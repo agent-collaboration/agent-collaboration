@@ -1,0 +1,103 @@
+//! Static bytes captured through the real writer before the shared typography repair.
+use super::{quota_view_model, write_quota_status_view};
+
+#[test]
+fn static_quota_typography_keeps_the_captured_base_bytes() {
+    for (ansi, expected) in [(false, BASE_PLAIN), (true, BASE_ANSI)] {
+        let mut output = Vec::new();
+        write_quota_status_view(&mut output, quota_view_model(), ansi).unwrap();
+        assert_eq!(
+            output,
+            expected.as_bytes(),
+            "static quota bytes changed, ansi={ansi}"
+        );
+    }
+}
+
+const BASE_PLAIN: &str = concat!(
+    "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮\n",
+    "│ Quota status                                                                           ⠋ fresh 1 │\n",
+    "│ responses -> ssdev    [preferred]                                                                │\n",
+    "│ ┌──────────────────────────────────────────────────────────────────────────────────────────────┐ │\n",
+    "│ │  ❯ ssdev                              available                safest quota                  │ │\n",
+    "│ │    ◎ OpenAI                           1 client                 Weekly         █████          │ │\n",
+    "│ │                                       2 resets                                83% left       │ │\n",
+    "│ │                                       Credits unknown                         reset 7d       │ │\n",
+    "│ │                                                                5h             █████          │ │\n",
+    "│ │                                                                               99% left       │ │\n",
+    "│ │                                                                               reset 5h       │ │\n",
+    "│ │                                                                Weekly pace    □□□□□□□│□□□□□  │ │\n",
+    "│ │                                                                               □□  1.00x      │ │\n",
+    "│ │                                                                               reset pace     │ │\n",
+    "│ │                                                                               healthy        │ │\n",
+    "│ └──────────────────────────────────────────────────────────────────────────────────────────────┘ │\n",
+    "│ ┌──────────────────────────────────────────────────────────────────────────────────────────────┐ │\n",
+    "│ │ Selected account                                                                             │ │\n",
+    "│ │ ssdev    available    safest quota                                                           │ │\n",
+    "│ │ Quota windows                                                                                │ │\n",
+    "│ │ weekly    ████ 83% left, reset 7d                                                            │ │\n",
+    "│ │ 5h        █████ 99% left, reset 5h                                                           │ │\n",
+    "│ │                                                                                              │ │\n",
+    "│ │ Reset pace                                                                                   │ │\n",
+    "│ │ weekly    □□□□□□□│□□□□□□□  1.00x reset pace healthy                                          │ │\n",
+    "│ │ sample    sample fresh 14s                                                                   │ │\n",
+    "│ │ rate      0.10%/h                                                                            │ │\n",
+    "│ │ conn      0.05%/h/conn                                                                       │ │\n",
+    "│ │ 5h        □□□□□□□│■■■■■■■  runs out 2d 16h                                                   │ │\n",
+    "│ │                                                                                              │ │\n",
+    "│ │ Activity                                                                                     │ │\n",
+    "│ │ clients   1 client                                                                           │ │\n",
+    "│ │ guards    5h 0% / weekly 8%                                                                  │ │\n",
+    "│ │ reset     2 available                                                                        │ │\n",
+    "│ │ note      safest quota                                                                       │ │\n",
+    "│ │                                                                                              │ │\n",
+    "│ └──────────────────────────────────────────────────────────────────────────────────────────────┘ │\n",
+    "│                                                                                                  │\n",
+    "│                                                                                                  │\n",
+    "│ ↑/↓ focus  ctrl-r account options  esc/q exit  ctrl-c exit                                       │\n",
+    "╰──────────────────────────────────────────────────────────────────────────────────────────────────╯\n",
+);
+
+const BASE_ANSI: &str = concat!(
+    "╭──────────────────────────────────────────────────────────────────────────────────────────────────╮\n",
+    "│ Quota status                                                                           ⠋ fresh 1 │\n",
+    "│ responses -> ssdev    [preferred]                                                                │\n",
+    "│ ┌──────────────────────────────────────────────────────────────────────────────────────────────┐ │\n",
+    "│ │  ❯ ssdev                              available                safest quota                  │ │\n",
+    "│ │    ◎ OpenAI                           1 client                 Weekly         █████          │ │\n",
+    "│ │                                       2 resets                                83% left       │ │\n",
+    "│ │                                       Credits unknown                         reset 7d       │ │\n",
+    "│ │                                                                5h             █████          │ │\n",
+    "│ │                                                                               99% left       │ │\n",
+    "│ │                                                                               reset 5h       │ │\n",
+    "│ │                                                                Weekly pace    □□□□□□□│□□□□□  │ │\n",
+    "│ │                                                                               □□  1.00x      │ │\n",
+    "│ │                                                                               reset pace     │ │\n",
+    "│ │                                                                               healthy        │ │\n",
+    "│ └──────────────────────────────────────────────────────────────────────────────────────────────┘ │\n",
+    "│ ┌──────────────────────────────────────────────────────────────────────────────────────────────┐ │\n",
+    "│ │ Selected account                                                                             │ │\n",
+    "│ │ ssdev    available    safest quota                                                           │ │\n",
+    "│ │ Quota windows                                                                                │ │\n",
+    "│ │ weekly    ████ 83% left, reset 7d                                                            │ │\n",
+    "│ │ 5h        █████ 99% left, reset 5h                                                           │ │\n",
+    "│ │                                                                                              │ │\n",
+    "│ │ Reset pace                                                                                   │ │\n",
+    "│ │ weekly    \u{001b}[38;5;10m□□□□□□□│□□□□□□□  1.00x reset pace healthy\u{001b}[0m                                          │ │\n",
+    "│ │ sample    sample fresh 14s                                                                   │ │\n",
+    "│ │ rate      0.10%/h                                                                            │ │\n",
+    "│ │ conn      0.05%/h/conn                                                                       │ │\n",
+    "│ │ 5h        □□□□□□□│■■■■■■■  runs out 2d 16h                                                   │ │\n",
+    "│ │                                                                                              │ │\n",
+    "│ │ Activity                                                                                     │ │\n",
+    "│ │ clients   1 client                                                                           │ │\n",
+    "│ │ guards    5h 0% / weekly 8%                                                                  │ │\n",
+    "│ │ reset     2 available                                                                        │ │\n",
+    "│ │ note      safest quota                                                                       │ │\n",
+    "│ │                                                                                              │ │\n",
+    "│ └──────────────────────────────────────────────────────────────────────────────────────────────┘ │\n",
+    "│                                                                                                  │\n",
+    "│                                                                                                  │\n",
+    "│ ↑/↓ focus  ctrl-r account options  esc/q exit  ctrl-c exit                                       │\n",
+    "╰──────────────────────────────────────────────────────────────────────────────────────────────────╯",
+);

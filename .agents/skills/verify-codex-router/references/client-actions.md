@@ -12,6 +12,14 @@ product edit, provider run, SSH action, policy change or target observation is
 authorized by this recipe.
 The Lead owns those documents and delivery acceptance.
 
+The owner correction at design `014e25e0851f1bef48b02a0d80e5167ec92fd7c2`
+(U12/R13, 2026-10-30) supersedes stopped-Claude background-resume expectations:
+Details shows **Open**, with **no Resume in background**. Open resumes the same
+native session with its saved settings and lands inside it. Keep this distinct
+from background New, which starts one job and attaches; detach leaves it running.
+See [Claude background](claude-background.md) for the F attachment/termios/job
+readbacks. The B Details checkpoint must reject the removed action as well.
+
 ## The boundary being proved
 
 Client and source are captured domain choices in the one New form: existing
@@ -130,8 +138,8 @@ not proof for a new Host.
 | NATIVE-JOB-DECODE | Real child/parser with a controlled external executable: one mixed public list includes interactive, job-backed background and peer-only background lacking both job id and lifecycle state. Retain valid jobs; leave peer discovery to its registry. A partial job discriminator rejects; missing only native UUID gives explicit unidentified coverage. Check duplicate/conflicting identities, absolute cwd/time, unknown state, output/time bounds and exact child settlement. A kind-only decoder must fail the mixed valid list. |
 | NATIVE-SERVICE-PROJECTION | Actual new Host/service/API/client with managed SQLite, peer fixtures and real job-reader child: Stored terminal history, Loaded live jobs/peers, Active working only. Corroborate one exact UUID+directory once; preserve equal managed/native UUID and time across pages. Never invent peer fields or Updated time from started time. Wrong endpoint/service/epoch/cursor and ambiguous claims reject. |
 | NATIVE-INDEPENDENT-COVERAGE | Carry serialized peer/job coverage through default/configured loaders, scheduler and mounted notice. Either native source unavailable retains other qualified observations with an explicit missing part; successful-empty is Complete. Invalid job output stays invalid and cannot enable actions. Check timeout after a qualified prefix, not a preclassified result above the decoder. |
-| NATIVE-CAPTURED-ACTIONS | Actual read adapter/revalidation and existing action owner keep UUID, cwd, source and typed origin through refresh, reorder and partial failure. Job handle differs from native UUID. A stopped native Stored job may resume in background; existing interactive peers and managed saved policy/Approver remain. Require one dispatch; lost output gives no retry or fabricated Router operation. |
-| NATIVE-ACTUAL-BOTH-MACHINES | On separately pinned new isolated debug Hosts/CLIs, public native New with no prompt returns an actual job and native UUID; that same Host catalogue and compiled TUI show it before any prompt. Inspect/Copy, stop only the owned job, observe Stored history and supported background Resume/Fork. Repeat selected-source semantics on Sunbook, preserving production/profile/credentials. Actual managed Cursor create/Load/Resume and all earlier menu/grid/resize images remain required. |
+| NATIVE-CAPTURED-ACTIONS | Actual read adapter/revalidation and existing action owner keep UUID, cwd, source and typed origin through refresh, reorder and partial failure. Job handle differs from native UUID. Stopped native Claude Details offers Open only, with no Resume in background; Open preserves that session's saved settings and attaches. Existing interactive peers and managed saved policy/Approver remain. Require one dispatch; lost output gives no retry or fabricated Router operation. |
+| NATIVE-ACTUAL-BOTH-MACHINES | On separately pinned new isolated debug Hosts/CLIs, public native New with no prompt starts one actual job, returns its distinct native UUID and attaches; detach leaves the job running and restores termios. That same Host catalogue and compiled TUI show it before any prompt. Inspect/Copy, stop only the owned job, observe Stored history, then use Details Open to resume the same native session with saved settings and land inside it. No Resume in background item. Qualify supported Fork separately. Repeat selected-source semantics on Sunbook, preserving production/profile/credentials. Actual managed Cursor create/Load/Resume and all earlier menu/grid/resize images remain required. |
 
 Keep job handle, native conversation UUID, peer process and managed SessionRef
 distinct. Working is active; blocked is waiting; done/failed/stopped are terminal;

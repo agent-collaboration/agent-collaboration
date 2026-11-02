@@ -19,10 +19,10 @@ use agent_session_inventory::{
     session_picker_record_loader::session_picker_record_loader,
     sessions::router_connection_registry,
 };
-use agent_session_picker::session_picker::SessionsPickerOutcome;
-use agent_session_picker::session_picker::SessionsPickerRecordLoader;
-use agent_session_picker::session_picker::SessionsPickerRequest;
-use agent_session_picker::session_picker::run_sessions_picker;
+use agent_session_tui::session_picker::SessionsPickerOutcome;
+use agent_session_tui::session_picker::SessionsPickerRecordLoader;
+use agent_session_tui::session_picker::SessionsPickerRequest;
+use agent_session_tui::session_picker::run_sessions_picker;
 use codex_native_integration::ResumeModelChoice;
 
 /// Runs the sessions command.
@@ -242,10 +242,10 @@ fn run_interactive_session(
         },
         machine_mode: match launch_target {
             SessionsLaunchTarget::Hosted { .. } => {
-                agent_session_picker::session_picker::PickerMachineSourceMode::HostedDefault
+                agent_session_tui::session_picker::PickerMachineSourceMode::HostedDefault
             }
             SessionsLaunchTarget::Local { .. } => {
-                agent_session_picker::session_picker::PickerMachineSourceMode::LocalCodex
+                agent_session_tui::session_picker::PickerMachineSourceMode::LocalCodex
             }
         },
         records: records
@@ -289,9 +289,10 @@ fn run_interactive_session(
                 description: request.unknown_description(),
             })
         }
-        SessionsPickerOutcome::LaunchNativeClaude(request) => {
+        SessionsPickerOutcome::LaunchNativeClaude(request, mode) => {
             agent_session_inventory::sessions::source_client_action::run_local_claude_terminal(
                 *request,
+                mode,
                 &crate::session_environment::collaboration_service_directory(context)?,
                 context.env_var("HOME").map(std::path::Path::new),
                 &command.codex_args,
@@ -454,6 +455,10 @@ impl SessionsPicker for TerminalSessionsPicker {
             Some(crate::session_client_composition::production_ports(
                 self.context.clone(),
             )),
+            crossterm::terminal::size().map_err(SessionsCommandError::Picker)?,
+            crate::session_environment::collaboration_service_directory(&self.context)
+                .ok()
+                .as_deref(),
         )
         .map_err(SessionsCommandError::Picker)
     }

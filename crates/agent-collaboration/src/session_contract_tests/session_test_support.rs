@@ -252,7 +252,7 @@ impl agent_session_inventory::sessions::SessionsCommandRunner for FakeSessionsCo
 }
 
 pub(super) struct FakeSessionsPicker {
-    pub(super) selected_outcome: agent_session_picker::session_picker::SessionsPickerOutcome,
+    pub(super) selected_outcome: agent_session_tui::session_picker::SessionsPickerOutcome,
     pub(super) offered_session_ids: Vec<String>,
     pub(super) offered_labels: Vec<String>,
     pub(super) new_session_args_display: Option<String>,
@@ -265,7 +265,7 @@ impl FakeSessionsPicker {
     pub(super) fn new(selected_session_id: &str) -> Self {
         Self {
             selected_outcome:
-                agent_session_picker::session_picker::SessionsPickerOutcome::ResumeSession(
+                agent_session_tui::session_picker::SessionsPickerOutcome::ResumeSession(
                     agent_session_inventory::sessions::SessionActionSelection::default_catalog(
                         selected_session_id.to_owned(),
                         codex_native_integration::ResumeModelChoice::default(),
@@ -282,7 +282,7 @@ impl FakeSessionsPicker {
     pub(super) fn new_start_new() -> Self {
         Self {
             selected_outcome:
-                agent_session_picker::session_picker::SessionsPickerOutcome::StartNewSession,
+                agent_session_tui::session_picker::SessionsPickerOutcome::StartNewSession,
             offered_session_ids: Vec::new(),
             offered_labels: Vec::new(),
             new_session_args_display: None,
@@ -293,13 +293,12 @@ impl FakeSessionsPicker {
 
     pub(super) fn new_fork(session_id: &str) -> Self {
         Self {
-            selected_outcome:
-                agent_session_picker::session_picker::SessionsPickerOutcome::ForkSession(
-                    agent_session_inventory::sessions::SessionActionSelection::default_catalog(
-                        session_id.to_owned(),
-                        codex_native_integration::ResumeModelChoice::default(),
-                    ),
+            selected_outcome: agent_session_tui::session_picker::SessionsPickerOutcome::ForkSession(
+                agent_session_inventory::sessions::SessionActionSelection::default_catalog(
+                    session_id.to_owned(),
+                    codex_native_integration::ResumeModelChoice::default(),
                 ),
+            ),
             offered_session_ids: Vec::new(),
             offered_labels: Vec::new(),
             new_session_args_display: None,
@@ -312,7 +311,7 @@ impl FakeSessionsPicker {
         &mut self,
         records: &[agent_session_inventory::sessions::SessionPickerRecord],
     ) {
-        use agent_session_picker::session_picker::SessionsPickerOutcome;
+        use agent_session_tui::session_picker::SessionsPickerOutcome;
         let selected_id = match &self.selected_outcome {
             SessionsPickerOutcome::ResumeSession(selection)
             | SessionsPickerOutcome::ForkSession(selection) => selection.session_id(),
@@ -344,10 +343,10 @@ impl FakeSessionsPicker {
 impl crate::sessions::SessionsPicker for FakeSessionsPicker {
     fn select_session(
         &mut self,
-        request: agent_session_picker::session_picker::SessionsPickerRequest,
-        record_loader: Option<agent_session_picker::session_picker::SessionsPickerRecordLoader>,
+        request: agent_session_tui::session_picker::SessionsPickerRequest,
+        record_loader: Option<agent_session_tui::session_picker::SessionsPickerRecordLoader>,
     ) -> Result<
-        Option<agent_session_picker::session_picker::SessionsPickerOutcome>,
+        Option<agent_session_tui::session_picker::SessionsPickerOutcome>,
         agent_session_inventory::sessions::SessionsCommandError,
     > {
         self.capture_selected_record(&request.records);
@@ -370,8 +369,8 @@ impl crate::sessions::SessionsPicker for FakeSessionsPicker {
                     .map_err(agent_session_inventory::sessions::SessionsCommandError::Runtime)?;
                 let records = runtime.block_on(record_loader(agent_session_inventory::source_inventory_request::SourceInventoryRequest {
                     source_context: match request.machine_mode {
-                        agent_session_picker::session_picker::PickerMachineSourceMode::HostedDefault => agent_session_inventory::source_inventory_request::PickerSourceContext::DefaultHosted,
-                        agent_session_picker::session_picker::PickerMachineSourceMode::LocalCodex => agent_session_inventory::source_inventory_request::PickerSourceContext::LocalCodex,
+                        agent_session_tui::session_picker::PickerMachineSourceMode::HostedDefault => agent_session_inventory::source_inventory_request::PickerSourceContext::DefaultHosted,
+                        agent_session_tui::session_picker::PickerMachineSourceMode::LocalCodex => agent_session_inventory::source_inventory_request::PickerSourceContext::LocalCodex,
                     }, query, request_generation: 0, continuation: None,
                 })).into_snapshot().map_err(|error| {
                     agent_session_inventory::sessions::SessionsCommandError::Picker(std::io::Error::other(error))

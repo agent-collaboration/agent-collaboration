@@ -106,7 +106,7 @@ impl SessionsPicker for SealedCatalogTerminalPicker {
         _request: SessionsPickerRequest,
         _record_loader: Option<SessionsPickerRecordLoader>,
     ) -> Result<Option<SessionsPickerOutcome>, SessionsCommandError> {
-        let mut request = agent_session_picker::session_picker::terminal_fixture_request();
+        let mut request = agent_session_tui::session_picker::terminal_fixture_request();
         request.root = agent_session_inventory::picker_data_query::SessionsPickerRoot::Any;
         request.source = agent_session_inventory::sessions::SessionsSource::All;
         let record = request

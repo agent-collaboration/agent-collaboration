@@ -1,89 +1,110 @@
-# Native Claude background launch — R15
+# Native Claude background New: start and attach
 
-**Draft/unobserved.** This is an adopted verification journey and test challenge,
-not a provider execution grant or working driver. The current assignment remains
-verification-skill upkeep. No provider/model launch, funding change or observation
-of an unreleased target is authorized. Continue from a separately declared isolated
-debug target and its explicit procedure/cleanup grant before driving this journey.
+**Draft/unobserved on the corrected target.** A background New starts one native
+job and attaches the terminal to it. Detaching returns control while that job
+keeps running, and restores termios. The owner corrected this on 2026-10-30:
+"it's supposed to attach to it or launch it". The correction is Requirements U12
+at design revision `74f1fb5b86f18c4cfee360a59a930a1d4e91bc76` under
+`docs/specs/2026-10-29-tui-component-system/`. It supersedes the earlier statement
+that background New leaves the user in the picker.
 
-The oracle is Requirements U15, Specification R15, Program Design's "native Claude
-background execution" correction and Verification Design U15/R15 under
-`docs/specs/2026-10-17-tui-component-system/`, plus the admitted
-`tmp/plan-workflows/2026-10-18-tui-component-system-provider-actions.md` S2a.
-U16/R16 client/machine/action proof is separately required under S2b and
-[client actions](client-actions.md); copy-only rows and this launch correction
-cannot close it. The action mapping is admitted; implementation and observation
-remain unearned.
+The later Open-only correction is R13/U12 at
+`014e25e0851f1bef48b02a0d80e5167ec92fd7c2`: stopped Claude Details offers
+**Open**, which resumes the same native session with its saved settings and
+lands inside it. **Resume in background must be absent**; seeing it fails B and
+F. Background remains a New choice, not a separate stopped-session action.
 
-## Entry and owners
+The old receipt "Started in background… Open it from the list" followed by a
+return without attachment is a **wrong outcome**. It cannot be reused as positive
+proof of this case. Existing 10-17/U15/R15 public-entry, original-argument,
+provider-owned guard and exact identity obligations still apply. The product
+correction comes from its separately owned worker before S6.
 
-The actual public entry is `crates/agent-collaboration/src/bin/agent-sessions.rs`
-→ `session_environment::run_arguments` → `session_command_dispatch`'s dedicated
-Claude path → `session_commands/claude_session_commands.rs`.
-`ClaudeLaunchTarget` in `claude_launch_target.rs` constructs native arguments and
-routed child environment; `claude_session_commands.rs` executes/reports the child.
-The adopted design keeps those owners. Product code and product tests belong to
-the Implementer. Future TUI adapters must reuse this owner once U16's mapping is
-admitted; do not duplicate background argument rules in a generic dialog.
+This recipe grants no provider/model launch, funding change, public Host, personal
+session operation or cleanup. Obtain the exact declared target and allowed-effects
+packet before runtime work. S9, not this authoring pass, drives the corrected
+compiled entry. See [client actions](client-actions.md) for the separate actual
+Human/client/machine/identity obligations.
 
-R15 requires literal `agent-sessions --provider claude --new` to use the installed
-native Claude `--bg` contract, returning its actual result/background identity.
-New/resume/fork remain background. Prepend the required native background default
-and forward every supplied argument unchanged, preserving bytes and order even
-for explicit mode aliases and flag-like option values. The installed native CLI
-owns its grammar and rejects incompatible print/background modes before native
-session/model dispatch. Router propagates that child failure; it does not scan,
-deduplicate, remove values or reject before creating the native child.
-Prompt/model/effort/working-directory and Router child environment remain
-preserved. ACP-managed provider IDs are not native transcript/background
-IDs. A shell `&`, detached wrapper PID or invented ID cannot establish this result.
+## Entry and ownership
 
-## Separate process, vendor guard and registration proof
+Public entry: `crates/agent-collaboration/src/bin/agent-sessions.rs` →
+`session_environment::run_arguments` → `session_command_dispatch`'s Claude path →
+`session_commands/claude_session_commands.rs`. `ClaudeLaunchTarget` in
+`claude_launch_target.rs` owns native argv/routed environment; the command owner
+executes and reports the native result. TUI New delegates to that same owner.
+Do not implement mode handling, attach or detach in verification apparatus.
 
-| Case | Required observation and wrong behavior it must catch | Current gap |
+For the TUI case, select Claude Code and Run Background, or use the menu's
+"New background session…". Foreground remains a separate supported choice.
+A separately declared public-entry case uses the actual supported public command;
+qualify its mode arguments from the corrected source/help rather than inventing
+flags. The established `agent-sessions --provider claude --new` process case keeps
+its literal argv until its owning correction explicitly changes that contract.
+
+Native IDs, Router SessionRefs and ACP-managed IDs retain their own meanings.
+A shell `&`, wrapper PID or invented ID never proves background registration or
+attachment. Preserve model, effort, prompt, cwd, routed environment and supplied
+argument bytes/order. The native client owns its option grammar and incompatible
+print/background rejection; Router propagates its actual result instead of
+scanning or rewriting the caller's argv.
+
+## Deciding journey
+
+1. Bind the corrected source/build, native executable/hash/version and scoped
+   normal environment/cwd. Record termios on the real PTY before the action.
+   Read `claude agents --json --all` through the qualified supported native route;
+   retain only the safe IDs/state needed to compare this invocation.
+2. Invoke one background New through the declared compiled public or TUI entry.
+   Observe actual job creation and **attachment to that job** on the same terminal.
+   A process exit, registration alone or a success sentence is insufficient.
+3. Correlate the actual job identity returned by its owner with exactly one new
+   job in `claude agents --json --all`. Preserve all pre-existing jobs. The list
+   difference alone is insufficient if it cannot be tied to this invocation.
+4. Detach using the installed client's qualified supported control. Check that
+   the attached terminal is released, termios equals its pre-action state and the
+   same job remains running in a fresh `claude agents --json --all` readback.
+   Attachment and post-detach liveness are separate observations.
+5. Settle only the newly owned job using the separately qualified cleanup route.
+   Keep actual native registration/attachment/detachment/cleanup receipts and
+   source/build/PTY identities. Do not kill by process name or touch older jobs.
+
+| Case | Required result | Wrong outcome |
 | --- | --- | --- |
-| R15-PUBLIC-NEW | Execute the exact compiled public agent-sessions entry with literal --provider claude --new through a controlled executable boundary. Preserve a causal old-code failure for missing background mode, then observe the corrected invocation and actual child output/exit. | Permanent public-entry source and offered causal RED/5-test GREEN logs checked; frozen delivery executable/run binding still awaited. A direct `launch_arguments()` unit test alone cannot prove entry wiring. |
-| R15-RESUME-FORK | Where the adopted native route supports the operation, retain native session identity and background mode, cwd and original args. Existing model/effort/prompt behavior stays. The TUI route must share the same owner. | Offered process tests cover supplied resume/fork argv. U16 adapter implementation and actual native observation are awaited. Never force a provider SessionRef through Codex or reinterpret ACP identity as transcript ID. |
-| R15-ARGV-VALUES | The public entry prepends --bg and preserves the complete supplied argv tail exactly, including supplied aliases, option values equal to --bg/--print, required-value arguments, short/long mode spellings and positional text after --. | Source and offered scanner-corruption RED/corrected five-test GREEN checked for their covered values/aliases. Frozen delivery binding and remaining exact variants still need verification. Router must not duplicate the native option-arity table. |
-| R15-NATIVE-CONFLICT | On the separately qualified actual native binary, incompatible print/background arguments produce its actual failure before background session/model creation. Forward all inputs and propagate native output/nonzero exit. | Actual vendor negative remains unobserved here. A substitute rejecting those flags proves failure propagation only; no zero-native-child or pre-Router-spawn assertion is owed. |
-| R15-FAILURE | Spawn failure and nonzero native child failure remain failures; no success/background ID is fabricated. Child output/actual identity remains attributable to this invocation. | Public-entry source and offered nonzero/spawn-failure cases checked. Real controlled child processes exercise propagation; their synthetic receipt is not a native identity. Frozen delivery binding remains awaited. |
-| R15-NATIVE-REGISTRATION | On the separately declared debug target, the actual installed Claude returns while exactly the newly owned native background session is visible through supported `claude agents --json`; correlate its actual identity/result and clean up only that session through qualified supported controls. | Native runtime grant, target, installed binary/help/capability qualification, readiness/identity and cleanup procedure not yet declared. No launch attempted. |
+| F-BG-ATTACH | One new native job; terminal attaches to that exact job | Registration then return-to-picker prose with no attachment |
+| F-BG-DETACH | Detach releases terminal, restores termios and leaves that job running | Detach kills/replaces the job, or leaves terminal modes changed |
+| F-BG-COUNT | Exactly one newly owned job in `claude agents --json --all` | Duplicate jobs, invented identity or an unrelated existing job |
+| F-STOPPED-OPEN | Stopped native Claude Details shows Open and no Resume in background; activate Open and observe the same native conversation UUID, saved settings and actual attachment | Removed action appears, Open creates a different session, changes saved settings or returns without attachment |
+| R15-PUBLIC-NEW | Real compiled public parsing/dispatch/native process boundary preserves the adopted mode/argv/cwd/environment | A helper-only argv test or fake registration standing in for public wiring |
+| R15-ARGV-VALUES | Original supplied argument tail preserved, including aliases, option values, delimiters and positional text | Router deduplicates, strips or scans native options |
+| R15-RESUME-FORK | Supported native route retains actual session identity, saved settings and original args | A new job/session substituted for the captured one, or ACP identity reinterpreted as native identity |
+| R15-NATIVE-CONFLICT | Actual qualified native client rejects incompatible modes before its native dispatch | A stand-in's rejection claimed as vendor behavior |
+| R15-FAILURE | Spawn/native failure propagates with no fabricated success/ID | Silent success, automatic retry or a made-up background identity |
 
-The public process test may replace the external Claude executable to observe
-argv/environment/cwd/outputs while keeping parsing, dispatch and actual process
-creation real. Label that as process-boundary proof. It cannot demonstrate vendor
-registration or its real option grammar/guard. The native observation must use
-the real qualified installed client;
-list-before/list-after alone is insufficient without this invocation's exact
-returned identity and supported session readback. Do not expose routing tokens or
-personal transcript contents in evidence.
+Controlled process tests may replace the native executable to establish argv,
+cwd/environment and failure propagation. They cannot prove vendor grammar,
+registration, actual attachment, detachment, liveness or real job settlement.
+Historical source and process receipts retain only the claims they actually
+proved; none establishes the corrected attachment behavior.
 
-The Lead's bounded correction was independently checked by reading the installed
-native 2.1.296 binary, without executing it. Its background module's `Gt` excludes
-indices classified as option values by its own `K` before checking print flags.
-New-session `zY` calls that gate before job creation; resume dispatcher `Nn` calls
-it before daemon `Te` and session `lXe`. This supports the vendor-owned boundary,
-not an observed negative or successful registration. Exact binary SHA and byte
-anchors are retained in `tmp/tui-verification/native-guard-source-readback.json`;
-requalify after any client change. Do not copy those minified names or arity rules
-into Router product code or this verification driver.
+For F-STOPPED-OPEN, capture native identity/settings before the action from the
+qualified existing read owner and correlate them after actual resume. Keep any
+new job handle distinct from that native conversation UUID. A B returned-action
+receipt proves only the captured effect target; it cannot establish vendor
+settings preservation or attachment. The offline checks in
+`scripts/verification/tui/journeys/scenes/claude-background-checks.ts` qualify only the
+observation oracle, never the vendor interaction.
 
-## Driving and evidence prerequisites
+## Runtime prerequisites and retained evidence
 
-Before a run, receive the exact compiled agent-sessions and installed Claude
-paths/hashes, current source/build declaration, normal isolated debug routing
-configuration, approved environment/working directory, allowed native operation,
-provider/model/API/funding boundary, deciding readiness/ID readback and exact owned
-cleanup. Reading this recipe grants none of them. Check supported controls from
-the actual installed help before using them; this draft invents no cleanup command.
+The execution packet supplies exact compiled/native paths and hashes, supported
+entry/mode/attach/detach/cleanup controls, approved environment/cwd, actual provider/
+model/funding boundary, before/after job inventory and termios observation routes,
+and owned cleanup authority. No native launch is authorized merely by reading it.
+Requalify installed client behavior after any binary change.
 
-Keep the public command, exit, safely redacted child argument/cwd/environment
-assertions, actual result/background ID, supported native registration evidence
-and owned cleanup settlement. Preserve causal RED separately from post-fix
-sensitivity. A harmless controlled executable tests only that boundary; its green
-does not authorize a real provider run. Once authorization/target/procedure are
-declared, the Lead assigns the lasting native driver paths if needed; the current
-TUI wrapper does not drive native background registration.
-
-Return each case as supported/unsupported/unknown with the source/build/client,
-actual observation or named gap. No runtime pass or U16 completion is claimed.
+Keep source/build/client bindings, safe command/result attribution, actual job ID,
+attachment witness, detach witness, correlated native inventory, termios equality
+and cleanup settlement. Do not retain routing tokens or personal transcript text.
+Report each row observed, unsupported or unverified; later UI migration must
+re-establish the real entry path at its own declared head.

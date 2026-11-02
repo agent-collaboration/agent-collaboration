@@ -3,7 +3,7 @@ use agent_session_inventory::sessions::source_ssh_protocol::{
     SourceNativeLaunchAvailability, SourceOperation, SourceReadError, SourceRejection, SourceReply,
 };
 use agent_session_inventory::source_inventory_request::PickerSourceContext;
-use agent_session_picker::session_picker::{NewClientInventoryLoader, SessionClientPorts};
+use agent_session_tui::session_picker::{NewClientInventoryLoader, SessionClientPorts};
 use collaboration_client::protocol::{EndpointInventory, UuidIdentity};
 use std::sync::Arc;
 
@@ -36,7 +36,7 @@ pub(crate) fn production_loader(context: CliContext) -> NewClientInventoryLoader
                 source,
             )
             .await?;
-            agent_session_picker::session_picker::new_session_client_inventory::qualify_capabilities(
+            agent_session_tui::session_picker::new_session_client_inventory::qualify_capabilities(
                 &expected,
                 inventory,
                 native_claude,

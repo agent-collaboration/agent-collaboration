@@ -7,10 +7,10 @@
     "lint": "oxlint --deny-warnings .",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
-    "test:tooling": "node --test tooling/tests/*.test.ts",
-    "test:fixtures": "node --test fixtures/tests/*.test.ts",
-    "test:observations": "node --test observations/tests/*.test.ts",
-    "test": "node --test tooling/tests/*.test.ts fixtures/tests/*.test.ts observations/tests/*.test.ts"
+    "test:tooling": "node --test tooling/*.test.ts",
+    "test:fixtures": "node --test fixtures/*.test.ts",
+    "test:observations": "node --test observations/*.test.ts",
+    "test": "node --test tooling/*.test.ts fixtures/*.test.ts observations/*.test.ts"
   },
   "dependencies": {
     "lossless-json": "4.3.3",

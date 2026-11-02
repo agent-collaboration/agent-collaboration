@@ -166,6 +166,10 @@ pub use quota_status_view_model::CreditUsageStatus;
 pub mod quota_command_family_test;
 
 #[cfg(test)]
+#[path = "quota/quota_refresh_outcome_tests.rs"]
+mod quota_refresh_outcome_tests;
+
+#[cfg(test)]
 #[path = "quota/claude_quota_refresh_ingestion_tests.rs"]
 pub mod claude_quota_refresh_ingestion_tests;
 

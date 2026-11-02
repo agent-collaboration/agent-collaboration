@@ -18,6 +18,7 @@ pub struct QuotaStatusViewModel {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct QuotaStatusAccountViewModel {
     pub provider: Provider,
+    pub login_state: QuotaLoginState,
     pub account_id: AccountId,
     pub account_tag: String,
     pub active_credential_generation: Option<u64>,
@@ -26,6 +27,7 @@ pub struct QuotaStatusAccountViewModel {
     pub account: String,
     pub status: crate::quota_display_facts::QuotaRowStatus,
     pub active_clients: String,
+    pub active_clients_value: Option<u32>,
     pub reset_credits: String,
     pub credit_usage_summary: String,
     pub credit_usage: CreditUsageStatus,
@@ -40,6 +42,13 @@ pub struct QuotaStatusAccountViewModel {
     pub weekly_pace: String,
     pub weekly_quota_floor_percent: u16,
     pub details: QuotaSelectedAccountViewModel,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum QuotaLoginState {
+    #[default]
+    NotRequired,
+    Required,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

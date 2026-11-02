@@ -272,6 +272,12 @@ pub struct ParsedPushLineHeader {
     pub title: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ParsedPushLine {
+    pub kind: PushKind,
+    pub link: RouterLink,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum PushIdError {
     #[error("invalid machine id")]
@@ -299,3 +305,7 @@ pub enum PushLineError {
 #[path = "push_line_render.rs"]
 mod rendering;
 pub use rendering::{escape_push_line_field, parse_push_line_header, render_push_line};
+
+#[path = "push_line_parse.rs"]
+mod parsing;
+pub use parsing::parse_push_line;

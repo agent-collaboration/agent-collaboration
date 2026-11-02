@@ -95,6 +95,7 @@ pub type SessionClientExecutor = Arc<
 /// The caller has already ended the picker render loop and restored its terminal.
 pub fn run_local_claude_terminal(
     request: CapturedClientAction,
+    mode: super::claude_terminal_launch::ClaudeTerminalMode,
     service_directory: &std::path::Path,
     home_directory: Option<&std::path::Path>,
     global_arguments: &[std::ffi::OsString],
@@ -111,6 +112,11 @@ pub fn run_local_claude_terminal(
         return Err(SessionsCommandError::SessionSourceUnqualified);
     };
     let resume = matches!(action, SourceNativeClaudeAction::Resume { .. });
+    if mode == super::claude_terminal_launch::ClaudeTerminalMode::BackgroundThenAttach
+        && !matches!(action, SourceNativeClaudeAction::New { .. })
+    {
+        return Err(SessionsCommandError::SessionSourceUnqualified);
+    }
     let request = SourceRequest {
         service_directory: service_directory
             .to_string_lossy()
@@ -130,6 +136,9 @@ pub fn run_local_claude_terminal(
     let command = runtime.block_on(super::source_ssh_executor::prepare_local_claude_terminal(
         &request,
         home_directory,
+    ))?;
+    let command = runtime.block_on(super::claude_terminal_launch::prepare_claude_terminal_mode(
+        command, mode,
     ))?;
     drop(runtime);
     // Match the existing Codex terminal owner: the native child inherits this TTY.

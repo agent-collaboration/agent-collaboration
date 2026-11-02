@@ -1,0 +1,118 @@
+//! One guarded source-view publication, including read progress and optional record replacement.
+use crate::session_picker::PickerSourceContext;
+use crate::session_picker::SourceInventoryRejection;
+use agent_session_inventory::picker_runtime_status::PickerRecordsSnapshot;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum SourceReadState {
+    Loading,
+    Complete { record_count: usize },
+    Partial { record_count: usize },
+    Suspended { record_count: usize },
+    LoadingMore { record_count: usize },
+    Rejected { reason: SourceInventoryRejection },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct SourceReadProgress {
+    pub(crate) source_context: PickerSourceContext,
+    pub(crate) read_state: SourceReadState,
+}
+
+impl SourceReadProgress {
+    pub(crate) fn source_name(&self) -> &str {
+        match &self.source_context {
+            PickerSourceContext::DefaultHosted => "This machine",
+            PickerSourceContext::LocalCodex => "Local Codex",
+            PickerSourceContext::ConfiguredHosted(profile) => profile.name.as_str(),
+        }
+    }
+    pub(crate) fn display_line(&self) -> String {
+        let name = self.source_name();
+        match self.read_state {
+            SourceReadState::Loading => format!("{name}: Loading"),
+            SourceReadState::Complete { record_count } => {
+                format!("{name}: {record_count} sessions")
+            }
+            SourceReadState::Partial { record_count } => {
+                format!("{name}: {record_count} sessions; Native Claude inventory incomplete")
+            }
+            SourceReadState::LoadingMore { record_count } => {
+                format!("{name}: Loading ({record_count} fetched; unfinished)")
+            }
+            SourceReadState::Suspended { record_count } => {
+                format!("{name}: Suspended ({record_count} fetched; unfinished)")
+            }
+            SourceReadState::Rejected { reason } => format!("{name}: Unavailable ({reason})"),
+        }
+    }
+}
+
+/// Aggregate only observed read states; a registry name is never an availability result.
+pub(crate) fn all_read_notice(progress: &[SourceReadProgress]) -> Option<String> {
+    let mut loading = Vec::new();
+    let mut unavailable = Vec::new();
+    let mut unfinished = Vec::new();
+    let mut incomplete_native = Vec::new();
+    for source in progress {
+        match source.read_state {
+            SourceReadState::Loading => loading.push(source.source_name()),
+            SourceReadState::Rejected { .. } => unavailable.push(source.source_name()),
+            SourceReadState::LoadingMore { .. } | SourceReadState::Suspended { .. } => {
+                unfinished.push(source.source_name())
+            }
+            SourceReadState::Partial { .. } => incomplete_native.push(source.source_name()),
+            SourceReadState::Complete { .. } => {}
+        }
+    }
+    let partial =
+        !unavailable.is_empty() || !unfinished.is_empty() || !incomplete_native.is_empty();
+    let mut details = Vec::new();
+    for (kind, names) in [
+        ("native Claude inventory incomplete", incomplete_native),
+        ("unavailable", unavailable),
+        ("unfinished", unfinished),
+        ("loading", loading),
+    ] {
+        if !names.is_empty() {
+            details.push(format!("{kind}: {}", names.join(", ")));
+        }
+    }
+    if details.is_empty() {
+        None
+    } else {
+        Some(format!(
+            "{} — {}",
+            if partial {
+                "Partial view"
+            } else {
+                "Loading view"
+            },
+            details.join("; ")
+        ))
+    }
+}
+
+pub(crate) enum SourceRecordsUpdate {
+    Pending,
+    Ready(PickerRecordsSnapshot),
+    Rejected(SourceInventoryRejection),
+}
+
+pub(crate) struct SourceReloadUpdate {
+    pub(crate) source_progress: Vec<SourceReadProgress>,
+    pub(crate) records_update: SourceRecordsUpdate,
+}
+
+impl SourceReloadUpdate {
+    #[cfg(test)]
+    pub(crate) fn into_snapshot(
+        self,
+    ) -> Option<Result<PickerRecordsSnapshot, SourceInventoryRejection>> {
+        match self.records_update {
+            SourceRecordsUpdate::Pending => None,
+            SourceRecordsUpdate::Ready(snapshot) => Some(Ok(snapshot)),
+            SourceRecordsUpdate::Rejected(reason) => Some(Err(reason)),
+        }
+    }
+}

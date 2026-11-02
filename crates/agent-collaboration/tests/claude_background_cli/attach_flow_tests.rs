@@ -11,6 +11,95 @@ const RECEIPT: &str = include_str!("claude_bg_2_1_312.txt");
 #[path = "resume_read_safety_tests.rs"]
 mod resume_read_safety_tests;
 
+fn background_new_command(
+    fixture: &ClaudeProcessFixture,
+    receipt: &str,
+) -> std::io::Result<Command> {
+    let mut command = resume_read_safety_tests::picker_command(fixture, SESSION)?;
+    let arguments =
+        ["--model", "haiku", "--name", "literal --bg value"].map(std::ffi::OsString::from);
+    let request = json!({
+        "serviceDirectory":fixture.root.path().join("router/agent-communication"),
+        "expectedService":"00000000-0000-4000-8000-000000000001",
+        "operation":{"kind":"nativeClaude","serviceEpoch":"00000000-0000-4000-8000-000000000002",
+            "action":{"kind":"new","directory":fixture.working_directory,"arguments":arguments}}
+    });
+    command
+        .env("CLAUDE_PICKER_REQUEST", request.to_string())
+        .env("CLAUDE_PICKER_BACKGROUND_NEW", "1")
+        .env("CLAUDE_FIXTURE_RECEIPT", receipt);
+    Ok(command)
+}
+
+#[tokio::test]
+async fn local_background_new_starts_once_then_attaches_supported_receipts() {
+    for receipt in [RECEIPT, include_str!("claude_bg_unnamed.txt")] {
+        let fixture = ClaudeProcessFixture::new().await.unwrap();
+        let api = serve_job(&fixture, "working").unwrap();
+        let output = background_new_command(&fixture, receipt)
+            .unwrap()
+            .output()
+            .await
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let calls = invocations(&fixture).unwrap();
+        assert_eq!(
+            calls.len(),
+            2,
+            "one background start followed by one attach"
+        );
+        assert_eq!(
+            calls[0].arguments,
+            ["--bg", "--model", "haiku", "--name", "literal --bg value"]
+        );
+        assert_eq!(calls[1].arguments, ["attach", "a1b2c3d4"]);
+        for call in calls {
+            assert_eq!(call.working_directory, fixture.working_directory);
+            assert_eq!(
+                call.base_url,
+                format!("http://{}/anthropic", fixture.endpoint)
+            );
+            assert_eq!(call.auth_token, "fixture-router-token");
+        }
+        api.stop().await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn local_background_new_does_not_retry_or_attach_an_unparseable_receipt() {
+    for receipt in [
+        "no job handle\n",
+        "backgrounded · a1b2c3d4\nbackgrounded · deadbeef\n",
+    ] {
+        let fixture = ClaudeProcessFixture::new().await.unwrap();
+        let api = serve_job(&fixture, "working").unwrap();
+        let output = background_new_command(&fixture, receipt)
+            .unwrap()
+            .output()
+            .await
+            .unwrap();
+        assert!(!output.status.success());
+        let calls = invocations(&fixture).unwrap();
+        assert_eq!(
+            calls.len(),
+            1,
+            "an uncertain start must not attach, retry, or copy"
+        );
+        assert_eq!(calls[0].arguments[0], "--bg");
+        let diagnostic = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            diagnostic.contains("claude agents")
+                && diagnostic.contains("do not start another copy"),
+            "{diagnostic}"
+        );
+        api.stop().await.unwrap();
+    }
+}
+
 fn attach_command(fixture: &ClaudeProcessFixture) -> Command {
     let mut command = fixture.command();
     command

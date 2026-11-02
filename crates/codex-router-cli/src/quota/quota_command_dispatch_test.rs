@@ -67,7 +67,7 @@ fn interactive_quota_requires_effective_table_format_and_both_terminals() {
 #[test]
 fn interactive_quota_component_uses_the_process_async_runtime() {
     let component_source =
-        include_str!("../../../codex-router-quota-tui/src/quota_status_component.rs");
+        include_str!("../../../agent-router-quota-tui/src/quota_status_component.rs");
 
     for forbidden_runtime_owner in ["tokio::runtime::Builder", ".block_on(", "spawn_blocking"] {
         assert!(

@@ -3,7 +3,7 @@ use agent_session_inventory::sessions::source_ssh_protocol::{
     SourceNativeBinding, SourceReadError,
 };
 use agent_session_inventory::source_inventory_binding::SourceInventoryBinding;
-use agent_session_picker::session_picker::details_client_inventory::{
+use agent_session_tui::session_picker::details_client_inventory::{
     DetailsClientCapabilities, DetailsClientInspector, ManagedRestoreActions,
 };
 use collaboration_client::protocol::ProviderBindingIdentity;

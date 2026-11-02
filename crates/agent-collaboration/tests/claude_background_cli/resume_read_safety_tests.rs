@@ -19,7 +19,10 @@ fn resume_request(fixture: &ClaudeProcessFixture, session_id: &str) -> serde_jso
     })
 }
 
-fn picker_command(fixture: &ClaudeProcessFixture, session_id: &str) -> std::io::Result<Command> {
+pub(super) fn picker_command(
+    fixture: &ClaudeProcessFixture,
+    session_id: &str,
+) -> std::io::Result<Command> {
     let template = attach_command(fixture);
     let mut command = Command::new(std::env::current_exe()?);
     command
@@ -56,6 +59,11 @@ fn picker_terminal_preparation_child() -> Result<(), Box<dyn std::error::Error>>
     else {
         return Err("probe requires a native Claude action".into());
     };
+    let mode = if std::env::var_os("CLAUDE_PICKER_BACKGROUND_NEW").is_some() {
+        agent_session_inventory::sessions::claude_terminal_launch::ClaudeTerminalMode::BackgroundThenAttach
+    } else {
+        agent_session_inventory::sessions::claude_terminal_launch::ClaudeTerminalMode::Foreground
+    };
     run_local_claude_terminal(
         CapturedClientAction {
             attempt: 1,
@@ -66,6 +74,7 @@ fn picker_terminal_preparation_child() -> Result<(), Box<dyn std::error::Error>>
                 action,
             },
         },
+        mode,
         std::path::Path::new(request.service_directory.as_str()),
         None,
         &[],

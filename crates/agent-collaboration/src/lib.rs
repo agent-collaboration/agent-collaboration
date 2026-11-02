@@ -14,7 +14,7 @@ pub fn run_sessions_picker_test_harness() -> std::io::Result<()> {
     if std::env::args().nth(2).as_deref() == Some("--claude-terminal-lifecycle") {
         claude_terminal_test_harness::run()
     } else if std::env::args().nth(2).as_deref() == Some("--provider-filter-storyboard") {
-        agent_session_picker::session_picker::run_sessions_picker_test_harness()
+        agent_session_tui::session_picker::run_sessions_picker_test_harness()
     } else {
         sessions::run_stored_model_terminal_fixture()
     }

@@ -1,0 +1,21 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT CAST(preference_id AS BLOB) AS \"preference_id!: Vec<u8>\" FROM ui_preferences WHERE screen = ? AND setting = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "preference_id!: Vec<u8>",
+        "ordinal": 0,
+        "type_info": "Blob",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "481be821126f59d490041c9fed99db7bbbf2635787e3d4a947905ab946823936"
+}

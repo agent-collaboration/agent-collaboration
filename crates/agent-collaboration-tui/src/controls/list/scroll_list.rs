@@ -1,0 +1,302 @@
+//! In-flow measurement, actual clipped hits, focus reveal and a visible scrollbar.
+use crate::controls::list::{ScrollHandle, scroll_model::ScrollRevealTarget};
+use crate::{
+    actions::Availability,
+    foundation::theme::{TextRole, UiGlyph},
+    surfaces::{
+        focus_model::TargetId,
+        hit_regions::{HitRegionKind, use_target_geometry},
+        surface_handle::SurfaceContext,
+        target_geometry::{TargetGeometryObserver, use_geometry_observer},
+    },
+};
+use iocraft::{ComponentDrawer, Hook, prelude::*};
+struct ViewportMeasure(ScrollHandle);
+impl Hook for ViewportMeasure {
+    fn pre_component_draw(&mut self, drawer: &mut ComponentDrawer) {
+        self.0
+            .measure_viewport(drawer.size().height, drawer.canvas_position().y);
+    }
+}
+struct ContentMeasure(ScrollHandle);
+impl Hook for ContentMeasure {
+    fn pre_component_draw(&mut self, drawer: &mut ComponentDrawer) {
+        self.0.measure_content(drawer.size().height);
+    }
+}
+#[derive(Clone)]
+struct ScrollContext {
+    scroll: ScrollHandle,
+    layout_offset: u16,
+}
+#[derive(Clone)]
+pub(crate) struct ScrollRevealPrefix {
+    target: TargetId,
+    top: Ref<Option<i16>>,
+}
+struct PrefixMeasure(ScrollRevealPrefix);
+impl Hook for PrefixMeasure {
+    fn pre_component_draw(&mut self, drawer: &mut ComponentDrawer) {
+        self.0.top.set(Some(drawer.canvas_position().y));
+    }
+}
+pub(crate) fn use_scroll_reveal_prefix(
+    hooks: &mut Hooks<'_, '_>,
+    target: TargetId,
+) -> ScrollRevealPrefix {
+    let top = hooks.use_ref(|| None);
+    let prefix = ScrollRevealPrefix { target, top };
+    hooks.use_hook(|| PrefixMeasure(prefix.clone())).0 = prefix.clone();
+    prefix
+}
+#[derive(Props)]
+struct ScrollContentProps<'a> {
+    #[iocraft(required)]
+    scroll: ScrollHandle,
+    offset: u16,
+    children: Vec<AnyElement<'a>>,
+}
+#[component]
+fn ScrollContent<'a>(
+    props: &mut ScrollContentProps<'a>,
+    mut hooks: Hooks,
+) -> impl Into<AnyElement<'a>> {
+    hooks.use_hook(|| ContentMeasure(props.scroll.clone())).0 = props.scroll.clone();
+    let children = std::mem::take(&mut props.children);
+    let context = ScrollContext {
+        scroll: props.scroll.clone(),
+        layout_offset: props.offset,
+    };
+    let observer = scroll_observer(Some(context.clone()), None);
+    element!(View(position:Position::Relative,top:-i32::from(props.offset),width:100pct,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
+        ContextProvider(value:Context::owned(context)) {ContextProvider(value:Context::owned(observer)) {#(children)}}
+    })
+}
+#[derive(Props)]
+pub struct ScrollListProps<'a> {
+    #[iocraft(required)]
+    pub id: TargetId,
+    #[iocraft(required)]
+    pub scroll: ScrollHandle,
+    pub grow: bool,
+    pub align_bottom: bool,
+    pub keyboard_target: Option<TargetId>,
+    pub children: Vec<AnyElement<'a>>,
+}
+#[component]
+pub fn ScrollList<'a>(
+    props: &mut ScrollListProps<'a>,
+    mut hooks: Hooks,
+) -> impl Into<AnyElement<'a>> {
+    let context = *hooks.use_context::<SurfaceContext>();
+    use_target_geometry(
+        &mut hooks,
+        context,
+        props.id.clone(),
+        HitRegionKind::ScrollArea,
+    );
+    hooks.use_hook(|| ViewportMeasure(props.scroll.clone())).0 = props.scroll.clone();
+    let position = props.scroll.position();
+    let children = std::mem::take(&mut props.children);
+    let keyboard_target = props.keyboard_target.as_ref().unwrap_or(&props.id);
+    let availability = context
+        .stack
+        .snapshot()
+        .surface(context.surface)
+        .and_then(|surface| {
+            surface
+                .focus
+                .targets()
+                .iter()
+                .find(|target| target.id == *keyboard_target)
+        })
+        .map_or(Availability::Available, |target| target.availability.get());
+    let focused = availability.is_available() && context.is_focused(keyboard_target);
+    let theme = context.theme();
+    element!(View(width:100pct,min_height:0,flex_grow:if props.grow {1.0_f32}else{0.0_f32},flex_shrink:1.0_f32,padding_right:1,overflow:Overflow::Hidden,flex_direction:FlexDirection::Column) {
+        #(props.align_bottom.then(||element!(View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_height:0))))
+        ScrollContent(scroll:props.scroll.clone(),offset:position.offset,children)
+        ScrollBar(scroll:props.scroll.clone(),color:theme.foreground(if focused {TextRole::Focused}else{TextRole::Muted}))
+        #(match availability {Availability::Available=>None,Availability::Unavailable {reason}=>Some(element!(Text(content:reason,color:theme.foreground(TextRole::Disabled))))})
+    })
+}
+struct ScrollBarPaint {
+    scroll: ScrollHandle,
+    color: Option<Color>,
+}
+impl Hook for ScrollBarPaint {
+    fn post_component_draw(&mut self, drawer: &mut ComponentDrawer) {
+        // The preceding viewport/content hooks measured THIS layout, even on mount.
+        let position = self.scroll.position();
+        if position.maximum() == 0 {
+            return;
+        }
+        let visible = position.viewport_height.min(drawer.size().height);
+        let thumb = u16::try_from(
+            (u32::from(visible) * u32::from(visible) / u32::from(position.natural_height))
+                .max(1)
+                .min(u32::from(visible)),
+        )
+        .unwrap_or(visible);
+        let thumb_top = u16::try_from(
+            u32::from(position.offset) * u32::from(visible.saturating_sub(thumb))
+                / u32::from(position.maximum()),
+        )
+        .unwrap_or(0);
+        let mut style = CanvasTextStyle::default();
+        style.color = self.color;
+        let mut canvas = drawer.canvas();
+        for row in 0..visible {
+            let glyph = if row >= thumb_top && row < thumb_top + thumb {
+                UiGlyph::ScrollThumb
+            } else {
+                UiGlyph::ScrollTrack
+            };
+            canvas.set_text(
+                0,
+                isize::try_from(row).unwrap_or(isize::MAX),
+                glyph.text(),
+                style,
+            );
+        }
+    }
+}
+#[derive(Props)]
+struct ScrollBarProps {
+    #[iocraft(required)]
+    scroll: ScrollHandle,
+    color: Option<Color>,
+}
+#[component]
+fn ScrollBar(props: &ScrollBarProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
+    let paint = hooks.use_hook(|| ScrollBarPaint {
+        scroll: props.scroll.clone(),
+        color: props.color,
+    });
+    paint.scroll = props.scroll.clone();
+    paint.color = props.color;
+    element!(View(position:Position::Absolute,right:0,top:0,width:1,height:100pct))
+}
+fn scroll_observer(
+    context: Option<ScrollContext>,
+    prefix: Option<ScrollRevealPrefix>,
+) -> TargetGeometryObserver {
+    TargetGeometryObserver::new(move |geometry, previous| {
+        let Some(context) = context.as_ref() else {
+            return;
+        };
+        let position = context.scroll.position();
+        let logical_top = |top: i16| {
+            i32::from(top) - i32::from(position.viewport_top) + i32::from(context.layout_offset)
+        };
+        let target = ScrollRevealTarget {
+            target_id: geometry.target.clone(),
+            logical_top: logical_top(geometry.top),
+            heading_top: prefix
+                .as_ref()
+                .filter(|prefix| geometry.target.as_ref() == Some(&prefix.target))
+                .and_then(|prefix| prefix.top.get())
+                .map(logical_top),
+            height: geometry.height,
+            viewport_height: position.viewport_height,
+        };
+        context.scroll.measure_target(target.clone());
+        if geometry.focused {
+            context.scroll.reveal(target);
+        } else if let Some(previous) = previous {
+            context
+                .scroll
+                .forget_target_reveal(previous.target.as_ref());
+        }
+    })
+}
+pub(crate) fn prefixed_geometry_observer(
+    hooks: &Hooks<'_, '_>,
+    prefix: ScrollRevealPrefix,
+) -> TargetGeometryObserver {
+    let context = hooks
+        .try_use_context::<ScrollContext>()
+        .map(|context| context.clone());
+    scroll_observer(context, Some(prefix))
+}
+pub(crate) fn use_scroll_reveal(
+    hooks: &mut Hooks<'_, '_>,
+    focused: bool,
+    target_id: Option<TargetId>,
+) {
+    let context = hooks
+        .try_use_context::<ScrollContext>()
+        .map(|context| context.clone());
+    let prefix = hooks
+        .try_use_context::<ScrollRevealPrefix>()
+        .map(|prefix| prefix.clone());
+    let focused = focused
+        && hooks
+            .try_use_context::<SurfaceContext>()
+            .is_none_or(|context| {
+                let stack = context.stack.snapshot();
+                stack.top_id() == context.surface && stack.top().focus.reveals_focus()
+            });
+    use_geometry_observer(
+        hooks,
+        Some(scroll_observer(context, prefix)),
+        target_id,
+        focused,
+    );
+}
+#[derive(Props)]
+pub struct ScrollRevealProps<'a> {
+    pub focused: bool,
+    pub children: Vec<AnyElement<'a>>,
+}
+#[component]
+pub fn ScrollReveal<'a>(
+    props: &mut ScrollRevealProps<'a>,
+    mut hooks: Hooks,
+) -> impl Into<AnyElement<'a>> {
+    let target_id = props
+        .focused
+        .then(|| {
+            hooks
+                .try_use_context::<SurfaceContext>()
+                .and_then(|context| {
+                    context
+                        .stack
+                        .snapshot()
+                        .surface(context.surface)
+                        .and_then(|surface| surface.focus.current().cloned())
+                })
+        })
+        .flatten();
+    use_scroll_reveal(&mut hooks, props.focused, target_id);
+    match props.children.first_mut() {
+        Some(child) => child.into(),
+        None => element!(View).into_any(),
+    }
+}
+
+#[derive(Props)]
+pub(crate) struct TargetScrollRevealProps<'a> {
+    #[iocraft(required)]
+    pub(crate) target: TargetId,
+    pub(crate) focused: bool,
+    pub(crate) children: Vec<AnyElement<'a>>,
+}
+#[component]
+pub(crate) fn TargetScrollReveal<'a>(
+    props: &mut TargetScrollRevealProps<'a>,
+    mut hooks: Hooks,
+) -> impl Into<AnyElement<'a>> {
+    use_scroll_reveal(&mut hooks, props.focused, Some(props.target.clone()));
+    match props.children.first_mut() {
+        Some(child) => child.into(),
+        None => element!(View).into_any(),
+    }
+}
+
+#[cfg(test)]
+#[path = "scroll_geometry_test.rs"]
+mod geometry_test;
+#[cfg(test)]
+#[path = "shared_focus_reveal_test.rs"]
+mod shared_focus_test;
