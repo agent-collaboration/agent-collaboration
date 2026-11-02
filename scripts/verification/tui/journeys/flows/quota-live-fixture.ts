@@ -53,7 +53,7 @@ export const quotaLiveReadbackSchema = z.strictObject({
 	readback: quotaLivePoseSchema,
 	accounts: z.array(quotaAccountFactSchema),
 	accountCommands: quotaEffectReceiptSchema.shape.accountCommands,
-	refresh: quotaRefreshReceiptSchema.nullable(),
+	refresh: quotaRefreshReceiptSchema.omit({ requests: true }).nullable(),
 });
 export type QuotaLiveReadback = z.infer<typeof quotaLiveReadbackSchema>;
 export const quotaObservationSchema = z.strictObject({

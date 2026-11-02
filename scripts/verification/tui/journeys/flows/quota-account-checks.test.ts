@@ -169,6 +169,11 @@ test.each([
 		'╭────────────────────────────────────────────╮\r\n│ Remove account                             │\r\n│ effect-alpha: Disable the account           │\r\n│ before removing it                         │\r\n╰────────────────────────────────────────────╯',
 		true,
 	],
+	[
+		'outer-frame-wrapped-notice',
+		'│effect-alpha: Disable the     │\r\n│account before removing it    │',
+		true,
+	],
 	['covered', 'Remove this disabled account and its credentials?', false],
 	['wrong-account', 'effect-beta: Disable the account before removing it', false],
 	['reason-only', 'Disable the account before removing it', false],

@@ -143,7 +143,10 @@ export function quotaToolbarBindings(
 			surface: quotaOverlay(3),
 			focusedTarget: '17:action:quota:help:help-body',
 		});
-		const failures = checkQuotaHelpRows(result.rows, false);
+		const failures = checkQuotaHelpRows(result.rows, {
+			refreshAvailable: false,
+			weeklyFloorAvailable: true,
+		});
 		writeFileSync(
 			join(evidence, 'quota-help-census.json'),
 			JSON.stringify({ rows: result.rows, failures }, null, 2),

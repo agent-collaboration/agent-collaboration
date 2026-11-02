@@ -103,7 +103,7 @@ export function quotaDialogTarget(
 		foregrounds: [
 			terminalTheme.palette[11] ?? 0xd7ba7d,
 			0x9cbcfb,
-			terminalTheme.palette[7] ?? 0xd4d4d4,
+			...(label === 'Disable' || label === 'Enable' ? [] : [terminalTheme.palette[7] ?? 0xd4d4d4]),
 			terminalTheme.palette[15] ?? 0xffffff,
 		],
 	};

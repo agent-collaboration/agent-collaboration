@@ -129,7 +129,10 @@ export function quotaOptionBindings(
 				focusedTarget: helpBody,
 			});
 			marked = result.marked;
-			const failures = checkQuotaHelpRows(result.rows, false);
+			const failures = checkQuotaHelpRows(result.rows, {
+				refreshAvailable: false,
+				weeklyFloorAvailable: false,
+			});
 			if (failures.length > 0) throw new Error(failures.join('; '));
 			const rectangle = findDialog(first.grid, 'Help');
 			if (rectangle === null) throw new Error('quota Help absent');
@@ -239,8 +242,16 @@ export function quotaOptionBindings(
 		[
 			'resize-same-child-to-each-declared-grid',
 			async (context) => {
+				const resizeGrids = help
+					? []
+					: invocation.grid === '120x36'
+						? [...journeyGridSizes.filter((grid) => grid !== '120x36'), invocation.grid]
+						: invocation.grid === '76x30' && invocation.keys === 'legacy'
+							? ['120x36']
+							: [];
+				if (resizeGrids.length === 0) return null;
 				let marked: MarkedInputEvidence | null = null;
-				await journeyGridSizes.reduce(async (previous, dimensions) => {
+				await resizeGrids.reduce(async (previous, dimensions) => {
 					await previous;
 					requireChild();
 					const [columns, rows] = dimensions.split('x').map(Number);

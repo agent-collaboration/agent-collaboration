@@ -31,7 +31,7 @@ test('Help keeps the complete closed action set and conventions across physical 
 	expect(
 		checkQuotaHelpRows(
 			literalHelp.flatMap((row) => [row.slice(0, 8), row.slice(8)]),
-			true,
+			{ refreshAvailable: true, weeklyFloorAvailable: true },
 		),
 	).toEqual([]);
 });
@@ -41,7 +41,9 @@ test.each([
 	['wrong key', literalHelp.map((row) => (row === 'F5 Pool' ? 'F8 Pool' : row))],
 	['wrong convention', literalHelp.map((row) => row.replace('stays on quota', 'quits quota'))],
 ])('Help rejects %s', (_label, rows) => {
-	expect(checkQuotaHelpRows(rows, true).length).toBeGreaterThan(0);
+	expect(
+		checkQuotaHelpRows(rows, { refreshAvailable: true, weeklyFloorAvailable: true }).length,
+	).toBeGreaterThan(0);
 });
 test.each([
 	['Details Filters: All ▾ Pool Options Floor', true],
@@ -65,7 +67,7 @@ test('read-only Help requires the exact unavailable Refresh reason across physic
 	expect(
 		checkQuotaHelpRows(
 			unavailableRefreshHelp.flatMap((row) => [row.slice(0, 13), row.slice(13)]),
-			false,
+			{ refreshAvailable: false, weeklyFloorAvailable: true },
 		),
 	).toEqual([]);
 });
@@ -92,5 +94,30 @@ test.each([
 		false,
 	],
 ] as const)('Help rejects capability mismatch: %s', (_name, rows, refreshAvailable) => {
-	expect(checkQuotaHelpRows(rows, refreshAvailable).length).toBeGreaterThan(0);
+	expect(
+		checkQuotaHelpRows(rows, { refreshAvailable, weeklyFloorAvailable: true }).length,
+	).toBeGreaterThan(0);
+});
+
+// Floor is a declared fixture capability, independent of Refresh.
+test('Help without a weekly-floor saver accepts the closed set without Floor', () => {
+	expect(
+		checkQuotaHelpRows(
+			literalHelp.filter((row) => row !== 'Ctrl+E Floor'),
+			{ refreshAvailable: true, weeklyFloorAvailable: false },
+		),
+	).toEqual([]);
+});
+test('Help rejects a missing Floor action when the saver exists', () => {
+	expect(
+		checkQuotaHelpRows(
+			literalHelp.filter((row) => row !== 'Ctrl+E Floor'),
+			{ refreshAvailable: true, weeklyFloorAvailable: true },
+		).length,
+	).toBeGreaterThan(0);
+});
+test('Help rejects an unexpected Floor action when the saver is absent', () => {
+	expect(
+		checkQuotaHelpRows(literalHelp, { refreshAvailable: true, weeklyFloorAvailable: false }).length,
+	).toBeGreaterThan(0);
 });

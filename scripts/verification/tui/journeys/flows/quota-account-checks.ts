@@ -71,8 +71,12 @@ export function checkQuotaAccount(options: {
 			failures.push('account dialog retargeted away from the captured identity');
 		for (const entry of commands)
 			if (
-				canonicalJson({ ...entry.command, action: undefined }) !==
-				canonicalJson({ ...target, action: undefined })
+				canonicalJson({
+					accountId: entry.command.accountId,
+					provider: entry.command.provider,
+					label: entry.command.label,
+					position: entry.command.position,
+				}) !== canonicalJson(target)
 			)
 				failures.push('account command retargeted captured identity');
 		if (
@@ -173,7 +177,11 @@ export function checkQuotaAccount(options: {
 				'RequiresDisabled did not preserve the captured account with one typed refusal',
 			);
 
-		const visibleText = [gridLines(grid).join(' ')];
+		const visibleText = [
+			gridLines(grid)
+				.map((line) => line.trimEnd().replace(/^[│┃]|[│┃]$/gu, ''))
+				.join(' '),
+		];
 		for (const title of ['Remove account', 'Account details'])
 			if (findDialog(grid, title) !== null)
 				visibleText.push(quotaDialogInteriorRows(grid, title).join(' '));

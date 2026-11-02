@@ -189,7 +189,7 @@ export function quotaAccountBindings(options: {
 						quotaExpectedKey(
 							'Escape',
 							active,
-							'action:quota:' + (dialogKind === 'options' ? 'domain-body' : 'floor-decrease'),
+							'action:quota:' + (dialogKind === 'options' ? 'domain-body' : 'floor-save'),
 						),
 					],
 				});
@@ -388,6 +388,15 @@ export function quotaAccountBindings(options: {
 			spec.enabled ? choice.actionId !== 'remove' : true,
 		);
 		let marked = await context.input.press('F12', [quotaExpectedKey('F12', spec.surface)]);
+		await context.driver.waitForGrid('captured account menu actions became available', (grid) => {
+			try {
+				locatePaintedTarget(grid, quotaDialogTarget(grid, '', 'Log in again'));
+				return true;
+			} catch {
+				return false;
+			}
+		});
+		marked = await context.input.press('F12', [quotaExpectedKey('F12', spec.surface)]);
 		const seen = new Set<string>();
 		const inspect = (): void => {
 			const text = gridLines(quotaMarkedFrame(marked).grid).join('\n');

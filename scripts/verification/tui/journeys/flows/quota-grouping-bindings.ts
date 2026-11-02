@@ -27,6 +27,10 @@ import type { QuotaLiveFixture, QuotaLiveReadback } from './quota-live-fixture.t
 import { collectQuotaMenu } from './quota-menu-observation.ts';
 import type { QuotaMenuObservation } from './quota-menu-observation.ts';
 
+function selectedAccountVisible(grid: NativeFlowContext['frame']['grid']): boolean {
+	return gridLines(grid).some((line) => line.includes('effect-alpha') && /[❯●]/u.test(line));
+}
+
 function statusHeading(status: string): string {
 	for (const heading of ['Preferred', 'Available', 'Held', 'Blocked', 'Stale'])
 		if (status === 'Account(' + heading + ')') return heading;
@@ -97,7 +101,11 @@ export function quotaGroupingBindings(options: {
 		}
 		baseline ??= live.readback.rows;
 		currentFacet = facet;
-		let marked = await context.input.press('F12', [quotaExpectedKey('F12', quotaScreen)]),
+		if (!selectedAccountVisible(context.frame.grid))
+			throw new Error('regroup did not keep the selected account painted before the census');
+		let marked = await context.input.press('Alt+Shift+Up', [
+				quotaExpectedKey('Alt+Shift+Up', quotaScreen, 'action:quota:accounts'),
+			]),
 			moved = 0;
 		const census: string[] = [...gridLines(quotaMarkedFrame(marked).grid)];
 		const advance = async (count: number): Promise<void> => {
@@ -120,6 +128,16 @@ export function quotaGroupingBindings(options: {
 				quotaExpectedKey('Alt+Up', quotaScreen, 'action:quota:accounts'),
 			]);
 		}, Promise.resolve());
+		const restoreSelected = async (count: number): Promise<void> => {
+			if (selectedAccountVisible(quotaMarkedFrame(marked).grid)) return;
+			if (count > moved)
+				throw new Error('whole-list census could not restore the selected account into view');
+			marked = await context.input.press('Alt+Down', [
+				quotaExpectedKey('Alt+Down', quotaScreen, 'action:quota:accounts'),
+			]);
+			await restoreSelected(count + 1);
+		};
+		await restoreSelected(0);
 		currentRows = census;
 		marked = await context.input.press('F10', [
 			quotaExpectedKey('F10', quotaScreen, null, 'quota:menu'),
@@ -150,9 +168,9 @@ export function quotaGroupingBindings(options: {
 	const check = async (name: FlowCheck, context: NativeFlowContext): Promise<readonly string[]> => {
 		const pose = (await fixture.read(context.frame.binding.sequence)).readback;
 		if (name === 'quota-grouping-selection')
-			return pose.listSelection === 'effect-account-0'
+			return pose.listSelection === 'effect-account-0' && selectedAccountVisible(context.frame.grid)
 				? []
-				: ['grouping changed the independently selected identity'];
+				: ['grouping changed or hid the independently selected account'];
 		if (name === 'quota-grouping-checked') {
 			const checked = menu?.items.filter((item) => item.checked).map((item) => item.actionId);
 			return JSON.stringify(checked) === JSON.stringify(['group-' + currentFacet])

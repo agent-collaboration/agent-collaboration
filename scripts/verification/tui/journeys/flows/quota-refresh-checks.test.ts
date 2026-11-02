@@ -18,7 +18,6 @@ function observation(percentage: string): ReturnType<typeof quotaObservationSche
 				callsWhileHeld: 1,
 				released: true,
 				observations: [],
-				requests: [],
 			},
 			readback: {
 				mount: 1,

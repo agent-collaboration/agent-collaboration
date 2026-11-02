@@ -77,16 +77,21 @@ const conventions = [
 const compact = (text: string): string => text.replace(/[\s│█]/gu, '');
 export function checkQuotaHelpRows(
 	rows: readonly string[],
-	refreshAvailable: boolean,
+	capabilities: { readonly refreshAvailable: boolean; readonly weeklyFloorAvailable: boolean },
 ): readonly string[] {
+	const { refreshAvailable, weeklyFloorAvailable } = capabilities;
 	const text = compact(rows.join(' ')),
 		start = text.indexOf('Actions'),
 		end = text.indexOf('Inputconventions');
 	if (start < 0 || end <= start) return ['quota Help action/convention sections absent'];
 	const failures: string[] = [];
-	const actions = quotaHelpActions.map((action) =>
-		action === 'R Refresh' && !refreshAvailable ? 'R Refresh Quota refresh is unavailable' : action,
-	);
+	const actions = quotaHelpActions
+		.filter((action) => weeklyFloorAvailable || action !== 'Ctrl+E Floor')
+		.map((action) =>
+			action === 'R Refresh' && !refreshAvailable
+				? 'R Refresh Quota refresh is unavailable'
+				: action,
+		);
 	if (text.slice(start + 'Actions'.length, end) !== compact(actions.join(' ')))
 		failures.push('quota Help closed action/key census differs');
 	const body = text.slice(end + 'Inputconventions'.length),
