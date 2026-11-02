@@ -1,0 +1,149 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Where the work stands · Central automations</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content">
+  <nav slot="pages" aria-label="Pages">
+    <a href="index.html">Central automations</a>
+    <a href="mental-model.html">How it all fits</a>
+    <a href="definitions.html">The central list</a>
+    <a href="firing.html">Clock, firing and delivery</a>
+    <a href="runs.html">The receiving machine</a>
+    <a href="remote-sessions.html">Sessions on other machines</a>
+    <a href="notifications.html">Notifications</a>
+    <a href="migration.html">Moving to central</a>
+    <a href="database.html">Database cleanup (PR 1)</a>
+    <a href="published-design.html">Fixing the published design</a>
+    <a href="proof.html">How it's proven</a>
+    <a href="firing-options.html">Firing options and cost</a>
+    <a href="history.html">How we got here</a>
+    <a href="delivery-plan.html">Delivery plan</a>
+    <a href="approvals.html">How approvals work</a>
+    <a href="progress.html">Where the work stands</a>    <a href="decisions.html">Your decisions</a>
+  </nav>
+</ex-nav>
+<ex-document id="content">
+<h1>Where the work stands</h1>
+
+<p><strong>PR 1 is done and its milestone accepted. In PR 2, the central side is finished and accepted. The receiving Router side is being built, and the two-machine checks are part way through.</strong> Real two-machine runs found three product bugs that unit tests had missed; all three are fixed or being fixed. Seven things wait on you: five storage changes to confirm before PR 2 merges, a leftover Router to stop, and which Router the model tests use. They're on <a href="decisions.html">Your decisions</a>, with answer buttons.</p>
+
+<ex-callout title="What I need from you" tone="question" icon="user">
+  <p>Seven answers, all on <a href="decisions.html">Your decisions</a>. None of them blocks today's work, because the storage changes were built so they come out easily. But PR 2 can't merge until you've answered the storage ones. M6 and V12 can't be observed until you've answered the model-route one.</p>
+</ex-callout>
+
+<p>Heads as of 2 November, 10:16 UTC: PR 1 (<code>fix/router-db-retention</code>, draft #205) is at <code>3816d7da6</code>, and PR 2 (<code>design/automations-central</code>, draft #206) is at <code>cbf27032a</code>.</p>
+
+<h2 id="status">Status by milestone</h2>
+<p>A milestone counts only once the Verifier has observed its check on a real build. That rule came from you ("milestones means it should be verified").</p>
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Milestone</th><th>What it proves</th><th>State</th></tr></thead>
+<tbody>
+<tr><td><strong>M0</strong> (PR 1)</td><td>Retention, WAL and vacuum; approval routes stored only in <code>interaction.sqlite</code></td><td><span class="chip">Accepted</span> Re-checked at <code>3816d7da6</code>: module-cycle check clean, storage tests 87/0, import, prune and restart on a real Host</td></tr>
+<tr><td><strong>M1</strong></td><td>Contracts, limits, 5-minute grid validation</td><td><span class="chip">Accepted</span></td></tr>
+<tr><td><strong>M2</strong></td><td>Central catalog, clock, Batches, custody</td><td><span class="chip">Accepted</span> Plus the later fix that brought a fresh Fleet alarm back to its 2-statement budget</td></tr>
+<tr><td><strong>M7</strong></td><td>The published board design</td><td><span class="chip">Accepted</span></td></tr>
+<tr><td>S11 central half</td><td>Remote session create: admission, status, reports, retention</td><td><span class="chip">Accepted</span> Native and Cloudflare worker; 5 wrong builds caught</td></tr>
+<tr><td>S7 central half</td><td>Handover import: frozen bytes, carried Firings, owed waiters</td><td><span class="chip">Accepted</span> Including the case where an imported local Run is still unresolved after its next due time</td></tr>
+<tr><td><strong>M3</strong>, receiving Router</td><td>Custody on B survives kills; reports reach central in order</td><td><span class="chip">Partly observed</span> A kill before acknowledgement, then a reopen, lost nothing and doubled nothing. The other kill points run next, each in its own state folder (run 7)</td></tr>
+<tr><td><strong>M4</strong>, commands through central</td><td>Real CLI and MCP on two machines; limits; off-grid refusals</td><td><span class="chip">Partly observed</span> The catalog paths (V1) are supported. Retry, limits and off-grid run next (run 7)</td></tr>
+<tr><td><strong>M3b</strong>, sessions on other machines</td><td>Create on B from A, with first input and approval</td><td><span class="chip">Building</span> The Router half is being built</td></tr>
+<tr><td><strong>M5</strong>, the move to central</td><td>Freeze, import and settle, with kills at each step</td><td><span class="chip">Building</span> The Router half; the import and reopen tests pass</td></tr>
+<tr><td><strong>M6</strong>, notifications</td><td>At most one notification per 10 minutes per reader</td><td><span class="chip">Blocked</span> Built, and being brought onto PR 2. The real-model check waits on your model-route answer</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="timeline">What happened</h2>
+<ex-trace title="From the approved plan to now" data-width="canvas">
+  <details icon="book-open" tone="done" tag="Owner approved">
+    <summary>The design and plan were approved (31 October)</summary>
+    <p>Four design documents, then the delivery plan. You approved it as written, adding that every milestone must be verified. Five lanes started on Sunclaw: central core, the receiving Router, notifications, republishing the design, and a Verifier.</p>
+  </details>
+  <details icon="database" tone="done" tag="Observed">
+    <summary>PR 1 finished: database retention and approval state</summary>
+    <p>Retention, WAL and vacuum on every database. Approval routes moved from <code>approval-routes.json</code> into a table, and the history JSON code was deleted. The first acceptance was withdrawn when the module-cycle check failed; after the placement fix, the Verifier re-checked it and M0 was accepted.</p>
+  </details>
+  <details icon="cloud" tone="done" tag="Observed">
+    <summary>Central was built and accepted: M1, M2, then remote create and handover</summary>
+    <p>Every central piece was checked on both runtimes, native and the real Cloudflare worker, plus wrong builds. Several gaps surfaced while building and were settled on the way. The Program Design now records each decision (see below).</p>
+  </details>
+  <details icon="terminal" tone="done" tag="Observed">
+    <summary>The receiving Router's custody (S5) and command cutover (S6) merged</summary>
+    <p>Full gates: central tests 1,162 passed, and the Host tests passed apart from six enrollment tests that fail only under the sandbox. Run outside the sandbox, those six passed 6/0.</p>
+  </details>
+  <details icon="bug" tone="done" tag="Observed">
+    <summary>The two-machine runs caught a real bug: cross-machine Wake send</summary>
+    <p>The real CLI on A refused a Wake addressed to B before ever sending it, and reported the refusal as "outcome unknown". Fixed: a test that drives the real compiled CLI from A to B failed before the fix and passes after it.</p>
+  </details>
+  <details icon="bug" tone="done" tag="Observed">
+    <summary>The strict MCP run caught a Wake-wait deadline race</summary>
+    <p>A local Wake wait could return "wait unavailable", because an outer deadline fired before the wait's own. Fixed with two phases in a row: the existing bounded owner selection first, then the owner's own wait. The existing "never guess the owner" test still passes.</p>
+  </details>
+  <details icon="bug" tone="planned" tag="Building">
+    <summary>Found: native create could hide a session it had already made</summary>
+    <p>This bug predates PR 2. If the model or folder check failed after the native thread had started, or the approval route failed to register, the session existed but was recorded as "not submitted". The fix records the session the moment its ID appears, and reports it as created with the settings actually applied. Its tests failed before the fix and pass after it (3/0); the remote-create integration is still being built.</p>
+  </details>
+  <details icon="hard-drives" tone="done" tag="Observed">
+    <summary>Twice, Sunclaw's disk ran low</summary>
+    <p>The first time, another Lead's TUI build reached about 104 GiB, and free space fell to 2.2 GiB. The second time, growth from several worktrees took free space to 42 GiB. Both times builds stopped at the 42 GiB floor, finished build folders were cleaned with the evidence kept, and free space came back above 100 GiB. No data was lost, and production was never touched.</p>
+  </details>
+  <details icon="shield-check" tone="done" tag="Fixed">
+    <summary>The test setup was pointed at your main Codex login. It was caught before any model call</summary>
+    <p>Its launcher sent model calls straight to OpenAI on <code>~/.codex</code>. It failed on an expired token, so no call was made. Your rule now lives in <code>AGENTS.md</code>, my memory, and every helper's instructions: test sessions use Luna through a debug Router, Haiku only with your approval, and never your main accounts or production. A sweep fixed 21 older test drivers that broke the rule.</p>
+  </details>
+</ex-trace>
+
+<h2 id="decisions">Decisions I made, and why</h2>
+<p>These came up while building. Each is reversible, or is a design detail inside what you approved, so I decided it and recorded it in the Program Design. Anything that touches stored data is on <a href="decisions.html">Your decisions</a> instead.</p>
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Decision</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td><strong>The interactions crate split is a separate PR (PR 2b)</strong>, after PR 2</td><td>You moved it. PR 1 got only a small placement fix. The PR 2b plan keeps one database, one migration set, and one direction of dependency</td></tr>
+<tr><td><strong>Prepare runs on the Schedule's target machine</strong> and binds through one new central call</td><td>The native thread is created there; central only records the binding</td></tr>
+<tr><td><strong>Portable import is one atomic central call</strong>; export reads from central</td><td>Two separate creates would change IDs and lose atomicity. Off-grid times are refused, never rounded (your rule)</td></tr>
+<tr><td><strong>A Wake or Schedule is served from wherever its stored row lives</strong> (local until it moves, then central)</td><td>Before handover, local definitions must stay readable and controllable. There's no fallback when central is down</td></tr>
+<tr><td><strong>The handover payload travels as the exact frozen bytes</strong>, and central computes the digest itself</td><td>Any retry sends the same bytes, and central never trusts a digest the caller sends</td></tr>
+<tr><td><strong>A carried Wake gets a Firing ID from the Router</strong>, which central records as already received</td><td>So central never sends work again that the machine already owns</td></tr>
+<tr><td><strong>Central's alarm also wakes for a carried Run owed in the future</strong></td><td>Otherwise a Run already owed on a suspended Schedule would never fire</td></tr>
+<tr><td><strong>The old remote-Wake path is retired</strong>; retrying an old operation recovers its recorded answer, read-only</td><td>No double send at upgrade. This interim recovery gets deleted after its 32-day retention</td></tr>
+<tr><td><strong>Remote create keeps the public ACP wire unchanged.</strong> A private adapter takes only the request central has verified</td><td>A new public field could be spoofed</td></tr>
+<tr><td><strong>The first input keeps the creator's verified origin exactly.</strong> A Router-authored first input is refused</td><td>It's never relabelled as an unverified owner, and the public guards stay unchanged</td></tr>
+<tr><td><strong>The interim approver lives in a read-only <code>remote-create.json</code></strong> that you edit by hand</td><td>It follows the <code>ports.json</code> precedent, and goes away with PR 3's routed approvals</td></tr>
+<tr><td><strong>The handover freeze depends on enrollment</strong>, not on whether central is reachable</td><td>An unenrolled Router keeps its local automations running. An enrolled one freezes even when central is down</td></tr>
+<tr><td><strong>One debug test clock</strong>, shared by notifications and the automation timers</td><td>Two clocks would drift and make the tests lie</td></tr>
+<tr><td><strong>The alarm budget is fixed, not raised.</strong> The automation work is skipped only when there's nothing at all</td><td>You've said not to raise budgets; nothing owed can be hidden</td></tr>
+<tr><td><strong>Each kill test runs in its own fresh state folder</strong></td><td>One run picked up a previous run's recovery. Isolating them is simpler and safer than a new control</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="unverified">Not verified yet</h2>
+<ul>
+  <li><strong>Two tests failed once under full load:</strong> <code>runtime_restart</code> and <code>retained_project_registry</code>. Neither fails on its own, and PR 1 is ruled out for the second. A test fixture that left an orphaned child process is fixed, but the original cause is still unproven.</li>
+  <li><strong>Real model runs:</strong> the M6 notification check and V12's fresh Schedule run. Both wait on your model-route answer.</li>
+  <li><strong>Native session effects on the test setup:</strong> the setup has no native backend, so delivery to Codex sessions shows "not submitted" there. Delivery to scripted providers is proven instead.</li>
+  <li><strong>Cross-lineage review and CI:</strong> not run yet. They happen once at the PR 2 batch end, with the review prompts the lanes prepared.</li>
+</ul>
+
+<h2 id="followups">Follow-ups logged, not in PR 2</h2>
+<ul>
+  <li><strong>PR 2b:</strong> the interactions crate split (plan written).</li>
+  <li><strong>The library follow-up you approved:</strong> install-attempt pruning, and vacuum for <code>agent-fleet-sync</code> and <code>sqlx-turso</code>.</li>
+  <li><strong>PR 3:</strong> approvals routed through central. The requester becomes the approver, replacing the interim Chief of Staff.</li>
+  <li><strong>Small items:</strong>
+    <ul>
+      <li>the same Serde unknown-field gap in an older enum (<code>DeliveryOutcome</code>);</li>
+      <li>a yield-polling test helper in notifications;</li>
+      <li><code>automation-debug-host</code>'s stale model setting;</li>
+      <li>deleting the old remote-Wake recovery after 32 days.</li>
+    </ul>
+  </li>
+</ul>
+</ex-document>
+</body></html>

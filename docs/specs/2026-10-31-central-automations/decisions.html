@@ -23,13 +23,82 @@
     <a href="history.html">How we got here</a>
     <a href="delivery-plan.html">Delivery plan</a>
     <a href="approvals.html">How approvals work</a>
-    <a href="decisions.html">Your decisions</a>
+    <a href="progress.html">Where the work stands</a>    <a href="decisions.html">Your decisions</a>
   </nav>
 </ex-nav>
 <ex-document id="content">
 <h1>Your decisions</h1>
 
-<p><strong>Nothing is waiting on you right now.</strong> Everything else you answered on 31 October. This page records each answer and what it changed in the design.</p>
+<p><strong>Seven questions are open.</strong> Five are storage changes I built so PR 2 could keep moving. Each is in PR 2's unreleased migrations and kept to one migration and one codec, so it comes out easily. They need your yes before PR 2 merges. The other two are a leftover Router to stop, and which Router the model tests use. Each question shows my recommendation. Choose an answer, then use Comments to send them back. For the full story, see <a href="progress.html">Where the work stands</a>.</p>
+
+<h2 id="open">Open questions</h2>
+
+<ex-choice id="prepare-retry" title="Prepare retry: how does a retry resend the exact bind request after a lost answer?">
+  <ex-option id="prepare-retry-a" title="**A: one nullable column** (recommended, built)">
+    <template slot="summary">
+Add `central_bind_request_json` to the existing `operation_receipts` row in `automation.sqlite`. It's written before sending, so a retry resends the exact bytes and never creates the thread twice. Only central's real answer finishes the operation. Existing rows stay null.
+    </template>
+  </ex-option>
+  <ex-option id="prepare-retry-b" title="B: no column">
+    <template slot="summary">
+After a lost answer, read central's current state and bind again under a new operation ID. That avoids the database change, but adds reconcile logic with more ways to go wrong, and drops exact replay.
+    </template>
+  </ex-option>
+</ex-choice>
+
+<ex-choice id="waiting-run" title="Handover: how does a waiting local Run end when its Schedule moves to central?">
+  <ex-option id="waiting-run-confirm" title="**Today's terminal failure, with the reason `transferredToCentral`** (recommended, built)">
+    <template slot="summary">The row and its history are kept. There's no new phase and nothing is deleted. The reason is a new typed value stored in an existing field.</template>
+  </ex-option>
+  <ex-option id="waiting-run-other" title="Something else">
+    <template slot="summary">Say what you want in a comment.</template>
+  </ex-option>
+</ex-choice>
+
+<ex-choice id="handover-records" title="Handover: replay and report records">
+  <ex-option id="handover-records-confirm" title="**New operation kinds in the existing `operation_receipts` rows** (recommended, being built)">
+    <template slot="summary">They hold the import ID, the replay of the final settlement, and the "timing adjusted" and "Wake ended" facts. Those facts feed the handover report and the `needsTimingFix` events. No new column, and the frozen payload stays the only copy.</template>
+  </ex-option>
+  <ex-option id="handover-records-other" title="Something else">
+    <template slot="summary">Say what you want in a comment.</template>
+  </ex-option>
+</ex-choice>
+
+<ex-choice id="carried-wake" title="Handover: where a carried Wake's Firing is recorded">
+  <ex-option id="carried-wake-confirm" title="**Two nullable columns on the local delivery row** (recommended, being built)">
+    <template slot="summary">`carried_firing_id` and `carried_report_seq`. That makes the delivery row the one owner of that Firing's report sequence. There's no table rebuild and no made-up Batch ID.</template>
+  </ex-option>
+  <ex-option id="carried-wake-other" title="Something else">
+    <template slot="summary">Say what you want in a comment.</template>
+  </ex-option>
+</ex-choice>
+
+<ex-choice id="human-origin" title="Remote create: how to record a first input from a person on another machine">
+  <ex-option id="human-origin-confirm" title="**A new stored origin, `HumanUser { installation }`** (recommended, being built)">
+    <template slot="summary">Only the private path central has verified uses it. Existing rows and public paths don't change. That way your own first input on another machine is credited to you, and not to an "unverified owner".</template>
+  </ex-option>
+  <ex-option id="human-origin-refuse" title="No new origin: refuse a first input from a person on another machine">
+    <template slot="summary">Simpler storage, but you couldn't create a remote session with a first input yourself. That's against your requirement.</template>
+  </ex-option>
+</ex-choice>
+
+<ex-choice id="orphan-router" title="Stop the leftover test Router on port 43127?">
+  <ex-option id="orphan-router-stop" title="**Yes, stop it** (recommended)">
+    <template slot="summary">It's an orphaned test Router from 16 October (PID 13306), serving `~/.codex-router-compaction-validation-2026-10-11`. It holds your `codex-router-debug` profile's port and returns 502s. Its folder stays as it is.</template>
+  </ex-option>
+  <ex-option id="orphan-router-keep" title="Leave it running">
+    <template slot="summary">Your debug profile keeps pointing at a broken Router.</template>
+  </ex-option>
+</ex-choice>
+
+<ex-choice id="model-route" title="Which Router carries model calls for the M6 and V12 test runs?">
+  <ex-option id="model-route-signed-in" title="**The test Router you signed into** (recommended)">
+    <template slot="summary">It already has a debug account, runs the build being tested, and isn't production. Test sessions use Luna at low effort.</template>
+  </ex-option>
+  <ex-option id="model-route-fresh-debug" title="Start a proper debug Router at `~/.codex-router-debug`">
+    <template slot="summary">It needs a start and maybe a sign-in from you. After that, your `codex-router-debug` profile works again.</template>
+  </ex-option>
+</ex-choice>
 
 <ex-callout title="Decided: database library gaps and the test rig's model" tone="decision" icon="database">
   <p><strong>Option A, with the library pins approved (1 November).</strong> PR 1 ships retention, WAL and vacuum for the stores the Router controls. A follow-up PR changes the pinned <code>agent-fleet-sync</code> (install-attempt pruning, journal mode for its stores) and <code>sqlx-turso</code> (vacuum).</p>
