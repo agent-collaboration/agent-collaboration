@@ -100,7 +100,7 @@ jobs:
       # Complete verification on its declared Node before switching to TUI's.
       - uses: actions/setup-node@v5
         with:
-          node-version: '26.12.1'
+          node-version: '26.13.0'
           package-manager-cache: false
       - name: Check Quota and Sessions verification TypeScript
         id: tui_verification
@@ -139,6 +139,8 @@ jobs:
       - name: Lint Rust workspace
         id: rust_lint
         run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Challenge TUI terminal input ownership
+        run: node verification/tooling/check-tui-input-ownership.ts
       - name: Check SQLx query metadata against native migrations
         id: sqlite_metadata
         run: |
@@ -221,7 +223,7 @@ jobs:
         run: pnpm --dir verification install --frozen-lockfile
       - uses: actions/setup-node@v5
         with:
-          node-version: '26.12.1'
+          node-version: '26.13.0'
           package-manager-cache: false
       - name: Install native adapter test dependencies
         run: |

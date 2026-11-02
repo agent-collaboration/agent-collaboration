@@ -1,0 +1,60 @@
+include!("quota_browse_compatibility_test.rs");
+include!("quota_browse_rendering_test.rs");
+include!("quota_presentation_support_test.rs");
+include!("quota_presentation_fixtures_test.rs");
+include!("quota_provider_filters_test.rs");
+#[path = "quota_static_typography_test.rs"]
+mod quota_static_typography_test;
+
+#[path = "quota_empty_state_test.rs"]
+mod quota_empty_state_test;
+
+#[path = "quota_form_alignment_test.rs"]
+mod quota_form_alignment_test;
+
+include!("quota_help_presentation_test.rs");
+include!("quota_component_cutover_test.rs");
+#[path = "quota_account_action_component_test.rs"]
+mod quota_account_action_component_test;
+#[path = "quota_refresh_component_test.rs"]
+mod quota_refresh_component_test;
+#[path = "quota_reset_primary_component_test.rs"]
+mod quota_reset_primary_component_test;
+#[path = "quota_taste_review_test.rs"]
+mod quota_taste_review_test;
+
+#[path = "quota_choice_dialog_test.rs"]
+mod quota_choice_dialog_test;
+
+#[path = "quota_storyboard_fixture_test.rs"]
+mod quota_storyboard_fixture_test;
+
+#[path = "quota_ux_clarity_test.rs"]
+pub(crate) mod quota_ux_clarity_test;
+
+#[path = "quota_visual_contract_test.rs"]
+mod quota_visual_contract_test;
+
+#[path = "quota_group_observation_test.rs"]
+mod quota_group_observation_test;
+
+#[path = "quota_normal_browse_pose_test.rs"]
+mod quota_normal_browse_pose_test;
+
+#[path = "quota_hard_fixture_consistency_test.rs"]
+mod quota_hard_fixture_consistency_test;
+
+#[path = "quota_filter_help_pose_test.rs"]
+mod quota_filter_help_pose_test;
+
+#[path = "quota_fixture_controller_test.rs"]
+mod quota_fixture_controller_test;
+
+#[path = "quota_grouping_component_test.rs"]
+mod quota_grouping_component_test;
+
+#[path = "quota_menu_sections_test.rs"]
+mod quota_menu_sections_test;
+
+#[path = "quota_grouped_rows_test.rs"]
+mod quota_grouped_rows_test;

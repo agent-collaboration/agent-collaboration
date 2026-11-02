@@ -45,7 +45,7 @@ function commonSuccess(): ProofRecord {
   };
 }
 export function patchReceipt(path: string, row: string): void {
-  const patches = readProof(new URL("proof-receipt-patches.json", import.meta.url).pathname);
+  const patches = readProof(new URL("./proof-receipt-patches.json", import.meta.url).pathname);
   writeProof(path, { ...readProof(path), ...record(patches[row]) });
 }
 export function passReceipt(path: string, notes: string): void {

@@ -494,6 +494,31 @@ fn quota_reset_test_harness_is_a_distinct_non_installable_package() {
     assert!(!cli_manifest.contains("portable-pty"));
     assert!(cli_manifest.contains("quota-reset-test-harness = ["));
     assert!(harness_manifest.contains("agent-collaboration/quota-reset-test-harness"));
+    let uses_forbidden_package = |configuration: &str| -> bool {
+        configuration
+            .split(|character: char| {
+                !character.is_alphanumeric() && character != '-' && character != '_'
+            })
+            .any(|token| token == "agent-collaboration")
+    };
+    for spelling in [
+        "agent-collaboration = {}",
+        "agent-collaboration.workspace = true",
+        "\"dep:agent-collaboration\"",
+        "\"agent-collaboration/feature\"",
+    ] {
+        assert!(uses_forbidden_package(spelling), "{spelling}");
+    }
+    for distinct_package in [
+        "agent-collaboration-tui.workspace = true",
+        "agent-collaboration_helper = {}",
+        "agent-collaboration2 = {}",
+    ] {
+        assert!(
+            !uses_forbidden_package(distinct_package),
+            "{distinct_package}"
+        );
+    }
     for section in ["[dependencies]", "[features]"] {
         let section_body = cli_manifest
             .split_once(section)
@@ -505,7 +530,7 @@ fn quota_reset_test_harness_is_a_distinct_non_installable_package() {
             .filter_map(|line| line.split('#').next())
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(!active_configuration.contains("agent-collaboration"));
+        assert!(!uses_forbidden_package(&active_configuration));
     }
     assert!(harness_manifest.contains("name = \"codex-router-quota-reset-test-harness\""));
     assert!(harness_manifest.contains("publish = false"));

@@ -179,8 +179,9 @@ name = "agent-collaboration"
 version = "0.1.119"
 dependencies = [
  "agent-automation",
+ "agent-collaboration-tui",
  "agent-session-inventory",
- "agent-session-picker",
+ "agent-session-tui",
  "automation-storage",
  "axum",
  "board-central-test-support",
@@ -192,7 +193,6 @@ dependencies = [
  "codex-native-integration",
  "codex-router-host",
  "codex-router-test-support",
- "codex-router-tui",
  "collaboration-central-admin-protocol",
  "collaboration-central-conformance",
  "collaboration-client",
@@ -242,6 +242,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent-collaboration-tui"
+version = "0.1.119"
+dependencies = [
+ "futures-util",
+ "iocraft",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "unicode-width 0.1.14",
+ "unicode-width 0.2.2",
+]
+
+[[package]]
+name = "agent-router-quota-tui"
+version = "0.1.119"
+dependencies = [
+ "agent-collaboration-tui",
+ "chrono",
+ "codex-router-core",
+ "codex-router-quota-service",
+ "codex-router-selection",
+ "crossterm",
+ "futures-util",
+ "iocraft",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "unicode-width 0.2.2",
+]
+
+[[package]]
 name = "agent-session-inventory"
 version = "0.1.119"
 dependencies = [
@@ -276,21 +310,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "agent-session-picker"
+name = "agent-session-tui"
 version = "0.1.119"
 dependencies = [
+ "agent-collaboration-tui",
  "agent-session-inventory",
+ "chrono",
+ "chrono-tz",
  "codex-native-integration",
- "codex-router-tui",
  "collaboration-client",
+ "collaboration-protocol",
  "crossterm",
  "futures-util",
  "iocraft",
  "node-test-fixture",
+ "rustix 1.1.4",
+ "serde",
  "serde_json",
  "sqlx",
  "tempfile",
  "tokio",
+ "ui-preference-store",
  "unicode-width 0.2.2",
 ]
 
@@ -1301,6 +1341,8 @@ dependencies = [
 name = "codex-router-cli"
 version = "0.1.119"
 dependencies = [
+ "agent-collaboration-tui",
+ "agent-router-quota-tui",
  "base64 0.22.1",
  "board-central-test-support",
  "chrono",
@@ -1311,12 +1353,10 @@ dependencies = [
  "codex-router-host",
  "codex-router-proxy",
  "codex-router-quota-service",
- "codex-router-quota-tui",
  "codex-router-secret-store",
  "codex-router-selection",
  "codex-router-state",
  "codex-router-test-support",
- "codex-router-tui",
  "collaboration-central-core",
  "collaboration-central-tokio",
  "collaboration-client",
@@ -1353,6 +1393,7 @@ dependencies = [
  "tracing-opentelemetry",
  "tracing-subscriber",
  "tungstenite 0.28.0",
+ "ui-preference-store",
  "unicode-width 0.2.2",
  "uuid",
 ]
@@ -1492,8 +1533,12 @@ dependencies = [
  "codex-router-core",
  "codex-router-secret-store",
  "codex-router-state",
+ "nix",
  "portable-pty",
  "regex",
+ "rustix 1.1.4",
+ "serde",
+ "serde_json",
  "sha2 0.10.9",
  "tokio",
 ]
@@ -1520,26 +1565,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "unicode-width 0.2.2",
-]
-
-[[package]]
-name = "codex-router-quota-tui"
-version = "0.1.119"
-dependencies = [
- "chrono",
- "codex-router-core",
- "codex-router-quota-service",
- "codex-router-selection",
- "codex-router-tui",
- "crossterm",
- "futures-util",
- "iocraft",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tracing",
  "unicode-width 0.2.2",
 ]
 
@@ -1634,16 +1659,6 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "tungstenite 0.28.0",
-]
-
-[[package]]
-name = "codex-router-tui"
-version = "0.1.119"
-dependencies = [
- "futures-util",
- "iocraft",
- "tokio",
- "unicode-width 0.2.2",
 ]
 
 [[package]]
@@ -7111,6 +7126,16 @@ name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
+
+[[package]]
+name = "ui-preference-store"
+version = "0.1.119"
+dependencies = [
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
 
 [[package]]
 name = "unarray"

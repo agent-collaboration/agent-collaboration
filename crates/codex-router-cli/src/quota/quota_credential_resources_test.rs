@@ -1,5 +1,5 @@
 #[cfg(test)]
-use codex_router_quota_tui::quota_status_view_model_loader;
+use agent_router_quota_tui::quota_status_view_model_loader;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicUsize;

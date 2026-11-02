@@ -13,6 +13,7 @@ use super::{
     safe_account_label, stale_after_unix_seconds, success_quota_history_observation,
     telemetry_hash, weekly_quota_switch_at_basis_points,
 };
+use crate::quota_refresh_outcome::AccountRefreshOutcomes;
 use codex_router_core::ids::AccountId;
 use codex_router_core::provider::Provider;
 use codex_router_core::route_profile::WindowKind;
@@ -23,6 +24,7 @@ use codex_router_state::window_observation::calculate_window_observation_fresh_u
 #[derive(Clone, Debug, Default)]
 pub struct QuotaRefreshReport {
     committed_responses_generations: HashMap<AccountId, u64>,
+    pub account_outcomes: Vec<crate::quota_refresh_outcome::AccountRefreshOutcome>,
 }
 
 impl QuotaRefreshReport {
@@ -192,13 +194,22 @@ where
     let mut refreshed_count = 0_u64;
     let mut failed_count = 0_u64;
     let mut committed_responses_generations = HashMap::new();
+    let mut account_outcomes = AccountRefreshOutcomes::default();
     'accounts: for account in accounts
         .iter()
         .filter(|account| account.status() == AccountStatus::Enabled)
         .filter(|account| account.active_credential_generation().is_some())
     {
+        account_outcomes.record_skipped(
+            account.account_id(),
+            "quota refresh was not committed".to_owned(),
+        );
         if schedule.polls_only_idle_claude_accounts() && account.provider() == Provider::Claude {
             if active_claude_accounts.contains(account.account_id()) {
+                account_outcomes.record_skipped(
+                    account.account_id(),
+                    "account has active sessions".to_owned(),
+                );
                 continue;
             }
             let latest_activity = quota_history_state
@@ -216,6 +227,8 @@ where
                 }
             };
             if !account_has_been_idle_long_enough {
+                account_outcomes
+                    .record_skipped(account.account_id(), "account is not idle".to_owned());
                 continue;
             }
         }
@@ -251,6 +264,7 @@ where
         {
             Ok(resolved) => resolved,
             Err(error) => {
+                account_outcomes.record_failed(account.account_id(), error.to_string());
                 failed_count = failed_count.saturating_add(route_bands.len() as u64);
                 let failure_status_attempt_unix_seconds =
                     credential_resolution_started_at.unwrap_or(observed_unix_seconds);
@@ -363,6 +377,7 @@ where
             let response = match response {
                 Ok(response) => response,
                 Err(error) => {
+                    account_outcomes.record_failed(account.account_id(), error.to_string());
                     failed_count = failed_count.saturating_add(1);
                     let error_class = quota_refresh_error_class(&error);
                     quota_history_state
@@ -460,6 +475,7 @@ where
                     )
                     .await?;
                 refreshed_count = refreshed_count.saturating_add(1);
+                account_outcomes.record_refreshed(account.account_id());
             }
             continue;
         }
@@ -563,6 +579,7 @@ where
             let response = match response {
                 Ok(response) => response,
                 Err(error) => {
+                    account_outcomes.record_failed(account.account_id(), error.to_string());
                     failed_count = failed_count.saturating_add(1);
                     let error_class = quota_refresh_error_class(&error);
                     if *route_band == USER_QUOTA_ROUTE_BAND {
@@ -639,6 +656,10 @@ where
             let effective_window = match response.effective_window() {
                 Some(effective_window) => effective_window,
                 None => {
+                    account_outcomes.record_failed(
+                        account.account_id(),
+                        "missing provider quota windows".to_owned(),
+                    );
                     failed_count = failed_count.saturating_add(1);
                     if *route_band == USER_QUOTA_ROUTE_BAND {
                         let Some(attempt) = credit_refresh_attempt.as_ref() else {
@@ -898,6 +919,7 @@ where
             );
             record_quota_refresh_metric(route_band, "success", "none");
             refreshed_count = refreshed_count.saturating_add(1);
+            account_outcomes.record_refreshed(account.account_id());
         }
     }
     purge_old_quota_history(&quota_history_state, observed_unix_seconds).await?;
@@ -906,17 +928,17 @@ where
     if failed_count > 0 {
         writeln!(stdout, "failed: {failed_count}").map_err(QuotaServiceError::Stdout)?;
     }
+    let account_outcomes = account_outcomes.into_outcomes();
     let refresh_result = if refreshed_count == 0 && failed_count > 0 {
-        Err(QuotaServiceError::ProviderResponse {
-            message: "quota refresh failed for all eligible route bands".to_owned(),
-        })
+        Err(QuotaServiceError::AllAccountsFailed { account_outcomes })
     } else {
-        Ok(())
+        Ok(account_outcomes)
     };
     quota_history_state.close().await?;
 
-    refresh_result.map(|()| QuotaRefreshReport {
+    refresh_result.map(|account_outcomes| QuotaRefreshReport {
         committed_responses_generations,
+        account_outcomes,
     })
 }
 

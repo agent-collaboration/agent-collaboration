@@ -5,6 +5,119 @@ use serde_json::{Value, json};
 const PRIVATE_SENTINEL: &str = "PRIVATE_INVENTORY_FAILURE_SENTINEL_DO_NOT_PRESENT";
 
 #[tokio::test]
+async fn configured_http_proxy_failure_is_unavailable_not_invalid_inventory() {
+    use crate::picker_runtime_status::NativeLiveUnavailableReason;
+    use crate::source_inventory_request::SourceInventoryRejection;
+    use crate::test_support::{
+        recorded_api_listener::RecordedApiListener,
+        source_fault_fixture::{ReadPeer, ReplyScenario, native_partitions::NativeScenario},
+    };
+    use tokio_util::sync::CancellationToken;
+
+    let peer = ReadPeer::start(ReplyScenario::NativePartition(NativeScenario::PrefixHeld)).await;
+    let PickerSourceContext::ConfiguredHosted(upstream_profile) = peer.request().source_context
+    else {
+        panic!("configured upstream fixture")
+    };
+    let RouterConnectionTransport::Remote { mcp_address, .. } = upstream_profile.transport else {
+        panic!("HTTP upstream fixture")
+    };
+    let shutdown = CancellationToken::new();
+    let proxy = RecordedApiListener::start(mcp_address.as_str().to_owned(), shutdown.clone())
+        .await
+        .unwrap();
+    let profile = profile_for_address(proxy.url.as_ref().unwrap());
+    let client = HttpConfiguredInventoryClient::new(&profile).unwrap();
+    let mut request = ProviderSessionListParams {
+        endpoint: serde_json::from_value(
+            json!({"serviceId":profile.service_id,"endpointId":"claude-local"}),
+        )
+        .unwrap(),
+        view: collaboration_client::protocol::NativeSessionView::Loaded,
+        scope: collaboration_client::protocol::NativeSessionScope::Any,
+        source: collaboration_client::protocol::NativeSessionSource::Interactive,
+        query: None,
+        page_size: 100,
+        cursor: None,
+    };
+    let first = client.provider_page(&request).await.unwrap();
+    request.cursor = Some(first.next_cursor.expect("fixture exposes a held next page"));
+    let reading = tokio::spawn(async move { client.provider_page(&request).await });
+    peer.wait_for_held_page().await;
+    shutdown.cancel();
+    let result = tokio::time::timeout(Duration::from_secs(5), reading)
+        .await
+        .unwrap()
+        .unwrap();
+    peer.release_held_page().await;
+    proxy.finish().await.unwrap();
+    peer.finish().await;
+
+    let failure = result.expect_err("the held upstream page must fail through the proxy");
+    assert_eq!(
+        failure,
+        InventoryReadFailure::Unavailable(NativeLiveUnavailableReason::TransportUnavailable),
+        "an HTTP upstream failure is availability, never invalid source data"
+    );
+    assert_eq!(
+        failure.into_rejection(),
+        SourceInventoryRejection::SourceUnavailable
+    );
+}
+
+#[tokio::test]
+async fn configured_http_server_failures_are_distinct_from_invalid_replies() {
+    use crate::picker_runtime_status::NativeLiveUnavailableReason;
+
+    for status in [500_u16, 502, 503, 504, 599, 400, 404, 200] {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let profile =
+            profile_for_address(&format!("http://{}/mcp", listener.local_addr().unwrap()));
+        let server = tokio::spawn(async move {
+            let router = axum::Router::new().route(
+                "/mcp",
+                axum::routing::post(move || async move {
+                    (
+                        axum::http::StatusCode::from_u16(status).unwrap(),
+                        "invalid reply",
+                    )
+                }),
+            );
+            axum::serve(listener, router).await.unwrap();
+        });
+        let request = ProviderSessionListParams {
+            endpoint: serde_json::from_value(
+                json!({"serviceId":profile.service_id,"endpointId":"claude-local"}),
+            )
+            .unwrap(),
+            view: collaboration_client::protocol::NativeSessionView::Loaded,
+            scope: collaboration_client::protocol::NativeSessionScope::Any,
+            source: collaboration_client::protocol::NativeSessionSource::Interactive,
+            query: None,
+            page_size: 100,
+            cursor: None,
+        };
+        let failure = HttpConfiguredInventoryClient::new(&profile)
+            .unwrap()
+            .provider_page(&request)
+            .await
+            .unwrap_err();
+        server.abort();
+        assert!(server.await.unwrap_err().is_cancelled());
+        let expected = match status {
+            500..=599 => {
+                InventoryReadFailure::Unavailable(NativeLiveUnavailableReason::TransportUnavailable)
+            }
+            200 => InventoryReadFailure::Invalid { code: None },
+            _ => InventoryReadFailure::Invalid {
+                code: Some(i64::from(status)),
+            },
+        };
+        assert_eq!(failure, expected, "HTTP status {status}");
+    }
+}
+
+#[tokio::test]
 async fn configured_http_only_published_discovery_unavailability_is_recoverable() {
     use crate::picker_runtime_status::NativeLiveUnavailableReason;
     let published = json!({"kind":"unavailable","stage":"discovery","message":PRIVATE_SENTINEL});

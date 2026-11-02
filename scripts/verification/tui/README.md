@@ -1,11 +1,12 @@
-# Quota and Sessions capture tools
+# Compiled terminal verification
 
-Run these tools with Node 26.12.1 and the package-local pnpm 12.14.0 toolchain.
-Node executes the TypeScript sources directly. Plans bind the absolute Node
-executable and its SHA-256 alongside the driver, fixture, VHS, ttyd and image
-checker. The parent CLI must use the declared executable.
+The Rust `TerminalDriver` owns each PTY. TypeScript sends its next input, feeds
+actual output bytes to `@wterm/ghostty` (libghostty), and checks the cells. All three
+wterm packages are pinned at 0.5.7. The separate original-image sink renders those
+bytes with `@wterm/dom` in headless Chrome through DevTools. No reconstructed cell
+image counts as an original. A headless image is not physical-terminal evidence.
 
-From the repository root:
+Use a privately retained Node 26.13.0 runtime and pnpm 12.14.0, from the repository root. Copy the complete Node runtime (including libnode) into an owned toolchain directory before declaring its canonical executable path and SHA-256; a mutable Homebrew symlink is not the retained runtime. Keep its dependency inventory with the declaration and re-qualify after any runtime dependency change. Historical 26.12.1 receipts remain evidence for their original runs only:
 
 ```sh
 pnpm --dir scripts/verification/tui install --frozen-lockfile
@@ -13,41 +14,49 @@ pnpm --dir scripts/verification/tui typecheck
 pnpm --dir scripts/verification/tui lint
 pnpm --dir scripts/verification/tui format:check
 pnpm --dir scripts/verification/tui test
-node scripts/verification/tui/capture-run.ts --help
+node scripts/verification/tui/terminal/terminal-qualification.ts OUTPUT.json
+node scripts/verification/tui/capture/capture-run.ts PLAN.json --check
+node scripts/verification/tui/capture/capture-run.ts PLAN.json
 ```
 
-The permanent Rust adapter tests also run in ordinary workspace test runs. Before
-running them locally, install the locked package dependencies as above and export
-the selected Node runtime's canonical path and digest:
+`gridCapturePlanSchema` in `capture/capture-run.ts` declares the repository, exact source
+head, signed driver/product/component artifact paths and SHA-256s, fresh output,
+journey name, `legacy` or `kitty` keys, and optional Chrome executable. The driver
+uses a prebuilt signed libtest, not Cargo. Quota and component routes use the
+`e2e` entry `quota_storyboard::compiled_grid_terminal_observation`. All S8 picker, quota and showcase routes use that namespaced entry; public
+Sessions uses `quota_storyboard::compiled_public_sessions_grid_observation`.
+The S9 cutover retires the historical flat-entry driver selection. Discovery and
+launch share `ptyGridDriverEntry`; no alternate entry is tried. Component
+journeys require the exact fixture-bearing Quota library test executable; the
+runner checks its test entry before launching it. Source files and artifact hashes
+are recorded and checked for drift. Build provenance remains the producer's duty.
 
-```sh
-export QUOTA_STORYBOARD_NODE="$(node -p 'require("node:fs").realpathSync(process.execPath)')"
-export QUOTA_STORYBOARD_NODE_SHA256="$("$QUOTA_STORYBOARD_NODE" --input-type=module -e 'import { createHash } from "node:crypto"; import { readFileSync } from "node:fs"; process.stdout.write(createHash("sha256").update(readFileSync(process.execPath)).digest("hex"));')"
-```
+`journeys/screens/` contains one data definition each for Sessions, Quota,
+Normal43 and hard cases. `journeys/journey-catalogue.ts` expands them over the
+canonical `journeyGridSizes` in `journeys/journey-definition.ts`: 120×36, 76×30,
+48×12 and 32×24. The 16 screen/grid variants retain their checkpoint IDs, action
+bursts and finish sequence. Size-specific scrolling is data inside each screen
+file. A definition is not a passing receipt.
+`capture/baseline-journeys.ts` separately records the component-system's pre-change
+failures, passing isolation cases, absent future entries, and unobserved fixtures.
 
-The tests require Node 26.12.1 and reject a different executable or digest. These
-variables nominate the runtime; they do not start a capture or install tools.
-The CI TypeScript job and Rust test job use the same prerequisites. Capture plans
-still carry their own exact runtime binding.
+Every checkpoint keeps raw ANSI, JSON cells, text and assertion results. Each
+original keeps its byte/image hashes, renderer/WASM/Chrome identities, source,
+build, viewport and checkpoint. Each journey rejects the actual empty-core and
+retained wrong-scene controls before writing a success receipt. An entry timeout
+is an apparatus/feasibility failure, never a product defect.
 
-`capture-run.ts` runs a declared compact capture or bounded live CUA lease.
-`component-capture-run.ts` runs a declared Normal or hard-case Quota capture.
-`evidence-readback.ts` records source bindings and same-child PTY dimensions.
-`public-sessions-run.ts` qualifies the existing declared Host read-only before
-launching the public Sessions entry. It preserves normal home directories and
-requires separate effect and job-settlement evidence.
+`sessions/public-sessions-run.ts PLAN.json --check` qualifies the separately authorized
+public route without launching its TUI. Its Host/process/health/effect checks,
+normal HOME/CODEX_HOME, exact public argv/cwd and job-settlement boundary remain
+separate from fixture zero-effect receipts. Running that route requires its own
+allowed-effects packet. S0 does not launch it.
 
-The native Rust harness owns the PTY and capture resources. Its permanent
-`fixture-child.ts` and `ttyd-adapter.ts` helpers inherit the native descriptors;
-the TypeScript core does not emulate terminal rendering or allocate another PTY.
+Native wrapper tests still exercise the real PTY, kernel resizing, retained-child
+cleanup and durable fixture receipts. They require nominated canonical
+`QUOTA_STORYBOARD_NODE` and `QUOTA_STORYBOARD_NODE_SHA256` matching Node 26.13.0.
+Their stand-ins prove wrapper contracts, not product appearance or real provider
+jobs. Never install debug product binaries or replace production processes.
 
-Tests use isolated Git repositories, controlled child processes, protocol-only
-image bytes and a controlled HTTP listener. These validate rejection, lifecycle
-and binding behavior. They do not establish product appearance, provider behavior
-or delivery acceptance. Galleries retain pending personal image inspection and
-explicit unverified rows.
-
-Discovery and image-checker subprocesses retain private raw output files in
-system temporary directories. A deadline never becomes success after later exit.
-Capture cancellation uses the declared cooperative marker; an unsettled driver
-is reported without broad process signaling or speculative cleanup.
+See the canonical repository recipe:
+`.agents/skills/verify-codex-router/references/tui-journeys.md`.

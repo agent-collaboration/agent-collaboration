@@ -3,7 +3,7 @@
 use super::*;
 use agent_session_inventory::sessions::SessionPickerRecord;
 use agent_session_inventory::source_inventory_request::PickerSourceContext;
-use agent_session_picker::session_picker::details_client_inventory::DetailsClientQuery;
+use agent_session_tui::session_picker::details_client_inventory::DetailsClientQuery;
 use collaboration_client::protocol::{ProviderKind, SessionRef};
 use serde_json::{Value, json};
 use std::time::Duration;

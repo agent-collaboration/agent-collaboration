@@ -1,8 +1,13 @@
-import { appendFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, writeFileSync } from "node:fs";
 import { z } from "zod";
 import { wireJson } from "./acp-stdio.ts";
 
 export function runFixture(_configuration: unknown): void {
+  if (
+    process.env.CLAUDE_FIXTURE_TEARDOWN_MARKER &&
+    !existsSync(process.env.CLAUDE_FIXTURE_TEARDOWN_MARKER)
+  )
+    throw new Error("native Claude ran before picker teardown");
   const invocation = {
     arguments: process.argv.slice(2),
     working_directory: process.cwd(),

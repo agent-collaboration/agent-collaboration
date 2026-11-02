@@ -19,22 +19,22 @@ Every original file has exactly one disposition. Proof letters are explained bel
 | `scripts/check-release-runtime-guardrails.py` | Ported | `verification/tooling/check-release-runtime-guardrails.ts` (G) |
 | `scripts/proof-tools/socket-permission-probe.py` | Ported | `verification/tooling/socket-permission-probe.ts` (N) |
 | `scripts/publish_homebrew_tap_local.py` | Ported | `verification/tooling/publish-homebrew-tap-local.ts` (H) |
-| `scripts/tests/test_acp_metadata_observation.py` | Ported | `verification/observations/tests/acp-metadata.test.ts` (M) |
-| `scripts/tests/test_bootstrap_tools.py` | Ported | `verification/tooling/tests/bootstrap-tools.test.ts` (C) |
-| `scripts/tests/test_prepare_sqlx.py` | Ported | `verification/tooling/tests/sqlx-preparation.test.ts` (C) |
-| `scripts/tests/test_prepare_sqlx_turso.py` | Ported | `verification/tooling/tests/sqlx-preparation.test.ts` (C) |
-| `scripts/tests/test_publish_homebrew_tap_local.py` | Ported | `verification/tooling/tests/release-command-process.test.ts` (H) |
-| `scripts/tests/test_rust_file_size.py` | Ported | `verification/tooling/tests/rust-file-size.test.ts` (C) |
-| `scripts/tests/test_tailnet_mcp_https_transport.py` | Ported | `verification/observations/tests/tailnet-curl-transport.test.ts` (T) |
-| `scripts/tests/test_tailnet_mcp_verification.py` | Ported | `verification/observations/tests/tailnet-oracles.test.ts` (T) |
+| `scripts/tests/test_acp_metadata_observation.py` | Ported | `verification/observations/acp-metadata.test.ts` (M) |
+| `scripts/tests/test_bootstrap_tools.py` | Ported | `verification/tooling/bootstrap-tools.test.ts` (C) |
+| `scripts/tests/test_prepare_sqlx.py` | Ported | `verification/tooling/sqlx-preparation.test.ts` (C) |
+| `scripts/tests/test_prepare_sqlx_turso.py` | Ported | `verification/tooling/sqlx-preparation.test.ts` (C) |
+| `scripts/tests/test_publish_homebrew_tap_local.py` | Ported | `verification/tooling/release-command-process.test.ts` (H) |
+| `scripts/tests/test_rust_file_size.py` | Ported | `verification/tooling/rust-file-size.test.ts` (C) |
+| `scripts/tests/test_tailnet_mcp_https_transport.py` | Ported | `verification/observations/tailnet-curl-transport.test.ts` (T) |
+| `scripts/tests/test_tailnet_mcp_verification.py` | Ported | `verification/observations/tailnet-oracles.test.ts` (T) |
 | `scripts/tests/test_tui_capture.py` | Removed by #161 | Merged in main at `6388b973` |
 | `scripts/tests/test_tui_component_capture.py` | Removed by #161 | Merged in main at `6388b973` |
 | `scripts/tests/test_tui_public_sessions.py` | Removed by #161 | Merged in main at `6388b973` |
 | `scripts/tests/test_tui_verification.py` | Removed by #161 | Merged in main at `6388b973` |
-| `scripts/tests/test_update_homebrew_formula.py` | Ported | `verification/tooling/tests/release-tooling.test.ts` (H) |
-| `scripts/tests/test_verification_lifecycle.py` | Ported | `verification/observations/tests/lifecycle.test.ts` (L) |
-| `scripts/tests/test_verification_observations.py` | Ported | `verification/observations/tests/observation-core.test.ts` (O) |
-| `scripts/tests/verification_controller_fixture.py` | Ported | `verification/observations/tests/lifecycle-fixture.ts` (L) |
+| `scripts/tests/test_update_homebrew_formula.py` | Ported | `verification/tooling/release-tooling.test.ts` (H) |
+| `scripts/tests/test_verification_lifecycle.py` | Ported | `verification/observations/lifecycle.test.ts` (L) |
+| `scripts/tests/test_verification_observations.py` | Ported | `verification/observations/observation-core.test.ts` (O) |
+| `scripts/tests/verification_controller_fixture.py` | Ported | `verification/observations/lifecycle-fixture.ts` (L) |
 | `scripts/tooling/check-central-worker-bundle.py` | Ported | `verification/tooling/check-central-worker-bundle.ts` (C) |
 | `scripts/tooling/check-rust-file-size.py` | Ported | `verification/tooling/check-rust-file-size.ts` (C) |
 | `scripts/tooling/prepare-sqlx-turso.py` | Ported | `verification/tooling/prepare-sqlx-turso.ts` (C) |
@@ -78,16 +78,16 @@ Golden inputs/results come from the base implementations. Fixture data retains s
 
 | Proof | Comparisons and retained evidence |
 | --- | --- |
-| H: Homebrew | Captured releasev0.1.102, asset SHA256 `54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517`. Original/new formula CLIs produce byte-identical files, stdout and stderr; CRLF behavior also matches. The whole local publisher CLI runs against identical fake external commands: formula, command trace and stdout match after declared temporary-path normalization. Permanent tests: `verification/tooling/tests/release-tooling.test.ts` and `release-command-process.test.ts`. No real brew, tap or publication ran. |
+| H: Homebrew | Captured releasev0.1.102, asset SHA256 `54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517`. Original/new formula CLIs produce byte-identical files, stdout and stderr; CRLF behavior also matches. The whole local publisher CLI runs against identical fake external commands: formula, command trace and stdout match after declared temporary-path normalization. Permanent tests: `verification/tooling/release-tooling.test.ts` and `release-command-process.test.ts`. No real brew, tap or publication ran. |
 | C: CI tooling |51 original Worker bundle exit/output cases;14 original SQLx preparation scenarios compare commands, environment, refusal/commit behavior and cache bytes;8 rustc-wrapper environment vectors plus executable-process checks. Rust size checks cover physical bytes, Git inventories, quoted paths,6 source-parser fixtures and9 line-count vectors. Bootstrap tests preserve successful/stale/failed/offline/check-mode outcomes with controlled installers. Tests are under `verification/tooling/tests/`. |
-| G: guards/artifacts | Original HTTP G24/G25 outputs match exactly. Release guard rows retain original results with timestamps normalized, including pre-existing failures. Proxy DB artifact fixtures retain root, pressure, ordering, correlation and privacy checks. See `verification/tooling/tests/structural-guards.test.ts` and its original fixture data. |
+| G: guards/artifacts | Original HTTP G24/G25 outputs match exactly. Release guard rows retain original results with timestamps normalized, including pre-existing failures. Proxy DB artifact fixtures retain root, pressure, ordering, correlation and privacy checks. See `verification/tooling/structural-guards.test.ts` and its original fixture data. |
 | O: observations | Configuration sections, evidence models/JSON, reports, native read protocol and read-only Codex-home checks use frozen original observations, including unknown fields, exact integers and invalid inputs. Tests: `verification/observations/tests/{observation-core,config-sections,harness-report}.test.ts`. Raw validated records remain the serialization boundary where the original omitted unset fields. |
-| L: lifecycle |19 original scoped lifecycle outcomes plus real harmless children cover identity retention, unknown inventory, deadlines, cleanup and no signal on mismatch. Signed macOS UIDs and child reaping are checked. See `verification/observations/tests/lifecycle.test.ts` and the original lifecycle baselines. |
-| M: metadata | Original oracle cases plus an owned Unix WebSocket check target bindings, metadata/prose separation, bounds and refusal controls. Tests: `verification/observations/tests/acp-metadata.test.ts` and `acp-metadata-transport.test.ts`. This adds no installed-provider/TUI observation. |
+| L: lifecycle |19 original scoped lifecycle outcomes plus real harmless children cover identity retention, unknown inventory, deadlines, cleanup and no signal on mismatch. Signed macOS UIDs and child reaping are checked. See `verification/observations/lifecycle.test.ts` and the original lifecycle baselines. |
+| M: metadata | Original oracle cases plus an owned Unix WebSocket check target bindings, metadata/prose separation, bounds and refusal controls. Tests: `verification/observations/acp-metadata.test.ts` and `acp-metadata-transport.test.ts`. This adds no installed-provider/TUI observation. |
 | I: callbacks |26 original oracle comparisons plus real local HTTP/SQLite fixtures exercise create/control, decisions, retention, independent readback and the complete journey. Tests: `verification/observations/tests/{callback-oracles,provider-control,callback-journey}.test.ts`. |
 | T: Tailnet | Entire Host driver is Rust by the owner's relayed decision. Original profile/observation/URL fixtures and real owned process/socket tests retain no-follow, nonblocking lock, owner/mode, inode/device, byte guards and exact restoration. TS peer tests retain curl/system trust, bounds and independent Unix/SQLite readback. See `crates/tailnet-verification-host/tests/` and `verification/observations/tests/tailnet-*.test.ts`. No real Host/profile/Tailscale/two-machine run occurred. |
 | F: executable fixtures | Shared ACP settings/scripted agents retain original request/response bytes and receipts. Broader migration:173 frozen ACP/CLI scenarios,3 ordered socket transcripts,12 restricted-PATH native executable cases and6 original shell-word vectors under `verification/fixtures/tests/`. The full oversized initialize fixture retains67,108,866 original output bytes and the actual child PID. |
-| N: permission probes | Owned live Unix/TCP listeners ensure allowed connections cannot produce denial receipts; only EPERM/EACCES counts as denial. Old/new embedded probes match exit/stdout and permission classification on the same allowed/denied Unix inputs. See `verification/tooling/tests/socket-permission-probe.test.ts`. Complete native Seatbelt/delivery acceptance remains unrun. |
+| N: permission probes | Owned live Unix/TCP listeners ensure allowed connections cannot produce denial receipts; only EPERM/EACCES counts as denial. Old/new embedded probes match exit/stdout and permission classification on the same allowed/denied Unix inputs. See `verification/tooling/socket-permission-probe.test.ts`. Complete native Seatbelt/delivery acceptance remains unrun. |
 
 The original captured-release receipts are `tmp/python-removal-proof/final-formula-comparison.json`, `formula-newline-comparisons.json` and `local-publisher-comparison.json`. Later published-release refreshes are identified in the PR handback. The publisher proof substitutes every external command and retains the resulting formula; it does not establish an actual Homebrew installation or tap publication.
 
