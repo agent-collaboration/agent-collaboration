@@ -5,7 +5,7 @@ use sqlite_storage_maintenance::{
 };
 use sqlx::{
     Connection, SqliteConnection,
-    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous},
+    sqlite::{SqliteConnectOptions, SqliteSynchronous},
 };
 use std::{path::Path, time::Duration};
 
@@ -120,6 +120,11 @@ impl AutomationStore {
     pub async fn open(path: &Path) -> Result<Self, StorageError> {
         let mut connection = connect(path, true).await?;
         crate::schema_initialization::initialize(&mut connection).await?;
+        // Refused legacy upgrades must leave the source file byte-for-byte intact.
+        sqlx::query("PRAGMA journal_mode = WAL")
+            .execute(&mut connection)
+            .await?;
+        prepare_existing_database(&mut connection, path).await?;
         Ok(Self { connection })
     }
 
@@ -152,19 +157,19 @@ async fn connect(path: &Path, create_if_missing: bool) -> Result<SqliteConnectio
         .filename(path)
         .create_if_missing(create_if_missing)
         .foreign_keys(true)
-        .journal_mode(SqliteJournalMode::Wal)
         .synchronous(SqliteSynchronous::Full)
         .busy_timeout(Duration::from_secs(1));
     let options = configure_new_database_options(options, path)?;
-    let mut connection = SqliteConnection::connect_with(&options).await?;
-    prepare_existing_database(&mut connection, path).await?;
-    Ok(connection)
+    Ok(SqliteConnection::connect_with(&options).await?)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{AutomationStore, SqliteConnection, SqliteJournalMode};
-    use sqlx::{Connection, sqlite::SqliteConnectOptions as ConnectOptions};
+    use super::{AutomationStore, SqliteConnection};
+    use sqlx::{
+        Connection,
+        sqlite::{SqliteConnectOptions as ConnectOptions, SqliteJournalMode},
+    };
 
     #[tokio::test]
     async fn fresh_automation_database_opens_in_wal_with_incremental_auto_vacuum() {
