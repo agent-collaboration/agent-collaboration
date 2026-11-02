@@ -178,7 +178,13 @@ async fn require_gate(client: &CollaborationClient, logged_in: bool) -> TestResu
         {
             Ok(())
         }
-        _ => Err("real board API did not match the login gate".into()),
+        (expected, Err(BoardClientError::Rejected(error))) => Err(io::Error::other(format!(
+            "board gate expected logged_in={expected}; observed {:?}/{:?}",
+            error.kind, error.next_action
+        ))
+        .into()),
+        (false, Ok(_)) => Err("board API admitted a machine before login".into()),
+        _ => Err("real board API transport did not establish login admission".into()),
     }
 }
 
@@ -262,7 +268,7 @@ async fn fleet_machine_login_actual_cli_host_encryption_and_saved_identity_survi
     let result = fleet_host::run_host_scenario(root.path(), async |host| {
         host.await_ready().await?;
         let client = CollaborationClient::connect(&directory, "login-fixture", "1").await?;
-        require_gate(&client, true).await?;
+        require_gate(&client, false).await?;
         let sign_in = issuer.sign_in();
         let output = held_login(&mut issuer, &router, &client, Some(&sign_in)).await?;
         if !output.status.success()
@@ -366,7 +372,7 @@ async fn fleet_machine_login_actual_cli_memory_only_restart_requires_a_fresh_dev
             host.await_ready().await?;
             let client =
                 CollaborationClient::connect(&directory, "memory-login-fixture", "1").await?;
-            require_gate(&client, expected_attempt == 1).await?;
+            require_gate(&client, false).await?;
             let sign_in = issuer.sign_in();
             let output = held_login(
                 &mut issuer,
@@ -440,21 +446,21 @@ async fn fleet_machine_login_actual_cli_rejects_discovery_before_saving_and_keep
             host.await_ready().await?;
             let client =
                 CollaborationClient::connect(&directory, "discovery-refusal-fixture", "1").await?;
-            require_gate(&client, true).await?;
+            require_gate(&client, false).await?;
             let missing = login(&router, None).await?;
             if missing.status.success()
                 || !String::from_utf8_lossy(&missing.stderr).contains("no sign-in address is saved")
             {
                 return Err(failed_cli(&missing, "missing sign-in was not refused"));
             }
-            require_gate(&client, true).await?;
+            require_gate(&client, false).await?;
             let invalid = login(&router, Some("http://issuer.example.invalid/api/auth")).await?;
             if invalid.status.success()
                 || !String::from_utf8_lossy(&invalid.stderr).contains("HTTPS issuer")
             {
                 return Err(failed_cli(&invalid, "HTTP issuer was not refused"));
             }
-            require_gate(&client, true).await?;
+            require_gate(&client, false).await?;
             issuer.state.release_discovery.add_permits(1);
             let refused = login(&router, Some(&issuer.sign_in())).await?;
             if refused.status.success()
