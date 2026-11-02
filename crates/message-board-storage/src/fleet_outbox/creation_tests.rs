@@ -426,3 +426,81 @@ async fn outbox_decoder_rejects_state_and_settlement_timestamp_mismatches() -> T
     outbox.close().await;
     Ok(())
 }
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
+#[tokio::test]
+async fn reopened_legacy_rejection_prunes_its_input_without_replaying_the_request() -> TestResult {
+    // Arrange: the previous writer could settle a rejection without releasing its input.
+    let temporary = tempfile::tempdir()?;
+    let path = temporary.path().join("outbox.sqlite");
+    let outbox = FleetOutbox::open(&path).await?;
+    let (rejected_input, rejected_directory) = inputs()?;
+    let (accepted_input, accepted_directory) = inputs()?;
+    let rejection = RequestDecision::Rejected {
+        reasons: vec![Refusal::NameConflict {
+            name: rejected_input.title.clone(),
+            existing: ProjectId::generate().into(),
+        }],
+    };
+    for (input, directory, decision) in [
+        (&rejected_input, &rejected_directory, rejection),
+        (&accepted_input, &accepted_directory, accepted_decision()?),
+    ] {
+        outbox.enqueue_creation(directory, input).await?;
+        sqlx::query("UPDATE fleet_outbox_requests SET state=?,settled_at_ms=? WHERE request_id=?")
+            .bind(serde_json::to_string(&FleetOutboxState::Decided {
+                decision,
+            })?)
+            .bind(1_000_i64)
+            .bind(input.request_id.as_str())
+            .execute(&outbox.database.pool)
+            .await?;
+    }
+    outbox.close().await;
+    let reopened = FleetOutbox::open(&path).await?;
+    assert_eq!(
+        reopened.creation_input(&rejected_input.request_id).await?,
+        Some(rejected_input.clone())
+    );
+    assert_eq!(
+        reopened.creation_input(&accepted_input.request_id).await?,
+        Some(accepted_input.clone())
+    );
+
+    // Act: normal maintenance must recover the old row without a decision or creation replay.
+    let after_retention = 100 * 24 * 60 * 60 * 1_000;
+    assert_eq!(reopened.prune_expired(after_retention, 1).await?, 1);
+
+    // Assert: one bounded transaction releases and retires only the old rejected request.
+    assert!(
+        reopened
+            .request(&rejected_input.request_id)
+            .await?
+            .is_none()
+    );
+    assert!(
+        reopened
+            .creation_input(&rejected_input.request_id)
+            .await?
+            .is_none()
+    );
+    assert!(matches!(
+        reopened
+            .request(&accepted_input.request_id)
+            .await?
+            .map(|entry| entry.state),
+        Some(FleetOutboxState::Decided {
+            decision: RequestDecision::Accepted { .. }
+        })
+    ));
+    assert_eq!(
+        reopened.creation_input(&accepted_input.request_id).await?,
+        Some(accepted_input)
+    );
+    assert_eq!(reopened.prune_expired(after_retention, 1).await?, 0);
+    reopened.close().await;
+    Ok(())
+}

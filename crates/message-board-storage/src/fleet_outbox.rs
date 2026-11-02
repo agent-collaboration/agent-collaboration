@@ -244,7 +244,7 @@ impl FleetOutbox {
             return Err(error);
         }
         let candidates = sqlx::query::<sqlx_turso::Turso>(
-            "SELECT request_id,canonical_hash,request,state,settled_at_ms FROM fleet_outbox_requests AS outbox WHERE json_extract(state,'$.kind')='decided' AND (settled_at_ms IS NULL OR settled_at_ms<?) AND NOT EXISTS (SELECT 1 FROM project_creation_inputs AS creation WHERE creation.request_id=outbox.request_id) ORDER BY COALESCE(settled_at_ms,0),request_id LIMIT ?",
+            "SELECT request_id,canonical_hash,request,state,settled_at_ms FROM fleet_outbox_requests AS outbox WHERE json_extract(state,'$.kind')='decided' AND (settled_at_ms IS NULL OR settled_at_ms<?) AND (json_extract(state,'$.decision.kind')='rejected' OR NOT EXISTS (SELECT 1 FROM project_creation_inputs AS creation WHERE creation.request_id=outbox.request_id)) ORDER BY COALESCE(settled_at_ms,0),request_id LIMIT ?",
         )
         .bind(cutoff_ms)
         .bind(i64::from(batch_size))
@@ -253,11 +253,19 @@ impl FleetOutbox {
         let mut removed = 0_u64;
         for row in candidates {
             let entry = decode_outbox_row(row)?;
-            let FleetOutboxState::Decided { .. } = entry.state else {
+            let FleetOutboxState::Decided { decision } = entry.state else {
                 transaction.rollback().await?;
                 return Err(RouterLocalStorageError::InvalidRecord);
             };
             let request_id = entry.request.request_id.as_str();
+            if matches!(decision, RequestDecision::Rejected { .. }) {
+                sqlx::query::<sqlx_turso::Turso>(
+                    "DELETE FROM project_creation_inputs WHERE request_id=?",
+                )
+                .bind(request_id)
+                .execute(&mut *transaction)
+                .await?;
+            }
             let deleted = sqlx::query::<sqlx_turso::Turso>(
                 "DELETE FROM fleet_outbox_requests WHERE request_id=? AND json_extract(state,'$.kind')='decided' AND settled_at_ms<?",
             )
