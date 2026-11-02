@@ -1,5 +1,6 @@
 //! Dialog content is a projection; actions and input belong to the declared scope.
 use super::{
+    AccountActionTarget, QuotaAccountAction, QuotaAccountCommandResult,
     quota_combo_controls::{QuotaChoiceField, choice_target},
     quota_control_context::{QuotaControlContext, QuotaControlResult, QuotaDialogKind, action_id},
 };
@@ -83,6 +84,10 @@ pub(crate) fn QuotaControlDialog(
                 vec![element!(QuotaOptionsSwitch(actions,available_width:props.context.options_switch_available_width)).into_any()],
                 options_status(&props.context),
             )
+        } else if let QuotaDialogKind::Account(target) = &props.kind
+            && props.context.remove_confirmation.get()
+        {
+            (Vec::new(), remove_status(&props.context, target))
         } else {
             (Vec::new(), None)
         };
@@ -226,6 +231,10 @@ fn floor_content(context: &QuotaControlContext) -> QuotaControlResult<AnyElement
     }).into_any())
 }
 
+#[cfg(test)]
+#[path = "quota_control_dialog_view_test.rs"]
+mod tests;
+
 fn options_content(
     context: &QuotaControlContext,
     surface: SurfaceContext,
@@ -288,6 +297,31 @@ fn options_content(
         explanation.map_or_else(||element!(FormFields(stacked:context.width.get()<40) {#(vec![field("Eligibility","Not checked".into(),UiTextRole::Body)])}).into_any(),|content|element!(UiText(content,role:UiTextRole::Secondary,wrap:TextWrap::Wrap)).into_any())
     };
     Ok((title.to_owned(),element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,row_gap:if context.height.get()<16{0}else{1}) {#(options.pending_tab.is_some().then(||element!(UiText(content:"Tab change pending",role:UiTextRole::Secondary)))) #(body)}).into_any()))
+}
+
+fn remove_status(
+    context: &QuotaControlContext,
+    target: &AccountActionTarget,
+) -> Option<AnyElement<'static>> {
+    if context.account_pending.read().is_some() {
+        return None;
+    }
+    let completions = context.account_commands.as_ref()?.subscribe();
+    let completion = completions.borrow();
+    let completion = completion.as_ref()?;
+    if completion.command.action != QuotaAccountAction::Remove
+        || completion.command.target != *target
+    {
+        return None;
+    }
+    let (status, detail) = match &completion.result {
+        QuotaAccountCommandResult::Refused { reason } => {
+            (StatusKind::Warning, reason.message().to_owned())
+        }
+        QuotaAccountCommandResult::Failed { message } => (StatusKind::Error, message.clone()),
+        QuotaAccountCommandResult::Succeeded => return None,
+    };
+    Some(element!(StatusValue(status,detail:Some(detail))).into_any())
 }
 
 fn options_status(context: &QuotaControlContext) -> Option<AnyElement<'static>> {
