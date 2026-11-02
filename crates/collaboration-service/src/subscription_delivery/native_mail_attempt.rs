@@ -25,7 +25,11 @@ impl SubscriptionPushStore {
     ) -> Result<NativeDeliveryResult, BoardError> {
         if !matches!(
             kind,
-            PushKind::DirectMessage | PushKind::BoardNotification | PushKind::SubscriptionActivity
+            PushKind::DirectMessage
+                | PushKind::BoardNotification
+                | PushKind::SubscriptionActivity
+                | PushKind::SubscriptionExpiry
+                | PushKind::NotificationListing
         ) {
             return Err(BoardError::board_unavailable());
         }
@@ -42,8 +46,12 @@ impl SubscriptionPushStore {
             () = self.shutdown.cancelled() => return Err(BoardError::board_unavailable()),
             receipt = self.delivery.deliver(request, &sink) => receipt.unwrap_or_else(|_| NativeDeliveryResult::unknown()),
         };
-        if kind == PushKind::SubscriptionActivity
-            && prepared.load_policy == LoadPolicy::LoadedOnly
+        if matches!(
+            kind,
+            PushKind::SubscriptionActivity
+                | PushKind::SubscriptionExpiry
+                | PushKind::NotificationListing
+        ) && prepared.load_policy == LoadPolicy::LoadedOnly
             && delivery.receipt().reachability == Some(SessionReachability::ProviderAcp)
             && delivery.receipt().outcome == DeliveryOutcome::Queued
         {

@@ -49,6 +49,7 @@ fn expected_table_sql(
     table_name: &str,
     has_mail_observations: bool,
     has_route_evidence: bool,
+    has_notification_windows: bool,
 ) -> Result<String, StorageError> {
     let prefix = format!("CREATE TABLE {table_name} (");
     let statement = MIGRATOR
@@ -79,6 +80,14 @@ fn expected_table_sql(
             .strip_suffix(")strict")
             .ok_or(StorageError::InvalidSchema)?;
         expected = format!("{preceding},last_route_evidence_jsontext)strict");
+    }
+    if has_notification_windows && table_name == "router_pushes" {
+        let preceding = expected
+            .strip_suffix(")strict")
+            .ok_or(StorageError::InvalidSchema)?;
+        expected = format!(
+            "{preceding},notification_listing_push_idtext,notification_item_digesttext,foreignkey(notification_listing_push_id)referencesrouter_pushes(push_id))strict"
+        );
     }
     Ok(expected)
 }
@@ -181,6 +190,7 @@ pub(super) async fn inspect_schema(
     let has_submission_epochs = tables.contains("mail_submission_epochs");
     let has_retirement_progress = tables.contains("mail_retirement_progress");
     let has_pending_poll = tables.contains("pending_poll_mail");
+    let has_notification_windows = migrations.iter().any(|row| row.version == 202611010001);
     let has_read_contexts = migrations.iter().any(|row| row.version == 202610220001);
     if has_installation_directory && !has_delivery_retries {
         return Err(StorageError::InvalidSchema);
@@ -215,6 +225,9 @@ pub(super) async fn inspect_schema(
     if has_read_contexts {
         composed_tables.insert("mail_read_contexts");
     }
+    if has_notification_windows {
+        composed_tables.insert("notification_windows");
+    }
     let composed = tables == composed_tables;
     if tables != history_tables && !composed {
         return Err(StorageError::InvalidSchema);
@@ -229,6 +242,27 @@ pub(super) async fn inspect_schema(
         "_fleet_sync_operations_due",
         "_fleet_sync_mail_deadlines",
     ]);
+    if has_notification_windows {
+        expected_indexes.insert("router_pushes_notification_listing");
+        let actual = objects
+            .iter()
+            .find(|object| {
+                object.object_type == "index" && object.name == "router_pushes_notification_listing"
+            })
+            .and_then(|object| object.sql.as_deref())
+            .ok_or(StorageError::InvalidSchema)?;
+        let expected = MIGRATOR
+            .iter()
+            .flat_map(|migration| migration.sql.as_str().split(';'))
+            .find(|sql| {
+                sql.trim_start()
+                    .starts_with("CREATE INDEX router_pushes_notification_listing ")
+            })
+            .ok_or(StorageError::InvalidSchema)?;
+        if normalize_schema_sql(actual) != normalize_schema_sql(expected) {
+            return Err(StorageError::InvalidSchema);
+        }
+    }
     if has_read_contexts {
         expected_indexes.insert("mail_read_context_conversation");
         let actual = objects
@@ -353,11 +387,17 @@ pub(super) async fn inspect_schema(
                         | "mail_retirement_progress"
                         | "pending_poll_mail"
                         | "mail_read_contexts"
+                        | "notification_windows"
                 ))
     }) {
         let actual = object.sql.as_deref().ok_or(StorageError::InvalidSchema)?;
         if normalize_schema_sql(actual)
-            != expected_table_sql(&object.name, has_mail_observations, has_route_evidence)?
+            != expected_table_sql(
+                &object.name,
+                has_mail_observations,
+                has_route_evidence,
+                has_notification_windows,
+            )?
         {
             return Err(StorageError::InvalidSchema);
         }
@@ -400,6 +440,7 @@ pub(super) async fn inspect_schema(
             - usize::from(!has_retirement_progress)
             - usize::from(!has_pending_poll)
             - usize::from(!has_read_contexts)
+            - usize::from(!has_notification_windows)
     } else {
         1
     };

@@ -151,6 +151,13 @@ async fn local_generation_replacement_reaches_native_delivery_while_another_read
         while let Some(hint) = hints.join_next().await {
             hint.unwrap();
         }
+        fixture.held_native_pushes(1).await;
+        runtime.owner_barrier(&fixture.reader).await;
+        assert!(
+            runtime.requests.lock().await.try_recv().is_err(),
+            "later allocation must obey L's cooldown while R's query is held"
+        );
+        fixture.clock.advance_without_tokio_time(600);
         Some(
             tokio::time::timeout(Duration::from_secs(6), async {
                 runtime.requests.lock().await.recv().await.unwrap()
@@ -262,6 +269,18 @@ async fn local_generation_replacement_reaches_native_delivery_while_another_read
     .is_ok();
     publisher.wait_project_idle_for_test(&fixture.project).await;
     let duplicate = runtime.requests.lock().await.try_recv().is_ok();
+    let later_original_ids = match later_received
+        .as_ref()
+        .and_then(|result| result.as_ref().ok())
+    {
+        Some(request) => fixture
+            .notification_records_for_request(request)
+            .await
+            .into_iter()
+            .map(|record| record.push_id.as_str().to_owned())
+            .collect::<Vec<_>>(),
+        None => Vec::new(),
+    };
 
     publisher.shutdown().await;
     drop(publisher);
@@ -272,7 +291,7 @@ async fn local_generation_replacement_reaches_native_delivery_while_another_read
 
     // Assert the native boundary happened before the unrelated Query was released.
     let received = received.expect("R's remote Query blocked L's native generation replacement");
-    let later_received = later_received
+    let _later_received = later_received
         .expect("the first local replacement must complete")
         .unwrap_or_else(|error| {
             panic!(
@@ -289,9 +308,11 @@ async fn local_generation_replacement_reaches_native_delivery_while_another_read
         received.payload.push_id.as_str(),
         local_items[1].id().as_uuid().to_string()
     );
+    // The later native effect is a listing; it must cover the exact third item.
+    // Its frozen membership was read before closing the physical owner below.
     assert_eq!(
-        later_received.payload.push_id.as_str(),
-        local_items[2].id().as_uuid().to_string()
+        later_original_ids,
+        vec![local_items[2].id().as_uuid().to_string()]
     );
     assert!(
         frontier_advanced,

@@ -59,6 +59,20 @@ pub async fn project_received_mail<THost: Host>(
         insert_mail_push_in_scope(scope, draft)
             .await
             .map_err(storage_error)?;
+        if matches!(
+            item.body(),
+            board_sync_protocol::BoardDeliveryBody::Notification(_)
+        ) {
+            interaction_storage::record_notification_reference_in_scope(
+                scope,
+                &fleet_sync_protocol::DeliveryItemRef {
+                    item: item.id(),
+                    digest: item.digest().clone(),
+                },
+            )
+            .await
+            .map_err(storage_error)?;
+        }
     }
     Ok(())
 }
@@ -119,6 +133,9 @@ pub async fn project_mail_outcome<THost: Host>(
         .await
         .map_err(storage_error)?
         .ok_or_else(invalid_projection)?;
+    interaction_storage::release_unsent_notification_member_in_scope(scope, &push_id)
+        .await
+        .map_err(storage_error)?;
     interaction_storage::record_mail_route_evidence_in_scope(
         scope,
         &record,

@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT notification_listing_push_id FROM router_pushes WHERE push_id=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "notification_listing_push_id",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "2cde73d13c0e4d1e1836bdb5c9c8319c6fb5cca6af3af01f6f68d2e87d9a7843"
+}

@@ -3,10 +3,6 @@ use std::error::Error;
 use super::ProviderOperationStore;
 
 #[tokio::test]
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "The assertion checks the stored PRAGMA; Result propagates fixture and database failures."
-)]
 async fn new_provider_operation_database_uses_incremental_auto_vacuum() -> Result<(), Box<dyn Error>>
 {
     let directory = tempfile::tempdir()?;
@@ -16,7 +12,9 @@ async fn new_provider_operation_database_uses_incremental_auto_vacuum() -> Resul
     let mode: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
         .fetch_one(&mut store.connection)
         .await?;
-    assert_eq!(mode, 2);
+    if mode != 2 {
+        return Err(format!("expected incremental auto_vacuum mode 2, got {mode}").into());
+    }
     store.close().await?;
     Ok(())
 }

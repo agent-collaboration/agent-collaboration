@@ -1,10 +1,19 @@
 #[path = "follow_admission_port.rs"]
 mod follow_admission_port;
 #[cfg(test)]
+#[path = "idle_owner_close_probe.rs"]
+pub(super) mod idle_owner_close_probe;
+#[cfg(test)]
+#[path = "tests/idle_owner_close_proofs.rs"]
+mod idle_owner_close_proofs;
+#[cfg(test)]
 #[path = "intent_progress_tests.rs"]
 mod intent_progress_tests;
 #[path = "native_mail_readiness.rs"]
 mod native_mail_readiness;
+#[path = "reader_owner_registry.rs"]
+mod reader_owner_registry;
+use reader_owner_registry::ReaderOwnerHandle;
 #[cfg(test)]
 #[path = "poll_handover_probe.rs"]
 mod poll_handover_probe;
@@ -51,6 +60,7 @@ pub struct SubscriptionDeliveryServiceProps {
 #[cfg(test)]
 #[derive(Clone, Debug)]
 pub(super) enum OwnerObservation {
+    ReaderPassFailed(BoardError),
     Started,
     RowsLoaded(usize),
     SelectingDueRoots,
@@ -78,15 +88,18 @@ pub(super) type NativeMailReadiness =
     Arc<std::sync::OnceLock<std::sync::Weak<crate::MailDeliveryRuntime>>>;
 
 struct ServiceInner {
+    notification_startup_attempts: std::sync::OnceLock<Arc<std::collections::HashSet<PushId>>>,
     #[cfg(test)]
     poll_handover_probe: PollHandoverProbeSlot,
+    #[cfg(test)]
+    idle_owner_close_probe: idle_owner_close_probe::IdleOwnerCloseProbeSlot,
     native_mail: NativeMailReadiness,
     follow_admission: FollowAdmissionSlot,
     board_availability: BoardAvailability,
     push: Arc<SubscriptionPushStore>,
     presence: Arc<dyn TargetPresenceProbe>,
     clock: Arc<dyn SubscriptionClock>,
-    owners: Mutex<HashMap<Identity, mpsc::Sender<ReaderDeliveryCommand>>>,
+    owners: Mutex<HashMap<Identity, ReaderOwnerHandle>>,
     start_gate: Mutex<bool>,
     shutdown: CancellationToken,
     tasks: TaskTracker,
@@ -133,8 +146,11 @@ impl SubscriptionDeliveryService {
         Self {
             lifetime: ServiceHandleLifetime::Owner(Arc::new(())),
             inner: Arc::new(ServiceInner {
+                notification_startup_attempts: std::sync::OnceLock::new(),
                 #[cfg(test)]
                 poll_handover_probe: Arc::new(std::sync::Mutex::new(None)),
+                #[cfg(test)]
+                idle_owner_close_probe: Arc::new(std::sync::Mutex::new(None)),
                 native_mail: Arc::new(std::sync::OnceLock::new()),
                 follow_admission: Arc::new(std::sync::RwLock::new(None)),
                 board_availability: props.board_availability,
@@ -155,6 +171,28 @@ impl SubscriptionDeliveryService {
         }
     }
 
+    /// Host composition calls this before creating the mail runtime. The immutable
+    /// snapshot distinguishes previous-process attempts from fresh SDK callbacks.
+    pub async fn capture_notification_startup_snapshot(&self) -> Result<(), BoardError> {
+        if self.inner.notification_startup_attempts.get().is_none() {
+            let attempts = self
+                .inner
+                .push
+                .store
+                .notification_startup_attempt_ids()
+                .await
+                .map_err(|error| {
+                    tracing::warn!(%error, "notification startup snapshot failed");
+                    BoardError::board_unavailable()
+                })?;
+            let _ = self
+                .inner
+                .notification_startup_attempts
+                .set(Arc::new(attempts.into_iter().collect()));
+        }
+        Ok(())
+    }
+
     pub async fn start(&self) -> Result<(), BoardError> {
         let mut started = self.inner.start_gate.lock().await;
         if self.inner.shutdown.is_cancelled() {
@@ -163,6 +201,7 @@ impl SubscriptionDeliveryService {
         if *started {
             return Ok(());
         }
+        self.capture_notification_startup_snapshot().await?;
         let (restored, probe_store) = match &self.inner.board_availability {
             BoardAvailability::Available(store) => {
                 let mut store = store.lock().await;
@@ -178,6 +217,18 @@ impl SubscriptionDeliveryService {
                 None,
             ),
         };
+        let notification_targets = match self.inner.push.store.notification_recovery_targets().await
+        {
+            Ok(targets) => targets,
+            Err(error) if recovery_connection_failed(&error) => {
+                tracing::warn!(%error, "notification recovery connection unavailable");
+                return Err(BoardError::board_unavailable());
+            }
+            Err(error) => {
+                tracing::warn!(%error, "notification recipient discovery failed; healthy readers continue and recover in their first pass");
+                Vec::new()
+            }
+        };
         let dm_targets = match self.inner.push.restore_direct_messages().await {
             Ok(targets) => targets,
             Err(error) if recovery_connection_failed(&error) => {
@@ -192,7 +243,7 @@ impl SubscriptionDeliveryService {
         *started = true;
         self.ensure_restored_owners(restored.records, restored.expiry_readers)
             .await?;
-        for target in dm_targets {
+        for target in dm_targets.into_iter().chain(notification_targets) {
             self.ensure_owner(reader_for_target(&target)?).await?;
         }
         if let Some(store) = probe_store {
@@ -420,6 +471,54 @@ impl SubscriptionDeliveryService {
         }
     }
 
+    pub(crate) async fn notification_listing_result(
+        &self,
+        target: SessionRef,
+        listing: PushId,
+    ) -> collaboration_contracts::NativeDeliveryResult {
+        use collaboration_contracts::NativeDeliveryResult;
+        loop {
+            let record = match self.inner.push.store.get_push_record(&listing).await {
+                Ok(Some(record))
+                    if record.target == target
+                        && record.kind == collaboration_protocol::PushKind::NotificationListing =>
+                {
+                    record
+                }
+                _ => return NativeDeliveryResult::unknown(),
+            };
+            if matches!(
+                record.delivery_state,
+                collaboration_protocol::PushDeliveryState::Delivered
+                    | collaboration_protocol::PushDeliveryState::OutcomeUnknown
+                    | collaboration_protocol::PushDeliveryState::Rejected
+            ) {
+                return crate::mail_push_outcome::listing_native_result(&record);
+            }
+            if self.require_started().await.is_err() {
+                return NativeDeliveryResult::unknown();
+            }
+            let Ok(reader) = reader_for_target(&target) else {
+                return NativeDeliveryResult::unknown();
+            };
+            let Ok(sender) = self.ensure_owner(reader).await else {
+                return NativeDeliveryResult::unknown();
+            };
+            let (reply, response) = oneshot::channel();
+            if sender
+                .send(ReaderDeliveryCommand::ListingResult {
+                    listing: listing.clone(),
+                    reply,
+                })
+                .await
+                .is_err()
+            {
+                continue;
+            }
+            return tokio::select! {() = self.inner.shutdown.cancelled() =>NativeDeliveryResult::unknown(),result=response=>result.unwrap_or_else(|_|NativeDeliveryResult::unknown())};
+        }
+    }
+
     /// Internal batch handoff. The public stored-notice conversion belongs to the surface.
     pub async fn wait(
         &self,
@@ -486,97 +585,55 @@ impl SubscriptionDeliveryService {
         }
     }
 
-    async fn ensure_owner(
+    #[cfg(debug_assertions)]
+    pub async fn debug_advance_notification_clock_millis(
         &self,
-        reader: Identity,
-    ) -> Result<mpsc::Sender<ReaderDeliveryCommand>, BoardError> {
-        self.ensure_owner_input(reader, ReaderScanScope::All, None)
-            .await
+        now_ms: i64,
+    ) -> Result<usize, BoardError> {
+        let now = chrono::DateTime::from_timestamp_millis(now_ms).ok_or_else(|| {
+            BoardError::invalid_field("nowMs", "must be UTC epoch milliseconds in range")
+        })?;
+        self.debug_advance_notification_clock(now).await
     }
-    async fn submit_reader_command(
+
+    #[cfg(debug_assertions)]
+    pub async fn debug_advance_notification_clock(
         &self,
-        reader: Identity,
-        scope: ReaderScanScope,
-        command: ReaderDeliveryCommand,
-    ) -> Result<(), BoardError> {
-        self.ensure_owner_input(reader, scope, Some(command))
-            .await
-            .map(|_| ())
-    }
-    async fn ensure_owner_input(
-        &self,
-        reader: Identity,
-        scope: ReaderScanScope,
-        mut command: Option<ReaderDeliveryCommand>,
-    ) -> Result<mpsc::Sender<ReaderDeliveryCommand>, BoardError> {
-        loop {
-            if self.inner.shutdown.is_cancelled() {
-                return Err(BoardError::board_unavailable());
-            }
-            // Keep the map gate through spawn: no Reader can acquire two selection owners.
-            let mut owners = self.inner.owners.lock().await;
-            if let Some(sender) = owners
-                .get(&reader)
-                .filter(|sender| !sender.is_closed())
-                .cloned()
-            {
-                drop(owners);
-                if let Some(input) = command.take()
-                    && let Err(error) = sender.send(input).await
-                {
-                    command = Some(error.0);
-                    continue;
-                }
-                return Ok(sender);
-            }
-            let activity = match &self.inner.board_availability {
-                BoardAvailability::Available(store) => {
-                    Some(store.lock().await.subscribe_activity())
-                }
-                BoardAvailability::Unavailable => None,
-            };
-            let (sender, commands) = mpsc::channel(64);
-            if let Some(input) = command.take() {
-                sender
-                    .send(input)
-                    .await
-                    .map_err(|_| BoardError::board_unavailable())?;
-            }
-            let owner = ReaderDeliveryOwner::new(ReaderDeliveryOwnerProps {
-                #[cfg(test)]
-                poll_handover_probe: self.inner.poll_handover_probe.clone(),
-                native_mail: self.inner.native_mail.clone(),
-                follow_admission: self.inner.follow_admission.clone(),
-                reader: reader.clone(),
-                initial_scope: scope.clone(),
-                board_availability: self.inner.board_availability.clone(),
-                push: self.inner.push.clone(),
-                presence: self.inner.presence.clone(),
-                clock: self.inner.clock.clone(),
-                shutdown: self.inner.shutdown.clone(),
-                commands,
-                activity,
-                #[cfg(test)]
-                observations: self.inner.observations.clone(),
-            });
-            owners.insert(reader.clone(), sender.clone());
-            let inner = self.inner.clone();
-            let owner_sender = sender.clone();
-            self.inner.tasks.spawn(
-                async move {
-                    Box::pin(owner.run()).await;
-                    let mut owners = inner.owners.lock().await;
-                    if owners
-                        .get(&reader)
-                        .is_some_and(|current| current.same_channel(&owner_sender))
-                    {
-                        owners.remove(&reader);
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<usize, BoardError> {
+        self.require_started().await?;
+        self.inner
+            .clock
+            .debug_advance_to(now)
+            .map_err(|message| BoardError::invalid_field("nowMs", message))?;
+        let readers: Vec<_> = self.inner.owners.lock().await.keys().cloned().collect();
+        let mut completed = 0;
+        for reader in readers {
+            loop {
+                let (reply, response) = oneshot::channel();
+                self.submit_reader_command(
+                    reader.clone(),
+                    ReaderScanScope::All,
+                    ReaderDeliveryCommand::DebugScan(reply),
+                )
+                .await?;
+                let result = tokio::select! {
+                    () = self.inner.shutdown.cancelled() => return Err(BoardError::board_unavailable()),
+                    result = response => result,
+                };
+                match result {
+                    Ok(outcome) => {
+                        outcome?;
+                        break;
                     }
+                    // An idle owner may close after accepting the command. Its
+                    // channel closure prompts one scan on its replacement owner.
+                    Err(_) => continue,
                 }
-                .with_current_subscriber(),
-            );
-            return Ok(sender);
+            }
+            completed += 1;
         }
+        Ok(completed)
     }
 
     #[cfg(test)]

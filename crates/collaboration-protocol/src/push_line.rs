@@ -191,6 +191,7 @@ pub enum PushKind {
     SubscriptionActivity,
     SubscriptionExpiry,
     BoardNotification,
+    NotificationListing,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
@@ -209,6 +210,9 @@ pub enum PushOrigin {
     deny_unknown_fields
 )]
 pub enum PushHeaderFacts {
+    NotificationListing {
+        item_count: u64,
+    },
     BoardNotification {
         project: message_board::ProjectId,
         intent: message_board::NotifyIntentId,
@@ -254,6 +258,7 @@ impl PushHeaderFacts {
             Self::SubscriptionActivity { .. } => PushKind::SubscriptionActivity,
             Self::SubscriptionExpiry { .. } => PushKind::SubscriptionExpiry,
             Self::BoardNotification { .. } => PushKind::BoardNotification,
+            Self::NotificationListing { .. } => PushKind::NotificationListing,
         }
     }
 }

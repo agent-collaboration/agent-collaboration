@@ -99,7 +99,7 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
         .await
         .unwrap();
 
-    // Act: today's public opener must admit that exact file and run migration13.
+    // Act: today's public opener admits that exact file and runs migrations 13 and 14.
     for _ in 0..2 {
         let owner = Arc::new(
             InteractionStore::open(&path)
@@ -124,7 +124,15 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
                 .fetch_one(&mut *writer)
                 .await
                 .unwrap();
-            assert_eq!(migrations, 13);
+            assert_eq!(migrations, 14);
+            let windows: i64 = sqlx::query_scalar("SELECT count(*) FROM notification_windows")
+                .fetch_one(&mut *writer)
+                .await
+                .unwrap();
+            assert_eq!(
+                windows, 0,
+                "upgrade invented a delivery window for historical mail"
+            );
             let contexts: i64 = sqlx::query_scalar("SELECT count(*) FROM mail_read_contexts")
                 .fetch_one(&mut *writer)
                 .await

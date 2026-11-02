@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE router_pushes SET notification_item_digest=? WHERE push_id=? AND notification_item_digest IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "c5350daf0fe3af53ce02e06e5e32388d4e3f9a15a4901ee704e3a6a964697442"
+}

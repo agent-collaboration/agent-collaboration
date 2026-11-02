@@ -64,6 +64,13 @@ mod held_mail;
 mod owed_wake_admission;
 mod push_record_rows;
 mod push_records;
+pub use push_records::{
+    NotificationListingMember, NotificationWindow, is_notification_kind,
+    notification_listing_for_member_in_scope, prepare_notification_listing_in_scope,
+    record_notification_reference_in_scope, refreeze_notification_listing_in_scope,
+    release_unsent_notification_member_in_scope,
+};
+
 mod push_retention;
 mod subscription_delivery_progress;
 mod worker_progress_id;
@@ -79,3 +86,6 @@ pub use subscription_delivery_progress::{
 mod interaction_atomic_store_tests;
 #[cfg(test)]
 mod schema_prefix_fixture;
+
+#[cfg(test)]
+mod notification_window_tests;

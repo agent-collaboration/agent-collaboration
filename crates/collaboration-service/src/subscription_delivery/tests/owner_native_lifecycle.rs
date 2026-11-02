@@ -3,6 +3,24 @@ use super::super::local_mail_proofs::native_mail_owner::NativeMailOwner;
 use super::*;
 
 impl OwnerRuntime {
+    pub async fn native_request_or_pass_error(
+        &self,
+    ) -> Result<collaboration_contracts::layer_zero::DeliveryRequest, message_board::BoardError>
+    {
+        let mut requests = self.requests.lock().await;
+        let mut observations = self.observations.lock().await;
+        loop {
+            tokio::select! {
+                request = requests.recv() => return request.ok_or_else(message_board::BoardError::board_unavailable),
+                observation = observations.recv() => match observation {
+                    Ok(super::super::super::subscription_service::OwnerObservation::ReaderPassFailed(error)) => return Err(error),
+                    Ok(_) => {},
+                    Err(_) => return Err(message_board::BoardError::board_unavailable()),
+                }
+            }
+        }
+    }
+
     pub async fn await_mail_outcome(
         &self,
         push: &collaboration_protocol::PushId,
@@ -50,6 +68,38 @@ impl OwnerRuntime {
 }
 
 impl OwnerFixture {
+    /// Reads originals through the same authorized member page the recipient uses.
+    /// One native listing covers these records without changing their SDK identities.
+    pub async fn notification_records_for_request(
+        &self,
+        request: &collaboration_contracts::layer_zero::DeliveryRequest,
+    ) -> Vec<collaboration_protocol::PushRecord> {
+        let record = self
+            .interactions
+            .get_push_record(&request.payload.push_id)
+            .await
+            .unwrap()
+            .unwrap();
+        if record.kind != collaboration_protocol::PushKind::NotificationListing {
+            return vec![record];
+        }
+        let mut records = Vec::new();
+        let mut after = None;
+        loop {
+            let (page, next) = self
+                .interactions
+                .notification_listing_members(&request.target, &record.push_id, after.as_ref(), 50)
+                .await
+                .unwrap();
+            records.extend(page);
+            match next {
+                Some(next) => after = Some(next),
+                None => break,
+            }
+        }
+        records
+    }
+
     pub async fn await_push_state(
         &self,
         push: &collaboration_protocol::PushId,

@@ -1,6 +1,6 @@
 {
   "db_name": "Turso",
-  "query": "SELECT push_id AS \"push_id!: String\",retention AS \"retention!: String\",delivery_state AS \"delivery_state!: String\",created_at AS \"created_at!: String\",settled_at FROM router_pushes WHERE (retention='creationAge' AND created_at<?) OR (retention='mailTerminalAge' AND settled_at<?) OR retention NOT IN ('creationAge','mailTerminalAge') ORDER BY CASE WHEN retention='mailTerminalAge' THEN settled_at ELSE created_at END,push_id LIMIT ?",
+  "query": "SELECT push_id AS \"push_id!: String\",retention AS \"retention!: String\",delivery_state AS \"delivery_state!: String\",created_at AS \"created_at!: String\",settled_at FROM router_pushes WHERE ((retention='creationAge' AND created_at<?) OR (retention='mailTerminalAge' AND settled_at<?) OR retention NOT IN ('creationAge','mailTerminalAge')) AND NOT EXISTS (SELECT 1 FROM router_pushes member WHERE member.notification_listing_push_id=router_pushes.push_id) ORDER BY CASE WHEN retention='mailTerminalAge' THEN settled_at ELSE created_at END,push_id LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -48,5 +48,5 @@
       null
     ]
   },
-  "hash": "e9c1ce4d038e196fdd7c3e8167c2b7b4fc7e1dbf621079cc1464d3205b1cc87b"
+  "hash": "b0e254f616ee2470b3a5e3d3e57446b62b436386aed6cc140c7dd9c7301d86d6"
 }

@@ -57,6 +57,7 @@ pub use journal_operations::{
 };
 pub use message_operations::{
     MessageFailure, MessageFailureKind, MessageFailureStage, MessageOperations,
+    NotificationMembersFailure,
 };
 pub use provider_observation_operations::{
     ObservationFailure, ObservationOperations, ObservedEventSink,

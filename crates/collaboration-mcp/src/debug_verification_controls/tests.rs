@@ -9,12 +9,21 @@ use std::{io, path::Path, sync::Arc, time::Duration};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
 async fn post_control(socket: &Path, action: &str, request: Value) -> (u16, Value) {
+    post_path(
+        socket,
+        &format!("/debug/automation/faults/{action}"),
+        request,
+    )
+    .await
+}
+
+async fn post_path(socket: &Path, path: &str, request: Value) -> (u16, Value) {
     let mut stream = tokio::net::UnixStream::connect(socket)
         .await
         .expect("connect the owned API socket");
     let body = serde_json::to_vec(&request).expect("control request JSON");
     let header = format!(
-        "POST /debug/automation/faults/{action} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n",
+        "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: {}\r\n\r\n",
         body.len()
     );
     stream
@@ -85,6 +94,7 @@ async fn owner_socket_controls_hold_until_the_matching_release() {
     let api = collaboration_api_router(&config, CollaborationApiListener::UnixSocket)
         .with_debug_verification_controls(DebugVerificationControls {
             automation_faults: Some(Arc::clone(&faults)),
+            ..Default::default()
         })
         .expect("owner socket admits named controls");
     let serving = tokio::spawn(serve_collaboration_api(
@@ -162,3 +172,6 @@ async fn owner_socket_controls_hold_until_the_matching_release() {
             .is_ok()
     );
 }
+
+#[path = "verification_clock_tests.rs"]
+mod verification_clock_tests;

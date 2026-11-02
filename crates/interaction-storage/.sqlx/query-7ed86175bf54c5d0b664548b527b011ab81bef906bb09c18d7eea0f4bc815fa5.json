@@ -1,0 +1,36 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT DISTINCT target_service_id AS \"service!: String\",target_endpoint_id AS \"endpoint!: String\",target_session_id AS \"session!: String\" FROM router_pushes WHERE kind IN ('notification-listing','board-notification','subscription-activity','subscription-expiry') AND delivery_state IN ('pending','held','attempted') ORDER BY target_service_id,target_endpoint_id,target_session_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "service!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "endpoint!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "session!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "7ed86175bf54c5d0b664548b527b011ab81bef906bb09c18d7eea0f4bc815fa5"
+}

@@ -67,6 +67,20 @@ impl CollaborationMcpServer {
         )
     }
 
+    #[tool(name="notification_members", description="Reads one recipient-authorized page of original notifications covered by a stored listing, including overflow beyond its 50 displayed entries. Pass the returned next PushId as after; limit is 1 through 50. Read-only; it never dispatches a notification or changes SDK custody.", output_schema=rmcp::handler::server::tool::schema_for_type::<McpToolOutput<collaboration_protocol::NotificationMembersPage>>())]
+    pub(super) async fn notification_members(
+        &self,
+        Parameters(request): Parameters<collaboration_protocol::NotificationMembersRequest>,
+    ) -> CallToolResult {
+        application_result(
+            self.application
+                .messages()
+                .notification_members(request)
+                .await,
+            OperationEffect::None,
+        )
+    }
+
     #[tool(name = "message_inbox", description = "Lists retained unread direct messages for the reported caller session. Caller identity is supplied by the MCP request and is not authenticated; the service uses it as a confusion guard.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<PushRecordListResult>>())]
     pub(super) async fn message_inbox(
         &self,

@@ -23,7 +23,47 @@ impl ReaderDeliveryOwner {
         self.native_checked_presence
             .retain(|id, _| held_ids.contains(id));
         let mut running = false;
+        let window = self
+            .push
+            .store
+            .notification_window(target)
+            .await
+            .map_err(|_| BoardError::board_unavailable())?;
+        let mut eligible = Vec::new();
         for item in &items {
+            if let Some(record) = self
+                .push
+                .store
+                .get_push_record(item)
+                .await
+                .map_err(|_| BoardError::board_unavailable())?
+                && interaction_storage::is_notification_kind(record.kind)
+                && self
+                    .push
+                    .store
+                    .notification_item_reference(item)
+                    .await
+                    .map_err(|_| BoardError::board_unavailable())?
+                    .is_some()
+                && (self
+                    .push
+                    .store
+                    .notification_listing_for_member(item)
+                    .await
+                    .map_err(|_| BoardError::board_unavailable())?
+                    .is_some()
+                    || window.as_ref().is_some_and(|window| {
+                        window.flush_due_at.is_some()
+                            || window
+                                .next_delivery_at()
+                                .is_ok_and(|due| self.clock.now() < due)
+                    }))
+            {
+                continue;
+            }
+            eligible.push(item.clone());
+        }
+        for item in &eligible {
             if self
                 .native_checked_presence
                 .get(item)
@@ -52,7 +92,7 @@ impl ReaderDeliveryOwner {
             }
         }
         if running {
-            let ready = items
+            let ready = eligible
                 .iter()
                 .map(|item| {
                     self.native_checked_presence

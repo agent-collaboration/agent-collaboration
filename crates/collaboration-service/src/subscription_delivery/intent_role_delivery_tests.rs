@@ -62,41 +62,40 @@ async fn handed_off_role_intent_delivers_to_the_frozen_recipient_after_holders_c
         .consume_project_intents(&fixture.project)
         .await
         .unwrap();
+    runtime.owner_barrier(&fixture.reader).await;
+    fixture.clock.advance_without_tokio_time(600);
+    runtime.owner_barrier(&fixture.reader).await;
     let mut observed_cause = Vec::new();
     let mut requests = runtime.requests.lock().await;
     while let Ok(request) = requests.try_recv() {
-        let push = fixture
-            .interactions
-            .get_push_record(&request.payload.push_id)
-            .await
-            .unwrap()
-            .unwrap();
-        let collaboration_protocol::PushHeaderFacts::BoardNotification {
-            project,
-            intent: delivered,
-            cause,
-            ..
-        } = push.header_facts
-        else {
-            panic!("board push");
-        };
-        assert_eq!(project, fixture.project);
-        if cause == post.clone().into() {
-            assert_eq!(delivered, intent);
-            let Identity::Session { session } = &fixture.reader else {
-                panic!("local reader");
+        for push in fixture.notification_records_for_request(&request).await {
+            let collaboration_protocol::PushHeaderFacts::BoardNotification {
+                project,
+                intent: delivered,
+                cause,
+                ..
+            } = push.header_facts
+            else {
+                panic!("board push");
             };
-            assert_eq!(
-                serde_json::to_value(&request.target).unwrap(),
-                serde_json::to_value(session).unwrap()
-            );
-            observed_cause.push(delivered);
+            assert_eq!(project, fixture.project);
+            if cause == post.clone().into() {
+                assert_eq!(delivered, intent);
+                let Identity::Session { session } = &fixture.reader else {
+                    panic!("local reader");
+                };
+                assert_eq!(
+                    serde_json::to_value(&request.target).unwrap(),
+                    serde_json::to_value(session).unwrap()
+                );
+                observed_cause.push(delivered);
+            }
         }
     }
     assert_eq!(
         observed_cause,
         vec![intent.clone()],
-        "exactly the frozen intent reached Layer-0"
+        "exactly the frozen intent was covered by native delivery"
     );
     drop(requests);
     let store = fixture
@@ -334,9 +333,11 @@ async fn claimed_retained_holder_delivers_an_already_consumed_reinstatement_in_t
         .consume_project_intents(&fixture.project)
         .await
         .unwrap();
-    // The initial pass submits two addressed posts and the current role grant.
-    // Completing those scripted calls proves all three requests reached the
-    // queue before its snapshot; a publisher pass only commits their custody.
+    // The same pass commits all three original identities. Each recipient has
+    // its own window; a later listing covers the returning actor's held item.
+    runtime.owner_barrier(&returning).await;
+    runtime.owner_barrier(&retained).await;
+    fixture.clock.advance_without_tokio_time(600);
     tokio::time::timeout(std::time::Duration::from_secs(10), async {
         while runtime
             .completed_native_calls
@@ -352,44 +353,40 @@ async fn claimed_retained_holder_delivers_an_already_consumed_reinstatement_in_t
     let mut first_pass_requests = Vec::new();
     let mut requests = runtime.requests.lock().await;
     while let Ok(request) = requests.try_recv() {
-        let push = fixture
-            .interactions
-            .get_push_record(&request.payload.push_id)
-            .await
-            .unwrap()
-            .unwrap();
-        let collaboration_protocol::PushHeaderFacts::BoardNotification {
-            project,
-            intent,
-            cause,
-            ..
-        } = push.header_facts
-        else {
-            panic!("board notification");
-        };
-        first_pass_requests.push((
-            request.payload.push_id.clone(),
-            request.attempt.clone(),
-            request.target.clone(),
-            intent.clone(),
-            cause.clone(),
-        ));
-        if cause == post.clone().into() {
-            assert_eq!(project, fixture.project);
-            let expected = if intent == retained_id {
-                &retained
-            } else {
-                assert_eq!(intent, returning_id, "no new actor identity");
-                &returning
+        for push in fixture.notification_records_for_request(&request).await {
+            let collaboration_protocol::PushHeaderFacts::BoardNotification {
+                project,
+                intent,
+                cause,
+                ..
+            } = push.header_facts
+            else {
+                panic!("board notification");
             };
-            let Identity::Session { session } = expected else {
-                panic!("local recipient");
-            };
-            assert_eq!(
-                serde_json::to_value(request.target).unwrap(),
-                serde_json::to_value(session).unwrap()
-            );
-            assert!(observed.insert(intent), "duplicate addressed push");
+            first_pass_requests.push((
+                request.payload.push_id.clone(),
+                request.attempt.clone(),
+                request.target.clone(),
+                intent.clone(),
+                cause.clone(),
+            ));
+            if cause == post.clone().into() {
+                assert_eq!(project, fixture.project);
+                let expected = if intent == retained_id {
+                    &retained
+                } else {
+                    assert_eq!(intent, returning_id, "no new actor identity");
+                    &returning
+                };
+                let Identity::Session { session } = expected else {
+                    panic!("local recipient");
+                };
+                assert_eq!(
+                    serde_json::to_value(&request.target).unwrap(),
+                    serde_json::to_value(session).unwrap()
+                );
+                assert!(observed.insert(intent), "duplicate addressed push");
+            }
         }
     }
     assert_eq!(

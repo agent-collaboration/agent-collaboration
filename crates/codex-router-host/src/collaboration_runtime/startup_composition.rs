@@ -325,8 +325,19 @@ impl CollaborationRuntime {
             dyn collaboration_contracts::ScheduledRunExecution,
         > = message_routes.router.clone();
         let provider_delivery_route = message_routes.provider_route;
-        let subscription_clock: std::sync::Arc<dyn collaboration_service::SubscriptionClock> =
-            std::sync::Arc::new(collaboration_service::SystemSubscriptionClock);
+        #[cfg(debug_assertions)]
+        let controlled_notification_clock = super::debug_notification_control::configured_clock()?;
+        #[cfg(debug_assertions)]
+        let subscription_clock: std::sync::Arc<
+            dyn collaboration_service::SubscriptionClock,
+        > = match &controlled_notification_clock {
+            Some(clock) => clock.clone(),
+            None => std::sync::Arc::new(collaboration_service::SystemSubscriptionClock),
+        };
+        #[cfg(not(debug_assertions))]
+        let subscription_clock: std::sync::Arc<
+            dyn collaboration_service::SubscriptionClock,
+        > = std::sync::Arc::new(collaboration_service::SystemSubscriptionClock);
         let central_catalog = prepared_board
             .as_ref()
             .and_then(|board| board.automation_transport());
@@ -377,6 +388,12 @@ impl CollaborationRuntime {
         let mail_session = prepared_board
             .as_ref()
             .and_then(|board| board.mail_session());
+        if let Some(service) = &subscription_delivery {
+            service
+                .capture_notification_startup_snapshot()
+                .await
+                .map_err(|error| io::Error::other(error.message))?;
+        }
         let mail_delivery = subscription_delivery
             .as_ref()
             .map(|actors| {
@@ -597,7 +614,12 @@ impl CollaborationRuntime {
             collaboration_api.with_service_socket(&inputs.directory.join("control.sock"))?;
         #[cfg(debug_assertions)]
         let collaboration_api = collaboration_api.with_debug_verification_controls(
-            collaboration_mcp::DebugVerificationControls { automation_faults },
+            collaboration_mcp::DebugVerificationControls {
+                automation_faults,
+                verification_clock: controlled_notification_clock
+                    .as_ref()
+                    .and(subscription_delivery.clone()),
+            },
         );
         let native = NativeRelayListener::bind(
             &inputs.directory.join("codex-native.sock"),

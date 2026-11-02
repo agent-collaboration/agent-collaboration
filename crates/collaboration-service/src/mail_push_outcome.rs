@@ -123,3 +123,25 @@ pub(crate) fn local_follow_outcome(
 #[cfg(test)]
 #[path = "mail_push_outcome_tests.rs"]
 mod tests;
+
+pub(crate) fn listing_native_result(
+    listing: &collaboration_protocol::PushRecord,
+) -> NativeDeliveryResult {
+    match listing.delivery_state {
+        collaboration_protocol::PushDeliveryState::Delivered => listing
+            .last_outcome
+            .clone()
+            .and_then(NativeDeliveryResult::reconciled_acceptance)
+            .unwrap_or_else(NativeDeliveryResult::unknown),
+        collaboration_protocol::PushDeliveryState::OutcomeUnknown => {
+            NativeDeliveryResult::unknown()
+        }
+        _ => NativeDeliveryResult::not_submitted(
+            "notification listing has not completed its native attempt",
+            true,
+            UnsentCause::Holdable {
+                otherwise: NativeRefusalCode::CarrierUnavailable,
+            },
+        ),
+    }
+}

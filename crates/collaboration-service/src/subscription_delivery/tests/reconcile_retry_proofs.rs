@@ -35,12 +35,14 @@ async fn accepted_reconcile_dropped_by_an_idle_owner_is_acknowledged_by_its_repl
     // The existing command channel is the race seam: acceptance precedes the
     // stale owner's close, while the response is never acknowledged.
     let (stale_sender, mut stale_receiver) = mpsc::channel(1);
-    service
-        .inner
-        .owners
-        .lock()
-        .await
-        .insert(reader.clone(), stale_sender);
+    let completed = CancellationToken::new();
+    service.inner.owners.lock().await.insert(
+        reader.clone(),
+        ReaderOwnerHandle {
+            commands: stale_sender,
+            completed: completed.clone(),
+        },
+    );
     let reconciler = service.clone();
     let reconcile = tokio::spawn(async move { reconciler.reconcile_reader(reader).await });
     let accepted = tokio::time::timeout(std::time::Duration::from_secs(5), stale_receiver.recv())
@@ -52,6 +54,7 @@ async fn accepted_reconcile_dropped_by_an_idle_owner_is_acknowledged_by_its_repl
     stale_receiver.close();
     drop(reply);
     drop(stale_receiver);
+    completed.cancel();
     tokio::time::timeout(std::time::Duration::from_secs(5), reconcile).await???;
     let started =
         tokio::time::timeout(std::time::Duration::from_secs(5), observations.recv()).await??;

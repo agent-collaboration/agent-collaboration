@@ -93,7 +93,32 @@ async fn deferred_project_restores_an_abandoned_selection_despite_the_same_reade
             .is_none_or(|selected| selected.batch_id != batch.batch_id),
         "healthy A owner protected B's abandoned pre-crash selection"
     );
-    let recovered = activity(&fixture, &runtime).await;
+    let held = fixture.held_native_pushes(1).await;
+    assert_eq!(
+        held[0].activity.as_ref().unwrap().ranges,
+        vec![expected_range(
+            fixture.project.clone(),
+            fixture.root.clone(),
+            owed
+        )]
+    );
+    runtime.owner_barrier(&fixture.reader).await;
+    assert!(
+        runtime.requests.lock().await.try_recv().is_err(),
+        "restoration allocates immediately but preserves the recipient cooldown"
+    );
+    tokio::time::pause();
+    fixture.clock.advance(600).await;
+    tokio::time::resume();
+    let request = tokio::time::timeout(Duration::from_secs(5), async {
+        runtime.requests.lock().await.recv().await.unwrap()
+    })
+    .await
+    .expect("restored listing delivery");
+    let originals = fixture.notification_records_for_request(&request).await;
+    assert_eq!(originals.len(), 1);
+    assert_eq!(originals[0].push_id, held[0].push_id);
+    let recovered = originals[0].activity.as_ref().unwrap();
     assert_eq!(
         recovered.ranges,
         vec![expected_range(
@@ -144,13 +169,14 @@ async fn deferred_handoff_replaces_an_owner_that_accepts_then_drops_its_command(
     tokio::time::resume();
     evidence.state("waiting").await;
     let (stale_sender, mut stale_receiver) = mpsc::channel(1);
-    runtime
-        .service
-        .inner
-        .owners
-        .lock()
-        .await
-        .insert(fixture.reader.clone(), stale_sender);
+    let completed = CancellationToken::new();
+    runtime.service.inner.owners.lock().await.insert(
+        fixture.reader.clone(),
+        ReaderOwnerHandle {
+            commands: stale_sender,
+            completed: completed.clone(),
+        },
+    );
     release_project_readers(held).await;
     fixture.clock.advance_without_tokio_time(1);
     let accepted = tokio::time::timeout(Duration::from_secs(5), stale_receiver.recv())
@@ -166,6 +192,7 @@ async fn deferred_handoff_replaces_an_owner_that_accepts_then_drops_its_command(
     stale_receiver.close();
     drop(reply);
     drop(stale_receiver);
+    completed.cancel();
     // Acceptance was real, but only the replacement can take responsibility.
     let notice = activity(&fixture, &runtime).await;
     assert_eq!(
@@ -301,13 +328,13 @@ async fn recovering_project_does_not_wait_for_an_owner_without_membership() {
     // A direct-message owner can legitimately be busy without a board membership.
     // Its channel cannot acknowledge a board command until its own effect settles.
     let (unrelated_sender, mut unrelated_receiver) = mpsc::channel(1);
-    runtime
-        .service
-        .inner
-        .owners
-        .lock()
-        .await
-        .insert(unrelated, unrelated_sender);
+    runtime.service.inner.owners.lock().await.insert(
+        unrelated,
+        ReaderOwnerHandle {
+            commands: unrelated_sender,
+            completed: CancellationToken::new(),
+        },
+    );
     let probe = fixture.store.lock().await.clone();
     let result=tokio::time::timeout(Duration::from_secs(5),async {
         tokio::select! {

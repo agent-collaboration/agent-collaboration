@@ -137,6 +137,59 @@ impl MailPushDelivery {
         Ok(Some(delivery))
     }
 
+    pub(crate) async fn prepare_notification_for_listing(
+        &self,
+        item: &DeliveryItem<RouterDeliveryTypes>,
+    ) -> Result<MailPushPreparation, DeliveryError> {
+        if !matches!(
+            item.body(),
+            board_sync_protocol::BoardDeliveryBody::Notification(_)
+        ) {
+            return Err(DeliveryError::Corrupt {
+                field: "listing notification body",
+            });
+        }
+        let draft = received_mail_push(item, self.props.clock.now())?
+            .ok_or(DeliveryError::CustodyMissing)?;
+        let working = self
+            .props
+            .interactions
+            .get_push_record(&draft.push_id)
+            .await
+            .map_err(storage_error)?
+            .ok_or(DeliveryError::CustodyMissing)?;
+        let presence = self
+            .props
+            .presence
+            .presence(&working.target)
+            .await
+            .unwrap_or_else(|error| TargetPresence::Unreachable {
+                reason: error.to_string(),
+            });
+        // This request is only a policy projection; it is never dispatched.
+        let call = CallId {
+            operation: runtime_primitives::OperationId::new(item.id().as_uuid()).map_err(|_| {
+                DeliveryError::Corrupt {
+                    field: "notification policy identity",
+                }
+            })?,
+            step: runtime_primitives::StepName::new("notification-policy").map_err(|_| {
+                DeliveryError::Corrupt {
+                    field: "notification policy step",
+                }
+            })?,
+        };
+        prepare_mail_push_with_load_policy(
+            item,
+            &working,
+            &self.props.machine,
+            &presence,
+            &call,
+            LoadPolicy::LoadedOnly,
+        )?
+        .ok_or(DeliveryError::CustodyMissing)
+    }
+
     fn now(&self) -> SyncTime {
         SyncTime::from_unix_millis(self.props.clock.now().timestamp_millis())
     }

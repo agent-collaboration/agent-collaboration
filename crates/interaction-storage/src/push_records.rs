@@ -1,9 +1,29 @@
 //! Durable push snapshots, delivery transitions, DM queries, and bounded pruning.
+#[path = "notification_windows.rs"]
+pub(crate) mod notification_windows;
+pub use notification_windows::NotificationWindow;
+#[path = "notification_listings.rs"]
+pub(crate) mod notification_listings;
+pub use notification_listings::is_notification_kind;
+#[path = "notification_references.rs"]
+pub(crate) mod notification_references;
+#[path = "notification_refreeze.rs"]
+pub(crate) mod notification_refreeze;
+pub use notification_refreeze::refreeze_notification_listing_in_scope;
+#[path = "notification_settlement.rs"]
+pub(crate) mod notification_settlement;
+#[path = "notification_startup_snapshot.rs"]
+pub(crate) mod notification_startup_snapshot;
 use crate::{InteractionStore, StorageError, push_record_rows};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use collaboration_protocol::{
     DeliveryOutcome, DeliveryReceipt, PushId, PushKind, PushOrigin, PushRecord, PushRecordDraft,
     RouterOriginRef, SessionRef,
+};
+pub use notification_references::{
+    NotificationListingMember, notification_listing_for_member_in_scope,
+    prepare_notification_listing_in_scope, record_notification_reference_in_scope,
+    release_unsent_notification_member_in_scope,
 };
 use sqlx::Connection;
 use sqlx_turso::TursoConnection;
@@ -324,7 +344,7 @@ impl InteractionStore {
         let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
         let pruned = async {
             let candidates = sqlx_turso::query!(
-                "SELECT push_id AS \"push_id!: String\",retention AS \"retention!: String\",delivery_state AS \"delivery_state!: String\",created_at AS \"created_at!: String\",settled_at FROM router_pushes WHERE (retention='creationAge' AND created_at<?) OR (retention='mailTerminalAge' AND settled_at<?) OR retention NOT IN ('creationAge','mailTerminalAge') ORDER BY CASE WHEN retention='mailTerminalAge' THEN settled_at ELSE created_at END,push_id LIMIT ?",
+                "SELECT push_id AS \"push_id!: String\",retention AS \"retention!: String\",delivery_state AS \"delivery_state!: String\",created_at AS \"created_at!: String\",settled_at FROM router_pushes WHERE ((retention='creationAge' AND created_at<?) OR (retention='mailTerminalAge' AND settled_at<?) OR retention NOT IN ('creationAge','mailTerminalAge')) AND NOT EXISTS (SELECT 1 FROM router_pushes member WHERE member.notification_listing_push_id=router_pushes.push_id) ORDER BY CASE WHEN retention='mailTerminalAge' THEN settled_at ELSE created_at END,push_id LIMIT ?",
                 cutoff, cutoff, i64::from(batch_size)
             ).fetch_all(&mut *transaction).await?;
             let mut pruned = 0;

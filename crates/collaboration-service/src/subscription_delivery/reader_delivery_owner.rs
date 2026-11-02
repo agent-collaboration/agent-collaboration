@@ -8,6 +8,8 @@ mod reader_follow_allocations;
 mod reader_membership_refresh;
 #[path = "reader_native_mail.rs"]
 mod reader_native_mail;
+#[path = "reader_notifications.rs"]
+mod reader_notifications;
 #[path = "reader_poll_mail.rs"]
 mod reader_poll_mail;
 pub(super) use reader_poll_mail::poll_unsent;
@@ -68,6 +70,8 @@ pub(super) enum ReaderReconcilePurpose {
 pub(super) enum ReaderDeliveryCommand {
     #[cfg(test)]
     Barrier(oneshot::Sender<()>),
+    #[cfg(debug_assertions)]
+    DebugScan(oneshot::Sender<Result<(), BoardError>>),
     Reconcile {
         scope: ReaderScanScope,
         purpose: ReaderReconcilePurpose,
@@ -83,6 +87,10 @@ pub(super) enum ReaderDeliveryCommand {
         check: MailAttemptCheck,
         reply: MailAttemptReply,
     },
+    ListingResult {
+        listing: PushId,
+        reply: MailAttemptReply,
+    },
     PollMailAttempt {
         item: Box<fleet_sync_protocol::DeliveryItem<collaboration_contracts::RouterDeliveryTypes>>,
         reply: MailAttemptReply,
@@ -96,8 +104,12 @@ pub(super) enum ReaderDeliveryCommand {
 }
 
 pub(super) struct ReaderDeliveryOwnerProps {
+    pub notification_startup_attempts: Arc<std::collections::HashSet<PushId>>,
     #[cfg(test)]
     pub poll_handover_probe: super::subscription_service::PollHandoverProbeSlot,
+    #[cfg(test)]
+    pub idle_owner_close_probe:
+        super::subscription_service::idle_owner_close_probe::IdleOwnerCloseProbeSlot,
     pub native_mail: super::subscription_service::NativeMailReadiness,
     pub follow_admission: super::subscription_service::FollowAdmissionSlot,
     pub reader: Identity,
@@ -114,12 +126,18 @@ pub(super) struct ReaderDeliveryOwnerProps {
 }
 
 pub(super) struct ReaderDeliveryOwner {
+    notification_startup_attempts: Arc<std::collections::HashSet<PushId>>,
     #[cfg(test)]
     poll_handover_probe: super::subscription_service::PollHandoverProbeSlot,
+    #[cfg(test)]
+    idle_owner_close_probe:
+        super::subscription_service::idle_owner_close_probe::IdleOwnerCloseProbeSlot,
     native_mail: super::subscription_service::NativeMailReadiness,
     follow_admission: super::subscription_service::FollowAdmissionSlot,
     native_checked_presence: HashMap<PushId, Instant>,
     membership_expiry_deadline: Option<Instant>,
+    notification_flush_deadline: Option<Instant>,
+    notification_recovery_complete: bool,
     reader: Identity,
     board_availability: BoardAvailability,
     push: Arc<SubscriptionPushStore>,
@@ -142,6 +160,8 @@ pub(super) struct ReaderDeliveryOwner {
     dm_replies: HashMap<PushId, Vec<DirectMessageReply>>,
     #[cfg(test)]
     barriers: Vec<oneshot::Sender<()>>,
+    #[cfg(debug_assertions)]
+    debug_scans: Vec<oneshot::Sender<Result<(), BoardError>>>,
     #[cfg(test)]
     observations: broadcast::Sender<OwnerObservation>,
 }
@@ -149,8 +169,11 @@ pub(super) struct ReaderDeliveryOwner {
 impl ReaderDeliveryOwner {
     pub(super) fn new(props: ReaderDeliveryOwnerProps) -> Self {
         let ReaderDeliveryOwnerProps {
+            notification_startup_attempts,
             #[cfg(test)]
             poll_handover_probe,
+            #[cfg(test)]
+            idle_owner_close_probe,
             native_mail,
             follow_admission,
             reader,
@@ -166,12 +189,17 @@ impl ReaderDeliveryOwner {
             observations,
         } = props;
         Self {
+            notification_startup_attempts,
             #[cfg(test)]
             poll_handover_probe,
+            #[cfg(test)]
+            idle_owner_close_probe,
             native_mail,
             follow_admission,
             native_checked_presence: HashMap::new(),
             membership_expiry_deadline: None,
+            notification_flush_deadline: None,
+            notification_recovery_complete: false,
             reader,
             board_availability,
             push,
@@ -194,9 +222,26 @@ impl ReaderDeliveryOwner {
             dm_replies: HashMap::new(),
             #[cfg(test)]
             barriers: Vec::new(),
+            #[cfg(debug_assertions)]
+            debug_scans: Vec::new(),
             #[cfg(test)]
             observations,
         }
+    }
+
+    #[cfg(debug_assertions)]
+    fn complete_debug_scans(&mut self, result: Result<(), BoardError>) {
+        for scan in self.debug_scans.drain(..) {
+            let _ = scan.send(result.clone());
+        }
+    }
+
+    fn record_pass_error(&mut self, error: &BoardError) {
+        tracing::warn!(reader = ?self.reader, %error, "reader delivery pass failed");
+        #[cfg(debug_assertions)]
+        self.complete_debug_scans(Err(error.clone()));
+        #[cfg(test)]
+        self.observe(OwnerObservation::ReaderPassFailed(error.clone()));
     }
 
     pub(super) async fn run(mut self) {
@@ -204,10 +249,20 @@ impl ReaderDeliveryOwner {
         self.observe(OwnerObservation::Started);
         while !self.shutdown.is_cancelled() {
             self.expire_waiters();
+            if let Err(error) = self.ensure_notification_recovery().await {
+                self.record_pass_error(&error);
+                self.answer_reconcile_requests(&Err(error));
+                self.refuse_expired_pending_waiters();
+                if !self.wait_for_input(Some(self.retry_deadline())).await {
+                    break;
+                }
+                continue;
+            }
             while let Ok(command) = self.commands.try_recv() {
                 self.handle_command(command).await;
             }
             if let Err(error) = self.expire_due_follow_memberships().await {
+                self.record_pass_error(&error);
                 self.answer_reconcile_requests(&Err(error));
                 self.refuse_expired_pending_waiters();
                 if !self.wait_for_input(Some(self.retry_deadline())).await {
@@ -216,10 +271,24 @@ impl ReaderDeliveryOwner {
                 continue;
             }
             self.try_pending_held_push_cleanup().await;
+            let pending_notifications = match Box::pin(self.flush_due_notifications()).await {
+                Ok(pending) => pending,
+                Err(error) => {
+                    tracing::warn!(%error,"notification listing pass failed before a new native effect");
+                    self.record_pass_error(&error);
+                    self.answer_reconcile_requests(&Err(error));
+                    self.refuse_expired_pending_waiters();
+                    if !self.wait_for_input(Some(self.retry_deadline())).await {
+                        break;
+                    }
+                    continue;
+                }
+            };
             let pending_dms = match self.deliver_direct_messages().await {
                 Ok(pending) => pending,
                 Err(error) => {
                     tracing::warn!(%error, "direct-message reload or delivery failed");
+                    self.record_pass_error(&error);
                     self.answer_reconcile_requests(&Err(error));
                     self.refuse_expired_pending_waiters();
                     if !self.wait_for_input(Some(self.retry_deadline())).await {
@@ -234,6 +303,7 @@ impl ReaderDeliveryOwner {
             let current = match self.refresh_subscription_records().await {
                 Ok(records) => records,
                 Err(error) => {
+                    self.record_pass_error(&error);
                     self.answer_reconcile_requests(&Err(error));
                     self.refuse_expired_pending_waiters();
                     if !self.wait_for_input(Some(self.retry_deadline())).await {
@@ -250,6 +320,7 @@ impl ReaderDeliveryOwner {
             self.answer_reconcile_requests(&Ok(current.clone()));
             self.activate_pending_waiters(&current.records).await;
             if reconsider_poll && let Err(error) = self.resume_poll_waiters().await {
+                self.record_pass_error(&error);
                 tracing::warn!(%error, "Poll readiness discovery failed");
             }
             let now = self.clock.now();
@@ -260,16 +331,29 @@ impl ReaderDeliveryOwner {
             if records.is_empty()
                 && self.waiters.is_empty()
                 && !pending_dms
+                && !pending_notifications
                 && self.pending_ended_push_cleanup.is_none()
             {
                 // Close admission, then finish every accepted carrier call once.
                 // Its effect cannot safely be requested again after a lost response.
+                #[cfg(test)]
+                super::subscription_service::idle_owner_close_probe::pause_before_close(
+                    &self.idle_owner_close_probe,
+                )
+                .await;
+                #[cfg(test)]
+                for barrier in self.barriers.drain(..) {
+                    let _ = barrier.send(());
+                }
                 self.commands.close();
+                #[cfg(debug_assertions)]
+                self.complete_debug_scans(Ok(()));
                 while let Some(command) = self.commands.recv().await {
                     if matches!(
                         &command,
                         ReaderDeliveryCommand::MailAttempt { .. }
                             | ReaderDeliveryCommand::PollMailAttempt { .. }
+                            | ReaderDeliveryCommand::ListingResult { .. }
                     ) {
                         self.handle_command(command).await;
                     }
@@ -301,6 +385,7 @@ impl ReaderDeliveryOwner {
                 Ok(roots) => roots,
                 Err(error) => {
                     tracing::warn!(%error, "subscription due selection failed");
+                    self.record_pass_error(&error);
                     Vec::new()
                 }
             };
@@ -311,6 +396,7 @@ impl ReaderDeliveryOwner {
                 Ok(false) => {}
                 Err(error) => {
                     tracing::warn!(%error, "subscription push failed before effect");
+                    self.record_pass_error(&error);
                     if !self.wait_for_input(Some(self.retry_deadline())).await {
                         break;
                     }
@@ -322,6 +408,7 @@ impl ReaderDeliveryOwner {
                 Ok(false) => {}
                 Err(error) => {
                     tracing::warn!(%error, "subscription wait selection failed");
+                    self.record_pass_error(&error);
                     if !self.wait_for_input(Some(self.retry_deadline())).await {
                         break;
                     }
@@ -396,6 +483,7 @@ impl ReaderDeliveryOwner {
             .iter()
             .map(|waiter| waiter.deadline)
             .chain(self.membership_expiry_deadline)
+            .chain(self.notification_flush_deadline)
             .chain(
                 records
                     .iter()
@@ -444,6 +532,8 @@ impl ReaderDeliveryOwner {
     }
 
     async fn wait_for_input(&mut self, deadline: Option<Instant>) -> bool {
+        #[cfg(debug_assertions)]
+        self.complete_debug_scans(Ok(()));
         let deadline = deadline
             .into_iter()
             .chain(
@@ -495,6 +585,11 @@ impl ReaderDeliveryOwner {
 
     async fn handle_command(&mut self, command: ReaderDeliveryCommand) {
         match command {
+            #[cfg(debug_assertions)]
+            ReaderDeliveryCommand::DebugScan(reply) => {
+                self.request_scan(ReaderScanScope::All);
+                self.debug_scans.push(reply);
+            }
             #[cfg(test)]
             ReaderDeliveryCommand::Barrier(reply) => self.barriers.push(reply),
             ReaderDeliveryCommand::Reconcile {
@@ -561,11 +656,23 @@ impl ReaderDeliveryOwner {
                     }
                 }
                 let receipt = self
-                    .push
-                    .dispatch_mail_attempt(kind, *request)
+                    .attempt_notification(kind, *request)
                     .await
                     .unwrap_or_else(|_| collaboration_contracts::NativeDeliveryResult::unknown());
                 let _ = reply.send(receipt);
+            }
+            ReaderDeliveryCommand::ListingResult { listing, reply } => {
+                let result = match self.push.store.get_push_record(&listing).await {
+                    Ok(Some(record))
+                        if record.kind == collaboration_protocol::PushKind::NotificationListing
+                            && target_session(&self.reader)
+                                .is_ok_and(|target| target == record.target) =>
+                    {
+                        crate::mail_push_outcome::listing_native_result(&record)
+                    }
+                    _ => collaboration_contracts::NativeDeliveryResult::unknown(),
+                };
+                let _ = reply.send(result);
             }
             ReaderDeliveryCommand::PollMailAttempt { item, reply } => {
                 let outcome = self.hand_over_poll_mail(item).await;

@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT push_id AS \"push_id!: String\" FROM router_pushes WHERE target_service_id=? AND target_endpoint_id=? AND target_session_id=? AND kind IN ('notification-listing','board-notification','subscription-activity','subscription-expiry') AND delivery_state IN ('attempted','outcome_unknown') ORDER BY push_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "push_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e5db4bec9d3e6020d7c8cea7eb4349d289e5fdfd833692e303803856fe83579d"
+}

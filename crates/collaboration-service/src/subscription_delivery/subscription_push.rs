@@ -1,17 +1,13 @@
 //! Store-first subscription records and their prepared Layer-0 delivery.
 use super::SubscriptionClock;
-use agent_automation::AttemptId;
-use collaboration_contracts::DeliveryPrecondition;
 use collaboration_contracts::LoadPolicy;
 use collaboration_contracts::MachineIdentity;
 use collaboration_contracts::SessionMessageDelivery;
-use collaboration_contracts::layer_zero::DeliveryRequest;
 use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
-    DeliveryCorrelationId, DeliveryOutcome, DeliveryReceipt, MachineId, MessageDelivery,
-    MessageText, PushActivityRange, PushActivitySnapshot, PushHeaderFacts, PushId, PushKind,
-    PushLineInput, PushOrigin, PushRecordDraft, RouterLink, RouterOriginRef, SessionRef,
-    render_push_line,
+    DeliveryOutcome, DeliveryReceipt, MachineId, MessageText, PushActivityRange,
+    PushActivitySnapshot, PushHeaderFacts, PushId, PushKind, PushLineInput, PushOrigin,
+    PushRecordDraft, RouterLink, RouterOriginRef, SessionRef, render_push_line,
 };
 use interaction_storage::InteractionStore;
 use message_board::{
@@ -208,30 +204,6 @@ impl SubscriptionPushStore {
             .mark_push_attempted(&prepared.push_id)
             .await
             .map_err(|_| BoardError::board_unavailable())?;
-        Ok(())
-    }
-
-    pub(super) async fn deliver(
-        &self,
-        target: &SessionRef,
-        prepared: PreparedPush,
-    ) -> Result<(), BoardError> {
-        self.mark_attempted(&prepared).await?;
-        let correlation = DeliveryCorrelationId::try_from(prepared.push_id.as_str().to_owned())
-            .map_err(|_| BoardError::board_unavailable())?;
-        let request = DeliveryRequest {
-            payload: prepared.clone(),
-            target: target.clone(),
-            mode: MessageDelivery::Auto,
-            precondition: DeliveryPrecondition::Unpinned,
-            correlation,
-            attempt: AttemptId::generate(),
-        };
-        let attempted = self
-            .dispatch_mail_attempt(PushKind::SubscriptionActivity, request)
-            .await?;
-        let receipt = attempted.into_receipt();
-        self.record_receipt(&prepared, &receipt, true).await?;
         Ok(())
     }
 

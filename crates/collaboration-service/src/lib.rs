@@ -5,6 +5,7 @@ pub use collaboration_application::{
     CollaborationApplication, FiringShowRequest, ResultByteBudget,
 };
 mod board_views;
+mod notification_listing_content;
 mod notification_publisher;
 mod project_admission;
 pub use notification_publisher::NotificationPublisher;
@@ -21,6 +22,8 @@ mod application_fixture;
 #[cfg(any(test, feature = "test-support"))]
 pub use application_fixture::ApplicationFixture;
 mod subscription_delivery;
+#[cfg(debug_assertions)]
+pub use subscription_delivery::DebugSubscriptionClock;
 pub use subscription_delivery::{
     BoardAvailability, SubscriptionClock, SubscriptionDeliveryService,
     SubscriptionDeliveryServiceProps, SubscriptionStartupRestoration, SubscriptionWaitFilter,

@@ -191,6 +191,8 @@ pub use push_record::{
     PushRecordShowResult, PushRecordValidationError,
 };
 pub use router_origin_ref::{InteractionId, InteractionPresentationId, RouterOriginRef};
+mod notification_listing;
+pub use notification_listing::{NotificationMembersPage, NotificationMembersRequest};
 mod endpoint_inventory;
 pub use endpoint_inventory::EndpointInventory;
 mod identity_schemas;

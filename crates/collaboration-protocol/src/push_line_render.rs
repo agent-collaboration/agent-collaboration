@@ -166,6 +166,15 @@ impl DisplayLimits {
             ) => {
                 format!("📋 Router: board notification @{machine_label}")
             }
+            (
+                PushHeaderFacts::NotificationListing { item_count },
+                PushOrigin::Router(PushKind::NotificationListing),
+            ) => {
+                format!(
+                    "📋 Router: notification listing @{machine_label} · {}",
+                    pluralized_count(*item_count, "notification", "notifications")
+                )
+            }
             _ => return String::new(),
         };
 
@@ -292,6 +301,9 @@ fn validate_input(input: &PushLineInput) -> Result<(), PushLineError> {
         {
             return Err(PushLineError::InvalidHeaderFacts);
         }
+        PushHeaderFacts::NotificationListing { item_count } if *item_count == 0 => {
+            return Err(PushLineError::InvalidHeaderFacts);
+        }
         PushHeaderFacts::SubscriptionExpiry { scope }
             if scope.trim().is_empty()
                 || scope.chars().count() > MAX_SUBSCRIPTION_SCOPE_SCALARS =>
@@ -388,6 +400,8 @@ pub fn parse_push_line_header(text: &str) -> Option<ParsedPushLineHeader> {
         PushKind::SubscriptionActivity
     } else if header.starts_with("🧵 Router: subscription expired") {
         PushKind::SubscriptionExpiry
+    } else if header.starts_with("📋 Router: notification listing") {
+        PushKind::NotificationListing
     } else if header.starts_with("📋 Router: board notification") {
         PushKind::BoardNotification
     } else {

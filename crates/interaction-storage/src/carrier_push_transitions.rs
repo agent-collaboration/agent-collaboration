@@ -114,7 +114,7 @@ impl InteractionStore {
                 record.mode,
                 Some(MessageDelivery::Auto | MessageDelivery::Queue)
             ),
-            PushKind::BoardNotification => record.mode.is_none(),
+            PushKind::BoardNotification | PushKind::SubscriptionExpiry => record.mode.is_none(),
             _ => false,
         };
         if !holdable
@@ -131,10 +131,11 @@ impl InteractionStore {
         }
         let kind = push_record_rows::serialize_kind(PushKind::DirectMessage)?;
         let board = push_record_rows::serialize_kind(PushKind::BoardNotification)?;
+        let expiry = push_record_rows::serialize_kind(PushKind::SubscriptionExpiry)?;
         let outcome_json = push_record_rows::serialize_json(&receipt)?;
         let result = sqlx_turso::query!(
-            "UPDATE router_pushes SET delivery_state='held',last_outcome_json=?,settled_at=NULL WHERE retention='creationAge' AND push_id=? AND kind IN (?,?) AND delivery_state IN ('pending','held')",
-            outcome_json, push_id.as_str(), kind, board
+            "UPDATE router_pushes SET delivery_state='held',last_outcome_json=?,settled_at=NULL WHERE retention='creationAge' AND push_id=? AND kind IN (?,?,?) AND delivery_state IN ('pending','held')",
+            outcome_json, push_id.as_str(), kind, board, expiry
         ).execute(&mut *transaction).await?;
         if result.rows_affected() != 1 {
             return Err(StorageError::PushStateConflict);

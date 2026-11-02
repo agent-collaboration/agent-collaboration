@@ -1,6 +1,6 @@
 {
   "db_name": "Turso",
-  "query": "SELECT DISTINCT target_service_id AS \"target_service_id!: String\",target_endpoint_id AS \"target_endpoint_id!: String\",target_session_id AS \"target_session_id!: String\" FROM router_pushes WHERE retention='creationAge' AND kind IN (?,?) AND delivery_state IN ('pending','held') ORDER BY target_service_id,target_endpoint_id,target_session_id",
+  "query": "SELECT DISTINCT target_service_id AS \"target_service_id!: String\",target_endpoint_id AS \"target_endpoint_id!: String\",target_session_id AS \"target_session_id!: String\" FROM router_pushes WHERE retention='creationAge' AND kind IN (?,?,?) AND delivery_state IN ('pending','held') ORDER BY target_service_id,target_endpoint_id,target_session_id",
   "describe": {
     "columns": [
       {
@@ -32,5 +32,5 @@
       null
     ]
   },
-  "hash": "735c3c0dd7444c82ab8472e5382269586360adf758d31c5b6098c6d025c67809"
+  "hash": "3942a710207a9556b042804901dc1ccd9192e318304a7d01a6ce800c572f5b98"
 }

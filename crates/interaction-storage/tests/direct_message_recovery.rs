@@ -323,7 +323,9 @@ async fn restart_discovers_unsent_dm_targets_and_preserves_owner_recovery_attemp
             | PushKind::SubscriptionActivity
             | PushKind::SubscriptionExpiry
             | PushKind::BoardNotification => settleable_attempted_ids.push(push_id),
-            PushKind::DirectMessage => return Err("unexpected DM fixture kind".into()),
+            PushKind::DirectMessage | PushKind::NotificationListing => {
+                return Err("unexpected router fixture kind".into());
+            }
         }
     }
     store.close().await?;
