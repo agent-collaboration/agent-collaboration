@@ -7,6 +7,13 @@ use crate::{
 use fleet_identity_protocol::MachineEnvironment;
 use std::os::unix::fs::PermissionsExt;
 
+fn private_root() -> tempfile::TempDir {
+    tempfile::Builder::new()
+        .permissions(std::fs::Permissions::from_mode(0o700))
+        .tempdir()
+        .unwrap()
+}
+
 fn candidate(environment: Option<MachineEnvironment>) -> FleetLoginCandidate {
     FleetLoginCandidate {
         sign_in: "https://signin.example.test/issuer"
@@ -37,7 +44,7 @@ fn candidate(environment: Option<MachineEnvironment>) -> FleetLoginCandidate {
 
 #[tokio::test]
 async fn fleet_sqlite_login_repository_honors_the_same_atomic_contract_as_the_stand_in() {
-    let root = tempfile::tempdir().unwrap();
+    let root = private_root();
     let store = FleetStateStore::open_and_migrate(root.path())
         .await
         .unwrap();
@@ -51,7 +58,7 @@ async fn fleet_sqlite_login_repository_honors_the_same_atomic_contract_as_the_st
 
 #[tokio::test]
 async fn fleet_sqlite_reopen_keeps_the_whole_confirmed_row_and_read_only_never_migrates() {
-    let root = tempfile::tempdir().unwrap();
+    let root = private_root();
     let store = FleetStateStore::open_and_migrate(root.path())
         .await
         .unwrap();
@@ -75,7 +82,7 @@ async fn fleet_sqlite_reopen_keeps_the_whole_confirmed_row_and_read_only_never_m
     assert_eq!(retained.machine_environment, MachineEnvironment::CloudVm);
     writable.close().await;
     assert!(!before.is_empty());
-    let absent = tempfile::tempdir().unwrap();
+    let absent = private_root();
     assert!(
         FleetStateStore::open_read_only(absent.path())
             .await
@@ -86,7 +93,7 @@ async fn fleet_sqlite_reopen_keeps_the_whole_confirmed_row_and_read_only_never_m
 
 #[tokio::test]
 async fn fleet_sqlite_owns_only_its_file_and_keeps_live_database_sidecars_private() {
-    let root = tempfile::tempdir().unwrap();
+    let root = private_root();
     let proxy = root.path().join("state.sqlite");
     let original = b"unrelated proxy state must remain byte-identical";
     std::fs::write(&proxy, original).unwrap();
@@ -111,7 +118,7 @@ async fn fleet_sqlite_owns_only_its_file_and_keeps_live_database_sidecars_privat
 #[tokio::test]
 async fn fleet_sqlite_rejects_an_unregistered_database_before_creating_migration_history() {
     use sqlx::Connection;
-    let root = tempfile::tempdir().unwrap();
+    let root = private_root();
     let path = root.path().join(crate::FLEET_DATABASE_FILENAME);
     std::fs::File::create(&path).unwrap();
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
@@ -183,7 +190,7 @@ async fn fleet_sqlite_rejects_corrupt_stored_fields_without_coercing_or_overwrit
             "SELECT relay_peer_id FROM fleet_login",
         ),
     ] {
-        let root = tempfile::tempdir().unwrap();
+        let root = private_root();
         let store = FleetStateStore::open_and_migrate(root.path())
             .await
             .unwrap();
@@ -206,5 +213,31 @@ async fn fleet_sqlite_rejects_corrupt_stored_fields_without_coercing_or_overwrit
             .unwrap();
         assert_eq!(retained, value);
         store.close().await;
+    }
+}
+
+#[tokio::test]
+async fn fleet_sqlite_refuses_public_roots_or_files_without_changing_their_permissions() {
+    for public_root in [true, false] {
+        let root = private_root();
+        let path = if public_root {
+            root.path().to_path_buf()
+        } else {
+            let path = root.path().join(crate::FLEET_DATABASE_FILENAME);
+            std::fs::write(&path, b"").unwrap();
+            path
+        };
+        let mode = if public_root { 0o755 } else { 0o644 };
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode)).unwrap();
+
+        assert!(matches!(
+            FleetStateStore::open_and_migrate(root.path()).await,
+            Err(FleetStateOpenError::Unavailable)
+        ));
+
+        assert_eq!(
+            std::fs::metadata(path).unwrap().permissions().mode() & 0o777,
+            mode
+        );
     }
 }
