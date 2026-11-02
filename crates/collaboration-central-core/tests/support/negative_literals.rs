@@ -100,6 +100,8 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
             json!("invitation:create"),
             json!({"kind":"machine:enroll"}),
             json!({"permission":"machine:enroll"}),
+            json!({"machine:enroll":null}),
+            json!({"machine:enroll":{}}),
             json!("owner"),
             json!("member"),
         ]);
@@ -133,6 +135,8 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
             json!("workspace:delete"),
             json!("owner"),
             json!({"kind":"machine:enroll"}),
+            json!({"machine:enroll":null}),
+            json!({"machine:enroll":{}}),
         ] {
             let mut value = first.clone();
             value["permissionChecked"] = permission;
