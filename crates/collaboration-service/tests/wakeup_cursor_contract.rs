@@ -108,7 +108,11 @@ async fn exercise_cursor(
         return Err("foreign service cursor was accepted".into());
     }
     served.stop().await?;
-    drop(store);
+    Arc::try_unwrap(store)
+        .map_err(|_| std::io::Error::other("fixture automation store remained shared"))?
+        .into_inner()
+        .close()
+        .await?;
     std::fs::remove_file(path)?;
     Ok(())
 }

@@ -233,3 +233,58 @@ async fn async_writable_store_enables_wal_journal_mode() {
         };
     assert_eq!(journal_mode.to_ascii_lowercase(), "wal");
 }
+
+#[tokio::test]
+async fn existing_delete_mode_state_file_reopens_in_wal_for_each_writable_store() {
+    let temp_dir = TestTempDir::new("async_existing_delete_wal_journal_mode");
+    let database_path = temp_dir.path().join("state.sqlite");
+    let store = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("state store should create the current schema");
+    store
+        .close()
+        .await
+        .expect("state store should close before switching the fixture");
+
+    set_journal_mode(&database_path, "DELETE");
+    let store = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("state store should reopen a DELETE database");
+    store.close().await.expect("state store should close");
+    assert_eq!(journal_mode(&database_path).as_deref(), Some("wal"));
+
+    set_journal_mode(&database_path, "DELETE");
+    let weekly_floor = AsyncWeeklyQuotaFloorMutationStore::open(&database_path)
+        .await
+        .expect("weekly-floor mutation store should reopen a DELETE database");
+    weekly_floor.close().await;
+    assert_eq!(journal_mode(&database_path).as_deref(), Some("wal"));
+
+    set_journal_mode(&database_path, "DELETE");
+    let credit_policy =
+        crate::credit_store::AsyncCreditUsagePolicyMutationStore::open(&database_path)
+            .await
+            .expect("credit-policy mutation store should reopen a DELETE database");
+    credit_policy.close().await;
+    assert_eq!(journal_mode(&database_path).as_deref(), Some("wal"));
+}
+
+fn set_journal_mode(database_path: &Path, requested_mode: &str) {
+    let connection = Connection::open(database_path).expect("state database should open");
+    connection
+        .pragma_update(None, "journal_mode", requested_mode)
+        .expect("fixture journal mode should change");
+    let actual_mode: String = connection
+        .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+        .expect("fixture journal mode should be readable");
+    assert_eq!(
+        actual_mode.to_ascii_lowercase(),
+        requested_mode.to_ascii_lowercase()
+    );
+}
+
+fn journal_mode(database_path: &Path) -> Option<String> {
+    Connection::open(database_path)
+        .and_then(|connection| connection.query_row("PRAGMA journal_mode", [], |row| row.get(0)))
+        .ok()
+}

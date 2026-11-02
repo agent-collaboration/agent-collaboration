@@ -118,10 +118,29 @@ impl CollaborationRuntime {
         {
             failure.get_or_insert(io::Error::other("automation maintenance shutdown failed"));
         }
+        if let Some(task) = self.fleet_outbox_maintenance.take()
+            && task.await.is_err()
+        {
+            failure.get_or_insert(io::Error::other("fleet outbox maintenance shutdown failed"));
+        }
         if let Some(task) = self.provider_retention.take()
             && task.await.is_err()
         {
             failure.get_or_insert(io::Error::other("provider retention maintenance failed"));
+        }
+        if let Some(store) = self.automation_store.take() {
+            match std::sync::Arc::try_unwrap(store) {
+                Ok(store) => {
+                    if store.into_inner().close().await.is_err() {
+                        failure.get_or_insert(io::Error::other("automation storage close failed"));
+                    }
+                }
+                Err(_) => {
+                    failure.get_or_insert(io::Error::other(
+                        "automation storage still owned after listener shutdown",
+                    ));
+                }
+            }
         }
         if let Some(store) = self.provider_store.take() {
             match std::sync::Arc::try_unwrap(store) {
@@ -149,6 +168,18 @@ impl CollaborationRuntime {
                 Err(_) => {
                     failure.get_or_insert(io::Error::other(
                         "board storage still owned after listener shutdown",
+                    ));
+                }
+            }
+        }
+        if let Some(journal) = self.journal.take() {
+            match std::sync::Arc::try_unwrap(journal) {
+                Ok(journal) => {
+                    journal.close().await;
+                }
+                Err(_) => {
+                    failure.get_or_insert(io::Error::other(
+                        "lifecycle storage still owned after listener shutdown",
                     ));
                 }
             }

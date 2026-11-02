@@ -95,7 +95,7 @@ pub use configuration_receipts::{
 };
 mod attempt_history_read;
 mod automation_collection_listing;
-mod automation_event_bounds;
+pub(crate) mod automation_event_bounds;
 mod automation_event_history;
 pub use attempt_history_read::{
     AttemptCollection, AttemptHistoryPosition, AttemptHistoryQuery, AttemptHistoryRead,

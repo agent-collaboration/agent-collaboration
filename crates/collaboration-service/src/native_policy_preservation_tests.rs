@@ -94,10 +94,17 @@ async fn policy_loaded_expired_broker_refuses_each_mode_before_resume_or_input()
         .await
         .unwrap();
         drop(broker);
+        let interaction_store = Arc::new(
+            interaction_storage::InteractionStore::open(
+                fixture.directory.path().join("interaction.sqlite"),
+            )
+            .await
+            .unwrap(),
+        );
         fixture.broker = ServiceInteractionBroker::load(
             fixture.backend.endpoint.service_id.clone(),
             fixture.backend.clone(),
-            fixture.directory.path().join("new-owner-routes.json"),
+            interaction_store,
         )
         .await
         .unwrap();

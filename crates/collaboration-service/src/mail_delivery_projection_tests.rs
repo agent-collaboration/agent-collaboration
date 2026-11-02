@@ -179,7 +179,7 @@ async fn oversized_real_task_answer_projects_uncertain_without_an_observation_or
 }
 
 #[tokio::test]
-async fn compact_library_identity_replays_the_recorded_answer_after_push_pruning() {
+async fn same_item_send_replay_returns_the_recorded_answer_inside_two_calendar_months() {
     let fixture = Fixture::new().await;
     let draft = fixture.draft();
     let push_id = draft.push_id.clone();
@@ -207,13 +207,17 @@ async fn compact_library_identity_replays_the_recorded_answer_after_push_pruning
         .unwrap()
         .result
         .unwrap();
+    let last_window_day = recorded_at()
+        .checked_add_months(chrono::Months::new(2))
+        .unwrap()
+        - chrono::Duration::days(1);
     assert_eq!(
         fixture
             .owner
-            .prune_push_records(recorded_at() + chrono::Duration::days(31), 10)
+            .prune_push_records(last_window_day, 10)
             .await
             .unwrap(),
-        1
+        0
     );
     assert!(
         fixture
@@ -221,7 +225,8 @@ async fn compact_library_identity_replays_the_recorded_answer_after_push_pruning
             .get_push_record(&push_id)
             .await
             .unwrap()
-            .is_none()
+            .is_some(),
+        "two-month retention must keep the push until its deadline"
     );
     let fixture = fixture.reopen().await;
     assert!(

@@ -159,6 +159,127 @@ async fn async_previous_response_affinity_owner_write_matches_sync_projection() 
     );
 }
 
+#[tokio::test]
+async fn previous_response_affinity_owner_retention_deletes_one_bounded_batch_before_cutoff() {
+    const INJECTED_NOW_UNIX_SECONDS: u64 = 90 * 86_400;
+    const RETENTION_SECONDS: u64 = 30 * 86_400;
+    const EXPECTED_BATCH_SIZE: u64 = 500;
+    let cutoff_unix_seconds = INJECTED_NOW_UNIX_SECONDS - RETENTION_SECONDS;
+    let temp_dir = TestTempDir::new("affinity_owner_retention");
+    let database_path = temp_dir.path().join("state.sqlite");
+    let store = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .unwrap_or_else(|error| panic!("state store should open and migrate: {error}"));
+    seed_account_records(&store, Provider::Openai, &["acct_retention"]).await;
+
+    let mut transaction = store
+        .pool
+        .begin()
+        .await
+        .unwrap_or_else(|error| panic!("retention fixture transaction should begin: {error}"));
+    for row_index in 0..501 {
+        sqlx::query(
+            "INSERT INTO previous_response_affinity_owners (
+                affinity_key_hash, route_band, account_id, credential_generation,
+                source_transport, created_unix_seconds
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        )
+        .bind(format!("{row_index:064x}"))
+        .bind(RouteBand::Responses.as_str())
+        .bind("acct_retention")
+        .bind(1_i64)
+        .bind(AffinitySourceTransport::HttpSse.as_str())
+        .bind(i64::try_from(cutoff_unix_seconds - 1).expect("cutoff fits"))
+        .execute(&mut *transaction)
+        .await
+        .unwrap_or_else(|error| panic!("old affinity owner should seed: {error}"));
+    }
+    for (hash, created_at) in [
+        ("a".repeat(64), cutoff_unix_seconds),
+        ("b".repeat(64), cutoff_unix_seconds + 1),
+    ] {
+        sqlx::query(
+            "INSERT INTO previous_response_affinity_owners (
+                affinity_key_hash, route_band, account_id, credential_generation,
+                source_transport, created_unix_seconds
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        )
+        .bind(hash)
+        .bind(RouteBand::Responses.as_str())
+        .bind("acct_retention")
+        .bind(1_i64)
+        .bind(AffinitySourceTransport::HttpSse.as_str())
+        .bind(i64::try_from(created_at).expect("cutoff fits"))
+        .execute(&mut *transaction)
+        .await
+        .unwrap_or_else(|error| panic!("boundary affinity owner should seed: {error}"));
+    }
+    transaction
+        .commit()
+        .await
+        .unwrap_or_else(|error| panic!("retention fixture should commit: {error}"));
+
+    assert_eq!(
+        store
+            .prune_previous_response_owners_before(cutoff_unix_seconds)
+            .await,
+        Ok(EXPECTED_BATCH_SIZE)
+    );
+    let stale_rows_remaining: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM previous_response_affinity_owners
+          WHERE created_unix_seconds < ?1",
+    )
+    .bind(i64::try_from(cutoff_unix_seconds).expect("cutoff fits"))
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("remaining old owner count should load: {error}"));
+    let total_rows_remaining: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM previous_response_affinity_owners")
+            .fetch_one(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("remaining owner count should load: {error}"));
+    assert_eq!(stale_rows_remaining, 1);
+    assert_eq!(total_rows_remaining, 3);
+
+    assert_eq!(
+        store
+            .prune_previous_response_owners_before(cutoff_unix_seconds)
+            .await,
+        Ok(1)
+    );
+    assert_eq!(
+        store
+            .prune_previous_response_owners_before(cutoff_unix_seconds)
+            .await,
+        Ok(0)
+    );
+    let retained_rows: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT affinity_key_hash, created_unix_seconds
+           FROM previous_response_affinity_owners ORDER BY created_unix_seconds",
+    )
+    .fetch_all(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("retained owner boundaries should load: {error}"));
+    assert_eq!(
+        retained_rows,
+        vec![
+            (
+                "a".repeat(64),
+                i64::try_from(cutoff_unix_seconds).expect("cutoff fits")
+            ),
+            (
+                "b".repeat(64),
+                i64::try_from(cutoff_unix_seconds + 1).expect("cutoff fits")
+            ),
+        ]
+    );
+
+    store
+        .close()
+        .await
+        .unwrap_or_else(|error| panic!("state store should close: {error}"));
+}
+
 #[test]
 fn previous_response_affinity_owner_detects_ambiguous_rows_and_can_purge() {
     let temp_dir = TestTempDir::new("affinity_owner_ambiguous_purge");

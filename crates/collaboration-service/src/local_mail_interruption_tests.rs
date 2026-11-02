@@ -87,26 +87,16 @@ async fn interrupted_sdk_dispatch_reopens_as_uncertain_without_repeating_the_nat
         .unwrap();
     assert_eq!(replay.receipt.outcome, DeliveryOutcome::Unknown);
     assert_eq!(runtime.client.calls(item), 1);
+    let last_window_day =
+        settled.checked_add_months(chrono::Months::new(2)).unwrap() - chrono::Duration::days(1);
     assert_eq!(
         runtime
             .fixture
             .owner
-            .prune_push_records(settled + chrono::Duration::days(30), 500)
+            .prune_push_records(last_window_day, 500)
             .await
             .unwrap(),
         0
-    );
-    assert_eq!(
-        runtime
-            .fixture
-            .owner
-            .prune_push_records(
-                settled + chrono::Duration::days(30) + chrono::Duration::nanoseconds(1),
-                500
-            )
-            .await
-            .unwrap(),
-        1
     );
     assert_eq!(
         serde_json::to_value(
@@ -125,7 +115,7 @@ async fn interrupted_sdk_dispatch_reopens_as_uncertain_without_repeating_the_nat
             .get_push_record(&push)
             .await
             .unwrap()
-            .is_none()
+            .is_some()
     );
     drop(mail);
     runtime.close().await;

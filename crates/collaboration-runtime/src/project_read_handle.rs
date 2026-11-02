@@ -42,7 +42,13 @@ impl ProjectReadOwner {
     ) -> Result<message_board_storage::ProjectReadStore<'a>, ProjectRegistryError> {
         match self {
             Self::Writer(owner) => owner.reader(project),
-            Self::Central(generation) => Ok(generation.copy.reader()),
+            Self::Central(generation) => {
+                generation
+                    .reader()
+                    .ok_or_else(|| ProjectRegistryError::Unavailable {
+                        project: project.clone(),
+                    })
+            }
         }
     }
 }

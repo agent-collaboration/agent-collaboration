@@ -20,15 +20,28 @@ pub struct AsyncCreditUsagePolicyMutationStore {
 impl AsyncCreditUsagePolicyMutationStore {
     /// Opens only an existing native database with the current validated schema.
     pub async fn open(database_path: &Path) -> Result<Self, StateStoreError> {
-        let options = SqliteConnectOptions::new()
-            .filename(database_path)
-            .create_if_missing(false)
-            .busy_timeout(Duration::ZERO);
+        let options = crate::sqlite::configure_writable_sqlite_options(
+            database_path,
+            SqliteConnectOptions::new()
+                .filename(database_path)
+                .create_if_missing(false)
+                .busy_timeout(Duration::ZERO),
+        )?;
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect_with(options)
             .await
             .map_err(policy_store_sqlx_error)?;
+
+        let preparation = async {
+            let mut connection = pool.acquire().await.map_err(policy_store_sqlx_error)?;
+            crate::sqlite::prepare_writable_sqlite_database(&mut connection, database_path).await
+        }
+        .await;
+        if let Err(error) = preparation {
+            pool.close().await;
+            return Err(error);
+        }
 
         let schema_is_current = match pool.acquire().await {
             Ok(mut connection) => {

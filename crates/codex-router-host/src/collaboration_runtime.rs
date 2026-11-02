@@ -124,6 +124,8 @@ pub struct CollaborationRuntime {
     subscription_delivery: Option<collaboration_service::SubscriptionDeliveryService>,
     provider_store:
         Option<std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>>,
+    automation_store:
+        Option<std::sync::Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>>,
     external_provider_supervisor: Option<std::sync::Arc<crate::ExternalProviderSupervisor>>,
     provider_delivery_route: Option<std::sync::Arc<crate::ProviderAcpDeliveryRoute>>,
     provider_retention: Option<tokio::task::JoinHandle<()>>,
@@ -144,6 +146,7 @@ pub struct CollaborationRuntime {
     automation_task: Option<tokio::task::JoinHandle<()>>,
     schedule_task: Option<tokio::task::JoinHandle<()>>,
     automation_maintenance: Option<tokio::task::JoinHandle<()>>,
+    fleet_outbox_maintenance: Option<tokio::task::JoinHandle<()>>,
     current_generation: Option<CodexGeneration>,
     observer_task: Option<tokio::task::JoinHandle<()>>,
     manifest: Option<collaboration_runtime::ManifestPublication>,

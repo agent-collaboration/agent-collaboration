@@ -1,6 +1,6 @@
 //! Real Control proofs for off-board DMs and retained conversation views.
 use super::*;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, Months, Utc};
 use collaboration_contracts::MachineIdentity;
 use collaboration_protocol::PushRecordNotice;
 use collaboration_runtime::AutomationRetentionWorker;
@@ -284,7 +284,7 @@ async fn control_dm_send_and_read_leave_board_messages_and_activity_empty() {
 }
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
-async fn stored_dm(
+async fn stored_delivered_dm(
     fixture: &BoardControlFixture,
     origin: &SessionRef,
     target: &SessionRef,
@@ -312,6 +312,24 @@ async fn stored_dm(
         })
         .await
         .expect("persist a typed DM in the native store");
+    fixture
+        .pushes
+        .mark_push_attempted(&push_id)
+        .await
+        .expect("mark stored DM delivery attempted");
+    fixture
+        .pushes
+        .settle_push_record(
+            &push_id,
+            DeliveryReceipt {
+                outcome: DeliveryOutcome::PeerMessageWritten,
+                reachability: None,
+                client: None,
+            },
+            created_at,
+        )
+        .await
+        .expect("settle stored DM through its delivery transition");
     push_id
 }
 
@@ -405,11 +423,13 @@ async fn control_inbox_and_history_order_retained_dms_and_omit_expired_records()
     let now = DateTime::parse_from_rfc3339("2026-09-01T12:00:00Z")
         .expect("fixed retention clock")
         .with_timezone(&Utc);
-    let cutoff = now - Duration::days(30);
+    let cutoff = now
+        .checked_sub_months(Months::new(2))
+        .expect("two-month retention cutoff");
     let caller = session("codex-local", "history-recipient");
     let correspondent = session("claude-local", "history-correspondent");
     let other = session("cursor-local", "unrelated-correspondent");
-    let expired = stored_dm(
+    let expired = stored_delivered_dm(
         &fixture,
         &correspondent,
         &caller,
@@ -417,15 +437,15 @@ async fn control_inbox_and_history_order_retained_dms_and_omit_expired_records()
         "expired body",
     )
     .await;
-    let boundary = stored_dm(
+    let boundary = stored_delivered_dm(
         &fixture,
         &correspondent,
         &caller,
         cutoff,
-        "exact thirty-day boundary",
+        "exact two-month boundary",
     )
     .await;
-    let older = stored_dm(
+    let older = stored_delivered_dm(
         &fixture,
         &correspondent,
         &caller,
@@ -433,7 +453,7 @@ async fn control_inbox_and_history_order_retained_dms_and_omit_expired_records()
         "older unread",
     )
     .await;
-    let read = stored_dm(
+    let read = stored_delivered_dm(
         &fixture,
         &correspondent,
         &caller,
@@ -441,7 +461,7 @@ async fn control_inbox_and_history_order_retained_dms_and_omit_expired_records()
         "read conversation message",
     )
     .await;
-    let outbound = stored_dm(
+    let outbound = stored_delivered_dm(
         &fixture,
         &caller,
         &correspondent,
@@ -449,7 +469,7 @@ async fn control_inbox_and_history_order_retained_dms_and_omit_expired_records()
         "outgoing conversation message",
     )
     .await;
-    let newest = stored_dm(
+    let newest = stored_delivered_dm(
         &fixture,
         &correspondent,
         &caller,
@@ -457,7 +477,7 @@ async fn control_inbox_and_history_order_retained_dms_and_omit_expired_records()
         "newest incoming",
     )
     .await;
-    let unrelated = stored_dm(
+    let unrelated = stored_delivered_dm(
         &fixture,
         &other,
         &caller,

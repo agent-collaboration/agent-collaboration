@@ -41,6 +41,11 @@ async fn assert_creation_reply(ready_during_wait: bool) -> TestResult {
     let running = board.start().ok_or("running session")?;
     timeout(BOUND, central.auth.entered.notified()).await?;
     settle_fixture_directory(&fleet, &creation).await?;
+    assert_eq!(
+        fleet.accepted_creation_page("", 100).await?,
+        vec![creation.clone()],
+        "accepted creation input must remain available while local completion waits for Welcome"
+    );
 
     let created = if ready_during_wait {
         let mut waits = projects.subscribe_registration_waits();
@@ -108,7 +113,10 @@ async fn assert_creation_reply(ready_during_wait: bool) -> TestResult {
     assert!(project_file.is_file());
     let replay = api.call("project_create", input).await?;
     assert_eq!(replay["result"]["result"], created["result"]["result"]);
-    assert_eq!(fleet.accepted_creation_page("", 100).await?, vec![creation]);
+    assert!(
+        fleet.accepted_creation_page("", 100).await?.is_empty(),
+        "completed creation must release its recovery input"
+    );
     api.stop().await?;
     drop(fleet);
     running.shutdown().await?;

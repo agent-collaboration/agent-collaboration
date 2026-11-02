@@ -176,6 +176,7 @@ impl LifecycleStore {
         self.invalidate_storage()?;
         journal.rebuild_addresses().await?;
         journal.expire_history(now).await?;
+        journal.incremental_vacuum_step().await?;
         *self
             .coverage
             .lock()
@@ -190,6 +191,7 @@ impl LifecycleStore {
         let result = journal.expire_history(now).await;
         self.observe_storage_result(&result)?;
         result?;
+        journal.incremental_vacuum_step().await?;
         self.signal_commit();
         Ok(())
     }
@@ -242,7 +244,9 @@ const fn lifecycle_maintenance_error_class(error: &JournalError) -> &'static str
         JournalError::Storage(_) => "storage",
         JournalError::InvalidRecord => "invalid_record",
         JournalError::InvalidStorage => "invalid_storage",
+        JournalError::InvalidCheckpointAddress { .. } => "invalid_checkpoint_address",
         JournalError::Capacity => "capacity",
+        JournalError::StorageMaintenance(_) => "storage_maintenance",
     }
 }
 
@@ -306,6 +310,28 @@ mod tests {
     use super::MaintenanceTickSource;
     use crate::JournalError;
     use crate::ObservationJournal;
+
+    #[path = "wal_mode_tests.rs"]
+    mod wal_mode_tests;
+
+    #[tokio::test]
+    async fn new_journal_database_uses_incremental_auto_vacuum() {
+        let directory = tempfile::tempdir().expect("temporary directory should be created");
+        let database_path = directory.path().join("session-registry.sqlite");
+        let mut journal = ObservationJournal::open(&database_path, identity())
+            .await
+            .expect("new journal database should open");
+        let mode: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
+            .fetch_one(&mut journal.connection)
+            .await
+            .expect("journal auto-vacuum mode should be readable");
+        let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+            .fetch_one(&mut journal.connection)
+            .await
+            .expect("journal mode should be readable");
+        assert_eq!(mode, 2);
+        assert_eq!(journal_mode, "wal");
+    }
 
     static TEMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 

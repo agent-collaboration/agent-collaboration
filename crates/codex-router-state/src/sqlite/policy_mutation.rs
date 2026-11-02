@@ -3,7 +3,8 @@ use super::{
     AccountId, AccountRoutingPolicy, AccountStatus, AsyncWeeklyQuotaFloorMutationStore,
     CURRENT_SCHEMA_VERSION, Duration, Instant, Path, Row, SqliteConnectOptions, SqlitePoolOptions,
     StateStoreError, WeeklyQuotaFloorBasisPoints, WeeklyQuotaFloorMutationResult,
-    is_busy_or_locked_sqlx_error,
+    configure_writable_sqlite_options, is_busy_or_locked_sqlx_error,
+    prepare_writable_sqlite_database,
 };
 const WEEKLY_FLOOR_RETRY_DELAYS: [Duration; 3] = [
     Duration::from_millis(25),
@@ -36,15 +37,30 @@ impl From<sqlx::Error> for WeeklyQuotaFloorMutationAttemptError {
 impl AsyncWeeklyQuotaFloorMutationStore {
     /// Opens an existing current-schema database without migrating or checkpointing.
     pub async fn open(database_path: &Path) -> Result<Self, StateStoreError> {
-        let options = SqliteConnectOptions::new()
-            .filename(database_path)
-            .create_if_missing(false)
-            .busy_timeout(Duration::from_millis(0));
+        let options = configure_writable_sqlite_options(
+            database_path,
+            SqliteConnectOptions::new()
+                .filename(database_path)
+                .create_if_missing(false)
+                .busy_timeout(Duration::from_millis(0)),
+        )?;
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
             .connect_with(options)
             .await
             .map_err(|_| redacted_weekly_floor_sqlite_error("unable to open database"))?;
+        let preparation = async {
+            let mut connection = pool
+                .acquire()
+                .await
+                .map_err(|_| redacted_weekly_floor_sqlite_error("unable to prepare database"))?;
+            prepare_writable_sqlite_database(&mut connection, database_path).await
+        }
+        .await;
+        if let Err(error) = preparation {
+            pool.close().await;
+            return Err(error);
+        }
         let authority = {
             let mut connection = pool
                 .acquire()

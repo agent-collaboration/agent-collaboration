@@ -2,8 +2,7 @@ use super::*;
 use agent_automation::RunPhase;
 
 #[tokio::test]
-async fn known_rejected_provider_submission_after_retention_uses_fresh_id_and_old_link_expires()
--> TestResult<()> {
+async fn pending_rejected_schedule_push_survives_two_months_and_reuses_its_id() -> TestResult<()> {
     let (root, store, worker, run_id, observed_push_ids) = provider_worker_fixture(
         FakeSubmissionPlan::RejectOnceThenAccept,
         FakeSettlementPlan::Pending,
@@ -64,44 +63,35 @@ async fn known_rejected_provider_submission_after_retention_uses_fresh_id_and_ol
             "retention fixture did not read its native push through the application".into(),
         );
     }
+    let retention_check = old_push
+        .created_at
+        .checked_add_months(chrono::Months::new(2))
+        .ok_or("valid two-month fixture time")?
+        + chrono::Duration::milliseconds(1);
     let pruned_count = worker
         .interactions
-        .prune_push_records(old_push.created_at + chrono::Duration::days(31), 500)
+        .prune_push_records(retention_check, 500)
         .await?;
-    if pruned_count != 1
+    if pruned_count != 0
         || worker
             .interactions
             .get_push_record(&old_push.push_id)
             .await?
-            .is_some()
+            .is_none()
     {
-        return Err("31-day retention did not prune the pending schedule push".into());
+        return Err("two-month retention removed a nonterminal schedule push".into());
     }
 
-    let old_link_result = match (identity.clone())
+    let retained_link = (identity.clone())
         .build()
         .messages()
         .push_show(collaboration_protocol::PushRecordShowParams {
             caller: old_push.target.clone(),
             reference: old_link.clone(),
         })
-        .await
-    {
-        Ok(result) => json!({ "result": result }),
-        Err(failure) => json!({
-            "error": crate::collaboration_rejection::CollaborationRejection::published_rejection(&failure)
-        }),
-    };
-    if old_link_result
-        .pointer("/error/data/kind")
-        .and_then(serde_json::Value::as_str)
-        != Some("notFound")
-        || !old_link_result
-            .pointer("/error/data/message")
-            .and_then(serde_json::Value::as_str)
-            .is_some_and(|message| message.contains("expired after 30 days"))
-    {
-        return Err("old schedule link did not report its expired record".into());
+        .await?;
+    if retained_link.record.push_id != old_push.push_id {
+        return Err("pending schedule link did not retain its original push".into());
     }
     drop(identity);
 
@@ -151,9 +141,9 @@ async fn known_rejected_provider_submission_after_retention_uses_fresh_id_and_ol
         .clone();
     if all_push_ids.len() != 3
         || all_push_ids[0] != all_push_ids[1]
-        || all_push_ids[2] == old_push.push_id
+        || all_push_ids[2] != old_push.push_id
     {
-        return Err("post-expiry retry did not create one fresh ScheduleRun PushId".into());
+        return Err("post-retention retry did not reuse the pending ScheduleRun PushId".into());
     }
     let fresh_push = worker
         .interactions

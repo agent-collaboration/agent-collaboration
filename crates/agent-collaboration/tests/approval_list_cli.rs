@@ -50,6 +50,11 @@ async fn provider_pending_approval_uses_legacy_cli_shape_and_safe_decision() {
         service_id: typed_service_id.clone(),
         endpoint_id: "claude-local".to_owned().try_into().expect("endpoint ID"),
     };
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
+            .await
+            .expect("interaction store"),
+    );
     let broker = collaboration_runtime::ServiceInteractionBroker::load(
         typed_service_id,
         collaboration_runtime::NativeControlBackend {
@@ -57,7 +62,7 @@ async fn provider_pending_approval_uses_legacy_cli_shape_and_safe_decision() {
             gate: collaboration_runtime::NativeGenerationGate::default(),
             codex_home: directory.path().to_owned(),
         },
-        directory.path().join("approval-routes.json"),
+        interaction_store,
     )
     .await
     .expect("broker");

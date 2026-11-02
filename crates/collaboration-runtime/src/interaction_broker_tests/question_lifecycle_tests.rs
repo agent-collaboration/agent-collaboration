@@ -461,18 +461,13 @@ async fn agent_withdrawal_cancels_one_question_without_touching_the_next() {
     assert_eq!(broker.list_questions(true).await.len(), 1);
 }
 
-// R5: after a host restart, no pending interaction is answerable by the lost
-// agent connection. Keep both rows in history with one explicit cause.
+// R5: after a host restart, no pending typed interaction is answerable by the
+// lost agent connection. Both rows retain one explicit cancellation cause.
 #[tokio::test]
 async fn restart_cancels_populated_pending_interaction_history() {
     use message_board::{HumanId, Identity};
 
-    let (broker, generation, directory) = fixture_broker().await;
-    let expiry = (chrono::Utc::now() + chrono::Duration::minutes(5)).to_rfc3339();
-    let (_legacy_params, _legacy_receiver) = insert_pending(&broker, generation, expiry).await;
-    let frozen_before = tokio::fs::read(directory.join("approval-history.json"))
-        .await
-        .expect("frozen history");
+    let (broker, _generation, directory) = fixture_broker().await;
     let requester =
         board_session_ref(&session(&broker.service_id, "provider-session")).expect("requester");
     let approver = Identity::Human {
@@ -501,17 +496,12 @@ async fn restart_cancels_populated_pending_interaction_history() {
         .expect("question");
     let service_id = broker.service_id.clone();
     let backend = broker.backend.clone();
+    let interaction_store = broker.interaction_store();
     drop(broker);
     let broker_after_restart =
-        ServiceInteractionBroker::load(service_id, backend, directory.join("approval-routes.json"))
+        ServiceInteractionBroker::load(service_id, backend, interaction_store)
             .await
             .expect("reload");
-    assert_eq!(
-        tokio::fs::read(directory.join("approval-history.json"))
-            .await
-            .expect("frozen history"),
-        frozen_before
-    );
     assert!(
         broker_after_restart
             .list_typed_approvals(true)

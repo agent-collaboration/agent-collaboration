@@ -5,6 +5,7 @@ use fleet_admission::{FleetOperation, FleetRequest};
 use message_board::{
     ProjectCreateRequest, RecordedActor, RequestId, request_canonical::creation_hash,
 };
+use sqlx::Row;
 
 impl FleetOutbox {
     pub async fn enqueue_creation(
@@ -25,7 +26,7 @@ impl FleetOutbox {
                 if row.canonical_hash != hash.as_str() {
                     return Err(RouterLocalStorageError::ConflictingRequest);
                 }
-            } else {
+            } else if matches!(queued.state, super::FleetOutboxState::Pending {}) {
                 let hash = hash.as_str();
                 let encoded = serde_json::to_string(input)?;
                 sqlx_turso::query!("INSERT INTO project_creation_inputs(request_id, canonical_hash, input) VALUES (?, ?, ?)", id, hash, encoded)
@@ -66,23 +67,47 @@ impl FleetOutbox {
         )?))
     }
 
+    /// Releases replay input after creation commits or the directory rejects it.
+    pub async fn complete_creation_input(
+        &self,
+        request: &RequestId,
+    ) -> Result<(), RouterLocalStorageError> {
+        let _guard = self.database.writer.lock().await;
+        sqlx::query::<sqlx_turso::Turso>("DELETE FROM project_creation_inputs WHERE request_id=?")
+            .bind(request.as_str())
+            .execute(&self.database.pool)
+            .await?;
+        Ok(())
+    }
+
     pub async fn accepted_creation_page(
         &self,
         after: &str,
         limit: u64,
     ) -> Result<Vec<ProjectCreateRequest>, RouterLocalStorageError> {
         let limit = i64::try_from(limit).map_err(|_| RouterLocalStorageError::InvalidRecord)?;
-        let rows = sqlx_turso::query!(r#"SELECT c.canonical_hash AS "creation_hash!: String", c.input AS "input!: String", r.request_id AS "request_id!: String", r.canonical_hash AS "canonical_hash!: String", r.request AS "request!: String", r.state AS "state!: String" FROM project_creation_inputs c JOIN fleet_outbox_requests r ON r.request_id = c.request_id WHERE c.request_id > ? AND json_extract(r.state, '$.kind') = 'decided' AND json_extract(r.state, '$.decision.kind') = 'accepted' ORDER BY c.request_id LIMIT ?"#, after, limit)
-            .fetch_all(&self.database.pool).await?;
+        let rows = sqlx::query::<sqlx_turso::Turso>("SELECT c.canonical_hash AS creation_hash,c.input,r.request_id,r.canonical_hash,r.request,r.state,r.settled_at_ms FROM project_creation_inputs c JOIN fleet_outbox_requests r ON r.request_id=c.request_id WHERE c.request_id>? AND json_extract(r.state,'$.kind')='decided' AND json_extract(r.state,'$.decision.kind')='accepted' ORDER BY c.request_id LIMIT ?")
+            .bind(after)
+            .bind(limit)
+            .fetch_all(&self.database.pool)
+            .await?;
         rows.into_iter()
             .map(|row| {
+                let creation_hash: String = row.try_get("creation_hash")?;
+                let input: String = row.try_get("input")?;
+                let request_id: String = row.try_get("request_id")?;
+                let canonical_hash: String = row.try_get("canonical_hash")?;
+                let request: String = row.try_get("request")?;
+                let state: String = row.try_get("state")?;
+                let settled_at_ms: Option<i64> = row.try_get("settled_at_ms")?;
                 let queued = decode_entry(
-                    &row.request_id,
-                    &row.canonical_hash,
-                    &row.request,
-                    &row.state,
+                    &request_id,
+                    &canonical_hash,
+                    &request,
+                    &state,
+                    settled_at_ms,
                 )?;
-                decode_input(&row.input, &row.creation_hash, &queued)
+                decode_input(&input, &creation_hash, &queued)
             })
             .collect()
     }

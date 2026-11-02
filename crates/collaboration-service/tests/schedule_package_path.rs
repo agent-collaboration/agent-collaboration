@@ -158,7 +158,11 @@ async fn exercise_package(fresh: bool) -> Result<(), Box<dyn std::error::Error>>
         return Err("package size rejection changed schedule state".into());
     }
     served.stop().await?;
-    drop(store);
+    Arc::try_unwrap(store)
+        .map_err(|_| std::io::Error::other("fixture automation store remained shared"))?
+        .into_inner()
+        .close()
+        .await?;
     std::fs::remove_file(path)?;
     Ok(())
 }

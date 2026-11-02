@@ -33,6 +33,10 @@ async fn client_error_does_not_retry_or_settle_question() -> Result<(), Box<dyn 
     let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
     let backend = Arc::new(ScriptedProviderBackend::new()?);
     let actor: Identity = serde_json::from_value(json!({"kind":"human","humanId":"owner"}))?;
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
+            .await?,
+    );
     let broker = ServiceInteractionBroker::load(
         service_id.to_owned().try_into()?,
         NativeControlBackend {
@@ -42,7 +46,7 @@ async fn client_error_does_not_retry_or_settle_question() -> Result<(), Box<dyn 
             gate: NativeGenerationGate::default(),
             codex_home: directory.path().to_path_buf(),
         },
-        directory.path().join("approval-routes.json"),
+        interaction_store,
     )
     .await?;
     let socket = directory.path().join("provider.sock");
@@ -164,6 +168,10 @@ async fn stale_question_answer_does_not_emit_nonretry_error()
     let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
     let backend = Arc::new(ScriptedProviderBackend::new()?);
     let actor: Identity = serde_json::from_value(json!({"kind":"human","humanId":"owner"}))?;
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
+            .await?,
+    );
     let broker = ServiceInteractionBroker::load(
         service_id.to_owned().try_into()?,
         NativeControlBackend {
@@ -173,7 +181,7 @@ async fn stale_question_answer_does_not_emit_nonretry_error()
             gate: NativeGenerationGate::default(),
             codex_home: directory.path().to_path_buf(),
         },
-        directory.path().join("approval-routes.json"),
+        interaction_store,
     )
     .await?;
     let socket = directory.path().join("provider.sock");

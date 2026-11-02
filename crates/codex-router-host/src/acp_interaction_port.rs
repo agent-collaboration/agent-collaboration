@@ -529,6 +529,13 @@ mod provider_actor_tests {
             service_id: service_id.clone(),
             endpoint_id: "cursor-local".to_owned().try_into().expect("endpoint ID"),
         };
+        let interaction_store = Arc::new(
+            interaction_storage::InteractionStore::open(
+                directory.path().join("interaction.sqlite"),
+            )
+            .await
+            .expect("interaction store"),
+        );
         let broker = ServiceInteractionBroker::load(
             service_id.clone(),
             collaboration_runtime::NativeControlBackend {
@@ -536,7 +543,7 @@ mod provider_actor_tests {
                 gate: collaboration_runtime::NativeGenerationGate::default(),
                 codex_home: directory.path().to_owned(),
             },
-            directory.path().join("approval-routes.json"),
+            interaction_store,
         )
         .await
         .expect("broker");

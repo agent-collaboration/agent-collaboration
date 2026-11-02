@@ -287,22 +287,22 @@ pub(super) fn active_session_event_compaction_keeps_completed_events_for_seven_d
 }
 
 #[test]
-pub(super) fn daily_session_affinity_cleanup_guard_allows_only_advancing_utc_days() {
+pub(super) fn daily_maintenance_cleanup_guard_allows_only_advancing_utc_days() {
     let last_attempted_utc_day = std::sync::atomic::AtomicU64::new(u64::MAX);
 
-    assert!(claim_session_affinity_cleanup_day(
+    assert!(claim_maintenance_cleanup_utc_day(
         &last_attempted_utc_day,
         0,
     ));
-    assert!(!claim_session_affinity_cleanup_day(
+    assert!(!claim_maintenance_cleanup_utc_day(
         &last_attempted_utc_day,
         86_399,
     ));
-    assert!(claim_session_affinity_cleanup_day(
+    assert!(claim_maintenance_cleanup_utc_day(
         &last_attempted_utc_day,
         86_400,
     ));
-    assert!(!claim_session_affinity_cleanup_day(
+    assert!(!claim_maintenance_cleanup_utc_day(
         &last_attempted_utc_day,
         1,
     ));

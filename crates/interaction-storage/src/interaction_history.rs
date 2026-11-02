@@ -18,6 +18,9 @@ use session_event_model::{
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum InteractionHistoryRecord {
+    NativeApproval {
+        record: Box<collaboration_protocol::ApprovalRequestRecord>,
+    },
     Approval {
         requester: SessionRef,
         approver: Identity,
@@ -73,6 +76,7 @@ impl InteractionHistoryRecord {
     #[must_use]
     pub fn request_id(&self) -> &str {
         match self {
+            Self::NativeApproval { record } => &record.request_id,
             Self::Approval { request, .. } => &request.request_id,
             Self::Question { request, .. } => &request.request_id,
             Self::RefusedApproval { refusal, .. } => &refusal.request_id,
@@ -83,7 +87,7 @@ impl InteractionHistoryRecord {
     pub fn approval_request(&self) -> Option<&ApprovalRequest> {
         match self {
             Self::Approval { request, .. } => Some(request),
-            Self::Question { .. } => None,
+            Self::NativeApproval { .. } | Self::Question { .. } => None,
             Self::RefusedApproval { .. } => None,
         }
     }
@@ -92,21 +96,23 @@ impl InteractionHistoryRecord {
     pub fn approval_state(&self) -> Option<&InteractionHistoryState> {
         match self {
             Self::Approval { state, .. } => Some(state),
-            Self::Question { .. } => None,
+            Self::NativeApproval { .. } | Self::Question { .. } => None,
             Self::RefusedApproval { .. } => None,
         }
     }
 
-    fn approver(&self) -> &Identity {
+    fn approver(&self) -> Option<&Identity> {
         match self {
-            Self::Approval { approver, .. } => approver,
-            Self::Question { approver, .. } => approver,
-            Self::RefusedApproval { approver, .. } => approver,
+            Self::NativeApproval { .. } => None,
+            Self::Approval { approver, .. } => Some(approver),
+            Self::Question { approver, .. } => Some(approver),
+            Self::RefusedApproval { approver, .. } => Some(approver),
         }
     }
 
     fn is_valid_stored_value(&self) -> bool {
         match self {
+            Self::NativeApproval { record } => valid_native_approval(record),
             Self::Approval {
                 requester,
                 approver,
@@ -159,6 +165,44 @@ impl InteractionHistoryRecord {
                 !refusal.request_id.is_empty() && !refusal.reason.trim().is_empty()
             }
         }
+    }
+}
+
+fn valid_native_approval(record: &collaboration_protocol::ApprovalRequestRecord) -> bool {
+    use collaboration_protocol::{ApprovalDecision, ApprovalOptionScope, ApprovalState};
+    if record.request_id.trim().is_empty()
+        || chrono::DateTime::parse_from_rfc3339(&record.expires_at).is_err()
+        || !record.operation.is_object()
+        || record
+            .reason
+            .as_ref()
+            .is_some_and(|reason| reason.trim().is_empty())
+        || (record.state == ApprovalState::ApproverIsRequester)
+            != (record.requester == record.approver)
+    {
+        return false;
+    }
+    match record.state {
+        ApprovalState::PendingClientDecision => {
+            record.decision.is_none() && record.reason.is_none()
+        }
+        ApprovalState::Decided => {
+            record.reason.is_none()
+                && record.decision.is_some_and(|decision| {
+                    record.offered_options.iter().any(|option| {
+                        matches!(
+                            (decision, &option.scope),
+                            (ApprovalDecision::Allow, ApprovalOptionScope::AllowOnce)
+                                | (
+                                    ApprovalDecision::AllowForSession,
+                                    ApprovalOptionScope::AllowForSession
+                                )
+                                | (ApprovalDecision::Deny, ApprovalOptionScope::RejectOnce)
+                        )
+                    })
+                })
+        }
+        _ => record.decision.is_none() && record.reason.is_some(),
     }
 }
 

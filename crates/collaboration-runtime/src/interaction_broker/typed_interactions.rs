@@ -492,7 +492,8 @@ impl ServiceInteractionBroker {
                         .await?;
                     Ok(TypedInteractionDecisionOutcome::QuestionCancelled)
                 }
-                InteractionHistoryRecord::RefusedApproval { .. } => {
+                InteractionHistoryRecord::NativeApproval { .. }
+                | InteractionHistoryRecord::RefusedApproval { .. } => {
                     Err(InteractionHistoryError::AlreadySettled)
                 }
             };
