@@ -130,6 +130,7 @@ export function pickerToolbarBindings(
 						: active.overlayId === '3'
 							? '11:action:help:help-body'
 							: null,
+					active.kind === 'overlay' && active.overlayId === '6' ? 'dialog-close' : null,
 				);
 				active = pickerScreen;
 			} else throw new Error('toolbar key not source-declared: ' + step.key);
@@ -385,10 +386,10 @@ export function pickerToolbarBindings(
 				async (context) => {
 					const live = filterCheck++ === 2;
 					if (
-						findDialog(context.frame.grid, 'Session details') !== null ||
+						findDialog(context.frame.grid, '') !== null ||
 						!pickerFilterFocused(context.frame.grid)
 					)
-						return ['filter click/shortcut failed to focus the field or opened Details'];
+						return ['filter click/shortcut failed to focus Browse or left a dialog painted'];
 					if (
 						live &&
 						!pickerToolbarRow(context.frame.grid).text.includes(

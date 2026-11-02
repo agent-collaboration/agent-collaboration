@@ -6,10 +6,12 @@ import { expect, test } from 'vitest';
 import { sourceDigest } from '../../evidence/source-binding.ts';
 import { protocolPlan, temporaryRoot } from '../../fixtures/receipt-fixtures.ts';
 import { checkInputConsumptionReceipt } from '../../sessions/input-consumption-readback.ts';
+import { createTerminalCore, snapshotGrid } from '../../terminal/terminal-grid.ts';
 import { authoredFlowPlanSchema, paintedMouseExpectationSchema } from './authored-flow-plan.ts';
 import type { AuthoredFlowPlan } from './authored-flow-plan.ts';
 import { authoredFlowMatrix, runAuthoredFlow } from './authored-flow-run.ts';
 import { authoredFlows } from './flow-catalogue.ts';
+import type { NativeFlowContext } from './native-flow-runtime.ts';
 import { pickerFlowAdmission } from './picker-flow-admission.ts';
 import { pickerFlowBindings } from './picker-flow-bindings.ts';
 import { pickerExpectedKey, pickerFilterTextExpectations } from './picker-flow-inputs.ts';
@@ -365,3 +367,93 @@ test('picker Option aliases and Ctrl chords keep producer code and modifier orde
 		phase: 'press',
 	});
 });
+
+test('toolbar New Escape names its declared close action and preserves exact surface rejection', () => {
+	const plan = controlledPlan('sessions-toolbar-and-menu'),
+		invocation = authoredFlowMatrix(plan)[0];
+	if (!invocation) throw new Error('controlled matrix absent');
+	const binding = pickerFlowBindings(plan, invocation, plan.output, join(plan.output, 'receipts'));
+	const choice = invocation.journey.steps.findIndex(
+			(step) => step.kind === 'capture' && step.checkpoint === 'new-foreground-choice',
+		),
+		closing = choice + 1,
+		input = binding?.inputs.get(closing);
+	if (input?.kind !== 'continuing') throw new Error('New Escape binding absent');
+	const expected = input.expected[0];
+	expect(expected).toEqual(
+		pickerExpectedKey('Escape', { kind: 'overlay', overlayId: '6' }, null, 'dialog-close'),
+	);
+	const actual = {
+		sequence: 1,
+		...pickerExpectedKey('Escape', { kind: 'overlay', overlayId: '6' }, null, 'dialog-close'),
+	};
+	expect(() => checkInputConsumptionReceipt(actual, expected)).not.toThrow();
+	expect(() => checkInputConsumptionReceipt({ ...actual, action: null }, expected)).toThrow(
+		'action mismatch',
+	);
+	expect(() =>
+		checkInputConsumptionReceipt(
+			{ ...actual, surface: { kind: 'overlay', overlayId: '7' } },
+			expected,
+		),
+	).toThrow('surface mismatch');
+	const following = binding?.inputs.get(closing + 1);
+	if (following?.kind !== 'focus') throw new Error('post-cancel Browse focus proof absent');
+	const next = following.route[0]?.expected[0];
+	expect(next?.surface).toEqual({ kind: 'screen' });
+	expect(() =>
+		checkInputConsumptionReceipt(
+			{ sequence: 2, ...pickerExpectedKey('Tab', { kind: 'overlay', overlayId: '6' }) },
+			next,
+		),
+	).toThrow('surface mismatch');
+});
+
+test.each([false, true])(
+	'post-cancel Browse filter check rejects a still-painted New dialog: %s',
+	async (dialogRemains) => {
+		const plan = controlledPlan('sessions-toolbar-and-menu'),
+			invocation = authoredFlowMatrix(plan)[0];
+		if (!invocation) throw new Error('controlled matrix absent');
+		const binding = pickerFlowBindings(
+				plan,
+				invocation,
+				plan.output,
+				join(plan.output, 'receipts'),
+			),
+			check = binding?.checks.get('filter-focus-and-live-query');
+		if (!check) throw new Error('real post-cancel Browse checker absent');
+		const core = await createTerminalCore(76, 30);
+		try {
+			core.writeString('Sessions\r\n≡ Menu F10 / \x1b[93;4mFilter\x1b[0m All 6/6 sessions');
+			if (dialogRemains)
+				core.writeString(
+					'\r\n╭──────────────────────────╮\r\n│ New session              │\r\n│ Run Foreground           │\r\n╰──────────────────────────╯',
+				);
+			// Grid-only reader control: no input/driver is consulted and no product is launched.
+			const context: NativeFlowContext = {
+				get driver(): never {
+					throw new Error('grid-only control must not consult a driver');
+				},
+				get input(): never {
+					throw new Error('grid-only control must not inject input');
+				},
+				frame: {
+					grid: snapshotGrid(core),
+					bytes: Buffer.alloc(0),
+					resizes: [],
+					binding: {
+						sequence: 1,
+						frameGeneration: 1,
+						frameEndByteOffset: 0,
+						markerEndByteOffset: 0,
+					},
+				},
+			};
+			const failures = await check(context, undefined);
+			expect(failures.length === 0).toBe(!dialogRemains);
+		} finally {
+			core.dispose();
+		}
+	},
+);
