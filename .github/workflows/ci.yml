@@ -253,12 +253,22 @@ jobs:
         uses: ./.github/actions/install-ci-tools
         with:
           cache-hit: ${{ steps.rust_tools.outputs.cache-hit }}
+      - name: Report shard CPU
+        run: |
+          nproc
+          lscpu
       - name: Build test binaries
         run: |
-          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))' --no-run
+          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))' --no-run --timings
       - name: Report shard disk space after build
         if: always()
         run: df -h /
+      - name: Retain shard build timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace-build-timings-shard-${{ matrix.shard }}
+          path: target/cargo-timings/*.html
       - name: Test Rust workspace
         id: workspace_tests
         run: |
