@@ -1,6 +1,6 @@
 /** Account action oracles over actual live publication, flushed effects, and painted cells. */
 import { canonicalJson } from '../../evidence/source-binding.ts';
-import { gridLines } from '../../terminal/terminal-grid.ts';
+import { cellText, gridLines, terminalTheme } from '../../terminal/terminal-grid.ts';
 import type { TerminalGrid } from '../../terminal/terminal-grid.ts';
 import { findDialog } from '../scenes/grid-scene-matcher.ts';
 import type { FlowCheck } from './flow-definition.ts';
@@ -172,6 +172,14 @@ export function checkQuotaAccount(options: {
 			failures.push(
 				'RequiresDisabled did not preserve the captured account with one typed refusal',
 			);
+
+		if (
+			!gridLines(grid)
+				.join(' ')
+				.replace(/\s+/gu, ' ')
+				.includes(label + ': Disable the account before removing it')
+		)
+			failures.push('RequiresDisabled lacks the named visible refusal');
 	} else if (check === 'no-retry') {
 		const actions =
 			scenario === 'captured-actions'
@@ -193,4 +201,34 @@ export function checkQuotaAccount(options: {
 /** QuotaAccountCompletion::message names the actual removed account on Browse. */
 export function quotaRemoveCompletionMessage(label: string): string {
 	return 'Account removed: ' + label;
+}
+
+/** A complete enabled button label run excludes the white Remove sentence and grey pending label. */
+export function quotaRemovalButtonAvailable(grid: TerminalGrid): boolean {
+	const rectangle = findDialog(grid, 'Remove account');
+	if (rectangle === null) return false;
+	const eligible = new Set([
+		terminalTheme.palette[7],
+		terminalTheme.palette[15],
+		terminalTheme.palette[11],
+		0x9cbcfb,
+	]);
+	let matches = 0;
+	for (const row of grid.cells.slice(rectangle.top + 1, rectangle.bottom)) {
+		let foreground: number | undefined,
+			text = '';
+		const finish = (): void => {
+			if (eligible.has(foreground) && text.trim() === 'Remove') matches += 1;
+		};
+		for (const cell of row.slice(rectangle.left + 1, rectangle.right)) {
+			if (cell.fgRgb !== foreground) {
+				finish();
+				text = '';
+				foreground = cell.fgRgb;
+			}
+			text += cellText(cell);
+		}
+		finish();
+	}
+	return matches === 1;
 }

@@ -17,7 +17,11 @@ import type {
 	NativeFlowInputBinding,
 } from './native-flow-runtime.ts';
 import { locatePaintedTarget } from './painted-flow-target.ts';
-import { checkQuotaAccount, quotaRemoveCompletionMessage } from './quota-account-checks.ts';
+import {
+	checkQuotaAccount,
+	quotaRemoveCompletionMessage,
+	quotaRemovalButtonAvailable,
+} from './quota-account-checks.ts';
 import { quotaAccountFactSchema, quotaEffectReceiptSchema } from './quota-effect-readback.ts';
 import { quotaCapturedPosition, quotaJourneyScenarios } from './quota-fixture-contract.ts';
 import type { QuotaFixtureLayout } from './quota-fixture-layout.ts';
@@ -300,6 +304,12 @@ export function quotaAccountBindings(options: {
 						signal,
 						decode: (value) => heldSchema.parse(value),
 					});
+
+					if (
+						scenario === 'remove-requires-disabled' &&
+						quotaRemovalButtonAvailable(context.frame.grid)
+					)
+						throw new Error('held removal did not paint its pending unavailable action');
 					await fixture.setup(
 						scenario === 'remove-held'
 							? { operation: 'release-removal' }
@@ -332,6 +342,13 @@ export function quotaAccountBindings(options: {
 								.includes(
 									quotaRemoveCompletionMessage('effect-' + ['alpha', 'beta', 'gamma'][position]),
 								),
+					);
+				else if (scenario === 'remove-requires-disabled')
+					// report(completion.message()) precedes pending=None and the refreshed action model.
+					// Its actual unavailable-to-available paint settles the UI observer before the separate F12.
+					await context.driver.waitForGrid(
+						'actual refusal completion cleared pending Remove',
+						quotaRemovalButtonAvailable,
 					);
 				else if (spec.action === 'disable')
 					await context.driver.waitForGrid('actual disabled Details', (grid) =>

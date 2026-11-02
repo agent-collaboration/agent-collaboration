@@ -2,7 +2,7 @@
 import { expect, test } from 'vitest';
 
 import { createTerminalCore, snapshotGrid } from '../../terminal/terminal-grid.ts';
-import { checkQuotaAccount } from './quota-account-checks.ts';
+import { checkQuotaAccount, quotaRemovalButtonAvailable } from './quota-account-checks.ts';
 import { quotaObservationSchema } from './quota-live-fixture.ts';
 
 function observation(): ReturnType<typeof quotaObservationSchema.parse> {
@@ -159,3 +159,64 @@ test('real Remove completion uses the source-defined named result after emptying
 		core.dispose();
 	}
 });
+
+test.each([
+	['visible', 'effect-alpha: Disable the account before removing it', true],
+	['wrapped', 'effect-alpha: Disable the account\r\nbefore removing it', true],
+	['covered', 'Remove this disabled account and its credentials?', false],
+	['wrong-account', 'effect-beta: Disable the account before removing it', false],
+	['reason-only', 'Disable the account before removing it', false],
+] as const)(
+	'RequiresDisabled requires its named visible refusal: %s',
+	async (_kind, painted, passes) => {
+		const core = await createTerminalCore(76, 30);
+		try {
+			core.writeString(painted);
+			const value = observation();
+			value.live.readback.listSelection = 'effect-account-0';
+			value.live.accountCommands.push({
+				command: {
+					accountId: 'effect-account-0',
+					provider: 'openai',
+					label: 'effect-alpha',
+					position: 0,
+					action: 'remove',
+				},
+				result: { kind: 'refused', reason: 'RequiresDisabled' },
+			});
+			const failures = checkQuotaAccount({
+				check: 'disabled-first-refusal',
+				scenario: 'remove-requires-disabled',
+				grid: snapshotGrid(core),
+				observation: value,
+				expectedCommands: 1,
+			});
+			expect(failures).toEqual(passes ? [] : ['RequiresDisabled lacks the named visible refusal']);
+		} finally {
+			core.dispose();
+		}
+	},
+);
+
+test.each([
+	['focused', '\x1b[93mRemove', true],
+	['enabled', '\x1b[97mRemove', true],
+	['pending', '\x1b[38;2;166;175;189mRemove', false],
+	['missing', '', false],
+	['duplicate', '\x1b[97mRemove\x1b[90m / \x1b[97mRemove', false],
+] as const)(
+	'refusal UI completion requires an actual eligible Remove label: %s',
+	async (_kind, button, available) => {
+		const core = await createTerminalCore(76, 30);
+		try {
+			core.writeString(
+				'╭──────────────────────────────────────────────────────────╮\r\n│ Remove account                                           │\r\n│ \x1b[97mRemove this disabled account and its credentials?\x1b[0m         │\r\n│ \x1b[93m● Cancel\x1b[0m ' +
+					button +
+					'\x1b[0m                                       │\r\n╰──────────────────────────────────────────────────────────╯',
+			);
+			expect(quotaRemovalButtonAvailable(snapshotGrid(core))).toBe(available);
+		} finally {
+			core.dispose();
+		}
+	},
+);
