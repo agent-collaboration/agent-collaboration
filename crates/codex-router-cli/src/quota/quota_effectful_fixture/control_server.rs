@@ -110,7 +110,12 @@ impl FixtureControlServer {
                 write_response(&mut writer, &fence_response(request_id, completion)).await?;
                 continue;
             }
+            let reenable_before_removal = matches!(
+                &request,
+                FixtureControlRequest::ReenableBeforeRemoval { .. }
+            );
             let result = self.execute(request).await;
+            let release_removal_after_publication = reenable_before_removal && result.is_ok();
             let response = match result {
                 Ok(value) => value,
                 Err(error) => {
@@ -118,6 +123,10 @@ impl FixtureControlServer {
                 }
             };
             self.events.write(response.clone())?;
+            // The setup snapshot must close and its receipt flush before the owner resumes.
+            if release_removal_after_publication {
+                self.accounts.removal_gate.release()?;
+            }
             write_response(&mut writer, &response).await?;
         }
     }
@@ -258,6 +267,10 @@ impl FixtureControlServer {
 fn fence_response(request_id: u64, result: super::event_fence::FixtureEventFenceResult) -> Value {
     json!({"kind":"fixture-event-fence","requestId":request_id,"result":result})
 }
+
+#[cfg(test)]
+#[path = "control_server_test.rs"]
+mod tests;
 
 async fn write_response(
     writer: &mut tokio::net::unix::OwnedWriteHalf,

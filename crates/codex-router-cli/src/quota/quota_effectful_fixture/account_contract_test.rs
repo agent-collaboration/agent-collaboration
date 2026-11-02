@@ -158,6 +158,7 @@ async fn remove_requires_disabled_fixture_reenables_before_actual_owner_and_reta
         )
         .await
         .unwrap();
+    effects.removal_gate.release().unwrap();
     assert_eq!(
         task.await.unwrap(),
         QuotaAccountCommandResult::Refused {
