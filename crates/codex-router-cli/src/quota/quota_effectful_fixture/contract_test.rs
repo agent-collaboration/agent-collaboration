@@ -20,3 +20,6 @@ mod grouping_reopen;
 
 #[path = "preference_write_contract_test.rs"]
 mod preference_write;
+
+#[path = "event_fence_contract_test.rs"]
+mod event_fence;

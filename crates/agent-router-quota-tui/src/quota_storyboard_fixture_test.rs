@@ -35,6 +35,7 @@ pub(crate) enum FixtureScenario {
     RefusedResult,
     RefreshPending,
     SavePending,
+    LargeList,
 }
 impl FixtureScenario {
     fn from_environment() -> std::io::Result<Self> {
@@ -50,6 +51,7 @@ impl FixtureScenario {
             Ok("refused-result") => Ok(Self::RefusedResult),
             Ok("refresh-pending") => Ok(Self::RefreshPending),
             Ok("save-pending") => Ok(Self::SavePending),
+            Ok("large-list") => Ok(Self::LargeList),
             _ => Err(std::io::Error::other(
                 "explicit QUOTA_COMPONENT_FIXTURE scenario is required",
             )),
@@ -82,6 +84,9 @@ pub(crate) fn fixture_model() -> QuotaStatusViewModel {
 
 pub(crate) fn fixture_scenario_model(scenario: FixtureScenario) -> QuotaStatusViewModel {
     let mut model = fixture_model();
+    if scenario == FixtureScenario::LargeList {
+        return large_list::with_large_list_accounts(model);
+    }
     if scenario != FixtureScenario::VisualHardCases {
         return model;
     }
@@ -516,7 +521,8 @@ async fn compiled_quota_component_storyboard_fixture() -> std::io::Result<()> {
         .as_ref()
         .map(|_| super::super::quota_viewport_trace::QuotaViewportTrace::default());
     let outcome = Arc::new(Mutex::new(None));
-    let mut component = element!(QuotaStatusComponent(view_model,dispatch_receipt:dispatch_sink.clone(),outcome_sink:Some(outcome.clone()),viewport_trace:viewport_trace.clone(),width:usize::from(terminal_width),height:usize::from(terminal_height),reload_view_model:Some(loader),weekly_floor_saver:Some(floor),credit_policy_saver:Some(policy),credit_usage_refresher:Some(refresh),reset_intent_sender:Some(ports.intent_sender),reset_snapshot_receiver:Some(ports.snapshot_receiver)));
+    let allow_effects = scenario != FixtureScenario::LargeList;
+    let mut component = element!(QuotaStatusComponent(view_model,dispatch_receipt:dispatch_sink.clone(),outcome_sink:Some(outcome.clone()),viewport_trace:viewport_trace.clone(),width:usize::from(terminal_width),height:usize::from(terminal_height),reload_view_model:allow_effects.then_some(loader),weekly_floor_saver:allow_effects.then_some(floor),credit_policy_saver:allow_effects.then_some(policy),credit_usage_refresher:allow_effects.then_some(refresh),reset_intent_sender:allow_effects.then_some(ports.intent_sender),reset_snapshot_receiver:allow_effects.then_some(ports.snapshot_receiver)));
     let render = component.render_loop().fullscreen().ignore_ctrl_c();
     let render = match &dispatch_sink {
         Some(sink) => render.stdout(sink.frame_writer(std::io::stdout())?),
@@ -707,3 +713,6 @@ fn visual_hard_case_fixture_has_attributable_unknown_stale_and_credential_facts(
         Some("Credentials locked")
     );
 }
+
+#[path = "quota_large_list_fixture_test.rs"]
+mod large_list;

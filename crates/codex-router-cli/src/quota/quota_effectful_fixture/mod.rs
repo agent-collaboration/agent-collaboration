@@ -2,6 +2,7 @@
 mod configuration;
 mod control_server;
 mod effect_ports;
+mod event_fence;
 mod grouping_reopen;
 #[path = "../../../../codex-router-quota-reset-test-harness/tests/e2e/quota_reset/quota_reset_pty_test/loopback_provider_test.rs"]
 mod loopback_provider;
@@ -76,6 +77,14 @@ async fn compiled_quota_effectful_fixture() -> FixtureResult<()> {
                     .write(json!({"kind":"view-mounted","readback":wire}))
                     .unwrap();
                 previous_mount = value.mount;
+            }
+            if let Some(result) = &value.refresh_result_published {
+                let frame = value
+                    .published
+                    .as_ref()
+                    .expect("completed fixture publication")
+                    .frame;
+                publication_events.write(json!({"kind":"refresh-result-published","mount":value.mount,"publicationFrame":frame,"result":receipts::refresh_result(result)})).unwrap();
             }
             observed_poses.lock().unwrap().push(wire);
         }
@@ -220,11 +229,12 @@ async fn compiled_quota_effectful_fixture() -> FixtureResult<()> {
         Ok(())
     } })).await;
     let _ = stop.send(());
-    server.await??;
-    run?;
-    dispatch.flush_and_check()?;
+    // Release the server's controller on stop, but drain a pending fence after the journal ends.
+    let completion: FixtureResult<()> = async {
     drop(controller);
     observer.await?;
+    run?;
+    dispatch.flush_and_check()?;
     let refresh_receipt = match &refresh {
         Some(refresh) => Some(refresh.finish().await?),
         None => None,
@@ -283,6 +293,10 @@ async fn compiled_quota_effectful_fixture() -> FixtureResult<()> {
         config.scenario
     );
     Ok(())
+    }.await;
+    events.finish();
+    server.await??;
+    completion
 }
 
 fn effect_ports_for_view(

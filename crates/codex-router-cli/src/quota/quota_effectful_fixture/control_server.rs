@@ -57,9 +57,27 @@ impl FixtureControlServer {
             if line.len() > 4096 {
                 return Err(io::Error::other("fixture setup request exceeded limit").into());
             }
-            let request: FixtureControlRequest = serde_json::from_str(&line)?;
+            let request: FixtureControlRequest = match serde_json::from_str(&line) {
+                Ok(request) => request,
+                Err(error) => {
+                    let wire: Value = serde_json::from_str(&line)?;
+                    if wire["operation"] != "await_event" {
+                        return Err(error.into());
+                    }
+                    let request_id = wire["requestId"]
+                        .as_u64()
+                        .filter(|&id| id > last_request)
+                        .ok_or_else(|| {
+                            io::Error::other("fixture request IDs must increase without replay")
+                        })?;
+                    last_request = request_id;
+                    write_response(&mut writer, &json!({"kind":"fixture-control-error","requestId":request_id,"message":error.to_string()})).await?;
+                    continue;
+                }
+            };
             let request_id = match &request {
-                FixtureControlRequest::Readback { request_id }
+                FixtureControlRequest::AwaitEvent { request_id, .. }
+                | FixtureControlRequest::Readback { request_id }
                 | FixtureControlRequest::SelectBrowseAccount { request_id, .. }
                 | FixtureControlRequest::ReloadViewModel { request_id, .. }
                 | FixtureControlRequest::RemoveCapturedAccountExternally { request_id, .. }
@@ -73,6 +91,25 @@ impl FixtureControlServer {
                 );
             }
             last_request = request_id;
+            if let FixtureControlRequest::AwaitEvent {
+                request_id,
+                after_ordinal,
+                kind,
+            } = request
+            {
+                let journal = self.events.clone();
+                let completion = tokio::select! {
+                    completion = journal.await_event(after_ordinal, kind) => completion,
+                    _ = &mut stopped => {
+                        drop(self);
+                        let completion = journal.await_event(after_ordinal, kind).await;
+                        write_response(&mut writer, &fence_response(request_id, completion)).await?;
+                        return Ok(());
+                    }
+                };
+                write_response(&mut writer, &fence_response(request_id, completion)).await?;
+                continue;
+            }
             let result = self.execute(request).await;
             let response = match result {
                 Ok(value) => value,
@@ -81,14 +118,19 @@ impl FixtureControlServer {
                 }
             };
             self.events.write(response.clone())?;
-            writer
-                .write_all(serde_json::to_string(&response)?.as_bytes())
-                .await?;
-            writer.write_all(b"\n").await?;
+            write_response(&mut writer, &response).await?;
         }
     }
     async fn execute(&self, request: FixtureControlRequest) -> FixtureResult<Value> {
         match request {
+            FixtureControlRequest::AwaitEvent {
+                request_id,
+                after_ordinal,
+                kind,
+            } => Ok(fence_response(
+                request_id,
+                self.events.await_event(after_ordinal, kind).await,
+            )),
             FixtureControlRequest::Readback { request_id } => Ok(
                 json!({"kind":"fixture-readback","requestId":request_id,"readback":receipts::readback(&self.controller.readback().map_err(io::Error::other)?),"accounts":read_accounts(&self.root).await?,"accountCommands":self.accounts.receipts(),"refresh":self.refresh.as_ref().map(RefreshEffects::readback)}),
             ),
@@ -209,6 +251,21 @@ impl FixtureControlServer {
             }
         }
     }
+}
+
+fn fence_response(request_id: u64, result: super::event_fence::FixtureEventFenceResult) -> Value {
+    json!({"kind":"fixture-event-fence","requestId":request_id,"result":result})
+}
+
+async fn write_response(
+    writer: &mut tokio::net::unix::OwnedWriteHalf,
+    response: &Value,
+) -> FixtureResult<()> {
+    writer
+        .write_all(serde_json::to_string(response)?.as_bytes())
+        .await?;
+    writer.write_all(b"\n").await?;
+    Ok(())
 }
 
 pub(super) async fn run_login_gate(

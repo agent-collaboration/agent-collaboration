@@ -44,8 +44,8 @@ impl NativeFixture {
             .join("../../scripts/verification/tui")
             .canonicalize()?;
         run_command(&root, "node-version", Command::new(&node).arg("--version"))?;
-        if fs::read_to_string(root.join("node-version.stdout"))?.trim() != "v26.12.1" {
-            return Err("native adapter tests require Node v26.12.1".into());
+        if fs::read_to_string(root.join("node-version.stdout"))?.trim() != "v26.13.0" {
+            return Err("native adapter tests require Node v26.13.0".into());
         }
         run_command(
             &root,

@@ -38,6 +38,14 @@ pub struct QuotaFixtureReadback {
     pub surfaces: SurfaceStack,
     pub actions: Vec<agent_collaboration_tui::actions::ActionPresentation>,
     pub published: Option<HitMapSnapshot>,
+    #[cfg(all(
+        debug_assertions,
+        any(
+            test,
+            all(feature = "test-support", feature = "quota-reset-test-harness")
+        )
+    ))]
+    pub refresh_result_published: Option<crate::QuotaRefreshResult>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -85,6 +93,14 @@ struct ControllerState {
     pending: Vec<PendingOperation>,
     last_published: Option<QuotaFixtureReadback>,
     publications: Vec<tokio::sync::mpsc::UnboundedSender<QuotaFixtureReadback>>,
+    #[cfg(all(
+        debug_assertions,
+        any(
+            test,
+            all(feature = "test-support", feature = "quota-reset-test-harness")
+        )
+    ))]
+    pending_refresh_result: Option<crate::QuotaRefreshResult>,
 }
 #[derive(Clone, Default)]
 pub struct QuotaFixtureController(Arc<Mutex<ControllerState>>);
@@ -221,6 +237,31 @@ impl QuotaFixtureController {
         Ok(state.mount)
     }
 
+    #[cfg(all(
+        debug_assertions,
+        any(
+            test,
+            all(feature = "test-support", feature = "quota-reset-test-harness")
+        )
+    ))]
+    pub(crate) fn refresh_finished(&self) {
+        let mut state = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let result =
+            state
+                .live
+                .as_ref()
+                .and_then(|live| match live.context.refresh.read().clone() {
+                    crate::quota_control_context::QuotaRefreshState::Finished(result) => {
+                        Some(result)
+                    }
+                    _ => None,
+                });
+        state.pending_refresh_result = result;
+    }
+
     pub(crate) fn published(&self, mount: u64) {
         let mut state = self
             .0
@@ -232,10 +273,36 @@ impl QuotaFixtureController {
         let Some(live) = state.live.as_ref() else {
             return;
         };
+        #[cfg(all(
+            debug_assertions,
+            any(
+                test,
+                all(feature = "test-support", feature = "quota-reset-test-harness")
+            )
+        ))]
+        let finished_refresh = match live.context.refresh.read().clone() {
+            crate::quota_control_context::QuotaRefreshState::Finished(result) => Some(result),
+            _ => None,
+        };
         let readback = live.readback(mount);
         if readback.published.is_none() {
             return;
         }
+        #[cfg(all(
+            debug_assertions,
+            any(
+                test,
+                all(feature = "test-support", feature = "quota-reset-test-harness")
+            )
+        ))]
+        let readback = {
+            let mut readback = readback;
+            readback.refresh_result_published = state
+                .pending_refresh_result
+                .take()
+                .filter(|result| Some(result) == finished_refresh.as_ref());
+            readback
+        };
         state.last_published = Some(readback.clone());
         state
             .publications
@@ -256,6 +323,16 @@ impl QuotaFixtureController {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         if state.mount == mount {
             state.live = None;
+            #[cfg(all(
+                debug_assertions,
+                any(
+                    test,
+                    all(feature = "test-support", feature = "quota-reset-test-harness")
+                )
+            ))]
+            {
+                state.pending_refresh_result = None;
+            }
             for pending in state.pending.drain(..) {
                 let _ = pending.sender.send(Err(
                     "Quota fixture unmounted before setup publication".to_owned(),
@@ -302,6 +379,14 @@ impl LiveQuotaFixture {
             surfaces,
             actions,
             published: self.stack.hit_regions().published(),
+            #[cfg(all(
+                debug_assertions,
+                any(
+                    test,
+                    all(feature = "test-support", feature = "quota-reset-test-harness")
+                )
+            ))]
+            refresh_result_published: None,
         }
     }
 }
@@ -309,3 +394,8 @@ impl LiveQuotaFixture {
 #[cfg(test)]
 #[path = "quota_control_kind_contract_test.rs"]
 mod control_kind_contract_test;
+
+#[cfg(test)]
+#[cfg(debug_assertions)]
+#[path = "quota_refresh_publication_test.rs"]
+mod refresh_publication_test;
