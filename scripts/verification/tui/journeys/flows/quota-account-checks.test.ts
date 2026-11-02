@@ -165,23 +165,39 @@ test('real Remove completion uses the source-defined named result after emptying
 });
 
 test.each([
-	['visible', 'effect-alpha: Disable the account before removing it', true],
-	['wrapped', 'effect-alpha: Disable the account\r\nbefore removing it', true],
 	[
-		'wrapped-dialog',
-		'╭────────────────────────────────────────────╮\r\n│ Remove account                             │\r\n│ effect-alpha: Disable the account           │\r\n│ before removing it                         │\r\n╰────────────────────────────────────────────╯',
+		'pinned identity and reason',
+		'╭──────────────────────────────────────────────────────────╮\r\n│ Remove account effect-alpha [b350cd65]                   │\r\n│ Warning                                                  │\r\n│ Disable the account before removing it                   │\r\n╰──────────────────────────────────────────────────────────╯',
 		true,
 	],
 	[
-		'outer-frame-wrapped-notice',
-		'│effect-alpha: Disable the     │\r\n│account before removing it    │',
+		'wrapped reason',
+		'╭──────────────────────────────────────────────────────────╮\r\n│ Remove account effect-alpha [b350cd65]                   │\r\n│ Warning                                                  │\r\n│ Disable the account before                               │\r\n│ removing it                                              │\r\n╰──────────────────────────────────────────────────────────╯',
 		true,
+	],
+	[
+		'wrapped identity',
+		'╭──────────────────────────────────────────────────────────╮\r\n│ Remove account                                           │\r\n│ effect-alpha [b350cd65]                                  │\r\n│ Warning                                                  │\r\n│ Disable the account before removing it                   │\r\n╰──────────────────────────────────────────────────────────╯',
+		true,
+	],
+	[
+		'Browse notice outside active dialog',
+		'effect-alpha: Disable the account before removing it\r\n╭──────────────────────────────────────────────────────────╮\r\n│ Remove account effect-alpha                              │\r\n│ Confirm removal                                          │\r\n╰──────────────────────────────────────────────────────────╯',
+		false,
 	],
 	['covered', 'Remove this disabled account and its credentials?', false],
-	['wrong-account', 'effect-beta: Disable the account before removing it', false],
-	['reason-only', 'Disable the account before removing it', false],
-] as const)(
-	'RequiresDisabled requires its named visible refusal: %s',
+	[
+		'wrong account',
+		'╭──────────────────────────────────────────────────────────╮\r\n│ Remove account effect-beta                               │\r\n│ Disable the account before removing it                   │\r\n╰──────────────────────────────────────────────────────────╯',
+		false,
+	],
+	[
+		'missing identity',
+		'╭──────────────────────────────────────────────────────────╮\r\n│ Remove account                                           │\r\n│ Disable the account before removing it                   │\r\n╰──────────────────────────────────────────────────────────╯',
+		false,
+	],
+])(
+	'RequiresDisabled requires captured identity and exact refusal inside the active dialog: %s',
 	async (_kind, painted, passes) => {
 		const core = await createTerminalCore(76, 30);
 		try {

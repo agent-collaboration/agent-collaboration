@@ -178,19 +178,14 @@ export function checkQuotaAccount(options: {
 				'RequiresDisabled did not preserve the captured account with one typed refusal',
 			);
 
-		const visibleText = [
-			gridLines(grid)
-				.map((line) => line.trimEnd().replace(/^[│┃]|[│┃]$/gu, ''))
-				.join(' '),
-		];
-		for (const title of ['Remove account', 'Account details'])
-			if (findDialog(grid, title) !== null)
-				visibleText.push(quotaDialogInteriorRows(grid, title).join(' '));
-		if (
-			!visibleText.some((text) =>
-				text.replace(/\s+/gu, ' ').includes(label + ': Disable the account before removing it'),
-			)
-		)
+		const text =
+			findDialog(grid, 'Remove account') === null
+				? ''
+				: quotaDialogInteriorRows(grid, 'Remove account')
+						.join(' ')
+						.replace(/[│█]/gu, ' ')
+						.replace(/\s+/gu, ' ');
+		if (!text.includes(label ?? '') || !text.includes('Disable the account before removing it'))
 			failures.push('RequiresDisabled lacks the named visible refusal');
 	} else if (check === 'no-retry') {
 		const actions =

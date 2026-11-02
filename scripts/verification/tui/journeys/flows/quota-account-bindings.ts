@@ -375,9 +375,11 @@ export function quotaAccountBindings(options: {
 				else if (spec.action === 'disable' || spec.action === 'enable') {
 					const status = spec.action === 'disable' ? 'blocked' : 'preferred';
 					await context.driver.waitForGrid('actual settled Details status', (grid) =>
-						quotaDialogInteriorRows(grid, 'Account details').some(
-							(row) => row.includes('Status') && row.includes(status),
-						),
+						quotaDialogInteriorRows(grid, 'Account details')
+							.join(' ')
+							.replace(/[│█]/gu, ' ')
+							.replace(/\s+/gu, ' ')
+							.includes('Status ' + status),
 					);
 					const marked = await collectDetails(context, spec.surface);
 					const paintedDisabled = body.join(' ').replace(/\s+/gu, ' ').includes('account disabled');
