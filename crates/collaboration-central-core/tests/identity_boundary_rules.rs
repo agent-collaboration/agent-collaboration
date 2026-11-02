@@ -3,8 +3,9 @@
 mod schema_validation;
 
 use collaboration_central_core::identity_contract::{
-    ConnectionView, DecideDeviceLogin, MachineEnrollment, MachinePresenceAnswer,
-    PersonAdmissionRequest, TokenLifetimeSeconds,
+    CommandRefusal, ConnectionView, DecideDeviceLogin, DeviceLoginRefusal, IdentityLookup,
+    IdentityLookupResult, MachineEnrollment, MachinePresenceAnswer, PersonAdmissionRequest,
+    TokenLifetimeSeconds, WhoIsLoggedInResult,
 };
 use fleet_identity_protocol::ReportSessionActivity;
 use schemars::JsonSchema;
@@ -41,6 +42,77 @@ fn assert_null_read_omitted_write<T: DeserializeOwned + Serialize + JsonSchema>(
             .unwrap()
             .is_valid(&value)
     );
+}
+
+// The authorization PD removes central's person subjects. These exact old
+// payloads must fail through both public parsers, not merely lose their types.
+#[test]
+fn authorization_refuses_retired_person_lookup_paths() {
+    // Arrange: valid person lookup input and output from the retired contract.
+    let request = json!({
+        "subject": "person",
+        "organizationId": "019a3dce-2000-7000-8000-000000000001",
+        "personId": "019a3dce-2000-7000-8000-000000000002"
+    });
+    let answer = json!({
+        "result": "person",
+        "personId": "019a3dce-2000-7000-8000-000000000002",
+        "standing": { "result": "admitted", "role": "member" }
+    });
+
+    // Act / Assert: real serde and JSON Schema readers reject both old paths.
+    assert_refused::<IdentityLookup>(request);
+    assert_refused::<IdentityLookupResult>(answer);
+}
+
+// OD25 replaces owner-named authorization failures without a wire alias.
+#[test]
+fn authorization_refuses_retired_owner_tags() {
+    // Arrange
+    let reason = json!({ "kind": "notOwner" });
+    let lookup_answer = json!({ "result": "refused", "reason": reason.clone() });
+
+    // Act / Assert
+    assert_refused::<CommandRefusal>(reason.clone());
+    assert_refused::<DeviceLoginRefusal>(reason);
+    assert_refused::<IdentityLookupResult>(lookup_answer);
+}
+
+// DecideDeviceLogin's permissionChecked is required by the reviewed wire shape;
+// deciding whether that permission authorizes enrollment belongs to F2a.
+#[test]
+fn authorization_requires_a_checked_device_permission() {
+    // Arrange: an otherwise valid old request omits the checked permission.
+    let request = json!({
+        "organizationId": "019a3dce-2000-7000-8000-000000000001",
+        "approver": "019a3dce-2000-7000-8000-000000000001",
+        "requestId": "019a3dce-2000-7000-8000-000000000002",
+        "installation": "019a3dce-2000-7000-8000-000000000001",
+        "peer": "019a3dce-2000-7000-8000-000000000002",
+        "label": "fixture machine",
+        "allowedWorkspaces": []
+    });
+
+    // Act / Assert
+    assert_refused::<DecideDeviceLogin>(request.clone());
+    let mut null_permission = request;
+    null_permission["permissionChecked"] = Value::Null;
+    assert_refused::<DecideDeviceLogin>(null_permission);
+}
+
+// Lead 66cb305d removes the people field from central's K12 snapshot too.
+#[test]
+fn authorization_snapshots_refuse_people_fields() {
+    // Arrange
+    let snapshot = json!({
+        "result": "snapshot",
+        "asOf": 1,
+        "machines": [],
+        "people": []
+    });
+
+    // Act / Assert
+    assert_refused::<WhoIsLoggedInResult>(snapshot);
 }
 
 #[test]
