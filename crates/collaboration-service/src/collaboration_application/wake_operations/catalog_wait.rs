@@ -25,15 +25,17 @@ impl WakeOperations {
             }
             .into());
         }
-        let deadline = self.clock.monotonic_now() + Duration::from_secs(u64::from(seconds));
-        let local_deadline = tokio::time::Instant::now() + Duration::from_secs(u64::from(seconds));
         let unavailable = || {
             WakeOperationFailure::Selection(WakeSelectionFailure::LocalStoreUnavailable {
-            operation_id: None, wakeup_id: Some(request.wakeup_id.clone()),
-            message: "Local Wake ownership could not be selected within this wait; no owner was guessed.".into(),
-        })
+                operation_id: None,
+                wakeup_id: Some(request.wakeup_id.clone()),
+                message: "Local Wake ownership could not be selected; no owner was guessed.".into(),
+            })
         };
         let store = self.store.as_ref().ok_or_else(unavailable)?;
+        // Selection is a separate bounded phase: no owner or cursor is assumed yet.
+        let selection_deadline =
+            self.clock.monotonic_now() + Duration::from_secs(u64::from(seconds));
         let selection = async {
             store
                 .lock()
@@ -42,32 +44,18 @@ impl WakeOperations {
                 .await
         };
         let owner = tokio::select! {
-            () = self.clock.sleep_until(deadline) => return Err(unavailable()),
+            () = self.clock.sleep_until(selection_deadline) => return Err(unavailable()),
             result = selection => result.map_err(|_| unavailable())?,
         };
         if owner != StoredAutomationOwner::Central {
-            // This guard includes the new owner-selection read in the original local budget.
-            return match tokio::time::timeout_at(
-                local_deadline,
-                self.wake_wait_local(request.clone()),
-            )
-            .await
-            {
-                Ok(result) => result
-                    .map(|value| WakeWaitResponse::Local { value })
-                    .map_err(Into::into),
-                Err(_) => match request.after {
-                    Some(cursor) => Ok(WakeWaitResponse::Local {
-                        value: collaboration_protocol::WakeWaitResult {
-                            wakeup_id: request.wakeup_id,
-                            outcome: collaboration_protocol::WakeWaitOutcome::TimedOut,
-                            cursor,
-                        },
-                    }),
-                    None => Err(WakeWaitFailure::unavailable(request.wakeup_id).into()),
-                },
-            };
+            // The Local wait owns its deadline and the cursor returned at that deadline.
+            return self
+                .wake_wait_local(request)
+                .await
+                .map(|value| WakeWaitResponse::Local { value })
+                .map_err(Into::into);
         }
+        let deadline = self.clock.monotonic_now() + Duration::from_secs(u64::from(seconds));
         let _permit = self
             .wait_permits
             .as_ref()
