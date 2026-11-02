@@ -278,3 +278,7 @@ mod tests;
 #[cfg(test)]
 #[path = "stored_registration_envelope_tests.rs"]
 mod storage_tests;
+
+#[cfg(test)]
+#[path = "sqlite_registration_tests.rs"]
+mod sqlite_tests;

@@ -9,7 +9,7 @@ publish.workspace = true
 workspace = true
 
 [features]
-test-support = ["dep:serde_json"]
+test-support = []
 
 [dependencies]
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.119" }
@@ -20,7 +20,7 @@ schemars.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 sqlx = { workspace = true, features = ["macros", "migrate", "sqlite"] }
-serde_json = { workspace = true, optional = true }
+serde_json.workspace = true
 url.workspace = true
 
 [dev-dependencies]

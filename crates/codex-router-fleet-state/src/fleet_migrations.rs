@@ -121,5 +121,108 @@ pub(crate) async fn validate_current(
     {
         return Err(FleetStateOpenError::InvalidSchema);
     }
+    validate_registration_schema(connection).await
+}
+
+async fn validate_registration_schema(
+    connection: &mut SqliteConnection,
+) -> Result<(), FleetStateOpenError> {
+    let columns = sqlx::query("PRAGMA table_info(fleet_session_registrations)")
+        .fetch_all(&mut *connection)
+        .await
+        .map_err(|_| FleetStateOpenError::InvalidSchema)?;
+    let names = [
+        "registration_id",
+        "operation_id",
+        "installation_id",
+        "binding_address",
+        "session_service_id",
+        "session_endpoint_id",
+        "session_id",
+        "lifecycle_json",
+    ];
+    if columns.len() != names.len() {
+        return Err(FleetStateOpenError::InvalidSchema);
+    }
+    for (column, expected) in columns.iter().zip(names) {
+        let name: String = column
+            .try_get("name")
+            .map_err(|_| FleetStateOpenError::InvalidSchema)?;
+        let kind: String = column
+            .try_get("type")
+            .map_err(|_| FleetStateOpenError::InvalidSchema)?;
+        let required: bool = column
+            .try_get("notnull")
+            .map_err(|_| FleetStateOpenError::InvalidSchema)?;
+        let primary: i64 = column
+            .try_get("pk")
+            .map_err(|_| FleetStateOpenError::InvalidSchema)?;
+        let expected_required = !expected.starts_with("session_");
+        if name != expected
+            || kind != "TEXT"
+            || required != expected_required
+            || primary != i64::from(expected == "registration_id")
+        {
+            return Err(FleetStateOpenError::InvalidSchema);
+        }
+    }
+    let indexes = sqlx::query("PRAGMA index_list(fleet_session_registrations)")
+        .fetch_all(&mut *connection)
+        .await
+        .map_err(|_| FleetStateOpenError::InvalidSchema)?;
+    for expected in [
+        "fleet_session_registration_operation",
+        "fleet_session_registration_binding",
+        "fleet_session_registration_conversation",
+    ] {
+        let mut found = false;
+        for index in &indexes {
+            let name: String = index
+                .try_get("name")
+                .map_err(|_| FleetStateOpenError::InvalidSchema)?;
+            if name == expected {
+                let unique: bool = index
+                    .try_get("unique")
+                    .map_err(|_| FleetStateOpenError::InvalidSchema)?;
+                let partial: bool = index
+                    .try_get("partial")
+                    .map_err(|_| FleetStateOpenError::InvalidSchema)?;
+                found = unique && !partial;
+            }
+        }
+        if !found {
+            return Err(FleetStateOpenError::InvalidSchema);
+        }
+    }
+    for (query, expected) in [
+        (
+            "PRAGMA index_info(fleet_session_registration_operation)",
+            &["operation_id"][..],
+        ),
+        (
+            "PRAGMA index_info(fleet_session_registration_binding)",
+            &["binding_address"][..],
+        ),
+        (
+            "PRAGMA index_info(fleet_session_registration_conversation)",
+            &["session_service_id", "session_endpoint_id", "session_id"][..],
+        ),
+    ] {
+        let parts = sqlx::query(query)
+            .fetch_all(&mut *connection)
+            .await
+            .map_err(|_| FleetStateOpenError::InvalidSchema)?;
+        if parts.len() != expected.len() {
+            return Err(FleetStateOpenError::InvalidSchema);
+        }
+        for (part, expected) in parts.iter().zip(expected) {
+            let name: String = part
+                .try_get("name")
+                .map_err(|_| FleetStateOpenError::InvalidSchema)?;
+            if name != *expected {
+                return Err(FleetStateOpenError::InvalidSchema);
+            }
+        }
+    }
     Ok(())
 }

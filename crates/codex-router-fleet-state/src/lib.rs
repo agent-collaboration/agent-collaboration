@@ -8,6 +8,7 @@ pub mod fleet_login_repository;
 mod fleet_migrations;
 mod sqlite;
 mod sqlite_login;
+mod sqlite_registration;
 pub use fleet_migrations::FleetStateOpenError;
 pub use sqlite::FleetStateStore;
 
