@@ -6,7 +6,7 @@ import { findDialog } from '../scenes/grid-scene-matcher.ts';
 import type { FlowCheck } from './flow-definition.ts';
 import { quotaCapturedPosition } from './quota-fixture-contract.ts';
 import type { QuotaEffectScenario } from './quota-fixture-contract.ts';
-import { quotaFocused, quotaPrimary } from './quota-flow-inputs.ts';
+import { quotaDialogInteriorRows, quotaFocused, quotaPrimary } from './quota-flow-inputs.ts';
 import { quotaObservationSchema } from './quota-live-fixture.ts';
 
 export function checkQuotaAccount(options: {
@@ -173,11 +173,14 @@ export function checkQuotaAccount(options: {
 				'RequiresDisabled did not preserve the captured account with one typed refusal',
 			);
 
+		const visibleText = [gridLines(grid).join(' ')];
+		for (const title of ['Remove account', 'Account details'])
+			if (findDialog(grid, title) !== null)
+				visibleText.push(quotaDialogInteriorRows(grid, title).join(' '));
 		if (
-			!gridLines(grid)
-				.join(' ')
-				.replace(/\s+/gu, ' ')
-				.includes(label + ': Disable the account before removing it')
+			!visibleText.some((text) =>
+				text.replace(/\s+/gu, ' ').includes(label + ': Disable the account before removing it'),
+			)
 		)
 			failures.push('RequiresDisabled lacks the named visible refusal');
 	} else if (check === 'no-retry') {

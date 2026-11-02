@@ -163,6 +163,11 @@ test('real Remove completion uses the source-defined named result after emptying
 test.each([
 	['visible', 'effect-alpha: Disable the account before removing it', true],
 	['wrapped', 'effect-alpha: Disable the account\r\nbefore removing it', true],
+	[
+		'wrapped-dialog',
+		'╭────────────────────────────────────────────╮\r\n│ Remove account                             │\r\n│ effect-alpha: Disable the account           │\r\n│ before removing it                         │\r\n╰────────────────────────────────────────────╯',
+		true,
+	],
 	['covered', 'Remove this disabled account and its credentials?', false],
 	['wrong-account', 'effect-beta: Disable the account before removing it', false],
 	['reason-only', 'Disable the account before removing it', false],
