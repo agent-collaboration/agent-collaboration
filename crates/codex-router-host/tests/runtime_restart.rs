@@ -28,11 +28,88 @@ use codex_router_test_support::router_health::run_persistent_router_health_fixtu
 mod operator_client;
 use operator_client::send_operator_request;
 
+#[path = "support/restart_fixture_lifetime.rs"]
+mod restart_fixture_lifetime;
+use restart_fixture_lifetime::{FIXTURE_SCOPE, REGISTRY_ENVIRONMENT, RestartFixtureLifetime};
+use restart_fixture_lifetime::{register_fixture_child, stop_and_reap_process};
+
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[tokio::test]
 async fn owned_router_restart_replaces_only_router_and_preserves_app_server_state()
 -> Result<(), Box<dyn std::error::Error>> {
+    let _fixture_scope = FIXTURE_SCOPE.lock().await;
+    run_restart_scenario(None).await
+}
+
+struct StartedFixture {
+    process_ids: [u32; 2],
+    router_address: SocketAddr,
+}
+
+enum FixtureExit<'a> {
+    Error(&'a mut Option<StartedFixture>),
+    Cancelled(tokio::sync::oneshot::Sender<StartedFixture>),
+}
+
+#[tokio::test]
+async fn early_error_stops_and_reaps_restart_fixture_children()
+-> Result<(), Box<dyn std::error::Error>> {
+    let _fixture_scope = FIXTURE_SCOPE.lock().await;
+    // Arrange: reach real Host readiness, then leave the scenario through an error.
+    let mut started = None;
+    let result = run_restart_scenario(Some(FixtureExit::Error(&mut started))).await;
+    check(
+        result.is_err_and(|error| error.to_string() == "forced early fixture error"),
+        "scenario must reach the deliberately injected early error",
+    )?;
+    let started = started.ok_or("fixture did not publish its started children")?;
+
+    require_fixture_reaped(started)
+}
+
+#[tokio::test]
+async fn cancelled_scenario_stops_and_reaps_restart_fixture_children()
+-> Result<(), Box<dyn std::error::Error>> {
+    let _fixture_scope = FIXTURE_SCOPE.lock().await;
+    let (started_sender, started_receiver) = tokio::sync::oneshot::channel();
+    let mut scenario = Box::pin(run_restart_scenario(Some(FixtureExit::Cancelled(
+        started_sender,
+    ))));
+    let started = tokio::select! {
+        started = started_receiver => started?,
+        _result = &mut scenario => return Err("scenario ended before cancellation".into()),
+    };
+    // Cancelling the fixture future must run its Drop guard, without finish().
+    drop(scenario);
+    require_fixture_reaped(started)
+}
+
+fn require_fixture_reaped(started: StartedFixture) -> Result<(), Box<dyn std::error::Error>> {
+    // Observe before the fallback cleanup, so that cleanup cannot hide the defect.
+    let children_absent = started.process_ids.iter().all(|process_id| {
+        let process_id = i32::try_from(*process_id)
+            .ok()
+            .and_then(rustix::process::Pid::from_raw);
+        matches!(
+            process_id.map(rustix::process::test_kill_process),
+            Some(Err(rustix::io::Errno::SRCH))
+        )
+    });
+    let port_released = std::net::TcpListener::bind(started.router_address).is_ok();
+    for process_id in started.process_ids {
+        stop_and_reap_process(process_id)?;
+    }
+    check(
+        children_absent,
+        "early error left a live or unreaped fixture child",
+    )?;
+    check(port_released, "early error left the fixture port listening")
+}
+
+async fn run_restart_scenario(
+    early_exit: Option<FixtureExit<'_>>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let _diagnostics = tracing::subscriber::set_default(
         tracing_subscriber::fmt()
             .with_test_writer()
@@ -40,6 +117,8 @@ async fn owned_router_restart_replaces_only_router_and_preserves_app_server_stat
             .finish(),
     );
     let directory = TestDirectory::new("owned-router-restart")?;
+    let registry_path = directory.path().join("child-registry");
+    let mut lifetime = RestartFixtureLifetime::new(registry_path.clone())?;
     let router_probe = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await?;
     let router_address = router_probe.local_addr()?;
     drop(router_probe);
@@ -74,6 +153,7 @@ async fn owned_router_restart_replaces_only_router_and_preserves_app_server_stat
             .with_environment("CODEX_HOST_RESTART_APP_SOCKET", &app_server_socket)
             .with_environment("CODEX_HOST_RESTART_APP_LOG", &app_server_process_log)
             .with_environment("CODEX_FIXTURE_IGNORE_TERM", "1")
+            .with_environment(REGISTRY_ENVIRONMENT, &registry_path)
             .with_output(ChildOutput::Null),
         identity,
         "1.2.3".to_owned(),
@@ -89,6 +169,7 @@ async fn owned_router_restart_replaces_only_router_and_preserves_app_server_stat
             router_address.to_string(),
         )
         .with_environment("CODEX_HOST_RESTART_ROUTER_LOG", &router_process_log)
+        .with_environment(REGISTRY_ENVIRONMENT, &registry_path)
         .with_output(ChildOutput::Null);
     let coordination_paths = HostCoordinationPaths::new(
         directory.path().join("operator.sock"),
@@ -108,157 +189,196 @@ async fn owned_router_restart_replaces_only_router_and_preserves_app_server_stat
             operator_request: Duration::from_secs(3),
         })?,
     });
-    let runtime = tokio::spawn(HostRuntime::run(
+    lifetime.attach(tokio::spawn(HostRuntime::run(
         config,
         ManagedChildLaunchPlans::new(Some(router_command), app_server),
         ManagedUpdateInputs::production(),
-    ));
+    )));
 
-    let startup = send_operator_request(
-        coordination_paths.operator_socket(),
-        OperatorRequest::AwaitHostStart,
-        Duration::from_secs(4),
-    )
-    .await?;
-    check_equal(
-        terminal_classification(&startup)?,
-        TerminalClassification::Ready,
-        "owned-router host startup must become ready",
-    )?;
-    let initial_app_server_pid = wait_for_process_ids(&app_server_process_log, 1).await?[0];
-    let initial_router_pid = wait_for_process_ids(&router_process_log, 1).await?[0];
-
-    let restart = send_operator_request(
-        coordination_paths.operator_socket(),
-        OperatorRequest::RestartRouter,
-        Duration::from_secs(4),
-    )
-    .await?;
-    check_equal(
-        terminal_classification(&restart)?,
-        TerminalClassification::Succeeded,
-        "owned router restart must succeed",
-    )?;
-    check(
-        restart.iter().any(|frame| {
-            matches!(
-                frame,
-                OperatorFrame::Progress(codex_router_host::HostProgress::StoppingRouter)
-            )
-        }) && restart.iter().any(|frame| {
-            matches!(
-                frame,
-                OperatorFrame::Progress(codex_router_host::HostProgress::RouterReady)
-            )
-        }),
-        "router restart must stream stopping and ready phases",
-    )?;
-    let restarted_router_pids = wait_for_process_ids(&router_process_log, 2).await?;
-    check(
-        restarted_router_pids[1] != initial_router_pid,
-        "owned router restart must replace the exact router child",
-    )?;
-    check_equal(
-        wait_for_process_ids(&app_server_process_log, 1).await?[0],
-        initial_app_server_pid,
-        "router restart must not replace the app-server",
-    )?;
-    check_equal(
-        terminal_snapshot(&restart)?.recovery_budget(),
-        RecoveryBudget::Available,
-        "router restart must not consume app-server recovery",
-    )?;
-
-    terminate_process(restarted_router_pids[1])?;
-    let unavailable = wait_for_router_condition(
-        coordination_paths.operator_socket(),
-        RouterCondition::Unavailable,
-    )
-    .await?;
-    let unavailable_snapshot = terminal_snapshot(&unavailable)?;
-    check(
-        unavailable_snapshot.app_server()
-            == &codex_router_host::AppServerCondition::NativeReady {
-                running_version: "1.2.3".to_owned(),
-            },
-        &format!(
-            "owned-router exit must preserve the healthy app-server: {:?}",
-            unavailable_snapshot.app_server()
-        ),
-    )?;
-    let recovery_restart = send_operator_request(
-        coordination_paths.operator_socket(),
-        OperatorRequest::RestartRouter,
-        Duration::from_secs(4),
-    )
-    .await?;
-    check_equal(
-        terminal_classification(&recovery_restart)?,
-        TerminalClassification::Succeeded,
-        "explicit router restart must recover an owned unavailable router",
-    )?;
-    let recovered_router_pids = wait_for_process_ids(&router_process_log, 3).await?;
-
-    let restart_started_at = tokio::time::Instant::now();
-    let operator_socket_for_restart = coordination_paths.operator_socket().to_owned();
-    let restart_future = send_operator_request(
-        &operator_socket_for_restart,
-        OperatorRequest::RestartAppServer,
-        Duration::from_secs(4),
-    );
-    let (restart_result, restarted_app_server_pids) = tokio::join!(
-        restart_future,
-        wait_for_process_ids(&app_server_process_log, 2)
-    );
-    tokio::time::timeout(Duration::from_secs(4), async {
-        loop {
-            if tokio::net::UnixStream::connect(&app_server_socket_for_gap)
-                .await
-                .is_ok()
-            {
-                break;
+    let scenario_result = async {
+        let startup = send_operator_request(
+            coordination_paths.operator_socket(),
+            OperatorRequest::AwaitHostStart,
+            Duration::from_secs(4),
+        )
+        .await?;
+        check_equal(
+            terminal_classification(&startup)?,
+            TerminalClassification::Ready,
+            "owned-router host startup must become ready",
+        )?;
+        let initial_app_server_pid = *wait_for_process_ids(&app_server_process_log, 1)
+            .await?
+            .first()
+            .ok_or("initial app-server PID is missing")?;
+        let initial_router_pid = *wait_for_process_ids(&router_process_log, 1)
+            .await?
+            .first()
+            .ok_or("initial router PID is missing")?;
+        if let Some(exit) = early_exit {
+            let started = StartedFixture {
+                process_ids: [initial_router_pid, initial_app_server_pid],
+                router_address,
+            };
+            match exit {
+                FixtureExit::Error(observed) => {
+                    *observed = Some(started);
+                    return Err("forced early fixture error".into());
+                }
+                FixtureExit::Cancelled(sender) => {
+                    sender
+                        .send(started)
+                        .map_err(|_| "cancellation observer closed")?;
+                    std::future::pending::<()>().await;
+                }
             }
-            tokio::task::yield_now().await;
         }
-    })
-    .await?;
-    let restart_gap = restart_started_at.elapsed();
-    eprintln!("app_server_restart_gap_ms={}", restart_gap.as_millis());
-    check(
-        restart_gap < Duration::from_secs(5),
-        &format!("app-server restart socket gap exceeded target: {restart_gap:?}"),
-    )?;
-    let restart_result = restart_result?;
-    check(
-        terminal_classification(&restart_result)? == TerminalClassification::Succeeded,
-        &format!("app-server restart must succeed: {restart_result:?}"),
-    )?;
-    check(
-        restart_result.iter().any(|frame| {
-            matches!(
-                frame,
-                OperatorFrame::Progress(codex_router_host::HostProgress::StoppingAppServer)
-            )
-        }) && restart_result.iter().any(|frame| {
-            matches!(
-                frame,
-                OperatorFrame::Progress(codex_router_host::HostProgress::AppServerReady)
-            )
-        }) && restart_result.iter().any(|frame| {
-            matches!(
-                frame,
-                OperatorFrame::Progress(codex_router_host::HostProgress::AppServerKilled)
-            )
-        }),
-        "app-server restart must stream stopping and ready phases",
-    )?;
-    let restarted_app_server_pid = restarted_app_server_pids?[1];
 
-    runtime.abort();
-    let _runtime_result = runtime.await;
-    terminate_process(recovered_router_pids[2])?;
-    terminate_process(restarted_app_server_pid)?;
-    Ok(())
+        let restart = send_operator_request(
+            coordination_paths.operator_socket(),
+            OperatorRequest::RestartRouter,
+            Duration::from_secs(4),
+        )
+        .await?;
+        check_equal(
+            terminal_classification(&restart)?,
+            TerminalClassification::Succeeded,
+            "owned router restart must succeed",
+        )?;
+        check(
+            restart.iter().any(|frame| {
+                matches!(
+                    frame,
+                    OperatorFrame::Progress(codex_router_host::HostProgress::StoppingRouter)
+                )
+            }) && restart.iter().any(|frame| {
+                matches!(
+                    frame,
+                    OperatorFrame::Progress(codex_router_host::HostProgress::RouterReady)
+                )
+            }),
+            "router restart must stream stopping and ready phases",
+        )?;
+        let restarted_router_pids = wait_for_process_ids(&router_process_log, 2).await?;
+        let restarted_router_pid = *restarted_router_pids
+            .get(1)
+            .ok_or("restarted router PID is missing")?;
+        check(
+            restarted_router_pid != initial_router_pid,
+            "owned router restart must replace the exact router child",
+        )?;
+        check_equal(
+            *wait_for_process_ids(&app_server_process_log, 1)
+                .await?
+                .first()
+                .ok_or("preserved app-server PID is missing")?,
+            initial_app_server_pid,
+            "router restart must not replace the app-server",
+        )?;
+        check_equal(
+            terminal_snapshot(&restart)?.recovery_budget(),
+            RecoveryBudget::Available,
+            "router restart must not consume app-server recovery",
+        )?;
+
+        terminate_process(restarted_router_pid)?;
+        let unavailable = wait_for_router_condition(
+            coordination_paths.operator_socket(),
+            RouterCondition::Unavailable,
+        )
+        .await?;
+        let unavailable_snapshot = terminal_snapshot(&unavailable)?;
+        check(
+            unavailable_snapshot.app_server()
+                == &codex_router_host::AppServerCondition::NativeReady {
+                    running_version: "1.2.3".to_owned(),
+                },
+            &format!(
+                "owned-router exit must preserve the healthy app-server: {:?}",
+                unavailable_snapshot.app_server()
+            ),
+        )?;
+        let recovery_restart = send_operator_request(
+            coordination_paths.operator_socket(),
+            OperatorRequest::RestartRouter,
+            Duration::from_secs(4),
+        )
+        .await?;
+        check_equal(
+            terminal_classification(&recovery_restart)?,
+            TerminalClassification::Succeeded,
+            "explicit router restart must recover an owned unavailable router",
+        )?;
+        let _recovered_router_pids = wait_for_process_ids(&router_process_log, 3).await?;
+
+        let restart_started_at = tokio::time::Instant::now();
+        let operator_socket_for_restart = coordination_paths.operator_socket().to_owned();
+        let restart_future = send_operator_request(
+            &operator_socket_for_restart,
+            OperatorRequest::RestartAppServer,
+            Duration::from_secs(4),
+        );
+        let (restart_result, restarted_app_server_pids) = tokio::join!(
+            restart_future,
+            wait_for_process_ids(&app_server_process_log, 2)
+        );
+        tokio::time::timeout(Duration::from_secs(4), async {
+            loop {
+                if tokio::net::UnixStream::connect(&app_server_socket_for_gap)
+                    .await
+                    .is_ok()
+                {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await?;
+        let restart_gap = restart_started_at.elapsed();
+        eprintln!("app_server_restart_gap_ms={}", restart_gap.as_millis());
+        check(
+            restart_gap < Duration::from_secs(5),
+            &format!("app-server restart socket gap exceeded target: {restart_gap:?}"),
+        )?;
+        let restart_result = restart_result?;
+        check(
+            terminal_classification(&restart_result)? == TerminalClassification::Succeeded,
+            &format!("app-server restart must succeed: {restart_result:?}"),
+        )?;
+        check(
+            restart_result.iter().any(|frame| {
+                matches!(
+                    frame,
+                    OperatorFrame::Progress(codex_router_host::HostProgress::StoppingAppServer)
+                )
+            }) && restart_result.iter().any(|frame| {
+                matches!(
+                    frame,
+                    OperatorFrame::Progress(codex_router_host::HostProgress::AppServerReady)
+                )
+            }) && restart_result.iter().any(|frame| {
+                matches!(
+                    frame,
+                    OperatorFrame::Progress(codex_router_host::HostProgress::AppServerKilled)
+                )
+            }),
+            "app-server restart must stream stopping and ready phases",
+        )?;
+        let _restarted_app_server_pid = restarted_app_server_pids?
+            .get(1)
+            .copied()
+            .ok_or("restarted app-server PID is missing")?;
+        Ok::<(), Box<dyn std::error::Error>>(())
+    }
+    .await;
+    let cleanup_result = lifetime.finish().await;
+    match (scenario_result, cleanup_result) {
+        (Err(error), Err(cleanup)) => {
+            Err(std::io::Error::other(format!("{error}; cleanup: {cleanup}")).into())
+        }
+        (Err(error), Ok(())) => Err(error),
+        (Ok(()), result) => Ok(result?),
+    }
 }
 
 async fn wait_for_router_condition(
@@ -290,6 +410,7 @@ async fn owned_router_restart_child_entrypoint() -> Result<(), Box<dyn std::erro
     };
     let process_log = std::env::var_os("CODEX_HOST_RESTART_ROUTER_LOG")
         .ok_or("owned router process log is missing")?;
+    register_fixture_child()?;
     run_persistent_router_health_fixture(
         address.to_string_lossy().parse::<SocketAddr>()?,
         Path::new(&process_log),
@@ -305,6 +426,7 @@ async fn owned_router_restart_app_server_child_entrypoint() -> Result<(), Box<dy
     };
     let process_log = std::env::var_os("CODEX_HOST_RESTART_APP_LOG")
         .ok_or("owned restart app-server process log is missing")?;
+    register_fixture_child()?;
     run_native_app_server_fixture(
         Path::new(&socket_path),
         "1.2.3",
