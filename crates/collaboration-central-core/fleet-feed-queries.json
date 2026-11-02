@@ -6,6 +6,13 @@
   "metadata": "fleet-feed-query-metadata.json",
   "queries": [
     {
+      "name": "read_fleet_alarm_state",
+      "sql": "sql/fleet/read_fleet_alarm_state.sql",
+      "row": "StoredFleetAlarmState",
+      "result": "many",
+      "parameters": []
+    },
+    {
       "name": "read_fleet_feed_state",
       "sql": "sql/fleet/read_fleet_feed_state.sql",
       "row": "StoredFleetFeedState",

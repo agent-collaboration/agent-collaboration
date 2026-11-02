@@ -32,6 +32,7 @@ pub use automation_handover_scenarios::{
     AutomationHandoverRestartCase, prepare_automation_handover_restart,
     resume_automation_handover_restart, run_automation_handover_carried_conformance,
     run_automation_handover_conformance, run_automation_handover_external_conformance,
+    run_automation_handover_external_due_conformance,
     run_automation_handover_lifecycle_conformance, run_automation_handover_repair_conformance,
     run_automation_handover_validation_conformance, run_automation_handover_wake_conformance,
 };

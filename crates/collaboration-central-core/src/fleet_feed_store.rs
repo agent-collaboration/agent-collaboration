@@ -41,18 +41,26 @@ where
     for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    let mut rows = queries::read_fleet_feed_state(scope)
+    let rows = queries::read_fleet_feed_state(scope)
         .await
         .map_err(StoreError::backend)?;
+    let feed_exists = rows.is_empty()
+        && !queries::read_fleet_feed_page(scope, "0".into(), "1".into())
+            .await
+            .map_err(StoreError::backend)?
+            .is_empty();
+    decode_state(rows, feed_exists)
+}
+
+pub(crate) fn decode_state(
+    mut rows: Vec<queries::StoredFleetFeedState>,
+    feed_exists: bool,
+) -> Result<FeedState, StoreError> {
     if rows.len() > 1 {
         return Err(corrupt("feed_state", "multiple Fleet feed heads"));
     }
     let Some(row) = rows.pop() else {
-        if !queries::read_fleet_feed_page(scope, "0".into(), "1".into())
-            .await
-            .map_err(StoreError::backend)?
-            .is_empty()
-        {
+        if feed_exists {
             return Err(corrupt("feed_state", "feed exists without its head"));
         }
         return Ok(FeedState {
@@ -188,6 +196,20 @@ where
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
     let state = state(scope).await?;
+    prune_from_state(scope, now, state).await
+}
+
+pub(crate) async fn prune_from_state<Scope: TransactionScope>(
+    scope: &mut Scope,
+    now: DateTime<Utc>,
+    state: FeedState,
+) -> Result<(), StoreError>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
     let cutoff = timestamp(
         now.checked_sub_signed(TimeDelta::days(30))
             .ok_or_else(|| corrupt("feed.retention", "time underflow"))?,
