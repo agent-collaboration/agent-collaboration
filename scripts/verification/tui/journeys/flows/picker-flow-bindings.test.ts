@@ -1,7 +1,7 @@
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { expect, test } from 'vitest';
+import { afterAll, expect, test } from 'vitest';
 
 import { sourceDigest } from '../../evidence/source-binding.ts';
 import { protocolPlan, temporaryRoot } from '../../fixtures/receipt-fixtures.ts';
@@ -18,23 +18,29 @@ import { pickerFlowBindings } from './picker-flow-bindings.ts';
 import { pickerExpectedKey, pickerFilterTextExpectations } from './picker-flow-inputs.ts';
 import { checkQualifiedForkOutcome } from './picker-fork-bindings.ts';
 
-function controlledPlan(journey: string): AuthoredFlowPlan {
-	const root = temporaryRoot(),
-		fixture = protocolPlan(root);
-	return authoredFlowPlanSchema.parse({
+const root = temporaryRoot(),
+	fixture = protocolPlan(root),
+	fixtureSourceDigest = sourceDigest(fixture.source),
+	fixturePlan = {
 		productRepository: root,
 		productSource: fixture.source,
-		productSourceDigest: sourceDigest(fixture.source),
+		productSourceDigest: fixtureSourceDigest,
 		observerRepository: root,
 		observerSource: fixture.source,
-		observerSourceDigest: sourceDigest(fixture.source),
+		observerSourceDigest: fixtureSourceDigest,
 		driver: fixture.capture_driver,
 		product: fixture.harness_binary,
 		node: fixture.node,
 		chrome: '/unneeded/no-native-run',
 		output: join(root, 'not-created'),
-		journey,
 		grids: ['120x36', '76x30', '48x12', '32x24'],
+	};
+afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+function controlledPlan(journey: string): AuthoredFlowPlan {
+	return authoredFlowPlanSchema.parse({
+		...fixturePlan,
+		journey,
 		keys: authoredFlows.find((flow) => flow.journeyId === journey)?.keys ?? ['legacy', 'kitty'],
 	});
 }
