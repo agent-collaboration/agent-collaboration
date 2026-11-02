@@ -145,20 +145,50 @@ async fn fleet_sqlite_rejects_an_unregistered_database_before_creating_migration
 #[tokio::test]
 async fn fleet_sqlite_rejects_corrupt_stored_fields_without_coercing_or_overwriting_them() {
     use crate::fleet_login_repository::FleetLoginStorageFailure;
-    for (column, value) in [
-        ("enrollment_id", "invalid"),
-        ("sign_in", "http://remote.invalid"),
-        ("organization_id", "invalid"),
-        ("machine_environment", "future"),
-        ("receiver_id", "invalid"),
-        ("relay_peer_id", "invalid"),
+    for (column, value, update, read) in [
+        (
+            "enrollment_id",
+            "invalid",
+            "UPDATE fleet_login SET enrollment_id=?1",
+            "SELECT enrollment_id FROM fleet_login",
+        ),
+        (
+            "sign_in",
+            "http://remote.invalid",
+            "UPDATE fleet_login SET sign_in=?1",
+            "SELECT sign_in FROM fleet_login",
+        ),
+        (
+            "organization_id",
+            "invalid",
+            "UPDATE fleet_login SET organization_id=?1",
+            "SELECT organization_id FROM fleet_login",
+        ),
+        (
+            "machine_environment",
+            "future",
+            "UPDATE fleet_login SET machine_environment=?1",
+            "SELECT machine_environment FROM fleet_login",
+        ),
+        (
+            "receiver_id",
+            "invalid",
+            "UPDATE fleet_login SET receiver_id=?1",
+            "SELECT receiver_id FROM fleet_login",
+        ),
+        (
+            "relay_peer_id",
+            "invalid",
+            "UPDATE fleet_login SET relay_peer_id=?1",
+            "SELECT relay_peer_id FROM fleet_login",
+        ),
     ] {
         let root = tempfile::tempdir().unwrap();
         let store = FleetStateStore::open_and_migrate(root.path())
             .await
             .unwrap();
         store.replace_fleet_login(&candidate(None)).await.unwrap();
-        sqlx::query(&format!("UPDATE fleet_login SET {column}=?1"))
+        sqlx::query(update)
             .bind(value)
             .execute(&store.pool)
             .await
@@ -170,7 +200,7 @@ async fn fleet_sqlite_rejects_corrupt_stored_fields_without_coercing_or_overwrit
         );
         assert!(store.replace_fleet_login(&candidate(None)).await.is_err());
 
-        let retained: String = sqlx::query_scalar(&format!("SELECT {column} FROM fleet_login"))
+        let retained: String = sqlx::query_scalar(read)
             .fetch_one(&store.pool)
             .await
             .unwrap();

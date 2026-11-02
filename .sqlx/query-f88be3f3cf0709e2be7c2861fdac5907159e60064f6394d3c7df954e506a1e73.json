@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT enrollment_id,sign_in,organization_id,machine_environment,receiver_id,relay_peer_id FROM fleet_login",
+  "describe": {
+    "columns": [
+      {
+        "name": "enrollment_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fleet_login",
+            "name": "enrollment_id"
+          }
+        }
+      },
+      {
+        "name": "sign_in",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fleet_login",
+            "name": "sign_in"
+          }
+        }
+      },
+      {
+        "name": "organization_id",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fleet_login",
+            "name": "organization_id"
+          }
+        }
+      },
+      {
+        "name": "machine_environment",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fleet_login",
+            "name": "machine_environment"
+          }
+        }
+      },
+      {
+        "name": "receiver_id",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fleet_login",
+            "name": "receiver_id"
+          }
+        }
+      },
+      {
+        "name": "relay_peer_id",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fleet_login",
+            "name": "relay_peer_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f88be3f3cf0709e2be7c2861fdac5907159e60064f6394d3c7df954e506a1e73"
+}

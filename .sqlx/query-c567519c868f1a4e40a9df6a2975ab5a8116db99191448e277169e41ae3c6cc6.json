@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO fleet_login(enrollment_id,sign_in,organization_id,machine_environment,receiver_id,relay_peer_id) VALUES (?1,?2,?3,?4,?5,?6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "c567519c868f1a4e40a9df6a2975ab5a8116db99191448e277169e41ae3c6cc6"
+}
