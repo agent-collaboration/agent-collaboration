@@ -1,0 +1,110 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT registration_id,operation_id,installation_id,binding_address,session_service_id,session_endpoint_id,session_id,lifecycle_json FROM fleet_session_registrations WHERE operation_id=?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "registration_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fleet_session_registrations",
+            "name": "registration_id"
+          }
+        }
+      },
+      {
+        "name": "operation_id",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fleet_session_registrations",
+            "name": "operation_id"
+          }
+        }
+      },
+      {
+        "name": "installation_id",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fleet_session_registrations",
+            "name": "installation_id"
+          }
+        }
+      },
+      {
+        "name": "binding_address",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fleet_session_registrations",
+            "name": "binding_address"
+          }
+        }
+      },
+      {
+        "name": "session_service_id",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fleet_session_registrations",
+            "name": "session_service_id"
+          }
+        }
+      },
+      {
+        "name": "session_endpoint_id",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fleet_session_registrations",
+            "name": "session_endpoint_id"
+          }
+        }
+      },
+      {
+        "name": "session_id",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fleet_session_registrations",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "name": "lifecycle_json",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fleet_session_registrations",
+            "name": "lifecycle_json"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "2cd09e2be29ac2d4bf782f54b8c2bc9be0b8dec921c79f3639f21f6c5a10cdeb"
+}

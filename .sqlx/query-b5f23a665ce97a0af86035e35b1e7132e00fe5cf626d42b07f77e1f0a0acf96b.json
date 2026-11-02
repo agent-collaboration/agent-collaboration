@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE fleet_session_registrations SET session_service_id=?1,session_endpoint_id=?2,session_id=?3,lifecycle_json=?4 WHERE registration_id=?5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "b5f23a665ce97a0af86035e35b1e7132e00fe5cf626d42b07f77e1f0a0acf96b"
+}

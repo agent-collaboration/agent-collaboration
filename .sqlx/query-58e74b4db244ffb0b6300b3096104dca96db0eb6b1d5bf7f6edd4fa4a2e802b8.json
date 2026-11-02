@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO fleet_session_registrations(registration_id,operation_id,installation_id,binding_address,session_service_id,session_endpoint_id,session_id,lifecycle_json) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "58e74b4db244ffb0b6300b3096104dca96db0eb6b1d5bf7f6edd4fa4a2e802b8"
+}
