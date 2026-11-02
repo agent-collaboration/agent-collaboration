@@ -140,6 +140,13 @@ impl ApplicationFixture {
         self.attach_follow_admission();
         self
     }
+    pub fn with_subscription_clock(
+        mut self,
+        clock: std::sync::Arc<dyn crate::SubscriptionClock>,
+    ) -> Self {
+        self.subscription_clock = clock;
+        self
+    }
     fn attach_follow_admission(&self) {
         if let (Some(service), Some(admission), Some(publisher)) = (
             &self.subscription_delivery,
@@ -208,6 +215,9 @@ impl ApplicationFixture {
                     self.configuration.clone(),
                     self.machine_identity.clone(),
                     std::sync::Arc::clone(interactions),
+                    std::sync::Arc::new(crate::subscription_delivery::SubscriptionRuntimeClock(
+                        self.subscription_clock.clone(),
+                    )),
                 )
             })
     }

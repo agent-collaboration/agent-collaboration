@@ -10,7 +10,7 @@ use collaboration_protocol::{
     UuidIdentity,
 };
 use collaboration_runtime::CodexAppServerDeliveryRoute;
-use collaboration_service::ApplicationFixture;
+use collaboration_service::{ApplicationFixture, SubscriptionClock};
 
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
@@ -23,14 +23,18 @@ use sqlx::Connection as _;
 use std::{
     collections::{BTreeMap, HashSet},
     error::Error,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicI64, Ordering},
+    },
     time::Duration,
 };
 use tokio::sync::mpsc;
 use tokio_tungstenite::{WebSocketStream, accept_async, tungstenite::Message};
 
-// U66 / MS-10: two real timer firings are separated by at least five minutes.
+// U66 / MS-10: real worker firings are separated by at least five logical minutes.
 const REPEAT_INTERVAL_SECONDS: u32 = 300;
+const MINIMUM_REPEAT_GAP_MILLIS: i64 = 300_000;
 const WAKE_BODY: &str = "Review the recurring report";
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
 const SESSION_ID: &str = "fixture-recurring-target";
@@ -40,10 +44,46 @@ type TestResult<T> = Result<T, Box<dyn Error + Send + Sync>>;
 struct NativeQueueObservation {
     client_user_message_id: String,
     prompt_text: String,
+    observed_at_ms: i64,
+}
+
+struct ManualWakeClock(AtomicI64);
+
+impl ManualWakeClock {
+    fn set(&self, now_ms: i64) {
+        self.0.store(now_ms, Ordering::SeqCst);
+    }
+}
+
+impl SubscriptionClock for ManualWakeClock {
+    #[expect(
+        clippy::expect_used,
+        reason = "Fail invalid timestamps in the controlled test clock rather than substitute time."
+    )]
+    fn now(&self) -> chrono::DateTime<chrono::Utc> {
+        chrono::DateTime::from_timestamp_millis(self.0.load(Ordering::SeqCst))
+            .expect("controlled wake timestamp is valid")
+    }
+    fn monotonic_now(&self) -> tokio::time::Instant {
+        tokio::time::Instant::now()
+    }
+}
+
+async fn advance_wake_clock(clock: &ManualWakeClock, now_ms: i64) {
+    tokio::time::pause();
+    clock.set(now_ms);
+    tokio::time::advance(Duration::from_millis(250)).await;
+    // Real socket/database work keeps its causal waits on elapsed time rather
+    // than allowing paused-time auto-advance to consume its I/O deadlines.
+    tokio::time::resume();
 }
 
 #[tokio::test]
 async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
+    let initial_time = chrono::Utc::now();
+    let clock = Arc::new(ManualWakeClock(AtomicI64::new(
+        initial_time.timestamp_millis(),
+    )));
     let root = tempfile::tempdir_in("/tmp").expect("fixture temp directory");
     let database = root.path().join("automation.sqlite");
     let store = Arc::new(tokio::sync::Mutex::new(
@@ -100,8 +140,9 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         codex_native_integration::NativePayloadSchemas::from_bundle(&bundle)
             .expect("validate native schemas"),
     );
-    let endpoint_observed_at =
-        chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let endpoint_observed_at = clock
+        .now()
+        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let description: EndpointDescription = serde_json::from_value(json!({
         "endpoint": target.endpoint,
         "label": "Wake fixture",
@@ -124,8 +165,7 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         codex_home: root.path().to_owned(),
     };
 
-    let anchor =
-        chrono::Utc::now() - chrono::Duration::seconds(i64::from(REPEAT_INTERVAL_SECONDS) - 1);
+    let anchor = initial_time - chrono::Duration::seconds(i64::from(REPEAT_INTERVAL_SECONDS) - 1);
     let expiry = anchor
         .checked_add_signed(chrono::Duration::seconds(
             i64::from(REPEAT_INTERVAL_SECONDS) * 2 + 3,
@@ -169,6 +209,7 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         .with_endpoints(vec![description])
         .expect("add native endpoint")
         .with_automation_store(Arc::clone(&store))
+        .with_subscription_clock(clock.clone())
         .with_interaction_store(Arc::clone(&interactions))
         .with_native_backend(native_backend.clone())
         .expect("add native backend");
@@ -187,11 +228,13 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         listener,
         String::from(target.session_id.clone()),
         observation_sender,
+        clock.clone(),
     ));
     let shutdown = tokio_util::sync::CancellationToken::new();
-    let wake_worker = identity
+    let mut wake_worker = identity
         .wake_timing_worker()
         .expect("wake timing worker is available");
+    let mut completions = wake_worker.observe_accepted_deliveries();
     let handoff_worker = tokio::spawn(
         identity
             .push_handoff_worker()
@@ -201,12 +244,36 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
     let worker = tokio::spawn(wake_worker.run(shutdown.clone()));
     drop(identity);
 
+    let first_due_ms = anchor.timestamp_millis() + i64::from(REPEAT_INTERVAL_SECONDS) * 1000;
+    advance_wake_clock(&clock, first_due_ms).await;
     let first_delivery = next_native_queue_delivery(&mut observation_receiver)
         .await
         .expect("first native queue delivery arrives");
+    let first_completion = tokio::time::timeout(Duration::from_secs(2), completions.recv())
+        .await
+        .expect("first delivery acceptance commits")
+        .expect("wake worker retains its completion sender");
+    advance_wake_clock(&clock, first_due_ms + 300_000).await;
     let second_delivery = next_native_queue_delivery(&mut observation_receiver)
         .await
         .expect("second native queue delivery arrives");
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let completed = completions
+                .recv()
+                .await
+                .expect("completion sender remains live");
+            if completed != first_completion {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("second delivery acceptance commits");
+    assert!(
+        second_delivery.observed_at_ms - first_delivery.observed_at_ms >= MINIMUM_REPEAT_GAP_MILLIS,
+        "recurring wake gap must be at least 300 logical seconds"
+    );
     tokio::time::timeout(Duration::from_secs(2), native_server)
         .await
         .expect("native server exits")
@@ -260,13 +327,19 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
     )
     .await
     .expect("open mailbox database for verification");
-    let stored_occurrences: Vec<String> = sqlx::query_scalar(
-        "SELECT occurrence_id FROM mailbox_deliveries WHERE wakeup_id=? ORDER BY due_at_ms,occurrence_id",
+    let stored_firings: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT occurrence_id,fired_at_ms FROM mailbox_deliveries WHERE wakeup_id=? ORDER BY due_at_ms,occurrence_id",
     )
     .bind(wake.definition.wakeup_id.as_str())
     .fetch_all(&mut connection)
     .await
     .expect("load stored wake occurrences");
+    assert_eq!(stored_firings.len(), 2, "wake must fire exactly twice");
+    assert!(
+        stored_firings[1].1 - stored_firings[0].1 >= MINIMUM_REPEAT_GAP_MILLIS,
+        "durable wake firing gap must be at least 300 logical seconds"
+    );
+    let stored_occurrences: Vec<String> = stored_firings.into_iter().map(|(id, _)| id).collect();
     let observed_occurrences = HashSet::from([
         String::from(first_occurrence.clone()),
         String::from(second_occurrence.clone()),
@@ -371,6 +444,7 @@ async fn serve_two_queue_deliveries(
     listener: tokio::net::UnixListener,
     expected_thread_id: String,
     observations: mpsc::Sender<NativeQueueObservation>,
+    clock: Arc<dyn SubscriptionClock>,
 ) -> TestResult<()> {
     for delivery_number in 1..=2 {
         let (stream, _) = tokio::time::timeout(
@@ -433,6 +507,7 @@ async fn serve_two_queue_deliveries(
             .send(NativeQueueObservation {
                 client_user_message_id,
                 prompt_text,
+                observed_at_ms: clock.now().timestamp_millis(),
             })
             .await
             .map_err(|_| "test stopped reading native queue observations")?;
