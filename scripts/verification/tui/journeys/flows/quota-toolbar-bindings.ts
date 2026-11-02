@@ -125,7 +125,11 @@ export function quotaToolbarBindings(
 	] as const) {
 		fixtures.set('inspect-quota-menu-' + checkpoint, async (context: NativeFlowContext) => {
 			requireChild(context);
-			const collected = await collectQuotaMenu({ context, surface: quotaOverlay(ordinal) });
+			const collected = await collectQuotaMenu({
+				context,
+				surface: quotaOverlay(ordinal),
+				disabled: ['refresh'],
+			});
 			menu = collected.observation;
 			writeFileSync(join(evidence, checkpoint + '-inventory.json'), JSON.stringify(menu, null, 2));
 			return collected.marked;
