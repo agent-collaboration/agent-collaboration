@@ -8,8 +8,7 @@ async fn a_client_that_disconnects_cancels_its_call_on_both_listeners() {
     let config = api_config(wake_application(directory.path()).await, directory.path());
     let tcp = ServedApi::tcp(&config).await;
     let unix = ServedApi::unix(&config, &directory.path().join("api.sock"));
-    let wake = tcp.call_tool("wake_send", wake_send_arguments()).await;
-    let wakeup_id = structured(&wake)["definition"]["wakeupId"].clone();
+    let wakeup_id = retained_local_wake(directory.path()).await;
     let long_wait = json!({"wakeupId": wakeup_id, "timeoutSeconds": 1500});
 
     for api in [&tcp, &unix] {
@@ -138,7 +137,7 @@ async fn a_client_that_disconnects_from_a_mutation_waiting_on_the_store_leaves_n
 }
 
 #[tokio::test]
-async fn a_wake_wait_ends_at_its_bound_while_the_store_is_held() {
+async fn wake_waits_do_not_guess_an_owner_when_selection_is_held_past_the_bound() {
     // Arrange: a wake-up, then its store held by someone else past the waits' one-second bound.
     let directory = private_directory();
     let automation = automation_store(directory.path()).await;
@@ -147,9 +146,13 @@ async fn a_wake_wait_ends_at_its_bound_while_the_store_is_held() {
         directory.path(),
     );
     let api = ServedApi::unix(&config, &directory.path().join("api.sock"));
-    let wake = api.call_tool("wake_send", wake_send_arguments()).await;
-    let wakeup_id = structured(&wake)["definition"]["wakeupId"].clone();
-    let cursor = structured(&wake)["latestEventCursor"].clone();
+    let wakeup_id = retained_local_wake(directory.path()).await;
+    let wake = api
+        .call_tool("wake_show", json!({"wakeupId":wakeup_id}))
+        .await;
+    assert_eq!(structured(&wake)["kind"], "local");
+    let cursor = structured(&wake)["value"]["latestEventCursor"].clone();
+    assert!(cursor.is_string(), "actual retained Local cursor");
     let held = automation.lock().await;
 
     // Act: one wait starts from the current state and one resumes from the cursor; both need
@@ -169,12 +172,17 @@ async fn a_wake_wait_ends_at_its_bound_while_the_store_is_held() {
     .await;
     drop(held);
 
-    // Assert: both ended at their bound while the store was still held. With no cursor yet
-    // the start is unavailable; the resumed wait times out at the cursor it was given.
+    // Both calls must select current custody before interpreting a cursor: a handover may
+    // have moved the ID since that cursor. A held owner read cannot guess Local or central.
     let (starting, resuming) = ended.expect("the waits ended at their bound");
     assert_eq!(starting.is_error, Some(true), "{starting:?}");
-    assert_eq!(structured(&starting)["kind"], "waitUnavailable");
-    assert_eq!(structured(&resuming)["outcome"]["kind"], "timedOut");
-    assert_eq!(structured(&resuming)["cursor"], cursor);
+    for result in [&starting, &resuming] {
+        assert_eq!(result.is_error, Some(true));
+        let failure = structured(result);
+        assert_eq!(failure["kind"], "rejected");
+        assert_eq!(failure["serviceKind"], "localStoreUnavailable");
+        assert_eq!(failure["data"]["wakeupId"], json!(wakeup_id));
+        assert_eq!(failure["effect"], "none");
+    }
     api.stop().await;
 }

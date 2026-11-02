@@ -187,6 +187,17 @@ pub fn run_instruction_command(arguments: Vec<OsString>) -> i32 {
             json!({"kind":"error","operationId":operation_id,"error":error}),
             4,
         ),
+        Err(InstructionClientError::Catalog(error)) => {
+            let exit = match &error {
+                collaboration_client::CentralCatalogFailure::CentralUnreachable { .. } => 3,
+                collaboration_client::CentralCatalogFailure::OutcomeUnknown { .. } => 5,
+                collaboration_client::CentralCatalogFailure::Refused { .. } => 4,
+            };
+            (
+                json!({"kind":"error","operationId":operation_id,"error":error}),
+                exit,
+            )
+        }
         Err(InstructionClientError::Connection(_)) => {
             let uncertain = dispatched && operation_id.is_some();
             (

@@ -1,18 +1,14 @@
 //! Bounded inspection methods share typed errors while preserving their distinct record types.
-use crate::{ClientError, CollaborationClient};
+use crate::{
+    AutomationInspectionClientError, CentralCatalogFailure, ClientError, CollaborationClient,
+    FiringShowRequest,
+};
 use collaboration_protocol::{
-    AutomationInspectionFailure, AutomationPage, AutomationPageRequest, DeliveryInspection,
-    DeliveryListRequest, InstructionSnapshot, RevisionListRequest, RevisionRecord, RunListRequest,
-    RunSnapshot, ScheduleSnapshot,
+    AutomationPage, AutomationPageRequest, DeliveryInspection, DeliveryListRequest,
+    FiringListRequest, FiringSnapshot, InstructionSnapshot, RevisionListRequest, RevisionRecord,
+    RunListRequest, RunSnapshot,
 };
 
-#[derive(Debug, thiserror::Error)]
-pub enum AutomationInspectionClientError {
-    #[error("automation inspection rejected: {0:?}")]
-    Rejected(Box<AutomationInspectionFailure>),
-    #[error(transparent)]
-    Connection(#[from] ClientError),
-}
 impl CollaborationClient {
     /// Observe the exact recorded worker/summary turn without starting or interrupting native work.
     pub async fn reconcile_run(
@@ -107,9 +103,23 @@ impl CollaborationClient {
     pub async fn list_schedules(
         &self,
         request: AutomationPageRequest,
-    ) -> Result<AutomationPage<ScheduleSnapshot>, AutomationInspectionClientError> {
-        self.automation_inspection_call("schedule_list", request)
-            .await
+    ) -> Result<AutomationPage<crate::ScheduleReadResponse>, AutomationInspectionClientError> {
+        let page: AutomationPage<crate::ScheduleReadResponse> = self
+            .automation_inspection_call("schedule_list", request)
+            .await?;
+        if page.records.iter().any(|record| match record {
+            crate::ScheduleReadResponse::Faulted { fault, .. } => {
+                fault.kind != collaboration_protocol::AutomationKind::Schedule
+            }
+            crate::ScheduleReadResponse::Suspended { suspended, .. } => {
+                suspended.kind != collaboration_protocol::AutomationKind::Schedule
+            }
+            crate::ScheduleReadResponse::Local { .. }
+            | crate::ScheduleReadResponse::Schedule { .. } => false,
+        }) {
+            return Err(ClientError::Protocol("Schedule list fault kind mismatch").into());
+        }
+        Ok(page)
     }
     pub async fn list_runs(
         &self,
@@ -147,6 +157,15 @@ impl CollaborationClient {
                 code: -32050,
                 data: Some(data),
             }) => {
+                if let Ok(error) = serde_json::from_value::<CentralCatalogFailure>(data.clone()) {
+                    if error.operation_id().is_some() {
+                        return Err(ClientError::Protocol(
+                            "catalog inspection failure supplied a mutation operation ID",
+                        )
+                        .into());
+                    }
+                    return Err(AutomationInspectionClientError::Catalog(error));
+                }
                 return Err(AutomationInspectionClientError::Rejected(
                     serde_json::from_value(data)
                         .map_err(|_| ClientError::Protocol("invalid inspection error"))?,
@@ -163,5 +182,39 @@ impl CollaborationClient {
             Ok(result) => Ok(result),
             Err(_) => Err(ClientError::Protocol("invalid inspection response").into()),
         }
+    }
+}
+
+impl CollaborationClient {
+    pub async fn read_firing(
+        &self,
+        request: FiringShowRequest,
+    ) -> Result<FiringSnapshot, AutomationInspectionClientError> {
+        let expected = request.firing_id.clone();
+        let firing: FiringSnapshot = self
+            .automation_inspection_call("firing_show", request)
+            .await?;
+        if firing.firing_id != expected {
+            return Err(ClientError::Protocol("Firing read identity mismatch").into());
+        }
+        Ok(firing)
+    }
+
+    pub async fn list_firings(
+        &self,
+        request: FiringListRequest,
+    ) -> Result<AutomationPage<FiringSnapshot>, AutomationInspectionClientError> {
+        let expected = request.automation_id.clone();
+        let page: AutomationPage<FiringSnapshot> = self
+            .automation_inspection_call("firing_list", request)
+            .await?;
+        if page
+            .records
+            .iter()
+            .any(|firing| firing.automation_id != expected)
+        {
+            return Err(ClientError::Protocol("Firing list automation identity mismatch").into());
+        }
+        Ok(page)
     }
 }

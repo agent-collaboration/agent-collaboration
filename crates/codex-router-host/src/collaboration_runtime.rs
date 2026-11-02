@@ -32,6 +32,7 @@ pub struct CollaborationRuntimeInputs {
 /// Host-owned startup facts that are not part of the public collaboration runtime inputs.
 pub(crate) struct HostCollaborationInputs {
     pub collaboration_runtime: CollaborationRuntimeInputs,
+    pub remote_create_default_approver: Option<collaboration_protocol::SessionRef>,
     pub router_proxy_endpoint: SocketAddr,
     pub remote_access: Option<crate::RemoteAccess>,
 }
@@ -121,6 +122,7 @@ pub struct CollaborationRuntime {
     notification_publisher: Option<std::sync::Arc<collaboration_service::NotificationPublisher>>,
     board_session: Option<board_composition::RunningMachineSession>,
     owner_human_id: Option<message_board::HumanId>,
+    remote_create_default_approver: Option<collaboration_protocol::SessionRef>,
     project_admission: Option<std::sync::Arc<collaboration_service::ProjectAdmission>>,
     subscription_delivery: Option<collaboration_service::SubscriptionDeliveryService>,
     provider_store:
@@ -151,6 +153,10 @@ pub struct CollaborationRuntime {
     collaboration_api: ServedCollaborationApi,
     tailscale_exposure: Option<crate::tailscale_exposure::TailscaleExposure>,
 }
+#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+#[path = "collaboration_runtime/machine_work_readiness_test_support.rs"]
+mod machine_work_readiness_test_support;
+
 impl CollaborationRuntime {
     pub(crate) const fn mcp_listen_address(&self) -> std::net::SocketAddr {
         self.collaboration_api.local_address()
@@ -230,6 +236,11 @@ impl CollaborationRuntime {
     }
 
     #[must_use]
+    pub fn remote_create_default_approver(&self) -> Option<&collaboration_protocol::SessionRef> {
+        self.remote_create_default_approver.as_ref()
+    }
+
+    #[must_use]
     pub fn service_id(&self) -> &UuidIdentity {
         &self.service_id
     }
@@ -246,12 +257,17 @@ impl CollaborationRuntime {
 #[path = "collaboration_runtime/collaboration_api_serving.rs"]
 mod collaboration_api_serving;
 use collaboration_api_serving::{BoundCollaborationApi, ServedCollaborationApi};
+#[path = "collaboration_runtime/automation_clock.rs"]
+mod automation_clock;
 #[path = "collaboration_runtime/board_composition.rs"]
 mod board_composition;
 #[path = "collaboration_runtime/lifecycle.rs"]
 mod lifecycle;
 #[path = "collaboration_runtime/native_backend.rs"]
 mod native_backend;
+#[cfg(test)]
+#[path = "collaboration_runtime/remote_create_config_tests.rs"]
+mod remote_create_config_tests;
 #[path = "collaboration_runtime/startup_composition.rs"]
 mod startup_composition;
 #[cfg(test)]
@@ -310,3 +326,7 @@ mod provider_retention;
 #[cfg(test)]
 #[path = "collaboration_runtime/startup_failure_tests.rs"]
 mod startup_failure_tests;
+
+#[cfg(debug_assertions)]
+#[path = "collaboration_runtime/debug_automation_control.rs"]
+mod debug_automation_control;

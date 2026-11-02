@@ -185,11 +185,9 @@ fn check_report(
                 cleanup_operations.push(operation_id);
                 if !unavailable {
                     ensure(
-                        matches!(&attempt.outcome, CleanupOutcome::Returned(CleanupObservation::Wake {
-                        state: WakeState::Cancelled, next_due_at: None, pending_delivery_id: None,
-                        discarded_delivery_ids, retained_deliveries,
-                    }) if discarded_delivery_ids.is_empty() && retained_deliveries.is_empty()),
-                        "real wake was not locally Cancelled",
+                        matches!(&attempt.outcome,CleanupOutcome::Returned(CleanupObservation::CentralWake {value,already_sent})
+                            if value.state==WakeState::Cancelled&&value.next_due_at.is_none()&&value.first_firing.is_none()&&already_sent.is_empty()),
+                        "real central Wake was not Cancelled",
                     )?;
                 }
             }
@@ -211,15 +209,10 @@ fn check_report(
                     ensure(
                         matches!(
                             &attempt.outcome,
-                            CleanupOutcome::Returned(CleanupObservation::Schedule {
-                                enabled: false,
-                                next_due_at: None,
-                                active_run_id: None,
-                                waiting_run_id: None,
-                                ..
-                            })
+                            CleanupOutcome::Returned(CleanupObservation::CentralSchedule {value,already_sent})
+                                if !value.definition.enabled&&value.next_due_at.is_none()&&already_sent.is_empty()
                         ),
-                        "real schedule was not locally disabled",
+                        "real central Schedule was not disabled",
                     )?;
                 }
             }

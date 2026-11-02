@@ -2,10 +2,9 @@
 use collaboration_client::{CollaborationClient, MessageSendRequest, PublicMessageContent};
 use collaboration_protocol::{
     ConversationCreateRequest, ConversationLoadRequest, ConversationOperationSettlement,
-    ConversationOperationWaitOutput, ConversationOperationWaitRequest, DeliveryDisposition,
-    DeliveryEvidence, DeliveryOutcome, DeliveryShowRequest, EndpointRef, MessageDelivery,
-    MessageText, OperationId, PositiveSeconds, ProviderRequestedPolicy, ProviderWorkingDirectory,
-    RouterAccess, SessionId, SessionRef, WakeSendRequest, WakeShowRequest,
+    ConversationOperationWaitOutput, ConversationOperationWaitRequest, EndpointRef,
+    MessageDelivery, MessageText, OperationId, PositiveSeconds, ProviderRequestedPolicy,
+    ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef,
 };
 use serde_json::json;
 use sha2::{Digest as _, Sha256};
@@ -261,60 +260,6 @@ pub(super) async fn load_provider_target(
             settlement: ConversationOperationSettlement::Loaded { .. }
         }
     ));
-}
-
-#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
-pub(super) async fn send_and_wait_wake(client: &CollaborationClient, target: SessionRef) {
-    // Omitted expiry ends a day after due; a fixed historical date is already expired.
-    let request: WakeSendRequest = serde_json::from_value(json!({
-        "operationId": OperationId::generate(),
-        "message": {
-            "target": target,
-            "content": {"kind":"humanUser","text":"wake through provider"},
-            "delivery": "auto",
-            "generationGuard": null
-        },
-        "timing": {"kind":"at","at":chrono::Utc::now()},
-        "requestedBy":{"kind":"owner"},"replace":false,"expiry": {"kind":"none"}
-    }))
-    .expect("wake request");
-    let wake = client.send_wakeup(request).await.expect("wake accepted");
-    let delivery_id = tokio::time::timeout(std::time::Duration::from_secs(5), async {
-        loop {
-            let snapshot = client
-                .read_wakeup(WakeShowRequest {
-                    wakeup_id: wake.definition.wakeup_id.clone(),
-                })
-                .await
-                .expect("wake inspection");
-            if let Some(delivery_id) = snapshot.pending_delivery_id {
-                break delivery_id;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("wake fire deadline");
-    tokio::time::timeout(std::time::Duration::from_secs(5), async {
-        loop {
-            let delivery = client
-                .read_delivery(DeliveryShowRequest {
-                    delivery_id: delivery_id.clone(),
-                })
-                .await
-                .expect("delivery inspection");
-            if matches!(delivery.disposition, DeliveryDisposition::Accepted) {
-                assert!(matches!(delivery.evidence,
-                    DeliveryEvidence::Accepted { receipt, .. }
-                    if receipt.outcome == DeliveryOutcome::Started
-                        && receipt.reachability == Some(collaboration_protocol::SessionReachability::ProviderAcp)));
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("wake delivery deadline");
 }
 
 #[path = "provider_conversation_submission.rs"]

@@ -4,7 +4,7 @@ pub(super) fn operation_description(name: &str) -> String {
             "Reads a bounded page of the terminal request decision in an explicit project or workspace scope. Pass the opaque next string as after. Read-only: it does not replay writes, marks or watches. UnknownRequest means no receipt is retrievable here and says nothing about whether retrying would be fresh."
         }
         "instruction_create" => {
-            "Creates one durable automation instruction from validated text and a required operation identity. Creation is local state, not native agent acceptance or completion."
+            "Creates an instruction in the organization's central catalog using validated text and the caller's required operation identity. It does not start native work."
         }
         "instruction_update" => {
             "Revises an existing instruction using its identity and expected revision guard. Returns the stored snapshot; a successful update does not start native work."
@@ -22,10 +22,10 @@ pub(super) fn operation_description(name: &str) -> String {
             "Creates one durable timed wake per target using its required operation identity, recording requestedBy. Active and paused wakes occupy the slot; replace requires the creator, target or declared owner. Reusing the same operation identity replays its first result. The central scheduling result, firing, native input acceptance, carrier acceptance, a completed turn and an agent reply remain separate."
         }
         "wake_show" => {
-            "Reads one wake definition, state, next due time and recorded first-fire evidence. Read-only; it does not wait for or replay delivery."
+            "Reads the Wake's stored owner: an unmoved or handover-pending local Wake returns local snapshot/cursor evidence; other IDs return the central snapshot or the distinct faulted envelope. A central outage never falls back locally. Read-only; it does not wait for or replay delivery."
         }
         "wake_list" => {
-            "Lists a bounded page of stored wakes and their current scheduling state. Read-only and does not fire or deliver them."
+            "Lists unmoved local Wakes first, then central Wakes, retaining local and central result tags and distinct faulted records. Local or handover-pending custody takes precedence for overlapping IDs. The opaque cursor belongs to this service; a handover between pages can move an ID, so cross-page exactly-once is not guaranteed. Read-only; it does not fire or deliver work."
         }
         "wake_pause" => {
             "Pauses an active wake using its wake identity and required operation identity. The mutation affects future eligibility; it does not retract an already accepted native input."
@@ -49,10 +49,10 @@ pub(super) fn operation_description(name: &str) -> String {
             "Reconciles one delivery from existing recorded/native evidence. Requires its delivery identity; it inspects state without resubmitting native input."
         }
         "schedule_import" => {
-            "Imports a validated portable schedule package, optionally overwriting according to the request. This mutates local schedule state but does not prepare or execute a run."
+            "Imports a validated portable Schedule and Instruction into central in one transaction, preserving package IDs and requiring explicit overwrite. The Schedule is always disabled. Replay uses the same operation identity; the result retains actual alreadySent Firing IDs. It does not prepare or execute a Run."
         }
         "schedule_export" => {
-            "Exports one stored schedule as a portable typed package. Read-only and does not enable, prepare or run the schedule."
+            "Exports the central Schedule and its current Instruction as a portable package. On its target Router continuity comes from the latest finished local Run; elsewhere it uses imported continuity. A faulted Schedule returns its unmodified fault envelope. Read-only; it does not enable, prepare or run work."
         }
         "schedule_create" => {
             "Creates a durable schedule from a validated definition. Supply effort for every destination; freshEachRun also requires model. Creation stores configuration only; it does not allocate a conversation or execute work."
@@ -61,10 +61,16 @@ pub(super) fn operation_description(name: &str) -> String {
             "Updates a schedule using its identity and expected change guard. Supply effort for every destination; freshEachRun also requires model. The returned snapshot reflects stored configuration; no run is started."
         }
         "schedule_show" => {
-            "Reads one schedule snapshot by identity without changing timing or execution state."
+            "Reads a central Schedule or its recorded fault by identity without changing timing or execution state. A fault retains the shared fault snapshot and revision."
         }
         "schedule_list" => {
-            "Lists a bounded page of schedules. Read-only and does not prepare or execute them."
+            "Lists central Schedules and recorded Schedule faults, retaining central's opaque continuation even when another catalog kind leaves an empty page. Read-only; it does not prepare or execute work."
+        }
+        "firing_show" => {
+            "Reads a central Firing by its actual ID, including its current outcome and nullable machine report sequence. Timer admission is distinct from native delivery. Read-only; no work is started or retried."
+        }
+        "firing_list" => {
+            "Lists central Firings for one Automation, ordered by due time with central's opaque continuation. Each record retains its actual content revision, outcome, Batch ID and nullable machine report sequence. Read-only; no work is started or retried."
         }
         "schedule_enable" => {
             "Enables a schedule using its identity and existing mutation contract. Enabling permits future eligibility but is not a firing, run acceptance or completion receipt."

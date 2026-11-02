@@ -1,151 +1,164 @@
-//! Real local SDK/socket/storage path; no native runtime or model.
+//! Real central catalog and public SDK path; native effects are absent.
+use collaboration_client::{CentralCatalogFailure, ScheduleClientError, ScheduleReadResponse};
 use collaboration_protocol::{
-    InstructionCreateParams, InstructionText, OperationId, ScheduleCreateRequest,
-    ScheduleShowRequest,
+    AutomationRefusal, AutomationRequestConstraint, InstructionCreateParams, InstructionText,
+    OperationId, ScheduleCreateRequest, ScheduleShowRequest,
 };
-use collaboration_service::ApplicationFixture;
 use serde_json::json;
-use std::sync::Arc;
-#[path = "support/served_api.rs"]
-mod served_api;
+#[path = "support/central_catalog_fixture.rs"]
+mod fixture;
+use fixture::{CatalogFixture, ProofResult};
+
 #[tokio::test]
-async fn sdk_creates_disabled_schedule_without_native_backend()
--> Result<(), Box<dyn std::error::Error>> {
-    let path = std::env::temp_dir().join(format!(
-        "schedule-service-{}.sqlite",
-        OperationId::generate().as_str()
-    ));
-    let store = Arc::new(tokio::sync::Mutex::new(
-        automation_storage::AutomationStore::open(&path).await?,
-    ));
-    let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002",
-    )
-    .map_err(std::io::Error::other)?
-    .with_automation_store(store.clone());
-    let served = served_api::ServedApi::start(identity)?;
-    let client = served.client("schedule-test").await?;
-    let instruction = client
-        .create_instruction(InstructionCreateParams {
-            operation_id: OperationId::generate(),
-            text: InstructionText::try_from("Inspect build status".to_owned())?,
-        })
-        .await?;
-    let request: ScheduleCreateRequest = serde_json::from_value(
-        json!({"operationId":OperationId::generate(),"definition":{"instructionId":instruction.instruction_id,"timing":{"kind":"interval","seconds":600},"enabled":false,"destination":{"kind":"unprepared"},"executionTimeoutSeconds":null,"model":"gpt-5.6-sol","effort":"medium"}}),
-    )?;
-    let first = client.create_schedule(request.clone()).await?;
-    let replay = client.create_schedule(request).await?;
-    if serde_json::to_value(&first)? != serde_json::to_value(replay)? {
-        return Err("schedule creation replay changed result".into());
+async fn sdk_creates_disabled_schedule_without_native_backend() -> ProofResult {
+    let fixture = CatalogFixture::open(|transport| transport, true).await?;
+    let proof: ProofResult = async {
+        let client = fixture.api.client("schedule-test").await?;
+        let instruction = client
+            .create_instruction(InstructionCreateParams {
+                operation_id: OperationId::generate(),
+                text: InstructionText::try_from("Inspect build status".to_owned())?,
+            })
+            .await?;
+        let request: ScheduleCreateRequest = serde_json::from_value(json!({
+            "operationId":OperationId::generate(),"definition":{
+                "instructionId":instruction.instruction_id,
+                "timing":{"kind":"interval","seconds":600},"enabled":false,
+                "destination":{"kind":"unprepared"},"executionTimeoutSeconds":null,
+                "model":"gpt-6-luna","effort":"low"
+            }
+        }))?;
+        let first = client.create_schedule(request.clone()).await?;
+        let replay = client.create_schedule(request).await?;
+        if serde_json::to_value(&first)? != serde_json::to_value(replay)? {
+            return Err("schedule creation replay changed result".into());
+        }
+        let ScheduleReadResponse::Schedule { value: read } = client
+            .read_schedule(ScheduleShowRequest {
+                schedule_id: first.schedule_id.clone(),
+            })
+            .await?
+        else {
+            return Err("new schedule unexpectedly faulted".into());
+        };
+        if read.definition.enabled {
+            return Err("new disabled schedule invented running work".into());
+        }
+        require_no_firings(&client, &read.schedule_id).await?;
+        let operation = OperationId::generate();
+        let rejected = client
+            .enable_schedule(collaboration_protocol::ScheduleEnableRequest {
+                operation_id: operation.clone(),
+                schedule_id: first.schedule_id.clone(),
+            })
+            .await;
+        if !matches!(rejected, Err(ScheduleClientError::Catalog(CentralCatalogFailure::Refused {
+            operation_id:Some(actual),error,..
+        })) if actual == operation && matches!(&*error, AutomationRefusal::InvalidRequest {
+            field,reason:AutomationRequestConstraint::UnpreparedDestination
+        } if field == "enabled"))
+        {
+            return Err("unprepared schedule enabled or failed without typed feedback".into());
+        }
+        let ScheduleReadResponse::Schedule { value: current } = client
+            .read_schedule(ScheduleShowRequest {
+                schedule_id: first.schedule_id,
+            })
+            .await?
+        else {
+            return Err("refused schedule unexpectedly faulted".into());
+        };
+        if serde_json::to_value(&current)? != serde_json::to_value(read)? {
+            return Err("refused enable changed the disabled schedule".into());
+        }
+        Ok(())
     }
-    let read = client
-        .read_schedule(ScheduleShowRequest {
-            schedule_id: first.schedule_id.clone(),
-        })
-        .await?;
-    if read.definition.enabled || read.active_run_id.is_some() || read.waiting_run_id.is_some() {
-        return Err("new disabled schedule invented running work".into());
-    }
-    let rejected = client
-        .enable_schedule(collaboration_protocol::ScheduleEnableRequest {
-            operation_id: OperationId::generate(),
-            schedule_id: first.schedule_id,
-        })
-        .await;
-    if !matches!(
-        rejected,
-        Err(collaboration_client::ScheduleClientError::Rejected(_))
-    ) {
-        return Err("unprepared schedule enabled or failed without typed feedback".into());
-    }
-    served.stop().await?;
-    drop(store);
-    std::fs::remove_file(path)?;
-    Ok(())
+    .await;
+    let stopped = fixture.close().await;
+    proof?;
+    stopped
 }
 
 #[tokio::test]
-async fn sdk_rejects_mode_change_and_thread_preparation_with_actionable_feedback()
--> Result<(), Box<dyn std::error::Error>> {
-    let path = std::env::temp_dir().join(format!(
-        "schedule-mode-sdk-{}.sqlite",
-        OperationId::generate().as_str()
-    ));
-    let store = Arc::new(tokio::sync::Mutex::new(
-        automation_storage::AutomationStore::open(&path).await?,
-    ));
-    let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002",
-    )
-    .map_err(std::io::Error::other)?
-    .with_automation_store(store.clone());
-    let served = served_api::ServedApi::start(identity.clone())?;
-    let client = served.client("mode-fixture").await?;
-    let instruction = client
-        .create_instruction(InstructionCreateParams {
-            operation_id: OperationId::generate(),
-            text: "Check".to_owned().try_into()?,
+async fn sdk_rejects_mode_change_and_thread_preparation_with_actionable_feedback() -> ProofResult {
+    let fixture = CatalogFixture::open(|transport| transport, true).await?;
+    let proof: ProofResult = async {
+        let client = fixture.api.client("mode-fixture").await?;
+        let ready = fixture.transport.call(collaboration_protocol::AutomationCall::PullAutomationBatches(
+            collaboration_protocol::PullAutomationBatches {
+                after: None, max_bytes: 1_048_576,
+                work_protocols: vec![collaboration_protocol::MachineWorkProtocol::MachineWorkV1],
+            },
+        )).await?;
+        if !matches!(ready, collaboration_protocol::AutomationAnswer::Batches(_)) {
+            return Err("mode fixture did not advertise receiving capability".into());
+        }
+        let instruction = client.create_instruction(InstructionCreateParams {
+            operation_id:OperationId::generate(),text:"Check".to_owned().try_into()?,
+        }).await?;
+        let endpoint=json!({"serviceId":fixture::SERVICE,"endpointId":"codex-local"});
+        let created=client.create_schedule(serde_json::from_value(json!({
+            "operationId":OperationId::generate(),"definition":{
+                "instructionId":instruction.instruction_id,"timing":{"kind":"interval","seconds":600},
+                "enabled":false,"destination":{"kind":"freshEachRun","endpoint":endpoint,"cwd":"/isolated-test"},
+                "executionTimeoutSeconds":null,"model":"gpt-6-luna","effort":"low"
+            }
+        }))?).await?;
+        let mut definition=created.definition.clone();
+        definition.destination=collaboration_protocol::ExecutionDestination::Unprepared;
+        let operation=OperationId::generate();
+        let changed=client.update_schedule(collaboration_protocol::ScheduleUpdateRequest {
+            operation_id:operation.clone(),schedule_id:created.schedule_id.clone(),
+            expected_change_id:created.change_id.clone(),definition,
+        }).await;
+        if !matches!(changed, Err(ScheduleClientError::Catalog(CentralCatalogFailure::Refused {
+            operation_id:Some(actual),error,..
+        })) if actual == operation && matches!(&*error, AutomationRefusal::InvalidRequest {
+            field,reason:AutomationRequestConstraint::ExecutionModeFixed
+        } if field == "destination")) {
+            return Err("mode update lost central's typed destination refusal".into());
+        }
+        let preparation=client.prepare_schedule(serde_json::from_value(json!({
+            "operationId":OperationId::generate(),"scheduleId":created.schedule_id,
+            "destination":{"kind":"fresh","endpoint":endpoint,"cwd":"/isolated-test"}
+        }))?).await;
+        let Err(ScheduleClientError::Rejected(error))=preparation else {
+            return Err("mode preparation lacked typed rejection".into());
+        };
+        if !matches!(error.kind,collaboration_protocol::ScheduleFailureKind::InvalidField)
+            || error.field.as_deref()!=Some("destination")
+            || !error.message.contains("fixed at creation")
+            || !matches!(error.next_action,collaboration_protocol::ScheduleNextAction::CorrectRequest)
+        {
+            return Err(format!("mode preparation omitted field, reason or recovery action: {error:?}").into());
+        }
+        let ScheduleReadResponse::Schedule { value: current }=client.read_schedule(ScheduleShowRequest {
+            schedule_id:created.schedule_id,
+        }).await? else { return Err("mode refusal unexpectedly faulted schedule".into()); };
+        if current.change_id!=created.change_id {
+            return Err("rejected mode request changed schedule or started work".into());
+        }
+        require_no_firings(&client, &current.schedule_id).await?;
+        Ok(())
+    }.await;
+    let stopped = fixture.close().await;
+    proof?;
+    stopped
+}
+
+async fn require_no_firings(
+    client: &collaboration_client::CollaborationClient,
+    id: &collaboration_protocol::ScheduleId,
+) -> ProofResult {
+    let page = client
+        .list_firings(collaboration_protocol::FiringListRequest {
+            automation_id: id.as_str().to_owned().try_into()?,
+            cursor: None,
+            limit: 50.try_into()?,
         })
         .await?;
-    let endpoint =
-        json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"});
-    let created = client.create_schedule(serde_json::from_value(json!({
-        "operationId":OperationId::generate(),"definition":{"instructionId":instruction.instruction_id,
-        "timing":{"kind":"interval","seconds":60},"enabled":false,
-        "destination":{"kind":"freshEachRun","endpoint":endpoint,"cwd":"/isolated-test"},"executionTimeoutSeconds":null,"model":"gpt-5.6-sol","effort":"medium"}
-    }))?).await?;
-    served.stop().await?;
-    for prepare in [false, true] {
-        let served = served_api::ServedApi::start(identity.clone())?;
-        let client = served.client("mode-rejection").await?;
-        let result = if prepare {
-            client
-                .prepare_schedule(serde_json::from_value(json!({
-                    "operationId":OperationId::generate(),"scheduleId":created.schedule_id,
-                    "destination":{"kind":"fresh","endpoint":endpoint,"cwd":"/isolated-test"}
-                }))?)
-                .await
-        } else {
-            let mut definition = created.definition.clone();
-            definition.destination = collaboration_protocol::ExecutionDestination::Unprepared;
-            client
-                .update_schedule(collaboration_protocol::ScheduleUpdateRequest {
-                    operation_id: OperationId::generate(),
-                    schedule_id: created.schedule_id.clone(),
-                    expected_change_id: created.change_id.clone(),
-                    definition,
-                })
-                .await
-        };
-        let Err(collaboration_client::ScheduleClientError::Rejected(error)) = result else {
-            return Err("mode change lacked typed rejection".into());
-        };
-        if !matches!(
-            error.kind,
-            collaboration_protocol::ScheduleFailureKind::InvalidField
-        ) || error.field.as_deref() != Some("destination")
-            || !error.message.contains("fixed at creation")
-            || !matches!(
-                error.next_action,
-                collaboration_protocol::ScheduleNextAction::CorrectRequest
-            )
-        {
-            return Err("mode rejection omitted field, reason or recovery action".into());
-        }
-        served.stop().await?;
+    if !page.records.is_empty() || page.next_cursor.is_some() {
+        return Err("disabled/refused Schedule invented admitted central work".into());
     }
-    let current = store.lock().await.inspect_schedule::<collaboration_protocol::SessionRef, collaboration_protocol::EndpointRef>(&created.schedule_id).await?;
-    if current.record.change_id != created.change_id
-        || current.active_run_id.is_some()
-        || current.waiting_run_id.is_some()
-    {
-        return Err("rejected mode request changed schedule or started work".into());
-    }
-    drop(identity);
-    drop(store);
-    std::fs::remove_file(path)?;
     Ok(())
 }

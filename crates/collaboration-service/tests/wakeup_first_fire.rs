@@ -1,34 +1,31 @@
 use collaboration_client::WakeWaitError;
 use collaboration_protocol::{OperationId, WakeMutationRequest, WakeSendRequest, WakeShowRequest};
-use collaboration_service::ApplicationFixture;
 use serde_json::json;
-use std::sync::Arc;
-#[path = "support/served_api.rs"]
-mod served_api;
+#[path = "support/central_catalog_fixture.rs"]
+mod fixture;
+#[path = "support/legacy_wake.rs"]
+mod legacy;
+use fixture::{CatalogFixture, ProofResult};
 #[path = "support/wake_push_draft.rs"]
 mod wake_push_test_support;
 #[tokio::test]
-async fn dedicated_wait_observes_pause_after_immediate_resume()
--> Result<(), Box<dyn std::error::Error>> {
-    let path = std::env::temp_dir().join(format!(
-        "wake-first-fire-{}.sqlite",
-        OperationId::generate().as_str()
-    ));
-    let store = Arc::new(tokio::sync::Mutex::new(
-        automation_storage::AutomationStore::open(&path).await?,
-    ));
-    let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002",
-    )
-    .map_err(std::io::Error::other)?
-    .with_automation_store(store.clone());
-    let served = served_api::ServedApi::start(identity)?;
+async fn dedicated_wait_observes_pause_after_immediate_resume() -> ProofResult {
+    let fixture = CatalogFixture::open(|transport| transport, true).await?;
+    let served = &fixture.api;
+    let store = fixture
+        .store
+        .as_ref()
+        .ok_or("local state fixture missing")?;
     let client = served.client("wake-control").await?;
     let request: WakeSendRequest = serde_json::from_value(
         json!({"operationId":OperationId::generate(),"message":{"target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"fixture-only"},"content":{"kind":"humanUser","text":"Check"},"delivery":"auto","generationGuard":null},"timing":{"kind":"interval","seconds":300},"requestedBy":{"kind":"owner"},"replace":false,"expiry":{"kind":"after","seconds":7200}}),
     )?;
-    let wake = client.send_wakeup(request).await?;
+    let id = legacy::seed(store, request).await?;
+    let wake = legacy::snapshot(
+        client
+            .read_wakeup(WakeShowRequest { wakeup_id: id })
+            .await?,
+    )?;
     let wait = served
         .client("wake-wait")
         .await?
@@ -80,6 +77,10 @@ async fn dedicated_wait_observes_pause_after_immediate_resume()
         .await?
         .wait_until_first_fire()
         .await?;
+    let collaboration_client::WakeFirstFireResponse::Local { value: historical } = historical
+    else {
+        return Err("historical local first fire lost its actual receipt".into());
+    };
     if historical.wakeup_id != wake.definition.wakeup_id {
         return Err("historical firing identity changed".into());
     }
@@ -93,8 +94,5 @@ async fn dedicated_wait_observes_pause_after_immediate_resume()
     if !matches!(missing, Err(WakeWaitError::NotFound { .. })) {
         return Err("missing wake was confused with unavailable observation".into());
     }
-    served.stop().await?;
-    drop(store);
-    std::fs::remove_file(path)?;
-    Ok(())
+    fixture.close().await
 }

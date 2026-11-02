@@ -195,6 +195,42 @@ async fn summary_completion_requires_exact_attempt_and_retains_source()
     {
         return Err("summary completion lost worker outcome or current text".into());
     }
+    // Export reads the same finished Run owner, preferring its actual summary over import.
+    let continuity = store
+        .export_schedule_continuity(
+            &schedule.schedule_id,
+            ContinuityInput::ImportedSummary {
+                text: "Older imported context".into(),
+                source_run_id: "imported-run".into(),
+                source_target: "foreign-thread".to_owned(),
+                import_operation_id: OperationId::generate(),
+            },
+        )
+        .await?;
+    if !matches!(continuity, Some(summary)
+        if summary.text.as_str() == "Verified completed task context" && summary.source_run_id == run.as_str() && summary.source_target == "B")
+    {
+        return Err("export continuity did not use the actual latest finished local Run".into());
+    }
+    // Stored text without its recorded source is corrupt, not absent continuity.
+    use sqlx::Connection;
+    let mut corruptor = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
+    )
+    .await?;
+    sqlx::query("UPDATE workflow_runs SET summary_source_json=NULL WHERE run_id=?")
+        .bind(run.as_str())
+        .execute(&mut corruptor)
+        .await?;
+    corruptor.close().await?;
+    if !matches!(
+        store
+            .export_schedule_continuity(&schedule.schedule_id, ContinuityInput::<String>::None)
+            .await,
+        Err(automation_storage::StorageError::InvalidRecord)
+    ) {
+        return Err("export silently treated corrupt summary provenance as no summary".into());
+    }
     store.close().await?;
     std::fs::remove_file(path)?;
     Ok(())

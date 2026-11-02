@@ -3,6 +3,10 @@ use std::error::Error;
 use super::ProviderOperationStore;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The assertion checks the stored PRAGMA; Result propagates fixture and database failures."
+)]
 async fn new_provider_operation_database_uses_incremental_auto_vacuum() -> Result<(), Box<dyn Error>>
 {
     let directory = tempfile::tempdir()?;

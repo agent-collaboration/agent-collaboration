@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO schedule_timing_state(schedule_id,applied_change_id,anchor_at_ms,evaluated_through_ms,next_due_at_ms) VALUES (?,?,?,?,NULL) ON CONFLICT(schedule_id) DO UPDATE SET applied_change_id=excluded.applied_change_id,next_due_at_ms=NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "a2b6ff367d024014deaca8caf14cb503f8f4c0824e0821ccbd7ea82896b5d65b"
+}

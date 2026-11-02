@@ -374,7 +374,7 @@ async fn create_empty_conversation(
                 created_by: ConversationCreateActor::Session(creator.clone()),
                 approver: Some(ConversationCreateActor::Session(creator.clone())),
                 generation: None,
-                model: Some("gpt-5.6-luna".to_owned()),
+                model: Some("gpt-6-luna".to_owned()),
                 mode: None,
                 effort: Some("low".to_owned()),
                 fork: None,
@@ -408,7 +408,7 @@ async fn cli_codex_create_then_prompt_load_route(
             "--endpoint",
             "codex-local",
             "--model",
-            "gpt-5.6-luna",
+            "gpt-6-luna",
             "--effort",
             "low",
             "--access",
@@ -614,7 +614,7 @@ async fn schedule_send(
                 enabled: false,
                 destination: ExecutionDestination::Unprepared,
                 execution_timeout_seconds: Some(120.try_into()?),
-                model: Some("gpt-5.6-luna".to_owned()),
+                model: Some("gpt-6-luna".to_owned()),
                 effort: Some("low".to_owned()),
             },
         })
@@ -637,6 +637,13 @@ async fn schedule_send(
             schedule_id: schedule.schedule_id,
         })
         .await?;
+    let collaboration_client::ScheduleMutationResponse::Central(enabled) = enabled else {
+        return Err("central Schedule control changed to Local".into());
+    };
+    let collaboration_client::CatalogAutomationResult::Schedule(enabled) = enabled.automation
+    else {
+        return Err("Schedule enable returned a different automation kind".into());
+    };
     if enabled.next_due_at.is_none() {
         return Err("Scheduled delivery has no next due time".into());
     }

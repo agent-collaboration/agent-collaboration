@@ -10,34 +10,55 @@ use collaboration_protocol::{
 
 #[tokio::test]
 async fn remote_wake_history_and_show_schemas_accept_cancelled_nullable_snapshots() {
-    // Arrange: real wake operations supply the snapshot, rather than a schema-shaped sample.
+    // The retained result comes from real local storage and owner operations.
     let directory = tempfile::tempdir().expect("automation directory");
     let store = std::sync::Arc::new(tokio::sync::Mutex::new(
         automation_storage::AutomationStore::open(&directory.path().join("automation.sqlite"))
             .await
             .expect("automation store"),
     ));
-    let application =
-        (crate::api_test_harness::test_identity().with_automation_store(store)).build();
-    let created = application
-        .wakes()
-        .wake_send(
-            serde_json::from_value::<WakeSendRequest>(serde_json::json!({
-                "operationId": OperationId::generate(),
-                "requestedBy": {"kind":"owner"},
-                "replace": false,
-                "message": {
-                    "target": fixture_session("codex-local", "schema-wake"),
-                    "content": {"kind":"humanUser", "text":"schema regression"},
-                    "delivery": "auto"
-                },
-                "timing": {"kind":"after", "seconds":60},
-                "expiry": {"kind":"after", "seconds":120}
-            }))
-            .expect("wake request"),
-        )
+    // Arrange retained pre-upgrade state, then read it through the actual public owner.
+    let request: WakeSendRequest = serde_json::from_value(serde_json::json!({
+        "operationId":OperationId::generate(),"requestedBy":{"kind":"owner"},"replace":false,
+        "message":{"target":fixture_session("codex-local","schema-wake"),"content":{"kind":"humanUser","text":"schema regression"},"delivery":"auto"},
+        "timing":{"kind":"after","seconds":60},"expiry":{"kind":"after","seconds":120}
+    })).expect("legacy wake request");
+    let created_id = store
+        .lock()
         .await
-        .expect("create real wake");
+        .create_wakeup(&automation_storage::WakeCreate {
+            operation_id: request.operation_id,
+            requested_by: request.requested_by,
+            replace: request.replace,
+            message: request.message,
+            timing: serde_json::from_value(serde_json::to_value(request.timing).expect("timing"))
+                .expect("legacy timing"),
+            expiry: serde_json::from_value(serde_json::to_value(request.expiry).expect("expiry"))
+                .expect("legacy expiry"),
+            now_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("fixture clock after epoch")
+                .as_millis()
+                .try_into()
+                .expect("fixture milliseconds fit storage"),
+        })
+        .await
+        .expect("actual legacy storage constructor")
+        .definition
+        .wakeup_id;
+    let application = crate::api_test_harness::test_identity()
+        .with_automation_store(store.clone())
+        .build();
+    let collaboration_service::WakeReadResponse::Local { value: created } = application
+        .wakes()
+        .wake_show(collaboration_protocol::WakeShowRequest {
+            wakeup_id: created_id,
+        })
+        .await
+        .expect("read retained Wake")
+    else {
+        panic!("retained local schema fixture changed owner");
+    };
     let cancelled = application
         .wakes()
         .wake_cancel(WakeMutationRequest {
@@ -46,6 +67,9 @@ async fn remote_wake_history_and_show_schemas_accept_cancelled_nullable_snapshot
         })
         .await
         .expect("cancel real wake");
+    let collaboration_service::WakeMutationResponse::Local(cancelled) = cancelled else {
+        panic!("retained local cancellation changed owner");
+    };
     assert_eq!(cancelled.wakeup.state, WakeState::Cancelled);
     let cancelled_wire = serde_json::to_value(&cancelled.wakeup).expect("cancelled snapshot");
     for field in ["nextDueAt", "firstFire", "pendingDeliveryId"] {
@@ -125,4 +149,11 @@ async fn remote_wake_history_and_show_schemas_accept_cancelled_nullable_snapshot
             }
         }
     }
+    drop(application);
+    std::sync::Arc::try_unwrap(store)
+        .unwrap_or_else(|_| panic!("schema fixture still owns storage"))
+        .into_inner()
+        .close()
+        .await
+        .expect("close schema fixture");
 }

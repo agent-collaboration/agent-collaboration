@@ -146,7 +146,7 @@ async fn replace_occupant<TMessage: DurableMessage + DeserializeOwned>(
     }
     let target =
         serde_json::to_string(request.message.target()).map_err(|_| StorageError::InvalidRecord)?;
-    let occupant = sqlx::query_scalar!("SELECT wakeup_id FROM wakeup_definitions WHERE wakeup_status IN ('active','paused') AND json_extract(definition_json,'$.message.target.endpoint.serviceId')=json_extract(?,'$.endpoint.serviceId') AND json_extract(definition_json,'$.message.target.endpoint.endpointId')=json_extract(?,'$.endpoint.endpointId') AND json_extract(definition_json,'$.message.target.sessionId')=json_extract(?,'$.sessionId') LIMIT 1", target, target, target)
+    let occupant = sqlx::query_scalar!("SELECT wakeup_id FROM wakeup_definitions WHERE authority='local' AND wakeup_status IN ('active','paused') AND json_extract(definition_json,'$.message.target.endpoint.serviceId')=json_extract(?,'$.endpoint.serviceId') AND json_extract(definition_json,'$.message.target.endpoint.endpointId')=json_extract(?,'$.endpoint.endpointId') AND json_extract(definition_json,'$.message.target.sessionId')=json_extract(?,'$.sessionId') LIMIT 1", target, target, target)
         .fetch_optional(&mut *connection).await?;
     // The legacy TEXT primary key is nullable in SQLite; a matching row must
     // still carry a valid identity, rather than disappearing from the slot.
@@ -193,11 +193,22 @@ pub(crate) async fn read_current<TMessage: DeserializeOwned>(
     connection: &mut SqliteConnection,
     id: &WakeupId,
 ) -> Result<WakeRecord<TMessage, collaboration_protocol::WakeCreator>, StorageError> {
-    let row=sqlx::query("SELECT definition_json,wakeup_status,next_due_at_ms,first_fire_json,pending_delivery_id,COALESCE((SELECT seq FROM sqlite_sequence WHERE name='automation_events'),0) AS event_sequence FROM wakeup_definitions WHERE wakeup_id=?")
+    let row=sqlx::query("SELECT authority,definition_json,wakeup_status,next_due_at_ms,first_fire_json,pending_delivery_id,COALESCE((SELECT seq FROM sqlite_sequence WHERE name='automation_events'),0) AS event_sequence FROM wakeup_definitions WHERE wakeup_id=?")
         .bind(id.as_str()).fetch_optional(connection).await?.ok_or(StorageError::WakeNotFound)?;
+    let authority = crate::automation_authority::AutomationAuthority::try_from(
+        row.try_get::<&str, _>("authority")?,
+    )
+    .map_err(|_| StorageError::InvalidRecord)?;
     let definition: WakeDefinition<TMessage, collaboration_protocol::WakeCreator> =
         serde_json::from_str(&row.try_get::<String, _>("definition_json")?)
             .map_err(|_| StorageError::InvalidRecord)?;
+    if authority == crate::automation_authority::AutomationAuthority::Central {
+        crate::central_definition_projection::validate_central_timing(
+            &definition.timing,
+            collaboration_protocol::AutomationKind::Wake,
+            definition.anchor_at_ms,
+        )?;
+    }
     if definition.wakeup_id != *id {
         return Err(StorageError::InvalidRecord);
     }

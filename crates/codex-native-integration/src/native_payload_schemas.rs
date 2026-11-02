@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub enum NativeOperation {
+    ListModels,
     ReadThread,
     ResumeThread,
     StartThread,
@@ -27,6 +28,7 @@ impl NativeOperation {
 
     pub(crate) fn contract(self) -> (&'static str, &'static str, &'static str) {
         match self {
+            Self::ListModels => ("model/list", "ModelListParams", "ModelListResponse"),
             Self::QueueList => (
                 "thread/queue/list",
                 "ThreadQueueListParams",
@@ -77,7 +79,8 @@ impl NativeOperation {
     pub(crate) fn has_effects(self) -> bool {
         !matches!(
             self,
-            Self::ReadThread
+            Self::ListModels
+                | Self::ReadThread
                 | Self::ListLoadedThreads
                 | Self::ListTurns
                 | Self::ListItems
@@ -114,6 +117,7 @@ impl NativePayloadSchemas {
             );
         }
         for operation in [
+            NativeOperation::ListModels,
             NativeOperation::QueueAdd,
             NativeOperation::QueueList,
             NativeOperation::ForkThread,

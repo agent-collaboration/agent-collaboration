@@ -339,6 +339,7 @@ mod tests {
         let actor: collaboration_protocol::SessionRef = serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"})).unwrap();
         // Fixture: this existing binding has a recorded Router profile; native omits it.
         binding.access_route = Some(crate::ApprovalRoute {
+            source_installation: None,
             thread_id: "thread-a".into(),
             created_by: actor.clone(),
             approver: actor,

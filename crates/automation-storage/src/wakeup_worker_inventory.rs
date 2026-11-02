@@ -8,7 +8,7 @@ impl AutomationStore {
         limit: u32,
     ) -> Result<Vec<WakeupId>, StorageError> {
         validate_batch(now_ms, limit)?;
-        let ids:Vec<String>=sqlx::query_scalar("SELECT wakeup_id FROM wakeup_definitions WHERE (wakeup_status='active' AND next_due_at_ms<=?) OR (wakeup_status IN ('active','paused') AND expires_at_ms<=?) ORDER BY COALESCE(next_due_at_ms,expires_at_ms),wakeup_id LIMIT ?")
+        let ids:Vec<String>=sqlx::query_scalar("SELECT wakeup_id FROM wakeup_definitions WHERE authority='local' AND ((wakeup_status='active' AND next_due_at_ms<=?) OR (wakeup_status IN ('active','paused') AND expires_at_ms<=?)) ORDER BY COALESCE(next_due_at_ms,expires_at_ms),wakeup_id LIMIT ?")
             .bind(now_ms).bind(now_ms).bind(i64::from(limit)).fetch_all(&mut self.connection).await?;
         ids.into_iter()
             .map(|id| id.try_into().map_err(|_| StorageError::InvalidRecord))

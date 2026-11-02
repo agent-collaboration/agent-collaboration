@@ -182,6 +182,7 @@ async fn cold_message_probe(case: ProbeCase) -> Result<ProbeObservation, TestErr
     if !matches!(case.authority, RecordedAuthority::Absent) {
         broker
             .register_route(ApprovalRoute {
+                source_installation: None,
                 thread_id: THREAD.into(),
                 created_by: target(),
                 approver: target(),

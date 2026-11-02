@@ -67,7 +67,7 @@ pub fn upgrade_stored_failure(mut value: Value) -> Result<Value, StorageError> {
     Ok(value)
 }
 
-fn validate_prepared_target(prepared: &PreparedTarget) -> Result<(), DeliveryContractError> {
+pub fn validate_prepared_target(prepared: &PreparedTarget) -> Result<(), DeliveryContractError> {
     if !prepared.evidence.is_valid() {
         return Err(DeliveryContractError::InvalidEvidence);
     }
@@ -87,7 +87,7 @@ fn validate_prepared_target(prepared: &PreparedTarget) -> Result<(), DeliveryCon
     }
 }
 
-fn same_preparation_identity(
+pub fn same_preparation_identity(
     before: &RouteEffectEvidence<SessionRef, CodexGeneration>,
     after: &RouteEffectEvidence<SessionRef, CodexGeneration>,
 ) -> bool {

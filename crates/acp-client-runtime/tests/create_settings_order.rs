@@ -10,6 +10,9 @@ use acp_client_runtime::{
 use session_event_model::{ApprovalRequest, SessionEvent};
 use tokio_util::sync::CancellationToken;
 
+#[path = "create_settings_order/remote_create_settings.rs"]
+mod remote_create_settings;
+
 const SETTINGS_FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../verification/fixtures/provider-create-settings-agent.ts"

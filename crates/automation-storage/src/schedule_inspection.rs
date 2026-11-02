@@ -30,6 +30,10 @@ pub(crate) async fn read_current<TTarget: DeserializeOwned, TEndpoint: Deseriali
     id: &ScheduleId,
 ) -> Result<ScheduleRecord<TTarget, TEndpoint>, StorageError> {
     let row=sqlx::query("SELECT s.*,t.anchor_at_ms,t.next_due_at_ms,t.applied_change_id FROM schedule_definitions s JOIN schedule_timing_state t ON s.schedule_id=t.schedule_id WHERE s.schedule_id=?").bind(id.as_str()).fetch_optional(connection).await?.ok_or(StorageError::ScheduleNotFound)?;
+    let authority = crate::automation_authority::AutomationAuthority::try_from(
+        row.try_get::<&str, _>("authority")?,
+    )
+    .map_err(|_| StorageError::InvalidRecord)?;
     let change: String = row.try_get("change_id")?;
     if change != row.try_get::<String, _>("applied_change_id")? {
         return Err(StorageError::InvalidRecord);
@@ -37,6 +41,13 @@ pub(crate) async fn read_current<TTarget: DeserializeOwned, TEndpoint: Deseriali
     let definition: agent_automation::ScheduleDefinition<TTarget, TEndpoint> =
         serde_json::from_str(&row.try_get::<String, _>("definition_json")?)
             .map_err(|_| StorageError::InvalidRecord)?;
+    if authority == crate::automation_authority::AutomationAuthority::Central {
+        crate::central_definition_projection::validate_central_timing(
+            &definition.timing,
+            collaboration_protocol::AutomationKind::Schedule,
+            row.try_get("anchor_at_ms")?,
+        )?;
+    }
     if definition.instruction_id.as_str() != row.try_get::<String, _>("instruction_id")?
         || definition.enabled != row.try_get::<bool, _>("enabled")?
     {

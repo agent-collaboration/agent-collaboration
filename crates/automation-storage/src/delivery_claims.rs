@@ -57,7 +57,15 @@ impl AutomationStore {
             .execute(&mut *transaction)
             .await?;
             sqlx::query("UPDATE wakeup_definitions SET pending_delivery_id=NULL WHERE pending_delivery_id=?").bind(id.as_str()).execute(&mut *transaction).await?;
+            crate::central_work_transitions::report_delivery_phase(
+                &mut transaction,
+                id,
+                "discarded",
+                (self.central_report_clock)(),
+            )
+            .await?;
             transaction.commit().await?;
+            self.central_reports_changed.notify_one();
             return Ok(None);
         }
         let wakeup_id = WakeupId::try_from(row.try_get::<String, _>("wakeup_id")?)

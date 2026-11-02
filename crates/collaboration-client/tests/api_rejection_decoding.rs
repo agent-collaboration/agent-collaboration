@@ -4,6 +4,7 @@ use collaboration_client::protocol::{
     SessionMessageSendParams,
 };
 use collaboration_client::{ClientError, CollaborationClient, operation_failure_from_client_error};
+use collaboration_service::collaboration_rejection::CollaborationRejection;
 use serde_json::{Value, json};
 
 #[expect(
@@ -13,6 +14,196 @@ use serde_json::{Value, json};
 #[path = "support/scripted_api.rs"]
 mod scripted_api;
 use scripted_api::{SCRIPTED_SERVICE_ID, ScriptedApi};
+
+#[tokio::test]
+async fn schedule_export_fault_preserves_the_shared_snapshot_and_rejects_other_identities() {
+    use collaboration_protocol::{
+        AutomationFault, AutomationKind, AutomationRefusal, FaultedAutomationSnapshot, ScheduleId,
+        ScheduleShowRequest,
+    };
+    let schedule_id = ScheduleId::generate();
+    for scenario in ["same", "other-id", "other-kind"] {
+        let fault = FaultedAutomationSnapshot {
+            automation_id: if scenario == "other-id" {
+                ScheduleId::generate().as_str().to_owned()
+            } else {
+                schedule_id.as_str().to_owned()
+            }
+            .try_into()
+            .unwrap(),
+            kind: if scenario == "other-kind" {
+                AutomationKind::Wake
+            } else {
+                AutomationKind::Schedule
+            },
+            revision: collaboration_protocol::ChangeId::generate(),
+            fault: AutomationFault {
+                error: AutomationRefusal::InvalidRecord {
+                    field: "definition_json".into(),
+                },
+                faulted_at: "2026-11-01T12:00:00Z".to_owned().try_into().unwrap(),
+            },
+        };
+        let expected = serde_json::to_value(&fault).unwrap();
+        // This is codec evidence, using the real service publisher and the shared S2 type.
+        let published =
+            collaboration_service::CatalogReadFailure::faulted(fault).published_rejection();
+        let data = published.data.unwrap();
+        assert_eq!(data["kind"], "faulted");
+        assert!(data["message"].is_string());
+        assert_eq!(data["fault"], expected);
+        let (api, mut calls) = ScriptedApi::start().unwrap();
+        let fixture = tokio::spawn(async move {
+            let request = calls.next().await.unwrap();
+            assert_eq!(request.tool, "schedule_export");
+            request.fail(published_rejection(-32050, data));
+        });
+        let client = CollaborationClient::connect(api.directory(), "catalog-fault", "1")
+            .await
+            .unwrap();
+        let result = client
+            .export_schedule(ScheduleShowRequest {
+                schedule_id: schedule_id.clone(),
+            })
+            .await;
+        fixture.await.unwrap();
+        match (scenario, result) {
+            ("same", Err(collaboration_client::ScheduleClientError::ReadFailure(error))) => {
+                assert_eq!(serde_json::to_value(error.fault()).unwrap(), expected);
+            }
+            (
+                "other-id" | "other-kind",
+                Err(collaboration_client::ScheduleClientError::Connection(ClientError::Protocol(
+                    _,
+                ))),
+            ) => {}
+            (_, other) => panic!(
+                "fault snapshot was changed or accepted for another Schedule identity: {other:?}"
+            ),
+        }
+    }
+}
+
+#[tokio::test]
+async fn instruction_catalog_failures_preserve_unsent_unknown_and_refusal_with_operation_identity()
+{
+    use collaboration_client::{CentralCatalogFailure, InstructionClientError};
+    use collaboration_protocol::{AutomationRefusal, InstructionCreateParams, OperationId};
+    let operation = OperationId::generate();
+    let cases = [
+        collaboration_service::CentralCatalogFailure::CentralUnreachable {
+            operation_id: Some(operation.clone()),
+        },
+        collaboration_service::CentralCatalogFailure::OutcomeUnknown {
+            operation_id: operation.clone(),
+        },
+        collaboration_service::CentralCatalogFailure::Refused {
+            operation_id: Some(operation.clone()),
+            error: AutomationRefusal::OperationConflict {
+                operation_id: operation.clone(),
+            },
+        },
+    ];
+    for (ordinal, failure) in cases.into_iter().enumerate() {
+        // Arrange: the real service serializer publishes through the real client carrier.
+        let (api, mut calls) = ScriptedApi::start().unwrap();
+        let expected = operation.clone();
+        let fixture = tokio::spawn(async move {
+            let request = calls.next().await.unwrap();
+            assert_eq!(request.tool, "instruction_create");
+            assert_eq!(request.arguments["operationId"], json!(expected));
+            request.fail(published_rejection(
+                -32050,
+                failure.published_rejection().data.unwrap(),
+            ));
+        });
+        let client = CollaborationClient::connect(api.directory(), "catalog-error", "1")
+            .await
+            .unwrap();
+        // Act: the instruction client must classify the actual failure, retaining its ID.
+        let error = client
+            .create_instruction(InstructionCreateParams {
+                operation_id: operation.clone(),
+                text: "Catalog failure proof".to_owned().try_into().unwrap(),
+            })
+            .await
+            .unwrap_err();
+        fixture.await.unwrap();
+        // Assert: literal scenarios decide the expected variant; no decoder builds the oracle.
+        let observed = format!("{error:?}");
+        let preserved = match (ordinal, error) {
+            (
+                0,
+                InstructionClientError::Catalog(CentralCatalogFailure::CentralUnreachable {
+                    operation_id,
+                    ..
+                }),
+            ) => operation_id.as_ref() == Some(&operation),
+            (
+                1,
+                InstructionClientError::Catalog(CentralCatalogFailure::OutcomeUnknown {
+                    operation_id,
+                    ..
+                }),
+            ) => operation_id == operation,
+            (
+                2,
+                InstructionClientError::Catalog(CentralCatalogFailure::Refused {
+                    operation_id,
+                    error,
+                    ..
+                }),
+            ) => {
+                operation_id.as_ref() == Some(&operation)
+                    && matches!(*error, AutomationRefusal::OperationConflict { operation_id } if operation_id == operation)
+            }
+            _ => false,
+        };
+        assert!(
+            preserved,
+            "catalog failure lost its typed state, refusal or operation identity in case {ordinal}: {observed}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn instruction_catalog_failure_cannot_substitute_another_operation_identity() {
+    use collaboration_client::InstructionClientError;
+    use collaboration_protocol::{InstructionCreateParams, OperationId};
+    let operation = OperationId::generate();
+    let other = OperationId::generate();
+    let (api, mut calls) = ScriptedApi::start().unwrap();
+    let fixture = tokio::spawn(async move {
+        let request = calls.next().await.unwrap();
+        request.fail(published_rejection(
+            -32050,
+            collaboration_service::CentralCatalogFailure::OutcomeUnknown {
+                operation_id: other,
+            }
+            .published_rejection()
+            .data
+            .unwrap(),
+        ));
+    });
+    let client = CollaborationClient::connect(api.directory(), "catalog-wrong-operation", "1")
+        .await
+        .unwrap();
+    let error = client
+        .create_instruction(InstructionCreateParams {
+            operation_id: operation,
+            text: "Keep caller identity".to_owned().try_into().unwrap(),
+        })
+        .await
+        .unwrap_err();
+    fixture.await.unwrap();
+    assert!(
+        matches!(
+            error,
+            InstructionClientError::Connection(ClientError::Protocol(_))
+        ),
+        "a correlated API reply supplied another operation ID: {error:?}"
+    );
+}
 
 #[tokio::test]
 async fn client_preserves_valid_cursor_errors() {

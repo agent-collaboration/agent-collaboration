@@ -36,8 +36,8 @@ fn message_features_do_not_import_client_routes() {
             include_str!("../../collaboration-runtime/src/run_reconciliation.rs"),
         ),
         (
-            "schedule activation",
-            include_str!("../src/schedule_activation.rs"),
+            "schedule catalog administration",
+            include_str!("../src/collaboration_application/catalog_schedule_operations.rs"),
         ),
         (
             "schedule preparation",

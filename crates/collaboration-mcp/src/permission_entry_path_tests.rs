@@ -189,6 +189,7 @@ impl ApprovalFixture {
             .expect("delivery injection");
         broker
             .register_route(ApprovalRoute {
+                source_installation: None,
                 thread_id: String::from(requester.session_id.clone()),
                 created_by: requester.clone(),
                 approver: approver.clone(),

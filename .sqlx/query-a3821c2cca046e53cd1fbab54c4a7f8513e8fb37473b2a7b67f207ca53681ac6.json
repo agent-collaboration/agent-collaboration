@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO schedule_definitions(schedule_id,change_id,instruction_id,enabled,definition_json,imported_continuity_json,created_at_ms,updated_at_ms,authority) VALUES (?,?,?,?,?,'{\"kind\":\"none\"}',?,?,'central') ON CONFLICT(schedule_id) DO UPDATE SET change_id=excluded.change_id,instruction_id=excluded.instruction_id,enabled=excluded.enabled,definition_json=excluded.definition_json,updated_at_ms=excluded.updated_at_ms",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "a3821c2cca046e53cd1fbab54c4a7f8513e8fb37473b2a7b67f207ca53681ac6"
+}

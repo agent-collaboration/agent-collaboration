@@ -41,6 +41,11 @@ pub enum RemoteWakePreparation {
         snapshot: Option<Box<WakeSnapshot>>,
     },
 }
+/// An immutable old operation, read only while its release-retention window remains open.
+pub struct RecordedRemoteWake {
+    pub request: RemoteWakeMail,
+    pub snapshot: Option<Box<WakeSnapshot>>,
+}
 pub struct WakeListingKey {
     pub wakeup_id: WakeupId,
     pub remote: bool,
@@ -66,30 +71,11 @@ impl AutomationStore {
             return Err(StorageError::OperationConflict);
         }
         if let Some(row) = sqlx::query_as!(StoredWakeRequest,"SELECT target_json,canonical_request,body_json,valid_until_ms,wakeup_id,snapshot_json FROM remote_wake_requests WHERE operation_id=?",request.operation_id.as_str()).fetch_optional(&mut self.connection).await? {
-            let canonical: Vec<u8> = row.canonical_request;
-            if canonical != request.canonical_request { return Err(StorageError::OperationConflict); }
-            let request = RemoteWakeMail {
-                operation_id: request.operation_id,
-                target: serde_json::from_str(&row.target_json).map_err(|_|StorageError::InvalidRecord)?,
-                canonical_request: canonical,
-                body: serde_json::from_str(&row.body_json).map_err(|_|StorageError::InvalidRecord)?,
-                valid_until_ms: row.valid_until_ms,
-            };
-            let snapshot = match (row.wakeup_id, row.snapshot_json) {
-                (None, None) => None,
-                (Some(id), Some(json)) => {
-                    let snapshot: Box<WakeSnapshot> = serde_json::from_str(&json)
-                        .map_err(|_| StorageError::InvalidRecord)?;
-                    if snapshot.definition.wakeup_id.as_str() != id
-                        || snapshot.definition.message.target != request.target
-                        || !matches!(request.body.request, collaboration_mail_protocol::RemoteWakeRequest::Send { .. })
-                    {
-                        return Err(StorageError::InvalidRecord);
-                    }
-                    Some(snapshot)
-                }
-                _ => return Err(StorageError::InvalidRecord),
-            };
+            let recorded = decode_recorded_remote_wake(request.operation_id.clone(), row)?;
+            if recorded.request.canonical_request != request.canonical_request {
+                return Err(StorageError::OperationConflict);
+            }
+            let RecordedRemoteWake { request, snapshot } = recorded;
             return Ok(RemoteWakePreparation::Replayed { request, snapshot });
         }
         let target =
@@ -98,6 +84,16 @@ impl AutomationStore {
         sqlx::query!("INSERT INTO remote_wake_requests(operation_id,target_json,canonical_request,body_json,valid_until_ms) VALUES(?,?,?,?,?)",request.operation_id.as_str(),target,request.canonical_request,body,request.valid_until_ms)
             .execute(&mut self.connection).await?;
         Ok(RemoteWakePreparation::New(request))
+    }
+
+    /// Read-only recovery. This never prepares, freezes or admits a new remote operation.
+    pub async fn recorded_remote_wake(
+        &mut self,
+        operation_id: &OperationId,
+    ) -> Result<Option<RecordedRemoteWake>, StorageError> {
+        let row = sqlx::query_as!(StoredWakeRequest,"SELECT target_json,canonical_request,body_json,valid_until_ms,wakeup_id,snapshot_json FROM remote_wake_requests WHERE operation_id=?",operation_id.as_str()).fetch_optional(&mut self.connection).await?;
+        row.map(|row| decode_recorded_remote_wake(operation_id.clone(), row))
+            .transpose()
     }
 
     pub async fn remember_remote_wake(
@@ -203,4 +199,37 @@ impl AutomationStore {
             next: if more { next } else { None },
         })
     }
+}
+
+fn decode_recorded_remote_wake(
+    operation_id: OperationId,
+    row: StoredWakeRequest,
+) -> Result<RecordedRemoteWake, StorageError> {
+    let request = RemoteWakeMail {
+        operation_id,
+        target: serde_json::from_str(&row.target_json).map_err(|_| StorageError::InvalidRecord)?,
+        canonical_request: row.canonical_request,
+        body: serde_json::from_str(&row.body_json).map_err(|_| StorageError::InvalidRecord)?,
+        valid_until_ms: row.valid_until_ms,
+    };
+    let snapshot = match (row.wakeup_id, row.snapshot_json) {
+        (None, None) => None,
+        (Some(id), Some(json)) => {
+            let snapshot: Box<WakeSnapshot> =
+                serde_json::from_str(&json).map_err(|_| StorageError::InvalidRecord)?;
+            if snapshot.definition.wakeup_id.as_str() != id
+                || snapshot.definition.message.target != request.target
+                || !matches!(
+                    request.body.request,
+                    collaboration_mail_protocol::RemoteWakeRequest::Send { .. }
+                )
+            {
+                return Err(StorageError::InvalidRecord);
+            }
+            Some(snapshot)
+        }
+        _ => return Err(StorageError::InvalidRecord),
+    };
+
+    Ok(RecordedRemoteWake { request, snapshot })
 }

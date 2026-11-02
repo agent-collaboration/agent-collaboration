@@ -1,33 +1,34 @@
-//! Wakes and their deliveries: durable reminders in automation storage. Timing workers own the
-//! later native submission; these operations never touch a native thread.
-use super::ResultByteBudget;
+//! Wake commands follow stored local or central ownership; separate drivers perform delivery.
 use crate::wakeup_subscription::{WakeResumeError, WakeSubscriptionState};
 use agent_automation::WakeupId;
-use automation_storage::{
-    AutomationStore, StorageError, WakeAction, WakeCreate, WakeListPosition, WakeMutation,
-};
+use automation_storage::{AutomationStore, StorageError};
 use collaboration_protocol::{
-    AutomationPage, AutomationPageRequest, DeliveryInspection, DeliveryShowRequest,
-    LocalMutationEvidence, LocalMutationState, OperationId, SavedMessage, UuidIdentity,
-    WaitUnavailable, WakeFailure, WakeFailureReason, WakeFailureStage, WakeMutationRequest,
-    WakeMutationResult, WakeNextAction, WakeNotFound, WakeSendRequest, WakeShowRequest,
-    WakeSnapshot, WakeState, WakeWaitOutcome, WakeWaitRequest, WakeWaitResult,
+    DeliveryInspection, DeliveryShowRequest, LocalMutationEvidence, LocalMutationState,
+    OperationId, SavedMessage, UuidIdentity, WakeFailure, WakeFailureReason, WakeFailureStage,
+    WakeMutationResult, WakeNextAction, WakeShowRequest, WakeSnapshot, WakeState, WakeWaitOutcome,
+    WakeWaitRequest, WakeWaitResult,
 };
-use serde_json::json;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 
+mod catalog_mutations;
+mod catalog_reads;
+mod catalog_wait;
 mod failure;
+#[cfg(test)]
+mod legacy_fixture;
+mod legacy_recovery;
+mod list_cursor;
 /// Wake and delivery operations over automation storage.
-mod remote;
-pub use failure::WakeWaitFailure;
+pub use crate::wake_operation_failure::WakeWaitFailure;
 pub(crate) use failure::{WakeFailureContext, wake_failure};
-use failure::{invalid_field, storage_reason};
 
 pub struct WakeOperations {
+    catalog: crate::central_catalog::CentralCatalog,
     service_id: UuidIdentity,
-    remote: Option<Arc<crate::MailDeliveryRuntime>>,
+    clock: Arc<dyn crate::SubscriptionClock>,
     store: Option<Arc<Mutex<AutomationStore>>>,
+    legacy_wake_recovery: Option<Arc<crate::MailDeliveryRuntime>>,
     /// Concurrent first-fire waits share these permits; a handle without them cannot wait.
     wait_permits: Option<Arc<Semaphore>>,
 }
@@ -42,11 +43,35 @@ const MAX_WAKE_WAIT_SECONDS: u32 = 1500;
 impl WakeOperations {
     pub fn new(service_id: &UuidIdentity, store: Option<&Arc<Mutex<AutomationStore>>>) -> Self {
         Self {
+            catalog: crate::central_catalog::CentralCatalog::new(None),
             service_id: service_id.clone(),
-            remote: None,
+            clock: Arc::new(crate::SystemSubscriptionClock),
             store: store.cloned(),
+            legacy_wake_recovery: None,
             wait_permits: None,
         }
+    }
+
+    pub fn with_catalog(
+        mut self,
+        transport: Option<Arc<dyn collaboration_runtime::CentralAutomationTransport>>,
+    ) -> Self {
+        self.catalog = crate::central_catalog::CentralCatalog::new(transport);
+        self
+    }
+
+    pub fn with_clock(mut self, clock: Arc<dyn crate::SubscriptionClock>) -> Self {
+        self.clock = clock;
+        self
+    }
+
+    /// Read-only old-operation recovery; remove after the 32-day retention following release.
+    pub fn with_legacy_wake_recovery(
+        mut self,
+        mail: Option<&Arc<crate::MailDeliveryRuntime>>,
+    ) -> Self {
+        self.legacy_wake_recovery = mail.cloned();
+        self
     }
 
     /// Lets this handle run first-fire waits, sharing `wait_permits` with every other wait.
@@ -69,281 +94,12 @@ impl WakeOperations {
         })
     }
 
-    /// Creates a wake, or replays the wake an earlier request with this operation created.
-    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
-    pub(crate) async fn wake_send_local(
+    #[expect(clippy::result_large_err, reason = "Preserve local route evidence.")]
+    fn project_local_mutation(
         &self,
-        request: WakeSendRequest,
-    ) -> Result<WakeSnapshot, WakeFailure> {
-        let context = WakeFailureContext::operation(request.operation_id.clone());
-        let store = self.store(&context)?;
-        let now_ms = chrono::Utc::now().timestamp_millis();
-        let timing = serde_json::to_value(request.timing).and_then(serde_json::from_value);
-        let expiry = serde_json::to_value(request.expiry).and_then(serde_json::from_value);
-        let (Ok(timing), Ok(expiry)) = (timing, expiry) else {
-            return Err(wake_failure(
-                context,
-                WakeFailureReason::InvalidField {
-                    field: "timing".into(),
-                    constraint: "Use a valid UTC instant or bounded duration.".into(),
-                },
-                LocalMutationState::None,
-            ));
-        };
-        let created = store
-            .lock()
-            .await
-            .create_wakeup(&WakeCreate {
-                operation_id: request.operation_id,
-                requested_by: request.requested_by,
-                replace: request.replace,
-                message: request.message,
-                timing,
-                expiry,
-                now_ms,
-            })
-            .await;
-        match created {
-            // Creation and replay return the cursor time of the durable creation receipt.
-            Ok(record) => {
-                let observed = record.definition.created_at_ms;
-                crate::wakeup_projection::snapshot(record, &self.service_id, observed).map_err(
-                    |()| {
-                        wake_failure(
-                            context,
-                            WakeFailureReason::InvalidRecord,
-                            LocalMutationState::Committed,
-                        )
-                    },
-                )
-            }
-            Err(error) => {
-                let mutation = if matches!(error, StorageError::Database(_)) {
-                    LocalMutationState::Unknown
-                } else {
-                    LocalMutationState::None
-                };
-                Err(wake_failure(context, storage_reason(error), mutation))
-            }
-        }
-    }
-
-    /// Shows one wake as of now.
-    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
-    pub(crate) async fn wake_show_local(
-        &self,
-        request: WakeShowRequest,
-    ) -> Result<WakeSnapshot, WakeFailure> {
-        let context = WakeFailureContext::wakeup(request.wakeup_id.clone());
-        let store = self.store(&context)?;
-        let now_ms = chrono::Utc::now().timestamp_millis();
-        let read = store
-            .lock()
-            .await
-            .read_wakeup::<SavedMessage>(&request.wakeup_id)
-            .await;
-        match read {
-            Ok(record) => crate::wakeup_projection::snapshot(record, &self.service_id, now_ms)
-                .map_err(|()| {
-                    wake_failure(
-                        context,
-                        WakeFailureReason::InvalidRecord,
-                        LocalMutationState::None,
-                    )
-                }),
-            Err(error) => Err(wake_failure(
-                context,
-                storage_reason(error),
-                LocalMutationState::None,
-            )),
-        }
-    }
-
-    /// Lists wakes newest first; the page shrinks until its response fits `budget`.
-    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
-    pub async fn wake_list(
-        &self,
-        request: AutomationPageRequest,
-        budget: ResultByteBudget,
-    ) -> Result<AutomationPage<WakeSnapshot>, WakeFailure> {
-        let context = WakeFailureContext::default();
-        let store = self.store(&context)?;
-        let fail = |reason| wake_failure(context.clone(), reason, LocalMutationState::None);
-        let digest = crate::automation_collection_cursor::filter_digest(&json!({}))
-            .map_err(|()| fail(WakeFailureReason::InvalidRecord))?;
-        let after = match request.cursor {
-            None => None,
-            Some(cursor) => {
-                let decoded = crate::automation_collection_cursor::decode(
-                    &cursor,
-                    &self.service_id,
-                    "wake/list",
-                    &digest,
-                )
-                .map_err(|_| {
-                    fail(invalid_field(
-                        "cursor",
-                        "Cursor belongs to another service/collection or is malformed; start a fresh listing.",
-                    ))
-                })?;
-                let (Ok(upper), Ok(last)) = (
-                    decoded.upper_key.1.try_into(),
-                    decoded.last_key.1.try_into(),
-                ) else {
-                    return Err(fail(invalid_field(
-                        "cursor",
-                        "Cursor wake identities must be UUIDv7.",
-                    )));
-                };
-                Some(WakeListPosition {
-                    upper_created_at_ms: decoded.upper_key.0,
-                    upper_wakeup_id: upper,
-                    created_at_ms: decoded.last_key.0,
-                    wakeup_id: last,
-                })
-            }
-        };
-        let page = store
-            .lock()
-            .await
-            .wake_listing_keys(after, u32::from(request.limit))
-            .await
-            .map_err(|_| fail(WakeFailureReason::AutomationUnavailable))?;
-        let now = chrono::Utc::now().timestamp_millis();
-        let mut snapshots = Vec::new();
-        for key in page.records {
-            let shown = if key.remote {
-                self.wake_show(WakeShowRequest {
-                    wakeup_id: key.wakeup_id,
-                })
-                .await?
-            } else {
-                self.wake_show_local(WakeShowRequest {
-                    wakeup_id: key.wakeup_id,
-                })
-                .await?
-            };
-            snapshots.push(shown);
-        }
-        self.fit_wake_page(snapshots, page.next, &digest, now, budget)
-            .map_err(|()| fail(WakeFailureReason::InvalidRecord))
-    }
-
-    fn fit_wake_page(
-        &self,
-        mut records: Vec<WakeSnapshot>,
-        page_next: Option<WakeListPosition>,
-        digest: &str,
-        _now: i64,
-        budget: ResultByteBudget,
-    ) -> Result<AutomationPage<WakeSnapshot>, ()> {
-        let positions: Vec<_> = records
-            .iter()
-            .map(|record| {
-                String::from(record.definition.created_at.clone())
-                    .parse::<chrono::DateTime<chrono::Utc>>()
-                    .map(|at| (at.timestamp_millis(), record.definition.wakeup_id.clone()))
-                    .map_err(|_| ())
-            })
-            .collect::<Result<_, _>>()?;
-        let upper = page_next
-            .as_ref()
-            .map(|position| {
-                (
-                    position.upper_created_at_ms,
-                    position.upper_wakeup_id.clone(),
-                )
-            })
-            .or_else(|| positions.last().cloned());
-        let mut next = page_next;
-        loop {
-            let next_cursor = next
-                .as_ref()
-                .map(|position| {
-                    crate::automation_collection_cursor::encode(
-                        &crate::automation_collection_cursor::CollectionCursor {
-                            version: 1,
-                            service_id: self.service_id.clone(),
-                            collection: "wake/list".into(),
-                            upper_key: (
-                                position.upper_created_at_ms,
-                                position.upper_wakeup_id.as_str().into(),
-                            ),
-                            last_key: (position.created_at_ms, position.wakeup_id.as_str().into()),
-                            filter_digest: digest.to_owned(),
-                        },
-                    )
-                })
-                .transpose()?;
-            let candidate = AutomationPage {
-                records: records.clone(),
-                next_cursor,
-            };
-            if budget.admits(&candidate) {
-                return Ok(candidate);
-            }
-            records.pop();
-            let index = records.len().checked_sub(1).ok_or(())?;
-            let (created_at_ms, wakeup_id) = positions.get(index).ok_or(())?;
-            let (upper_created_at_ms, upper_wakeup_id) = upper.as_ref().ok_or(())?;
-            next = Some(WakeListPosition {
-                upper_created_at_ms: *upper_created_at_ms,
-                upper_wakeup_id: upper_wakeup_id.clone(),
-                created_at_ms: *created_at_ms,
-                wakeup_id: wakeup_id.clone(),
-            });
-        }
-    }
-
-    /// Pauses a wake; deliveries already handed to a native thread are not recalled.
-    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
-    pub(crate) async fn wake_pause_local(
-        &self,
-        request: WakeMutationRequest,
+        mutated: Result<automation_storage::WakeMutationResult<SavedMessage>, StorageError>,
+        context: WakeFailureContext,
     ) -> Result<WakeMutationResult, WakeFailure> {
-        self.mutate(request, WakeAction::Pause).await
-    }
-
-    /// Resumes a paused wake.
-    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
-    pub(crate) async fn wake_resume_local(
-        &self,
-        request: WakeMutationRequest,
-    ) -> Result<WakeMutationResult, WakeFailure> {
-        self.mutate(request, WakeAction::Resume).await
-    }
-
-    /// Cancels a wake; a cancelled wake is never implicitly recreated.
-    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
-    pub(crate) async fn wake_cancel_local(
-        &self,
-        request: WakeMutationRequest,
-    ) -> Result<WakeMutationResult, WakeFailure> {
-        self.mutate(request, WakeAction::Cancel).await
-    }
-
-    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
-    async fn mutate(
-        &self,
-        request: WakeMutationRequest,
-        action: WakeAction,
-    ) -> Result<WakeMutationResult, WakeFailure> {
-        let context = WakeFailureContext {
-            operation_id: Some(request.operation_id.clone()),
-            wakeup_id: Some(request.wakeup_id.clone()),
-        };
-        let store = self.store(&context)?;
-        let now = chrono::Utc::now().timestamp_millis();
-        let mutated = store
-            .lock()
-            .await
-            .mutate_wakeup::<SavedMessage>(&WakeMutation {
-                operation_id: request.operation_id,
-                wakeup_id: request.wakeup_id,
-                action,
-                now_ms: now,
-            })
-            .await;
         match mutated {
             Ok(result) => crate::wakeup_projection::project_mutation(result, &self.service_id)
                 .map_err(|()| {

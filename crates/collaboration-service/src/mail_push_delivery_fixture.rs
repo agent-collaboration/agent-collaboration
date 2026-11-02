@@ -154,6 +154,9 @@ pub(super) struct Runtime {
     _directory: tempfile::TempDir,
 }
 impl Runtime {
+    pub(super) fn automation_database_path(&self) -> std::path::PathBuf {
+        self._directory.path().join("automation.sqlite")
+    }
     pub(super) fn local_mail_props(&self) -> MailPushDeliveryProps {
         MailPushDeliveryProps {
             interactions: self.fixture.owner.clone(),

@@ -205,6 +205,7 @@ impl TryFrom<String> for ProviderWorkingDirectory {
     type Error = &'static str;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
+        // This path belongs to the Unix target, including when wasm decodes it.
         if (1..=4096).contains(&value.len()) && !value.contains('\0') && value.starts_with('/') {
             Ok(Self(value))
         } else {

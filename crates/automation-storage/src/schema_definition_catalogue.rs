@@ -9,6 +9,8 @@ pub(super) const CURRENT_TARGET_DEFINITION_SOURCE: &str = concat!(
     include_str!("../migrations/20261019000200_owed_push_operations.sql"),
     "\n",
     include_str!("../migrations/20261023000100_remote_wake_requests.sql"),
+    "\n",
+    include_str!("../migrations/20261101000100_automation_handover.sql"),
 );
 
 pub(super) struct TableSpec {
@@ -17,10 +19,25 @@ pub(super) struct TableSpec {
     pub(super) foreign_keys: &'static str,
 }
 
-pub(super) const TABLE_SPECS: [TableSpec; 12] = [
+pub(super) const TABLE_SPECS: [TableSpec; 15] = [
     TableSpec {
         name: "automation_events",
         columns: "event_sequence,INTEGER,0,<NULL>,1;event_id,TEXT,1,<NULL>,0;subject_kind,TEXT,1,<NULL>,0;subject_id,TEXT,1,<NULL>,0;event_kind,TEXT,1,<NULL>,0;event_body_json,TEXT,1,<NULL>,0;recorded_at_ms,INTEGER,1,<NULL>,0",
+        foreign_keys: "",
+    },
+    TableSpec {
+        name: "automation_handover",
+        columns: "automation_id,TEXT,1,<NULL>,1;state,TEXT,1,<NULL>,0;watermark_local_ms,INTEGER,1,<NULL>,0;frozen_payload,BLOB,1,<NULL>,0;digest,TEXT,1,<NULL>,0",
+        foreign_keys: "",
+    },
+    TableSpec {
+        name: "central_report_outbox",
+        columns: "report_id,TEXT,1,<NULL>,1;subject_kind,TEXT,1,<NULL>,0;subject_id,TEXT,1,<NULL>,0;report_seq,INTEGER,1,<NULL>,0;report_json,TEXT,1,<NULL>,0;queued_at_ms,INTEGER,1,<NULL>,0",
+        foreign_keys: "",
+    },
+    TableSpec {
+        name: "firing_receipts",
+        columns: "firing_id,TEXT,1,<NULL>,1;batch_id,TEXT,1,<NULL>,0;local_work_ref,TEXT,1,<NULL>,0;state,TEXT,1,<NULL>,0;report_seq,INTEGER,1,<NULL>,0",
         foreign_keys: "",
     },
     TableSpec {
@@ -80,10 +97,14 @@ pub(super) const TABLE_SPECS: [TableSpec; 12] = [
     },
 ];
 
-pub(super) const INDEX_SPECS: [&str; 27] = [
+pub(super) const INDEX_SPECS: [&str; 31] = [
     "automation_events,event_cleanup,0,c,0,recorded_at_ms:0:BINARY:1,event_sequence:0:BINARY:1",
     "automation_events,event_history,0,c,0,subject_kind:0:BINARY:1,subject_id:0:BINARY:1,event_sequence:0:BINARY:1",
     "automation_events,_,1,u,0,event_id:0:BINARY:1",
+    "automation_handover,_,1,pk,0,automation_id:0:BINARY:1",
+    "central_report_outbox,_,1,pk,0,report_id:0:BINARY:1",
+    "central_report_outbox,_,1,u,0,subject_kind:0:BINARY:1,subject_id:0:BINARY:1,report_seq:0:BINARY:1",
+    "firing_receipts,_,1,pk,0,firing_id:0:BINARY:1",
     "instruction_documents,_,1,pk,0,instruction_id:0:BINARY:1",
     "instruction_revisions,_,1,u,0,instruction_id:0:BINARY:1,revision_id:0:BINARY:1",
     "instruction_revisions,_,1,pk,0,revision_id:0:BINARY:1",

@@ -16,7 +16,89 @@ use fleet_sync_protocol::{
     DeliveryItem, DeliveryStatus, ItemId, PeerId, StatusPublication, StatusVersion,
 };
 use serde_json::json;
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
+
+struct NoCentralDispatch;
+impl collaboration_runtime::CentralAutomationTransport for NoCentralDispatch {
+    fn call(
+        &self,
+        request: collaboration_protocol::AutomationCall,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        collaboration_protocol::AutomationAnswer,
+                        collaboration_runtime::CentralAutomationError,
+                    >,
+                > + Send
+                + '_,
+        >,
+    > {
+        Box::pin(async move {
+            panic!("old Wake recovery dispatched a central call: {request:?}");
+        })
+    }
+}
+
+struct ReadOnlyEvidence {
+    automation: sqlx::SqliteConnection,
+    interaction: sqlx::SqliteConnection,
+    versions: (i64, i64),
+}
+impl ReadOnlyEvidence {
+    async fn start(runtime: &Runtime) -> Self {
+        use sqlx::Connection;
+        let mut automation = sqlx::SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(runtime.automation_database_path())
+                .read_only(true),
+        )
+        .await
+        .unwrap();
+        let mut interaction = sqlx::SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(runtime.fixture.database_path())
+                .read_only(true),
+        )
+        .await
+        .unwrap();
+        // SQLite commit metadata only; no SDK-owned table is inspected.
+        let versions = (
+            sqlx::query_scalar("PRAGMA data_version")
+                .fetch_one(&mut automation)
+                .await
+                .unwrap(),
+            sqlx::query_scalar("PRAGMA data_version")
+                .fetch_one(&mut interaction)
+                .await
+                .unwrap(),
+        );
+        Self {
+            automation,
+            interaction,
+            versions,
+        }
+    }
+    async fn assert_unchanged(mut self) {
+        use sqlx::Connection;
+        let versions: (i64, i64) = (
+            sqlx::query_scalar("PRAGMA data_version")
+                .fetch_one(&mut self.automation)
+                .await
+                .unwrap(),
+            sqlx::query_scalar("PRAGMA data_version")
+                .fetch_one(&mut self.interaction)
+                .await
+                .unwrap(),
+        );
+        self.automation.close().await.unwrap();
+        self.interaction.close().await.unwrap();
+        assert_eq!(
+            versions, self.versions,
+            "read-only old-operation recovery committed new Automation or SDK state"
+        );
+    }
+}
 
 fn service(last: u8) -> collaboration_protocol::UuidIdentity {
     format!("00000000-0000-4000-8000-{last:012}")
@@ -128,12 +210,21 @@ async fn publish_recorded_status(
         .await
         .unwrap();
 }
-async fn after_deadline(runtime: &Runtime, deadline: chrono::DateTime<chrono::Utc>) {
-    let remaining = (deadline - chrono::Utc::now()).to_std().unwrap_or_default();
-    tokio::time::sleep(remaining + Duration::from_millis(20)).await;
-    runtime.fixture.host.clock.store(
-        chrono::Utc::now().timestamp_millis(),
-        std::sync::atomic::Ordering::SeqCst,
+fn after_deadline(runtime: &Runtime, deadline: chrono::DateTime<chrono::Utc>) {
+    // Advance the old sender's actual injected clock; no wall-clock sleep is an oracle.
+    let after = deadline.timestamp_millis() + 1;
+    runtime
+        .fixture
+        .host
+        .clock
+        .store(after, std::sync::atomic::Ordering::SeqCst);
+    assert!(
+        runtime
+            .fixture
+            .host
+            .clock
+            .load(std::sync::atomic::Ordering::SeqCst)
+            > deadline.timestamp_millis()
     );
 }
 fn mail_runtime(source: &Runtime) -> Arc<MailDeliveryRuntime> {
@@ -169,19 +260,27 @@ async fn assert_late_creation_replay(remember_creation: bool) {
         Some(serde_json::from_value(json!({"kind":"snapshot","value":snapshot})).unwrap()),
     )
     .await;
-    after_deadline(&source, deadline).await;
+    after_deadline(&source, deadline);
     let mail = mail_runtime(&source);
     let sender_service = service(1);
+    let read_only = ReadOnlyEvidence::start(&source).await;
     // Act: the identical public operation is retried after its immutable deadline.
     let replay = WakeOperations::new(&sender_service, Some(&source.automation))
-        .with_remote(Some(&mail))
+        .with_legacy_wake_recovery(Some(&mail))
+        .with_catalog(Some(Arc::new(NoCentralDispatch)))
         .wake_send(request)
         .await;
     // Assert: the original answer, not today's expired projection or a new timer.
     assert_eq!(
-        serde_json::to_value(replay.expect("late creation must replay")).unwrap(),
+        serde_json::to_value(match replay.expect("late creation must replay") {
+            crate::WakeCreateResponse::Legacy { value } => value,
+            crate::WakeCreateResponse::Central { .. } =>
+                panic!("an old operation must recover its legacy answer"),
+        })
+        .unwrap(),
         serde_json::to_value(snapshot).unwrap()
     );
+    read_only.assert_unchanged().await;
     drop(mail);
     source.close().await;
     owner.close().await;
@@ -192,53 +291,6 @@ async fn wake_operations_remote_creation_late_replay_returns_recorded_result() {
     assert_late_creation_replay(true).await;
     // A crash after SDK settlement but before the route write still has its answer.
     assert_late_creation_replay(false).await;
-}
-
-#[tokio::test]
-async fn wake_operations_remote_expired_new_request_has_no_custody() {
-    let source = Runtime::new().await;
-    let deadline = chrono::Utc::now() - chrono::Duration::seconds(1);
-    let request = create_request(deadline);
-    let id = ItemId::new(uuid::Uuid::parse_str(request.operation_id.as_str()).unwrap()).unwrap();
-    after_deadline(&source, deadline).await;
-    let mail = mail_runtime(&source);
-    let sender_service = service(1);
-    let error = WakeOperations::new(&sender_service, Some(&source.automation))
-        .with_remote(Some(&mail))
-        .wake_send(request)
-        .await
-        .expect_err("a new expired request must not dispatch");
-    assert!(matches!(
-        error.reason,
-        collaboration_protocol::WakeFailureReason::DeadlineExpired
-    ));
-    assert!(matches!(
-        error.effects,
-        LocalMutationEvidence::Local {
-            mutation: LocalMutationState::None
-        }
-    ));
-    let limits = source.fixture.host.config.local.limits;
-    let state = source
-        .fixture
-        .store
-        .transaction(move |scope| {
-            Box::pin(async move {
-                Outbox::<_, RouterDeliveryTypes>::new(scope, limits)
-                    .status(id)
-                    .await
-                    .map(|status| status.state)
-                    .map_err(delivery_rollback)
-            })
-        })
-        .await
-        .unwrap();
-    assert!(matches!(
-        state,
-        fleet_sync_delivery::OutboxStatusState::Unknown
-    ));
-    drop(mail);
-    source.close().await;
 }
 
 async fn assert_late_pause_replay(retain_result: bool, retention_age: Option<chrono::Duration>) {
@@ -271,7 +323,7 @@ async fn assert_late_pause_replay(retain_result: bool, retention_age: Option<chr
     let result = retain_result
         .then(|| serde_json::from_value(json!({"kind":"mutation","value":paused})).unwrap());
     publish_recorded_status(&source, &owner, frozen.clone(), result).await;
-    after_deadline(&source, deadline).await;
+    after_deadline(&source, deadline);
     if let Some(age) = retention_age {
         collaboration_runtime::AutomationRetentionWorker::new(source.automation.clone())
             .prune_batch((deadline + age).timestamp_millis())
@@ -294,17 +346,28 @@ async fn assert_late_pause_replay(retain_result: bool, retention_age: Option<chr
     }
     let mail = mail_runtime(&source);
     let sender_service = service(1);
+    let read_only = ReadOnlyEvidence::start(&source).await;
     let replay = WakeOperations::new(&sender_service, Some(&source.automation))
-        .with_remote(Some(&mail))
+        .with_legacy_wake_recovery(Some(&mail))
+        .with_catalog(Some(Arc::new(NoCentralDispatch)))
         .wake_pause(request)
         .await;
     if retain_result {
         assert_eq!(
-            serde_json::to_value(replay.expect("late pause must replay")).unwrap(),
+            serde_json::to_value(match replay.expect("late pause must replay") {
+                crate::WakeMutationResponse::Local(value) => value,
+                crate::WakeMutationResponse::Central(_) =>
+                    panic!("an old control must recover its legacy answer"),
+            })
+            .unwrap(),
             serde_json::to_value(paused).unwrap()
         );
     } else {
-        let error = replay.expect_err("missing owning result must remain uncertain");
+        let crate::WakeOperationFailure::Local(error) =
+            replay.expect_err("missing owning result must remain uncertain")
+        else {
+            panic!("an old uncertain operation must stay in its original owner");
+        };
         assert!(
             matches!(
                 error.effects,
@@ -315,6 +378,7 @@ async fn assert_late_pause_replay(retain_result: bool, retention_age: Option<chr
             "lost pause answer falsely reports no mutation: {error:?}"
         );
     }
+    read_only.assert_unchanged().await;
     drop(mail);
     source.close().await;
     owner.close().await;
@@ -333,4 +397,68 @@ async fn wake_operations_remote_aged_control_keeps_replay_after_retention() {
     // C36 retains identity evidence by retirement, rather than its history age.
     assert_late_pause_replay(true, Some(chrono::Duration::days(32))).await;
     assert_late_pause_replay(false, Some(chrono::Duration::days(32))).await;
+}
+
+#[tokio::test]
+async fn wake_operations_remote_changed_old_requests_conflict_without_dispatch_or_writes() {
+    let source = Runtime::new().await;
+    let owner = Runtime::new().await;
+    let deadline = chrono::Utc::now() + chrono::Duration::minutes(5);
+    let original = create_request(deadline);
+    let snapshot = WakeOperations::new(&service(2), Some(&owner.automation))
+        .wake_send_local(original.clone())
+        .await
+        .unwrap();
+    freeze(&source, &creation_mail(&original, deadline)).await;
+    let control = WakeMutationRequest {
+        operation_id: OperationId::generate(),
+        wakeup_id: snapshot.definition.wakeup_id.clone(),
+    };
+    freeze(&source, &pause_mail(&control, &snapshot, deadline)).await;
+    let mail = mail_runtime(&source);
+    let operations = WakeOperations::new(&service(1), Some(&source.automation))
+        .with_legacy_wake_recovery(Some(&mail))
+        .with_catalog(Some(Arc::new(NoCentralDispatch)));
+    let read_only = ReadOnlyEvidence::start(&source).await;
+
+    let mut changed = original.clone();
+    changed.message.content = serde_json::from_value(json!({
+        "kind":"humanUser","text":"Changed bytes under the old create operation"
+    }))
+    .unwrap();
+    let crate::WakeOperationFailure::Local(create_error) = operations
+        .wake_send(changed)
+        .await
+        .expect_err("changed old creation must conflict")
+    else {
+        panic!("old conflict lost its original owner");
+    };
+    let crate::WakeOperationFailure::Local(control_error) = operations
+        .wake_resume(control.clone())
+        .await
+        .expect_err("resume under an old pause operation must conflict")
+    else {
+        panic!("old control conflict lost its original owner");
+    };
+    for (error, operation_id) in [
+        (create_error, original.operation_id),
+        (control_error, control.operation_id),
+    ] {
+        assert!(matches!(
+            error.reason,
+            collaboration_protocol::WakeFailureReason::OperationConflict
+        ));
+        assert_eq!(error.operation_id, Some(operation_id));
+        assert!(matches!(
+            error.effects,
+            LocalMutationEvidence::Local {
+                mutation: LocalMutationState::None
+            }
+        ));
+    }
+    read_only.assert_unchanged().await;
+    drop(operations);
+    drop(mail);
+    source.close().await;
+    owner.close().await;
 }

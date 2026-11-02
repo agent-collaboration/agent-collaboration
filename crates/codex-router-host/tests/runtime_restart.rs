@@ -33,6 +33,12 @@ static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 #[tokio::test]
 async fn owned_router_restart_replaces_only_router_and_preserves_app_server_state()
 -> Result<(), Box<dyn std::error::Error>> {
+    let _diagnostics = tracing::subscriber::set_default(
+        tracing_subscriber::fmt()
+            .with_test_writer()
+            .with_max_level(tracing::Level::INFO)
+            .finish(),
+    );
     let directory = TestDirectory::new("owned-router-restart")?;
     let router_probe = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await?;
     let router_address = router_probe.local_addr()?;

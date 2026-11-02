@@ -16,7 +16,7 @@ test-support = ["collaboration-service/test-support"]
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
-axum = { workspace = true, features = ["http1", "tokio"] }
+axum = { workspace = true, features = ["http1", "json", "tokio"] }
 collaboration-client = { path = "../collaboration-client", version = "0.1.30" }
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.30" }
 collaboration-service = { path = "../collaboration-service", version = "0.1.30" }

@@ -74,11 +74,36 @@ pub struct CollaborationApiRouter {
     router: Router,
     tool_calls: ToolCallRegistry,
     call_grace: Duration,
+    #[cfg(debug_assertions)]
+    owner_unix_socket: bool,
+    #[cfg(debug_assertions)]
+    debug_control_shutdown: CancellationToken,
 }
 
 impl CollaborationApiRouter {
+    /// Adds the named debug controls only to the owner Unix socket's API copy.
+    #[cfg(debug_assertions)]
+    pub fn with_debug_verification_controls(
+        mut self,
+        controls: crate::DebugVerificationControls,
+    ) -> io::Result<Self> {
+        if !self.owner_unix_socket {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                "debug verification controls require the owner Unix socket",
+            ));
+        }
+        self.router = self
+            .router
+            .merge(crate::debug_verification_controls::router(
+                controls,
+                self.debug_control_shutdown.clone(),
+            ));
+        Ok(self)
+    }
+
     /// The tool calls this copy runs, to count them.
-    #[cfg(test)]
+    #[cfg(any(test, all(feature = "test-support", debug_assertions)))]
     pub(crate) fn tool_calls(&self) -> ToolCallRegistry {
         self.tool_calls.clone()
     }
@@ -97,6 +122,8 @@ pub fn collaboration_api_router(
     config: &CollaborationApiConfig,
     listener: CollaborationApiListener,
 ) -> CollaborationApiRouter {
+    #[cfg(debug_assertions)]
+    let owner_unix_socket = matches!(&listener, CollaborationApiListener::UnixSocket);
     let mut service_config = StreamableHttpServerConfig::default()
         .with_legacy_session_mode(false)
         .with_json_response(true)
@@ -160,6 +187,10 @@ pub fn collaboration_api_router(
         router,
         tool_calls,
         call_grace: CALL_GRACE,
+        #[cfg(debug_assertions)]
+        owner_unix_socket,
+        #[cfg(debug_assertions)]
+        debug_control_shutdown: config.shutdown.clone(),
     }
 }
 

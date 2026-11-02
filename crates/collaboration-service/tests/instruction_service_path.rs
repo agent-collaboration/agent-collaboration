@@ -1,29 +1,15 @@
-use automation_storage::AutomationStore;
 use collaboration_protocol::{
     InstructionCreateParams, InstructionShowParams, InstructionText, OperationId,
 };
-use collaboration_service::ApplicationFixture;
-use std::sync::Arc;
-#[path = "support/served_api.rs"]
-mod served_api;
+#[path = "support/central_catalog_fixture.rs"]
+mod fixture;
 
 #[tokio::test]
-async fn real_control_client_creates_and_reads_durable_instruction()
--> Result<(), Box<dyn std::error::Error>> {
-    // Arrange: real SQLite and Unix socket; no native app-server or model involved.
-    let path = std::env::temp_dir().join(format!(
-        "instruction-rpc-{}.sqlite",
-        OperationId::generate().as_str()
-    ));
-    let store = Arc::new(tokio::sync::Mutex::new(AutomationStore::open(&path).await?));
-    let identity = ApplicationFixture::new(
-        "00000000-0000-4000-8000-000000000001",
-        "00000000-0000-4000-8000-000000000002",
-    )
-    .map_err(std::io::Error::other)?
-    .with_automation_store(store.clone());
-    let served = served_api::ServedApi::start(identity)?;
-    let client = served.client("instruction-test").await?;
+async fn real_control_client_creates_and_reads_durable_instruction() -> fixture::ProofResult {
+    // The real control client reaches the owning central SQLite with no Local definition store.
+    let fixture = fixture::CatalogFixture::open(|transport| transport, false).await?;
+    let proof: fixture::ProofResult = async {
+    let client = fixture.api.client("instruction-test").await?;
     let request = InstructionCreateParams {
         operation_id: OperationId::generate(),
         text: InstructionText::try_from("Check the workspace".to_owned())?,
@@ -57,17 +43,17 @@ async fn real_control_client_creates_and_reads_durable_instruction()
         .await
         .err()
         .ok_or("stale update accepted")?;
-    let collaboration_client::InstructionClientError::Rejected(failure) = error else {
+    let collaboration_client::InstructionClientError::Catalog(collaboration_client::CentralCatalogFailure::Refused { error, .. }) = error else {
         return Err("stale update lacked typed conflict".into());
     };
-    let encoded = serde_json::to_value(failure)?;
-    if encoded.get("currentRevisionId") != Some(&serde_json::to_value(updated.revision_id)?) {
+    if !matches!(*error, collaboration_protocol::AutomationRefusal::InstructionRevisionConflict { current_revision_id } if current_revision_id == updated.revision_id) {
         return Err(
             "revision conflict omitted the revision observed by the rejecting transaction".into(),
         );
     }
-    served.stop().await?;
-    drop(store);
-    std::fs::remove_file(path)?;
     Ok(())
+    }.await;
+    let stopped = fixture.close().await;
+    proof?;
+    stopped
 }

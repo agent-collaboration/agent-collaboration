@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT worker_outcome_json FROM workflow_runs WHERE run_id=?",
+  "describe": {
+    "columns": [
+      {
+        "name": "worker_outcome_json",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "workflow_runs",
+            "name": "worker_outcome_json"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "3faf67fb0aab87603c692d18d261e6da668fea68d391115a3ca89b00305d6fc1"
+}

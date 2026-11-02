@@ -1,85 +1,49 @@
-use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
-use collaboration_client::protocol::OperationId;
-use std::os::unix::fs::DirBuilderExt;
+//! Real CLI processes reach the enrolled Host's central instruction catalog.
+#[path = "support/central_automation_host.rs"]
+#[expect(
+    dead_code,
+    reason = "This target uses instruction CRUD, not the fixture's controlled firing journey."
+)]
+mod fixture;
+use fixture::{CentralHost, ProofResult};
+use serde_json::Value;
 
 #[tokio::test]
-async fn cli_creates_and_reads_instruction_through_host() -> Result<(), Box<dyn std::error::Error>>
-{
-    // Arrange: a real owned collaboration API and CLI subprocess; no native process/model.
-    let root = std::path::PathBuf::from(format!(
-        "/tmp/instruction-cli-{}",
-        OperationId::generate().as_str()
-    ));
-    std::fs::DirBuilder::new().mode(0o700).create(&root)?;
-    let runtime = Box::pin(CollaborationRuntime::start(CollaborationRuntimeInputs {
-        board_session: None,
-        directory: root.clone(),
-        codex_home: root.clone(),
-        backend_socket: root.join("absent.sock"),
-        mcp_bind: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
-        native_schema: None,
-        peer_registry_directory: None,
-        remote_control_server_name: None,
-        owner_human_id: None,
-    }))
-    .await?;
-    // Act: the documented CLI operation must reach Host-created persistent state.
-    let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-        .args([
-            "instruction",
-            "create",
-            "--text",
-            "Check repository",
-            "--json",
-            "--service-directory",
-        ])
-        .arg(&root)
-        .output()
-        .await?;
-    if !output.status.success() {
-        return Err(format!(
-            "CLI create failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        )
-        .into());
-    }
-    let record: serde_json::Value = serde_json::from_slice(&output.stdout)?;
-    let id = record
-        .pointer("/result/record/instructionId")
-        .and_then(serde_json::Value::as_str)
-        .ok_or("missing created instruction identity")?;
-    let read = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-        .args([
-            "instruction",
-            "show",
-            "--instruction-id",
-            id,
-            "--json",
-            "--service-directory",
-        ])
-        .arg(&root)
-        .output()
-        .await?;
-    // Assert: machine-readable read returns the exact text, with no native backend involved.
-    if !read.status.success() {
-        return Err("CLI show failed".into());
-    }
-    let record: serde_json::Value = serde_json::from_slice(&read.stdout)?;
-    if record
-        .pointer("/result/record/text")
-        .and_then(serde_json::Value::as_str)
-        != Some("Check repository")
-    {
-        return Err("CLI text was not persisted".into());
-    }
-    runtime.shutdown().await?;
-    for entry in std::fs::read_dir(&root)? {
-        let entry = entry?;
-        if !entry.file_type()?.is_file() {
-            return Err("unexpected cleanup entry".into());
+async fn cli_creates_and_reads_instruction_through_host() -> ProofResult {
+    let host = CentralHost::start(fixture::directory()?).await?;
+    let proof: ProofResult = async {
+        let created = host
+            .json(&["instruction", "create", "--text", "Check repository"])
+            .await?;
+        let id = created
+            .pointer("/result/record/instructionId")
+            .and_then(Value::as_str)
+            .ok_or("missing created instruction identity")?;
+        let read = host
+            .json(&["instruction", "show", "--instruction-id", id])
+            .await?;
+        if read.pointer("/result/record/text").and_then(Value::as_str) != Some("Check repository") {
+            return Err("CLI text was not persisted".into());
         }
-        std::fs::remove_file(entry.path())?;
+        use sqlx::Connection as _;
+        let mut sql = sqlx::SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(host.root().join("automation.sqlite")),
+        )
+        .await?;
+        let local: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM instruction_documents WHERE instruction_id=?")
+                .bind(id)
+                .fetch_one(&mut sql)
+                .await?;
+        sql.close().await?;
+        if local != 0 {
+            return Err("new CLI Instruction created local definition truth".into());
+        }
+        Ok(())
     }
-    std::fs::remove_dir(root)?;
-    Ok(())
+    .await;
+    let stopped = host.close().await;
+    proof?;
+    stopped
 }

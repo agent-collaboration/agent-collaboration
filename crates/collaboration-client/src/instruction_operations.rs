@@ -1,13 +1,15 @@
 //! Typed instruction operations; callers retain operation identity across an uncertain connection.
 use crate::{ClientError, CollaborationClient};
 use collaboration_protocol::{
-    InstructionCreateParams, InstructionFailure, InstructionShowParams, InstructionSnapshot,
-    InstructionUpdateParams,
+    InstructionCreateParams, InstructionFailure, InstructionFailureKind, InstructionShowParams,
+    InstructionSnapshot, InstructionUpdateParams, OperationId,
 };
 use serde::Serialize;
 
 #[derive(Debug, thiserror::Error)]
 pub enum InstructionClientError {
+    #[error(transparent)]
+    Catalog(#[from] crate::central_catalog_failure::CentralCatalogFailure),
     #[error("instruction operation rejected: {0:?}")]
     Rejected(InstructionFailure),
     #[error(transparent)]
@@ -18,24 +20,30 @@ impl CollaborationClient {
         &self,
         params: InstructionCreateParams,
     ) -> Result<InstructionSnapshot, InstructionClientError> {
-        self.instruction_call("instruction_create", params).await
+        let operation_id = params.operation_id.clone();
+        self.instruction_call("instruction_create", params, Some(operation_id))
+            .await
     }
     pub async fn update_instruction(
         &self,
         params: InstructionUpdateParams,
     ) -> Result<InstructionSnapshot, InstructionClientError> {
-        self.instruction_call("instruction_update", params).await
+        let operation_id = params.operation_id.clone();
+        self.instruction_call("instruction_update", params, Some(operation_id))
+            .await
     }
     pub async fn read_instruction(
         &self,
         params: InstructionShowParams,
     ) -> Result<InstructionSnapshot, InstructionClientError> {
-        self.instruction_call("instruction_show", params).await
+        self.instruction_call("instruction_show", params, None)
+            .await
     }
     async fn instruction_call<TParams: Serialize>(
         &self,
         method: &str,
         params: TParams,
+        operation_id: Option<OperationId>,
     ) -> Result<InstructionSnapshot, InstructionClientError> {
         let params = serde_json::to_value(params)
             .map_err(|_| ClientError::Protocol("invalid instruction request"))?;
@@ -46,9 +54,22 @@ impl CollaborationClient {
                 code: -32050,
                 data: Some(data),
             }) => {
-                let failure = serde_json::from_value(data)
-                    .map_err(|_| ClientError::Protocol("invalid instruction error"))?;
-                return Err(InstructionClientError::Rejected(failure));
+                // The API may shed a call before it reaches the catalog.
+                if let Ok(failure) = serde_json::from_value::<InstructionFailure>(data.clone())
+                    && matches!(failure.kind, InstructionFailureKind::Overloaded)
+                {
+                    return Err(InstructionClientError::Rejected(failure));
+                }
+                let failure: crate::central_catalog_failure::CentralCatalogFailure =
+                    serde_json::from_value(data)
+                        .map_err(|_| ClientError::Protocol("invalid central catalog failure"))?;
+                if failure.operation_id() != operation_id.as_ref() {
+                    return Err(ClientError::Protocol(
+                        "central catalog failure operation identity mismatch",
+                    )
+                    .into());
+                }
+                return Err(InstructionClientError::Catalog(failure));
             }
             Err(ClientError::Overloaded { message }) => {
                 return Err(InstructionClientError::Rejected(

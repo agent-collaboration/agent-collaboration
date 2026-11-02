@@ -1,5 +1,4 @@
-//! Native preparation through real SDK/SQLite/WebSocket fixture; no Codex binary or model.
-use automation_storage::AutomationStore;
+//! Central preparation through real SDK, central/Router SQLite and scripted native WebSockets.
 use collaboration_protocol::{
     CodexGeneration, EndpointDescription, InstructionCreateParams, InstructionText, OperationId,
     ScheduleCreateRequest, SchedulePrepareRequest, SessionRef,
@@ -9,8 +8,10 @@ use collaboration_runtime::NativeGenerationGate;
 use collaboration_service::ApplicationFixture;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, os::unix::fs::DirBuilderExt, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use tokio_tungstenite::tungstenite::Message;
+#[path = "support/central_catalog_fixture.rs"]
+mod fixture;
 #[path = "support/served_api.rs"]
 mod served_api;
 #[tokio::test]
@@ -38,15 +39,10 @@ async fn exercise_preparation(
     ownership_conflict: bool,
     change_conflict: bool,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let root = std::path::PathBuf::from("/tmp").join(format!(
-        "schedule-native-fixture-{}",
-        OperationId::generate().as_str()
-    ));
-    std::fs::DirBuilder::new().mode(0o700).create(&root)?;
-    let database = root.join("automation.sqlite");
-    let store = Arc::new(tokio::sync::Mutex::new(
-        AutomationStore::open(&database).await?,
-    ));
+    let fixture = fixture::CatalogFixture::open(|transport| transport, true).await?;
+    let proof: fixture::ProofResult = async {
+    let root = fixture.api.directory().to_path_buf();
+    let store = fixture.store.as_ref().ok_or("missing Router store")?.clone();
     let path = root.join("native.sock");
     let listener = tokio::net::UnixListener::bind(&path)?;
     let service_id = "00000000-0000-4000-8000-000000000001";
@@ -88,6 +84,7 @@ async fn exercise_preparation(
     };
     let identity = ApplicationFixture::new(service_id, service_id)?
         .with_endpoints(vec![description])?
+        .with_catalog(Some(fixture.transport.clone()))
         .with_automation_store(store.clone())
         .with_scheduled_run_execution(Arc::new(
             collaboration_runtime::CodexAppServerScheduledRuns::new(
@@ -98,15 +95,32 @@ async fn exercise_preparation(
         .with_native_backend(native_backend)?;
     let served = served_api::ServedApi::start(identity.clone())?;
     let client = served.client("prepare-fixture").await?;
+    if !matches!(fixture.transport.call(collaboration_protocol::AutomationCall::PullAutomationBatches(
+        collaboration_protocol::PullAutomationBatches {
+            after: None, max_bytes: 1_048_576,
+            work_protocols: vec![collaboration_protocol::MachineWorkProtocol::MachineWorkV1],
+        }
+    )).await?, collaboration_protocol::AutomationAnswer::Batches(_)) {
+        return Err("preparation target did not advertise MachineWorkV1".into());
+    }
     let instruction = client
         .create_instruction(InstructionCreateParams {
             operation_id: OperationId::generate(),
             text: InstructionText::try_from("Check status".to_owned())?,
         })
         .await?;
-    let schedule=client.create_schedule(serde_json::from_value::<ScheduleCreateRequest>(json!({"operationId":OperationId::generate(),"definition":{"instructionId":instruction.instruction_id,"timing":{"kind":"interval","seconds":60},"enabled":false,"destination":{"kind":"unprepared"},"executionTimeoutSeconds":null,"model":"gpt-5.6-sol","effort":"medium"}}))?).await?;
+    let schedule=client.create_schedule(serde_json::from_value::<ScheduleCreateRequest>(json!({"operationId":OperationId::generate(),"definition":{"instructionId":instruction.instruction_id,"timing":{"kind":"interval","seconds":600},"enabled":false,"destination":{"kind":"unprepared"},"executionTimeoutSeconds":null,"model":"gpt-5.6-sol","effort":"medium"}}))?).await?;
     if ownership_conflict {
-        let owner = client.create_schedule(serde_json::from_value::<ScheduleCreateRequest>(json!({"operationId":OperationId::generate(),"definition":{"instructionId":instruction.instruction_id,"timing":{"kind":"interval","seconds":60},"enabled":false,"destination":{"kind":"unprepared"},"executionTimeoutSeconds":null,"model":"gpt-5.6-sol","effort":"medium"}}))?).await?;
+        // A retained Local Schedule's real native claim must still exclude a central binding.
+        let local_instruction = store.lock().await.create_instruction(
+            &OperationId::generate(), &"Retained Local owner".to_owned().try_into()?, 0,
+        ).await?;
+        let owner = store.lock().await.create_schedule(&automation_storage::ScheduleCreate::<SessionRef, collaboration_protocol::EndpointRef> {
+            operation_id: OperationId::generate(),
+            definition: serde_json::from_value(json!({"instructionId":local_instruction.instruction_id,"timing":{"kind":"interval","seconds":600},"enabled":false,"destination":{"kind":"unprepared"},"executionTimeoutSeconds":null,"model":"gpt-5.6-sol","effort":"medium"}))?,
+            imported_continuity: agent_automation::ContinuityInput::None,
+            now_ms: 0,
+        }).await?;
         store
             .lock()
             .await
@@ -120,7 +134,7 @@ async fn exercise_preparation(
             .await?;
     }
     let existing_conflict = ownership_conflict || change_conflict;
-    let backend_store = store.clone();
+    let backend_client = fixture.api.client("edit-during-native-preparation").await?;
     let backend_schedule = schedule.schedule_id.clone();
     let backend = tokio::spawn(async move {
         for attempt in 0..if existing_conflict { 2 } else { 1 } {
@@ -142,26 +156,17 @@ async fn exercise_preparation(
                     .to_text()?,
             )?;
             if change_conflict && attempt == 0 {
-                let current = backend_store
-                    .lock()
-                    .await
-                    .inspect_schedule::<SessionRef, collaboration_protocol::EndpointRef>(
-                        &backend_schedule,
-                    )
-                    .await?;
-                let mut definition = current.record.definition;
-                definition.execution_timeout_seconds = Some(120);
-                backend_store
-                    .lock()
-                    .await
-                    .mutate_schedule(&automation_storage::ScheduleMutation {
+                let collaboration_client::ScheduleReadResponse::Schedule {value: current} = backend_client
+                    .read_schedule(collaboration_protocol::ScheduleShowRequest {schedule_id: backend_schedule.clone()}).await?
+                    else { return Err("central Schedule unavailable during native preparation".into()); };
+                let mut definition = current.definition;
+                definition.execution_timeout_seconds = Some(120.try_into()?);
+                backend_client
+                    .update_schedule(collaboration_protocol::ScheduleUpdateRequest {
                         operation_id: OperationId::generate(),
                         schedule_id: backend_schedule.clone(),
-                        edit: automation_storage::ScheduleEdit::Replace {
-                            expected_change_id: current.record.change_id,
-                            definition,
-                        },
-                        now_ms: chrono::Utc::now().timestamp_millis(),
+                        expected_change_id: current.change_id,
+                        definition,
                     })
                     .await?;
             }
@@ -228,6 +233,13 @@ async fn exercise_preparation(
         if !correct_error {
             return Err("known preparation rejection became unrecoverable uncertainty".into());
         }
+        let collaboration_client::ScheduleReadResponse::Schedule { value: unchanged } = client
+            .read_schedule(collaboration_protocol::ScheduleShowRequest {schedule_id: schedule.schedule_id.clone()}).await?
+            else {return Err("refused central binding lost its Schedule".into());};
+        if !matches!(unchanged.definition.destination, collaboration_protocol::ExecutionDestination::Unprepared)
+            || (change_conflict && error.current_change_id != Some(unchanged.change_id)) {
+            return Err("refused binding changed central destination or omitted actual conflicting revision".into());
+        }
         let served_retry_client = served_api::ServedApi::start(identity.clone())?;
         let retry_client = served_retry_client.client("ownership-recovery").await?;
         let retry = retry_client.prepare_schedule(serde_json::from_value(json!({
@@ -273,13 +285,27 @@ async fn exercise_preparation(
             _ => return Err("native thread identity not bound".into()),
         }
     }
+    let collaboration_protocol::AutomationAnswer::Schedule(central) = fixture.transport
+        .call(collaboration_protocol::AutomationCall::ScheduleShow(collaboration_protocol::ScheduleShowRequest {schedule_id: schedule.schedule_id.clone()})).await?
+        else {return Err("central Schedule not inspectable after native preparation".into());};
+    let expected_thread = if existing_conflict {"different-thread"} else {"prepared-new-thread"};
+    if central.definition.enabled
+        || if lose_response {
+            !matches!(central.definition.destination, collaboration_protocol::ExecutionDestination::Unprepared)
+                || central.change_id != schedule.change_id
+        } else {
+            !matches!(central.definition.destination, collaboration_protocol::ExecutionDestination::OwnedThread {target,..} if String::from(target.session_id.clone())==expected_thread)
+                || central.change_id == schedule.change_id
+        }
+    {
+        return Err("native preparation result disagreed with actual central binding/revision".into());
+    }
     served.stop().await?;
     backend.await??;
     drop(store);
-    for entry in std::fs::read_dir(&root)? {
-        let entry = entry?;
-        std::fs::remove_file(entry.path())?;
-    }
-    std::fs::remove_dir(root)?;
     Ok(())
+    }.await;
+    let closed = fixture.close().await;
+    proof?;
+    closed
 }

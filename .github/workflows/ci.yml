@@ -153,6 +153,10 @@ jobs:
           cargo check --locked -p collaboration-central-core
           cargo check --locked -p collaboration-central-core --target wasm32-unknown-unknown
           cargo clippy --locked -p collaboration-central-core --target wasm32-unknown-unknown --lib -- -D warnings
+      - name: Check provider working directories on wasm
+        run: |
+          cargo build --locked -p collaboration-protocol --example provider_working_directory_contract --target wasm32-unknown-unknown --features uuid/js
+          node verification/tooling/check-provider-working-directory-wasm.ts
       - name: Build codex-router variants and quota-reset harness
         run: |
           cargo build -p codex-router-cli --bin codex-router

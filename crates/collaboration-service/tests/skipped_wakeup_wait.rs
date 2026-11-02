@@ -55,6 +55,9 @@ async fn sdk_wait_reports_skipped_one_shot_without_a_delivery()
             wakeup_id: wake.definition.wakeup_id.clone(),
         })
         .await?;
+    let collaboration_client::WakeReadResponse::Local { value: current } = current else {
+        return Err("stored pre-upgrade Wake did not retain local ownership".into());
+    };
     if current.first_fire.is_some() || current.pending_delivery_id.is_some() {
         return Err("skipped wake fabricated firing or delivery".into());
     }

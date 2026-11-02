@@ -112,7 +112,7 @@ async fn unavailable_native_source_blocks_summary_and_keeps_worker_outcome() -> 
         .bind(instruction_id.as_str())
         .execute(&mut *transaction)
         .await?;
-    sqlx::query("INSERT INTO schedule_definitions VALUES (?,?,?,0,'{}','{}',0,0)")
+    sqlx::query("INSERT INTO schedule_definitions(schedule_id,change_id,instruction_id,enabled,definition_json,imported_continuity_json,created_at_ms,updated_at_ms) VALUES (?,?,?,0,'{}','{}',0,0)")
         .bind(schedule_id.as_str())
         .bind(agent_automation::ChangeId::generate().as_str())
         .bind(instruction_id.as_str())
@@ -277,7 +277,7 @@ async fn exercise_timeout_connection(fail_connection: bool) -> TestResult<()> {
         .bind(instruction_id.as_str())
         .execute(&mut *transaction)
         .await?;
-    sqlx::query("INSERT INTO schedule_definitions VALUES (?,?,?,0,'{}','{}',0,0)")
+    sqlx::query("INSERT INTO schedule_definitions(schedule_id,change_id,instruction_id,enabled,definition_json,imported_continuity_json,created_at_ms,updated_at_ms) VALUES (?,?,?,0,'{}','{}',0,0)")
         .bind(schedule_id.as_str())
         .bind(agent_automation::ChangeId::generate().as_str())
         .bind(instruction_id.as_str())

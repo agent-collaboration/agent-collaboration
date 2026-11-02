@@ -13,6 +13,7 @@ pub struct ExternalOperationRecord<TState, TResult> {
     pub result: Option<TResult>,
     pub failure: Option<serde_json::Value>,
     pub admitted_at_ms: i64,
+    pub central_bind_request: Option<crate::StoredCentralBindRequest>,
 }
 pub struct ExternalAdmission<TState> {
     pub operation_id: OperationId,
@@ -26,6 +27,20 @@ pub enum ExternalAdmissionResult<TState, TResult> {
     Existing(ExternalOperationRecord<TState, TResult>),
 }
 impl AutomationStore {
+    /// Inspects replay identity without admitting a new operation or dispatching an effect.
+    pub async fn read_schedule_preparation<TState: DeserializeOwned, TResult: DeserializeOwned>(
+        &mut self,
+        operation_id: &OperationId,
+        schedule_id: &agent_automation::ScheduleId,
+        canonical_request: &[u8],
+    ) -> Result<Option<ExternalOperationRecord<TState, TResult>>, StorageError> {
+        sqlx::query("SELECT * FROM operation_receipts WHERE operation_id=?")
+            .bind(operation_id.as_str())
+            .fetch_optional(&mut self.connection)
+            .await?
+            .map(|row| decode_preparation(&row, operation_id, schedule_id, canonical_request))
+            .transpose()
+    }
     pub async fn admit_schedule_preparation<
         TState: Serialize + DeserializeOwned,
         TResult: DeserializeOwned,
@@ -42,40 +57,12 @@ impl AutomationStore {
             .fetch_optional(&mut *transaction)
             .await?;
         if let Some(row) = existing {
-            if row.try_get::<String, _>("method_name")? != "schedule/prepare"
-                || row.try_get::<String, _>("resource_id")? != request.schedule_id.as_str()
-                || row.try_get::<Vec<u8>, _>("canonical_request")? != request.canonical_request
-            {
-                return Err(StorageError::OperationConflict);
-            }
-            let status: String = row.try_get("operation_status")?;
-            if !matches!(
-                status.as_str(),
-                "admitted" | "inProgress" | "uncertain" | "succeeded" | "failed"
-            ) {
-                return Err(StorageError::InvalidRecord);
-            }
-            let evidence = serde_json::from_str(&row.try_get::<String, _>("effect_evidence_json")?)
-                .map_err(|_| StorageError::InvalidRecord)?;
-            let result = row
-                .try_get::<Option<String>, _>("final_result_json")?
-                .map(|value| serde_json::from_str(&value).map_err(|_| StorageError::InvalidRecord))
-                .transpose()?;
-            let record = ExternalOperationRecord {
-                operation_id: request.operation_id.clone(),
-                method: "schedule/prepare".into(),
-                resource_id: request.schedule_id.as_str().to_owned(),
-                status,
-                evidence,
-                result,
-                failure: row
-                    .try_get::<Option<String>, _>("final_error_json")?
-                    .map(|text| {
-                        serde_json::from_str(&text).map_err(|_| StorageError::InvalidRecord)
-                    })
-                    .transpose()?,
-                admitted_at_ms: row.try_get("committed_at_ms")?,
-            };
+            let record = decode_preparation(
+                &row,
+                &request.operation_id,
+                &request.schedule_id,
+                &request.canonical_request,
+            )?;
             transaction.commit().await?;
             return Ok(ExternalAdmissionResult::Existing(record));
         }
@@ -90,4 +77,60 @@ impl AutomationStore {
         transaction.commit().await?;
         Ok(ExternalAdmissionResult::New)
     }
+}
+fn decode_preparation<TState: DeserializeOwned, TResult: DeserializeOwned>(
+    row: &sqlx::sqlite::SqliteRow,
+    operation_id: &OperationId,
+    schedule_id: &agent_automation::ScheduleId,
+    canonical_request: &[u8],
+) -> Result<ExternalOperationRecord<TState, TResult>, StorageError> {
+    if row.try_get::<String, _>("method_name")? != "schedule/prepare"
+        || row.try_get::<String, _>("resource_id")? != schedule_id.as_str()
+        || row.try_get::<Vec<u8>, _>("canonical_request")? != canonical_request
+    {
+        return Err(StorageError::OperationConflict);
+    }
+    let status: String = row.try_get("operation_status")?;
+    let result: Option<TResult> = row
+        .try_get::<Option<String>, _>("final_result_json")?
+        .map(|encoded| serde_json::from_str(&encoded).map_err(|_| StorageError::InvalidRecord))
+        .transpose()?;
+    let failure: Option<serde_json::Value> = row
+        .try_get::<Option<String>, _>("final_error_json")?
+        .map(|encoded| serde_json::from_str(&encoded).map_err(|_| StorageError::InvalidRecord))
+        .transpose()?;
+    if !matches!(
+        (status.as_str(), result.is_some(), failure.is_some()),
+        ("admitted" | "inProgress", false, false)
+            | ("uncertain", false, _)
+            | ("succeeded", true, false)
+            | ("failed", false, true)
+    ) {
+        return Err(StorageError::InvalidRecord);
+    }
+    let central_bind_request: Option<crate::StoredCentralBindRequest> = row
+        .try_get::<Option<String>, _>("central_bind_request_json")?
+        .map(TryInto::try_into)
+        .transpose()?;
+    if let Some(bind) = &central_bind_request {
+        let bind = bind.request()?;
+        if bind.operation_id != *operation_id
+            || bind.automation_id.as_str() != schedule_id.as_str()
+            || status == "admitted"
+        {
+            return Err(StorageError::InvalidRecord);
+        }
+    }
+    Ok(ExternalOperationRecord {
+        operation_id: operation_id.clone(),
+        method: "schedule/prepare".into(),
+        resource_id: schedule_id.as_str().into(),
+        status,
+        evidence: serde_json::from_str(&row.try_get::<String, _>("effect_evidence_json")?)
+            .map_err(|_| StorageError::InvalidRecord)?,
+        result,
+        failure,
+        admitted_at_ms: row.try_get("committed_at_ms")?,
+        central_bind_request,
+    })
 }

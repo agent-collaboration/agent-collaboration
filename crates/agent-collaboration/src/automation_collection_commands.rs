@@ -47,6 +47,13 @@ pub(crate) struct RunListOptions {
     pub page: PageOptions,
 }
 #[derive(clap::Args)]
+pub(crate) struct FiringListOptions {
+    #[arg(long)]
+    pub automation_id: String,
+    #[command(flatten)]
+    pub page: PageOptions,
+}
+#[derive(clap::Args)]
 pub(crate) struct RunSummaryOptions {
     #[arg(long)]
     pub run_id: String,
@@ -75,6 +82,8 @@ pub(crate) struct DeliveryListOptions {
     pub page: PageOptions,
 }
 pub(crate) enum CollectionCommand {
+    FiringShow(String),
+    Firings(FiringListOptions),
     RunReconcile(String),
     DeliveryReconcile(String),
     OperationReconcile(String),
@@ -94,6 +103,8 @@ pub(crate) struct CollectionContext {
     pub json: bool,
 }
 enum PreparedCollection {
+    FiringShow(collaboration_client::FiringShowRequest),
+    Firings(collaboration_client::protocol::FiringListRequest),
     RunReconcile(collaboration_client::protocol::RunShowRequest),
     DeliveryReconcile(DeliveryShowRequest),
     OperationReconcile(collaboration_client::protocol::OperationShowRequest),
@@ -109,13 +120,16 @@ enum PreparedCollection {
     DeliveryShow(DeliveryShowRequest),
 }
 enum ReadCommandError {
+    Catalog(collaboration_client::CentralCatalogFailure),
     Inspection(Box<collaboration_client::protocol::AutomationInspectionFailure>),
     Wake(Box<collaboration_client::protocol::WakeFailure>),
+    WakeSelection(Box<collaboration_client::WakeSelectionFailure>),
     Client(ClientError),
 }
 impl From<AutomationInspectionClientError> for ReadCommandError {
     fn from(error: AutomationInspectionClientError) -> Self {
         match error {
+            AutomationInspectionClientError::Catalog(error) => Self::Catalog(error),
             AutomationInspectionClientError::Rejected(error) => Self::Inspection(error),
             AutomationInspectionClientError::Connection(error) => Self::Client(error),
         }
@@ -124,6 +138,8 @@ impl From<AutomationInspectionClientError> for ReadCommandError {
 impl From<WakeClientError> for ReadCommandError {
     fn from(error: WakeClientError) -> Self {
         match error {
+            WakeClientError::Selection(error) => Self::WakeSelection(error),
+            WakeClientError::Catalog(error) => Self::Catalog(error),
             WakeClientError::Rejected(error) => Self::Wake(error),
             WakeClientError::Connection(error) => Self::Client(error),
         }
@@ -183,6 +199,10 @@ pub(crate) fn run_collection_command(
         )
         .await?;
         match request {
+            PreparedCollection::FiringShow(request) => {
+                read_value(client.read_firing(request)).await
+            }
+            PreparedCollection::Firings(request) => read_value(client.list_firings(request)).await,
             PreparedCollection::RunReconcile(request) => {
                 read_value(client.reconcile_run(request)).await
             }
@@ -233,8 +253,30 @@ pub(crate) fn run_collection_command(
     }
     let (record, code) = match result {
         Ok(result) => (crate::endpoint_commands::result_envelope(json!(result)), 0),
+        Err(ReadCommandError::Catalog(error)) => {
+            let code = if matches!(
+                error,
+                collaboration_client::CentralCatalogFailure::CentralUnreachable { .. }
+            ) {
+                3
+            } else {
+                4
+            };
+            (json!({"kind":"error","error":error}), code)
+        }
         Err(ReadCommandError::Inspection(error)) => (json!({"kind":"error","error":error}), 4),
         Err(ReadCommandError::Wake(error)) => (json!({"kind":"error","error":error}), 4),
+        Err(ReadCommandError::WakeSelection(error)) => {
+            let code = if matches!(
+                &*error,
+                collaboration_client::WakeSelectionFailure::LocalStoreUnavailable { .. }
+            ) {
+                3
+            } else {
+                4
+            };
+            (json!({"kind":"error","error":error}), code)
+        }
         Err(ReadCommandError::Client(error)) => {
             let kind = if matches!(error, ClientError::UnsupportedCapability(_)) {
                 "unsupportedCapability"
@@ -267,6 +309,24 @@ async fn read_value<TResult: serde::Serialize, TError: Into<ReadCommandError>>(
 }
 fn prepare(command: CollectionCommand) -> Result<PreparedCollection, String> {
     match command {
+        CollectionCommand::FiringShow(id) => Ok(PreparedCollection::FiringShow(
+            collaboration_client::FiringShowRequest {
+                firing_id: id.try_into().map_err(|_| "--firing-id requires UUIDv7")?,
+            },
+        )),
+        CollectionCommand::Firings(options) => {
+            let page = options.page.request()?;
+            Ok(PreparedCollection::Firings(
+                collaboration_client::protocol::FiringListRequest {
+                    automation_id: options
+                        .automation_id
+                        .try_into()
+                        .map_err(|_| "--automation-id requires UUIDv7")?,
+                    cursor: page.cursor,
+                    limit: page.limit,
+                },
+            ))
+        }
         CollectionCommand::RunReconcile(id) => Ok(PreparedCollection::RunReconcile(
             collaboration_client::protocol::RunShowRequest {
                 run_id: id.try_into().map_err(|_| "--run-id requires UUIDv7")?,

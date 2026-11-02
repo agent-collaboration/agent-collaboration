@@ -376,7 +376,9 @@ impl ProjectStoreRegistry {
             superseded_current: Some(current),
         };
         tracing::trace!(target: "collaboration_service::project_native_close", "native project drain started");
+        tracing::debug!(target: "collaboration_runtime::project_native_close_diagnostic", phase = "database.close", state = "started", "supersession drain");
         database.close().await;
+        tracing::debug!(target: "collaboration_runtime::project_native_close_diagnostic", phase = "database.close", state = "completed", "supersession drain");
         *owner = ProjectRuntime::Superseded {
             current: Some(current),
         };

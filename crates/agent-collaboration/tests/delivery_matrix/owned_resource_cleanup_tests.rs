@@ -1,11 +1,10 @@
-//! Real API/service/SQLite case; no native endpoint, HOME override or mocked cleanup call.
+//! Real pre-upgrade Local timer cleanup through the API, followed by exact SQLite reopen.
 use super::super::{owned_resources::OwnedMatrixResources, proof_context::ProofResult};
 use super::{CleanupAction, CleanupObservation, CleanupOutcome, cleanup_owned_resources};
 use automation_storage::AutomationStore;
 use collaboration_client::protocol::{
-    EndpointRef, InstructionCreateParams, OperationId, SavedMessage, ScheduleCreateRequest,
-    ScheduleId, ScheduleShowRequest, SessionRef, WakeSendRequest, WakeShowRequest, WakeState,
-    WakeupId,
+    EndpointRef, OperationId, SavedMessage, ScheduleCreateRequest, ScheduleId, ScheduleShowRequest,
+    SessionRef, WakeSendRequest, WakeShowRequest, WakeState, WakeupId,
 };
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_service::ApplicationFixture;
@@ -14,7 +13,7 @@ use std::{fmt, os::unix::fs::PermissionsExt as _, sync::Arc};
 use tokio::sync::Mutex;
 
 #[tokio::test]
-async fn known_timer_cleanup_reaches_real_service_and_sqlite() -> ProofResult<()> {
+async fn known_legacy_timer_cleanup_reaches_real_service_and_sqlite() -> ProofResult<()> {
     let directory = tempfile::Builder::new()
         .prefix("cleanup-")
         .tempdir_in("/tmp")?;
@@ -68,16 +67,40 @@ async fn exercise_real_timer_cleanup(
         "timing": {"kind": "after", "seconds": 600},
         "expiry": {"kind": "none"}
     }))?;
-    let wake = client.send_wakeup(wake_request).await?;
+    // Arrange retained pre-upgrade state with its real constructor; new public create is central.
+    let wake_id = store
+        .lock()
+        .await
+        .create_wakeup(&automation_storage::WakeCreate {
+            operation_id: wake_request.operation_id,
+            requested_by: wake_request.requested_by,
+            replace: wake_request.replace,
+            message: wake_request.message,
+            timing: serde_json::from_value(serde_json::to_value(wake_request.timing)?)?,
+            expiry: serde_json::from_value(serde_json::to_value(wake_request.expiry)?)?,
+            now_ms: chrono::Utc::now().timestamp_millis(),
+        })
+        .await?
+        .definition
+        .wakeup_id;
+    let collaboration_client::WakeReadResponse::Local { value: wake } = client
+        .read_wakeup(WakeShowRequest { wakeup_id: wake_id })
+        .await?
+    else {
+        return Err("legacy cleanup Wake changed owner".into());
+    };
     owner.record_wake_receipt(&wake_operation, wake.definition.wakeup_id.clone())?;
 
     let instruction_operation = OperationId::generate();
     owner.record_instruction_submission(instruction_operation.clone())?;
-    let instruction = client
-        .create_instruction(InstructionCreateParams {
-            operation_id: instruction_operation.clone(),
-            text: "Synthetic schedule instruction".to_owned().try_into()?,
-        })
+    let instruction = store
+        .lock()
+        .await
+        .create_instruction(
+            &instruction_operation,
+            &"Synthetic schedule instruction".to_owned().try_into()?,
+            chrono::Utc::now().timestamp_millis(),
+        )
         .await?;
     owner.record_instruction_receipt(&instruction_operation, instruction.instruction_id.clone())?;
     let schedule_operation = OperationId::generate();
@@ -91,7 +114,27 @@ async fn exercise_real_timer_cleanup(
             "model": "fixture-model", "effort": "medium"
         }
     }))?;
-    let schedule = client.create_schedule(schedule_request).await?;
+    let schedule_id = store
+        .lock()
+        .await
+        .create_schedule(
+            &automation_storage::ScheduleCreate::<SessionRef, EndpointRef> {
+                operation_id: schedule_request.operation_id,
+                definition: serde_json::from_value(serde_json::to_value(
+                    schedule_request.definition,
+                )?)?,
+                imported_continuity: agent_automation::ContinuityInput::None,
+                now_ms: chrono::Utc::now().timestamp_millis(),
+            },
+        )
+        .await?
+        .schedule_id;
+    let collaboration_client::ScheduleReadResponse::Local { value: schedule } = client
+        .read_schedule(ScheduleShowRequest { schedule_id })
+        .await?
+    else {
+        return Err("legacy cleanup Schedule changed owner".into());
+    };
     owner.record_schedule_receipt(&schedule_operation, schedule.schedule_id.clone())?;
 
     let report = cleanup_owned_resources(&client, owner.into_cleanup_plan()).await;
@@ -146,16 +189,24 @@ async fn exercise_real_timer_cleanup(
             );
         }
     };
-    let wake_read = client
+    let collaboration_client::WakeReadResponse::Local { value: wake_read } = client
         .read_wakeup(WakeShowRequest {
             wakeup_id: wake.definition.wakeup_id.clone(),
         })
-        .await?;
-    let schedule_read = client
+        .await?
+    else {
+        return Err("legacy cleanup read changed Wake owner".into());
+    };
+    let collaboration_client::ScheduleReadResponse::Local {
+        value: schedule_read,
+    } = client
         .read_schedule(ScheduleShowRequest {
             schedule_id: schedule.schedule_id.clone(),
         })
-        .await?;
+        .await?
+    else {
+        return Err("legacy cleanup read changed Schedule owner".into());
+    };
     if wake_read.definition.wakeup_id != wake.definition.wakeup_id
         || wake_read.state != WakeState::Cancelled
         || wake_read.next_due_at.is_some()

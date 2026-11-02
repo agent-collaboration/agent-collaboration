@@ -132,6 +132,38 @@ pub(crate) async fn prepare_schedule(
     let Some(execution) = request.execution else {
         return reject_without_route(&params, "Scheduled preparation route unavailable.");
     };
+    if matches!(destination, ScheduleDestination::Fresh { .. }) {
+        match execution.support(&destination).await {
+            Ok(collaboration_contracts::ScheduleSupport::Supported { .. }) => {}
+            Ok(collaboration_contracts::ScheduleSupport::Unsupported { missing })
+                if missing
+                    .contains(&collaboration_contracts::ScheduleCapability::CreateSession) =>
+            {
+                return reject_preselection(
+                    &params,
+                    ScheduleFailureKind::InvalidField,
+                    "create the session first (conversation create), then schedule it as an existing target",
+                    Some(&effects),
+                );
+            }
+            Ok(collaboration_contracts::ScheduleSupport::Unsupported { .. }) => {
+                return reject_preselection(
+                    &params,
+                    ScheduleFailureKind::UnsupportedCapability,
+                    "This target does not support the requested preparation; no native effect was dispatched.",
+                    Some(&effects),
+                );
+            }
+            Err(_) => {
+                return reject_preselection(
+                    &params,
+                    ScheduleFailureKind::AutomationUnavailable,
+                    "Target preparation capabilities could not be established; no native effect was dispatched.",
+                    Some(&effects),
+                );
+            }
+        }
+    }
     let canonical = match serde_json::to_vec(&(&params.schedule_id, &params.destination)) {
         Ok(value) => value,
         Err(_) => {
@@ -319,14 +351,14 @@ pub(crate) async fn prepare_schedule(
         .await,
     }
 }
-fn destination_endpoint(destination: &DestinationPreparation) -> &EndpointRef {
+pub(crate) fn destination_endpoint(destination: &DestinationPreparation) -> &EndpointRef {
     match destination {
         DestinationPreparation::Existing { target, .. } => &target.endpoint,
         DestinationPreparation::Fresh { endpoint, .. } => endpoint,
         DestinationPreparation::Fork { source, .. } => &source.endpoint,
     }
 }
-fn destination_cwd(destination: &DestinationPreparation) -> &str {
+pub(crate) fn destination_cwd(destination: &DestinationPreparation) -> &str {
     match destination {
         DestinationPreparation::Existing { cwd, .. }
         | DestinationPreparation::Fresh { cwd, .. }
@@ -334,7 +366,7 @@ fn destination_cwd(destination: &DestinationPreparation) -> &str {
     }
 }
 #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
-fn reject_choice_field(
+pub(crate) fn reject_choice_field(
     params: &SchedulePrepareRequest,
     field: &str,
     effects: Option<&RouteEffectEvidence<SessionRef, CodexGeneration>>,
@@ -359,7 +391,7 @@ fn reject_choice_field(
     Err(ScheduleOperationFailure::Preparation(failure))
 }
 #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
-fn reject_preselection(
+pub(crate) fn reject_preselection(
     params: &SchedulePrepareRequest,
     kind: ScheduleFailureKind,
     message: &str,
@@ -389,7 +421,7 @@ fn reject_preselection(
     };
     Err(ScheduleOperationFailure::Preparation(failure))
 }
-fn error(
+pub(crate) fn error(
     params: &SchedulePrepareRequest,
     kind: ScheduleFailureKind,
     message: &str,
@@ -426,7 +458,7 @@ fn reject(
     )))
 }
 #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
-async fn finish_failure(
+pub(crate) async fn finish_failure(
     store: &Arc<Mutex<AutomationStore>>,
     params: &SchedulePrepareRequest,
     kind: ScheduleFailureKind,
