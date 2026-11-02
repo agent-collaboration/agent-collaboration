@@ -206,6 +206,7 @@ jobs:
       # The full workspace test build outgrows the runner's initial free disk.
       # Remove preinstalled SDKs this job never uses.
       - name: Free runner disk space
+        background: true
         shell: bash
         run: |
           df -h /
@@ -249,6 +250,8 @@ jobs:
         uses: ./.github/actions/install-ci-tools
         with:
           cache-hit: ${{ steps.rust_tools.outputs.cache-hit }}
+      - name: Wait for runner disk cleanup
+        wait-all:
       # Build the same workspace selection and features on each runner, then
       # reuse those binaries for its hash partition without relinking them.
       # Real Host, importer and forwarding-timer roots run in e2e below.
