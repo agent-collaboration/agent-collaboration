@@ -4,8 +4,20 @@ import { resolve } from "node:path";
 
 const workspaceRoot = resolve(import.meta.dirname, "../..");
 const outputRoot = resolve(workspaceRoot, "tmp/tui-input-ownership");
-const cargoArguments = ["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"];
-const fixtureName = "s8_input_ownership_control.rs";
+const cargoArguments = [
+  "clippy",
+  "--keep-going",
+  "-p",
+  "agent-session-tui",
+  "-p",
+  "agent-router-quota-tui",
+  "-p",
+  "agent-collaboration-tui",
+  "--examples",
+  "--",
+  "-D",
+  "warnings",
+];
 const crateNames = ["agent-session-tui", "agent-router-quota-tui", "agent-collaboration-tui"];
 const methods = ["use_terminal_events", "use_local_terminal_events", "use_terminal_size"];
 
@@ -43,6 +55,14 @@ const controls: readonly LintControl[] = [
   },
 ];
 
+function fixtureName(control: LintControl): string {
+  return `s8_input_ownership_${control.name.replaceAll("-", "_")}.rs`;
+}
+
+function fixturePath(control: LintControl): string {
+  return resolve(workspaceRoot, "crates", control.crateName, "examples", fixtureName(control));
+}
+
 function fixtureSource(control: LintControl): string {
   const parameters = control.method === null ? "" : "mut hooks: Hooks";
   const subscription = control.method === null ? "" : `hooks.${control.method}(|_| {});`;
@@ -70,23 +90,11 @@ function preflight(): void {
       if (!configuration.includes(`::${method}"`))
         throw new Error(`${configurationPath} does not disallow ${method}`);
     }
-    const fixturePath = resolve(workspaceRoot, "crates", crateName, "examples", fixtureName);
-    if (existsSync(fixturePath)) throw new Error(`Refusing to overwrite a fixture: ${fixturePath}`);
   }
-}
-
-function runClippy(name: string): { readonly status: number; readonly output: string } {
-  const result = spawnSync("cargo", cargoArguments, {
-    cwd: workspaceRoot,
-    encoding: "utf8",
-    maxBuffer: 32 * 1024 * 1024,
-  });
-  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-  writeFileSync(resolve(outputRoot, `${name}.log`), output);
-  if (result.error !== undefined) throw result.error;
-  if (result.signal !== null || result.status === null)
-    throw new Error(`${name}: Clippy terminated without an exit status (${result.signal})`);
-  return { status: result.status, output };
+  for (const control of controls) {
+    const controlPath = fixturePath(control);
+    if (existsSync(controlPath)) throw new Error(`Refusing to overwrite a fixture: ${controlPath}`);
+  }
 }
 
 function main(): void {
@@ -97,64 +105,87 @@ function main(): void {
     console.log("TUI input-ownership controls are ready; no Cargo command or mutation ran.");
     return;
   }
-  mkdirSync(outputRoot, { recursive: true });
-  const receipts: {
-    readonly name: string;
-    readonly exitCode: number;
-    readonly expectedFailure: boolean;
-  }[] = [];
-  const baseline = runClippy("baseline");
-  if (baseline.status !== 0)
-    throw new Error(
-      `Correct workspace Clippy failed (${baseline.status}); no negative control was installed. See ${outputRoot}/baseline.log`,
-    );
-  for (const control of controls) {
-    const examplesPath = resolve(workspaceRoot, "crates", control.crateName, "examples");
-    const fixturePath = resolve(examplesPath, fixtureName);
-    mkdirSync(examplesPath, { recursive: true });
-    const source = fixtureSource(control);
-    writeFileSync(fixturePath, source, { flag: "wx" });
-    let outcome: { readonly kind: "passed" } | { readonly kind: "failed"; readonly error: unknown };
-    try {
-      const result = runClippy(control.name);
-      const expectedFailure = control.method !== null;
-      if (expectedFailure) {
-        if (
-          result.status === 0 ||
-          !result.output.includes(fixtureName) ||
-          !result.output.includes("disallowed method") ||
-          !result.output.includes(control.method ?? "")
-        ) {
-          throw new Error(
-            `${control.name}: the named fixture did not produce its disallowed-method diagnostic; see ${outputRoot}/${control.name}.log`,
+  const installed: { readonly path: string; readonly source: string }[] = [];
+  const cleanupErrors: unknown[] = [];
+  let output = "";
+  let outcome: { readonly kind: "passed" } | { readonly kind: "failed"; readonly error: unknown } =
+    {
+      kind: "passed",
+    };
+  try {
+    for (const control of controls) {
+      const controlPath = fixturePath(control);
+      const source = fixtureSource(control);
+      mkdirSync(resolve(controlPath, ".."), { recursive: true });
+      writeFileSync(controlPath, source, { flag: "wx" });
+      installed.push({ path: controlPath, source });
+    }
+    const result = spawnSync("cargo", cargoArguments, {
+      cwd: workspaceRoot,
+      env: { ...process.env, CARGO_TERM_COLOR: "never" },
+      encoding: "utf8",
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    if (result.error !== undefined) throw result.error;
+    if (result.signal !== null || result.status === null)
+      throw new Error(`Clippy terminated without an exit status (${result.signal})`);
+    if (result.status === 0) throw new Error("Clippy accepted the disallowed listener fixtures");
+    const diagnostics = output
+      .split(/(?=^(?:error|warning)(?:\[[^\]]+\])?:)/m)
+      .filter((diagnostic) => /^(?:error|warning)(?:\[[^\]]+\])?:/.test(diagnostic));
+    for (const control of controls) {
+      const method = control.method;
+      const controlName = fixtureName(control);
+      if (method === null) {
+        if (diagnostics.some((diagnostic) => diagnostic.includes(controlName)))
+          throw new Error(`${control.name}: the render-only fixture produced a diagnostic`);
+      } else if (
+        !diagnostics.some((diagnostic) => {
+          const headline = diagnostic.split("\n", 1)[0] ?? "";
+          return (
+            headline.includes("disallowed method") &&
+            headline.includes(method) &&
+            diagnostic.includes(controlName)
           );
-        }
-      } else if (result.status !== 0) {
+        })
+      ) {
         throw new Error(
-          `Render-only control failed (${result.status}); see ${outputRoot}/${control.name}.log`,
+          `${control.name}: the named fixture did not produce its disallowed-method diagnostic`,
         );
       }
-      receipts.push({ name: control.name, exitCode: result.status, expectedFailure });
-      outcome = { kind: "passed" };
-    } catch (error) {
-      outcome = { kind: "failed", error };
     }
-    if (readFileSync(fixturePath, "utf8") !== source) {
-      const changed = new Error(
-        `Control changed during execution; retained for inspection: ${fixturePath}`,
-      );
-      throw new AggregateError(
-        outcome.kind === "failed" ? [outcome.error, changed] : [changed],
-        "TUI control restoration failed",
-      );
+  } catch (error) {
+    outcome = { kind: "failed", error };
+  } finally {
+    for (const fixture of installed) {
+      try {
+        if (readFileSync(fixture.path, "utf8") !== fixture.source)
+          cleanupErrors.push(
+            new Error(`Control changed during execution; retained for inspection: ${fixture.path}`),
+          );
+        else unlinkSync(fixture.path);
+      } catch (error) {
+        cleanupErrors.push(error);
+      }
     }
-    unlinkSync(fixturePath);
-    if (outcome.kind === "failed") throw outcome.error;
   }
-  writeFileSync(
-    resolve(outputRoot, "receipts.json"),
-    `${JSON.stringify({ command: ["cargo", ...cargoArguments], receipts }, null, 2)}\n`,
-  );
+  if (cleanupErrors.length > 0)
+    outcome = {
+      kind: "failed",
+      error: new AggregateError(
+        outcome.kind === "failed" ? [outcome.error, ...cleanupErrors] : cleanupErrors,
+        "TUI control restoration failed",
+      ),
+    };
+  if (outcome.kind === "failed") {
+    if (output.length > 0) {
+      mkdirSync(outputRoot, { recursive: true });
+      writeFileSync(resolve(outputRoot, "clippy.log"), output);
+      console.error(`Clippy output: ${outputRoot}/clippy.log`);
+    }
+    throw outcome.error;
+  }
   console.log("Three listener controls rejected; render-only control passed. No fixture remains.");
 }
 

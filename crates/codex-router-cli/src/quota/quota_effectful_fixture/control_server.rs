@@ -132,7 +132,7 @@ impl FixtureControlServer {
                 self.events.await_event(after_ordinal, kind).await,
             )),
             FixtureControlRequest::Readback { request_id } => Ok(
-                json!({"kind":"fixture-readback","requestId":request_id,"readback":receipts::readback(&self.controller.readback().map_err(io::Error::other)?),"accounts":read_accounts(&self.root).await?,"accountCommands":self.accounts.receipts(),"refresh":self.refresh.as_ref().map(RefreshEffects::readback)}),
+                json!({"kind":"fixture-readback","requestId":request_id,"readback":receipts::live_readback(&self.controller.readback().map_err(io::Error::other)?),"accounts":read_accounts(&self.root).await?,"accountCommands":self.accounts.receipts(),"refresh":self.refresh.as_ref().map(RefreshEffects::readback)}),
             ),
             FixtureControlRequest::SelectBrowseAccount {
                 request_id,
@@ -206,7 +206,9 @@ impl FixtureControlServer {
                     .map_err(io::Error::other)?;
                 let value = json!({"kind":"fixture-mutation","operation":"remove-captured-account-externally","requestId":request_id,"accountId":self.target.account_id.as_str(),"accounts":read_accounts(&self.root).await?,"readback":receipts::readback(&acknowledgement.readback)});
                 self.mutations.lock().unwrap().push(value.clone());
-                Ok(value)
+                let mut response = value;
+                response["readback"] = receipts::live_readback(&acknowledgement.readback);
+                Ok(response)
             }
             FixtureControlRequest::ReenableBeforeRemoval { request_id } => {
                 self.accounts

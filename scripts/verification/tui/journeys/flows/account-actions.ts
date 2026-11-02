@@ -17,7 +17,7 @@ const shared = {
 		'typed account-command result and refreshed report',
 	],
 	wrongOutcomes: [
-		'enabled account exposes Remove',
+		'enabled account Remove loses its reason or dispatches while unavailable',
 		'wrong account receives a command',
 		'Cancel is not primary/initially focused',
 		'Ctrl+Enter removes',
@@ -28,7 +28,7 @@ const shared = {
 		'S7 account-command/clipboard fixtures; declared keys for actions without a fixed key in R17 must be exercised and equal across projections.',
 	],
 } satisfies Omit<FlowJourney, 'journeyId' | 'steps'>;
-export const accountActionJourneys: readonly FlowJourney[] = [
+const accountActionDrafts: readonly FlowJourney[] = [
 	{
 		...shared,
 		journeyId: 'quota-actions-every-command',
@@ -171,3 +171,51 @@ export const accountActionJourneys: readonly FlowJourney[] = [
 		}),
 	),
 ];
+
+export const accountActionJourneys: readonly FlowJourney[] = accountActionDrafts.map((journey) =>
+	Object.assign({}, journey, {
+		steps: journey.steps.flatMap((step): FlowJourney['steps'] => {
+			if (step.kind === 'readback')
+				return [
+					{
+						kind: 'fixture',
+						operation: 'publish-settled-account-command',
+						purpose:
+							'Await the real flushed owner completion, release only the declared held removal gate, and retain the resulting native marked publication.',
+					},
+					step,
+				];
+			if (step.kind === 'click' && step.target !== 'Actions ▾')
+				return [
+					{
+						kind: 'fixture',
+						operation: 'reveal-quota-account-' + step.target,
+						purpose:
+							'Reveal only the actual fully painted menu label by acknowledged focus traversal before its original click.',
+					},
+					step,
+				];
+			if (step.kind === 'capture' && step.checks.includes('account-actions-inventory'))
+				return [
+					{
+						kind: 'fixture',
+						operation: 'inspect-account-actions-menu',
+						purpose:
+							'Observe the complete actual closed menu, including unavailable items and reasons.',
+					},
+					...(step.checkpoint === 'enabled-actions-menu'
+						? [
+								{
+									kind: 'fixture',
+									operation: 'try-unavailable-account-remove',
+									purpose:
+										'Click the actual unavailable Remove label; both native receipts have no action and the real owner receives no command.',
+								} satisfies FlowJourney['steps'][number],
+							]
+						: []),
+					step,
+				];
+			return [step];
+		}),
+	}),
+);

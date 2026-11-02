@@ -60,6 +60,7 @@ test('Help oracle excludes chrome and rejects a one-row alias masquerading as a 
 			'overflow',
 		);
 		expect(observed.rows).toEqual(['First', 'Second', 'Third']);
+		expect(observed.scrollbar).toEqual({ column: 19, top: 3, bottom: 5 });
 		expect(observed.atEnd).toBe(false);
 		expect(appendOneHelpRow(observed.rows, ['Second', 'Third', 'Fourth'])).toBe('Fourth');
 		expect(() => appendOneHelpRow(observed.rows, ['Third', 'Fourth', 'Fifth'])).toThrow(

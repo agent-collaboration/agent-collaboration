@@ -1,6 +1,6 @@
 # S9 authored journeys and native bindings
 
-The 31 B flows adopt the
+The 33 B flows adopt the
 four-document TUI component design at
 `76803a480b21cad31dc32db1b6fbc86c31aab61b` (including the Open-only correction
 at `014e25e08`) and later direct Lead corrections. All cases are historically
@@ -48,7 +48,7 @@ Steps name semantic targets/checkpoints, not invented screen coordinates. A
 fixture operation names an adapter contract, never a product mutation hook;
 an operation without a registered fixture binding remains an admission gap.
 The four sizes are 120×36, 76×30, 48×12 and 32×24. Login/refresh
-logic cases also use all four grids. The current data declares 212 valid
+logic cases also use all four grids. The current data declares 228 valid
 grid/protocol variants; compound-only flows and separate legacy fallback flows
 retain their own protocol restrictions.
 
@@ -164,8 +164,8 @@ never learned from the ACK under test. Other adapters remain named admission
 gaps before startup. On the six-scenario S6b declaration, Fork needs
 `fork-ssh-profile`, toolbar's successful Claude New needs `claude-new-success`,
 and the two >2-page alias journeys need `large-list`; the base six-row fixture
-does not supply these. The interpreter accepts all 31 data definitions; that does
-not mean all 31 have fixture bindings.
+does not supply these. The interpreter accepts all 33 data definitions; that does
+not mean all 33 have qualified runtime observations.
 
 Fixed key names follow the producer's crossterm Display, including `Back Tab`,
 macOS `Return` and `Esc`; Rust variant names are not the receipt wire format.
@@ -212,10 +212,46 @@ strict selection, heading and bucket checks use that marked frame. Preserve the
 F6 ACK/frame and raw bytes as the owner-deferred first-frame measurement
 limitation, never as a first-paint pass (Lead decision 01a196f6-4356).
 F6 is the settled grouping key on both screens; picker Ctrl+G/F2 remain Machine.
-Quota grouping still needs its separately declared child-free remount binding.
+Quota `quota-group-by-f6` has a draft child-free remount binding; its signed-target admission and native observation remain required.
 An authored binding is not a product pass.
 
-## Quota B offline preparation (draft)
+## Quota B native bindings (draft)
+
+The catalogue contains seventeen quota journeys and 136 grid/protocol cases.
+Their complete four-grid expansion requires 176 child invocations: middle
+removal adds its separate held-removal child, and each refresh outcome has fresh
+key and menu children. These are planned coverage counts, never product passes.
+
+`quota-flow-bindings.ts` binds effectful CLI journeys; `quota-case-run.ts`
+admits every phase before staging and records fresh driver/wrapper/product
+identities. `quota-toolbar-bindings.ts` and `quota-option-bindings.ts` use
+the distinct read-only component role. The CLI, read-only library and login
+stand-in remain independently declared artifacts. None can alias another role.
+
+Refresh waits on the existing `await_event` channel for the actual
+`refresh-result-published` journal event after reload, Finished state and a
+completed current-mount publication. Its mount, newer publication frame and full
+typed mapper result are checked before a separate native F12. A release ACK,
+file notification, unchanged failure values or a planned result cannot release
+that wait. The menu child opens Details while refresh is held and keeps it open
+through completion. Final receipts retain strict HTTP request counts and source
+service/mapper outcomes.
+
+Navigation qualifies physical content through acknowledged one-row movement,
+checks all sixty fixed labels in order, and compares aliases with the resulting
+physical page interval. Actual Details checks the selected account after list
+scrolling. Help keeps its independent action/convention census, and resizes retain
+the same product identity and reread keyboard modes. Fitting-dialog rows are
+scoped to their actual border interior; login preview checks exactly one command
+before the next Quota windows section. Native argv and parent-wait proof remain
+separate.
+
+These bindings remain a draft until the exact signed product/observer artifacts,
+source-derived input inventory, check-only transport admission, startup and all
+native journeys are qualified. Reader tests and catalogue admission report no
+product passes.
+
+## Quota fixture preparation
 
 The authored plan may bind `quota.loginStandin` as an exact artifact path and
 SHA-256. Login and grouping guard routes require it before adapter lookup or
@@ -242,7 +278,7 @@ profiles. It reports executable admission as unbound when the packet's artifacts
 are null. Source argument matches, synthetic helper checks and reader sensitivity
 are zero product passes; they cannot replace signed-driver check-only admission.
 The current source binding has fifteen effectful scenarios, including
-`grouping-reopen`, and eleven read-only scenarios. Historical fourteen-scenario
+`grouping-reopen`, and twelve read-only scenarios. Historical fourteen-scenario
 packets remain retained evidence; the strict current census requires a fresh
 source packet. Grouping native admission still needs its declared signed target.
 
@@ -274,8 +310,8 @@ streaming-driver route uses the existing inherited-PTY wrapper and binds
 plus the same nominated product path/hash. Rebuild and sign the driver against
 the current wrapper source before using it. This route is draft until qualified.
 
-All eleven read-only scenario names retain their separate component entry and
-unchanged read-only proof. The five pending scenarios require their own absent
+The eleven original read-only scenario names retain their separate component entry and
+unchanged read-only proof. The separate `large-list` scenario adds sixty fixed account identities for ContentScroll navigation; it must come from the declared fixture-bearing libtest. The five pending scenarios require their own absent
 release path and exact `settle\n` bytes. Do not substitute those release files
 for effectful fixture gates.
 
@@ -290,8 +326,9 @@ and menu children, with actual duplicate ACK/frame proof before release.
 `quota-effect-readback.ts` checks raw producer receipts for exact account effects,
 captured identity, login argv/exit/terminal flags and restart, removal reselection,
 and this invocation's service/mapper results. It supplies no input/frame/cleanup
-proof by itself. Native input/focus/pointer bindings, the refresh child transition,
-the actual signed artifacts and startup qualification must all be admitted before
+proof by itself. The native input/focus/pointer bindings and fresh refresh child transitions are
+implemented as draft apparatus. The actual signed artifacts, source/ACK inventory,
+transport admission and startup qualification must all be checked before
 a quota B window is requested. No product/native run follows from this draft.
 
 `quota-event-journal.ts` reads the actual `{sequence,event}` envelopes from an

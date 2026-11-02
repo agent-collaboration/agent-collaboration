@@ -1,37 +1,46 @@
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { expect, test } from 'vitest';
+import { afterAll, expect, test } from 'vitest';
 
 import { sourceDigest } from '../../evidence/source-binding.ts';
 import { protocolPlan, temporaryRoot } from '../../fixtures/receipt-fixtures.ts';
 import { checkInputConsumptionReceipt } from '../../sessions/input-consumption-readback.ts';
+import { createTerminalCore, snapshotGrid } from '../../terminal/terminal-grid.ts';
+import { findDialog } from '../scenes/grid-scene-matcher.ts';
 import { authoredFlowPlanSchema, paintedMouseExpectationSchema } from './authored-flow-plan.ts';
 import type { AuthoredFlowPlan } from './authored-flow-plan.ts';
 import { authoredFlowMatrix, runAuthoredFlow } from './authored-flow-run.ts';
 import { authoredFlows } from './flow-catalogue.ts';
+import type { NativeFlowContext } from './native-flow-runtime.ts';
 import { pickerFlowAdmission } from './picker-flow-admission.ts';
 import { pickerFlowBindings } from './picker-flow-bindings.ts';
 import { pickerExpectedKey, pickerFilterTextExpectations } from './picker-flow-inputs.ts';
 import { checkQualifiedForkOutcome } from './picker-fork-bindings.ts';
 
-function controlledPlan(journey: string): AuthoredFlowPlan {
-	const root = temporaryRoot(),
-		fixture = protocolPlan(root);
-	return authoredFlowPlanSchema.parse({
+const root = temporaryRoot(),
+	fixture = protocolPlan(root),
+	fixtureSourceDigest = sourceDigest(fixture.source),
+	fixturePlan = {
 		productRepository: root,
 		productSource: fixture.source,
-		productSourceDigest: sourceDigest(fixture.source),
+		productSourceDigest: fixtureSourceDigest,
 		observerRepository: root,
 		observerSource: fixture.source,
-		observerSourceDigest: sourceDigest(fixture.source),
+		observerSourceDigest: fixtureSourceDigest,
 		driver: fixture.capture_driver,
 		product: fixture.harness_binary,
 		node: fixture.node,
 		chrome: '/unneeded/no-native-run',
 		output: join(root, 'not-created'),
-		journey,
 		grids: ['120x36', '76x30', '48x12', '32x24'],
+	};
+afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+function controlledPlan(journey: string): AuthoredFlowPlan {
+	return authoredFlowPlanSchema.parse({
+		...fixturePlan,
+		journey,
 		keys: authoredFlows.find((flow) => flow.journeyId === journey)?.keys ?? ['legacy', 'kitty'],
 	});
 }
@@ -62,9 +71,9 @@ test('all authored flow data selects through one matrix without copied steps', (
 		expect(matrix.every((invocation) => invocation.journey === journey)).toBe(true);
 	}
 });
-test('unsupported native fixture rejects before even creating an output directory', async () => {
-	const plan = controlledPlan('quota-refresh-partial');
-	await expect(runAuthoredFlow(plan)).rejects.toThrow('no native adapter');
+test('unknown authored journey rejects before even creating an output directory', async () => {
+	const plan = controlledPlan('quota-not-authored');
+	await expect(runAuthoredFlow(plan)).rejects.toThrow('unknown authored flow');
 	expect(existsSync(plan.output)).toBe(false);
 });
 test('the stopped native adapter declares its independent first-overlay and exact captured source', () => {
@@ -365,3 +374,105 @@ test('picker Option aliases and Ctrl chords keep producer code and modifier orde
 		phase: 'press',
 	});
 });
+
+test('toolbar New Escape names its declared close action and preserves exact surface rejection', () => {
+	const plan = controlledPlan('sessions-toolbar-and-menu'),
+		invocation = authoredFlowMatrix(plan)[0];
+	if (!invocation) throw new Error('controlled matrix absent');
+	const binding = pickerFlowBindings(plan, invocation, plan.output, join(plan.output, 'receipts'));
+	const choice = invocation.journey.steps.findIndex(
+			(step) => step.kind === 'capture' && step.checkpoint === 'new-foreground-choice',
+		),
+		closing = choice + 1,
+		input = binding?.inputs.get(closing);
+	if (input?.kind !== 'continuing') throw new Error('New Escape binding absent');
+	const expected = input.expected[0];
+	expect(expected).toEqual(
+		pickerExpectedKey('Escape', { kind: 'overlay', overlayId: '6' }, null, 'dialog-close'),
+	);
+	const actual = {
+		sequence: 1,
+		...pickerExpectedKey('Escape', { kind: 'overlay', overlayId: '6' }, null, 'dialog-close'),
+	};
+	expect(() => checkInputConsumptionReceipt(actual, expected)).not.toThrow();
+	expect(() => checkInputConsumptionReceipt({ ...actual, action: null }, expected)).toThrow(
+		'action mismatch',
+	);
+	expect(() =>
+		checkInputConsumptionReceipt(
+			{ ...actual, surface: { kind: 'overlay', overlayId: '7' } },
+			expected,
+		),
+	).toThrow('surface mismatch');
+	const following = binding?.inputs.get(closing + 1);
+	if (following?.kind !== 'focus') throw new Error('post-cancel Browse focus proof absent');
+	const next = following.route[0]?.expected[0];
+	expect(next?.surface).toEqual({ kind: 'screen' });
+	expect(() =>
+		checkInputConsumptionReceipt(
+			{ sequence: 2, ...pickerExpectedKey('Tab', { kind: 'overlay', overlayId: '6' }) },
+			next,
+		),
+	).toThrow('surface mismatch');
+});
+
+test.each([
+	['plain-browse', false, null],
+	['bordered-browse', true, null],
+	['open-new', true, 'New session'],
+	['open-details', true, 'Session details'],
+] as const)(
+	'post-cancel Browse filter check preserves the named-dialog contract: %s',
+	async (_label, bordered, dialogTitle) => {
+		const plan = controlledPlan('sessions-toolbar-and-menu'),
+			invocation = authoredFlowMatrix(plan)[0];
+		if (!invocation) throw new Error('controlled matrix absent');
+		const binding = pickerFlowBindings(
+				plan,
+				invocation,
+				plan.output,
+				join(plan.output, 'receipts'),
+			),
+			check = binding?.checks.get('filter-focus-and-live-query');
+		if (!check) throw new Error('real post-cancel Browse checker absent');
+		const core = await createTerminalCore(76, 30);
+		try {
+			if (bordered)
+				core.writeString(
+					'╭────────────────────────────────────────────╮\r\n│ ≡ Menu F10 / \x1b[93;4mFilter\x1b[0m All 6/6 sessions        │\r\n│ ┌───────────────────────────────────────┐  │\r\n│ │ Session                               │  │\r\n│ └───────────────────────────────────────┘  │\r\n╰────────────────────────────────────────────╯',
+				);
+			else core.writeString('Sessions\r\n≡ Menu F10 / \x1b[93;4mFilter\x1b[0m All 6/6 sessions');
+			if (dialogTitle !== null)
+				core.writeString(
+					'\r\n╭──────────────────────────╮\r\n│ ' +
+						dialogTitle +
+						'              │\r\n│ Run Foreground           │\r\n╰──────────────────────────╯',
+				);
+			if (bordered) expect(findDialog(snapshotGrid(core), '')).not.toBeNull();
+			// Grid-only reader control: no input/driver is consulted and no product is launched.
+			const context: NativeFlowContext = {
+				get driver(): never {
+					throw new Error('grid-only control must not consult a driver');
+				},
+				get input(): never {
+					throw new Error('grid-only control must not inject input');
+				},
+				frame: {
+					grid: snapshotGrid(core),
+					bytes: Buffer.alloc(0),
+					resizes: [],
+					binding: {
+						sequence: 1,
+						frameGeneration: 1,
+						frameEndByteOffset: 0,
+						markerEndByteOffset: 0,
+					},
+				},
+			};
+			const failures = await check(context, undefined);
+			expect(failures.length === 0).toBe(dialogTitle === null);
+		} finally {
+			core.dispose();
+		}
+	},
+);

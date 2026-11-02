@@ -1,7 +1,11 @@
 /** Controlled bytes qualify the frame observer; no product outcome is claimed. */
 import { expect, test } from 'vitest';
 
-import { DispatchFrameIndex, dispatchFrameGrid } from './input-dispatch-frames.ts';
+import {
+	DispatchFrameIndex,
+	dispatchFrameGrid,
+	IncrementalDispatchFrameReplay,
+} from './input-dispatch-frames.ts';
 import { gridLines } from './terminal-grid.ts';
 
 const frame = (text: string): string => '\x1b[?2026h\x1b[2J\x1b[H' + text + '\x1b[?2026l';
@@ -103,4 +107,62 @@ test('an optional marker for an explicitly acknowledged handoff may finish arriv
 	index.append(Buffer.from(frame('fresh quota') + marker(2)));
 	expect(index.get(2)?.sequence).toBe(2);
 	expect(() => index.append(Buffer.from(frame('duplicate') + marker(1)))).toThrow('not contiguous');
+});
+
+test('incremental marked frames equal full replay across edits, UTF-8, cohorts and resizes', async () => {
+	const first = Buffer.from(frame('entry') + marker(1));
+	const second = Buffer.concat([
+		first,
+		Buffer.from('\x1b[?2026h\x1b[2;1H❯ Claude · 📂\x1b[?2026l' + marker(2) + marker(3)),
+	]);
+	const bytes = Buffer.concat([
+		second,
+		Buffer.from('\x1b[?2026h\x1b[3;1Hlast\x1b[?2026l' + marker(4) + frame('future')),
+	]);
+	const resizes = [
+		{ byteOffset: first.length, columns: 76, rows: 30 },
+		{ byteOffset: second.length, columns: 32, rows: 24 },
+	];
+	const index = new DispatchFrameIndex();
+	index.append(bytes);
+	const replay = new IncrementalDispatchFrameReplay();
+	try {
+		await [1, 2, 3, 4].reduce(async (previous, sequence) => {
+			await previous;
+			const binding = index.get(sequence);
+			if (binding === null) throw new Error('literal marker absent');
+			const observed = await replay.grid(bytes, resizes, binding);
+			expect(observed).toEqual(await dispatchFrameGrid(bytes, resizes, binding));
+			expect(await replay.grid(bytes, resizes, binding)).toBe(observed);
+		}, Promise.resolve());
+		const old = index.get(1);
+		if (old === null) throw new Error('literal first absent');
+		await expect(replay.grid(bytes, resizes, old)).rejects.toThrow('stream order');
+	} finally {
+		await replay.close();
+	}
+});
+test('full-replay equivalence rejects a dropped content byte in the incremental stream', async () => {
+	const bytes = Buffer.from(frame('HELLO') + marker(1));
+	const index = new DispatchFrameIndex();
+	index.append(bytes);
+	const binding = index.get(1);
+	if (binding === null) throw new Error('literal marker absent');
+	const position = bytes.indexOf(Buffer.from('HELLO'));
+	const dropped = Buffer.concat([
+		bytes.subarray(0, position),
+		bytes.subarray(position + 1),
+		Buffer.from([0]),
+	]);
+	const replay = new IncrementalDispatchFrameReplay();
+	try {
+		const expected = await dispatchFrameGrid(bytes, [], binding);
+		await expect(
+			(async () => {
+				expect(await replay.grid(dropped, [], binding)).toEqual(expected);
+			})(),
+		).rejects.toThrow();
+	} finally {
+		await replay.close();
+	}
 });

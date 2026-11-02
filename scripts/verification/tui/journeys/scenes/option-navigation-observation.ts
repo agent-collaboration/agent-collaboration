@@ -35,6 +35,11 @@ export function pickerPageRows(grid: TerminalGrid): number {
 }
 export interface HelpViewport {
 	readonly rectangle: GridRectangle;
+	readonly scrollbar: {
+		readonly column: number;
+		readonly top: number;
+		readonly bottom: number;
+	};
 	readonly rows: readonly string[];
 	readonly atEnd: boolean;
 }
@@ -73,9 +78,16 @@ export function trackedScrollViewport(
 			.join('')
 			.trimEnd(),
 	);
-	const last = track.rows.at(-1);
-	const lastCell = last === undefined ? undefined : grid.cells[last]?.[track.column];
-	return { rectangle, rows, atEnd: lastCell !== undefined && cellText(lastCell) === '█' };
+	const first = track.rows[0],
+		last = track.rows.at(-1);
+	if (first === undefined || last === undefined) throw new Error('painted scrollbar span absent');
+	const lastCell = grid.cells[last]?.[track.column];
+	return {
+		rectangle,
+		scrollbar: { column: track.column, top: first, bottom: last },
+		rows,
+		atEnd: lastCell !== undefined && cellText(lastCell) === '█',
+	};
 }
 function trackedHelpViewport(grid: TerminalGrid): HelpViewport | null {
 	const rectangle = findDialog(grid, 'Help');

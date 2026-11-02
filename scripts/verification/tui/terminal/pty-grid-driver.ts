@@ -19,8 +19,9 @@ import {
 } from '../sessions/sessions-receipt-directory.ts';
 import type { TerminalInputModes } from './ghostty-input-encoding.ts';
 import { readGhosttyInputModes } from './ghostty-input-encoding.ts';
-import { DispatchFrameIndex, dispatchFrameGrid } from './input-dispatch-frames.ts';
-import type { DispatchFrameObservation } from './input-dispatch-frames.ts';
+import { DispatchFrameIndex, IncrementalDispatchFrameReplay } from './input-dispatch-frames.ts';
+import type { DispatchFrameBinding, DispatchFrameObservation } from './input-dispatch-frames.ts';
+import { registerPtyGridStop, throwIfPtyGridCancelled } from './pty-grid-cancellation.ts';
 import { createTerminalCore, gridLines, snapshotGrid } from './terminal-grid.ts';
 import type { TerminalGrid, TerminalResize } from './terminal-grid.ts';
 
@@ -166,7 +167,9 @@ export class PtyGridDriver {
 	private eof = false;
 	private failure: Error | null = null;
 	private readonly outputWaiters = new Set<() => void>();
+	private unregisterStop: () => void = () => undefined;
 	private readonly dispatchFrames = new DispatchFrameIndex();
+	private readonly markedReplay = new IncrementalDispatchFrameReplay();
 	private constructor(target: PtyGridTarget, core: GhosttyCore) {
 		this.target = target;
 		this.core = core;
@@ -312,10 +315,13 @@ export class PtyGridDriver {
 		});
 	}
 	static async start(target: PtyGridTarget): Promise<PtyGridDriver> {
+		throwIfPtyGridCancelled();
 		const core = await createTerminalCore(120, 36);
 		let driver: PtyGridDriver;
 		try {
+			throwIfPtyGridCancelled();
 			driver = new PtyGridDriver(target, core);
+			driver.unregisterStop = registerPtyGridStop(() => driver.stop());
 		} catch (error) {
 			core.dispose();
 			throw error;
@@ -430,11 +436,11 @@ export class PtyGridDriver {
 			this.outputWaiters.add(notify);
 		});
 	}
-	async waitForDispatchFrame(sequence: number): Promise<DispatchFrameObservation> {
+	async waitForDispatchMarker(sequence: number): Promise<DispatchFrameBinding> {
 		if (this.dispatchFrames.isUnframedHandoff(sequence))
 			throw new Error('loop-ending handoff has no promised continuing frame');
 		const deadline = Date.now() + 8_000;
-		const next = async (): Promise<DispatchFrameObservation> => {
+		const next = async (): Promise<DispatchFrameBinding> => {
 			if (this.failure !== null) throw this.failure;
 			const binding = this.dispatchFrames.get(sequence);
 			if (binding !== null) {
@@ -442,14 +448,7 @@ export class PtyGridDriver {
 					join(this.target.evidence, `dispatch-${sequence}-frame.json`),
 					JSON.stringify(binding, null, 2),
 				);
-				const bytes = this.bytes();
-				const resizes = this.resizeHistory();
-				return {
-					binding,
-					grid: await dispatchFrameGrid(bytes, resizes, binding),
-					bytes: bytes.subarray(0, binding.frameEndByteOffset),
-					resizes: resizes.filter((resize) => resize.byteOffset <= binding.frameEndByteOffset),
-				};
+				return binding;
 			}
 			const remaining = deadline - Date.now();
 			if (remaining <= 0 || this.eof)
@@ -458,6 +457,17 @@ export class PtyGridDriver {
 			return next();
 		};
 		return next();
+	}
+	async waitForDispatchFrame(sequence: number): Promise<DispatchFrameObservation> {
+		const binding = await this.waitForDispatchMarker(sequence),
+			bytes = this.bytes(),
+			resizes = this.resizeHistory();
+		return {
+			binding,
+			grid: await this.markedReplay.grid(bytes, resizes, binding),
+			bytes: bytes.subarray(0, binding.frameEndByteOffset),
+			resizes: resizes.filter((resize) => resize.byteOffset <= binding.frameEndByteOffset),
+		};
 	}
 	acknowledgeLoopEndingHandoff(sequence: number): void {
 		this.dispatchFrames.acknowledgeLoopEndingHandoff(sequence);
@@ -563,6 +573,8 @@ export class PtyGridDriver {
 			JSON.stringify(this.grid(), null, 2),
 		);
 		this.core.dispose();
+		await this.markedReplay.close();
+		this.unregisterStop();
 		return code;
 	}
 }

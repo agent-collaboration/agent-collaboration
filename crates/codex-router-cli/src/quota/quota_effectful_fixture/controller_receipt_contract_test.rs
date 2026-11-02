@@ -84,12 +84,50 @@ async fn controller_setup_receipt_from_actual_list_is_never_a_user_input_receipt
         "only InputOwner can emit that receipt schema"
     );
     assert_eq!(wire["readback"]["listSelection"], beta.as_str());
+    assert!(
+        wire["readback"]["bodyScroll"].is_object(),
+        "live setup acknowledgement needs the published body witness"
+    );
+    assert_eq!(
+        wire["readback"]["bodyScroll"]["mount"],
+        wire["readback"]["mount"]
+    );
+    assert_eq!(
+        wire["readback"]["bodyScroll"]["publicationFrame"],
+        wire["readback"]["published"]["frame"]
+    );
+    let body = acknowledgement.readback.body_scroll.as_ref().unwrap();
+    let position = body.position;
+    assert_eq!(
+        wire["readback"]["bodyScroll"],
+        json!({
+            "surface":format!("{:?}",body.surface),"mount":body.mount,"publicationFrame":body.publication_frame,
+            "offset":position.offset,"maxOffset":position.natural_height.saturating_sub(position.viewport_height),
+            "viewportHeight":position.viewport_height,"contentHeight":position.natural_height
+        }),
+        "the live ABI preserves all seven named fields"
+    );
     assert_eq!(
         wire["readback"]["captured"]["accountId"],
         state.target.account_id.as_str()
     );
+    let base = receipts::readback(&acknowledgement.readback);
+    assert!(
+        base.get("bodyScroll").is_none(),
+        "the base journal projection stays unchanged"
+    );
+    let mut summary_poses = Vec::new();
+    receipts::append_summary_pose(&mut summary_poses, &wire["readback"]);
+    assert!(
+        summary_poses[0].get("bodyScroll").is_none(),
+        "live geometry never enters the compact summary"
+    );
     sender.send(key(KeyCode::Esc)).unwrap();
     frame(frames.as_mut(), "Quota ·").await;
+    assert!(
+        receipts::live_readback(&controller.readback().unwrap())["bodyScroll"].is_null(),
+        "Browse has no dialog body witness"
+    );
     sender.send(key(KeyCode::Char('q'))).unwrap();
     tokio::time::timeout(Duration::from_secs(2), async {
         while frames.next().await.is_some() {}

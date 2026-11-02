@@ -3,10 +3,12 @@ use crate::{
     AccountActionTarget, QuotaStatusViewModelLoader, quota_control_context::QuotaControlContext,
 };
 use agent_collaboration_tui::{
-    controls::list::ListSelectionControl,
+    controls::list::{ListSelectionControl, ScrollPosition},
+    dialog::help::HelpControl,
     surfaces::{
-        hit_regions::HitMapSnapshot, surface_handle::SurfaceStackHandle,
-        surface_stack::SurfaceStack,
+        hit_regions::HitMapSnapshot,
+        surface_handle::SurfaceStackHandle,
+        surface_stack::{SurfaceId, SurfaceStack},
     },
 };
 use codex_router_core::ids::AccountId;
@@ -28,6 +30,14 @@ pub enum QuotaCapturedContext {
     Other,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QuotaBodyScrollSnapshot {
+    pub surface: SurfaceId,
+    pub mount: u64,
+    pub publication_frame: u64,
+    pub position: ScrollPosition,
+}
+
 #[derive(Clone)]
 pub struct QuotaFixtureReadback {
     pub mount: u64,
@@ -38,6 +48,7 @@ pub struct QuotaFixtureReadback {
     pub surfaces: SurfaceStack,
     pub actions: Vec<agent_collaboration_tui::actions::ActionPresentation>,
     pub published: Option<HitMapSnapshot>,
+    pub body_scroll: Option<QuotaBodyScrollSnapshot>,
     #[cfg(all(
         debug_assertions,
         any(
@@ -81,6 +92,7 @@ struct PendingOperation {
 pub(crate) struct LiveQuotaFixture {
     pub(crate) context: QuotaControlContext,
     pub(crate) list: ListSelectionControl,
+    pub(crate) screen_help: HelpControl,
     pub(crate) stack: SurfaceStackHandle,
     pub(crate) loader: Option<QuotaStatusViewModelLoader>,
     pub(crate) reload_lock: Arc<tokio::sync::Mutex<()>>,
@@ -130,7 +142,16 @@ impl QuotaFixtureController {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let live = state.live.as_ref().ok_or("Quota fixture is not mounted")?;
-        Ok(live.readback(state.mount))
+        let mut readback = live.readback(state.mount);
+        readback.body_scroll = state.last_published.as_ref().and_then(|published| {
+            let body = published.body_scroll.as_ref()?;
+            let frame = readback.published.as_ref()?;
+            (body.mount == readback.mount
+                && body.publication_frame == frame.frame
+                && body.surface == readback.surfaces.top_id())
+            .then(|| body.clone())
+        });
+        Ok(readback)
     }
 
     fn live(&self, mount: u64) -> Result<LiveQuotaFixture, String> {
@@ -284,10 +305,11 @@ impl QuotaFixtureController {
             crate::quota_control_context::QuotaRefreshState::Finished(result) => Some(result),
             _ => None,
         };
-        let readback = live.readback(mount);
+        let mut readback = live.readback(mount);
         if readback.published.is_none() {
             return;
         }
+        readback.body_scroll = live.published_body_scroll(&readback);
         #[cfg(all(
             debug_assertions,
             any(
@@ -343,6 +365,39 @@ impl QuotaFixtureController {
 }
 
 impl LiveQuotaFixture {
+    fn published_body_scroll(
+        &self,
+        readback: &QuotaFixtureReadback,
+    ) -> Option<QuotaBodyScrollSnapshot> {
+        let frame = readback.published.as_ref()?;
+        let surface = readback.surfaces.top_id();
+        if !frame
+            .surfaces
+            .iter()
+            .any(|region| region.surface == surface && !region.cells.is_empty())
+        {
+            return None;
+        }
+        let scroll = self
+            .context
+            .dialog
+            .read()
+            .as_ref()
+            .and_then(|dialog| {
+                dialog.help.scroll(surface).or_else(|| {
+                    (surface == SurfaceId::Overlay(dialog.id)).then(|| dialog.scroll.clone())
+                })
+            })
+            .or_else(|| self.screen_help.scroll(surface))?;
+        let position = scroll.position();
+        (position.viewport_height > 0).then_some(QuotaBodyScrollSnapshot {
+            surface,
+            mount: readback.mount,
+            publication_frame: frame.frame,
+            position,
+        })
+    }
+
     fn readback(&self, mount: u64) -> QuotaFixtureReadback {
         use crate::quota_control_context::QuotaDialogKind;
         let captured = self
@@ -379,6 +434,7 @@ impl LiveQuotaFixture {
             surfaces,
             actions,
             published: self.stack.hit_regions().published(),
+            body_scroll: None,
             #[cfg(all(
                 debug_assertions,
                 any(
@@ -399,3 +455,7 @@ mod control_kind_contract_test;
 #[cfg(debug_assertions)]
 #[path = "quota_refresh_publication_test.rs"]
 mod refresh_publication_test;
+
+#[cfg(test)]
+#[path = "quota_body_scroll_publication_test.rs"]
+mod body_scroll;
