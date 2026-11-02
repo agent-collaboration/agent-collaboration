@@ -19,5 +19,7 @@
 "workspace:delete",
 null,
 {"kind":"machine:enroll"},
+{"machine:enroll":null},
+{"machine:enroll":{}},
 {"permission":"machine:enroll"}
 ]
