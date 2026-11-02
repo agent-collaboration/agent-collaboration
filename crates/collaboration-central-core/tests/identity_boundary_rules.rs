@@ -70,7 +70,7 @@ fn authorization_refuses_retired_person_lookup_paths() {
 fn authorization_refuses_retired_owner_tags() {
     // Arrange
     let reason = json!({ "kind": "notOwner" });
-    let lookup_answer = json!({ "result": "refused", "reason": reason.clone() });
+    let lookup_answer = json!({ "result": "refused", "reason": reason });
 
     // Act / Assert
     assert_refused::<CommandRefusal>(reason.clone());

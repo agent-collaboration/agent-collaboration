@@ -3,10 +3,11 @@ use collaboration_central_core::identity_contract::{
     DecideDeviceLogin, FleetPermission, ProvisionOrganization, ProvisionOrganizationResult,
 };
 use serde_json::json;
+#[cfg(test)]
 #[path = "support/contract_artifacts.rs"]
 mod contract_artifacts;
-#[path = "support/schema_validation.rs"]
-mod schema_validation;
+#[cfg(test)]
+use contract_artifacts::schema_validation;
 
 // PD 2530c3a3's complete route table, independent of the Rust enum's variants.
 const ROUTE_PERMISSIONS: [&str; 9] = [
