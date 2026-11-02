@@ -281,10 +281,13 @@ async fn host_child() -> TestResult {
     .with_collaboration_peer_registry_directory(root.join("no-peer-registry"))
     .with_owner_human_id("f11-test-owner".to_owned().try_into()?);
     let instance = HostInstance::acquire(config.coordination_paths().clone())?;
+    let repository = Arc::new(
+        codex_router_fleet_state::FleetStateStore::open_and_migrate(&root.join("router")).await?,
+    );
     let mut ready = UnixStream::connect(root.join("fixture-bound.sock")).await?;
     ready.write_all(BOUND_EVENT).await?;
     ready.shutdown().await?;
-    Box::pin(HostRuntime::run_acquired_with_fleet_login_dependencies(
+    let result = Box::pin(HostRuntime::run_acquired_with_fleet_login_dependencies(
         config,
         ManagedChildLaunchPlans::new(
             None,
@@ -292,14 +295,18 @@ async fn host_child() -> TestResult {
         ),
         ManagedUpdateInputs::production(),
         instance,
+        repository.clone(),
         codex_router_host::fleet_machine_login::FleetLoginDependencies {
             clock: Arc::new(PollingClock(AtomicI64::new(0))),
             keychain: Arc::new(
                 codex_router_secret_store::test_support::DeterministicTestKeychainAccess,
             ),
+            issuer_client: super::fleet_login_https::issuer_client()?,
         },
     ))
-    .await?;
+    .await;
+    repository.close().await;
+    result?;
     Ok(())
 }
 
