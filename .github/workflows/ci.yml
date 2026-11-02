@@ -203,6 +203,8 @@ jobs:
       CARGO_PROFILE_TEST_DEBUG: "0"
       CARGO_INCREMENTAL: "0"
     steps:
+      # The full workspace test build outgrows the runner's initial free disk.
+      # Remove preinstalled SDKs this job never uses.
       - name: Free runner disk space
         shell: bash
         run: |
@@ -221,14 +223,6 @@ jobs:
           package_json_file: verification/package.json
       - name: Install TypeScript fixture dependencies
         run: pnpm --dir verification install --frozen-lockfile
-      - uses: actions/setup-node@v5
-        with:
-          node-version: '26.13.0'
-          package-manager-cache: false
-      - name: Install native adapter test dependencies
-        run: |
-          pnpm --dir scripts/verification/tui install --frozen-lockfile
-          node -e 'const fs=require("node:fs");const crypto=require("node:crypto");const runtime=fs.realpathSync(process.execPath);fs.appendFileSync(process.env.GITHUB_ENV,"QUOTA_STORYBOARD_NODE="+runtime+"\nQUOTA_STORYBOARD_NODE_SHA256="+crypto.createHash("sha256").update(fs.readFileSync(runtime)).digest("hex")+"\n");'
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -238,6 +232,8 @@ jobs:
           shared-key: test
           # One main-run writer avoids four racing saves of the same cache key.
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.shard == 1 }}
+      # The dependency-structure tests use offline Cargo metadata for all
+      # targets, so fetch target-specific packages even on this Linux runner.
       - name: Fetch dependencies for all targets
         run: cargo fetch --locked
       - name: Restore pinned Rust tools
@@ -253,22 +249,14 @@ jobs:
         uses: ./.github/actions/install-ci-tools
         with:
           cache-hit: ${{ steps.rust_tools.outputs.cache-hit }}
-      - name: Report shard CPU
-        run: |
-          nproc
-          lscpu
+      # Build the same workspace selection and features on each runner, then
+      # reuse those binaries for its hash partition without relinking them.
+      # Real Host, importer and forwarding-timer roots run in e2e below.
+      # Keep the build/run exclusions and slower-job inventory identical.
       - name: Build test binaries
         run: |
-          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))' --no-run --timings
-      - name: Report shard disk space after build
-        if: always()
-        run: df -h /
-      - name: Retain shard build timings
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: workspace-build-timings-shard-${{ matrix.shard }}
-          path: target/cargo-timings/*.html
+          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))' --no-run
+          df -h /
       - name: Test Rust workspace
         id: workspace_tests
         run: |
