@@ -2,7 +2,7 @@
  * node scripts/verification/tui/journeys/flows/authored-flow-run.ts PLAN.json [--check]
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 
 import {
@@ -18,6 +18,10 @@ import {
 	verifyArtifact,
 } from '../../evidence/source-binding.ts';
 import { COMPONENT_SCENARIOS, COMPONENT_TEST } from '../../fixtures/component-fixture-contract.ts';
+import {
+	PtyGridCommandAborted,
+	withPtyGridSignalCancellation,
+} from '../../terminal/pty-grid-cancellation.ts';
 import { ptyGridDriverEntry } from '../../terminal/pty-grid-driver.ts';
 import { qualifyTerminal } from '../../terminal/terminal-qualification.ts';
 import { authoredFlowPlanSchema } from './authored-flow-plan.ts';
@@ -230,6 +234,32 @@ export async function authoredFlowMain(args: readonly string[]): Promise<void> {
 			JSON.stringify({ kind: 'qualified-not-driven', cases: matrix.length, productPasses: 0 }) +
 				'\n',
 		);
-	} else await runAuthoredFlow(plan);
+	} else {
+		try {
+			await withPtyGridSignalCancellation(() => runAuthoredFlow(plan));
+		} catch (error) {
+			if (error instanceof PtyGridCommandAborted && existsSync(plan.output))
+				writeFileSync(
+					join(plan.output, 'operator-abort.json'),
+					JSON.stringify(
+						{
+							kind: 'operator-abort',
+							signal: error.signal,
+							productVerdict: null,
+							transcriptFlush: 'existing PTY stop/settlement completed',
+						},
+						null,
+						2,
+					),
+				);
+			throw error;
+		}
+	}
 }
-if (isMain(import.meta.url)) await authoredFlowMain(process.argv.slice(2)).catch(reportCliFailure);
+if (isMain(import.meta.url))
+	await authoredFlowMain(process.argv.slice(2)).catch((error: unknown) => {
+		if (error instanceof PtyGridCommandAborted) {
+			process.stderr.write(error.message + '\n');
+			process.exitCode = error.signal === 'SIGINT' ? 130 : 143;
+		} else reportCliFailure(error);
+	});

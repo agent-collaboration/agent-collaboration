@@ -19,7 +19,7 @@ interface JournalSnapshot {
 	readonly receipts: readonly InputDispatchReceipt[];
 	readonly partial: boolean;
 }
-function decodeJournal(bytes: Buffer): JournalSnapshot {
+function decodeJournal(bytes: Buffer, previousCount = 0): JournalSnapshot {
 	const boundary = bytes.lastIndexOf(10) + 1;
 	let text: string;
 	try {
@@ -33,12 +33,15 @@ function decodeJournal(bytes: Buffer): JournalSnapshot {
 		try {
 			value = JSON.parse(line);
 		} catch {
-			throw new Error(`input receipt JSON invalid at line ${index + 1}`);
+			throw new Error(`input receipt JSON invalid at line ${previousCount + index + 1}`);
 		}
 		const receipt = inputDispatchReceiptSchema.safeParse(value);
-		if (!receipt.success) throw new Error(`input receipt wire invalid at line ${index + 1}`);
-		if (receipt.data.sequence !== index + 1)
-			throw new Error(`input receipt sequence is not contiguous at line ${index + 1}`);
+		if (!receipt.success)
+			throw new Error(`input receipt wire invalid at line ${previousCount + index + 1}`);
+		if (receipt.data.sequence !== previousCount + index + 1)
+			throw new Error(
+				`input receipt sequence is not contiguous at line ${previousCount + index + 1}`,
+			);
 		return receipt.data;
 	});
 	return { receipts, partial: boundary !== bytes.length };
@@ -90,6 +93,8 @@ export class InputConsumptionReadback {
 	private readonly path: string;
 	private readonly identity: BigIntStats;
 	private previousBytes = Buffer.alloc(0);
+	private completeOffset = 0;
+	private readonly decodedReceipts: InputDispatchReceipt[] = [];
 	private cursor = 0;
 	private busy = false;
 	private failure: Error | null = null;
@@ -117,9 +122,11 @@ export class InputConsumptionReadback {
 			!bytes.subarray(0, this.previousBytes.length).equals(this.previousBytes)
 		)
 			throw new Error('input receipt was truncated or rewritten');
-		const snapshot = decodeJournal(bytes);
+		const suffix = decodeJournal(bytes.subarray(this.completeOffset), this.decodedReceipts.length);
+		this.decodedReceipts.push(...suffix.receipts);
+		this.completeOffset = bytes.lastIndexOf(10) + 1;
 		this.previousBytes = bytes;
-		return snapshot;
+		return { receipts: [...this.decodedReceipts], partial: suffix.partial };
 	}
 	private healthy(): void {
 		if (this.failure !== null) throw this.failure;
