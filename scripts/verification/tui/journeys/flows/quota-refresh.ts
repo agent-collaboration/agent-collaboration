@@ -1,7 +1,7 @@
 import { journeyGridSizes } from '../journey-definition.ts';
 import { absentAtBase, flowReference } from './flow-definition.ts';
 import type { FlowJourney } from './flow-definition.ts';
-export const quotaRefreshJourneys: readonly FlowJourney[] = (
+const quotaRefreshDrafts: readonly FlowJourney[] = (
 	['all-success', 'partial', 'all-failed', 'setup-failed'] as const
 ).map((outcome) => ({
 	journeyId: 'quota-refresh-' + outcome,
@@ -85,3 +85,37 @@ export const quotaRefreshJourneys: readonly FlowJourney[] = (
 		'S7 fixture provider plus actual CLI adapter and causal release/readback; a mock refresher alone cannot prove adapter result mapping.',
 	],
 }));
+
+export const quotaRefreshJourneys: readonly FlowJourney[] = quotaRefreshDrafts.map((journey) =>
+	Object.assign({}, journey, {
+		steps: journey.steps.flatMap((step, index): FlowJourney['steps'] => {
+			if (
+				step.kind === 'press' &&
+				step.key === 'R' &&
+				journey.steps
+					.slice(0, index)
+					.every((previous) => previous.kind !== 'press' || previous.key !== 'R')
+			)
+				return [
+					step,
+					{
+						kind: 'fixture',
+						operation: 'await-refresh-held',
+						purpose:
+							'Await the actual first request/setup hold through its flushed fence, then retain a separate native F12.',
+					},
+				];
+			if (step.kind === 'capture' && step.checkpoint === 'refresh-menu-unavailable')
+				return [
+					{
+						kind: 'fixture',
+						operation: 'inspect-pending-refresh-menu',
+						purpose:
+							'Traverse the actual pending menu and reveal unavailable Refresh before clicking its painted cells.',
+					},
+					step,
+				];
+			return [step];
+		}),
+	}),
+);

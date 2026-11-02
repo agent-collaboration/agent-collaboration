@@ -48,12 +48,14 @@ export class MarkerInputSession {
 				await options.inject();
 				// The producer flushes its receipt before publishing this exact marker.
 				// Re-read after that causal fact even if file notifications coalesce.
-				await this.driver.waitForDispatchFrame(finalSequence);
+				await this.driver.waitForDispatchMarker(finalSequence);
 			},
 		});
-		const frames = await Promise.all(
-			receipts.map((receipt) => this.driver.waitForDispatchFrame(receipt.sequence)),
-		);
+		const frames = await receipts.reduce(async (previous, receipt) => {
+			const observed = await previous;
+			observed.push(await this.driver.waitForDispatchFrame(receipt.sequence));
+			return observed;
+		}, Promise.resolve<DispatchFrameObservation[]>([]));
 		return {
 			receipts,
 			frames,

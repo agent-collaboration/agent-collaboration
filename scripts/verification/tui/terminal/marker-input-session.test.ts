@@ -122,3 +122,37 @@ test('exact markers and producer exit settle receipt reads even with every file 
 		fileNotifications.suppressed = false;
 	}
 });
+
+test('a burst renders its ACK frames in order before later queued output', async () => {
+	const directory = temporaryRoot(),
+		receipt = join(directory, 'input-dispatch.jsonl');
+	const executable = controlledExecutable(
+		directory,
+		'incremental-burst-control',
+		`
+const fs=require('node:fs'), readline=require('node:readline');fs.writeFileSync(${JSON.stringify(receipt)},'');
+const emit=x=>process.stdout.write('TUI_GRID '+x+'\\n');const frame=x=>'\\x1b[?2026h\\x1b[2J\\x1b[H'+x+'\\x1b[?2026l';const marker=n=>'\\x1b]7770;dispatch='+n+'\\x1b\\\\';
+emit('READY 120 36 STREAM');readline.createInterface({input:process.stdin}).on('line',line=>{
+ if(line.startsWith('write ')){for(const sequence of [1,2])fs.appendFileSync(${JSON.stringify(receipt)},JSON.stringify({sequence,...${JSON.stringify(down)}})+'\\n');emit('OK');emit('BYTES '+Buffer.from(frame('one')+marker(1)+frame('two')+marker(2)+frame('later unrelated')).toString('hex'));}
+ else if(line==='stop'){emit('EOF');process.stdout.write('TUI_GRID STOPPED 0\\n',()=>process.exit(0));}
+});`,
+	);
+	const driver = await PtyGridDriver.start({
+		repository: directory,
+		driver: executable,
+		surface: 'sessions-filters',
+		keys: 'legacy',
+		evidence: directory,
+	});
+	try {
+		const input = new MarkerInputSession({ driver, receipt, profile: 'terminal-only' });
+		const observed = await input.burst(Buffer.from('\x1b[B\x1b[B'), [down, down]);
+		expect(observed.receipts.map((entry) => entry.sequence)).toEqual([1, 2]);
+		expect(observed.frames.map((entry) => gridLines(entry.grid)[0]?.trim())).toEqual([
+			'one',
+			'two',
+		]);
+	} finally {
+		await driver.stop();
+	}
+});

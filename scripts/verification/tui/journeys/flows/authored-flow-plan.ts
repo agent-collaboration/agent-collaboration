@@ -18,6 +18,17 @@ export const paintedMouseExpectationSchema = inputConsumptionExpectationSchema
 		coordinateRule: z.literal('unique-fully-painted-label-in-active-surface'),
 	});
 
+/** Wheel cells are measured from the actual painted ContentScroll scrollbar, independently of a label. */
+const viewportMouseExpectationSchema = inputConsumptionExpectationSchema
+	.unwrap()
+	.omit({ event: true })
+	.extend({
+		kind: z.literal('viewport-mouse'),
+		mouse: z.enum(['scrollDown', 'scrollUp']),
+		modifiers: z.tuple([]),
+		coordinateRule: z.literal('active-content-scrollbar-midpoint'),
+	});
+
 export const authoredFlowPlanSchema = z
 	.strictObject({
 		productRepository: z.string().min(1),
@@ -58,7 +69,11 @@ export const authoredFlowPlanSchema = z
 										operation: z.string().min(1),
 										expected: z
 											.array(
-												z.union([inputConsumptionExpectationSchema, paintedMouseExpectationSchema]),
+												z.union([
+													inputConsumptionExpectationSchema,
+													paintedMouseExpectationSchema,
+													viewportMouseExpectationSchema,
+												]),
 											)
 											.min(1),
 										minimumRepeats: z.number().int().nonnegative(),

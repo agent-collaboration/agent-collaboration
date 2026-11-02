@@ -3,6 +3,7 @@ export const COMPONENT_TEST =
 	'quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture';
 export const COMPONENT_SCENARIOS = {
 	normal: 'Normal',
+	'large-list': 'LargeList',
 	'inspection-pending': 'InspectionPending',
 	'commit-pending': 'CommitPending',
 	'unknown-result': 'UnknownResult',

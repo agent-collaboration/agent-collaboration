@@ -1,3 +1,5 @@
+import type { GhosttyCore } from '@wterm/ghostty';
+
 /** Index producer OSC markers in the byte stream, independently of file notification order. */
 import { createTerminalCore, snapshotGrid } from './terminal-grid.ts';
 import type { TerminalGrid, TerminalResize } from './terminal-grid.ts';
@@ -123,5 +125,65 @@ export async function dispatchFrameGrid(
 		return snapshotGrid(core);
 	} finally {
 		core.dispose();
+	}
+}
+
+/** One marked-frame emulator per live run. Historical random access uses full replay above. */
+export class IncrementalDispatchFrameReplay {
+	private core: Promise<GhosttyCore> | null = null;
+	private offset = 0;
+	private resizeIndex = 0;
+	private latest: { readonly binding: DispatchFrameBinding; readonly grid: TerminalGrid } | null =
+		null;
+	private tail: Promise<void> = Promise.resolve();
+	private closed = false;
+	grid(
+		bytes: Buffer,
+		resizes: readonly TerminalResize[],
+		binding: DispatchFrameBinding,
+	): Promise<TerminalGrid> {
+		const result = this.tail.then(async () => {
+			if (this.closed) throw new Error('incremental frame replay is closed');
+			if (binding.markerEndByteOffset > bytes.length)
+				throw new Error('dispatch marker bytes absent');
+			if (binding.frameEndByteOffset < this.offset)
+				throw new Error('marked frames must be requested in stream order');
+			if (this.latest !== null && binding.frameEndByteOffset === this.offset) {
+				if (binding.frameGeneration !== this.latest.binding.frameGeneration)
+					throw new Error('same frame offset has a different generation');
+				return this.latest.grid;
+			}
+			const core = await (this.core ??= createTerminalCore(120, 36));
+			for (; this.resizeIndex < resizes.length; this.resizeIndex += 1) {
+				const resize = resizes[this.resizeIndex];
+				if (resize === undefined || resize.byteOffset > binding.frameEndByteOffset) break;
+				if (resize.byteOffset < this.offset)
+					throw new Error('resize precedes the incremental frame boundary');
+				core.writeRaw(bytes.subarray(this.offset, resize.byteOffset));
+				core.resize(resize.columns, resize.rows);
+				this.offset = resize.byteOffset;
+			}
+			core.writeRaw(bytes.subarray(this.offset, binding.frameEndByteOffset));
+			if (
+				core.synchronizedOutput() ||
+				core.synchronizedOutputGeneration() !== binding.frameGeneration
+			)
+				throw new Error('dispatch frame index differs from incremental emulator generation');
+			this.offset = binding.frameEndByteOffset;
+			const grid = snapshotGrid(core);
+			this.latest = { binding, grid };
+			return grid;
+		});
+		this.tail = result.then(
+			() => undefined,
+			() => undefined,
+		);
+		return result;
+	}
+	async close(): Promise<void> {
+		await this.tail;
+		if (this.closed) return;
+		this.closed = true;
+		if (this.core !== null) (await this.core).dispose();
 	}
 }
