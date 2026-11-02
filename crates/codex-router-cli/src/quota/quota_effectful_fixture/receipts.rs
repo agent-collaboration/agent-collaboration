@@ -94,7 +94,7 @@ impl FixtureControlReceipt {
                 QuotaFixtureOperation::SelectBrowseAccount => "select-browse-account",
                 QuotaFixtureOperation::ReloadViewModel => "reload-view-model",
             },
-            readback: readback(&ack.readback),
+            readback: live_readback(&ack.readback),
         }
     }
 }
@@ -219,4 +219,16 @@ pub(super) fn append_summary_pose(poses: &mut Vec<Value>, readback: &Value) {
     if poses.last() != Some(&pose) {
         poses.push(pose);
     }
+}
+
+/// Live replies add the published body witness; base journal and summary facts stay separate.
+pub(super) fn live_readback(value: &QuotaFixtureReadback) -> Value {
+    let body_scroll = value.body_scroll.as_ref().map(|body| {
+        let position = body.position;
+        json!({"surface":format!("{:?}",body.surface),"mount":body.mount,"publicationFrame":body.publication_frame,
+            "offset":position.offset,"maxOffset":position.maximum(),"viewportHeight":position.viewport_height,"contentHeight":position.natural_height})
+    });
+    let mut wire = readback(value);
+    wire["bodyScroll"] = json!(body_scroll);
+    wire
 }
