@@ -83,7 +83,13 @@ fn choices(
         },
     }
 }
-fn dialog(stack: SurfaceStackHandle, state: ExceptionState, journal: EventJournal) -> OverlaySpec {
+fn dialog(
+    stack: SurfaceStackHandle,
+    state: ExceptionState,
+    journal: EventJournal,
+    guarded_close: bool,
+    close_unavailable: bool,
+) -> OverlaySpec {
     let mut start = action("start", "Ctrl+Enter", {
         let journal = journal.clone();
         move |()| {
@@ -116,10 +122,35 @@ fn dialog(stack: SurfaceStackHandle, state: ExceptionState, journal: EventJourna
                 .unwrap();
         }
     });
+    let close_journal = journal.clone();
     let menu = action("menu", "F10", move |()| {
         stack
             .open_overlay(choices(stack, state, journal.clone(), OverlayKind::Menu))
             .unwrap();
+    });
+    let mut actions = vec![start, dropdown, menu];
+    if guarded_close {
+        let mut close = action("close", "Esc", move |()| {
+            close_journal.log_handler("close-guard");
+            if state.start_count.get() == 0 {
+                stack.close_top();
+            }
+        });
+        if close_unavailable {
+            close.availability = AvailabilityFn::new(|| Availability::Unavailable {
+                reason: "cannot close".into(),
+            });
+        }
+        actions.push(close);
+    }
+    let available = AvailabilityFn::new(move || {
+        if guarded_close && state.start_count.get() > 0 {
+            Availability::Unavailable {
+                reason: "pending operation".into(),
+            }
+        } else {
+            Availability::Available
+        }
     });
     let group = GroupId::new("fields").unwrap();
     OverlaySpec {
@@ -127,18 +158,16 @@ fn dialog(stack: SurfaceStackHandle, state: ExceptionState, journal: EventJourna
         model: SurfaceModel {
             focus: FocusModel::new(vec![
                 TargetSpec::new(target_id("field"))
+                    .with_availability(available.clone())
                     .in_group(group.clone())
                     .with_activation(action_id("dropdown")),
                 TargetSpec::new(target_id("start-button"))
+                    .with_availability(available)
                     .in_group(group)
                     .with_activation(action_id("start")),
             ])
             .unwrap(),
-            actions: ActionRegistry::new(
-                ScopeId::new("dialog").unwrap(),
-                vec![start, dropdown, menu],
-            )
-            .unwrap(),
+            actions: ActionRegistry::new(ScopeId::new("dialog").unwrap(), actions).unwrap(),
             primary_action: Some(action_id("start")),
         },
         view: OverlayView::new(|| element!(ExceptionBody).into_any()),
@@ -155,6 +184,8 @@ struct ExceptionSceneProps {
     #[iocraft(required)]
     journal: EventJournal,
     deny_quit: bool,
+    guarded_close: bool,
+    close_unavailable: bool,
 }
 #[component]
 fn ExceptionScene(props: &ExceptionSceneProps, mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
@@ -183,9 +214,17 @@ fn ExceptionScene(props: &ExceptionSceneProps, mut hooks: Hooks) -> impl Into<An
         });
         let dialog_action = action("dialog", "F2", {
             let journal = props.journal.clone();
+            let guarded_close = props.guarded_close;
+            let close_unavailable = props.close_unavailable;
             move |()| {
                 stack
-                    .open_overlay(dialog(stack, state, journal.clone()))
+                    .open_overlay(dialog(
+                        stack,
+                        state,
+                        journal.clone(),
+                        guarded_close,
+                        close_unavailable,
+                    ))
                     .unwrap();
             }
         });
@@ -233,6 +272,64 @@ fn ExceptionScene(props: &ExceptionSceneProps, mut hooks: Hooks) -> impl Into<An
             snapshots.extend(stack.snapshot().overlays().iter().map(|overlay|(SurfaceId::Overlay(overlay.id),format!("{:?}",overlay.kind).into_bytes())));
             journal.processed(SurfaceSnapshot(snapshots));
         }) { OverlayHost {ExceptionScreen(state)} }
+    }
+}
+
+async fn assert_disabled_focus_keeps_declared_escape_guard(
+    mode: InputMode,
+    close_unavailable: bool,
+) {
+    let (mut driver, config, journal) = EventDriver::new();
+    let mut ui = element!(ExceptionScene(journal,guarded_close:true,close_unavailable));
+    let mut frames = Box::pin(recording_terminal_render_loop(&mut ui, config));
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        driver.initial(&mut frames).await;
+        let observations = driver
+            .drive(
+                &mut frames,
+                mode,
+                vec![
+                    (key(KeyCode::F(2)), true),
+                    (control(KeyCode::Enter), true),
+                    (key(KeyCode::Esc), false),
+                ],
+                true,
+            )
+            .await;
+        let after_escape = observations.last().unwrap();
+        assert_eq!(after_escape.snapshot.0[0].1, b"original|1|0");
+        assert_eq!(
+            after_escape.snapshot.0.len(),
+            2,
+            "Escape cannot bypass the declared pending-operation guard"
+        );
+        assert_eq!(
+            after_escape.handlers,
+            if close_unavailable {
+                vec!["start"]
+            } else {
+                vec!["start", "close-guard"]
+            }
+        );
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn disabled_focus_keeps_declared_escape_guard_in_burst() {
+    assert_disabled_focus_keeps_declared_escape_guard(InputMode::Burst, false).await;
+}
+
+#[tokio::test]
+async fn disabled_focus_keeps_declared_escape_guard_after_a_frame() {
+    assert_disabled_focus_keeps_declared_escape_guard(InputMode::FrameSeparated, false).await;
+}
+
+#[tokio::test]
+async fn unavailable_declared_escape_never_falls_back_to_popping_the_overlay() {
+    for mode in [InputMode::Burst, InputMode::FrameSeparated] {
+        assert_disabled_focus_keeps_declared_escape_guard(mode, true).await;
     }
 }
 #[derive(Props)]

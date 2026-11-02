@@ -2,7 +2,7 @@
 use crate::{
     actions::ActionId,
     surfaces::{
-        focus_model::{FocusDirection, InputUse, TargetId, TargetSpec},
+        focus_model::{FocusDirection, InputUse, TargetActivationKeys, TargetId, TargetSpec},
         hit_regions::{HitRegionKind, use_frame_publication},
         surface_handle::{SurfaceContext, SurfaceStackHandle},
         surface_stack::{OverlayId, OverlayKind, SurfaceId, SurfaceStack},
@@ -281,7 +281,9 @@ fn route_key(handle: SurfaceStackHandle, stack: &SurfaceStack, key: KeyEvent) ->
             );
         }
         if key.kind == KeyEventKind::Press
-            && key.code == KeyCode::Enter
+            && (key.code == KeyCode::Enter
+                || (key.code == KeyCode::Char(' ')
+                    && target.activation_keys == TargetActivationKeys::EnterOrSpace))
             && key.modifiers.is_empty()
             && let Some(action) = &target.activation
         {
@@ -292,6 +294,16 @@ fn route_key(handle: SurfaceStackHandle, stack: &SurfaceStack, key: KeyEvent) ->
         && key.code == KeyCode::Esc
         && stack.top_id() != SurfaceId::Screen
     {
+        if let Some(close) = stack
+            .top()
+            .actions
+            .definitions()
+            .iter()
+            .rev()
+            .find(|action| action.keys.iter().any(|binding| binding.matches(&key)))
+        {
+            return run_action(stack, &close.id, stack.top_id(), None);
+        }
         return handle.close_top().map_or_else(
             || RouteDecision::ignored(stack.top_id()),
             |id| RouteDecision::new(Routed::OverlayClosed(id), stack.top_id(), None, None),
@@ -403,6 +415,9 @@ fn route_mouse(
     RouteDecision::ignored(surface)
 }
 
+#[cfg(test)]
+#[path = "button_activation_test.rs"]
+mod button_activation_test;
 #[cfg(test)]
 #[path = "input_isolation_test.rs"]
 mod isolation_test;
