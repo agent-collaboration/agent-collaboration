@@ -181,6 +181,16 @@ test.each([
 		true,
 	],
 	[
+		'ellipsized title beside stable tag',
+		'╭──────────────────────────────────────────────────────────╮\r\n│ Remove accou… … [b350cd65]                               │\r\n│ Confirm removal                                          │\r\n│ effect-alpha                                             │\r\n│ Warning                                                  │\r\n│ Disable the account before removing it                   │\r\n╰──────────────────────────────────────────────────────────╯',
+		true,
+	],
+	[
+		'wrong active dialog',
+		'╭──────────────────────────────────────────────────────────╮\r\n│ Account details effect-alpha                             │\r\n│ Warning                                                  │\r\n│ Disable the account before removing it                   │\r\n╰──────────────────────────────────────────────────────────╯',
+		false,
+	],
+	[
 		'Browse notice outside active dialog',
 		'effect-alpha: Disable the account before removing it\r\n╭──────────────────────────────────────────────────────────╮\r\n│ Remove account effect-alpha                              │\r\n│ Confirm removal                                          │\r\n╰──────────────────────────────────────────────────────────╯',
 		false,

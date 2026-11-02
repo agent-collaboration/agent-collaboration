@@ -9,6 +9,9 @@ import type { QuotaEffectScenario } from './quota-fixture-contract.ts';
 import { quotaDialogInteriorRows, quotaFocused, quotaPrimary } from './quota-flow-inputs.ts';
 import { quotaObservationSchema } from './quota-live-fixture.ts';
 
+// DialogHeader fits a title beside its account tag; the suffix is ellipsized at 32×24.
+const removalDialogTitlePrefix = 'Remove';
+
 export function checkQuotaAccount(options: {
 	readonly check: FlowCheck;
 	readonly scenario: QuotaEffectScenario;
@@ -179,9 +182,9 @@ export function checkQuotaAccount(options: {
 			);
 
 		const text =
-			findDialog(grid, 'Remove account') === null
+			findDialog(grid, removalDialogTitlePrefix) === null
 				? ''
-				: quotaDialogInteriorRows(grid, 'Remove account')
+				: quotaDialogInteriorRows(grid, removalDialogTitlePrefix)
 						.join(' ')
 						.replace(/[│█]/gu, ' ')
 						.replace(/\s+/gu, ' ');
@@ -212,7 +215,7 @@ export function quotaRemoveCompletionMessage(label: string): string {
 
 /** A complete enabled button label run excludes the white Remove sentence and grey pending label. */
 export function quotaRemovalButtonAvailable(grid: TerminalGrid): boolean {
-	const rectangle = findDialog(grid, 'Remove account');
+	const rectangle = findDialog(grid, removalDialogTitlePrefix);
 	if (rectangle === null) return false;
 	const eligible = new Set([
 		terminalTheme.palette[7],
