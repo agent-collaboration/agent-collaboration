@@ -456,7 +456,8 @@ async fn fleet_machine_login_actual_cli_rejects_discovery_before_saving_and_keep
             require_gate(&client, false).await?;
             let invalid = login(&router, Some("http://issuer.example.invalid/api/auth")).await?;
             if invalid.status.success()
-                || !String::from_utf8_lossy(&invalid.stderr).contains("HTTPS issuer")
+                || !String::from_utf8_lossy(&invalid.stderr)
+                    .contains("--sign-in requires HTTPS or loopback HTTP")
             {
                 return Err(failed_cli(&invalid, "HTTP issuer was not refused"));
             }
