@@ -99,6 +99,17 @@ struct PendingWakeSend {
     expiry: ExpiryRequest,
     replace: bool,
 }
+
+enum WakeExecutionFailure {
+    Preparation(String),
+    Service(WakeClientError),
+}
+
+impl From<collaboration_client::ClientError> for WakeExecutionFailure {
+    fn from(error: collaboration_client::ClientError) -> Self {
+        Self::Service(error.into())
+    }
+}
 struct WakeInvocation {
     directory: PathBuf,
     json: bool,
@@ -145,25 +156,21 @@ pub fn run_wakeup_command(arguments: Vec<OsString>) -> i32 {
         }
     };
     let mut dispatched = false;
-    let result: Result<serde_json::Value, WakeClientError> = runtime.block_on(async {
+    let result: Result<serde_json::Value, WakeExecutionFailure> = runtime.block_on(async {
         let client = CollaborationClient::connect(
             &invocation.directory,
             "agent-collaboration-wake",
             env!("CARGO_PKG_VERSION"),
         )
         .await?;
-        dispatched = true;
-        match invocation.request {
+        let answer = match invocation.request {
             PreparedWake::Send(request) => {
                 let request = *request;
                 let message = request
                     .message
                     .resolve(&client.identity().service_id)
-                    .map_err(|_| {
-                        WakeClientError::Connection(collaboration_client::ClientError::Protocol(
-                            "invalid session target",
-                        ))
-                    })?;
+                    .map_err(WakeExecutionFailure::Preparation)?;
+                dispatched = true;
                 client
                     .send_wakeup(WakeSendRequest {
                         operation_id: request.operation_id,
@@ -195,16 +202,20 @@ pub fn run_wakeup_command(arguments: Vec<OsString>) -> i32 {
             PreparedWake::List(request) => {
                 client.list_wakeups(request).await.and_then(encode_result)
             }
-            PreparedWake::Mutate(action, request) => match action {
-                LifecycleAction::Pause => client.pause_wakeup(request).await,
-                LifecycleAction::Resume => client.resume_wakeup(request).await,
-                LifecycleAction::Cancel => client.cancel_wakeup(request).await,
+            PreparedWake::Mutate(action, request) => {
+                dispatched = true;
+                match action {
+                    LifecycleAction::Pause => client.pause_wakeup(request).await,
+                    LifecycleAction::Resume => client.resume_wakeup(request).await,
+                    LifecycleAction::Cancel => client.cancel_wakeup(request).await,
+                }
+                .and_then(encode_result)
             }
-            .and_then(encode_result),
-        }
+        };
+        answer.map_err(WakeExecutionFailure::Service)
     });
     if !dispatched
-        && let Err(WakeClientError::Connection(error)) = &result
+        && let Err(WakeExecutionFailure::Service(WakeClientError::Connection(error))) = &result
         && let Some(code) = crate::permission_diagnostic_reporting::report_actionable_client_error(
             error,
             crate::permission_diagnostic_reporting::PermissionDiagnosticRendering::Operation(
@@ -216,13 +227,17 @@ pub fn run_wakeup_command(arguments: Vec<OsString>) -> i32 {
         return code;
     }
     let (record, code) = match result {
+        Err(WakeExecutionFailure::Preparation(message)) => (
+            json!({"kind":"error","operationId":invocation.operation_id,"error":{"kind":"invalidField","message":message}}),
+            2,
+        ),
         Ok(snapshot) => (
             crate::endpoint_commands::result_envelope(
                 json!({"operationId":invocation.operation_id,"result":snapshot}),
             ),
             0,
         ),
-        Err(WakeClientError::Rejected(error)) => {
+        Err(WakeExecutionFailure::Service(WakeClientError::Rejected(error))) => {
             let uncertain = matches!(
                 &error.effects,
                 LocalMutationEvidence::Local {
@@ -234,7 +249,7 @@ pub fn run_wakeup_command(arguments: Vec<OsString>) -> i32 {
                 if uncertain { 5 } else { 4 },
             )
         }
-        Err(WakeClientError::Selection(error)) => {
+        Err(WakeExecutionFailure::Service(WakeClientError::Selection(error))) => {
             let code = if matches!(
                 &*error,
                 collaboration_client::WakeSelectionFailure::LocalStoreUnavailable { .. }
@@ -248,7 +263,7 @@ pub fn run_wakeup_command(arguments: Vec<OsString>) -> i32 {
                 code,
             )
         }
-        Err(WakeClientError::Catalog(error)) => {
+        Err(WakeExecutionFailure::Service(WakeClientError::Catalog(error))) => {
             let code = match &error {
                 collaboration_client::CentralCatalogFailure::CentralUnreachable { .. } => 3,
                 collaboration_client::CentralCatalogFailure::OutcomeUnknown { .. } => 5,
@@ -259,7 +274,7 @@ pub fn run_wakeup_command(arguments: Vec<OsString>) -> i32 {
                 code,
             )
         }
-        Err(WakeClientError::Connection(_)) => {
+        Err(WakeExecutionFailure::Service(WakeClientError::Connection(_))) => {
             let uncertain = dispatched && invocation.operation_id.is_some();
             (
                 json!({"kind":"error","operationId":invocation.operation_id,"error":{"kind":if uncertain{"outcomeUnknown"}else{"unavailable"},"message":if uncertain{"Wake mutation may have committed. Inspect or replay the same operation ID; do not blindly create another wake."}else{"Wake service unavailable; no mutation dispatched."},"nextAction":if uncertain{"inspectOperation"}else{"retryLater"}}}),
