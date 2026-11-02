@@ -154,6 +154,22 @@ test('each declared journey kind builds its scenes for the target provider only'
 	]);
 	expect(modelJourney.steps[2]?.actions).toEqual(MODEL.model_navigation);
 	expect(modelJourney.steps[3]?.actions).toEqual([{ kind: 'text', text: 's' }]);
+	const saved = { model: 'composer-2.5', effort: 'none' };
+	const savedDefault = await runPlan({
+		...MODEL,
+		apply: 'default',
+		expected_outcome: [],
+		saved_default: saved,
+	});
+	const applied = codexJourneyFor(savedDefault.plan).steps.at(-1)?.checkpoint;
+	expect(applied?.info_line).toBe('Model changed to composer-2.5 default');
+	const wide = await runPlan({
+		...MODEL,
+		apply: 'default',
+		expected_outcome: [],
+		saved_default: { ...saved, model: 'm'.repeat(120) },
+	});
+	expect(() => codexJourneyFor(wide.plan)).toThrow('would wrap at this viewport');
 	const information = await runPlan(INFORMATION);
 	expect(codexJourneyFor(information.plan).steps.map((step) => step.checkpoint.scene)).toEqual([
 		'mcp-command-ready',
@@ -201,6 +217,10 @@ test('the plan refuses relative output, unknown fields and unbounded effect wait
 		{ ...MODEL, catalogue_page: Array.from({ length: 9 }, (_, index) => `Model ${index}`) },
 		{ ...MODEL, target: { ...MODEL.target, number: 0 } },
 		{ ...MODEL, expected_outcome: [] },
+		// A default apply names only what it saves; the old refusal cannot be its outcome.
+		{ ...MODEL, apply: 'default' },
+		{ ...MODEL, apply: 'default', saved_default: { model: 'fixture-model', effort: 'high' } },
+		{ ...MODEL, saved_default: { model: 'fixture-model', effort: 'high' } },
 		{ ...MODEL, outcome_deadline_ms: 3_600_000 },
 		{ ...PICKER, skill: '' },
 		{ ...RENAME, title: 'Fixture\r/quit' },

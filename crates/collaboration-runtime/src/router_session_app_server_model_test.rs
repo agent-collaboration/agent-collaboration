@@ -55,6 +55,102 @@ async fn model_rpc(
     .await?
 }
 
+/// Oracle: Codex 0.165 config_update.rs:87-104,155-172 and the reviewed
+/// M1 no-op contract. The extra default save must not repeat session settings.
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Literal native transport contract assertions; setup failures propagate."
+)]
+async fn model_default_save_receipt_preserves_the_applied_session_settings()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Arrange: apply a real native settings request through the owning socket.
+    let directory = tempfile::tempdir()?;
+    let socket_path = directory.path().join("defaults.sock");
+    let listener = UnixListener::bind(&socket_path)?;
+    let backend = ScriptedSessionBackend::new()?;
+    let model = super::test_support::qualified_model("haiku", "Haiku", &["low", "medium"], "low")?;
+    let (_catalog_sender, catalog) = tokio::sync::watch::channel(vec![model]);
+    let context = Arc::new(RouterSessionAppServerContext::new(
+        backend.endpoint.clone(),
+        ScriptedSessionBackend::actor()?,
+        backend.clone(),
+        backend.clone(),
+        super::test_support::model_catalog(catalog),
+    ));
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await?;
+        serve_router_session_app_server_connection(stream, context)
+            .await
+            .map_err(std::io::Error::other)
+    });
+    let (mut client, _) = client_async(
+        "ws://localhost/rpc",
+        UnixStream::connect(&socket_path).await?,
+    )
+    .await?;
+    let created = model_rpc(
+        &mut client,
+        1,
+        "thread/start",
+        json!({"cwd":directory.path()}),
+    )
+    .await?;
+    let applied = model_rpc(
+        &mut client,
+        2,
+        "thread/settings/update",
+        json!({"threadId":created["result"]["thread"]["id"],
+            "model":"haiku","effort":"medium"}),
+    )
+    .await?;
+    assert_eq!(applied, json!({"id":2,"result":{}}));
+    assert_eq!(backend.setting_commands.lock().expect("settings").len(), 2);
+
+    // Act: the same connection sends the picker's separate housekeeping batch.
+    let response = model_rpc(
+        &mut client,
+        3,
+        "config/batchWrite",
+        json!({"edits":[
+            {"keyPath":"model","value":"haiku","mergeStrategy":"replace"},
+            {"keyPath":"model_reasoning_effort","value":"medium","mergeStrategy":"replace"}
+        ],"filePath":null,"expectedVersion":null,"reloadUserConfig":true}),
+    )
+    .await?;
+
+    // Assert: a correlated native receipt, with no extra provider command.
+    assert_eq!(
+        response,
+        json!({"id":3,"result":{
+            "status":"ok","version":"acp-compat-noop-v1",
+            "filePath":"/dev/null","overriddenMetadata":null
+        }})
+    );
+    assert_eq!(backend.setting_commands.lock().expect("settings").len(), 2);
+    assert_eq!(
+        backend.effective_model.lock().expect("model").as_deref(),
+        Some("haiku")
+    );
+    assert_eq!(
+        backend.effective_effort.lock().expect("effort").as_deref(),
+        Some("medium")
+    );
+    assert!(backend.prompt_commands.lock().expect("prompts").is_empty());
+    assert!(backend.steer_commands.lock().expect("steers").is_empty());
+    assert!(
+        backend
+            .compact_commands
+            .lock()
+            .expect("compacts")
+            .is_empty()
+    );
+    assert!(backend.cancel_commands.lock().expect("cancels").is_empty());
+    client.close(None).await?;
+    tokio::time::timeout(std::time::Duration::from_secs(2), server).await???;
+    Ok(())
+}
+
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,

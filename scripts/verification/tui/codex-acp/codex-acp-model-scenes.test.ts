@@ -1,6 +1,10 @@
 import { expect, test } from 'vitest';
 
-import { codexEffortLabel, modelJourney } from './codex-acp-model-scenes.ts';
+import {
+	codexEffortLabel,
+	codexSavedDefaultMessage,
+	modelJourney,
+} from './codex-acp-model-scenes.ts';
 import type { ModelJourneyInput } from './codex-acp-model-scenes.ts';
 import { gridShowsCheckpoint, gridShowsSelectedMenuRow } from './codex-acp-scenes.ts';
 
@@ -110,21 +114,29 @@ test('/model waits for the refreshed catalogue and each selected row before its 
 			gridShowsCheckpoint(['  Select Reasoning Level for Haiku 5.5', selected], effort),
 			selected,
 		).toBe(false);
-	expect(
-		gridShowsCheckpoint(
-			['• Model changed to claude-haiku-5-5 high for this conversation'],
-			applied,
-		),
-	).toBe(true);
+	// The regular PersistModelSelection success cell (event_dispatch.rs:2575-2584).
+	expect(gridShowsCheckpoint(['• Model changed to claude-haiku-5-5 high'], applied)).toBe(true);
 	for (const screen of [
-		[
-			'• Model changed to claude-haiku-5-5 high for this conversation',
-			'  Select Reasoning Level for Haiku 5.5',
-		],
-		['• Model changed to claude-haiku-5-5 high for this conversation', '  Select Model and Effort'],
+		// Another sibling message that saves differently or not at all.
+		['• Model changed to claude-haiku-5-5 high for this conversation'],
+		['• Model changed to claude-haiku-5-5 high for this session only'],
+		// A popup still open over the success cell.
+		['• Model changed to claude-haiku-5-5 high', '  Select Reasoning Level for Haiku 5.5'],
+		['• Model changed to claude-haiku-5-5 high', '  Select Model and Effort'],
+		// The success cell twice, or beside the red save error.
+		['• Model changed to claude-haiku-5-5 high', '• Model changed to claude-haiku-5-5 high'],
+		['• Model changed to claude-haiku-5-5 high', '■ Failed to save default model: io error'],
+		// The text not as its own info cell.
+		['  Model changed to claude-haiku-5-5 high'],
+		['• Model changed to claude-haiku-5-5 xhigh'],
 		['› /model'],
 	])
 		expect(gridShowsCheckpoint(screen, applied), screen.join('|')).toBe(false);
+	// Before the apply key, the success text already on screen means it is not this action's.
+	expect(
+		gridShowsCheckpoint([...refreshed, '• Model changed to claude-haiku-5-5 high'], catalogue),
+	).toBe(false);
+	expect(journey.whole_run_errors).toBe('forbid');
 });
 
 test('/model folds a selection already drawn into the frame that shows it, and refuses advanced efforts', () => {
@@ -135,6 +147,8 @@ test('/model folds a selection already drawn into the frame that shows it, and r
 		target: { displayName: 'Sonnet 4.6', number: 1, isCurrent: true },
 		effort: null,
 		apply: 'session',
+		expectedOutcome: ['Model changed to claude-sonnet-4-6', 'for this session only'],
+		savedDefault: null,
 	});
 	expect(direct.steps.map((step) => step.checkpoint.scene)).toEqual([
 		'model-command-ready',
@@ -148,9 +162,13 @@ test('/model folds a selection already drawn into the frame that shows it, and r
 		current: true,
 	});
 	expect(direct.steps[2]?.actions).toEqual([{ kind: 'text', text: 's' }]);
+	// A session apply keeps its declared outcome and no whole-run error gate.
+	expect(direct.steps[2]?.checkpoint.info_line).toBeUndefined();
+	expect(direct.whole_run_errors).toBeUndefined();
 	const effortFirst = modelJourney({
 		...MODEL_INPUT,
 		effort: { ...MODEL_EFFORT, navigation: [], number: 1, value: 'low', isDefault: true },
+		savedDefault: { model: 'claude-haiku-5-5', effort: 'low' },
 	});
 	expect(effortFirst.steps.map((step) => step.checkpoint.scene)).not.toContain('effort-selected');
 	expect(effortFirst.steps[3]?.checkpoint.selected_menu_row).toEqual({
@@ -184,20 +202,56 @@ const MODEL_INPUT: ModelJourneyInput = {
 	target: { displayName: 'Haiku 5.5', number: 2, isCurrent: false },
 	effort: MODEL_EFFORT,
 	apply: 'default',
-	expectedOutcome: ['Model changed to claude-haiku-5-5 high'],
+	expectedOutcome: [],
+	savedDefault: { model: 'claude-haiku-5-5', effort: 'high' },
 	outcomeDeadlineMs: 8_000,
 };
 
-test('the default apply can declare the honest default-save refusal as its outcome', () => {
-	const applied = modelJourney({
-		...MODEL_INPUT,
-		expectedOutcome: ['Failed to save default model', ROUTER_SAVE_REFUSAL],
-	}).steps.at(-1)?.checkpoint;
-	if (applied === undefined) throw new Error('model refusal scene missing');
-	expect(
-		gridShowsCheckpoint([`■ Failed to save default model: ${ROUTER_SAVE_REFUSAL}`], applied),
-	).toBe(true);
-	expect(gridShowsCheckpoint(['■ Failed to save default model: io error'], applied)).toBe(false);
+test('the default apply never accepts the old default-save refusal as its outcome', () => {
+	const applied = modelJourney(MODEL_INPUT).steps.at(-1)?.checkpoint;
+	if (applied === undefined) throw new Error('model apply scene missing');
+	// The red frame the earlier refusal produced (pre-M1 Router), alone or after a success line.
+	for (const screen of [
+		[`■ Failed to save default model: ${ROUTER_SAVE_REFUSAL}`],
+		[
+			'• Model changed to claude-haiku-5-5 high',
+			`■ Failed to save default model: ${ROUTER_SAVE_REFUSAL}`,
+		],
+	])
+		expect(gridShowsCheckpoint(screen, applied), screen.join('|')).toBe(false);
+	// The refusal can no longer be declared as a default apply's outcome.
+	expect(() =>
+		modelJourney({
+			...MODEL_INPUT,
+			expectedOutcome: ['Failed to save default model', ROUTER_SAVE_REFUSAL],
+		}),
+	).toThrow('only the saved model and effort');
+	expect(() => modelJourney({ ...MODEL_INPUT, savedDefault: null })).toThrow(
+		'only the saved model and effort',
+	);
+	expect(() =>
+		modelJourney({ ...MODEL_INPUT, apply: 'session', expectedOutcome: ['Model changed'] }),
+	).toThrow('saves no default');
+	expect(() =>
+		modelJourney({ ...MODEL_INPUT, savedDefault: { model: 'claude-haiku-5-5', effort: 'low' } }),
+	).toThrow('chosen effort row');
+});
+
+test('the saved-default cell follows the native formatter, not the menu label', () => {
+	// Literal expected text from app/event_dispatch.rs:2575-2584 and config_persistence.rs:1036-1047.
+	for (const [saved, message] of [
+		[{ model: 'claude-haiku-5-5', effort: 'xhigh' }, 'Model changed to claude-haiku-5-5 xhigh'],
+		[{ model: 'grok-4.6', effort: 'none' }, 'Model changed to grok-4.6 default'],
+		[{ model: 'gpt-x', effort: 'turbo-plus' }, 'Model changed to gpt-x turbo-plus'],
+		[{ model: 'codex-auto-fast', effort: 'high' }, 'Model changed to codex-auto-fast'],
+	] as const)
+		expect(codexSavedDefaultMessage(saved)).toBe(message);
+	for (const saved of [
+		{ model: 'two words', effort: 'high' },
+		{ model: 'claude-haiku-5-5', effort: 'high for this conversation' },
+		{ model: 'claude-haiku-5-5', effort: '' },
+	])
+		expect(() => codexSavedDefaultMessage(saved)).toThrow('native printable values');
 });
 
 test("an effort row carries Codex's label for the value and nothing appended", () => {

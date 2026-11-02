@@ -51,6 +51,8 @@ export const codexCheckpointSchema = z.strictObject({
 		.optional(),
 	// A grid line that is one whole error history cell: `■ `, this text, then only padding.
 	error_line: z.string().min(1).optional(),
+	// Exactly one grid line that is a whole info history cell: `• `, this text, then only padding.
+	info_line: z.string().min(1).optional(),
 });
 export type CodexCheckpoint = z.infer<typeof codexCheckpointSchema>;
 
@@ -65,6 +67,9 @@ export const codexJourneySchema = z
 				}),
 			)
 			.min(1),
+		// Every completed frame of the whole run must show no error history cell. Journeys that
+		// expect an error (interrupt, refusals) omit it; their frames are still recorded.
+		whole_run_errors: z.literal('forbid').optional(),
 	})
 	.refine(
 		(journey) =>
@@ -100,6 +105,8 @@ export const CODEX_0_165_TEXT = {
 	contextCompacted: 'Context compacted',
 	// history_cell/notices.rs:331-336, every error history cell.
 	errorPrefix: '■ ',
+	// history_cell/notices.rs:321-329 via chatwidget.rs:1575-1577, every info history cell.
+	infoPrefix: '• ',
 	// chatwidget/input_restore.rs:383, interrupted turn.
 	interrupted: '■ Conversation interrupted',
 	// chatwidget/model_popups.rs:637, the reasoning popup that may follow a model row.
@@ -532,6 +539,16 @@ export function gridShowsErrorLine(lines: readonly string[], text: string): bool
 	return lines.some((line) => pattern.test(line));
 }
 
+/**
+ * How many grid lines are this whole info history cell: `• ` at the line start, then exactly this
+ * text and only padding (history_cell/notices.rs:321-329). The text with a suffix after it, such
+ * as " for this session only", or inside another cell is not this line.
+ */
+export function countInfoLines(lines: readonly string[], text: string): number {
+	const pattern = new RegExp(`^${escapeRegExp(CODEX_0_165_TEXT.infoPrefix + text)}\\s*$`, 'u');
+	return lines.filter((line) => pattern.test(line)).length;
+}
+
 /** Whether one grid frame shows a checkpoint: every required text and no forbidden text. */
 export function gridShowsCheckpoint(
 	lines: readonly string[],
@@ -548,7 +565,8 @@ export function gridShowsCheckpoint(
 			gridShowsSelectedMenuRow(lines, checkpoint.selected_menu_row)) &&
 		(checkpoint.selected_slash_row === undefined ||
 			gridShowsSelectedSlashRow(lines, checkpoint.selected_slash_row)) &&
-		(checkpoint.error_line === undefined || gridShowsErrorLine(lines, checkpoint.error_line))
+		(checkpoint.error_line === undefined || gridShowsErrorLine(lines, checkpoint.error_line)) &&
+		(checkpoint.info_line === undefined || countInfoLines(lines, checkpoint.info_line) === 1)
 	);
 }
 
