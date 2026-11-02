@@ -17,8 +17,10 @@ fleet-sync-protocol.workspace = true
 schemars.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+sqlx = { workspace = true, features = ["macros", "migrate", "sqlite"] }
 serde_json = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json.workspace = true
+tempfile = "3.27.0"
 tokio = { workspace = true, features = ["macros", "rt", "sync"] }

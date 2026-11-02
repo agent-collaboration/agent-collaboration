@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM fleet_login WHERE enrollment_id=?1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "25be0fa47630bf71f12c60a237b2114999eeea52e48bd99bda5c67ed4ff5a914"
+}
