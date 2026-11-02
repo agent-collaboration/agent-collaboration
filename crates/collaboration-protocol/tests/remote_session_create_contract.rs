@@ -1,6 +1,7 @@
 //! Central status distinguishes unreported work from an observed uncertain effect.
 use collaboration_protocol::{
     AutomationAnswer, AutomationCall, RemoteSessionCreateRequest, SessionCreateEntry,
+    WorkItemReport,
 };
 use serde_json::{Value, json};
 
@@ -10,6 +11,48 @@ fn unreported_snapshot() -> Value {
         "operationId":"019f0000-0000-7000-8000-000000000002",
         "state":"pending","create":null,"input":{"state":"none"},"reportSeq":null
     })
+}
+
+#[test]
+fn create_report_keeps_required_nullable_input_distinct_from_explicit_no_input() {
+    let schema =
+        serde_json::to_value(schemars::schema_for!(WorkItemReport)).expect("report schema");
+    let validator = jsonschema::validator_for(&schema).expect("report schema compiles");
+    for input in [
+        Value::Null,
+        json!({"state":"none"}),
+        json!({"state":"accepted"}),
+    ] {
+        let wire = json!({"kind":"sessionCreate","value":{
+            "workItemId":"019f0000-0000-7000-8000-000000000001","seq":1,
+            "create":{"state":"unknown"},"input":input
+        }});
+        let decoded: WorkItemReport = serde_json::from_value(wire.clone())
+            .expect("create report must represent pending input independently");
+        assert_eq!(
+            serde_json::to_value(decoded).expect("report roundtrip"),
+            wire
+        );
+        assert!(
+            validator.is_valid(&wire),
+            "schema refused an explicit input state: {wire}"
+        );
+        for field in ["create", "input"] {
+            let mut missing = wire.clone();
+            missing["value"]
+                .as_object_mut()
+                .expect("report body")
+                .remove(field);
+            assert!(
+                serde_json::from_value::<WorkItemReport>(missing.clone()).is_err(),
+                "missing {field} was silently defaulted"
+            );
+            assert!(
+                !validator.is_valid(&missing),
+                "schema made {field} optional"
+            );
+        }
+    }
 }
 
 fn request_definition() -> Value {

@@ -198,6 +198,49 @@ fn stored_results_require_a_positive_sequence_and_complete_typed_fields() {
 }
 
 #[test]
+fn stored_nullable_input_is_explicit_and_unrequested_input_stays_none() {
+    for input in [
+        Value::Null,
+        json!({"state":"none"}),
+        json!({"state":"unknown"}),
+        json!({"state":"accepted"}),
+    ] {
+        let encoded = json!({"seq":1,"create":{"state":"unknown"},"input":input});
+        let mut stored = row();
+        stored.result_json = Some(encoded.to_string());
+        let record =
+            decode(stored).expect("stored result must represent an unreported input independently");
+        assert_eq!(
+            serde_json::to_value(&record.result).expect("stored result roundtrip"),
+            encoded
+        );
+        let expected = if input.is_null() {
+            json!({"state":"none"})
+        } else {
+            input
+        };
+        assert_eq!(
+            serde_json::to_value(record.snapshot().input).expect("snapshot input"),
+            expected
+        );
+    }
+    for encoded in [
+        json!({"seq":1,"create":{"state":"unknown"}}),
+        json!({"seq":1,"create":{"state":"unknown"},"input":false}),
+        json!({"seq":1,"create":{"state":"unknown"},"input":null,"extra":true}),
+    ] {
+        let mut stored = row();
+        stored.result_json = Some(encoded.to_string());
+        assert!(matches!(
+            decode(stored),
+            Err(AutomationStoreError::InvalidRecord(
+                "machine_work_items.result_json"
+            ))
+        ));
+    }
+}
+
+#[test]
 fn known_created_session_belongs_to_the_bound_target() {
     let mut result = json!({"seq":1,"create":{"state":"created","sessionRef":{
         "endpoint":{"serviceId":TARGET,"endpointId":"codex-local"},"sessionId":"created-target"
@@ -332,10 +375,18 @@ fn result_variants_refuse_incomplete_nested_fields_and_unrecognized_fields() {
         assert!(decode(valid).is_ok(), "matrix baseline must decode");
         for pointer in pointers {
             for invalid in [None, Some(Value::Null), Some(json!(true))] {
+                let nullable_input = pointer == "/input" && invalid == Some(Value::Null);
                 let mut result = baseline.clone();
                 replace_or_remove(&mut result, pointer, invalid);
                 let mut stored = row();
                 stored.result_json = Some(result.to_string());
+                if nullable_input {
+                    assert!(
+                        decode(stored).is_ok(),
+                        "explicit unreported input must remain valid"
+                    );
+                    continue;
+                }
                 assert!(
                     matches!(
                         decode(stored),
