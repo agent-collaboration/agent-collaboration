@@ -232,17 +232,6 @@ async fn directory_refusal_keeps_its_structured_reason_without_creating_a_file()
         None,
         "terminal directory refusal retained an unusable creation input"
     );
-    fixture
-        ._fleet
-        .prune_outbox_batch(
-            chrono::DateTime::parse_from_rfc3339("2030-03-01T00:00:00Z")?.timestamp_millis(),
-            500,
-        )
-        .await?;
-    assert!(
-        fixture._fleet.request(&request.request_id).await?.is_none(),
-        "released rejected creation remained past the retention cutoff"
-    );
     assert!(
         !fixture
             ._directory
@@ -262,6 +251,87 @@ async fn directory_refusal_keeps_its_structured_reason_without_creating_a_file()
             .accepted_creation_page("", 100)
             .await?
             .is_empty()
+    );
+    let pruned = fixture
+        ._fleet
+        .prune_outbox_batch(
+            chrono::DateTime::parse_from_rfc3339("2030-03-01T00:00:00Z")?.timestamp_millis(),
+            500,
+        )
+        .await?;
+    assert!(pruned > 0, "released rejected creation was not pruned");
+    assert_eq!(
+        fixture
+            ._fleet
+            .prune_outbox_batch(
+                chrono::DateTime::parse_from_rfc3339("2030-03-01T00:00:00Z")?.timestamp_millis(),
+                500,
+            )
+            .await?,
+        0,
+        "released rejected request remained past the retention cutoff"
+    );
+    fixture.stop().await
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
+async fn synchronized_directory_rejection_releases_queued_creation_input() -> Result<(), TestError>
+{
+    let mut fixture = BoardFixture::start().await?;
+    let accepted = request(&fixture)?;
+    fixture.prepare_registered_creation(&accepted).await?;
+    assert!(matches!(
+        fixture._admission.create_project(&accepted).await?.result,
+        RequestResult::Decided(_)
+    ));
+
+    fixture._fleet_runtime.disconnect().await?;
+    let mut rejected = request(&fixture)?;
+    rejected.title = accepted.title.clone();
+    assert_eq!(
+        fixture._admission.create_project(&rejected).await?.result,
+        RequestResult::PendingUnreachable
+    );
+    assert_eq!(
+        fixture._fleet.creation_input(&rejected.request_id).await?,
+        Some(rejected.clone())
+    );
+
+    let fixture = fixture.restart_read_fixture().await?;
+    assert_eq!(
+        fixture._fleet.creation_input(&rejected.request_id).await?,
+        None,
+        "synchronized rejection retained an unusable creation input"
+    );
+    assert!(matches!(
+        fixture._admission.create_project(&rejected).await?.result,
+        RequestResult::ScopeUnavailable(ScopeRefusal::ProjectRejected {
+            reason: ProjectRejection::Directory {
+                refusal: Refusal::NameConflict { .. }
+            },
+            ..
+        })
+    ));
+    let future_cutoff =
+        chrono::DateTime::parse_from_rfc3339("2030-03-01T00:00:00Z")?.timestamp_millis();
+    assert!(
+        fixture
+            ._fleet
+            .prune_outbox_batch(future_cutoff, 500)
+            .await?
+            > 0
+    );
+    assert_eq!(
+        fixture
+            ._fleet
+            .prune_outbox_batch(future_cutoff, 500)
+            .await?,
+        0,
+        "synchronized rejected request remained after retention"
     );
     fixture.stop().await
 }

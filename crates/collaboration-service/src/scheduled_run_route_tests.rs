@@ -162,7 +162,7 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
         Arc::try_unwrap(interactions)
             .map_err(|_| std::io::Error::other("fixture interaction store remained shared"))?
             .close()
-            .await;
+            .await?;
         std::fs::remove_dir_all(&root)?;
     }
     Ok(())
@@ -322,7 +322,7 @@ async fn provider_existing_preparation_is_inspectable_and_fresh_activation_is_re
     Arc::try_unwrap(interactions)
         .map_err(|_| std::io::Error::other("fixture interaction store remained shared"))?
         .close()
-        .await;
+        .await?;
     std::fs::remove_dir_all(&root)?;
     Ok(())
 }

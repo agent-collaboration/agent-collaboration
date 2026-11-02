@@ -246,6 +246,48 @@ async fn accepted_creation_input_blocks_retention_until_local_completion() -> Te
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
+async fn replayed_rejection_releases_orphaned_input_without_refreshing_settlement() -> TestResult {
+    let temporary = tempfile::tempdir()?;
+    let outbox = FleetOutbox::open(&temporary.path().join("outbox.sqlite")).await?;
+    let (input, directory) = inputs()?;
+    outbox.enqueue_creation(&directory, &input).await?;
+    let rejected = RequestDecision::Rejected {
+        reasons: Vec::new(),
+    };
+    outbox
+        .mark_decided(&input.request_id, &rejected, 1_000)
+        .await?;
+    assert!(outbox.creation_input(&input.request_id).await?.is_none());
+
+    let hash = request_canonical::creation_hash(&input)?;
+    sqlx::query(
+        "INSERT INTO project_creation_inputs(request_id,canonical_hash,input) VALUES (?,?,?)",
+    )
+    .bind(input.request_id.as_str())
+    .bind(hash.as_str())
+    .bind(serde_json::to_string(&input)?)
+    .execute(&outbox.database.pool)
+    .await?;
+    outbox
+        .mark_decided(&input.request_id, &rejected, 2_000)
+        .await?;
+
+    assert!(outbox.creation_input(&input.request_id).await?.is_none());
+    let settled_at: i64 =
+        sqlx::query_scalar("SELECT settled_at_ms FROM fleet_outbox_requests WHERE request_id=?")
+            .bind(input.request_id.as_str())
+            .fetch_one(&outbox.database.pool)
+            .await?;
+    assert_eq!(settled_at, 1_000);
+    outbox.close().await;
+    Ok(())
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
+#[tokio::test]
 async fn migrated_decided_rows_age_from_migration_and_pending_rows_stay_unpruned() -> TestResult {
     let temporary = tempfile::tempdir()?;
     let path = temporary.path().join("outbox.sqlite");

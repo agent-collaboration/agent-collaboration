@@ -9,7 +9,7 @@ pub(crate) const MAILBOX_DELIVERY_RETENTION_MONTHS: u32 = 2;
 /// Retains terminal operation receipts for two calendar months.
 pub(crate) const OPERATION_RECEIPT_RETENTION_MONTHS: u32 = 2;
 
-/// Retains completed workflow runs for two calendar months, keeping each schedule's newest summary.
+/// Retains completed workflow runs for two calendar months, keeping each schedule's newest finished run.
 pub(crate) const WORKFLOW_RUN_RETENTION_MONTHS: u32 = 2;
 
 /// Retains expired and cancelled wake definitions for two calendar months.
@@ -65,7 +65,7 @@ impl AutomationStore {
         Ok(result.rows_affected())
     }
 
-    /// Deletes one bounded batch of old workflow runs, retaining each schedule's newest summary.
+    /// Deletes one bounded batch of old workflow runs, retaining each schedule's newest finished run.
     pub async fn prune_completed_workflow_runs(
         &mut self,
         now_ms: i64,
@@ -82,16 +82,11 @@ impl AutomationStore {
                      AND candidate.run_status IN ('finished','preparationFailed')
                      AND NOT (
                          candidate.run_status='finished'
-                         AND candidate.summary_text IS NOT NULL
-                         AND candidate.summary_source_json IS NOT NULL
                          AND candidate.run_id = (
                              SELECT retained.run_id
                                FROM workflow_runs AS retained
                               WHERE retained.schedule_id=candidate.schedule_id
                                 AND retained.run_status='finished'
-                                AND retained.completed_at_ms IS NOT NULL
-                                AND retained.summary_text IS NOT NULL
-                                AND retained.summary_source_json IS NOT NULL
                               ORDER BY retained.completed_at_ms DESC,retained.run_id DESC
                               LIMIT 1
                          )

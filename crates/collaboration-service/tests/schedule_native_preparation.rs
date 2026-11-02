@@ -248,7 +248,7 @@ async fn exercise_preparation(
         {
             return Err("lost allocation response invented no effect".into());
         }
-        let served_replay_client = served_api::ServedApi::start(identity)?;
+        let served_replay_client = served_api::ServedApi::start(identity.clone())?;
         let replay_client = served_replay_client.client("prepare-replay").await?;
         let replay = replay_client.prepare_schedule(request).await;
         let replay = match replay {

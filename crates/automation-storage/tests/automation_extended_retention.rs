@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use automation_storage::AutomationStore;
-use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
+use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
 
 type TestResult = Result<(), Box<dyn Error + Send + Sync>>;
 
@@ -76,11 +76,7 @@ async fn two_month_run_wake_and_revision_pruning_preserves_current_and_owed_work
     .await?;
     for (run_id, run_status, completed_at_ms) in [
         (old_run_id.as_str(), "finished", Some(old_ms)),
-        (
-            boundary_run_id.as_str(),
-            "preparationFailed",
-            Some(cutoff_ms),
-        ),
+        (boundary_run_id.as_str(), "finished", Some(cutoff_ms)),
         (pending_run_id.as_str(), "uncertain", None),
     ] {
         sqlx::query(
@@ -236,7 +232,7 @@ async fn two_month_run_wake_and_revision_pruning_preserves_current_and_owed_work
 }
 
 #[tokio::test]
-async fn completed_summary_is_retained_for_existing_schedule_continuity() -> TestResult {
+async fn latest_skipped_run_is_retained_instead_of_resurrecting_older_summary() -> TestResult {
     use agent_automation::{
         ContinuityInput, ExecutionDestination, InstructionText, OperationId, RunId,
         ScheduleDefinition, SummarySource, SummarySourceReference, TimingRule,
@@ -249,7 +245,7 @@ async fn completed_summary_is_retained_for_existing_schedule_continuity() -> Tes
     let now_ms = chrono::DateTime::parse_from_rfc3339("2026-08-31T12:00:00Z")?.timestamp_millis();
     let cutoff_ms =
         chrono::DateTime::parse_from_rfc3339("2026-06-30T12:00:00Z")?.timestamp_millis();
-    let completed_at_ms = cutoff_ms - 1;
+    let completed_at_ms = cutoff_ms - 2;
     let instruction = store
         .create_instruction(
             &OperationId::generate(),
@@ -278,13 +274,17 @@ async fn completed_summary_is_retained_for_existing_schedule_continuity() -> Tes
         .await?;
 
     let summary_run_id = RunId::generate();
+    let skipped_run_id = RunId::generate();
     let obsolete_run_id = RunId::generate();
-    let source = serde_json::to_string(&SummarySource::Completed {
+    let completed_source = serde_json::to_string(&SummarySource::Completed {
         source_target: "previous-thread".to_owned(),
         source_reference: SummarySourceReference::NativeTurn {
             turn_id: "summary-turn".to_owned(),
         },
         summary_attempt_id: agent_automation::AttemptId::generate(),
+    })?;
+    let skipped_source = serde_json::to_string(&SummarySource::<String>::Skipped {
+        reason: "Summary intentionally omitted by explicit command.".to_owned(),
     })?;
     let mut observer = SqliteConnection::connect_with(
         &SqliteConnectOptions::new()
@@ -297,8 +297,15 @@ async fn completed_summary_is_retained_for_existing_schedule_continuity() -> Tes
             summary_run_id.as_str(),
             "finished",
             Some("Prior completed work"),
-            Some(source.as_str()),
+            Some(completed_source.as_str()),
             Some(completed_at_ms),
+        ),
+        (
+            skipped_run_id.as_str(),
+            "finished",
+            None,
+            Some(skipped_source.as_str()),
+            Some(completed_at_ms + 1),
         ),
         (
             obsolete_run_id.as_str(),
@@ -324,21 +331,36 @@ async fn completed_summary_is_retained_for_existing_schedule_continuity() -> Tes
     observer.close().await?;
 
     let pruned = store.prune_completed_workflow_runs(now_ms, 500).await?;
-    if pruned != 1 {
-        return Err(format!("pruned {pruned} old runs; expected only the unrelated run").into());
+    if pruned != 2 {
+        return Err(format!(
+            "pruned {pruned} old runs; expected the older summary and unrelated run"
+        )
+        .into());
     }
+    let mut observer = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(&path)
+            .foreign_keys(true),
+    )
+    .await?;
+    let remaining_runs = sqlx::query("SELECT run_id FROM workflow_runs WHERE run_id IN (?,?)")
+        .bind(summary_run_id.as_str())
+        .bind(skipped_run_id.as_str())
+        .fetch_all(&mut observer)
+        .await?;
+    if remaining_runs.len() != 1 {
+        return Err("pruning did not retain only the newest finished run".into());
+    }
+    let retained_run_id: String = remaining_runs[0].try_get("run_id")?;
+    if retained_run_id != skipped_run_id.as_str() {
+        return Err("pruning did not retain only the newest finished run".into());
+    }
+    observer.close().await?;
     let package = store
         .export_schedule::<String, String>(&schedule.schedule_id)
         .await?;
-    let exported = package
-        .continuity
-        .as_ref()
-        .ok_or("schedule export lost its latest completed summary")?;
-    if exported.text.as_str() != "Prior completed work"
-        || exported.source_run_id != summary_run_id.as_str()
-        || exported.source_target != "previous-thread"
-    {
-        return Err("schedule export changed retained summary continuity".into());
+    if package.continuity.is_some() {
+        return Err("schedule export resurrected an older completed summary".into());
     }
 
     let waiting_run_id = store
@@ -354,18 +376,11 @@ async fn completed_summary_is_retained_for_existing_schedule_continuity() -> Tes
     if run_id != waiting_run_id
         || !matches!(
             inputs.continuity,
-            ContinuityInput::LocalSummary {
-                text,
-                source_run_id,
-                source_target,
-                source_reference: SummarySourceReference::NativeTurn { turn_id },
-            } if text.as_str() == "Prior completed work"
-                && source_run_id == summary_run_id
-                && source_target == "previous-thread"
-                && turn_id == "summary-turn"
+            ContinuityInput::Omitted { reason }
+                if reason == "Summary intentionally omitted by explicit command."
         )
     {
-        return Err("next run did not receive the retained local summary".into());
+        return Err("next run did not use the newest skipped summary outcome".into());
     }
 
     store.close().await?;

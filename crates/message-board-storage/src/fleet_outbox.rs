@@ -171,7 +171,17 @@ impl FleetOutbox {
         )?;
         match current.state {
             FleetOutboxState::Decided { decision: existing } if existing == *decision => {
-                transaction.rollback().await?;
+                if matches!(decision, RequestDecision::Rejected { .. }) {
+                    sqlx::query::<sqlx_turso::Turso>(
+                        "DELETE FROM project_creation_inputs WHERE request_id=?",
+                    )
+                    .bind(id)
+                    .execute(&mut *transaction)
+                    .await?;
+                    transaction.commit().await?;
+                } else {
+                    transaction.rollback().await?;
+                }
                 Ok(())
             }
             FleetOutboxState::Decided { .. } => {
@@ -193,6 +203,14 @@ impl FleetOutbox {
                 if updated.rows_affected() != 1 {
                     transaction.rollback().await?;
                     return Err(RouterLocalStorageError::InvalidRecord);
+                }
+                if matches!(decision, RequestDecision::Rejected { .. }) {
+                    sqlx::query::<sqlx_turso::Turso>(
+                        "DELETE FROM project_creation_inputs WHERE request_id=?",
+                    )
+                    .bind(id)
+                    .execute(&mut *transaction)
+                    .await?;
                 }
                 transaction.commit().await?;
                 Ok(())

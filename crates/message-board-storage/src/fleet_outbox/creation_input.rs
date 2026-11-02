@@ -26,7 +26,7 @@ impl FleetOutbox {
                 if row.canonical_hash != hash.as_str() {
                     return Err(RouterLocalStorageError::ConflictingRequest);
                 }
-            } else {
+            } else if matches!(queued.state, super::FleetOutboxState::Pending {}) {
                 let hash = hash.as_str();
                 let encoded = serde_json::to_string(input)?;
                 sqlx_turso::query!("INSERT INTO project_creation_inputs(request_id, canonical_hash, input) VALUES (?, ?, ?)", id, hash, encoded)
