@@ -10,12 +10,14 @@ pub enum AutomationCollection {
     Deliveries(Option<WakeupId>),
     Revisions(InstructionId),
 }
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AutomationListKey {
     pub created_at_ms: i64,
     pub resource_id: String,
 }
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AutomationListPosition {
     pub upper: AutomationListKey,
     pub last: AutomationListKey,
@@ -47,6 +49,34 @@ impl AutomationStore {
         position: Option<AutomationListPosition>,
         limit: u32,
     ) -> Result<AutomationKeyPage, StorageError> {
+        self.list_collection_keys_with_parent(collection, position, limit, true)
+            .await
+    }
+
+    /// Lists local execution history after the service verified the parent at central.
+    pub async fn list_collection_keys_with_central_parent(
+        &mut self,
+        collection: &AutomationCollection,
+        position: Option<AutomationListPosition>,
+        limit: u32,
+    ) -> Result<AutomationKeyPage, StorageError> {
+        if !matches!(
+            collection,
+            AutomationCollection::Runs(_) | AutomationCollection::Deliveries(Some(_))
+        ) {
+            return Err(StorageError::InvalidRecord);
+        }
+        self.list_collection_keys_with_parent(collection, position, limit, false)
+            .await
+    }
+
+    async fn list_collection_keys_with_parent(
+        &mut self,
+        collection: &AutomationCollection,
+        position: Option<AutomationListPosition>,
+        limit: u32,
+        local_parent_required: bool,
+    ) -> Result<AutomationKeyPage, StorageError> {
         if !(1..=100).contains(&limit) {
             return Err(StorageError::InvalidRecord);
         }
@@ -54,7 +84,9 @@ impl AutomationStore {
             position.validate_for(collection)?;
         }
         let mut transaction = self.connection.begin().await?;
-        validate_parent(&mut transaction, collection).await?;
+        if local_parent_required {
+            validate_parent(&mut transaction, collection).await?;
+        }
         let (base, filter) = match collection {
             AutomationCollection::Instructions => (
                 "SELECT instruction_id AS resource_id,(SELECT MIN(recorded_at_ms) FROM instruction_revisions r WHERE r.instruction_id=d.instruction_id) AS created_at_ms FROM instruction_documents d WHERE ? IS NULL",

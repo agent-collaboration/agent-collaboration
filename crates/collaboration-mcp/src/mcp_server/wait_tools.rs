@@ -9,10 +9,11 @@ use super::{
     operation_failure_result, rejection_failure, success_result, thread_wait_outcome_unknown, tool,
     tool_router, validation_failure, wake_wait_failure,
 };
-use collaboration_protocol::{WakeWaitRequest, WakeWaitResult};
+use collaboration_protocol::WakeWaitRequest;
 use collaboration_service::collaboration_application::{
     WakeWaitFailure, thread_wait_root_notice_limit,
 };
+use collaboration_service::{WakeOperationFailure, WakeWaitResponse};
 
 #[tool_router(router = wait_tool_router, vis = "pub(super)")]
 impl CollaborationMcpServer {
@@ -51,7 +52,7 @@ impl CollaborationMcpServer {
         }
     }
 
-    #[tool(name = "wake_wait_until_first_fire", description = "Waits up to timeoutSeconds (1 to 1500, default 60) for the selected wake-up's first fire, or for it to pause, cancel, expire or finish without firing, and returns the cursor to resume from. A fire carries the same receipt as before. timedOut means nothing changed before the timeout: wait again with that cursor as after, and no change in between is missed. Cancellation ends only this wait; it never recreates or replays the wake-up.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<WakeWaitResult>>())]
+    #[tool(name = "wake_wait_until_first_fire", description = "Waits up to timeoutSeconds (1 to 1500, default 60) for the Wake's first timer fire. Unmoved local Wakes retain their cursor wait; central Wakes use only their Wake ID and return the actual first Firing and its state, a lifecycle outcome, a distinct faulted envelope, or pending on timeout/outage. Central waits sleep to the known grid due time before bounded read-only backoff and never cause a Firing. Delivery is inspected separately. Cancellation ends this wait without recreating or replaying the Wake.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<WakeWaitResponse>>())]
     pub(super) async fn wake_wait_until_first_fire(
         &self,
         Parameters(request): Parameters<WakeWaitRequest>,
@@ -69,13 +70,17 @@ impl CollaborationMcpServer {
         };
         match result {
             Ok(outcome) => success_result(&outcome),
-            Err(WakeWaitFailure::NotFound(_)) => {
+            Err(WakeOperationFailure::Wait(failure))
+                if matches!(*failure, WakeWaitFailure::NotFound(_)) =>
+            {
                 wake_wait_failure(collaboration_client::WakeWaitError::NotFound { wakeup_id })
             }
-            Err(WakeWaitFailure::Unavailable(_)) => {
+            Err(WakeOperationFailure::Wait(failure))
+                if matches!(*failure, WakeWaitFailure::Unavailable(_)) =>
+            {
                 wake_wait_failure(collaboration_client::WakeWaitError::Unavailable { wakeup_id })
             }
-            Err(rejection @ WakeWaitFailure::InvalidField { .. }) => {
+            Err(rejection) => {
                 operation_failure_result(&rejection_failure(&rejection, OperationEffect::None))
             }
         }

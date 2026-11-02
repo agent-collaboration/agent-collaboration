@@ -42,6 +42,15 @@ pub enum ClientError {
     Overloaded { message: String },
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum AutomationInspectionClientError {
+    #[error(transparent)]
+    Catalog(crate::CentralCatalogFailure),
+    #[error("automation inspection rejected: {0:?}")]
+    Rejected(Box<collaboration_protocol::AutomationInspectionFailure>),
+    #[error(transparent)]
+    Connection(#[from] ClientError),
+}
 impl ClientError {
     /// The provider conversation failure this error carries: a conversation tool's typed
     /// rejection, or the API's admission overload in the conversation family's shape.

@@ -4,6 +4,7 @@ use agent_automation::{WakeRecord, WakeupId};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sqlx::{Connection, Row};
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct WakeListPosition {
     pub upper_created_at_ms: i64,
     pub upper_wakeup_id: WakeupId,

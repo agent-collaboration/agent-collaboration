@@ -327,6 +327,9 @@ impl CollaborationRuntime {
         let provider_delivery_route = message_routes.provider_route;
         let subscription_clock: std::sync::Arc<dyn collaboration_service::SubscriptionClock> =
             std::sync::Arc::new(collaboration_service::SystemSubscriptionClock);
+        let central_catalog = prepared_board
+            .as_ref()
+            .and_then(|board| board.automation_transport());
         let central_report_worker = match (&mut prepared_board, &automation_store) {
             (Some(board), Some(store)) => board
                 .attach_automations(
@@ -398,14 +401,6 @@ impl CollaborationRuntime {
         if let Some(mail) = &mail_delivery {
             mail.validate_owner(&identity, Some(&interactions))
                 .map_err(io::Error::other)?;
-            if let Some(store) = &automation_store {
-                mail.attach_wake_owner(
-                    service_id.clone(),
-                    store.clone(),
-                    wake_wait_permits.clone(),
-                )
-                .map_err(io::Error::other)?;
-            }
             mail.attach_reader_readiness().map_err(io::Error::other)?;
             mail.attach_project_replication(project_replication.clone())
                 .map_err(io::Error::other)?;
@@ -572,7 +567,8 @@ impl CollaborationRuntime {
                     Some(interactions.clone()),
                     Some(scheduled_run_execution),
                     Some(native_backend.clone()),
-                );
+                )
+                .with_catalog(central_catalog.clone());
             let interactions =
                 collaboration_service::collaboration_application::InteractionOperations::new(Some(
                     approval_broker.clone(),
@@ -582,7 +578,9 @@ impl CollaborationRuntime {
                 automation_store.clone().as_ref(),
             )
             .with_wait_capacity(&wake_wait_permits.clone())
-            .with_remote(mail_delivery.clone().as_ref());
+            .with_catalog(central_catalog)
+            .with_legacy_wake_recovery(mail_delivery.as_ref())
+            .with_clock(subscription_clock.clone());
             collaboration_service::CollaborationApplication::new(
                 identity.clone(),
                 board,

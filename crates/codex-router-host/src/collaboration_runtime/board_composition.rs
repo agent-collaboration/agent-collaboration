@@ -71,6 +71,16 @@ pub(super) struct BoardComposition {
 }
 
 impl BoardComposition {
+    pub fn automation_transport(
+        &self,
+    ) -> Option<Arc<dyn collaboration_runtime::CentralAutomationTransport>> {
+        self.session.as_ref().map(|session| {
+            Arc::new(collaboration_runtime::SessionAutomationTransport::new(
+                session.requests.clone(),
+            )) as Arc<dyn collaboration_runtime::CentralAutomationTransport>
+        })
+    }
+
     pub async fn attach_automations(
         &mut self,
         store: Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>,

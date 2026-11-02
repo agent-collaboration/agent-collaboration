@@ -39,8 +39,8 @@ pub async fn exercise(proof: &mut ProofContext) -> ProofResult<()> {
                 enabled: false,
                 destination: ExecutionDestination::Unprepared,
                 execution_timeout_seconds: Some(2.try_into()?),
-                model: Some("gpt-5.6-sol".into()),
-                effort: Some("medium".into()),
+                model: Some("gpt-6-luna".into()),
+                effort: Some("low".into()),
             },
         })
         .await?;
@@ -62,6 +62,13 @@ pub async fn exercise(proof: &mut ProofContext) -> ProofResult<()> {
             schedule_id: schedule.schedule_id,
         })
         .await?;
+    let collaboration_client::ScheduleMutationResponse::Central(schedule) = schedule else {
+        return Err("central Schedule control changed to Local".into());
+    };
+    let collaboration_client::CatalogAutomationResult::Schedule(schedule) = schedule.automation
+    else {
+        return Err("Schedule enable returned a different automation kind".into());
+    };
     if schedule.next_due_at.is_none() {
         return Err("Timed worker setup missed its one-shot due time".into());
     }

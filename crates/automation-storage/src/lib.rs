@@ -53,7 +53,10 @@ mod schedule_mutations;
 pub use schedule_mutations::{ScheduleEdit, ScheduleMutation};
 mod thread_binding_repository;
 pub use thread_binding_repository::ThreadBindingClaim;
+mod central_bind_request;
+mod central_preparation_projection;
 mod external_operation_receipts;
+pub use central_bind_request::StoredCentralBindRequest;
 mod operation_receipt_read;
 pub use external_operation_receipts::{
     ExternalAdmission, ExternalAdmissionResult, ExternalOperationRecord,
@@ -115,7 +118,7 @@ pub use schedule_import::ScheduleImport;
 
 mod remote_wake_requests;
 pub use remote_wake_requests::{
-    RemoteWakeMail, RemoteWakePreparation, WakeListingKey, WakeListingKeys,
+    RecordedRemoteWake, RemoteWakeMail, RemoteWakePreparation, WakeListingKey, WakeListingKeys,
 };
 
 mod central_report_outbox;
@@ -134,3 +137,5 @@ pub use debug_automation_faults::{
     AutomationFaultEvidence, AutomationFaultObserver, AutomationFaultPoint,
 };
 mod automation_authority;
+mod automation_command_owner;
+pub use automation_command_owner::StoredAutomationOwner;

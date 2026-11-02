@@ -2,15 +2,15 @@
 //! receipts. Attempt and event history live in `automation_history_operations`. Nothing here
 //! repeats a native mutation.
 use super::{AutomationOperations, ResultByteBudget};
+use crate::central_catalog::CatalogPageFailure;
 use crate::{automation_collection_cursor as cursor, automation_inspection_failure as failure};
 use automation_storage::{
     AutomationCollection, AutomationListKey, AutomationListPosition, AutomationStore, StorageError,
 };
 use collaboration_protocol::{
-    AutomationInspectionFailure, AutomationPage, AutomationPageRequest, CodexGeneration,
-    DeliveryInspection, DeliveryListRequest, DeliveryShowRequest, EndpointRef, InstructionSnapshot,
-    OperationShowRequest, OperationSnapshot, RevisionListRequest, RevisionRecord, RunListRequest,
-    RunShowRequest, RunSnapshot, ScheduleSnapshot, SessionRef, UuidIdentity,
+    AutomationInspectionFailure, AutomationPage, CodexGeneration, DeliveryInspection,
+    DeliveryListRequest, DeliveryShowRequest, EndpointRef, OperationShowRequest, OperationSnapshot,
+    RunListRequest, RunShowRequest, RunSnapshot, SessionRef, UuidIdentity,
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -25,53 +25,12 @@ impl AutomationOperations {
         self.store().ok_or_else(failure::unavailable)
     }
 
-    /// Pages instruction documents, newest first.
-    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
-    pub async fn instruction_list(
-        &self,
-        request: AutomationPageRequest,
-        budget: ResultByteBudget,
-    ) -> InspectionResult<AutomationPage<InstructionSnapshot>> {
-        self.list_collection(
-            CollectionSelection {
-                scope: "instruction/list",
-                collection: AutomationCollection::Instructions,
-                cursor: request.cursor,
-                limit: request.limit.into(),
-                filters: json!({}),
-            },
-            budget,
-        )
-        .await
-    }
-
-    /// Pages schedules, newest first.
-    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
-    pub async fn schedule_list(
-        &self,
-        request: AutomationPageRequest,
-        budget: ResultByteBudget,
-    ) -> InspectionResult<AutomationPage<ScheduleSnapshot>> {
-        self.list_collection(
-            CollectionSelection {
-                scope: "schedule/list",
-                collection: AutomationCollection::Schedules,
-                cursor: request.cursor,
-                limit: request.limit.into(),
-                filters: json!({}),
-            },
-            budget,
-        )
-        .await
-    }
-
     /// Pages one schedule's Runs, newest first.
-    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn run_list(
         &self,
         request: RunListRequest,
         budget: ResultByteBudget,
-    ) -> InspectionResult<AutomationPage<RunSnapshot>> {
+    ) -> Result<AutomationPage<RunSnapshot>, CatalogPageFailure> {
         self.list_collection(
             CollectionSelection {
                 scope: "run/list",
@@ -85,33 +44,12 @@ impl AutomationOperations {
         .await
     }
 
-    /// Pages one instruction's revisions, newest first.
-    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
-    pub async fn revision_list(
-        &self,
-        request: RevisionListRequest,
-        budget: ResultByteBudget,
-    ) -> InspectionResult<AutomationPage<RevisionRecord>> {
-        self.list_collection(
-            CollectionSelection {
-                scope: "revision/list",
-                filters: json!({"instructionId":request.instruction_id}),
-                collection: AutomationCollection::Revisions(request.instruction_id),
-                cursor: request.cursor,
-                limit: request.limit.into(),
-            },
-            budget,
-        )
-        .await
-    }
-
     /// Pages deliveries, optionally of one wake, newest first.
-    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn delivery_list(
         &self,
         request: DeliveryListRequest,
         budget: ResultByteBudget,
-    ) -> InspectionResult<AutomationPage<DeliveryInspection>> {
+    ) -> Result<AutomationPage<DeliveryInspection>, CatalogPageFailure> {
         self.list_collection(
             CollectionSelection {
                 scope: "delivery/list",
@@ -125,12 +63,11 @@ impl AutomationOperations {
         .await
     }
 
-    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn list_collection<TRecord: DeserializeOwned>(
         &self,
         selection: CollectionSelection,
         budget: ResultByteBudget,
-    ) -> InspectionResult<AutomationPage<TRecord>> {
+    ) -> Result<AutomationPage<TRecord>, CatalogPageFailure> {
         let store = self.inspection_store()?;
         let service_id = self.identity.service_id();
         let digest = cursor::filter_digest(&selection.filters)
@@ -157,7 +94,7 @@ impl AutomationOperations {
                     return Err(failure::invalid(
                         "cursor",
                         "Cursor must match this service, collection, filter and stable UUIDv7 key range; start a fresh listing.",
-                    ));
+                    ).into());
                 }
             },
         };
@@ -168,13 +105,33 @@ impl AutomationOperations {
             return Err(failure::invalid(
                 "cursor",
                 "Cursor creation times do not match its ordered resource identities.",
-            ));
+            )
+            .into());
         }
         let mut store = store.lock().await;
-        let page = store
-            .list_collection_keys(&selection.collection, position, selection.limit)
+        let page = match store
+            .list_collection_keys(&selection.collection, position.clone(), selection.limit)
             .await
-            .map_err(failure::storage)?;
+        {
+            Ok(page) => page,
+            Err(StorageError::ScheduleNotFound | StorageError::WakeNotFound) => {
+                // Check the real definition owner without retaining a SQLite lock
+                // across the network request. Local history is queried afterwards.
+                drop(store);
+                self.require_central_collection_parent(&selection.collection)
+                    .await?;
+                store = self.inspection_store()?.lock().await;
+                store
+                    .list_collection_keys_with_central_parent(
+                        &selection.collection,
+                        position,
+                        selection.limit,
+                    )
+                    .await
+                    .map_err(failure::storage)?
+            }
+            Err(error) => return Err(failure::storage(error).into()),
+        };
         let mut records = Vec::new();
         let mut next_cursor = None;
         for (index, key) in page.records.iter().enumerate() {
@@ -216,7 +173,7 @@ impl AutomationOperations {
                         "One record exceeds the 1048576-byte response limit; no record was truncated.",
                     );
                     error.resource_id = Some(key.resource_id.clone());
-                    return Err(error);
+                    return Err(error.into());
                 }
                 // The preceding candidate already retained a cursor because this row was still pending.
                 break;

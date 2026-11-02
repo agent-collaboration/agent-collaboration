@@ -245,6 +245,7 @@ async fn verified_copy_entry_drops_once_and_preserves_all_retained_automation_ro
     // Later migrations add request and central-custody tables after the drop.
     // Each must start empty; every previously retained table keeps its exact rows.
     for table in [
+        "automation_handover",
         "remote_wake_requests",
         "firing_receipts",
         "central_report_outbox",

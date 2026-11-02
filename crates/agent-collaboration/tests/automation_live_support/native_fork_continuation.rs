@@ -59,8 +59,8 @@ pub async fn exercise() -> ProofResult<()> {
                 enabled: false,
                 destination: ExecutionDestination::Unprepared,
                 execution_timeout_seconds: Some(120.try_into()?),
-                model: Some("gpt-5.6-sol".into()),
-                effort: Some("medium".into()),
+                model: Some("gpt-6-luna".into()),
+                effort: Some("low".into()),
             },
         })
         .await?;

@@ -46,6 +46,17 @@ impl AutomationStore {
         let canonical =
             serde_json::to_vec(&request.wakeup_id).map_err(|_| StorageError::InvalidRecord)?;
         let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        match crate::automation_command_owner::read_wake_owner(&mut transaction, &request.wakeup_id)
+            .await?
+        {
+            crate::StoredAutomationOwner::Local => {}
+            crate::StoredAutomationOwner::HandoverPending => {
+                return Err(StorageError::AutomationHandoverPending);
+            }
+            crate::StoredAutomationOwner::Central => {
+                return Err(StorageError::AutomationOwnedByCentral);
+            }
+        }
         if let Some(result) = local_operation_receipts::replay(
             &mut transaction,
             LocalOperation {

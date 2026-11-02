@@ -24,6 +24,8 @@ pub(crate) enum CallEndedEarly {
 #[derive(Clone, Debug)]
 pub(crate) struct ToolCallRegistry {
     calls: TaskTracker,
+    #[cfg(all(feature = "test-support", debug_assertions))]
+    test_call_started_notify: std::sync::Arc<tokio::sync::Notify>,
     abort: CancellationToken,
     /// Cancelled when the listener starts stopping. rmcp then cancels every request's token
     /// too, which is not a disconnect: the shutdown grace period owns the calls from there.
@@ -34,6 +36,8 @@ impl ToolCallRegistry {
     pub(crate) fn new(listener_stopping: CancellationToken) -> Self {
         Self {
             calls: TaskTracker::new(),
+            #[cfg(all(feature = "test-support", debug_assertions))]
+            test_call_started_notify: std::sync::Arc::new(tokio::sync::Notify::new()),
             abort: CancellationToken::new(),
             listener_stopping,
         }
@@ -50,22 +54,37 @@ impl ToolCallRegistry {
     ) -> TOutput {
         let abort = self.abort.clone();
         let listener_stopping = self.listener_stopping.clone();
-        self.calls
-            .track_future(async move {
-                let caller_disconnected = async {
-                    caller.cancelled().await;
-                    if listener_stopping.is_cancelled() {
-                        std::future::pending::<()>().await;
-                    }
-                };
-                tokio::select! {
-                    biased;
-                    () = abort.cancelled() => ended_early(CallEndedEarly::AbortedAtShutdown),
-                    () = caller_disconnected => ended_early(CallEndedEarly::CallerDisconnected),
-                    output = call => output,
+        let tracked_call = self.calls.track_future(async move {
+            let caller_disconnected = async {
+                caller.cancelled().await;
+                if listener_stopping.is_cancelled() {
+                    std::future::pending::<()>().await;
                 }
-            })
-            .await
+            };
+            tokio::select! {
+                biased;
+                () = abort.cancelled() => ended_early(CallEndedEarly::AbortedAtShutdown),
+                () = caller_disconnected => ended_early(CallEndedEarly::CallerDisconnected),
+                output = call => output,
+            }
+        });
+        #[cfg(all(feature = "test-support", debug_assertions))]
+        self.test_call_started_notify.notify_waiters();
+        tracked_call.await
+    }
+
+    /// Observes admission on the existing tracker without owning another count.
+    #[cfg(all(feature = "test-support", debug_assertions))]
+    pub(crate) async fn wait_for_tracked_call_start_for_test(&self) {
+        loop {
+            let started = self.test_call_started_notify.notified();
+            tokio::pin!(started);
+            started.as_mut().enable();
+            if !self.calls.is_empty() {
+                return;
+            }
+            started.await;
+        }
     }
 
     /// Drops every running call and every call that starts from now on.

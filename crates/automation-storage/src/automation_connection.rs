@@ -1,5 +1,6 @@
-//! Database connection lifecycle; schema setup precedes every repository operation.
-use crate::{StorageError, central_firing_receipts, central_report_outbox};
+//! The AutomationStore file owner, its connection lifecycle and shared repository entrypoints.
+use crate::{StorageError, StoredAutomationOwner, central_firing_receipts, central_report_outbox};
+use agent_automation::{ScheduleId, WakeupId};
 use sqlx::{
     Connection, SqliteConnection,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous},
@@ -118,4 +119,36 @@ async fn connect(path: &Path, create_if_missing: bool) -> Result<SqliteConnectio
         .synchronous(SqliteSynchronous::Full)
         .busy_timeout(Duration::from_secs(1));
     Ok(SqliteConnection::connect_with(&options).await?)
+}
+
+impl AutomationStore {
+    /// An absent row selects central; pending local custody remains readable.
+    pub async fn wake_command_owner(
+        &mut self,
+        id: &WakeupId,
+    ) -> Result<StoredAutomationOwner, StorageError> {
+        crate::automation_command_owner::read_wake_owner(&mut self.connection, id).await
+    }
+    /// Schedules use the same durable authority and handover rules as Wakes.
+    pub async fn schedule_command_owner(
+        &mut self,
+        id: &ScheduleId,
+    ) -> Result<StoredAutomationOwner, StorageError> {
+        crate::automation_command_owner::read_schedule_owner(&mut self.connection, id).await
+    }
+}
+
+impl AutomationStore {
+    pub async fn project_central_preparation(
+        &mut self,
+        schedule: &collaboration_protocol::ScheduleSnapshot,
+        instruction: &collaboration_protocol::InstructionSnapshot,
+    ) -> Result<(), StorageError> {
+        crate::central_preparation_projection::project_central_preparation(
+            &mut self.connection,
+            schedule,
+            instruction,
+        )
+        .await
+    }
 }

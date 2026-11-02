@@ -290,49 +290,40 @@ where
 }
 #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
 pub fn install() {
+    // Global and scoped registries share these callsites. A root filter keeps
+    // per-layer FilterMap state out of the unfiltered scoped observations.
+    let targets = tracing_subscriber::filter::Targets::new()
+        .with_target("sqlx::query", tracing::Level::TRACE)
+        .with_target(
+            "collaboration_central_tokio::native_objects",
+            tracing::Level::TRACE,
+        )
+        .with_target("message_board_storage::decode", tracing::Level::TRACE)
+        .with_target("message_board_storage::open", tracing::Level::TRACE)
+        .with_target(
+            "message_board_storage::project_store",
+            tracing::Level::TRACE,
+        )
+        .with_target(
+            "message_board_storage::project_inbox_pages",
+            tracing::Level::TRACE,
+        )
+        .with_target(
+            "message_board_storage::project_record_io",
+            tracing::Level::TRACE,
+        )
+        .with_target(
+            "message_board_storage::project_membership_io",
+            tracing::Level::TRACE,
+        )
+        .with_target(
+            "message_board_storage::project_read_store",
+            tracing::Level::TRACE,
+        );
     tracing_subscriber::registry()
-        .with(
-            alarm_read_costs::AlarmReadCostLayer.with_filter(
-                tracing_subscriber::filter::Targets::new()
-                    .with_target("sqlx::query", tracing::Level::TRACE)
-                    .with_target(
-                        "collaboration_central_tokio::native_objects",
-                        tracing::Level::TRACE,
-                    ),
-            ),
-        )
-        .with(
-            ReadCostLayer(None).with_filter(
-                tracing_subscriber::filter::Targets::new()
-                    .with_target("sqlx::query", tracing::Level::TRACE)
-                    .with_target(
-                        "collaboration_central_tokio::native_objects",
-                        tracing::Level::TRACE,
-                    )
-                    .with_target("message_board_storage::decode", tracing::Level::TRACE)
-                    .with_target("message_board_storage::open", tracing::Level::TRACE)
-                    .with_target(
-                        "message_board_storage::project_store",
-                        tracing::Level::TRACE,
-                    )
-                    .with_target(
-                        "message_board_storage::project_inbox_pages",
-                        tracing::Level::TRACE,
-                    )
-                    .with_target(
-                        "message_board_storage::project_record_io",
-                        tracing::Level::TRACE,
-                    )
-                    .with_target(
-                        "message_board_storage::project_membership_io",
-                        tracing::Level::TRACE,
-                    )
-                    .with_target(
-                        "message_board_storage::project_read_store",
-                        tracing::Level::TRACE,
-                    ),
-            ),
-        )
+        .with(targets)
+        .with(alarm_read_costs::AlarmReadCostLayer)
+        .with(ReadCostLayer(None))
         .try_init()
         .unwrap();
 }

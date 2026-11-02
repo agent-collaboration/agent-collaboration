@@ -1,5 +1,7 @@
 //! Debug-only transaction observation; the runtime owns arming and release.
-use collaboration_protocol::{BatchId, FiringId, OperationId, RunId, WorkItemId};
+use collaboration_protocol::{
+    BatchId, FiringId, OperationId, RunId, WorkItemId, WorkReportSequence,
+};
 use serde::{Deserialize, Serialize};
 use std::{future::Future, pin::Pin};
 
@@ -28,6 +30,8 @@ pub struct AutomationFaultEvidence {
     pub batch_id: Option<BatchId>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub firing_id: Option<FiringId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub report_seq: Option<WorkReportSequence>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub work_item_id: Option<WorkItemId>,
     #[serde(skip_serializing_if = "Option::is_none")]

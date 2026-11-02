@@ -12,6 +12,10 @@ pub mod board {
 }
 mod admission_overload;
 mod api_connection;
+mod catalog_read_failure;
+mod central_catalog_failure;
+pub use catalog_read_failure::CatalogReadFailure;
+pub use central_catalog_failure::CentralCatalogFailure;
 mod collaboration_access;
 mod collaboration_client;
 mod message_operation;
@@ -20,7 +24,9 @@ mod provider_conversations;
 pub use collaboration_access::{CollaborationAccess, LocalCollaboration, LocalFuture};
 pub use provider_conversations::ProviderConversations;
 mod operation_error;
-pub use collaboration_client::{ClientError, CollaborationClient, RouterIdentity};
+pub use collaboration_client::{
+    AutomationInspectionClientError, ClientError, CollaborationClient, RouterIdentity,
+};
 pub use collaboration_protocol::EndpointInventory;
 pub use collaboration_protocol::{
     AdapterOperationFailure as OperationFailure, OperationEffect, OperationFailureKind,
@@ -180,13 +186,29 @@ mod instruction_operations;
 pub use instruction_operations::InstructionClientError;
 mod wakeup_operations;
 pub use wakeup_operations::WakeClientError;
+mod wake_selection_failure;
+pub use wake_selection_failure::WakeSelectionFailure;
 
+mod wake_wait_results;
 mod wakeup_waiting;
+pub use wake_wait_results::{
+    CentralWakeWaitOutcome, CentralWakeWaitResult, WakeFirstFireResponse, WakeWaitResponse,
+};
 pub use wakeup_waiting::{WakeWaitConnection, WakeWaitError};
 pub use wakeup_waiting::{WakeWaitFailure, WakeWaitFailureKind};
 mod automation_inspection_operations;
+mod firing_inspection;
+pub use firing_inspection::FiringShowRequest;
+mod catalog_results;
+mod schedule_selection_failure;
+pub use schedule_selection_failure::ScheduleSelectionFailure;
+mod central_schedule_snapshot;
+pub use central_schedule_snapshot::CentralScheduleSnapshot;
 mod schedule_operations;
-pub use automation_inspection_operations::AutomationInspectionClientError;
+pub use catalog_results::{
+    CatalogAutomationResult, CatalogMutationResult, ScheduleMutationResponse, ScheduleReadResponse,
+    WakeCreateResponse, WakeMutationResponse, WakeReadResponse,
+};
 pub use schedule_operations::ScheduleClientError;
 mod run_operations;
 pub use run_operations::RunClientError;

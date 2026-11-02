@@ -272,3 +272,124 @@ async fn report_fault_selector_reaches_a_nonfirst_report_before_local_acknowledg
     ));
     Ok(())
 }
+
+#[cfg(debug_assertions)]
+#[tokio::test]
+async fn report_sequence_selects_received_or_delivered_for_the_same_firing() -> TestResult {
+    use crate::{AutomationFaultPoint, AutomationFaultSelector, DebugAutomationFaultController};
+    for selected_sequence in [1_u64, 2] {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("automation.sqlite");
+        let mut store = AutomationStore::open(&path).await?;
+        let faults = Arc::new(DebugAutomationFaultController::default());
+        store.set_automation_faults(faults.clone());
+        let firing_id = FiringId::generate();
+        let mut seed = sqlx::SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
+        )
+        .await?;
+        // Both immutable owed reports deliberately share a Firing: the selector must
+        // distinguish its Received report from the later committed-delivery report.
+        for (sequence, outcome) in [
+            (1_u64, FiringOutcome::Received),
+            (2, FiringOutcome::Delivered),
+        ] {
+            let report = WorkItemReport::Firing(FiringReport {
+                firing_id: firing_id.clone(),
+                seq: sequence.try_into()?,
+                outcome,
+            });
+            sqlx::query("INSERT INTO central_report_outbox(report_id,subject_kind,subject_id,report_seq,report_json,queued_at_ms) VALUES (?,'firing',?,?,?,400000)")
+                .bind(OperationId::generate().as_str()).bind(firing_id.as_str())
+                .bind(i64::try_from(sequence)?).bind(serde_json::to_string(&report)?)
+                .execute(&mut seed).await?;
+        }
+        seed.close().await?;
+        let sequence = selected_sequence.try_into()?;
+        if faults
+            .arm(
+                AutomationFaultPoint::EntryAdmissionCommitted,
+                AutomationFaultSelector {
+                    report_seq: Some(sequence),
+                    ..Default::default()
+                },
+            )
+            .await
+            .is_ok()
+        {
+            return Err("report sequence was accepted at an unrelated fault point".into());
+        }
+        let arm = faults
+            .arm(
+                AutomationFaultPoint::ReportSentBeforeAcknowledgement,
+                AutomationFaultSelector {
+                    firing_id: Some(firing_id.clone()),
+                    report_seq: Some(sequence),
+                    ..Default::default()
+                },
+            )
+            .await?;
+        let store = Arc::new(Mutex::new(store));
+        let (now, _) = watch::channel(400_500);
+        let (waiting, _) = mpsc::unbounded_channel();
+        let (observed, mut sent) = mpsc::unbounded_channel();
+        let worker = CentralReportWorker::new(
+            store.clone(),
+            Arc::new(ReportStandIn { observed }),
+            Arc::new(ControlledClock { now, waiting }),
+        );
+        let task = tokio::spawn(async move { worker.flush_due().await });
+        let held = tokio::time::timeout(std::time::Duration::from_secs(3), faults.wait_held(&arm))
+            .await??;
+        if held.evidence.firing_id.as_ref() != Some(&firing_id)
+            || held.evidence.report_seq != Some(sequence)
+            || task.is_finished()
+        {
+            return Err(
+                "report qualifier held another sequence or failed to hold its producer".into(),
+            );
+        }
+        let envelope = sent.recv().await.ok_or("actual report envelope absent")?;
+        let Some(WorkItemReport::Firing(selected)) = envelope.iter().find(
+            |report| matches!(report, WorkItemReport::Firing(report) if report.seq == sequence),
+        ) else {
+            return Err("selected sequence absent from actual owed envelope".into());
+        };
+        let expected_outcome = if selected_sequence == 1 {
+            FiringOutcome::Received
+        } else {
+            FiringOutcome::Delivered
+        };
+        if serde_json::to_value(&selected.outcome)? != serde_json::to_value(expected_outcome)? {
+            return Err(
+                "selected report did not retain its actual Received/Delivered outcome".into(),
+            );
+        }
+        let automation_storage::CentralReportBatch::Ready(owed) =
+            store.lock().await.central_report_batch(400_500).await?
+        else {
+            return Err("report acknowledgement passed the causal hold".into());
+        };
+        if owed.len() != 2 {
+            return Err("selected hold lost an immutable owed report".into());
+        }
+        faults.release(&arm).await?;
+        if tokio::time::timeout(std::time::Duration::from_secs(3), task)
+            .await???
+            .is_some()
+            || !matches!(
+                store.lock().await.central_report_batch(400_500).await?,
+                automation_storage::CentralReportBatch::Empty
+            )
+        {
+            return Err("matching release did not acknowledge the exact report envelope".into());
+        }
+        Arc::try_unwrap(store)
+            .map_err(|_| "report control store still owned")?
+            .into_inner()
+            .close()
+            .await?;
+        directory.close()?;
+    }
+    Ok(())
+}

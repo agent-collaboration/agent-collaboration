@@ -1,8 +1,7 @@
-//! Complete scheduled worker protocol path with real SQLite and scripted native sockets.
+//! Retained Local Run worker path with real SQLite and scripted native sockets.
 use automation_storage::AutomationStore;
 use collaboration_protocol::{
-    CodexGeneration, EndpointDescription, InstructionCreateParams, InstructionText, OperationId,
-    ScheduleCreateRequest, SessionRef,
+    CodexGeneration, EndpointDescription, InstructionText, OperationId, SessionRef,
 };
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
@@ -157,11 +156,16 @@ async fn exercise_scheduled_run(
         .ok_or("scheduler missing")?;
     let served = served_api::ServedApi::start(identity)?;
     let client = served.client("scheduled-run-fixture").await?;
-    let instruction = client
-        .create_instruction(InstructionCreateParams {
-            operation_id: OperationId::generate(),
-            text: InstructionText::try_from(FRESH_SCHEDULE_TASK_TEXT.to_owned())?,
-        })
+    // Arrange retained Local definitions directly. New public creates belong to central;
+    // this worker fixture keeps exercising the pre-handover Local Run and native owner.
+    let instruction = store
+        .lock()
+        .await
+        .create_instruction(
+            &OperationId::generate(),
+            &InstructionText::try_from(FRESH_SCHEDULE_TASK_TEXT.to_owned())?,
+            chrono::Utc::now().timestamp_millis(),
+        )
         .await?;
     let backend_store = Arc::clone(&store);
     let resume_uncertainty_observed = Arc::new(tokio::sync::Notify::new());
@@ -399,7 +403,12 @@ async fn exercise_scheduled_run(
         }
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     });
-    let schedule=client.create_schedule(serde_json::from_value::<ScheduleCreateRequest>(json!({"operationId":OperationId::generate(),"definition":{"instructionId":instruction.instruction_id,"timing":{"kind":"at","at":"2026-01-01T00:00:00.000Z"},"enabled":true,"destination":{"kind":"freshEachRun","endpoint":target.endpoint,"cwd":"/fresh-fixture"},"executionTimeoutSeconds":120,"model":"gpt-5.6-sol","effort":"medium"}}))?).await?;
+    let schedule = store.lock().await.create_schedule(&automation_storage::ScheduleCreate::<SessionRef, collaboration_protocol::EndpointRef> {
+        operation_id: OperationId::generate(),
+        definition: serde_json::from_value(json!({"instructionId":instruction.instruction_id,"timing":{"kind":"at","at":"2026-01-01T00:00:00.000Z"},"enabled":true,"destination":{"kind":"freshEachRun","endpoint":target.endpoint,"cwd":"/fresh-fixture"},"executionTimeoutSeconds":120,"model":"gpt-5.6-sol","effort":"medium"}))?,
+        imported_continuity: agent_automation::ContinuityInput::None,
+        now_ms: chrono::Utc::now().timestamp_millis(),
+    }).await?;
     if frozen_inputs {
         // Admit with the original fresh-thread definition, then edit only future work.
         let now = chrono::Utc::now().timestamp_millis();
@@ -420,17 +429,20 @@ async fn exercise_scheduled_run(
                 now,
             )
             .await?;
-        let future_instruction = client
-            .create_instruction(InstructionCreateParams {
-                operation_id: OperationId::generate(),
-                text: "FUTURE_INSTRUCTION".to_owned().try_into()?,
-            })
+        let future_instruction = store
+            .lock()
+            .await
+            .create_instruction(
+                &OperationId::generate(),
+                &"FUTURE_INSTRUCTION".to_owned().try_into()?,
+                now,
+            )
             .await?;
         let mut future = schedule.definition.clone();
         future.enabled = false;
         future.instruction_id = future_instruction.instruction_id;
-        future.execution_timeout_seconds = Some(1.try_into()?);
-        future.destination = collaboration_protocol::ExecutionDestination::FreshEachRun {
+        future.execution_timeout_seconds = Some(1);
+        future.destination = agent_automation::ExecutionDestination::FreshEachRun {
             endpoint: target.endpoint.clone(),
             cwd: "/future-fixture".into(),
         };
@@ -439,7 +451,7 @@ async fn exercise_scheduled_run(
                 operation_id: OperationId::generate(),
                 schedule_id: schedule.schedule_id.clone(),
                 expected_change_id: schedule.change_id.clone(),
-                definition: future,
+                definition: serde_json::from_value(serde_json::to_value(future)?)?,
             })
             .await?;
         // The worker has never run. Replace the repository connection so its first step

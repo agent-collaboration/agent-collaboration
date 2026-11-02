@@ -78,6 +78,9 @@ fn main() {
     if arguments.first().is_some_and(|arg| arg == "delivery") {
         std::process::exit(agent_collaboration::run_delivery_command(arguments));
     }
+    if arguments.first().is_some_and(|arg| arg == "firing") {
+        std::process::exit(agent_collaboration::run_firing_command(arguments));
+    }
     if arguments.first().is_some_and(|arg| arg == "revision") {
         std::process::exit(agent_collaboration::run_revision_command(arguments));
     }

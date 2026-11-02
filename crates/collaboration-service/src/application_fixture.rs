@@ -4,6 +4,8 @@ use collaboration_runtime::EndpointDirectory;
 
 #[derive(Clone)]
 pub struct ApplicationFixture {
+    pub(crate) catalog:
+        Option<std::sync::Arc<dyn collaboration_runtime::CentralAutomationTransport>>,
     pub(crate) notification_publisher: Option<std::sync::Arc<crate::NotificationPublisher>>,
     pub(crate) mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
     pub(crate) project_claim: Option<std::sync::Arc<dyn collaboration_contracts::ProjectClaim>>,
@@ -49,18 +51,19 @@ pub struct ApplicationFixture {
         Option<std::sync::Arc<dyn collaboration_contracts::ProviderConversationBackend>>,
 }
 impl ApplicationFixture {
+    pub fn with_catalog(
+        mut self,
+        transport: Option<std::sync::Arc<dyn collaboration_runtime::CentralAutomationTransport>>,
+    ) -> Self {
+        self.catalog = transport;
+        self
+    }
+
     pub fn with_mail_delivery_runtime(
         mut self,
         runtime: std::sync::Arc<crate::MailDeliveryRuntime>,
     ) -> Result<Self, String> {
         runtime.validate_owner(&self.router_identity(), self.interaction_store.as_ref())?;
-        if let Some(store) = &self.automation {
-            runtime.attach_wake_owner(
-                self.service_id.clone(),
-                store.clone(),
-                self.wake_wait_permits.clone(),
-            )?;
-        }
         runtime.attach_reader_readiness()?;
         runtime.attach_project_replication(self.project_replication.clone())?;
         self.mail_delivery = Some(runtime);
@@ -370,6 +373,7 @@ impl ApplicationFixture {
             collaboration_contracts::MachineIdentity::new(service_id.clone(), None)
                 .map_err(|error| error.to_string())?;
         Ok(Self {
+            catalog: None,
             notification_publisher: None,
             project_replication: std::sync::Arc::new(
                 collaboration_contracts::UnacknowledgedProjectReplication,
@@ -510,7 +514,8 @@ impl ApplicationFixture {
             self.interaction_store.clone(),
             self.scheduled_run_execution.clone(),
             self.native_backend.clone(),
-        );
+        )
+        .with_catalog(self.catalog.clone());
         let interactions = crate::collaboration_application::InteractionOperations::new(
             self.approval_broker.clone(),
         );
@@ -519,7 +524,9 @@ impl ApplicationFixture {
             self.automation.clone().as_ref(),
         )
         .with_wait_capacity(&self.wake_wait_permits.clone())
-        .with_remote(self.mail_delivery.as_ref());
+        .with_catalog(self.catalog.clone())
+        .with_legacy_wake_recovery(self.mail_delivery.as_ref())
+        .with_clock(self.subscription_clock.clone());
         crate::CollaborationApplication::new(
             self.router_identity(),
             board,

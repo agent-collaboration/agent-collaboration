@@ -55,6 +55,7 @@ impl CentralReportWorker {
                                     collaboration_protocol::WorkItemReport::Firing(report) => {
                                         automation_storage::AutomationFaultEvidence {
                                             firing_id: Some(report.firing_id.clone()),
+                                            report_seq: Some(report.seq),
                                             ..Default::default()
                                         }
                                     }

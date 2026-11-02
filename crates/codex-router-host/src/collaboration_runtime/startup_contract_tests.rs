@@ -12,10 +12,10 @@ mod broker_context_tests;
 mod follow_attachment_tests;
 #[path = "../../tests/support/registered_route_project.rs"]
 mod registered_route_project;
+#[path = "startup_contract_tests/retired_wake_tests.rs"]
+mod retired_wake_tests;
 #[path = "../../tests/support/session_follow_fixture.rs"]
 mod route_fixture;
-#[path = "startup_contract_tests/wake_capacity_tests.rs"]
-mod wake_capacity_tests;
 
 struct StartupFixture {
     directory: tempfile::TempDir,

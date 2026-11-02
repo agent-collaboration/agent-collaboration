@@ -153,6 +153,10 @@ pub struct CollaborationRuntime {
     collaboration_api: ServedCollaborationApi,
     tailscale_exposure: Option<crate::tailscale_exposure::TailscaleExposure>,
 }
+#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+#[path = "collaboration_runtime/machine_work_readiness_test_support.rs"]
+mod machine_work_readiness_test_support;
+
 impl CollaborationRuntime {
     pub(crate) const fn mcp_listen_address(&self) -> std::net::SocketAddr {
         self.collaboration_api.local_address()

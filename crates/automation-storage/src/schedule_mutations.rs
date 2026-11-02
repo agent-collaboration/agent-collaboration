@@ -40,6 +40,20 @@ impl AutomationStore {
         let canonical = serde_json::to_vec(&(&request.schedule_id, &request.edit))
             .map_err(|_| StorageError::InvalidRecord)?;
         let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        match crate::automation_command_owner::read_schedule_owner(
+            &mut transaction,
+            &request.schedule_id,
+        )
+        .await?
+        {
+            crate::StoredAutomationOwner::Local => {}
+            crate::StoredAutomationOwner::HandoverPending => {
+                return Err(StorageError::AutomationHandoverPending);
+            }
+            crate::StoredAutomationOwner::Central => {
+                return Err(StorageError::AutomationOwnedByCentral);
+            }
+        }
         if let Some(record) = local_operation_receipts::replay(
             &mut transaction,
             LocalOperation {

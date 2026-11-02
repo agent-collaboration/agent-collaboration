@@ -13,6 +13,16 @@ use tokio::{sync::watch, time::timeout};
 #[cfg(debug_assertions)]
 #[path = "tests/central_automation.rs"]
 mod central_automation;
+#[path = "tests/central_catalog.rs"]
+mod central_catalog;
+#[path = "tests/central_catalog_fixture.rs"]
+mod central_catalog_fixture;
+#[path = "tests/central_schedule_catalog.rs"]
+mod central_schedule_catalog;
+#[path = "tests/central_schedule_packages.rs"]
+mod central_schedule_packages;
+#[path = "tests/central_wake_catalog.rs"]
+mod central_wake_catalog;
 
 #[path = "tests/archive_observation.rs"]
 mod archive_observation;

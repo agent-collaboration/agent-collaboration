@@ -4,27 +4,32 @@
 //!
 //! Each sub-area fails with its existing typed payload (`ConfigurationFailure`, `RunFailure`,
 //! `InstructionFailure`, `ScheduleFailure`, `AutomationInspectionFailure`).
+use crate::CentralCatalogFailure;
+use crate::central_catalog::CentralCatalog;
 use crate::collaboration_rejection::{
     CollaborationRejection, CollaborationRejectionReason, PublishedRejection,
 };
 use automation_storage::{
-    AutomationStore, InstructionUpdate, StorageError, SummaryRecoveryAction, SummaryRecoveryRequest,
+    AutomationStore, StorageError, SummaryRecoveryAction, SummaryRecoveryRequest,
 };
 use collaboration_protocol::{
     AutomationConfiguration, AutomationConfigureRequest, AutomationInspectionFailure,
     AutomationInspectionFailureKind, AutomationStatus, CodexGeneration, ConfigurationFailure,
     ConfigurationFailureKind, ConfigurationFileState, ConfigurationNextAction, EndpointRef,
-    InstructionCreateParams, InstructionFailure, InstructionFailureKind, InstructionId,
-    InstructionNextAction, InstructionShowParams, InstructionSnapshot, InstructionStage,
-    InstructionUpdateParams, LocalMutationEvidence, LocalMutationState, OperationId, RunFailure,
-    RunFailureKind, RunFailureStage, RunId, RunNextAction, RunRecoveryRequest, RunShowRequest,
-    RunSnapshot, ScheduleFailure, ScheduleFailureKind, SessionRef,
+    InstructionCreateParams, InstructionFailure, InstructionFailureKind, InstructionShowParams,
+    InstructionSnapshot, InstructionUpdateParams, LocalMutationEvidence, LocalMutationState,
+    OperationId, RunFailure, RunFailureKind, RunFailureStage, RunId, RunNextAction,
+    RunRecoveryRequest, RunShowRequest, RunSnapshot, ScheduleFailure, ScheduleFailureKind,
+    SessionRef,
 };
+#[cfg(test)]
+use collaboration_protocol::{InstructionId, InstructionNextAction, InstructionStage};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Automation operations over automation storage, the Host's configuration and scheduled runs.
 pub struct AutomationOperations {
+    pub(super) catalog: CentralCatalog,
     pub(super) identity: collaboration_contracts::RouterIdentity,
     pub(super) automation:
         Option<std::sync::Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>>,
@@ -61,6 +66,7 @@ impl AutomationOperations {
         native_backend: Option<collaboration_runtime::NativeControlBackend>,
     ) -> Self {
         Self {
+            catalog: CentralCatalog::new(None),
             identity,
             automation,
             configuration,
@@ -70,6 +76,14 @@ impl AutomationOperations {
             scheduled_run_execution,
             native_backend,
         }
+    }
+
+    pub fn with_catalog(
+        mut self,
+        transport: Option<Arc<dyn collaboration_runtime::CentralAutomationTransport>>,
+    ) -> Self {
+        self.catalog = CentralCatalog::new(transport);
+        self
     }
 
     pub(super) fn store(&self) -> Option<&Arc<Mutex<AutomationStore>>> {
@@ -197,78 +211,56 @@ impl AutomationOperations {
     pub async fn instruction_create(
         &self,
         request: InstructionCreateParams,
-    ) -> Result<InstructionSnapshot, InstructionFailure> {
-        let mut context = InstructionContext::mutation(Some(request.operation_id.clone()), None);
-        let store = self.instruction_store(&context)?;
-        let now = chrono::Utc::now().timestamp_millis();
-        let created = store
-            .lock()
-            .await
-            .create_instruction(&request.operation_id, &request.text, now)
-            .await;
-        project_instruction(created, &mut context)
+    ) -> Result<InstructionSnapshot, CentralCatalogFailure> {
+        let operation_id = Some(request.operation_id.clone());
+        match self
+            .catalog
+            .request(
+                collaboration_protocol::AutomationCall::InstructionCreate(request),
+                operation_id.clone(),
+            )
+            .await?
+        {
+            collaboration_protocol::AutomationAnswer::Instruction(document) => Ok(document),
+            _ => Err(CentralCatalogFailure::unanswered(operation_id)),
+        }
     }
 
     /// Replaces an instruction's text when its current revision is the expected one.
     pub async fn instruction_update(
         &self,
         request: InstructionUpdateParams,
-    ) -> Result<InstructionSnapshot, InstructionFailure> {
-        let mut context = InstructionContext::mutation(
-            Some(request.operation_id.clone()),
-            Some(request.instruction_id.clone()),
-        );
-        let store = self.instruction_store(&context)?;
-        let now = chrono::Utc::now().timestamp_millis();
-        let updated = store
-            .lock()
-            .await
-            .update_instruction(&InstructionUpdate {
-                operation_id: request.operation_id,
-                instruction_id: request.instruction_id,
-                expected_revision_id: request.expected_revision_id,
-                text: request.text,
-                now_ms: now,
-            })
-            .await;
-        project_instruction(updated, &mut context)
+    ) -> Result<InstructionSnapshot, CentralCatalogFailure> {
+        let operation_id = Some(request.operation_id.clone());
+        match self
+            .catalog
+            .request(
+                collaboration_protocol::AutomationCall::InstructionUpdate(request),
+                operation_id.clone(),
+            )
+            .await?
+        {
+            collaboration_protocol::AutomationAnswer::Instruction(document) => Ok(document),
+            _ => Err(CentralCatalogFailure::unanswered(operation_id)),
+        }
     }
 
     /// Shows an instruction's current revision.
     pub async fn instruction_show(
         &self,
         request: InstructionShowParams,
-    ) -> Result<InstructionSnapshot, InstructionFailure> {
-        let mut context = InstructionContext {
-            operation_id: None,
-            instruction_id: Some(request.instruction_id.clone()),
-            mutation: false,
-            current_revision_id: None,
-        };
-        let store = self.instruction_store(&context)?;
-        let read = store
-            .lock()
-            .await
-            .read_instruction(&request.instruction_id)
-            .await;
-        project_instruction(read, &mut context)
-    }
-
-    fn instruction_store(
-        &self,
-        context: &InstructionContext,
-    ) -> Result<&Arc<Mutex<AutomationStore>>, InstructionFailure> {
-        self.store().ok_or_else(|| {
-            instruction_failure(
-                context.clone(),
-                InstructionFailureReason {
-                    kind: InstructionFailureKind::AutomationUnavailable,
-                    stage: InstructionStage::Storage,
-                    message: "Automation storage is unavailable; no instruction mutation was dispatched.",
-                    mutation: LocalMutationState::None,
-                },
+    ) -> Result<InstructionSnapshot, CentralCatalogFailure> {
+        match self
+            .catalog
+            .request(
+                collaboration_protocol::AutomationCall::InstructionShow(request),
+                None,
             )
-        })
+            .await?
+        {
+            collaboration_protocol::AutomationAnswer::Instruction(document) => Ok(document),
+            _ => Err(CentralCatalogFailure::unanswered(None)),
+        }
     }
 }
 
@@ -369,26 +361,16 @@ fn project_run(
     }
 }
 
-/// The identities and mutation flag an instruction failure reports.
+/// Legacy instruction rejection fields used by the error-classification fixture.
 #[derive(Clone)]
+#[cfg(test)]
 pub(crate) struct InstructionContext {
     pub(super) operation_id: Option<OperationId>,
     pub(super) instruction_id: Option<InstructionId>,
-    pub(super) mutation: bool,
     pub(super) current_revision_id: Option<collaboration_protocol::RevisionId>,
 }
 
-impl InstructionContext {
-    fn mutation(operation_id: Option<OperationId>, instruction_id: Option<InstructionId>) -> Self {
-        Self {
-            operation_id,
-            instruction_id,
-            mutation: true,
-            current_revision_id: None,
-        }
-    }
-}
-
+#[cfg(test)]
 pub(crate) struct InstructionFailureReason<'a> {
     pub(super) kind: InstructionFailureKind,
     pub(super) stage: InstructionStage,
@@ -397,6 +379,7 @@ pub(crate) struct InstructionFailureReason<'a> {
 }
 
 /// An instruction failure with the next action its kind and context imply.
+#[cfg(test)]
 pub(crate) fn instruction_failure(
     context: InstructionContext,
     reason: InstructionFailureReason<'_>,
@@ -425,74 +408,6 @@ pub(crate) fn instruction_failure(
         current_revision_id: context.current_revision_id,
         effects: LocalMutationEvidence::Local { mutation },
         next_action,
-    }
-}
-
-fn project_instruction(
-    result: Result<agent_automation::InstructionDocument, StorageError>,
-    context: &mut InstructionContext,
-) -> Result<InstructionSnapshot, InstructionFailure> {
-    match result {
-        Ok(document) => crate::instruction_projection::snapshot(document).map_err(|()| {
-            let mutation = if context.mutation {
-                LocalMutationState::Committed
-            } else {
-                LocalMutationState::None
-            };
-            instruction_failure(
-                context.clone(),
-                InstructionFailureReason {
-                    kind: InstructionFailureKind::InvalidRecord,
-                    stage: InstructionStage::Inspection,
-                    message: "Instruction outcome exists but its stored timestamps are invalid; inspect the operation before retrying.",
-                    mutation,
-                },
-            )
-        }),
-        Err(error) => {
-            if let StorageError::RevisionConflict {
-                current_revision_id,
-            } = &error
-            {
-                context.current_revision_id = Some(current_revision_id.clone());
-            }
-            let (kind, message) = match &error {
-                StorageError::OperationConflict => (
-                    InstructionFailureKind::OperationConflict,
-                    "Operation identity belongs to a different request; inspect that operation or choose a new identity for new work.",
-                ),
-                StorageError::RevisionConflict { .. } => (
-                    InstructionFailureKind::RevisionConflict,
-                    "Instruction changed; read its current revision before editing.",
-                ),
-                StorageError::InstructionNotFound => (
-                    InstructionFailureKind::ResourceNotFound,
-                    "Instruction was not found in this service; verify its identity.",
-                ),
-                StorageError::Database(_) => (
-                    InstructionFailureKind::AutomationUnavailable,
-                    "Instruction storage request failed; a mutation may have committed. Inspect or replay the same operation identity, never create a new one blindly.",
-                ),
-                _ => (
-                    InstructionFailureKind::InvalidRecord,
-                    "Instruction storage is inconsistent; inspect the stored operation and record.",
-                ),
-            };
-            let mutation = if context.mutation && matches!(error, StorageError::Database(_)) {
-                LocalMutationState::Unknown
-            } else {
-                LocalMutationState::None
-            };
-            Err(instruction_failure(
-                context.clone(),
-                InstructionFailureReason {
-                    kind,
-                    stage: InstructionStage::Storage,
-                    message,
-                    mutation,
-                },
-            ))
-        }
     }
 }
 

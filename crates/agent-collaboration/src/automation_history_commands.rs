@@ -8,6 +8,48 @@ use std::{ffi::OsString, path::PathBuf};
 
 #[derive(Parser)]
 #[command(
+    name = "agent-collaboration firing",
+    bin_name = "agent-collaboration firing"
+)]
+struct FiringArguments {
+    #[arg(long, global = true)]
+    service_directory: Option<PathBuf>,
+    #[arg(long, global = true)]
+    json: bool,
+    #[command(subcommand)]
+    command: FiringCommand,
+}
+#[derive(Subcommand)]
+enum FiringCommand {
+    /// Inspect central outcome evidence without starting or retrying work.
+    Show {
+        #[arg(long)]
+        firing_id: String,
+    },
+    /// List central Firings for one Automation using central's page boundary.
+    List(crate::automation_collection_commands::FiringListOptions),
+}
+pub fn run_firing_command(arguments: Vec<OsString>) -> i32 {
+    let args: FiringArguments =
+        match crate::automation_argument_feedback::parse_arguments(arguments) {
+            Ok(args) => args,
+            Err(code) => return code,
+        };
+    let command = match args.command {
+        FiringCommand::Show { firing_id } => CollectionCommand::FiringShow(firing_id),
+        FiringCommand::List(options) => CollectionCommand::Firings(options),
+    };
+    run_collection_command(
+        command,
+        CollectionContext {
+            service_directory: args.service_directory,
+            json: args.json,
+        },
+    )
+}
+
+#[derive(Parser)]
+#[command(
     name = "agent-collaboration delivery",
     bin_name = "agent-collaboration delivery"
 )]

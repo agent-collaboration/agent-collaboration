@@ -103,7 +103,7 @@ impl CollaborationApiRouter {
     }
 
     /// The tool calls this copy runs, to count them.
-    #[cfg(test)]
+    #[cfg(any(test, all(feature = "test-support", debug_assertions)))]
     pub(crate) fn tool_calls(&self) -> ToolCallRegistry {
         self.tool_calls.clone()
     }

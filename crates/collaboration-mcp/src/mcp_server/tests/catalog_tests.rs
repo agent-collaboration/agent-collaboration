@@ -34,14 +34,16 @@ fn retired_cancel_tools_and_cli_commands_are_absent() {
 fn catalog_has_complete_unique_tools_with_resolvable_schemas() {
     let server = CollaborationMcpServer::catalog_only();
     let tools = server.resolved_tools();
-    assert_eq!(tools.len(), 165);
+    assert_eq!(tools.len(), 167);
     let mut names = tools
         .iter()
         .map(|tool| tool.name.as_ref())
         .collect::<Vec<_>>();
     names.sort_unstable();
     names.dedup();
-    assert_eq!(names.len(), 165);
+    assert_eq!(names.len(), 167);
+    assert!(names.contains(&"firing_show"));
+    assert!(names.contains(&"firing_list"));
     assert!(names.contains(&"conversation_resume"));
     assert!(names.contains(&"installation_show"));
     assert!(names.contains(&"conversation_close"));

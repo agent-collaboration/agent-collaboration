@@ -54,6 +54,7 @@ async fn validate_schema(
                     | "remote_wake_requests"
                     | "firing_receipts"
                     | "central_report_outbox"
+                    | "automation_handover"
             )
     }) {
         validate_columns(transaction, table, legacy).await?;
@@ -94,6 +95,7 @@ async fn validate_object_inventory(
                         | "remote_wake_requests"
                         | "firing_receipts"
                         | "central_report_outbox"
+                        | "automation_handover"
                 )
         })
         .map(|table| table.name)
@@ -161,6 +163,11 @@ async fn validate_columns(
     } else {
         expected
     };
+    let expected = if !legacy && table.name == "operation_receipts" {
+        format!("{expected};central_bind_request_json,TEXT,0,<NULL>,0")
+    } else {
+        expected
+    };
     if actual != expected {
         return Err(StorageError::InvalidSchema);
     }
@@ -213,6 +220,7 @@ async fn validate_indexes(
                     | "remote_wake_requests"
                     | "firing_receipts"
                     | "central_report_outbox"
+                    | "automation_handover"
             )
     }) {
         let indexes = sqlx::query(
@@ -260,6 +268,7 @@ async fn validate_indexes(
         .filter(|index| {
             !legacy
                 || (!index.starts_with("central_report_outbox,")
+                    && !index.starts_with("automation_handover,")
                     && !index.starts_with("firing_receipts,")
                     && !index.starts_with("remote_wake_requests,")
                     && !index.starts_with("owed_push_operations,")
@@ -286,6 +295,7 @@ async fn validate_known_definitions(
                     | "remote_wake_requests"
                     | "firing_receipts"
                     | "central_report_outbox"
+                    | "automation_handover"
             )
     }) {
         let sql: String =
@@ -304,6 +314,7 @@ async fn validate_known_definitions(
         .filter(|index| {
             !legacy
                 || (!index.starts_with("central_report_outbox,")
+                    && !index.starts_with("automation_handover,")
                     && !index.starts_with("firing_receipts,")
                     && !index.starts_with("remote_wake_requests,")
                     && !index.starts_with("owed_push_operations,")
@@ -348,6 +359,7 @@ fn expected_definition_tokens(
         );
         let source = source.replace("updated_at_ms INTEGER NOT NULL -- Last configuration edit time.", "updated_at_ms INTEGER NOT NULL, authority TEXT NOT NULL DEFAULT 'local' -- Last configuration edit time.")
             .replace("updated_at_ms INTEGER NOT NULL, -- Latest definition edit time.", "updated_at_ms INTEGER NOT NULL, authority TEXT NOT NULL DEFAULT 'local', -- Latest definition edit time.");
+        let source = source.replace("committed_at_ms INTEGER NOT NULL -- UTC first admission time.", "committed_at_ms INTEGER NOT NULL, central_bind_request_json TEXT -- UTC first admission time.");
         format!(
             "{source}\n{}",
             include_str!("../migrations/20261031000100_central_firing_receipts.sql")

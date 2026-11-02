@@ -1,4 +1,4 @@
-//! The served collaboration API with a controlled admission gate and a real debug Codex backend.
+//! Retained Local delivery recovery with a controlled gate; package import uses real central.
 //! Host discovery and native relay publication have separate live acceptance coverage.
 use super::{
     proof_context::{ProofContext, ProofResult},
@@ -60,16 +60,39 @@ pub async fn exercise(proof: &mut ProofContext, portable: PortableRunProof) -> P
         }],
     };
     let gate = NativeGenerationGate::default();
+    let central = board_central_test_support::TestCentral::start_with_peer(
+        &directory.join("test-central"),
+        &message_board::ActorOrigin {
+            installation: service_id.clone().try_into()?,
+            machine: "retained delivery recovery".to_owned().try_into()?,
+        },
+        uuid::Uuid::now_v7().to_string().try_into()?,
+    )
+    .await?;
+    let (requests, central_runtime) = central.connect_machine_session(&directory).await?;
+    let catalog: Arc<dyn collaboration_runtime::CentralAutomationTransport> = Arc::new(
+        collaboration_runtime::SessionAutomationTransport::new(requests),
+    );
     let identity = ApplicationFixture::new(&service_id, &epoch)?
+        .with_catalog(Some(catalog.clone()))
         .with_endpoints(vec![description.clone()])?
         .with_automation_store(Arc::clone(&store))
         .with_native_backend(NativeControlBackend {
             endpoint,
             gate: gate.clone(),
-            codex_home: std::path::PathBuf::from(std::env::var_os("HOME").ok_or("HOME missing")?)
-                .join(".codex"),
+            codex_home: proof.owned_codex_home().to_path_buf(),
         })?;
-    let served = ServedCollaborationApi::start(&directory, (identity.clone()).build())?;
+    let served = match ServedCollaborationApi::start(&directory, identity.clone().build()) {
+        Ok(served) => served,
+        Err(error) => {
+            central_runtime.shutdown().await?;
+            return Err(error.into());
+        }
+    };
+    let shutdown = tokio_util::sync::CancellationToken::new();
+    let _cancel_on_drop = shutdown.clone().drop_guard();
+    let mut worker = None;
+    let scenario:ProofResult<()>=async {
     let client = served.client("durable-recovery-proof").await?;
     let imported = client
         .import_schedule(ScheduleImportRequest {
@@ -78,6 +101,8 @@ pub async fn exercise(proof: &mut ProofContext, portable: PortableRunProof) -> P
             overwrite: false,
         })
         .await?;
+    if !imported.already_sent.is_empty(){return Err("disabled central import invented sent work".into());}
+    let collaboration_client::CatalogAutomationResult::Schedule(imported)=imported.automation else{return Err("central import returned another automation kind".into());};
     if imported.schedule_id != portable.schedule_id
         || imported.change_id == portable.source_change_id
         || imported.definition.enabled
@@ -100,14 +125,12 @@ pub async fn exercise(proof: &mut ProofContext, portable: PortableRunProof) -> P
         return Err("Import created execution or unexpectedly opened native admission".into());
     }
     proof.record("disabledImportWithRealSummaryVerified", json!(imported))?;
-    let shutdown = tokio_util::sync::CancellationToken::new();
-    let _cancel_on_drop = shutdown.clone().drop_guard();
-    let worker = tokio::spawn(
+    worker=Some(tokio::spawn(
         identity
             .wake_timing_worker()
             .ok_or("Wake worker missing")?
             .run(shutdown.clone()),
-    );
+    ));
     let marker = format!("DELIVERY_RECOVERED_{}", OperationId::generate().as_str());
     let request = WakeSendRequest {
         requested_by: collaboration_client::protocol::WakeCreator::Owner {},
@@ -128,7 +151,7 @@ pub async fn exercise(proof: &mut ProofContext, portable: PortableRunProof) -> P
         },
         expiry: ExpiryRequest::None,
     };
-    let wake = client.send_wakeup(request.clone()).await?;
+    let wake=seed_legacy_wake(&store,&client,request.clone()).await?;
     let waiter = served
         .client("durable-recovery-waiter")
         .await?
@@ -138,6 +161,7 @@ pub async fn exercise(proof: &mut ProofContext, portable: PortableRunProof) -> P
         .await?;
     let fire =
         tokio::time::timeout(Duration::from_secs(10), waiter.wait_until_first_fire()).await??;
+    let collaboration_client::WakeFirstFireResponse::Local {value:fire}=fire else{return Err("retained Local first-fire wait changed owner".into());};
     let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
     let mut interval = tokio::time::interval(Duration::from_millis(100));
     let pending = loop {
@@ -242,7 +266,7 @@ pub async fn exercise(proof: &mut ProofContext, portable: PortableRunProof) -> P
     paused_request.timing = TimingRequest::After {
         seconds: 60.try_into()?,
     };
-    let paused = client.send_wakeup(paused_request).await?;
+    let paused=seed_legacy_wake(&store,&client,paused_request).await?;
     let waiter = served
         .client("durable-recovery-waiter")
         .await?
@@ -271,14 +295,70 @@ pub async fn exercise(proof: &mut ProofContext, portable: PortableRunProof) -> P
         "pausedFirstFireWaitRejected",
         json!({"wakeupId":paused.definition.wakeup_id}),
     )?;
-    shutdown.cancel();
-    worker.await?;
-    served.stop().await?;
     Ok(())
+    }.await;
+    shutdown.cancel();
+    let worker_stop: ProofResult<()> = async {
+        if let Some(worker) = worker {
+            worker.await?;
+        }
+        Ok(())
+    }
+    .await;
+    let api_stop = served.stop().await;
+    drop(identity);
+    drop(catalog);
+    let central_stop = central_runtime.shutdown().await;
+    let storage_stop: ProofResult<()> = async {
+        Arc::try_unwrap(store)
+            .map_err(|_| "durable recovery still owns local storage")?
+            .into_inner()
+            .close()
+            .await?;
+        Ok(())
+    }
+    .await;
+    match (scenario, worker_stop, api_stop, central_stop, storage_stop) {
+        (Ok(()), Ok(()), Ok(()), Ok(()), Ok(())) => Ok(()),
+        results => Err(format!(
+            "durable recovery scenario/worker/API/central/storage results: {results:?}"
+        )
+        .into()),
+    }
 }
 
 fn timestamp() -> ProofResult<collaboration_client::protocol::ObservationTimestamp> {
     Ok(chrono::Utc::now()
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
         .try_into()?)
+}
+
+async fn seed_legacy_wake(
+    store: &Arc<Mutex<AutomationStore>>,
+    client: &collaboration_client::CollaborationClient,
+    request: WakeSendRequest,
+) -> ProofResult<collaboration_protocol::WakeSnapshot> {
+    // Actual pre-upgrade owner state; new public Wake creation belongs to central.
+    let id = store
+        .lock()
+        .await
+        .create_wakeup(&automation_storage::WakeCreate {
+            operation_id: request.operation_id,
+            requested_by: request.requested_by,
+            replace: request.replace,
+            message: request.message,
+            timing: serde_json::from_value(serde_json::to_value(request.timing)?)?,
+            expiry: serde_json::from_value(serde_json::to_value(request.expiry)?)?,
+            now_ms: chrono::Utc::now().timestamp_millis(),
+        })
+        .await?
+        .definition
+        .wakeup_id;
+    match client
+        .read_wakeup(WakeShowRequest { wakeup_id: id })
+        .await?
+    {
+        collaboration_client::WakeReadResponse::Local { value } => Ok(value),
+        _ => Err("pre-upgrade recovery Wake did not retain Local ownership".into()),
+    }
 }

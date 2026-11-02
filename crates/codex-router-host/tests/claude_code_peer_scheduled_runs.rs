@@ -30,10 +30,10 @@ use collaboration_contracts::StopRequestOutcome;
 use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     AutomationConfigureRequest, CodexGeneration, DeliveryOutcome, EndpointId, EndpointRef,
-    InstructionCreateParams, InstructionText, MachineId, MachineLabel, MessageText, OperationId,
-    PushHeaderFacts, PushId, PushKind, PushLineInput, PushOrigin, RouterLink, RunExecution,
-    RunShowRequest, RunState, ScheduleCreateRequest, ScheduleEnableRequest, SchedulePrepareRequest,
-    SessionId, SessionRef, UuidIdentity, WorkerOutcome, render_push_line,
+    MachineId, MachineLabel, MessageText, OperationId, PushHeaderFacts, PushId, PushKind,
+    PushLineInput, PushOrigin, RouterLink, RunExecution, RunShowRequest, RunState,
+    ScheduleEnableRequest, SchedulePrepareRequest, SessionId, SessionRef, UuidIdentity,
+    WorkerOutcome, render_push_line,
 };
 use collaboration_runtime::SessionDeliveryRouter;
 use serde_json::{Value, json};
@@ -363,13 +363,61 @@ async fn scheduled_peer_rejects_a_prepared_push_link_that_disagrees_with_its_id(
 }
 
 #[tokio::test]
-async fn host_worker_finalizes_peer_run_as_written() {
+async fn host_worker_finalizes_retained_local_peer_run_as_written() {
     let root = tempfile::tempdir().expect("Host root");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private Host root");
     let registry = root.path().join("peer-registry");
     std::fs::create_dir(&registry).expect("registry directory");
     let session_id = SessionId::try_from("scheduled-peer-host".to_owned()).expect("session ID");
+    let target = SessionRef {
+        endpoint: EndpointRef {
+            service_id: collaboration_runtime::load_service_identity(root.path())
+                .expect("retained Host service identity"),
+            endpoint_id: EndpointId::try_from("claude-local".to_owned()).expect("endpoint ID"),
+        },
+        session_id: session_id.clone(),
+    };
+    // Arrange actual pre-upgrade Local definitions before the Host starts. This proves
+    // retained Local execution; new central native preparation has its own S6 gate.
+    let mut retained =
+        automation_storage::AutomationStore::open(&root.path().join("automation.sqlite"))
+            .await
+            .expect("retained automation store");
+    let instruction = retained
+        .create_instruction(
+            &OperationId::generate(),
+            &"Check peer work"
+                .to_owned()
+                .try_into()
+                .expect("instruction"),
+            0,
+        )
+        .await
+        .expect("pre-upgrade Instruction");
+    let created = retained
+        .create_schedule(
+            &automation_storage::ScheduleCreate::<SessionRef, EndpointRef> {
+                operation_id: OperationId::generate(),
+                definition: agent_automation::ScheduleDefinition {
+                    instruction_id: instruction.instruction_id,
+                    timing: agent_automation::TimingRule::After { seconds: 1 },
+                    enabled: false,
+                    destination: agent_automation::ExecutionDestination::Unprepared,
+                    execution_timeout_seconds: Some(120),
+                    model: Some("fixture-model".to_owned()),
+                    effort: Some("medium".to_owned()),
+                },
+                imported_continuity: agent_automation::ContinuityInput::None,
+                now_ms: chrono::Utc::now().timestamp_millis(),
+            },
+        )
+        .await
+        .expect("pre-upgrade Schedule");
+    retained
+        .close()
+        .await
+        .expect("retained store closed before Host");
     let socket_path = registry.join("peer.sock");
     publish_peer(&registry, &session_id, &socket_path);
     let listener = tokio::net::UnixListener::bind(&socket_path).expect("peer listener");
@@ -395,13 +443,7 @@ async fn host_worker_finalizes_peer_run_as_written() {
     })
     .await
     .expect("Host runtime");
-    let target = SessionRef {
-        endpoint: EndpointRef {
-            service_id: runtime.service_id().clone(),
-            endpoint_id: EndpointId::try_from("claude-local".to_owned()).expect("endpoint ID"),
-        },
-        session_id,
-    };
+    assert_eq!(&target.endpoint.service_id, runtime.service_id());
     let client = CollaborationClient::connect(root.path(), "peer-run-host-proof", "1")
         .await
         .expect("collaboration API client");
@@ -413,28 +455,6 @@ async fn host_worker_finalizes_peer_run_as_written() {
         })
         .await
         .expect("automation configured");
-    let instruction = client
-        .create_instruction(InstructionCreateParams {
-            operation_id: OperationId::generate(),
-            text: InstructionText::try_from("Check peer work".to_owned()).expect("instruction"),
-        })
-        .await
-        .expect("instruction created");
-    let schedule: ScheduleCreateRequest = serde_json::from_value(json!({
-        "operationId":OperationId::generate(),
-        "definition":{
-            "instructionId":instruction.instruction_id,
-            "timing":{"kind":"after","seconds":1},
-            "enabled":false,
-            "destination":{"kind":"unprepared"},
-            "executionTimeoutSeconds":120,"model":"fixture-model","effort":"medium"
-        }
-    }))
-    .expect("schedule request");
-    let created = client
-        .create_schedule(schedule)
-        .await
-        .expect("schedule created");
     client
         .prepare_schedule(SchedulePrepareRequest {
             operation_id: OperationId::generate(),
@@ -453,6 +473,9 @@ async fn host_worker_finalizes_peer_run_as_written() {
         })
         .await
         .expect("peer schedule enabled");
+    let collaboration_client::ScheduleMutationResponse::Local(created) = created else {
+        panic!("retained peer Schedule control changed its Local owner");
+    };
     let mut database = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new().filename(root.path().join("automation.sqlite")),
     )

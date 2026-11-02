@@ -234,6 +234,31 @@ pub fn run_wakeup_command(arguments: Vec<OsString>) -> i32 {
                 if uncertain { 5 } else { 4 },
             )
         }
+        Err(WakeClientError::Selection(error)) => {
+            let code = if matches!(
+                &*error,
+                collaboration_client::WakeSelectionFailure::LocalStoreUnavailable { .. }
+            ) {
+                3
+            } else {
+                4
+            };
+            (
+                json!({"kind":"error","operationId":invocation.operation_id,"error":error}),
+                code,
+            )
+        }
+        Err(WakeClientError::Catalog(error)) => {
+            let code = match &error {
+                collaboration_client::CentralCatalogFailure::CentralUnreachable { .. } => 3,
+                collaboration_client::CentralCatalogFailure::OutcomeUnknown { .. } => 5,
+                collaboration_client::CentralCatalogFailure::Refused { .. } => 4,
+            };
+            (
+                json!({"kind":"error","operationId":invocation.operation_id,"error":error}),
+                code,
+            )
+        }
         Err(WakeClientError::Connection(_)) => {
             let uncertain = dispatched && invocation.operation_id.is_some();
             (
@@ -244,7 +269,7 @@ pub fn run_wakeup_command(arguments: Vec<OsString>) -> i32 {
     };
     let wait_id = if invocation.wait_until_first_fire && code == 0 {
         record
-            .pointer("/result/record/definition/wakeupId")
+            .pointer("/result/record/value/definition/wakeupId")
             .cloned()
             .and_then(|id| {
                 serde_json::from_value::<collaboration_client::protocol::WakeupId>(id).ok()
@@ -257,9 +282,7 @@ pub fn run_wakeup_command(arguments: Vec<OsString>) -> i32 {
             &invocation.directory,
             id.clone(),
         )) {
-            Ok(fire) => {
-                combine_first_fire(record, json!(fire), invocation.operation_id.as_ref(), &id)
-            }
+            Ok(fire) => combine_wake_wait(record, fire, invocation.operation_id.as_ref(), &id),
             Err(error) => {
                 let failure = error.into_operation_failure();
                 let code = if matches!(
@@ -300,13 +323,60 @@ pub fn run_wakeup_command(arguments: Vec<OsString>) -> i32 {
     }
 }
 
+fn combine_wake_wait(
+    mut created: serde_json::Value,
+    answer: collaboration_client::WakeFirstFireResponse,
+    operation_id: Option<&OperationId>,
+    wakeup_id: &collaboration_client::protocol::WakeupId,
+) -> (serde_json::Value, i32) {
+    match answer {
+        collaboration_client::WakeFirstFireResponse::Suspended { message, suspended } => (
+            json!({"kind":"error","operationId":operation_id,"wakeupId":wakeup_id,
+                "created":created.pointer("/result/record"),"error":{"kind":"suspended","message":message,"suspended":suspended}}),
+            4,
+        ),
+        collaboration_client::WakeFirstFireResponse::Local { value } => {
+            combine_first_fire(created, json!(value), operation_id, wakeup_id)
+        }
+        collaboration_client::WakeFirstFireResponse::Central { value } => match &value.outcome {
+            collaboration_client::CentralWakeWaitOutcome::Fired { firing } => {
+                if let Some(first_firing) = created.pointer_mut("/result/record/value/firstFiring")
+                {
+                    *first_firing = json!(firing);
+                    return (created, 0);
+                }
+                (
+                    json!({"kind":"error","operationId":operation_id,"wakeupId":wakeup_id,
+                        "created":created.pointer("/result/record"),"error":{"kind":"protocolViolation","message":"Central Wake omitted firstFiring"}}),
+                    5,
+                )
+            }
+            collaboration_client::CentralWakeWaitOutcome::Pending { .. } => (
+                json!({"kind":"pending","operationId":operation_id,"wakeupId":wakeup_id,
+                        "created":created.pointer("/result/record"),"wait":value}),
+                3,
+            ),
+            _ => (
+                json!({"kind":"error","operationId":operation_id,"wakeupId":wakeup_id,
+                    "created":created.pointer("/result/record"),"wait":value}),
+                4,
+            ),
+        },
+        collaboration_client::WakeFirstFireResponse::Faulted { message, fault } => (
+            json!({"kind":"error","operationId":operation_id,"wakeupId":wakeup_id,
+                "created":created.pointer("/result/record"),"error":{"kind":"faulted","message":message,"fault":fault}}),
+            4,
+        ),
+    }
+}
+
 fn combine_first_fire(
     mut created: serde_json::Value,
     fire: serde_json::Value,
     operation_id: Option<&OperationId>,
     wakeup_id: &collaboration_client::protocol::WakeupId,
 ) -> (serde_json::Value, i32) {
-    if let Some(first_fire) = created.pointer_mut("/result/record/firstFire") {
+    if let Some(first_fire) = created.pointer_mut("/result/record/value/firstFire") {
         *first_fire = fire;
         (created, 0)
     } else {

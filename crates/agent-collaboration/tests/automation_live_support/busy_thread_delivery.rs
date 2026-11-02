@@ -57,8 +57,8 @@ pub async fn exercise() -> ProofResult<()> {
                 enabled: false,
                 destination: ExecutionDestination::Unprepared,
                 execution_timeout_seconds: Some(120.try_into()?),
-                model: Some("gpt-5.6-sol".into()),
-                effort: Some("medium".into()),
+                model: Some("gpt-6-luna".into()),
+                effort: Some("low".into()),
             },
         })
         .await?;
@@ -80,6 +80,13 @@ pub async fn exercise() -> ProofResult<()> {
             schedule_id: schedule.schedule_id,
         })
         .await?;
+    let collaboration_client::ScheduleMutationResponse::Central(schedule) = schedule else {
+        return Err("central Schedule control changed to Local".into());
+    };
+    let collaboration_client::CatalogAutomationResult::Schedule(schedule) = schedule.automation
+    else {
+        return Err("Schedule enable returned a different automation kind".into());
+    };
     if schedule.next_due_at.is_none() {
         return Err(
             "Busy proof missed its one-shot timing during setup; no scheduled input was submitted"

@@ -92,6 +92,10 @@ pub enum StorageError {
     InvalidCentralTiming(#[from] collaboration_protocol::AutomationValidationError),
     #[error("wake-up was not found in this automation database")]
     WakeNotFound,
+    #[error("automation handover is pending; no local mutation was committed")]
+    AutomationHandoverPending,
+    #[error("central owns this automation; no local mutation was committed")]
+    AutomationOwnedByCentral,
     #[error(
         "wake-up lifecycle does not permit this action in state {state:?}; inspect or create another reminder"
     )]
