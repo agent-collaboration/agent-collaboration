@@ -68,6 +68,14 @@ struct DirectRuntime {
 }
 impl DirectRuntime {
     async fn new(mode: SessionRegistrationMode, unavailable: bool) -> Self {
+        Self::with_repository(mode, unavailable, None).await
+    }
+
+    async fn with_repository(
+        mode: SessionRegistrationMode,
+        unavailable: bool,
+        repository: Option<Arc<dyn codex_router_fleet_state::session_registration_repository::FleetSessionRegistrationRepository>>,
+    ) -> Self {
         let fixture = RuntimeFixture::new();
         let native = NativeFixture::start(fixture.root.path()).await;
         let service_id = "019f0000-0000-7000-8000-000000000777"
@@ -108,9 +116,11 @@ impl DirectRuntime {
                 super::super::registrar_composition::RegistrarStartupInput::AccessEnrollment
             }
             SessionRegistrationMode::MachineTokens => {
-                super::super::registrar_composition::RegistrarStartupInput::Injected(
-                    fixture.capabilities(mode, true),
-                )
+                let mut capabilities = fixture.capabilities(mode, true);
+                if let Some(repository) = repository {
+                    capabilities.repository = Some(repository);
+                }
+                super::super::registrar_composition::RegistrarStartupInput::Injected(capabilities)
             }
         };
         let registrar = input
@@ -196,6 +206,9 @@ impl DirectRuntime {
         }
     }
 }
+
+#[path = "registrar_native_real_store_tests.rs"]
+mod real_store;
 
 // Catch an unwired direct route, registration before the actual ID, policy
 // overrides, or repeat dispatch. No pre-fix semantic red observed yet.

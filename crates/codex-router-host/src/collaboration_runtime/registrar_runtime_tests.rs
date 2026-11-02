@@ -5,6 +5,8 @@ mod fixture;
 mod native_delivery;
 #[path = "registrar_native_test_fixture.rs"]
 mod native_fixture;
+#[path = "registrar_real_store_tests.rs"]
+mod real_store;
 use crate::external_provider_runtime::acp_scripted_fixture::AcpFixtureScript;
 use collaboration_service::fleet_session_registrar::SessionRegistrationMode;
 use fixture::{PROJECT, RuntimeFixture, call};
