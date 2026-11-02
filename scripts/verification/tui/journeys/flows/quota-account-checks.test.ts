@@ -47,6 +47,7 @@ function observation(): ReturnType<typeof quotaObservationSchema.parse> {
 				scope: 'quota-account-actions',
 				focus: 'action:quota:login',
 				actions,
+				bodyScroll: null,
 				published: null,
 				rows: [
 					{

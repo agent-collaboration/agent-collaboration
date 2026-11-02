@@ -19,7 +19,6 @@ import { requireQuotaLoginParentExit } from './quota-effect-readback.ts';
 import { quotaJourneyScenarios, quotaLoginExit } from './quota-fixture-contract.ts';
 import type { QuotaFixtureLayout } from './quota-fixture-layout.ts';
 import {
-	collectQuotaDialog,
 	quotaBaseBindings,
 	quotaDialogTarget,
 	quotaExpectedKey,
@@ -31,6 +30,7 @@ import {
 import { quotaLoginHandoff } from './quota-handoff-bindings.ts';
 import { quotaObservationSchema } from './quota-live-fixture.ts';
 import type { QuotaLiveFixture } from './quota-live-fixture.ts';
+import { collectPublishedQuotaDialog } from './quota-published-dialog.ts';
 
 const observationSchema = quotaObservationSchema;
 const loginEntrySchema = z.strictObject({
@@ -117,7 +117,9 @@ export function quotaLoginBindings(options: {
 		};
 	};
 	const inspect = async (context: NativeFlowContext): Promise<MarkedInputEvidence> => {
-		const result = await collectQuotaDialog({
+		const result = await collectPublishedQuotaDialog({
+			evidence,
+			fixture,
 			context,
 			title: 'Account details',
 			surface: quotaOverlay(1),

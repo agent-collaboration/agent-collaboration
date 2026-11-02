@@ -28,6 +28,7 @@ function observation(percentage: string): ReturnType<typeof quotaObservationSche
 				scope: 'quota-browse',
 				focus: 'action:quota:accounts',
 				actions: [],
+				bodyScroll: null,
 				published: { frame: 5 },
 				rows: [0, 1].map((index) => ({
 					accountId: 'effect-account-' + index,

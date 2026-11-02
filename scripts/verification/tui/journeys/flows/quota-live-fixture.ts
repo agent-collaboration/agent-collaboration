@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 
 import { z } from 'zod';
 
+import { quotaBodyScrollSchema } from './quota-body-scroll.ts';
 import {
 	checkQuotaEffectReceipt,
 	quotaAccountFactSchema,
@@ -44,6 +45,7 @@ export const quotaLivePoseSchema = quotaPoseSchema.extend({
 		}),
 	),
 	published: z.unknown(),
+	bodyScroll: quotaBodyScrollSchema.nullable(),
 });
 export const quotaLiveReadbackSchema = z.strictObject({
 	kind: z.literal('fixture-readback'),

@@ -18,7 +18,6 @@ import { locatePaintedTarget } from './painted-flow-target.ts';
 import { collectQuotaContent } from './quota-content-census.ts';
 import type { QuotaFixtureLayout } from './quota-fixture-layout.ts';
 import {
-	collectQuotaDialog,
 	quotaBaseBindings,
 	quotaDialogTarget,
 	quotaExpectedKey,
@@ -33,6 +32,7 @@ import {
 	currentQuotaMenu,
 	quotaMenuNavigationExpected,
 } from './quota-menu-observation.ts';
+import { collectPublishedQuotaDialog } from './quota-published-dialog.ts';
 import { checkQuotaRefresh } from './quota-refresh-checks.ts';
 import {
 	quotaRefreshPublicationSchema,
@@ -141,7 +141,9 @@ export function quotaRefreshBindings(options: {
 		phase = 'completed';
 		let marked = await context.input.press('F12', [quotaExpectedKey('F12', active)]);
 		if (menuRoute) {
-			const collected = await collectQuotaDialog({
+			const collected = await collectPublishedQuotaDialog({
+				evidence,
+				fixture,
 				context: { ...context, frame: quotaMarkedFrame(marked) },
 				title: 'Account details',
 				surface: active,
