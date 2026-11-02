@@ -5,6 +5,54 @@ use std::error::Error;
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
+    reason = "Assertions check real damaged-row repair after reopening SQLite."
+)]
+async fn saving_replaces_rejected_preference_identities_and_preserves_the_repair()
+-> Result<(), Box<dyn Error>> {
+    for damaged in [
+        b"damaged".as_slice(),
+        b"00000000-0000-4000-8000-000000000001".as_slice(),
+        b"00000000-0000-7000-0000-000000000001".as_slice(),
+        &[0x80],
+    ] {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("ui.sqlite");
+        let store = UiPreferenceStore::open_and_migrate(&path).await;
+        store.save("sessions", "group-by", "day").await?;
+        let mut raw =
+            SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&path)).await?;
+        sqlx::query("UPDATE ui_preferences SET preference_id = ? WHERE screen = 'sessions' AND setting = 'group-by'")
+            .bind(damaged).execute(&mut raw).await?;
+        assert_eq!(store.load("sessions", "group-by").await, None);
+        raw.close().await?;
+        store.save("sessions", "group-by", "machine").await?;
+        store.close().await;
+
+        let reopened = UiPreferenceStore::open_and_migrate(&path).await;
+        assert_eq!(
+            reopened.load("sessions", "group-by").await.as_deref(),
+            Some("machine"),
+            "the next change repairs a rejected identity"
+        );
+        let mut raw =
+            SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&path)).await?;
+        let repaired: String = sqlx::query_scalar("SELECT preference_id FROM ui_preferences WHERE screen = 'sessions' AND setting = 'group-by'").fetch_one(&mut raw).await?;
+        let identity = uuid::Uuid::parse_str(&repaired)?;
+        assert_eq!(identity.get_version_num(), 7);
+        assert_eq!(identity.get_variant(), uuid::Variant::RFC4122);
+        assert_ne!(repaired.as_bytes(), damaged);
+        reopened.save("sessions", "group-by", "folder").await?;
+        let stable: String = sqlx::query_scalar("SELECT preference_id FROM ui_preferences WHERE screen = 'sessions' AND setting = 'group-by'").fetch_one(&mut raw).await?;
+        assert_eq!(stable, repaired, "a valid repaired identity remains stable");
+        raw.close().await?;
+        reopened.close().await;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
     reason = "I/O setup propagates errors; assertions must fail the persistence contract test."
 )]
 async fn sqlite_preferences_round_trip_and_upsert_preserve_uuid_v7_identity()

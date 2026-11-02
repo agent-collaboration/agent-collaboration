@@ -3,7 +3,7 @@ use crate::{
     actions::{ActionDef, ActionId, ActionPresentation, Availability},
     foundation::theme::{SurfaceRole, TextRole, UiGlyph},
     surfaces::{
-        focus_model::{TargetId, TargetSpec},
+        focus_model::{TargetActivationKeys, TargetId, TargetSpec},
         hit_regions::{HitRegionKind, use_target_geometry},
         surface_handle::SurfaceContext,
     },
@@ -50,6 +50,7 @@ pub(crate) fn action_button_width(action: &ActionPresentation, show_key: bool) -
 pub fn button_target(id: TargetId, action: &ActionDef) -> TargetSpec {
     TargetSpec::new(id)
         .with_activation(action.id.clone())
+        .with_activation_keys(TargetActivationKeys::EnterOrSpace)
         .with_availability(action.availability.clone())
 }
 pub(crate) fn presentation(context: SurfaceContext, id: &ActionId) -> Option<ActionPresentation> {

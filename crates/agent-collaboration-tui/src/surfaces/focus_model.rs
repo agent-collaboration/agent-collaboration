@@ -70,6 +70,13 @@ pub enum TargetRole {
     PointerOnly,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum TargetActivationKeys {
+    #[default]
+    Enter,
+    EnterOrSpace,
+}
+
 /// Live layout presence, independent of whether a painted control can activate.
 #[derive(Clone)]
 pub struct TargetVisibility(Arc<dyn Fn() -> bool + Send + Sync>);
@@ -101,6 +108,7 @@ pub struct TargetSpec {
     pub visibility: TargetVisibility,
     pub input: TargetInputHandler,
     pub activation: Option<crate::actions::ActionId>,
+    pub activation_keys: TargetActivationKeys,
 }
 impl TargetSpec {
     pub fn new(id: TargetId) -> Self {
@@ -112,6 +120,7 @@ impl TargetSpec {
             visibility: TargetVisibility::default(),
             input: TargetInputHandler::default(),
             activation: None,
+            activation_keys: TargetActivationKeys::Enter,
         }
     }
     pub fn in_group(mut self, group: GroupId) -> Self {
@@ -131,6 +140,10 @@ impl TargetSpec {
     }
     pub fn with_activation(mut self, action: crate::actions::ActionId) -> Self {
         self.activation = Some(action);
+        self
+    }
+    pub fn with_activation_keys(mut self, keys: TargetActivationKeys) -> Self {
+        self.activation_keys = keys;
         self
     }
     pub fn with_availability(mut self, availability: AvailabilityFn) -> Self {

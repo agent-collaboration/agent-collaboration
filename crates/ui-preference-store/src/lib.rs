@@ -63,9 +63,7 @@ impl UiPreferenceStore {
         .fetch_optional(pool)
         .await
         .ok()??;
-        let identity = uuid::Uuid::parse_str(&row.preference_id).ok()?;
-        (identity.get_version_num() == 7 && identity.get_variant() == uuid::Variant::RFC4122)
-            .then_some(row.value)
+        is_valid_preference_id(&row.preference_id).then_some(row.value)
     }
 
     pub async fn save(
@@ -75,10 +73,27 @@ impl UiPreferenceStore {
         value: &str,
     ) -> Result<(), UiPreferenceSaveError> {
         let pool = self.pool.as_ref().ok_or(UiPreferenceSaveError)?;
-        let preference_id = uuid::Uuid::now_v7().to_string();
-        sqlx::query!("INSERT INTO ui_preferences (preference_id, screen, setting, value) VALUES (?, ?, ?, ?) ON CONFLICT(screen, setting) DO UPDATE SET value = excluded.value",
-            preference_id, screen, setting, value).execute(pool).await.map_err(|_| UiPreferenceSaveError)?;
-        Ok(())
+        let mut connection = pool.acquire().await.map_err(|_| UiPreferenceSaveError)?;
+        let mut transaction = connection
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(|_| UiPreferenceSaveError)?;
+        let stored_id = sqlx::query_scalar!(
+            "SELECT CAST(preference_id AS BLOB) AS \"preference_id!: Vec<u8>\" FROM ui_preferences WHERE screen = ? AND setting = ?",
+            screen, setting
+        ).fetch_optional(&mut *transaction).await.map_err(|_| UiPreferenceSaveError)?;
+        let preference_id = stored_id
+            .as_deref()
+            .and_then(|bytes| std::str::from_utf8(bytes).ok())
+            .filter(|identity| is_valid_preference_id(identity))
+            .map(str::to_owned)
+            .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+        sqlx::query!("INSERT INTO ui_preferences (preference_id, screen, setting, value) VALUES (?, ?, ?, ?) ON CONFLICT(screen, setting) DO UPDATE SET preference_id = excluded.preference_id, value = excluded.value",
+            preference_id, screen, setting, value).execute(&mut *transaction).await.map_err(|_| UiPreferenceSaveError)?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| UiPreferenceSaveError)
     }
 
     pub async fn close(self) {
@@ -86,6 +101,12 @@ impl UiPreferenceStore {
             pool.close().await;
         }
     }
+}
+
+fn is_valid_preference_id(value: &str) -> bool {
+    uuid::Uuid::parse_str(value).is_ok_and(|identity| {
+        identity.get_version_num() == 7 && identity.get_variant() == uuid::Variant::RFC4122
+    })
 }
 
 async fn initialize_schema(pool: &SqlitePool) -> Result<(), sqlx::Error> {
