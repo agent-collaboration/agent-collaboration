@@ -6,7 +6,7 @@ wterm packages are pinned at 0.5.7. The separate original-image sink renders tho
 bytes with `@wterm/dom` in headless Chrome through DevTools. No reconstructed cell
 image counts as an original. A headless image is not physical-terminal evidence.
 
-Use Node 26.12.1 and pnpm 12.14.0, from the repository root:
+Use a privately retained Node 26.13.0 runtime and pnpm 12.14.0, from the repository root. Copy the complete Node runtime (including libnode) into an owned toolchain directory before declaring its canonical executable path and SHA-256; a mutable Homebrew symlink is not the retained runtime. Keep its dependency inventory with the declaration and re-qualify after any runtime dependency change. Historical 26.12.1 receipts remain evidence for their original runs only:
 
 ```sh
 pnpm --dir scripts/verification/tui install --frozen-lockfile
@@ -54,7 +54,7 @@ allowed-effects packet. S0 does not launch it.
 
 Native wrapper tests still exercise the real PTY, kernel resizing, retained-child
 cleanup and durable fixture receipts. They require nominated canonical
-`QUOTA_STORYBOARD_NODE` and `QUOTA_STORYBOARD_NODE_SHA256` matching Node 26.12.1.
+`QUOTA_STORYBOARD_NODE` and `QUOTA_STORYBOARD_NODE_SHA256` matching Node 26.13.0.
 Their stand-ins prove wrapper contracts, not product appearance or real provider
 jobs. Never install debug product binaries or replace production processes.
 

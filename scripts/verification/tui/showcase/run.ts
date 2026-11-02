@@ -42,7 +42,7 @@ export async function checkShowcaseTarget(plan: ShowcasePlan): Promise<void> {
 		canonicalJson(plan.exampleSource.source)
 	)
 		throw new Error('declared example source changed');
-	if (process.version !== 'v26.12.1' || realpathSync(process.execPath) !== plan.node.path)
+	if (process.version !== 'v26.13.0' || realpathSync(process.execPath) !== plan.node.path)
 		throw new Error('observer must use its pinned Node executable');
 	for (const artifact of [plan.driver, plan.example, plan.node])
 		if (

@@ -30,7 +30,7 @@ export function prepareShowcasePlan(args: readonly string[]): void {
 		);
 		return;
 	}
-	if (process.version !== 'v26.12.1') throw new Error('showcase requires nominated Node v26.12.1');
+	if (process.version !== 'v26.13.0') throw new Error('showcase requires nominated Node v26.13.0');
 	const repository = realpathSync(process.cwd());
 	if (gitOutput(repository, ['rev-parse', '--show-toplevel']).trim() !== repository)
 		throw new Error('prepare plan from repository root');

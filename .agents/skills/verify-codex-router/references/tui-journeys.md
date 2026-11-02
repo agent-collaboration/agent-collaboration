@@ -15,7 +15,7 @@ owner decisions. Earlier screenshots and current output do not define correctnes
 
 ## Declare and qualify the target
 
-Use an allocated isolated checkout with no competing build, Node 26.12.1 and
+Use an allocated isolated checkout with no competing build, Node 26.13.0 and
 locked dependencies. Sign every directly executed binary with the repository's
 `scripts/cargo_debug_signing_runner.sh`. Never install debug binaries or replace
 production processes. Preserve the allocation's disk floor.
