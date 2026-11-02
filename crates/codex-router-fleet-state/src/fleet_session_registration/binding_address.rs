@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 #[serde(try_from = "String", into = "String")]
 pub struct SessionBindingOrigin(String);
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
 pub struct SessionBindingAddress(String);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]

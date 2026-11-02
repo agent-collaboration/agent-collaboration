@@ -162,7 +162,8 @@ impl FleetSessionBindingLifecycle {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct FleetSessionPreparation {
     pub registration_id: FleetSessionRegistrationId,
     pub operation_id: OperationId,
@@ -171,10 +172,47 @@ pub struct FleetSessionPreparation {
     pub launch: PreparedFleetSession,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(
+    try_from = "StoredRegistrationEnvelope",
+    into = "StoredRegistrationEnvelope"
+)]
 pub struct FleetSessionRegistrationRecord {
     preparation: FleetSessionPreparation,
     lifecycle: FleetSessionBindingLifecycle,
+}
+
+// The existing lifecycle_json column owns this whole value. This representation
+// is private storage, not a Fleet protocol contract or public JSON Schema.
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "version", deny_unknown_fields)]
+enum StoredRegistrationEnvelope {
+    #[serde(rename = "1")]
+    VersionOne {
+        preparation: FleetSessionPreparation,
+        lifecycle: FleetSessionBindingLifecycle,
+    },
+}
+
+impl From<FleetSessionRegistrationRecord> for StoredRegistrationEnvelope {
+    fn from(record: FleetSessionRegistrationRecord) -> Self {
+        Self::VersionOne {
+            preparation: record.preparation,
+            lifecycle: record.lifecycle,
+        }
+    }
+}
+
+impl TryFrom<StoredRegistrationEnvelope> for FleetSessionRegistrationRecord {
+    type Error = InvalidFleetSessionRegistration;
+    fn try_from(envelope: StoredRegistrationEnvelope) -> Result<Self, Self::Error> {
+        match envelope {
+            StoredRegistrationEnvelope::VersionOne {
+                preparation,
+                lifecycle,
+            } => Self::new(preparation, lifecycle),
+        }
+    }
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 #[error("invalid Fleet session registration: {field}")]
@@ -236,3 +274,7 @@ impl FleetSessionRegistrationRecord {
 #[cfg(test)]
 #[path = "fleet_session_registration_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "stored_registration_envelope_tests.rs"]
+mod storage_tests;
