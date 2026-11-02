@@ -29,76 +29,276 @@
 <ex-document id="content">
 <h1>Your decisions</h1>
 
-<p><strong>Seven questions are open.</strong> Five are storage changes I built so PR 2 could keep moving. Each is in PR 2's unreleased migrations and kept to one migration and one codec, so it comes out easily. They need your yes before PR 2 merges. The other two are a leftover Router to stop, and which Router the model tests use. Each question shows my recommendation. Choose an answer, then use Comments to send them back. For the full story, see <a href="progress.html">Where the work stands</a>.</p>
+<p><strong>Seven decisions are open.</strong> Five are about <strong>what a Router saves on its own disk</strong>, in its two local databases: <code>automation.sqlite</code> (automations) and <code>interaction.sqlite</code> (messages and approvals). I built all five my recommended way so PR 2 could keep moving. Each lives in one migration and one place in the code, so if you choose differently it comes out before release. They only need your answer <strong>before PR 2 merges</strong>. The last two are housekeeping on Sunclaw. For the overall status, see <a href="progress.html">Where the work stands</a>.</p>
 
-<h2 id="open">Open questions</h2>
+<h2 id="map">Where these decisions sit</h2>
+<p>Two machines, one central. Machine A is where you, or an agent, act; machine B is where the work runs. Central holds the shared list of automations and hands work to each machine. Each number below is one decision on this page.</p>
+<ex-mermaid id="decision-map" label="Where each decision lives"><script type="text/plain">
+flowchart LR
+  subgraph A["Machine A: where you act"]
+    youA[You or an agent]
+  end
+  subgraph C["Central (per organization)"]
+    fleet[Shared list of automations and work]
+  end
+  subgraph B["Machine B: where the work runs"]
+    routerB[Router on B]
+    autoDb[(automation.sqlite)]
+    msgDb[(interaction.sqlite)]
+    codex[Codex sessions]
+  end
+  youA -->|commands| fleet
+  fleet -->|work to run| routerB
+  routerB --> autoDb
+  routerB --> msgDb
+  routerB --> codex
+  autoDb -.- d1["1 prepare retry"]
+  autoDb -.- d2["2-4 the move to central"]
+  msgDb -.- d5["5 who sent a first message"]
+</script></ex-mermaid>
+<p>Decisions 6 and 7 are about Sunclaw itself, not product design.</p>
 
-<ex-choice id="prepare-retry" title="Prepare retry: how does a retry resend the exact bind request after a lost answer?">
-  <ex-option id="prepare-retry-a" title="**A: one nullable column** (recommended, built)">
-    <template slot="summary">
-Add `central_bind_request_json` to the existing `operation_receipts` row in `automation.sqlite`. It's written before sending, so a retry resends the exact bytes and never creates the thread twice. Only central's real answer finishes the operation. Existing rows stay null.
-    </template>
+<h2 id="d1">1. Prepare retry: how B safely retries after losing central's answer</h2>
+<p><strong>The decision:</strong> when B has created a Schedule's thread but lost central's reply, how does B retry without making a mess?</p>
+<p><strong>Background.</strong> Some Schedules run every time in the same long-lived Codex thread. Before one can be switched on, <code>schedule prepare</code> has to <em>create that thread on the machine where it will run</em>, then tell central which thread it is. That second step is called "binding". Program Design line 73, "Schedule prepare".</p>
+<ex-mermaid id="d1-today" label="Prepare, and where it can break"><script type="text/plain">
+sequenceDiagram
+  participant You
+  participant B as Router on B
+  participant X as Codex on B
+  participant C as Central
+  You->>B: schedule prepare
+  B->>X: create the thread
+  X-->>B: thread T exists
+  B->>C: bind Schedule (revision 7) to thread T
+  C--xB: the answer is lost (crash or network)
+  Note over B: Now what? A retry must not create a second thread,<br/>and must send the same request central already saw
+</script></ex-mermaid>
+<p><strong>Why it's open.</strong> Today B saves nothing it could resend. To retry safely, it needs the exact request it sent the first time, including "revision 7", because the Schedule could have been edited in the meantime. No earlier decision of yours covers this.</p>
+<ex-compare label="Prepare retry options" data-width="canvas">
+  <section id="d1-opt-a" label="A: save the request (recommended)" icon="database">
+    <section data-compare-row="what"><p><strong>What changes</strong></p><p>One new, usually-empty column, <code>central_bind_request_json</code>, on an existing table in <code>automation.sqlite</code>. That table, <code>operation_receipts</code>, already holds one row per operation so it can be replayed. The request goes into it <em>before</em> it's sent.</p></section>
+    <section data-compare-row="retry"><p><strong>On retry</strong></p><p>B resends exactly the same bytes. Central sees the same operation and returns its original answer. The thread is never created twice.</p></section>
+    <section data-compare-row="gain"><p><strong>Gains</strong></p><p>A simple, exact replay. It's the same "same request, same answer" rule the rest of the system uses.</p></section>
+    <section data-compare-row="cost"><p><strong>Costs</strong></p><p>One column in a migration. Old rows stay empty.</p></section>
+  </section>
+  <section id="d1-opt-b" label="B: save nothing, ask central" icon="cloud">
+    <section data-compare-row="what"><p><strong>What changes</strong></p><p>Nothing new is saved.</p></section>
+    <section data-compare-row="retry"><p><strong>On retry</strong></p><p>B reads the Schedule from central. If it's already bound to thread T, B is done. If it's still unprepared, B binds again under a <em>new</em> operation. If it changed, B reports a conflict.</p></section>
+    <section data-compare-row="gain"><p><strong>Gains</strong></p><p>No database change.</p></section>
+    <section data-compare-row="cost"><p><strong>Costs</strong></p><p>More logic, with more cases to get wrong, such as an edit landing in between. The "same request, same answer" guarantee is lost.</p></section>
+  </section>
+</ex-compare>
+<p><strong>Who weighed in.</strong> The Router lane (lane 2) found the gap and proposed A. I agree.</p>
+<p><strong>Recommendation: A.</strong> It's the smallest change that keeps "only central's real answer finishes the operation".</p>
+<p><strong>If you wait.</strong> Nothing is blocked: A is built. You need to answer before PR 2 merges.</p>
+<ex-choice id="prepare-retry" title="Decision 1: prepare retry">
+  <ex-option id="prepare-retry-a" title="**A: save the request** (recommended, built)">
+    <template slot="summary">One empty-by-default column on the existing operation table. A retry resends the exact request.</template>
   </ex-option>
-  <ex-option id="prepare-retry-b" title="B: no column">
-    <template slot="summary">
-After a lost answer, read central's current state and bind again under a new operation ID. That avoids the database change, but adds reconcile logic with more ways to go wrong, and drops exact replay.
-    </template>
+  <ex-option id="prepare-retry-b" title="B: save nothing, ask central">
+    <template slot="summary">No database change, but more reconcile logic and no exact replay.</template>
   </ex-option>
 </ex-choice>
 
-<ex-choice id="waiting-run" title="Handover: how does a waiting local Run end when its Schedule moves to central?">
-  <ex-option id="waiting-run-confirm" title="**Today's terminal failure, with the reason `transferredToCentral`** (recommended, built)">
-    <template slot="summary">The row and its history are kept. There's no new phase and nothing is deleted. The reason is a new typed value stored in an existing field.</template>
+<h2 id="move">Background for decisions 2–4: the move to central</h2>
+<p>When a machine first starts the new release, it <strong>moves each of its local Schedules and Wakes to central, once</strong> (Specification R11, line 110), and every Schedule or Wake has exactly <strong>one owner at every moment</strong> (R12, line 125). The machine "freezes" its local copy, sends it to central, and marks it "moved" once central confirms. Some work may be half-done at that moment: a Run waiting to start, or a Wake message being delivered. That's called <em>carried</em> work, and it has to happen exactly once. Program Design flow 5, line 100, and the rows at lines 78–80.</p>
+<ex-mermaid id="move-flow" label="The move to central"><script type="text/plain">
+sequenceDiagram
+  participant M as Machine (old owner)
+  participant C as Central (new owner)
+  Note over M: 1. freeze: stop local timers for this item,<br/>record what already ran, fit the timing
+  M->>M: save the frozen copy and an import ID
+  M->>C: 2. import (the frozen copy)
+  C-->>M: 3. imported
+  M->>M: 4. mark moved
+  Note over M,C: carried work finishes once, reported to central
+</script></ex-mermaid>
+
+<h2 id="d2">2. What happens to a Run that was waiting when its Schedule moves</h2>
+<p><strong>The decision:</strong> on the machine, how does a waiting local Run end once central has taken over?</p>
+<p><strong>Background.</strong> A Run was queued locally but hadn't started. Central now owns that occurrence and will run it once, at its fitted time. The local Run row must stop counting as waiting, without pretending it ran or failed for some other reason. The local Run states today: preparing, then executing, then finished or failed. There's no "cancelled" state, and the failure path only accepts preparing Runs.</p>
+<ex-mermaid id="d2-states" label="A local Run's states, and the new ending"><script type="text/plain">
+stateDiagram-v2
+  [*] --> Waiting
+  Waiting --> Preparing
+  Preparing --> Executing
+  Executing --> Finished
+  Preparing --> Failed
+  Waiting --> Failed: handover, with reason transferredToCentral (option A)
+</script></ex-mermaid>
+<ex-compare label="Waiting Run options" data-width="canvas">
+  <section id="d2-a" label="A: end it with a clear reason (recommended)" icon="database">
+    <section data-compare-row="what"><p><strong>What changes</strong></p><p>The Run ends in today's "failed before it started" state, with a new reason value, <code>transferredToCentral</code>, saved in an existing field.</p></section>
+    <section data-compare-row="gain"><p><strong>Gains</strong></p><p>The row and its history are kept, and the reason says exactly what happened. There's no new state.</p></section>
+    <section data-compare-row="cost"><p><strong>Costs</strong></p><p>One new value stored in an existing field.</p></section>
+  </section>
+  <section id="d2-b" label="B: delete the row" icon="file">
+    <section data-compare-row="what"><p><strong>What changes</strong></p><p>The waiting Run row is removed.</p></section>
+    <section data-compare-row="gain"><p><strong>Gains</strong></p><p>Nothing new is stored.</p></section>
+    <section data-compare-row="cost"><p><strong>Costs</strong></p><p>History disappears, and you can't see afterwards what was handed over.</p></section>
+  </section>
+  <section id="d2-c" label="C: add a new &quot;transferred&quot; state" icon="git-branch">
+    <section data-compare-row="what"><p><strong>What changes</strong></p><p>A new Run state that every reader and listing has to learn.</p></section>
+    <section data-compare-row="gain"><p><strong>Gains</strong></p><p>The most explicit option.</p></section>
+    <section data-compare-row="cost"><p><strong>Costs</strong></p><p>A wider change across every place that shows Runs.</p></section>
+  </section>
+</ex-compare>
+<p><strong>Who weighed in.</strong> The central lane (lane 1) proposed A. I agree.</p>
+<p><strong>Recommendation: A.</strong> <strong>If you wait:</strong> nothing is blocked. Where: Program Design line 80, "Handover Router storage", point (1).</p>
+<ex-choice id="waiting-run" title="Decision 2: a waiting Run at the move">
+  <ex-option id="waiting-run-a" title="**A: end it with reason `transferredToCentral`** (recommended, being built)">
+    <template slot="summary">Keeps the history, adds one reason value, no new state.</template>
   </ex-option>
-  <ex-option id="waiting-run-other" title="Something else">
-    <template slot="summary">Say what you want in a comment.</template>
+  <ex-option id="waiting-run-b" title="B: delete the row">
+    <template slot="summary">Nothing new is stored, but the history is lost.</template>
+  </ex-option>
+  <ex-option id="waiting-run-c" title="C: a new &quot;transferred&quot; state">
+    <template slot="summary">The most explicit, and the widest change.</template>
   </ex-option>
 </ex-choice>
 
-<ex-choice id="handover-records" title="Handover: replay and report records">
-  <ex-option id="handover-records-confirm" title="**New operation kinds in the existing `operation_receipts` rows** (recommended, being built)">
-    <template slot="summary">They hold the import ID, the replay of the final settlement, and the "timing adjusted" and "Wake ended" facts. Those facts feed the handover report and the `needsTimingFix` events. No new column, and the frozen payload stays the only copy.</template>
+<h2 id="d3">3. What the machine remembers about the move</h2>
+<p><strong>The decision:</strong> where does the machine save the few facts it needs to make the move safe to retry, and to report on it?</p>
+<p><strong>Background.</strong> To retry an interrupted move and report on it afterwards, the machine has to remember three things:</p>
+<ul>
+  <li>the import ID it used, so a retry reuses it;</li>
+  <li>the final result of any carried Run, to resend it if that answer is lost;</li>
+  <li>for the move report you'll see, whether each item's timing was adjusted and whether a Wake ended.</li>
+</ul>
+<p>The report counts can't be worked out later. Once a definition is converted, its original timing is gone. The spec requires that report (R11, line 110). The frozen copy itself is already saved in <code>automation_handover</code>.</p>
+<ex-compare label="Move records options" data-width="canvas">
+  <section id="d3-a" label="A: new kinds of row in the existing operation table (recommended)" icon="database">
+    <section data-compare-row="what"><p><strong>What changes</strong></p><p>New typed operation kinds in the existing <code>operation_receipts</code> table, which already holds per-operation replay records. There's no new table or column.</p></section>
+    <section data-compare-row="gain"><p><strong>Gains</strong></p><p>It reuses the existing replay machinery. The frozen copy stays the only copy of the definition.</p></section>
+    <section data-compare-row="cost"><p><strong>Costs</strong></p><p>New stored kinds in an existing table.</p></section>
+  </section>
+  <section id="d3-b" label="B: a new handover table" icon="file">
+    <section data-compare-row="what"><p><strong>What changes</strong></p><p>A separate table just for move bookkeeping.</p></section>
+    <section data-compare-row="gain"><p><strong>Gains</strong></p><p>Kept apart from the operation table.</p></section>
+    <section data-compare-row="cost"><p><strong>Costs</strong></p><p>A second place that records operations, with its own replay logic.</p></section>
+  </section>
+</ex-compare>
+<p><strong>Who weighed in.</strong> Lane 1 proposed A. I agree. <strong>Recommendation: A.</strong> <strong>If you wait:</strong> nothing is blocked. Where: Program Design line 80, point (2), and the report on the existing automation-events list.</p>
+<ex-choice id="handover-records" title="Decision 3: move records">
+  <ex-option id="handover-records-a" title="**A: new kinds of row in the existing operation table** (recommended, being built)">
+    <template slot="summary">No new table or column; reuses the existing replay records.</template>
   </ex-option>
-  <ex-option id="handover-records-other" title="Something else">
-    <template slot="summary">Say what you want in a comment.</template>
+  <ex-option id="handover-records-b" title="B: a new handover table">
+    <template slot="summary">Separate, but a second place recording operations.</template>
   </ex-option>
 </ex-choice>
 
-<ex-choice id="carried-wake" title="Handover: where a carried Wake's Firing is recorded">
-  <ex-option id="carried-wake-confirm" title="**Two nullable columns on the local delivery row** (recommended, being built)">
-    <template slot="summary">`carried_firing_id` and `carried_report_seq`. That makes the delivery row the one owner of that Firing's report sequence. There's no table rebuild and no made-up Batch ID.</template>
+<h2 id="d4">4. A Wake message that was mid-delivery when the move happened</h2>
+<p><strong>The decision:</strong> where does the machine record a Wake delivery that started locally and finishes after central has taken over?</p>
+<p><strong>Background.</strong> If a Wake's message is being delivered into a session during the move, the delivery finishes on the machine. Central still has to know about it, or it would send that occurrence again: a double message. So during the freeze, the machine gives that delivery a central Firing ID. Central records it as "already with the machine", and the machine later reports the outcome under that ID, with a numbered report so central can apply reports in order. The question is where the machine keeps that ID and report number.</p>
+<ex-mermaid id="d4-flow" label="A carried Wake delivery"><script type="text/plain">
+sequenceDiagram
+  participant D as Local delivery (in progress)
+  participant M as Machine
+  participant C as Central
+  M->>D: freeze: give it Firing ID F
+  M->>C: import includes carried Firing F
+  C->>C: record F as already with the machine (never sent again)
+  D-->>M: delivery finishes
+  M->>C: report outcome of F (report number 1)
+</script></ex-mermaid>
+<ex-compare label="Carried Wake options" data-width="canvas">
+  <section id="d4-a" label="A: two columns on the delivery row (recommended)" icon="database">
+    <section data-compare-row="what"><p><strong>What changes</strong></p><p>Two usually-empty columns, <code>carried_firing_id</code> and <code>carried_report_seq</code>, on the local delivery row that already represents this delivery.</p></section>
+    <section data-compare-row="gain"><p><strong>Gains</strong></p><p>One row owns the whole delivery and its report number.</p></section>
+    <section data-compare-row="cost"><p><strong>Costs</strong></p><p>Two columns in a migration.</p></section>
+  </section>
+  <section id="d4-b" label="B: reuse the central-receipt table" icon="file">
+    <section data-compare-row="what"><p><strong>What changes</strong></p><p>Record it in <code>firing_receipts</code>, which requires a Batch ID.</p></section>
+    <section data-compare-row="gain"><p><strong>Gains</strong></p><p>The same table as other central work.</p></section>
+    <section data-compare-row="cost"><p><strong>Costs</strong></p><p>A carried delivery has no Batch, so it would need a fake Batch ID or a table rebuild. <code>AGENTS.md</code> warns against rebuilds.</p></section>
+  </section>
+</ex-compare>
+<p><strong>Who weighed in.</strong> Lane 1 found that the receipt table can't hold it, and I chose A. <strong>Recommendation: A.</strong> <strong>If you wait:</strong> nothing is blocked. Where: Program Design line 79, "Handover import contract", and line 80, point (3).</p>
+<ex-choice id="carried-wake" title="Decision 4: a carried Wake delivery">
+  <ex-option id="carried-wake-a" title="**A: two columns on the delivery row** (recommended, being built)">
+    <template slot="summary">One row owns the delivery and its report numbering.</template>
   </ex-option>
-  <ex-option id="carried-wake-other" title="Something else">
-    <template slot="summary">Say what you want in a comment.</template>
+  <ex-option id="carried-wake-b" title="B: reuse the central-receipt table">
+    <template slot="summary">Needs a fake Batch ID or a table rebuild.</template>
   </ex-option>
 </ex-choice>
 
-<ex-choice id="human-origin" title="Remote create: how to record a first input from a person on another machine">
-  <ex-option id="human-origin-confirm" title="**A new stored origin, `HumanUser { installation }`** (recommended, being built)">
-    <template slot="summary">Only the private path central has verified uses it. Existing rows and public paths don't change. That way your own first input on another machine is credited to you, and not to an "unverified owner".</template>
+<h2 id="d5">5. Who sent the first message of a session created on another machine</h2>
+<p><strong>The decision:</strong> when you create a session on B from A, with a first message, how does B record that the message came from you?</p>
+<p><strong>Background.</strong> From machine A you can create a session on machine B and give it a first message (Specification R16, line 142). Central checks that the request really comes from you on A. B then delivers the first message into the new session, and saves it as a message with an <em>origin</em>: who sent it. Today a saved message's origin can only be one of three things:</p>
+<ul>
+  <li>a session;</li>
+  <li>"owner, unverified";</li>
+  <li>the Router.</li>
+</ul>
+<p>None of them means "this person, verified by central, from machine A". An agent's first message is fine: its origin is its session.</p>
+<ex-mermaid id="d5-flow" label="A first message from you on another machine"><script type="text/plain">
+sequenceDiagram
+  participant You as You on machine A
+  participant C as Central
+  participant B as Router on B
+  participant S as New session on B
+  You->>C: create a session on B, first message "start on X"
+  C->>C: verify the request is really from you on A
+  C->>B: create request (verified)
+  B->>S: create the session
+  B->>S: deliver "start on X", saved with origin = ?
+</script></ex-mermaid>
+<ex-compare label="First message origin options" data-width="canvas">
+  <section id="d5-a" label="A: a new origin, &quot;person on machine A&quot; (recommended)" icon="user">
+    <section data-compare-row="what"><p><strong>What changes</strong></p><p>One new stored origin kind, <code>HumanUser { installation }</code>, used only by this central-verified path.</p></section>
+    <section data-compare-row="gain"><p><strong>Gains</strong></p><p>The message is correctly credited to you, on the machine you sent it from.</p></section>
+    <section data-compare-row="cost"><p><strong>Costs</strong></p><p>A new kind in saved message data. Existing rows don't change.</p></section>
+  </section>
+  <section id="d5-b" label="B: save it as &quot;owner, unverified&quot;" icon="file">
+    <section data-compare-row="what"><p><strong>What changes</strong></p><p>Nothing new is stored.</p></section>
+    <section data-compare-row="gain"><p><strong>Gains</strong></p><p>No data change.</p></section>
+    <section data-compare-row="cost"><p><strong>Costs</strong></p><p>It mislabels a message central <em>did</em> verify as unverified, and hides which machine sent it.</p></section>
+  </section>
+  <section id="d5-c" label="C: refuse a first message from a person" icon="lock">
+    <section data-compare-row="what"><p><strong>What changes</strong></p><p>A person on another machine can't send a first message; only agents can.</p></section>
+    <section data-compare-row="gain"><p><strong>Gains</strong></p><p>No data change.</p></section>
+    <section data-compare-row="cost"><p><strong>Costs</strong></p><p>You couldn't create a remote session with a first message yourself, which your requirement includes.</p></section>
+  </section>
+</ex-compare>
+<p><strong>Who weighed in.</strong> Lane 2 found that the stored origin can't express it, and proposed A. I agree. <strong>Recommendation: A.</strong> <strong>If you wait:</strong> nothing is blocked. Where: Program Design line 83, "Remote create first input on the target".</p>
+<ex-choice id="human-origin" title="Decision 5: first message origin">
+  <ex-option id="human-origin-a" title="**A: new origin, &quot;person on machine A&quot;** (recommended, being built)">
+    <template slot="summary">Credits you correctly. One new stored origin kind.</template>
   </ex-option>
-  <ex-option id="human-origin-refuse" title="No new origin: refuse a first input from a person on another machine">
-    <template slot="summary">Simpler storage, but you couldn't create a remote session with a first input yourself. That's against your requirement.</template>
+  <ex-option id="human-origin-b" title="B: save as &quot;owner, unverified&quot;">
+    <template slot="summary">No data change, but a verified sender is mislabelled.</template>
+  </ex-option>
+  <ex-option id="human-origin-c" title="C: refuse a first message from a person">
+    <template slot="summary">No data change, but you lose that ability.</template>
   </ex-option>
 </ex-choice>
 
-<ex-choice id="orphan-router" title="Stop the leftover test Router on port 43127?">
+<h2 id="d6">6. The leftover test Router on Sunclaw</h2>
+<p>Your <code>codex-router-debug</code> profile points at port 43127. What's actually listening there is a <strong>test Router an agent started on 16 October and never stopped</strong> (PID 13306). It serves an old validation folder, <code>~/.codex-router-compaction-validation-2026-10-11</code>, its logs were deleted, and its quota refresh is turned off. Model calls through it fail with 502. Stopping it ends that process only; its folder stays as it is. It isn't production and it isn't your debug Router.</p>
+<ex-choice id="orphan-router" title="Decision 6: stop the leftover test Router on port 43127?">
   <ex-option id="orphan-router-stop" title="**Yes, stop it** (recommended)">
-    <template slot="summary">It's an orphaned test Router from 16 October (PID 13306), serving `~/.codex-router-compaction-validation-2026-10-11`. It holds your `codex-router-debug` profile's port and returns 502s. Its folder stays as it is.</template>
+    <template slot="summary">It frees your debug profile's port. Nothing else changes.</template>
   </ex-option>
   <ex-option id="orphan-router-keep" title="Leave it running">
-    <template slot="summary">Your debug profile keeps pointing at a broken Router.</template>
+    <template slot="summary">Your debug profile keeps hitting a broken Router.</template>
   </ex-option>
 </ex-choice>
 
-<ex-choice id="model-route" title="Which Router carries model calls for the M6 and V12 test runs?">
+<h2 id="d7">7. Which Router the model tests use</h2>
+<p>Two checks need a real model: M6, at most one notification per 10 minutes, and V12, a real fresh Schedule run and its summary. By your rule, model calls must go through a <strong>debug Router</strong> using its own accounts, on Luna. They never go through your main accounts or production. Earlier you signed a debug account into one of the test Routers, and the leftover Router in decision 6 isn't usable.</p>
+<ex-choice id="model-route" title="Decision 7: which Router carries the test model calls?">
   <ex-option id="model-route-signed-in" title="**The test Router you signed into** (recommended)">
-    <template slot="summary">It already has a debug account, runs the build being tested, and isn't production. Test sessions use Luna at low effort.</template>
+    <template slot="summary">It already has a debug account, runs the build being tested, and isn't production. Nothing more needed from you.</template>
   </ex-option>
-  <ex-option id="model-route-fresh-debug" title="Start a proper debug Router at `~/.codex-router-debug`">
-    <template slot="summary">It needs a start and maybe a sign-in from you. After that, your `codex-router-debug` profile works again.</template>
+  <ex-option id="model-route-fresh-debug" title="Start your real debug Router at `~/.codex-router-debug`">
+    <template slot="summary">It may need a sign-in from you. After that, your debug profile works again everywhere.</template>
   </ex-option>
 </ex-choice>
+
+<p>When you've chosen, open <strong>Comments</strong> and use Copy. Your answers and any notes go into one handoff you can paste back to me.</p>
 
 <ex-callout title="Decided: database library gaps and the test rig's model" tone="decision" icon="database">
   <p><strong>Option A, with the library pins approved (1 November).</strong> PR 1 ships retention, WAL and vacuum for the stores the Router controls. A follow-up PR changes the pinned <code>agent-fleet-sync</code> (install-attempt pruning, journal mode for its stores) and <code>sqlx-turso</code> (vacuum).</p>
