@@ -5,6 +5,11 @@
 
 pub mod fleet_login;
 pub mod fleet_login_repository;
+mod fleet_migrations;
+mod sqlite;
+mod sqlite_login;
+pub use fleet_migrations::FleetStateOpenError;
+pub use sqlite::FleetStateStore;
 
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
