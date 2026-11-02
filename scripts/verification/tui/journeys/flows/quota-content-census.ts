@@ -56,9 +56,9 @@ export async function collectQuotaContent(context: NativeFlowContext): Promise<{
 		height = initial.length;
 	let moved = 0;
 	const wheel = async (direction: 'up' | 'down'): Promise<void> => {
-		const currentRectangle = quotaContentViewport(quotaMarkedFrame(marked).grid).rectangle,
-			column = currentRectangle.left + 2,
-			row = currentRectangle.top + 2;
+		const scrollbar = quotaContentViewport(quotaMarkedFrame(marked).grid).scrollbar,
+			column = scrollbar.column,
+			row = Math.floor((scrollbar.top + scrollbar.bottom) / 2);
 		marked = await context.input.pointer({ kind: 'wheel', direction, column, row }, [
 			quotaWheelExpected(direction, column, row),
 		]);

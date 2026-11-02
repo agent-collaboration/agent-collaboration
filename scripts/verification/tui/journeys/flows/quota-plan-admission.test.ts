@@ -212,7 +212,7 @@ test('wheel preflight declares measured viewport coordinates without inventing c
 		kind: 'viewport-mouse',
 		mouse: 'scrollDown',
 		modifiers: [],
-		coordinateRule: 'active-content-viewport-left-plus-two-top-plus-two',
+		coordinateRule: 'active-content-scrollbar-midpoint',
 		surface: { kind: 'screen' },
 		target: '21:action:quota:accounts:scroll',
 		action: null,
@@ -250,6 +250,7 @@ test('wheel preflight declares measured viewport coordinates without inventing c
 	for (const wrong of [
 		{ ...expected, column: 0, row: 0 },
 		{ ...expected, coordinateRule: 'guessed-before-launch' },
+		{ ...expected, coordinateRule: 'active-content-viewport-left-plus-two-top-plus-two' },
 		{ ...expected, mouse: 'down' },
 		{ ...expected, button: 'left' },
 	]) {
