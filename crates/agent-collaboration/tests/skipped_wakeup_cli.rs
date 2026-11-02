@@ -107,7 +107,11 @@ async fn skipped_one_shot_cli_wait_reports_no_firing() -> Result<(), Box<dyn std
     if current.first_fire.is_some() || current.pending_delivery_id.is_some() {
         return Err("skipped wake invented a firing or delivery".into());
     }
-    drop(store);
+    Arc::try_unwrap(store)
+        .map_err(|_| std::io::Error::other("fixture automation store remained shared"))?
+        .into_inner()
+        .close()
+        .await?;
     for entry in std::fs::read_dir(&root)? {
         let entry = entry?;
         if !entry.file_type()?.is_file() {

@@ -6,9 +6,10 @@ use std::process::Command;
 
 use serde::Deserialize;
 
-const LAYER_POLICY: [(&str, &[&str]); 16] = [
+const LAYER_POLICY: [(&str, &[&str]); 17] = [
     ("node-test-fixture", &[]),
     ("ui-preference-store", &[]),
+    ("sqlite-storage-maintenance", &[]),
     ("codex-router-quota", &[]),
     ("codex-router-selection", &["codex-router-quota"]),
     (
@@ -29,7 +30,10 @@ const LAYER_POLICY: [(&str, &[&str]); 16] = [
         &["codex-router-quota-service", "agent-collaboration-tui"],
     ),
     ("collaboration-contracts", &[]),
-    ("collaboration-runtime", &["collaboration-contracts"]),
+    (
+        "collaboration-runtime",
+        &["collaboration-contracts", "sqlite-storage-maintenance"],
+    ),
     (
         "collaboration-service",
         &["collaboration-contracts", "collaboration-runtime"],

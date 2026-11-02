@@ -51,7 +51,9 @@ pub(super) struct CentralReadCopies {
     requests: SessionRequests<BoardConsumerProtocol>,
     receiver: ReceiverId,
     welcomed: watch::Receiver<bool>,
-    root: PathBuf,
+    cache_root: PathBuf,
+    session_root: PathBuf,
+    session_id: durable_steps::Uuid,
     #[cfg(all(test, feature = "runtime-test-support"))]
     page_gate: Option<Arc<proof_gate::StagedPageGate>>,
 }
@@ -62,15 +64,78 @@ impl CentralReadCopies {
         receiver: ReceiverId,
         welcomed: watch::Receiver<bool>,
     ) -> Self {
+        let cache_root = root.join("board-read-cache");
+        let session_id = durable_steps::Uuid::now_v7();
+        let session_root = cache_root.join(session_id.to_string());
         Self {
             requests,
             receiver,
             welcomed,
-            root: root
-                .join("board-read-cache")
-                .join(durable_steps::Uuid::now_v7().to_string()),
+            cache_root,
+            session_root,
+            session_id,
             #[cfg(all(test, feature = "runtime-test-support"))]
             page_gate: None,
+        }
+    }
+
+    pub(super) async fn sweep_stale_session_roots(&self) {
+        let mut entries = match tokio::fs::read_dir(&self.cache_root).await {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return,
+            Err(error) => {
+                tracing::warn!(
+                    path = %self.cache_root.display(),
+                    %error,
+                    "board-read-cache session sweep could not read its root"
+                );
+                return;
+            }
+        };
+        loop {
+            let entry = match entries.next_entry().await {
+                Ok(Some(entry)) => entry,
+                Ok(None) => return,
+                Err(error) => {
+                    tracing::warn!(
+                        path = %self.cache_root.display(),
+                        %error,
+                        "board-read-cache session sweep stopped after a directory read failure"
+                    );
+                    return;
+                }
+            };
+            let file_type = match entry.file_type().await {
+                Ok(file_type) => file_type,
+                Err(error) => {
+                    tracing::warn!(
+                        path = %entry.path().display(),
+                        %error,
+                        "board-read-cache session sweep could not inspect an entry"
+                    );
+                    continue;
+                }
+            };
+            if !file_type.is_dir() {
+                continue;
+            }
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else {
+                continue;
+            };
+            let Ok(session_id) = durable_steps::Uuid::parse_str(name) else {
+                continue;
+            };
+            if session_id.to_string() != name || session_id == self.session_id {
+                continue;
+            }
+            if let Err(error) = tokio::fs::remove_dir_all(entry.path()).await {
+                tracing::warn!(
+                    path = %entry.path().display(),
+                    %error,
+                    "stale board-read-cache session removal failed; directory retained"
+                );
+            }
         }
     }
     #[cfg(all(test, feature = "runtime-test-support"))]
@@ -118,7 +183,7 @@ impl CentralReadCopies {
         )
         .map_err(|_| CentralReadError::Corrupt)?;
         let root = self
-            .root
+            .session_root
             .join(project.as_str())
             .join(durable_steps::Uuid::now_v7().to_string());
         let calls = Arc::new(ReadCopyCalls {
@@ -249,7 +314,11 @@ impl CentralReadCopies {
                     }
                     _ => CentralReadError::Corrupt,
                 })?;
-            Ok(PulledProjectReadCopy { copy, lease })
+            Ok(PulledProjectReadCopy {
+                copy,
+                lease,
+                generation_root: root,
+            })
         }
         .await;
         let closed = objects.close().await;

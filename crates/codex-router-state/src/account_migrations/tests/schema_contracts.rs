@@ -6,6 +6,16 @@ async fn fresh_account_database_has_generation_scoped_credential_maintenance() {
     let store = AsyncSqliteStateStore::open(temporary_database.path())
         .await
         .expect("fresh database should open");
+    let mut connection = store
+        .acquire_connection_for_test()
+        .await
+        .expect("fresh database connection should be available");
+    let auto_vacuum_mode: i64 = sqlx::query_scalar("PRAGMA auto_vacuum")
+        .fetch_one(&mut *connection)
+        .await
+        .expect("fresh database auto-vacuum mode should be readable");
+    assert_eq!(auto_vacuum_mode, 2);
+    drop(connection);
     store.close().await.expect("fresh database should close");
 
     let mut connection = open_test_connection(temporary_database.path(), false).await;

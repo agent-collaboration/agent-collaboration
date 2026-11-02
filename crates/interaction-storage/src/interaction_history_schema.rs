@@ -44,11 +44,14 @@ const MAIL_OUTCOME_OBSERVATIONS_VERSION: i64 = 202610210001;
 const HELD_MAIL_READINESS_VERSION: i64 = 202610210002;
 const SCHEDULED_RETRY_READINESS_VERSION: i64 = 202610210003;
 const MAIL_ROUTE_EVIDENCE_VERSION: i64 = 202610210004;
+const SETTLED_ANSWER_RETENTION_VERSION: i64 = 202610310001;
+const APPROVAL_ROUTES_VERSION: i64 = 202610310002;
 
 fn expected_table_sql(
     table_name: &str,
     has_mail_observations: bool,
     has_route_evidence: bool,
+    has_settled_answer_retention: bool,
 ) -> Result<String, StorageError> {
     let prefix = format!("CREATE TABLE {table_name} (");
     let statement = MIGRATOR
@@ -79,6 +82,21 @@ fn expected_table_sql(
             .strip_suffix(")strict")
             .ok_or(StorageError::InvalidSchema)?;
         expected = format!("{preceding},last_route_evidence_jsontext)strict");
+    }
+    if has_settled_answer_retention {
+        let column = match table_name {
+            "message_send_answers" | "local_cancel_deliveries" => Some("settled_at_ms"),
+            _ => None,
+        };
+        if let Some(column) = column {
+            let strict = expected.ends_with(")strict");
+            let suffix = if strict { ")strict" } else { ")" };
+            let preceding = expected
+                .strip_suffix(suffix)
+                .ok_or(StorageError::InvalidSchema)?;
+            let preceding = preceding.replace("textprimarykeynotnull", "textnotnullprimarykey");
+            expected = format!("{preceding},{column}integer{suffix}");
+        }
     }
     Ok(expected)
 }
@@ -134,6 +152,12 @@ pub(super) async fn inspect_schema(
     let has_route_evidence = migrations
         .iter()
         .any(|row| row.version == MAIL_ROUTE_EVIDENCE_VERSION);
+    let has_settled_answer_retention = migrations
+        .iter()
+        .any(|row| row.version == SETTLED_ANSWER_RETENTION_VERSION);
+    let has_approval_routes = migrations
+        .iter()
+        .any(|row| row.version == APPROVAL_ROUTES_VERSION);
     let history_tables = BTreeSet::from([
         "_sqlx_migrations",
         "interaction_history_revision",
@@ -215,6 +239,9 @@ pub(super) async fn inspect_schema(
     if has_read_contexts {
         composed_tables.insert("mail_read_contexts");
     }
+    if has_approval_routes {
+        composed_tables.insert("approval_routes");
+    }
     let composed = tables == composed_tables;
     if tables != history_tables && !composed {
         return Err(StorageError::InvalidSchema);
@@ -229,6 +256,51 @@ pub(super) async fn inspect_schema(
         "_fleet_sync_operations_due",
         "_fleet_sync_mail_deadlines",
     ]);
+    if has_settled_answer_retention {
+        for index_name in [
+            "message_send_answers_settled",
+            "local_cancel_deliveries_settled",
+        ] {
+            expected_indexes.insert(index_name);
+            let actual = objects
+                .iter()
+                .find(|object| object.object_type == "index" && object.name == index_name)
+                .and_then(|object| object.sql.as_deref())
+                .ok_or(StorageError::InvalidSchema)?;
+            let expected = MIGRATOR
+                .iter()
+                .flat_map(|migration| migration.sql.as_str().split(';'))
+                .find(|sql| {
+                    sql.trim_start()
+                        .starts_with(&format!("CREATE INDEX {index_name} "))
+                })
+                .ok_or(StorageError::InvalidSchema)?;
+            if normalize_schema_sql(actual) != normalize_schema_sql(expected) {
+                return Err(StorageError::InvalidSchema);
+            }
+        }
+    }
+    if has_approval_routes {
+        expected_indexes.insert("approval_routes_last_used");
+        let actual = objects
+            .iter()
+            .find(|object| {
+                object.object_type == "index" && object.name == "approval_routes_last_used"
+            })
+            .and_then(|object| object.sql.as_deref())
+            .ok_or(StorageError::InvalidSchema)?;
+        let expected = MIGRATOR
+            .iter()
+            .flat_map(|migration| migration.sql.as_str().split(';'))
+            .find(|sql| {
+                sql.trim_start()
+                    .starts_with("CREATE INDEX approval_routes_last_used ")
+            })
+            .ok_or(StorageError::InvalidSchema)?;
+        if normalize_schema_sql(actual) != normalize_schema_sql(expected) {
+            return Err(StorageError::InvalidSchema);
+        }
+    }
     if has_read_contexts {
         expected_indexes.insert("mail_read_context_conversation");
         let actual = objects
@@ -353,12 +425,17 @@ pub(super) async fn inspect_schema(
                         | "mail_retirement_progress"
                         | "pending_poll_mail"
                         | "mail_read_contexts"
+                        | "approval_routes"
                 ))
     }) {
         let actual = object.sql.as_deref().ok_or(StorageError::InvalidSchema)?;
-        if normalize_schema_sql(actual)
-            != expected_table_sql(&object.name, has_mail_observations, has_route_evidence)?
-        {
+        let expected = expected_table_sql(
+            &object.name,
+            has_mail_observations,
+            has_route_evidence,
+            has_settled_answer_retention,
+        )?;
+        if normalize_schema_sql(actual) != expected {
             return Err(StorageError::InvalidSchema);
         }
     }
@@ -400,6 +477,8 @@ pub(super) async fn inspect_schema(
             - usize::from(!has_retirement_progress)
             - usize::from(!has_pending_poll)
             - usize::from(!has_read_contexts)
+            - usize::from(!has_settled_answer_retention)
+            - usize::from(!has_approval_routes)
     } else {
         1
     };

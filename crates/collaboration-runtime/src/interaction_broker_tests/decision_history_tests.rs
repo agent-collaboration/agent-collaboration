@@ -1,10 +1,26 @@
 use super::*;
+use std::path::PathBuf;
+
+async fn native_approval_records(broker: &ServiceInteractionBroker) -> Vec<ApprovalRequestRecord> {
+    broker
+        .list_interactions()
+        .await
+        .into_iter()
+        .filter_map(|record| match record {
+            crate::interaction_broker::InteractionHistoryRecord::NativeApproval { record } => {
+                Some(*record)
+            }
+            _ => None,
+        })
+        .collect()
+}
 
 #[tokio::test]
 async fn decision_is_single_use_actor_bound_and_maps_only_offered_options() {
     let (broker, generation, _directory) = fixture_broker().await;
     let expiry = (chrono::Utc::now() + chrono::Duration::minutes(5)).to_rfc3339();
     let (params, receiver) = insert_pending(&broker, generation, expiry).await;
+    assert_eq!(broker.list(true).await.approvals.len(), 1);
     let mut requester = params.clone();
     requester.actor = board_identity(&session(&broker.service_id, "requester")).expect("actor");
     assert!(matches!(
@@ -38,10 +54,10 @@ async fn decision_is_single_use_actor_bound_and_maps_only_offered_options() {
             option_id: "native-accept".to_owned()
         }
     );
-    assert_eq!(
-        broker.list(false).await.approvals[0].decision,
-        Some(ApprovalDecision::Allow)
-    );
+    let history = native_approval_records(&broker).await;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].state, ApprovalState::Decided);
+    assert_eq!(history[0].decision, Some(ApprovalDecision::Allow));
 }
 
 #[tokio::test]
@@ -76,7 +92,7 @@ async fn native_request_by_its_own_approver_is_recorded_and_refused() {
         .expect("self-approval refusal settles");
 
     assert_eq!(outcome, BrokeredApprovalOutcome::Cancelled);
-    let history = broker.list(false).await.approvals;
+    let history = native_approval_records(&broker).await;
     assert_eq!(history.len(), 1);
     assert_eq!(history[0].requester, self_approver);
     assert_eq!(history[0].approver, self_approver);
@@ -165,56 +181,17 @@ async fn native_request_with_empty_option_mapping_is_recorded_as_refused() {
 
     assert_eq!(outcome, BrokeredApprovalOutcome::Cancelled);
     assert!(broker.pending.lock().await.is_empty());
-    let record = broker
-        .list(false)
-        .await
-        .approvals
-        .pop()
-        .expect("refusal history");
-    assert_eq!(record.state, ApprovalState::Cancelled);
+    let history = native_approval_records(&broker).await;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].state, ApprovalState::Cancelled);
     assert_eq!(
-        record.reason.as_deref(),
+        history[0].reason.as_deref(),
         Some("native permission request has no supported decision option")
     );
 }
 
 #[tokio::test]
-async fn terminal_history_failure_is_visible_and_does_not_strand_pending_entry() {
-    let (broker, generation, _directory) = fixture_broker().await;
-    let expiry = (chrono::Utc::now() + chrono::Duration::minutes(5)).to_rfc3339();
-    let (params, _receiver) = insert_pending(&broker, generation, expiry).await;
-    tokio::fs::remove_file(&broker.history_path)
-        .await
-        .expect("remove file before simulating storage failure");
-    tokio::fs::create_dir(&broker.history_path)
-        .await
-        .expect("replace history file with directory");
-
-    let result = broker
-        .finish_pending(
-            &params.request_id,
-            ApprovalState::TimedOut,
-            Some("approval timed out"),
-        )
-        .await;
-
-    assert!(matches!(result, Err(ApprovalBrokerError::Unavailable)));
-    assert!(broker.pending.lock().await.is_empty());
-    let record = broker
-        .list(false)
-        .await
-        .approvals
-        .pop()
-        .expect("visible failure row");
-    assert_eq!(record.state, ApprovalState::TimedOut);
-    assert_eq!(
-        record.reason.as_deref(),
-        Some("approval ended, but its history could not be persisted; inspect Router diagnostics")
-    );
-}
-
-#[tokio::test]
-async fn expired_and_old_generation_decisions_are_refused_with_terminal_history() {
+async fn expired_and_old_generation_decisions_persist_terminal_native_history() {
     let (broker, generation, _directory) = fixture_broker().await;
     let (expired, _receiver) = insert_pending(
         &broker,
@@ -226,9 +203,12 @@ async fn expired_and_old_generation_decisions_are_refused_with_terminal_history(
         broker.decide(expired).await,
         Err(ApprovalDecisionError::Code("expired"))
     ));
+    let history = native_approval_records(&broker).await;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].state, ApprovalState::TimedOut);
     assert_eq!(
-        broker.list(false).await.approvals[0].state,
-        ApprovalState::TimedOut
+        history[0].reason.as_deref(),
+        Some("approval expired before a decision")
     );
 
     let (broker, generation, _directory) = fixture_broker().await;
@@ -260,183 +240,265 @@ async fn expired_and_old_generation_decisions_are_refused_with_terminal_history(
         broker.decide(stale).await,
         Err(ApprovalDecisionError::Code("oldGeneration"))
     ));
+    let history = native_approval_records(&broker).await;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].state, ApprovalState::Cancelled);
     assert_eq!(
-        broker.list(false).await.approvals[0].state,
-        ApprovalState::Cancelled
+        history[0].reason.as_deref(),
+        Some("approval was cancelled because its provider generation ended")
     );
 }
 
 #[tokio::test]
-async fn malformed_persisted_routes_fail_closed() {
-    let service_id = crate::new_service_uuid().unwrap();
+async fn native_allow_and_deny_decisions_survive_broker_restart() {
+    use codex_acp_adapter::{ApprovalBroker as _, ApprovalRoute, BrokeredApprovalRequest};
+    use collaboration_protocol::RouterAccess;
+
+    for (option_id, decision) in [
+        ("native-accept", ApprovalDecision::Allow),
+        ("native-decline", ApprovalDecision::Deny),
+    ] {
+        let (broker, generation, directory) = fixture_broker().await;
+        let requester = session(&broker.service_id, "native-requester");
+        let approver = session(&broker.service_id, "native-approver");
+        broker
+            .register_route(ApprovalRoute {
+                thread_id: "native-requester".to_owned(),
+                created_by: requester,
+                approver: approver.clone(),
+                access: RouterAccess::WorkspaceWrite,
+                scratch_path: "/tmp/native-approval-decision".to_owned(),
+                root_message_id: None,
+            })
+            .await
+            .expect("route registered");
+
+        let notices = Arc::new(Mutex::new(Vec::new()));
+        let delivered = Arc::new(tokio::sync::Notify::new());
+        let prepared_pushes_at_delivery = Arc::new(Mutex::new(Vec::new()));
+        broker
+            .install_session_delivery(Arc::new(CapturingInteractionDelivery {
+                notices,
+                delivered: Arc::clone(&delivered),
+                push_store: Some(broker.interaction_store()),
+                prepared_pushes_at_delivery,
+            }))
+            .expect("delivery route");
+
+        let request_broker = Arc::clone(&broker);
+        let request_task = tokio::spawn(async move {
+            request_broker
+                .request(BrokeredApprovalRequest {
+                    thread_id: "native-requester".to_owned(),
+                    generation,
+                    request: json!({
+                        "method":"item/commandExecution/requestApproval",
+                        "params":{"options":[
+                            {"optionId":"native-accept","name":"Allow once"},
+                            {"optionId":"native-decline","name":"Deny once"}
+                        ]}
+                    }),
+                })
+                .await
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(5), delivered.notified())
+            .await
+            .expect("native approval notice delivered");
+
+        let pending = native_approval_records(&broker).await;
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].state, ApprovalState::PendingClientDecision);
+        let request_id = pending[0].request_id.clone();
+        let result = broker
+            .decide(ApprovalDecideParams {
+                request_id: request_id.clone(),
+                decision: None,
+                option_id: Some(option_id.to_owned()),
+                acknowledge_persistent: false,
+                note: None,
+                actor: board_identity(&approver).expect("approver identity"),
+            })
+            .await
+            .expect("decision recorded");
+        assert_eq!(result.state, ApprovalState::Decided);
+        assert_eq!(result.decision, Some(decision));
+        assert!(matches!(
+            request_task.await.expect("request task"),
+            Ok(BrokeredApprovalOutcome::Selected { option_id: selected })
+                if selected == option_id
+        ));
+
+        let terminal = native_approval_records(&broker).await;
+        assert_eq!(terminal.len(), 1);
+        assert_eq!(terminal[0].request_id, request_id);
+        assert_eq!(terminal[0].state, ApprovalState::Decided);
+        assert_eq!(terminal[0].decision, Some(decision));
+
+        let service_id = broker.service_id.clone();
+        let backend = broker.backend.clone();
+        let database_path = directory.join("interaction.sqlite");
+        drop(broker);
+        let store = Arc::new(
+            interaction_storage::InteractionStore::open(database_path)
+                .await
+                .expect("reopen interaction store"),
+        );
+        let restarted = ServiceInteractionBroker::load(service_id, backend, store)
+            .await
+            .expect("restart broker");
+        let restored = native_approval_records(&restarted).await;
+        assert_eq!(restored.len(), 1);
+        assert_eq!(restored[0].request_id, request_id);
+        assert_eq!(restored[0].state, ApprovalState::Decided);
+        assert_eq!(restored[0].decision, Some(decision));
+    }
+}
+
+#[tokio::test]
+async fn malformed_legacy_routes_fail_closed_and_are_preserved() {
+    let directory = tempfile::tempdir().expect("temporary import directory");
+    let routes = directory.path().join("approval-routes.json");
+    tokio::fs::write(&routes, br#"[{"threadId":"thread","access":"invalid"}]"#)
+        .await
+        .expect("write corrupt route fixture");
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
+            .await
+            .expect("interaction store"),
+    );
+    let imported_at_ms = chrono::DateTime::parse_from_rfc3339("2026-10-31T12:00:00Z")
+        .expect("fixed import time")
+        .timestamp_millis();
+    let imported = ServiceInteractionBroker::import_legacy_approval_routes(
+        interaction_store.as_ref(),
+        &routes,
+        imported_at_ms,
+    )
+    .await;
+    assert!(matches!(imported, Err(ApprovalBrokerError::Unavailable)));
+    assert!(routes.exists(), "corrupt legacy route file was deleted");
+    assert!(
+        interaction_store
+            .approval_route_json("thread", imported_at_ms + 1)
+            .await
+            .expect("read absent route")
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn valid_legacy_routes_are_removed_after_loading() {
+    use codex_acp_adapter::{ApprovalBroker as _, ApprovalRoute};
+    use collaboration_protocol::RouterAccess;
+
+    let service_id = crate::new_service_uuid().expect("service id");
     let generation: CodexGeneration = serde_json::from_value(json!({
         "serviceEpoch": String::from(service_id.clone()), "generation": 1
     }))
-    .unwrap();
+    .expect("generation");
     let gate = crate::NativeGenerationGate::default();
     gate.activate(
         generation,
-        PathBuf::from("/tmp/approval-corrupt.sock"),
+        PathBuf::from("/tmp/approval-route-import.sock"),
         None,
     )
-    .unwrap();
+    .expect("activate native generation");
     let endpoint = EndpointRef {
         service_id: service_id.clone(),
-        endpoint_id: "codex-local".to_owned().try_into().unwrap(),
+        endpoint_id: "codex-local".to_owned().try_into().expect("endpoint id"),
     };
-    let directory = std::env::temp_dir().join(format!(
-        "approval-corrupt-{}",
-        String::from(crate::new_service_uuid().unwrap())
-    ));
-    std::fs::create_dir_all(&directory).unwrap();
-    let routes = directory.join("approval-routes.json");
-    std::fs::write(&routes, br#"[{"threadId":"thread","access":"invalid"}]"#).unwrap();
-    let loaded = ServiceInteractionBroker::load(
-        service_id.clone(),
-        NativeControlBackend {
-            endpoint,
-            gate,
-            codex_home: directory,
+    let directory = tempfile::tempdir().expect("temporary broker directory");
+    let routes_path = directory.path().join("approval-routes.json");
+    let route = ApprovalRoute {
+        thread_id: "route-thread".to_owned(),
+        created_by: SessionRef {
+            endpoint: endpoint.clone(),
+            session_id: "creator".to_owned().try_into().expect("creator id"),
         },
-        routes,
-    )
-    .await;
-    assert!(matches!(loaded, Err(ApprovalBrokerError::Unavailable)));
-}
-
-#[tokio::test]
-async fn malformed_persisted_history_fails_closed_while_absence_stays_empty() {
-    // Arrange: valid routes beside an unreadable decision history.
-    let service_id = crate::new_service_uuid().unwrap();
-    let generation: CodexGeneration = serde_json::from_value(json!({
-        "serviceEpoch": String::from(service_id.clone()), "generation": 1
-    }))
-    .unwrap();
-    let gate = crate::NativeGenerationGate::default();
-    gate.activate(
-        generation,
-        PathBuf::from("/tmp/approval-history-corrupt.sock"),
-        None,
-    )
-    .unwrap();
-    let endpoint = EndpointRef {
-        service_id: service_id.clone(),
-        endpoint_id: "codex-local".to_owned().try_into().unwrap(),
+        approver: SessionRef {
+            endpoint: endpoint.clone(),
+            session_id: "approver".to_owned().try_into().expect("approver id"),
+        },
+        access: RouterAccess::WorkspaceWrite,
+        scratch_path: "/tmp/approval-route-scratch".to_owned(),
+        root_message_id: None,
     };
-    let directory = std::env::temp_dir().join(format!(
-        "approval-history-corrupt-{}",
-        String::from(crate::new_service_uuid().unwrap())
-    ));
-    std::fs::create_dir_all(&directory).unwrap();
-    let routes = directory.join("approval-routes.json");
-    std::fs::write(&routes, b"[]").unwrap();
-    let backend = |directory: PathBuf| NativeControlBackend {
-        endpoint: endpoint.clone(),
-        gate: gate.clone(),
-        codex_home: directory,
-    };
-
-    // Act: a missing history file is an empty history.
-    let absent = ServiceInteractionBroker::load(
-        service_id.clone(),
-        backend(directory.clone()),
-        routes.clone(),
+    tokio::fs::write(
+        &routes_path,
+        serde_json::to_vec(&vec![route.clone()]).expect("serialize route fixture"),
     )
-    .await;
+    .await
+    .expect("write legacy route fixture");
 
-    // Assert.
-    assert!(absent.is_ok());
-
-    // Act: a malformed history file refuses to load.
-    std::fs::write(directory.join("approval-history.json"), b"{not json").unwrap();
-    let corrupt =
-        ServiceInteractionBroker::load(service_id.clone(), backend(directory), routes).await;
-
-    // Assert.
-    assert!(matches!(corrupt, Err(ApprovalBrokerError::Unavailable)));
-}
-
-// F9 and E12: v0.1.38's unchanged ApprovalRequestRecord reader must load a
-// populated approval-history.json after the new interaction store is written.
-// `git diff v0.1.38 -- crates/collaboration-protocol/src/approval_contract.rs`
-// is empty at this slice's base, so the imported type is that exact reader.
-#[tokio::test]
-async fn populated_old_approval_reader_survives_human_interaction_history() {
-    use message_board::{HumanId, Identity};
-
-    let (broker, generation, directory) = fixture_broker().await;
-    let expiry = (chrono::Utc::now() + chrono::Duration::minutes(5)).to_rfc3339();
-    let (_legacy_params, _legacy_receiver) = insert_pending(&broker, generation, expiry).await;
-    let requester: message_board::SessionRef = serde_json::from_value(
-        serde_json::to_value(session(&broker.service_id, "provider-session"))
-            .expect("requester JSON"),
-    )
-    .expect("board requester");
-    let human = Identity::Human {
-        human_id: HumanId::try_from("owner".to_owned()).expect("human ID"),
-    };
-    let receiver = broker
-        .request_typed_approval(
-            requester,
-            human.clone(),
-            typed_approval_request("human-approval-1"),
-            tokio_util::sync::CancellationToken::new(),
-            tokio_util::sync::CancellationToken::new(),
-            None,
-        )
-        .await
-        .expect("record new interaction");
-
-    let wrong_actor = Identity::Human {
-        human_id: HumanId::try_from("other".to_owned()).expect("other human ID"),
-    };
-    assert!(matches!(
-        broker
-            .decide_typed_interaction("human-approval-1", &wrong_actor, select_typed("allow-once"))
-            .await,
-        Err(crate::interaction_broker::InteractionHistoryError::WrongActor)
-    ));
-    broker
-        .decide_typed_interaction("human-approval-1", &human, select_typed("allow-once"))
-        .await
-        .expect("human decision");
-    assert!(matches!(receiver.await.expect("agent option"),
-        crate::interaction_broker::TypedApprovalResolution::Selected(selected)
-            if selected.option_id.as_str() == "allow-once"));
-    assert!(matches!(
-        broker
-            .decide_typed_interaction("human-approval-1", &human, select_typed("allow-once"))
-            .await,
-        Err(crate::interaction_broker::InteractionHistoryError::AlreadySettled)
-    ));
-
-    let old_bytes = tokio::fs::read(directory.join("approval-history.json"))
-        .await
-        .expect("populated legacy history");
-    let old_records: Vec<ApprovalRequestRecord> =
-        serde_json::from_slice(&old_bytes).expect("v0.1.38 reader loads new-build history");
-    assert_eq!(old_records.len(), 1);
-    let default_list = serde_json::to_value(broker.list(false).await).expect("default list");
-    let frozen_list: collaboration_protocol::ApprovalListResult =
-        serde_json::from_value(default_list.clone()).expect("0.1.38 list reader");
-    assert_eq!(frozen_list.approvals.len(), 1);
-    assert_eq!(
-        default_list,
-        json!({"approvals":[serde_json::to_value(&old_records[0]).expect("old record")]})
+    let imported_at_ms = chrono::DateTime::parse_from_rfc3339("2026-10-31T12:00:00Z")
+        .expect("fixed import time")
+        .timestamp_millis();
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
+            .await
+            .expect("interaction store"),
     );
-    let new_records = stored_interaction_records(&directory).await;
-    assert!(matches!(
-        new_records["human-approval-1"].approval_state(),
-        Some(crate::interaction_broker::InteractionHistoryState::Decided { option_id })
-            if option_id.as_str() == "allow-once"
-    ));
+    let database_path = directory.path().join("interaction.sqlite");
+    let native_backend = NativeControlBackend {
+        endpoint,
+        gate,
+        codex_home: directory.path().to_path_buf(),
+    };
+    ServiceInteractionBroker::import_legacy_approval_routes(
+        interaction_store.as_ref(),
+        &routes_path,
+        imported_at_ms,
+    )
+    .await
+    .expect("import valid legacy route file");
+    let broker = ServiceInteractionBroker::load(
+        service_id.clone(),
+        native_backend.clone(),
+        Arc::clone(&interaction_store),
+    )
+    .await
+    .expect("load broker from valid route file");
+
+    assert!(
+        !routes_path.exists(),
+        "a valid legacy route file remains after import"
+    );
+    let loaded_route = broker
+        .route(&route.thread_id)
+        .await
+        .expect("lookup route")
+        .expect("imported route");
+    assert_eq!(
+        serde_json::to_value(loaded_route).expect("serialize loaded route"),
+        serde_json::to_value(&route).expect("serialize expected route")
+    );
+    drop(broker);
+    drop(interaction_store);
+
+    let restarted_store = Arc::new(
+        interaction_storage::InteractionStore::open(database_path)
+            .await
+            .expect("reopen interaction store"),
+    );
+    let restarted_broker =
+        ServiceInteractionBroker::load(service_id, native_backend, restarted_store)
+            .await
+            .expect("restart broker from interaction database");
+    assert!(
+        restarted_broker
+            .route(&route.thread_id)
+            .await
+            .expect("lookup restarted route")
+            .is_some(),
+        "route did not survive broker and database restart"
+    );
 }
 
 #[tokio::test]
 async fn typed_interaction_rejects_self_approver_and_corrupt_stored_rows() {
     use message_board::Identity;
 
-    let (broker, _generation, directory) = fixture_broker().await;
+    let (broker, _generation, _directory) = fixture_broker().await;
     let requester: message_board::SessionRef = serde_json::from_value(
         serde_json::to_value(session(&broker.service_id, "provider-session"))
             .expect("requester JSON"),
@@ -469,7 +531,7 @@ async fn typed_interaction_rejects_self_approver_and_corrupt_stored_rows() {
     let reload = ServiceInteractionBroker::load(
         broker.service_id.clone(),
         broker.backend.clone(),
-        directory.join("approval-routes.json"),
+        broker.interaction_store(),
     )
     .await;
     assert!(matches!(reload, Err(ApprovalBrokerError::Unavailable)));
@@ -573,7 +635,7 @@ async fn refused_typed_offer_preserves_reviewed_fields_and_order_without_legacy_
     let reloaded = ServiceInteractionBroker::load(
         broker.service_id.clone(),
         broker.backend.clone(),
-        directory.join("approval-routes.json"),
+        broker.interaction_store(),
     )
     .await
     .expect("reload typed refusal");

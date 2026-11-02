@@ -103,7 +103,11 @@ async fn settings_recovery_reconciles_file_and_receipt_without_rolling_back_repl
         return Err("unknown settings version admitted automation".into());
     }
     drop(backend);
-    drop(store);
+    Arc::try_unwrap(store)
+        .map_err(|_| std::io::Error::other("fixture automation store remained shared"))?
+        .into_inner()
+        .close()
+        .await?;
     for entry in std::fs::read_dir(&root)? {
         std::fs::remove_file(entry?.path())?;
     }

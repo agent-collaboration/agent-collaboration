@@ -11,7 +11,15 @@ async fn mail_projection_retention_survives_reopen_without_custody_and_rejects_a
     let owner = Arc::new(InteractionStore::open(&path).await.unwrap());
     let store = NativeStore::new(owner.clone(), Arc::new(NoDispatchHost));
     let (_, mut draft) = native_item_and_push();
-    let created = chrono::Utc::now() - chrono::Duration::days(80);
+    let created = "2026-07-01T12:00:00Z"
+        .parse::<chrono::DateTime<chrono::Utc>>()
+        .unwrap();
+    let now = "2026-10-31T12:00:00Z"
+        .parse::<chrono::DateTime<chrono::Utc>>()
+        .unwrap();
+    let settled_at = "2026-08-31T12:00:00Z"
+        .parse::<chrono::DateTime<chrono::Utc>>()
+        .unwrap();
     draft.created_at = created;
     let id = draft.push_id.clone();
     let pending_id = id.clone();
@@ -25,13 +33,7 @@ async fn mail_projection_retention_survives_reopen_without_custody_and_rejects_a
         })
         .await
         .unwrap();
-    assert_eq!(
-        owner
-            .prune_push_records(created + chrono::Duration::days(39), 500)
-            .await
-            .unwrap(),
-        0
-    );
+    assert_eq!(owner.prune_push_records(now, 500).await.unwrap(), 0);
     store
         .transaction(move |scope| {
             Box::pin(async move {
@@ -47,7 +49,7 @@ async fn mail_projection_retention_survives_reopen_without_custody_and_rejects_a
                             reachability: None,
                             client: None,
                         },
-                        settled_at: created + chrono::Duration::days(40),
+                        settled_at,
                     },
                 )
                 .await
@@ -64,13 +66,7 @@ async fn mail_projection_retention_survives_reopen_without_custody_and_rejects_a
         .await
         .unwrap();
     let owner = InteractionStore::open(&path).await.unwrap();
-    assert_eq!(
-        owner
-            .prune_push_records(created + chrono::Duration::days(70), 500)
-            .await
-            .unwrap(),
-        0
-    );
+    assert_eq!(owner.prune_push_records(now, 500).await.unwrap(), 0);
     assert!(owner.get_push_record(&id).await.unwrap().is_some());
     let mut connection = owner.writer.lock().await;
     sqlx::query::<sqlx_turso::Turso>(
@@ -87,7 +83,7 @@ async fn mail_projection_retention_survives_reopen_without_custody_and_rejects_a
     ));
     assert!(matches!(
         owner
-            .prune_push_records(created + chrono::Duration::days(71), 500)
+            .prune_push_records(now + chrono::Duration::nanoseconds(1), 500)
             .await,
         Err(StorageError::InvalidRecord)
     ));
@@ -102,7 +98,7 @@ async fn mail_projection_retention_survives_reopen_without_custody_and_rejects_a
     drop(connection);
     assert_eq!(
         owner
-            .prune_push_records(created + chrono::Duration::days(71), 500)
+            .prune_push_records(now + chrono::Duration::nanoseconds(1), 500)
             .await
             .unwrap(),
         1

@@ -7,23 +7,25 @@ mod tests {
     use sqlx::Connection;
     use std::path::Path;
 
-    const NOW: i64 = 40 * 86400;
-
     #[tokio::test]
     async fn capacity_pressure_reclaims_expired_prefix_before_rejecting_append() {
         // Arrange: one expired and one recent record. Seed the logical byte counter
         // at its limit to exercise admission without a 256 MiB stress fixture.
         let path =
             std::env::temp_dir().join(format!("capacity-expired-{}.sqlite", std::process::id()));
+        let now = now_seconds();
         let mut journal = ObservationJournal::open(&path, identity()).await.unwrap();
-        journal.append(&observation("old"), 1).await.unwrap();
-        journal.append(&observation("recent"), NOW).await.unwrap();
+        journal
+            .append(&observation("old"), now - 100 * 86400)
+            .await
+            .unwrap();
+        journal.append(&observation("recent"), now).await.unwrap();
         journal.close().await;
         seed_capacity_counter(&path).await;
         let journal = ObservationJournal::open(&path, identity()).await.unwrap();
         let store = LifecycleStore::new(journal);
         // Act: new record fits only after the expired prefix is reclaimed.
-        let result = store.append(&observation("new"), NOW).await;
+        let result = store.append(&observation("new"), now).await;
         // Assert: metadata acceptance remains usable, with exactly the expired prefix removed.
         assert!(
             result.is_ok(),
@@ -55,15 +57,16 @@ mod tests {
         // Arrange: capacity pressure with no policy-eligible records.
         let path =
             std::env::temp_dir().join(format!("capacity-recent-{}.sqlite", std::process::id()));
+        let now = now_seconds();
         let mut journal = ObservationJournal::open(&path, identity()).await.unwrap();
-        journal.append(&observation("recent"), NOW).await.unwrap();
+        journal.append(&observation("recent"), now).await.unwrap();
         journal.close().await;
         seed_capacity_counter(&path).await;
         let journal = ObservationJournal::open(&path, identity()).await.unwrap();
         let store = LifecycleStore::new(journal);
         // Act / Assert: fail closed and preserve unexpired input, without committing a new row.
         assert!(matches!(
-            store.append(&observation("new"), NOW).await,
+            store.append(&observation("new"), now).await,
             Err(JournalError::Capacity)
         ));
         assert!(store.bounds().await.is_err());
@@ -80,6 +83,11 @@ mod tests {
             .to_owned()
             .try_into()
             .unwrap()
+    }
+    fn now_seconds() -> i64 {
+        chrono::DateTime::parse_from_rfc3339("2026-10-31T12:00:00Z")
+            .unwrap_or_else(|error| panic!("clock fixture: {error}"))
+            .timestamp()
     }
     fn observation(thread: &str) -> LifecycleObservation {
         serde_json::from_value(json!({

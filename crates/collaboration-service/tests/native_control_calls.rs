@@ -1,3 +1,4 @@
+use codex_acp_adapter::{ApprovalBroker, ApprovalRoute};
 use collaboration_client::{ClientError, MessageSendRequest, PublicMessageContent};
 use collaboration_contracts::MachineIdentity;
 use collaboration_contracts::SessionDeliveryRoute;
@@ -105,20 +106,11 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
     gate.activate(generation.clone(), backend_path.clone(), Some(schemas))
         .unwrap_or_else(|error| panic!("activate: {error}"));
     // A recorded Router route makes inspect report the access Router selected.
-    let routes_path = root.join("approval-routes.json");
-    std::fs::write(
-        &routes_path,
-        serde_json::to_vec(&json!([{
-            "threadId":"proof-thread",
-            "createdBy":target,
-            "approver":target,
-            "access":"workspace-write",
-            "scratchPath":"/tmp/native-control-scratch",
-            "rootMessageId":null
-        }]))
-        .unwrap_or_else(|error| panic!("routes: {error}")),
-    )
-    .unwrap_or_else(|error| panic!("routes file: {error}"));
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(root.join("interaction.sqlite"))
+            .await
+            .unwrap_or_else(|error| panic!("interaction store: {error}")),
+    );
     let broker = collaboration_runtime::ServiceInteractionBroker::load(
         service_id
             .to_owned()
@@ -129,10 +121,21 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
             endpoint: target.endpoint.clone(),
             gate: gate.clone(),
         },
-        routes_path.clone(),
+        interaction_store,
     )
     .await
     .unwrap_or_else(|error| panic!("broker: {error}"));
+    broker
+        .register_route(ApprovalRoute {
+            thread_id: "proof-thread".to_owned(),
+            created_by: target.clone(),
+            approver: target.clone(),
+            access: collaboration_protocol::RouterAccess::WorkspaceWrite,
+            scratch_path: "/tmp/native-control-scratch".to_owned(),
+            root_message_id: None,
+        })
+        .await
+        .unwrap_or_else(|error| panic!("route registration: {error}"));
     let native_backend = NativeControlBackend {
         codex_home: root.clone(),
         endpoint: target.endpoint.clone(),
@@ -641,7 +644,6 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
     std::fs::remove_file(root.join("automation.sqlite"))
         .unwrap_or_else(|error| panic!("automation database cleanup: {error}"));
     std::fs::remove_file(backend_path).unwrap_or_else(|error| panic!("socket cleanup: {error}"));
-    std::fs::remove_file(routes_path).unwrap_or_else(|error| panic!("routes cleanup: {error}"));
     interaction_database_cleanup::remove_closed_interaction_database(
         &root.join("interaction.sqlite"),
     )
