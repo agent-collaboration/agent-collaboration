@@ -1,12 +1,12 @@
 {
   "$defs": {
-    "OwnerRefusal": {
+    "LookupRefusal": {
       "oneOf": [
         {
           "additionalProperties": false,
           "properties": {
             "kind": {
-              "const": "notOwner",
+              "const": "notPermitted",
               "type": "string"
             }
           },
@@ -102,7 +102,7 @@
       "additionalProperties": false,
       "properties": {
         "reason": {
-          "$ref": "#/$defs/OwnerRefusal"
+          "$ref": "#/$defs/LookupRefusal"
         },
         "result": {
           "const": "refused",

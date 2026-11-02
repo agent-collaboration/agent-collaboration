@@ -5,7 +5,7 @@
       "additionalProperties": false,
       "properties": {
         "kind": {
-          "const": "notOwner",
+          "const": "notPermitted",
           "type": "string"
         }
       },

@@ -6,6 +6,20 @@
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
       "type": "string"
     },
+    "FleetPermission": {
+      "enum": [
+        "workspace:create",
+        "workspaceAdmin:allowMachine",
+        "workspaceAdmin:withdrawMachine",
+        "workspaceAdmin:removeSession",
+        "machine:enroll",
+        "machine:revoke",
+        "machine:setTokenLifetime",
+        "organization:view",
+        "organization:readAudit"
+      ],
+      "type": "string"
+    },
     "InstallationId": {
       "maxLength": 36,
       "minLength": 36,
@@ -88,6 +102,9 @@
     "peer": {
       "$ref": "#/$defs/RecordId"
     },
+    "permissionChecked": {
+      "$ref": "#/$defs/FleetPermission"
+    },
     "requestId": {
       "$ref": "#/$defs/DeviceLoginRequestId"
     }
@@ -95,6 +112,7 @@
   "required": [
     "organizationId",
     "approver",
+    "permissionChecked",
     "requestId",
     "installation",
     "peer",
