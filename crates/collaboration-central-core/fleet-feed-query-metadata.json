@@ -13,7 +13,7 @@
     "core_migrations/0009_migration_failures.sql": "cb66a15734e44a6dd6d022dc79601ae018824125c51104f95b8859cbdaf70674",
     "core_migrations/0011_automations.sql": "a46b1e7e192ca774001b6e6311a3ef825edcb709bfd757fa517d622e0324bfc3",
     "core_migrations/0012_machine_work_items.sql": "e9b499823fe2cf8111088c0e7bdb440de59242a79d927254c437c74ec106a007",
-    "fleet-feed-queries.json": "72b4f7f39ec52af4df9878a83eeb6cb7b39a72feeef0f2727f3a4db7e1e9c532",
+    "fleet-feed-queries.json": "bc8e2f8c51c1193d12b2e09300abefb4b3e194b2f711988f84e764501131bb6b",
     "generator:fleet-sync-query-gen/Cargo.toml": "01210c567dcbccb4ff127626a0ff7625641edd4c5f0787ea41777757b1eaa3e6",
     "generator:fleet-sync-query-gen/src/expression_classes.rs": "14dc40abaec059e437d3e44bc187b9560812b0ed21ee2ad9d558364032fb097e",
     "generator:fleet-sync-query-gen/src/lib.rs": "df50be1a279adf266fdd12d184637b0113740390c0cef7273d1995dea0475152",
@@ -73,13 +73,83 @@
     "sql/fleet/prune_fleet_feed.sql": "9e7075068789cbc375c584ae1f99c8732b8db363a8723c9fb62454dfc20eccad",
     "sql/fleet/read_expired_fleet_feed.sql": "9f122d139544f7a1a3909375db7229a00006710cd09a704cf60ebc89db775c71",
     "sql/fleet/read_feed_readers.sql": "691a304ea93331802bd6591e9421089c2a9fc27eea455cc036982872ef340ece",
+    "sql/fleet/read_fleet_alarm_state.sql": "301902a15aa045e295218f262cb9edaaf6bb8836032f0421293311d65a44e469",
     "sql/fleet/read_fleet_feed_page.sql": "7026aad31e4eac1637b36c5aed40a855e595629f365674e3da85f2eab6584fff",
     "sql/fleet/read_fleet_feed_state.sql": "806493cb956f3f82fca74b5d7d5629ad52f0b8d630905aefaa8024372cebf980",
     "sql/fleet/store_feed_reader.sql": "19f06bc488518cfab127d43c947c5f140f2a2dc030150f15b724126f7d914f71",
-    "src/generated_fleet_feed.rs": "0146bfda2d36a630dafa98fa22aa409351bc629ffbd6ab5bdfb4e487b39a5d17"
+    "src/generated_fleet_feed.rs": "ebcd0f61e247b79a2b09d5883ff4ae674b16e6518af7015c6d735d1b6af4b9a0"
   },
-  "queries_digest": "a39538c88f39fa552d00d5c659ab6a543cdf7046927a504a055fe13c8faeaa90",
+  "queries_digest": "6bc4fb87f078a8cb891e8a07c980b39361350d24fe7b298ab81edc93cf3e93c6",
   "queries": [
+    {
+      "name": "read_fleet_alarm_state",
+      "bind_slots": 0,
+      "columns": [
+        {
+          "name": "state_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "name",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "last_position",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "position_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "retained_through",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "floor_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "state_exists",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "feed_exists",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "automation_work_exists",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        }
+      ]
+    },
     {
       "name": "read_fleet_feed_state",
       "bind_slots": 0,

@@ -1,5 +1,6 @@
 //! The Fleet face owns central's nonreplicated application state.
 
+mod alarm_maintenance_step;
 mod automation_calls;
 mod automation_catalog_step;
 mod automation_clock_step;
@@ -60,15 +61,32 @@ where
         let ObjectWork::Fleet { engine, host, io } = &self.work else {
             return Err(wrong_face());
         };
-        self.prune_feed().await?;
-        StepDriver::new(host.clone())
-            .run(automation_clock_step::EvaluateAutomations {
-                now_ms: io.now().unix_millis(),
-                row_ids: crate::fleet_row_ids::FleetRowIds::new(io.clone()),
-            })
+        let now = chrono::DateTime::from_timestamp_millis(io.now().unix_millis())
+            .ok_or_else(|| StoreError::backend("invalid Fleet retention clock"))?;
+        let (maintenance, _) = StepDriver::new(host.clone())
+            .run(alarm_maintenance_step::PrepareFleetAlarm { now })
             .await?;
+        if matches!(
+            maintenance,
+            alarm_maintenance_step::AutomationMaintenance::Required
+        ) {
+            StepDriver::new(host.clone())
+                .run(automation_clock_step::EvaluateAutomations {
+                    now_ms: io.now().unix_millis(),
+                    row_ids: crate::fleet_row_ids::FleetRowIds::new(io.clone()),
+                })
+                .await?;
+        }
         let driven = engine.drive_due().await?;
-        self.rearm().await?;
+        match maintenance {
+            alarm_maintenance_step::AutomationMaintenance::Required => self.rearm().await?,
+            alarm_maintenance_step::AutomationMaintenance::Empty => {
+                // No stored Automation, owed Firing, shared Batch or work item can
+                // need the clock. Journal debt still drives and rearms normally;
+                // a concurrent catalog mutation arms its own earlier deadline.
+                self.rearm_journal().await?;
+            }
+        }
         Ok(driven)
     }
     pub async fn initialize(&self) -> Result<usize, StoreError> {

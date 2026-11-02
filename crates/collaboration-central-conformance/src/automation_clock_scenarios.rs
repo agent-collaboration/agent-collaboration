@@ -71,12 +71,55 @@ pub async fn run_automation_clock_conformance(
     client: &ConformanceClient,
     platform: AutomationClockPlatform,
 ) -> ConformanceResult<()> {
+    empty_callback_keeps_automation_custody_empty(client).await?;
     let service = durable_steps::Uuid::now_v7().to_string();
     let mut machine = open_machine(client, &service).await?;
     let proof = first_create_arms_durable_deadline(client, &mut machine, &service, platform).await;
     let closed = machine.close().await;
     proof?;
     closed?;
+    Ok(())
+}
+
+async fn empty_callback_keeps_automation_custody_empty(
+    client: &ConformanceClient,
+) -> ConformanceResult<()> {
+    let absent = durable_steps::Uuid::now_v7().to_string().try_into()?;
+    let expected = serde_json::json!({
+        "automations":0,"timing":0,"firings":0,"batches":0,"imports":0,
+        "contentRevisions":0,"instructionDocuments":0
+    });
+    let initial = fixture::automation(client, &absent, None).await?;
+    if initial.get("counts") != Some(&expected) {
+        return Err("empty callback fixture already contains Automation custody".into());
+    }
+    let before = client
+        .automation_clock(AutomationClockControl::Observe)
+        .await?;
+    let after = client
+        .automation_clock(AutomationClockControl::InvokeAlarm)
+        .await?;
+    let retained = fixture::automation(client, &absent, None).await?;
+    if after.now != before.now
+        || after.callbacks.len() <= before.callbacks.len()
+        || !after
+            .callbacks
+            .iter()
+            .skip(before.callbacks.len())
+            .all(|receipt| matches!(receipt.result, crate::AutomationAlarmResult::Completed))
+        || retained.get("counts") != Some(&expected)
+    {
+        return Err(
+            "empty Fleet callback failed, invented work, or was not causally observed".into(),
+        );
+    }
+    println!(
+        "AUTOMATION_EMPTY_ALARM_RESULT {}",
+        serde_json::json!({
+            "before":before,"after":after,"counts":expected,
+            "nextStep":"ordinary Schedule creation must arm and admit on this same owner"
+        })
+    );
     Ok(())
 }
 
