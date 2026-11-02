@@ -75,6 +75,7 @@ tracing-subscriber.workspace = true
 unicode-width.workspace = true
 
 [dev-dependencies]
+codex-router-fleet-state = { path = "../codex-router-fleet-state", version = "0.1.119" }
 tokio-rustls = { version = "0.26.4", default-features = false, features = ["ring", "tls12"] }
 axum = { workspace = true, features = ["form", "json", "http1", "tokio"] }
 codex-router-quota-service = { version = "0.1.105", path = "../codex-router-quota-service", features = ["test-support"] }

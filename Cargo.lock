@@ -1310,6 +1310,7 @@ dependencies = [
  "codex-native-integration",
  "codex-router-auth",
  "codex-router-core",
+ "codex-router-fleet-state",
  "codex-router-host",
  "codex-router-proxy",
  "codex-router-quota-service",
