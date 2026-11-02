@@ -78,7 +78,11 @@ async fn settings_write_failure_retains_uncertainty_and_recovers_same_request()
         return Err("reconciling old operation rolled back newer configuration".into());
     }
     drop(backend);
-    drop(store);
+    Arc::try_unwrap(store)
+        .map_err(|_| std::io::Error::other("fixture automation store remained shared"))?
+        .into_inner()
+        .close()
+        .await?;
     std::fs::remove_file(directory.join("automation-settings.json"))?;
     std::fs::remove_dir(directory)?;
     for entry in std::fs::read_dir(&root)? {

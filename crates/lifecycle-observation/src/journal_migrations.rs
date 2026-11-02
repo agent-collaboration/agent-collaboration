@@ -1,8 +1,8 @@
 //! Native migration ownership for the journal; legacy adoption never rewrites domain rows.
-use collaboration_protocol::UuidIdentity;
+use collaboration_protocol::{AddressEntry, UuidIdentity};
 use sqlx::{Connection, Row, SqliteConnection, migrate::MigrateError};
 
-use crate::JournalError;
+use crate::{JournalError, journal_retention::observation_timestamp_millis};
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 const BASELINE_VERSION: i64 = 202_609_110_001;
@@ -41,6 +41,7 @@ async fn initialize_transaction(
     )
     .fetch_one(&mut **transaction)
     .await?;
+    let needs_checkpoint_backfill = !checkpoint_has_last_seen_column(transaction).await?;
     if !has_history && has_domain_objects {
         validate_schema(transaction, BASELINE_SQL).await?;
         read_identity(transaction).await?;
@@ -63,7 +64,78 @@ async fn initialize_transaction(
             .execute(&mut **transaction)
             .await?;
     }
+    if needs_checkpoint_backfill {
+        backfill_checkpoint_last_seen(transaction).await?;
+    }
     read_identity(transaction).await
+}
+
+async fn checkpoint_has_last_seen_column(
+    connection: &mut SqliteConnection,
+) -> Result<bool, JournalError> {
+    let has_table: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='checkpoint_addresses')",
+    )
+    .fetch_one(&mut *connection)
+    .await?;
+    if !has_table {
+        return Ok(false);
+    }
+    let columns = sqlx::query("PRAGMA table_info(checkpoint_addresses)")
+        .fetch_all(connection)
+        .await?;
+    columns
+        .into_iter()
+        .map(|row| row.try_get::<String, _>("name"))
+        .collect::<Result<Vec<_>, _>>()
+        .map(|columns| columns.iter().any(|column| column == "last_seen_ms"))
+        .map_err(JournalError::Storage)
+}
+
+async fn backfill_checkpoint_last_seen(
+    connection: &mut SqliteConnection,
+) -> Result<(), JournalError> {
+    let journal_id = read_identity(connection).await?;
+    let mut cursor = String::new();
+    loop {
+        let rows=sqlx::query("SELECT address_key,entry_json FROM checkpoint_addresses WHERE last_seen_ms=0 AND address_key>? ORDER BY address_key LIMIT 100")
+            .bind(&cursor)
+            .fetch_all(&mut *connection)
+            .await?;
+        if rows.is_empty() {
+            break;
+        }
+        for row in rows {
+            let address_key: String = row.try_get("address_key")?;
+            cursor.clone_from(&address_key);
+            let encoded: String = row.try_get("entry_json")?;
+            let invalid_row = || JournalError::InvalidCheckpointAddress {
+                address_key: address_key.clone(),
+            };
+            let entry: AddressEntry = serde_json::from_str(&encoded).map_err(|_| invalid_row())?;
+            if serde_json::to_string(&entry.address).map_err(|_| invalid_row())? != address_key
+                || entry.last_observation.journal_id != journal_id
+            {
+                return Err(invalid_row());
+            }
+            let last_seen_ms =
+                observation_timestamp_millis(&entry.last_observed_at).map_err(|_| invalid_row())?;
+            if last_seen_ms == 0 {
+                return Err(invalid_row());
+            }
+            let updated = sqlx::query(
+                "UPDATE checkpoint_addresses SET last_seen_ms=? WHERE address_key=? AND last_seen_ms=0",
+            )
+            .bind(last_seen_ms)
+            .bind(address_key)
+            .execute(&mut *connection)
+            .await?;
+            if updated.rows_affected() != 1 {
+                return Err(JournalError::InvalidStorage);
+            }
+        }
+    }
+    Ok(())
 }
 
 async fn read_identity(connection: &mut SqliteConnection) -> Result<UuidIdentity, JournalError> {

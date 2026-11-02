@@ -16,6 +16,7 @@ members = [
     "crates/automation-storage",
     "crates/ui-preference-store",
     "crates/interaction-storage",
+    "crates/sqlite-storage-maintenance",
     "crates/codex-acp-adapter",
     "crates/lifecycle-observation",
     "crates/collaboration-client",

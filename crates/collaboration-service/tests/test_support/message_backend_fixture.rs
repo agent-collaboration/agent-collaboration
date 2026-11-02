@@ -205,11 +205,13 @@ async fn exercise_message(
     let broker = if recorded {
         let scratch = root.join("scratch");
         tokio::fs::create_dir(&scratch).await?;
-        let path = root.join("approval-routes.json");
+        let interaction_store = Arc::new(
+            interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
+        );
         let broker = ServiceInteractionBroker::load(
             service_id.to_owned().try_into()?,
             native_backend.clone(),
-            path.clone(),
+            Arc::clone(&interaction_store),
         )
         .await?;
         broker
@@ -223,10 +225,14 @@ async fn exercise_message(
             })
             .await?;
         drop(broker);
+        drop(interaction_store);
+        let interaction_store = Arc::new(
+            interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
+        );
         let broker = ServiceInteractionBroker::load(
             service_id.to_owned().try_into()?,
             native_backend.clone(),
-            path,
+            interaction_store,
         )
         .await?;
         let fixture_mode = if matches!(

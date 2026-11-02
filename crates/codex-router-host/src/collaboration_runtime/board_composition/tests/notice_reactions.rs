@@ -35,6 +35,8 @@ struct Runtime {
     running: super::super::machine_session::RunningMachineSession,
     #[cfg(feature = "runtime-test-support")]
     readiness: watch::Receiver<bool>,
+    #[cfg(feature = "runtime-test-support")]
+    creation_request: message_board::ProjectCreateRequest,
     project: ProjectId,
     epoch: Epoch,
     renewal_receipts: std::sync::Mutex<RenewalPromptReceipts>,
@@ -110,6 +112,8 @@ impl Runtime {
             running,
             #[cfg(feature = "runtime-test-support")]
             readiness,
+            #[cfg(feature = "runtime-test-support")]
+            creation_request: creation.clone(),
             project: creation.project_id,
             epoch: Epoch::new(1)?,
             renewal_receipts,

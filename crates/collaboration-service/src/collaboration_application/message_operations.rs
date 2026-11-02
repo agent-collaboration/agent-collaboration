@@ -471,7 +471,7 @@ pub enum MessageFailureKind {
     /// The push lives on another machine; cross-machine reads are not available yet.
     ForeignMachine,
     Unavailable,
-    /// The push expired after 30 days, or never existed.
+    /// The push expired after two calendar months, or never existed.
     NotFound,
     NotPermitted,
     NotDirectMessage,
@@ -510,7 +510,7 @@ impl MessageFailure {
         Self::new(
             MessageFailureKind::NotFound,
             stage,
-            "not found (expired after 30 days, or never existed)",
+            "not found (expired after two calendar months, or never existed)",
         )
     }
 }

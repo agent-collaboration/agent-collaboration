@@ -10,6 +10,7 @@ use std::sync::mpsc::Sender as TestCompletionSender;
 
 use codex_router_core::routes::RouteBand;
 use codex_router_state::sqlite::AsyncSqliteStateStore;
+use codex_router_state::sqlite::PREVIOUS_RESPONSE_AFFINITY_OWNER_PRUNE_BATCH_SIZE;
 use codex_router_state::sqlite::StateStoreError;
 use futures_util::future::BoxFuture;
 use thiserror::Error;
@@ -23,6 +24,31 @@ use crate::telemetry::record_maintenance_lag_observed;
 
 /// Default bounded capacity for coalesced maintenance hints.
 pub const MAINTENANCE_QUEUE_CAPACITY: usize = 32;
+
+const PREVIOUS_RESPONSE_AFFINITY_OWNER_MAX_BATCHES_PER_PASS: usize = 4_096;
+
+/// Retains previous-response affinity owners for 30 days.
+const PREVIOUS_RESPONSE_AFFINITY_OWNER_RETENTION_SECONDS: u64 = 30 * 86_400;
+
+/// Retains session-account pins for one week after their last observation.
+pub(crate) const SESSION_ACCOUNT_AFFINITY_RETENTION_SECONDS: u64 = 7 * 86_400;
+
+/// Retains active-session rollup buckets for one week.
+pub(crate) const ACTIVE_SESSION_ROLLUP_RETENTION_SECONDS: u64 = 7 * 86_400;
+
+pub(crate) const fn previous_response_affinity_owner_retention_cutoff(
+    now_unix_seconds: u64,
+) -> u64 {
+    now_unix_seconds.saturating_sub(PREVIOUS_RESPONSE_AFFINITY_OWNER_RETENTION_SECONDS)
+}
+
+pub(crate) const fn session_account_affinity_retention_cutoff(now_unix_seconds: u64) -> u64 {
+    now_unix_seconds.saturating_sub(SESSION_ACCOUNT_AFFINITY_RETENTION_SECONDS)
+}
+
+pub(crate) const fn active_session_rollup_retention_cutoff(now_unix_seconds: u64) -> u64 {
+    now_unix_seconds.saturating_sub(ACTIVE_SESSION_ROLLUP_RETENTION_SECONDS)
+}
 
 /// Result of a non-blocking maintenance hint enqueue.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -40,7 +66,7 @@ pub enum MaintenanceEnqueueResult {
 /// Coalescible maintenance hint.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum MaintenanceHint {
-    /// Cleanup session-account affinities last observed before the cutoff.
+    /// Clean up session-account affinities and quota history before the weekly cutoff.
     CleanupStaleSessionAccountAffinities { stale_before_unix_seconds: u64 },
     /// Cleanup active-client leases older than the cutoff for one route band.
     CleanupStaleActiveClients {
@@ -64,6 +90,8 @@ pub enum MaintenanceHint {
         route_band: RouteBand,
         compact_before_unix_seconds: u64,
     },
+    /// Delete one batch of previous-response owners created before the cutoff.
+    PrunePreviousResponseAffinityOwners { created_before_unix_seconds: u64 },
 }
 
 #[cfg(test)]
@@ -144,12 +172,16 @@ impl MaintenanceRepository for AsyncSqliteStateStore {
         hint: MaintenanceHint,
     ) -> BoxFuture<'a, Result<(), MaintenanceRepositoryError>> {
         Box::pin(async move {
+            let mut should_vacuum = false;
             match hint {
                 MaintenanceHint::CleanupStaleSessionAccountAffinities {
                     stale_before_unix_seconds,
                 } => {
                     self.purge_session_account_affinities_before(stale_before_unix_seconds)
                         .await?;
+                    self.purge_quota_history_before(stale_before_unix_seconds)
+                        .await?;
+                    should_vacuum = true;
                 }
                 MaintenanceHint::CleanupStaleActiveClients {
                     route_band,
@@ -161,6 +193,7 @@ impl MaintenanceRepository for AsyncSqliteStateStore {
                         0,
                     )
                     .await?;
+                    should_vacuum = true;
                 }
                 MaintenanceHint::RefreshActiveSessionRollups {
                     route_band,
@@ -182,6 +215,7 @@ impl MaintenanceRepository for AsyncSqliteStateStore {
                 } => {
                     self.purge_active_session_rollups_before(retain_after_unix_seconds)
                         .await?;
+                    should_vacuum = true;
                 }
                 MaintenanceHint::CompactActiveSessionHistory {
                     route_band,
@@ -192,7 +226,38 @@ impl MaintenanceRepository for AsyncSqliteStateStore {
                         compact_before_unix_seconds,
                     )
                     .await?;
+                    should_vacuum = true;
                 }
+                MaintenanceHint::PrunePreviousResponseAffinityOwners {
+                    created_before_unix_seconds,
+                } => {
+                    let mut rows_deleted = 0_u64;
+                    let mut batch_count = 0_u64;
+                    for _batch_index in 0..PREVIOUS_RESPONSE_AFFINITY_OWNER_MAX_BATCHES_PER_PASS {
+                        let deleted_in_batch = self
+                            .prune_previous_response_owners_before(created_before_unix_seconds)
+                            .await?;
+                        rows_deleted = rows_deleted.saturating_add(deleted_in_batch);
+                        batch_count = batch_count.saturating_add(1);
+                        let batch_was_full = i64::try_from(deleted_in_batch).ok()
+                            == Some(PREVIOUS_RESPONSE_AFFINITY_OWNER_PRUNE_BATCH_SIZE);
+                        if !batch_was_full {
+                            break;
+                        }
+                        tokio::task::yield_now().await;
+                    }
+                    tracing::info!(
+                        maintenance.class = "previous_response_affinity_owner_retention",
+                        route_band = "all",
+                        maintenance.rows_deleted = rows_deleted,
+                        maintenance.batch_count = batch_count,
+                        "codex_router.maintenance_completed"
+                    );
+                    should_vacuum = true;
+                }
+            }
+            if should_vacuum {
+                self.incremental_vacuum_step().await?;
             }
             Ok(())
         })
@@ -405,6 +470,11 @@ impl MaintenanceHint {
                     maintenance_class: self.maintenance_class(),
                 }
             }
+            Self::PrunePreviousResponseAffinityOwners { .. } => {
+                MaintenanceCoalescingKey::GlobalClass {
+                    maintenance_class: self.maintenance_class(),
+                }
+            }
             Self::RefreshActiveSessionRollups {
                 route_band,
                 interval_start_unix_seconds,
@@ -436,12 +506,16 @@ impl MaintenanceHint {
             Self::RefreshActiveSessionRollups { .. } => "active_session_rollup_refresh",
             Self::ApplyActiveSessionRetention { .. } => "active_session_retention",
             Self::CompactActiveSessionHistory { .. } => "active_session_history_compaction",
+            Self::PrunePreviousResponseAffinityOwners { .. } => {
+                "previous_response_affinity_owner_retention"
+            }
         }
     }
 
     const fn route_band_label(&self) -> &'static str {
         match self {
-            Self::CleanupStaleSessionAccountAffinities { .. } => "all",
+            Self::CleanupStaleSessionAccountAffinities { .. }
+            | Self::PrunePreviousResponseAffinityOwners { .. } => "all",
             Self::CleanupStaleActiveClients { route_band, .. }
             | Self::RefreshActiveSessionRollups { route_band, .. }
             | Self::ApplyActiveSessionRetention { route_band, .. }
@@ -541,3 +615,14 @@ fn lag_millis_since(enqueued_at: Instant) -> u64 {
 #[cfg(test)]
 #[path = "maintenance_actor/maintenance_behavior_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "maintenance_actor/affinity_retention_tests.rs"]
+mod affinity_retention_tests;
+#[cfg(test)]
+#[path = "maintenance_actor/quota_history_retention_tests.rs"]
+mod quota_history_retention_tests;
+
+#[cfg(test)]
+#[path = "maintenance_actor/incremental_vacuum_tests.rs"]
+mod incremental_vacuum_tests;

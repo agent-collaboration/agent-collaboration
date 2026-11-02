@@ -6,9 +6,6 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 
-const DEFAULT_PROVIDER_OPERATION_RETENTION_DAYS: NonZeroU32 =
-    NonZeroU32::new(60).expect("positive retention default");
-
 use thiserror::Error;
 
 /// Router-root-owned coordination artifacts.
@@ -88,7 +85,7 @@ pub struct HostConfig {
     app_server_socket: PathBuf,
     managed_executable: PathBuf,
     external_provider_startups: Vec<crate::ExternalProviderStartup>,
-    provider_operation_retention_days: NonZeroU32,
+    provider_operation_retention_days: Option<NonZeroU32>,
     deadlines: HostDeadlines,
 }
 
@@ -125,7 +122,7 @@ impl HostConfig {
             app_server_socket: inputs.app_server_socket,
             managed_executable: inputs.managed_executable,
             external_provider_startups: Vec::new(),
-            provider_operation_retention_days: DEFAULT_PROVIDER_OPERATION_RETENTION_DAYS,
+            provider_operation_retention_days: None,
             deadlines: inputs.deadlines,
         }
     }
@@ -151,12 +148,12 @@ impl HostConfig {
         &self.external_provider_startups
     }
     #[must_use]
-    pub const fn provider_operation_retention_days(&self) -> NonZeroU32 {
+    pub const fn provider_operation_retention_days(&self) -> Option<NonZeroU32> {
         self.provider_operation_retention_days
     }
     #[must_use]
     pub const fn with_provider_operation_retention_days(mut self, days: NonZeroU32) -> Self {
-        self.provider_operation_retention_days = days;
+        self.provider_operation_retention_days = Some(days);
         self
     }
     #[must_use]

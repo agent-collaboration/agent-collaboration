@@ -378,7 +378,7 @@ async fn header_facts_round_trip_through_stored_json_uses_camel_case() {
 }
 
 #[tokio::test]
-async fn prune_removes_only_push_records_strictly_older_than_thirty_days() {
+async fn prune_removes_only_push_records_strictly_older_than_two_calendar_months() {
     let database = TestDatabase::new();
     let store = InteractionStore::open(&database.path)
         .await
@@ -386,7 +386,7 @@ async fn prune_removes_only_push_records_strictly_older_than_thirty_days() {
     let sender = session("claude-local", "sender-thread");
     let target = session("codex-local", "target-thread");
     let now = Utc::now();
-    let cutoff = now - Duration::days(30);
+    let cutoff = now.checked_sub_months(chrono::Months::new(2)).unwrap();
     let expired_id = push_id();
     let boundary_id = push_id();
     let recent_id = push_id();
@@ -410,6 +410,21 @@ async fn prune_removes_only_push_records_strictly_older_than_thirty_days() {
             .await
             .expect("insert retention fixture");
     }
+    let mut writer =
+        TursoConnection::connect_with(&TursoConnectOptions::new().filename(&database.path))
+            .await
+            .expect("retention fixture writer");
+    sqlx::query::<sqlx_turso::Turso>(
+        "UPDATE router_pushes SET delivery_state='delivered' WHERE push_id=?",
+    )
+    .bind(expired_id.as_str())
+    .execute(&mut writer)
+    .await
+    .expect("old fixture is terminal");
+    writer
+        .close()
+        .await
+        .expect("close retention fixture writer");
 
     assert_eq!(
         store

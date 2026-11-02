@@ -613,6 +613,10 @@ async fn reattach_does_not_reissue_resolved_approval() -> Result<(), Box<dyn std
         "serviceId":backend.endpoint.service_id,
         "endpointId":"claude-local"
     }))?;
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
+            .await?,
+    );
     let broker = ServiceInteractionBroker::load(
         backend.endpoint.service_id.as_str().to_owned().try_into()?,
         NativeControlBackend {
@@ -620,7 +624,7 @@ async fn reattach_does_not_reissue_resolved_approval() -> Result<(), Box<dyn std
             gate: NativeGenerationGate::default(),
             codex_home: directory.path().to_path_buf(),
         },
-        directory.path().join("approvals.json"),
+        interaction_store,
     )
     .await?;
     let context = Arc::new(

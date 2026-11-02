@@ -65,6 +65,9 @@ impl ProjectAdmission {
         match directory_reply.result {
             RequestResult::Decided(RequestDecision::Accepted { .. }) => {}
             RequestResult::Decided(RequestDecision::Rejected { reasons }) => {
+                self.fleet
+                    .complete_creation_input(&request.request_id)
+                    .await?;
                 let [refusal] = reasons.as_slice() else {
                     return Err(ProjectAdmissionError::InvalidRecord(
                         "directory creation refusal must have one typed reason".to_owned(),
@@ -89,7 +92,14 @@ impl ProjectAdmission {
         }
         let completion = self.complete_accepted_creation(request, &board, hash).await;
         match completion {
-            Ok(reply) => Ok(reply),
+            Ok(reply) => {
+                if matches!(&reply.result, RequestResult::Decided(_)) {
+                    self.fleet
+                        .complete_creation_input(&request.request_id)
+                        .await?;
+                }
+                Ok(reply)
+            }
             Err(error) => {
                 tracing::warn!(%error, project = ?request.project_id, "directory accepted; local project completion remains pending");
                 Ok(pending_creation_reply(&request.project_id))

@@ -59,4 +59,8 @@ impl ProjectReadCopy {
     pub fn installed(&self) -> &fleet_sync_receiver::InstalledSnapshot {
         self.copy.installed()
     }
+
+    pub async fn close(self) -> Result<(), fleet_sync_writer::ReadCopyError> {
+        self.copy.close().await
+    }
 }

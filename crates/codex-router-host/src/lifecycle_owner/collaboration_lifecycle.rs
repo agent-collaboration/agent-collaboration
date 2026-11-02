@@ -16,7 +16,7 @@ pub(super) struct CollaborationLifecycle {
     remote_access: Option<crate::RemoteAccess>,
     router_proxy_endpoint: std::net::SocketAddr,
     external_provider_startups: Vec<crate::ExternalProviderStartup>,
-    provider_operation_retention_days: std::num::NonZeroU32,
+    provider_operation_retention_days: Option<std::num::NonZeroU32>,
     remote_control_server_name: Option<RemoteControlServerName>,
     router_executable_relation:
         tokio::sync::watch::Receiver<collaboration_protocol::RouterExecutableRelation>,

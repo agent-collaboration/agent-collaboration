@@ -22,6 +22,9 @@ pub(super) fn typed_cancel_approval_state(
 pub(super) fn project_typed_legacy_approval(
     record: InteractionHistoryRecord,
 ) -> Option<ApprovalRequestRecord> {
+    if let InteractionHistoryRecord::NativeApproval { record } = record {
+        return Some(*record);
+    }
     use session_event_model::{ApprovalEffect, ApprovalScope};
     let InteractionHistoryRecord::Approval {
         approver: message_board::Identity::Session { session: approver },
