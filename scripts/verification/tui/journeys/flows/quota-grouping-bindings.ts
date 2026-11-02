@@ -122,12 +122,10 @@ export function quotaGroupingBindings(options: {
 			await advance(count + 1);
 		};
 		await advance(0);
-		await Array.from({ length: moved }).reduce(async (previous) => {
-			await previous;
-			marked = await context.input.press('Alt+Up', [
-				quotaExpectedKey('Alt+Up', quotaScreen, 'action:quota:accounts'),
-			]);
-		}, Promise.resolve());
+		// Page clamping makes reverse page counts asymmetric; restore from the absolute first row.
+		marked = await context.input.press('Alt+Shift+Up', [
+			quotaExpectedKey('Alt+Shift+Up', quotaScreen, 'action:quota:accounts'),
+		]);
 		const restoreSelected = async (count: number): Promise<void> => {
 			if (selectedAccountVisible(quotaMarkedFrame(marked).grid)) return;
 			if (count > moved)

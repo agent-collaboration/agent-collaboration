@@ -28,6 +28,7 @@ import type { QuotaFixtureLayout } from './quota-fixture-layout.ts';
 import {
 	quotaBaseBindings,
 	quotaDialogTarget,
+	quotaDialogInteriorRows,
 	quotaExpectedKey,
 	quotaFocused,
 	quotaMarkedFrame,
@@ -37,6 +38,7 @@ import {
 } from './quota-flow-inputs.ts';
 import type { QuotaLiveFixture } from './quota-live-fixture.ts';
 import type { quotaObservationSchema } from './quota-live-fixture.ts';
+import { collectPublishedQuotaDialog } from './quota-published-dialog.ts';
 
 const ownerFinishedSchema = z.strictObject({
 	kind: z.literal('account-owner-finished'),
@@ -240,6 +242,7 @@ export function quotaAccountBindings(options: {
 			});
 		}
 	}
+	let body: readonly string[] = [];
 	let ownerBoundary = 0,
 		expectedCommands = 0;
 	const observe = async (
@@ -251,6 +254,25 @@ export function quotaAccountBindings(options: {
 			events: [...access.journal.read()],
 			routerRoot: access.started.routerRoot,
 		};
+	};
+	const collectDetails = async (
+		context: NativeFlowContext,
+		surface: Surface,
+	): Promise<MarkedInputEvidence> => {
+		const live = await fixture.read(context.frame.binding.sequence);
+		const focusedTarget = live.readback.focus;
+		if (focusedTarget === null)
+			throw new Error('Details body census requires the actual focused target');
+		const collected = await collectPublishedQuotaDialog({
+			context,
+			title: 'Account details',
+			surface,
+			focusedTarget,
+			evidence,
+			fixture,
+		});
+		body = collected.rows;
+		return collected.marked;
 	};
 	const runFixture = async (
 		context: NativeFlowContext,
@@ -287,7 +309,7 @@ export function quotaAccountBindings(options: {
 				operation: 'remove-captured-account-externally',
 				mount: live.readback.mount,
 			});
-			return context.input.press('F12', [quotaExpectedKey('F12', spec.surface)]);
+			return collectDetails(context, spec.surface);
 		}
 		if (spec.kind === 'settle') {
 			if (spec.action !== null) {
@@ -350,15 +372,21 @@ export function quotaAccountBindings(options: {
 						'actual refusal completion cleared pending Remove',
 						quotaRemovalButtonAvailable,
 					);
-				else if (spec.action === 'disable')
-					await context.driver.waitForGrid('actual disabled Details', (grid) =>
-						gridLines(grid).join(' ').toLowerCase().includes('disabled'),
+				else if (spec.action === 'disable' || spec.action === 'enable') {
+					const status = spec.action === 'disable' ? 'blocked' : 'available';
+					await context.driver.waitForGrid('actual settled Details status', (grid) =>
+						quotaDialogInteriorRows(grid, 'Account details').some(
+							(row) => row.includes('Status') && row.includes(status),
+						),
 					);
-				else if (spec.action === 'enable')
-					await context.driver.waitForGrid(
-						'actual enabled Details',
-						(grid) => !gridLines(grid).join(' ').toLowerCase().includes('disabled'),
-					);
+					const marked = await collectDetails(context, spec.surface);
+					const paintedDisabled = body.join(' ').replace(/\s+/gu, ' ').includes('account disabled');
+					if (paintedDisabled !== (spec.action === 'disable'))
+						throw new Error(
+							'settled Details disabled reason differs from the actual status action',
+						);
+					return marked;
+				}
 			}
 			return context.input.press('F12', [quotaExpectedKey('F12', spec.surface)]);
 		}
@@ -490,6 +518,7 @@ export function quotaAccountBindings(options: {
 						grid: context.frame.grid,
 						observation: value === undefined ? await observe(context) : value,
 						expectedCommands,
+						body,
 					}),
 			]),
 		),

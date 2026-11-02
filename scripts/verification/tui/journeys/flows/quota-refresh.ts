@@ -32,9 +32,9 @@ const quotaRefreshDrafts: readonly FlowJourney[] = (
 			operation: 'hold-first-refresh',
 			purpose: 'Causal pending acknowledgment, never a sleep.',
 		},
-		{ kind: 'press', key: 'R' },
+		{ kind: 'press', key: 'r' },
 		{ kind: 'capture', checkpoint: 'refresh-pending', checks: ['refresh-visible-and-disabled'] },
-		{ kind: 'press', key: 'R' },
+		{ kind: 'press', key: 'r' },
 		{ kind: 'press', key: 'F10' },
 		{
 			kind: 'capture',
@@ -91,10 +91,10 @@ export const quotaRefreshJourneys: readonly FlowJourney[] = quotaRefreshDrafts.m
 		steps: journey.steps.flatMap((step, index): FlowJourney['steps'] => {
 			if (
 				step.kind === 'press' &&
-				step.key === 'R' &&
+				step.key === 'r' &&
 				journey.steps
 					.slice(0, index)
-					.every((previous) => previous.kind !== 'press' || previous.key !== 'R')
+					.every((previous) => previous.kind !== 'press' || previous.key !== 'r')
 			)
 				return [
 					step,

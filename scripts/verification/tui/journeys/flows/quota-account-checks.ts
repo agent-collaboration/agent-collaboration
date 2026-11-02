@@ -15,6 +15,7 @@ export function checkQuotaAccount(options: {
 	readonly grid: TerminalGrid;
 	readonly observation: unknown;
 	readonly expectedCommands: number;
+	readonly body: readonly string[];
 }): readonly string[] {
 	const { check, scenario, grid, expectedCommands } = options;
 	const observed = quotaObservationSchema.parse(options.observation),
@@ -101,7 +102,7 @@ export function checkQuotaAccount(options: {
 				)
 			)
 				failures.push('gone captured account retained an available action or lost its reason');
-			if (!gridLines(grid).join(' ').includes('Account is no longer listed'))
+			if (!options.body.join(' ').replace(/\s+/gu, ' ').includes('Account is no longer listed'))
 				failures.push('gone captured account warning is not painted');
 		}
 	} else if (check === 'options-and-floor-captured-target') {

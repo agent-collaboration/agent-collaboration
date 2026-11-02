@@ -85,6 +85,7 @@ test('enabled Remove is painted unavailable with its actual reason and no owner 
 				grid: snapshotGrid(core),
 				observation: observation(),
 				expectedCommands: 0,
+				body: [],
 			}),
 		).toEqual([]);
 	} finally {
@@ -119,6 +120,7 @@ test.each(['available', 'missing-reason', 'dispatched'] as const)(
 					grid: snapshotGrid(core),
 					observation: value,
 					expectedCommands: 0,
+					body: [],
 				}).length,
 			).toBeGreaterThan(0);
 		} finally {
@@ -154,6 +156,7 @@ test('real Remove completion uses the source-defined named result after emptying
 				grid: snapshotGrid(core),
 				observation: value,
 				expectedCommands: 1,
+				body: [],
 			}),
 		).toEqual([]);
 	} finally {
@@ -201,6 +204,7 @@ test.each([
 				grid: snapshotGrid(core),
 				observation: value,
 				expectedCommands: 1,
+				body: [],
 			});
 			expect(failures).toEqual(passes ? [] : ['RequiresDisabled lacks the named visible refusal']);
 		} finally {
@@ -226,6 +230,36 @@ test.each([
 					'\x1b[0m                                       │\r\n╰──────────────────────────────────────────────────────────╯',
 			);
 			expect(quotaRemovalButtonAvailable(snapshotGrid(core))).toBe(available);
+		} finally {
+			core.dispose();
+		}
+	},
+);
+
+test.each([
+	['wrapped warning', ['Warning', 'Account is no longer', 'listed'], true],
+	['missing warning', ['Warning'], false],
+	['different reason', ['Account is unavailable'], false],
+] as const)(
+	'gone captured account requires its collected painted warning: %s',
+	async (_name, body, passes) => {
+		const core = await createTerminalCore(32, 24);
+		try {
+			const value = observation();
+			value.live.accounts = [];
+			for (const action of value.live.readback.actions) {
+				action.available = false;
+				action.availability = 'Unavailable { reason: "Account is no longer listed" }';
+			}
+			const failures = checkQuotaAccount({
+				check: 'captured-account-target',
+				scenario: 'captured-actions',
+				grid: snapshotGrid(core),
+				observation: value,
+				expectedCommands: 0,
+				body,
+			});
+			expect(failures).toEqual(passes ? [] : ['gone captured account warning is not painted']);
 		} finally {
 			core.dispose();
 		}

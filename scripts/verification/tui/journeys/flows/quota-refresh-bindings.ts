@@ -54,7 +54,7 @@ export function quotaRefreshBindings(options: {
 	const base = quotaBaseBindings({ plan, invocation, evidence, layout }),
 		inputs = new Map<number, NativeFlowInputBinding>();
 	const menuRoute = !invocation.journey.steps.some(
-		(step) => step.kind === 'press' && step.key === 'R',
+		(step) => step.kind === 'press' && step.key === 'r',
 	);
 	let phase: 'before' | 'pending' | 'completed' = 'before',
 		baseline: QuotaLiveReadback | null = null,
@@ -70,7 +70,7 @@ export function quotaRefreshBindings(options: {
 					step.key === 'F10'
 						? quotaExpectedKey('F10', quotaScreen, null, 'quota:menu')
 						: quotaExpectedKey(
-								'R',
+								'r',
 								quotaScreen,
 								null,
 								refreshPresses++ === 0 ? 'quota:refresh' : null,
