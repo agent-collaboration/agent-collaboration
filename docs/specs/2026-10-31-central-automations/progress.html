@@ -123,6 +123,79 @@
 </table>
 </div>
 
+<h2 id="explained">Five of those decisions explained</h2>
+<p>You asked about these five. Each one says what problem it solves, what was decided, and where it's written. The Program Design (<code>program-design.md</code>) and the Specification (<code>specification.md</code>) are in this folder.</p>
+
+<details id="explain-alarm">
+<summary>The alarm budget is fixed, not raised</summary>
+<p><strong>The problem.</strong> Each organization's central Fleet has an alarm, a timer that wakes the Fleet to do scheduled work. An existing test, <code>bounded_gate_reads</code>, says a freshly created, empty Fleet's alarm may run at most <strong>2</strong> SQL statements. It's there so central stays cheap per organization, because on Cloudflare every query costs. PR 2's automation clock added 5 statements that ran on every alarm: a catalog scan, an occupant check, the deadline query twice, and a Batch-retention delete. So an empty Fleet ran 7.</p>
+<p><strong>What was decided.</strong> Not raising the test to 7, which you've ruled out. Instead, the alarm's existing first read also asks one cheap question: is there any Automation, timing row, Firing, shared Batch or remote-create work item at all? If not, the automation phase is skipped, so the count is back to 2. If there's anything, the automation phase runs exactly as before, which is why nothing owed can be hidden. The Verifier confirmed it: the alarm went from 8 statements before the fix to 2 after it.</p>
+<p><strong>Where.</strong> Program Design line 32, the timing row: "An empty Fleet skips automation work". The code is commit <code>a2c20aba2</code>, with the test <code>crates/collaboration-service/tests/fresh_fleet_alarm_budget.rs</code>.</p>
+</details>
+
+<details id="explain-approver">
+<summary>The interim approver lives in a read-only <code>remote-create.json</code></summary>
+<p><strong>The problem.</strong> When someone on machine A creates a session on machine B (R16), the new session needs an <em>approver</em>: who answers its permission prompts. You decided the requester will be the approver later, in PR 3, once approvals route through central. For now, if no approver is named, it's <strong>B's Chief of Staff session, named per machine</strong>. So each machine needs a setting that says which session is its Chief. That setting had nowhere to live, because the Router's host configuration is built in code.</p>
+<p><strong>What was decided.</strong> One single-purpose file in the Router's root folder, <code>remote-create.json</code>, containing <code>{ "defaultApprover": &lt;session address&gt; }</code>. You edit it by hand on each machine, the same way as <code>ports.json</code>. It's read once at startup.</p>
+<ul>
+  <li>No file means no default: a remote create that names no approver is refused (<code>approverRequired</code>) before anything is created.</li>
+  <li>A malformed file stops the Router from starting, rather than guessing.</li>
+  <li>Agents never write it.</li>
+  <li>It's marked interim and is deleted when PR 3 lands.</li>
+</ul>
+<p><strong>What you'll need to do.</strong> Once this ships, create that file on each machine, naming that machine's Chief of Staff session.</p>
+<p><strong>Where.</strong> Program Design line 84, "Interim approver setting home". The requirement is Specification R16 (lines 142–152), and the check is V18.</p>
+</details>
+
+<details id="explain-carried">
+<summary>"Carried" work at the handover, and why central's alarm wakes for a carried Run</summary>
+<p><strong>The background.</strong> When a machine upgrades, it moves its local Schedules and Wakes to central once (R11). At that moment some work may already be under way locally. That's <em>carried</em> work, and it must happen exactly once, never twice and never zero times (R12):</p>
+<ul>
+  <li><strong>A carried waiting Run</strong> is a Schedule run already queued locally but not started.</li>
+  <li><strong>A carried Wake</strong> is a Wake delivery already admitted locally, and being delivered into a session.</li>
+</ul>
+<ex-mermaid id="carried-flow" label="What happens to carried work at the move"><script type="text/plain">
+sequenceDiagram
+  participant M as Machine (old owner)
+  participant C as Central (new owner)
+  Note over M: freeze, all in one transaction
+  M->>M: give the in-progress Wake delivery a Firing ID
+  M->>C: import (frozen bytes, carried items)
+  C->>C: record the carried Wake Firing as already received (never batched)
+  C->>C: record the waiting Run as owed at its fitted due time
+  Note over C: alarm wakes at that due time
+  C-->>M: the waiting Run, sent once at its due time
+  M->>C: the carried Wake's outcome, under the same Firing ID
+</script></ex-mermaid>
+<p><strong>Why the Router gives a carried Wake its Firing ID.</strong> The delivery is already happening on the machine, so it finishes there. Central still has to know about it, or it would think that occurrence is still owed and send it again: a double delivery. So in the freeze transaction, the Router assigns that delivery a Firing ID and puts the ID in the frozen payload. Central records the Firing as already received by that machine and never puts it in a Batch. When the delivery finishes, the machine reports the outcome under that same ID. The ID has to exist before the import, inside the frozen bytes, so that every retry carries the same one.</p>
+<p><strong>Why central's alarm wakes for a carried Run.</strong> A waiting Run's due time gets fitted to the 5-minute grid. If it was due at 10:02 and the move happens at 10:03, it's now owed at 10:05: in the future. Central's alarm used to wake only for each Automation's next due time and for Wake expiries. If that Schedule arrived suspended, say a cron that can't be rewritten exactly, it has no next due time. Then nothing would wake central at 10:05, and the owed Run would never fire. So the alarm's wake-up time now also includes the due time of a still-pending carried Run. At that time the Run is released once from its saved entry, and the suspended Schedule fires nothing else until you fix it.</p>
+<p><strong>Where.</strong></p>
+<ul>
+  <li>Program Design line 79, "Handover import contract": the <code>carried_firing</code> field and its handling.</li>
+  <li>Line 80, "Handover Router storage": where the machine records it.</li>
+  <li>Line 32, the timing row: the clock's wake-up rule, "minimum of three sets".</li>
+  <li>Line 86: a suspended move with a carried waiting Run.</li>
+  <li>The rules come from Specification R11 and R12 (lines 110–135), and the check is V14 (line 202).</li>
+</ul>
+</details>
+
+<details id="explain-bytes">
+<summary>The handover payload travels as the exact frozen bytes, and central computes the digest itself</summary>
+<p><strong>The problem.</strong> When a machine moves its definitions to central, it freezes each one: the converted timing, the watermark (what already ran locally), and any carried work. Then it sends the result to central. If the answer gets lost or the machine crashes, it retries. A retry must never create a second copy, and it must never send different content under the same name.</p>
+<p><strong>What was decided.</strong></p>
+<ul>
+  <li><strong>Freeze once, store the bytes.</strong> The machine writes the frozen payload to <code>automation_handover.frozen_payload</code>, and every send, retries included, uses those exact stored bytes.</li>
+  <li><strong>Central checks for itself.</strong> Central computes a SHA-256 fingerprint of the bytes it receives, and never trusts one the sender supplies.
+    <ul>
+      <li>Same machine, same Automation and same fingerprint: the answer is "already imported", with nothing written twice.</li>
+      <li>A different fingerprint: the answer is "import conflict", before anything is written.</li>
+    </ul>
+  </li>
+  <li><strong>Sent as a string.</strong> The payload travels as a JSON string inside the request. Central's request decoder would otherwise reorder keys and change the bytes, which would break that fingerprint check.</li>
+</ul>
+<p><strong>Where.</strong> Program Design line 79, "Handover import contract", under "Bytes and digest". The rule that every retry sends the same bytes is in Specification R11 (line 123).</p>
+</details>
+
 <h2 id="unverified">Not verified yet</h2>
 <ul>
   <li><strong>Two tests failed once under full load:</strong> <code>runtime_restart</code> and <code>retained_project_registry</code>. Neither fails on its own, and PR 1 is ruled out for the second. A test fixture that left an orphaned child process is fixed, but the original cause is still unproven.</li>
