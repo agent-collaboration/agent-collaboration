@@ -63,7 +63,7 @@ export async function checkAuthoredFlowTarget(plan: AuthoredFlowPlan): Promise<v
 		![plan.productRepository, plan.observerRepository, plan.output, plan.chrome].every(isAbsolute)
 	)
 		throw new Error('authored-flow paths must be absolute');
-	if (process.version !== 'v26.12.1' || realpathSync(process.execPath) !== plan.node.path)
+	if (process.version !== 'v26.13.0' || realpathSync(process.execPath) !== plan.node.path)
 		throw new Error('declared pinned Node required');
 	requireSourcePins(plan);
 	const preflight = plan.expectationPreflight;

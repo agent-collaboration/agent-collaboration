@@ -113,7 +113,7 @@ export async function checkOptionNavigationTarget(plan: OptionNavigationPlan): P
 		plan.requiredCrateHead,
 		plan.source.head,
 	]);
-	if (process.version !== 'v26.12.1' || realpathSync(process.execPath) !== plan.node.path)
+	if (process.version !== 'v26.13.0' || realpathSync(process.execPath) !== plan.node.path)
 		throw new Error('pinned Node required');
 	for (const artifact of [plan.driver, plan.product, plan.node]) verifyArtifact(artifact);
 	for (const artifact of [plan.driver, plan.product])

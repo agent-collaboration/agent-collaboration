@@ -55,16 +55,16 @@ export class ReceiptNotifications {
 	private notify(): void {
 		for (const listener of this.listeners) listener();
 	}
-	public async ready(): Promise<void> {
-		// The initial received frame proves the writer has started. macOS can
-		// coalesce its earlier directory creation event; attach to both actual
-		// files directly instead of demanding that optional discovery event.
-		for (const file of ['input-dispatch.jsonl', 'showcase-state.jsonl'])
-			if (existsSync(join(this.directory, file))) this.subscribe(file);
+	public async ready(awaitWriter: () => Promise<void> = async () => {}): Promise<void> {
 		await this.wait({
 			description: 'retained subscriptions to both owned receipt files',
 			matches: () => (this.files.size === 2 ? true : null),
-			inject: async () => {},
+			inject: async () => {
+				await awaitWriter();
+				// Completion forces an authoritative read even if directory discovery coalesced.
+				for (const file of ['input-dispatch.jsonl', 'showcase-state.jsonl'])
+					if (existsSync(join(this.directory, file))) this.subscribe(file);
+			},
 		});
 	}
 	public async wait<TResult>(options: {

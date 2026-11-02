@@ -104,7 +104,7 @@ export function verifyTarget(plan: CapturePlan): void {
 		throw new Error('declared product source changed; stop and re-pin');
 	for (const binding of [plan.node, plan.capture_driver, plan.harness_binary])
 		verifyArtifact(binding);
-	if (process.version !== 'v26.12.1') throw new Error('capture requires pinned Node v26.12.1');
+	if (process.version !== 'v26.13.0') throw new Error('capture requires pinned Node v26.13.0');
 	if (realpathSync(process.execPath) !== plan.node.path)
 		throw new Error('parent CLI must use the declared Node executable');
 	if (!statSync(plan.temporary_directory).isDirectory())

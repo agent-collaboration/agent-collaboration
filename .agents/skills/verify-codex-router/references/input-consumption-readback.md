@@ -111,7 +111,7 @@ producer omission. S6b real-byte integration and S9 product passes remain open.
 
 ## Native watcher qualification limit
 
-On this macOS Node 26.12.1/libuv 1.53 host, an immediate same-turn synchronous
+On the historically qualified macOS Node 26.12.1/libuv 1.53 host, an immediate same-turn synchronous
 write after fs.watch creation could be missed even under an 8-second diagnostic
 guard. A separate controlled process produced a native event in 64 ms. The
 [libuv implementation](https://github.com/libuv/libuv/blob/v1.53.0/src/unix/fsevents.c)

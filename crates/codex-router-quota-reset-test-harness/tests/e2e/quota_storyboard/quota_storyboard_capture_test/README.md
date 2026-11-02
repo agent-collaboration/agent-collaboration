@@ -23,7 +23,7 @@ packet and is not part of the S0 port.
 The ordinary native adapter and public transport tests use controlled children,
 not a real Router or provider. They exercise exact argv, environment, durable
 receipts, real PTYs, kernel resize and retained-child/bystander cleanup. Use the
-nominated canonical Node26.12.1 and SHA-256 for native tests. No stand-in counts
+nominated canonical Node26.13.0 and SHA-256 for native tests. No stand-in counts
 as product rendering or public-provider proof.
 
 The canonical recipe is `.agents/skills/verify-codex-router/references/tui-journeys.md`.
