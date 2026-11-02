@@ -1,7 +1,6 @@
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_client::CollaborationClient;
 use collaboration_protocol::{InstructionCreateParams, InstructionText, OperationId};
-use collaboration_runtime::test_support::remove_store_directory_tolerating_sqlite_sidecars;
 use std::os::unix::fs::DirBuilderExt;
 
 #[tokio::test]
@@ -49,7 +48,7 @@ async fn host_supplies_automation_storage_without_native_backend()
         .shutdown()
         .await
         .map_err(|error| format!("runtime shutdown: {error}"))?;
-    remove_store_directory_tolerating_sqlite_sidecars(&root)
+    std::fs::remove_dir_all(&root)
         .map_err(|error| format!("remove test root {}: {error}", root.display()))?;
     Ok(())
 }

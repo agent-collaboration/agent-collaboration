@@ -1,6 +1,20 @@
 use super::*;
 use std::path::PathBuf;
 
+async fn native_approval_records(broker: &ServiceInteractionBroker) -> Vec<ApprovalRequestRecord> {
+    broker
+        .list_interactions()
+        .await
+        .into_iter()
+        .filter_map(|record| match record {
+            crate::interaction_broker::InteractionHistoryRecord::NativeApproval { record } => {
+                Some(*record)
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 #[tokio::test]
 async fn decision_is_single_use_actor_bound_and_maps_only_offered_options() {
     let (broker, generation, _directory) = fixture_broker().await;
@@ -40,11 +54,14 @@ async fn decision_is_single_use_actor_bound_and_maps_only_offered_options() {
             option_id: "native-accept".to_owned()
         }
     );
-    assert!(broker.list(false).await.approvals.is_empty());
+    let history = native_approval_records(&broker).await;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].state, ApprovalState::Decided);
+    assert_eq!(history[0].decision, Some(ApprovalDecision::Allow));
 }
 
 #[tokio::test]
-async fn native_request_by_its_own_approver_is_refused_without_legacy_history() {
+async fn native_request_by_its_own_approver_is_recorded_and_refused() {
     use codex_acp_adapter::{ApprovalBroker as _, ApprovalRoute, BrokeredApprovalRequest};
     use collaboration_protocol::RouterAccess;
 
@@ -75,7 +92,20 @@ async fn native_request_by_its_own_approver_is_refused_without_legacy_history() 
         .expect("self-approval refusal settles");
 
     assert_eq!(outcome, BrokeredApprovalOutcome::Cancelled);
-    assert!(broker.list(false).await.approvals.is_empty());
+    let history = native_approval_records(&broker).await;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].requester, self_approver);
+    assert_eq!(history[0].approver, self_approver);
+    assert_eq!(history[0].state, ApprovalState::ApproverIsRequester);
+    assert_eq!(
+        history[0].reason.as_deref(),
+        Some("set a different approver")
+    );
+    assert_eq!(history[0].offered_options[0].option_id, "native-accept");
+    assert_eq!(
+        history[0].offered_options[0].scope,
+        ApprovalOptionScope::AllowOnce
+    );
 }
 
 #[tokio::test]
@@ -118,7 +148,7 @@ async fn missing_native_approval_route_emits_only_typed_safe_diagnostic() {
 }
 
 #[tokio::test]
-async fn native_request_with_empty_option_mapping_is_refused_without_legacy_history() {
+async fn native_request_with_empty_option_mapping_is_recorded_as_refused() {
     use codex_acp_adapter::{ApprovalBroker as _, ApprovalRoute, BrokeredApprovalRequest};
     use collaboration_protocol::RouterAccess;
 
@@ -151,11 +181,17 @@ async fn native_request_with_empty_option_mapping_is_refused_without_legacy_hist
 
     assert_eq!(outcome, BrokeredApprovalOutcome::Cancelled);
     assert!(broker.pending.lock().await.is_empty());
-    assert!(broker.list(false).await.approvals.is_empty());
+    let history = native_approval_records(&broker).await;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].state, ApprovalState::Cancelled);
+    assert_eq!(
+        history[0].reason.as_deref(),
+        Some("native permission request has no supported decision option")
+    );
 }
 
 #[tokio::test]
-async fn expired_and_old_generation_decisions_remove_pending_legacy_requests() {
+async fn expired_and_old_generation_decisions_persist_terminal_native_history() {
     let (broker, generation, _directory) = fixture_broker().await;
     let (expired, _receiver) = insert_pending(
         &broker,
@@ -167,7 +203,13 @@ async fn expired_and_old_generation_decisions_remove_pending_legacy_requests() {
         broker.decide(expired).await,
         Err(ApprovalDecisionError::Code("expired"))
     ));
-    assert!(broker.list(false).await.approvals.is_empty());
+    let history = native_approval_records(&broker).await;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].state, ApprovalState::TimedOut);
+    assert_eq!(
+        history[0].reason.as_deref(),
+        Some("approval expired before a decision")
+    );
 
     let (broker, generation, _directory) = fixture_broker().await;
     let (stale, _receiver) = insert_pending(
@@ -198,7 +240,118 @@ async fn expired_and_old_generation_decisions_remove_pending_legacy_requests() {
         broker.decide(stale).await,
         Err(ApprovalDecisionError::Code("oldGeneration"))
     ));
-    assert!(broker.list(false).await.approvals.is_empty());
+    let history = native_approval_records(&broker).await;
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].state, ApprovalState::Cancelled);
+    assert_eq!(
+        history[0].reason.as_deref(),
+        Some("approval was cancelled because its provider generation ended")
+    );
+}
+
+#[tokio::test]
+async fn native_allow_and_deny_decisions_survive_broker_restart() {
+    use codex_acp_adapter::{ApprovalBroker as _, ApprovalRoute, BrokeredApprovalRequest};
+    use collaboration_protocol::RouterAccess;
+
+    for (option_id, decision) in [
+        ("native-accept", ApprovalDecision::Allow),
+        ("native-decline", ApprovalDecision::Deny),
+    ] {
+        let (broker, generation, directory) = fixture_broker().await;
+        let requester = session(&broker.service_id, "native-requester");
+        let approver = session(&broker.service_id, "native-approver");
+        broker
+            .register_route(ApprovalRoute {
+                thread_id: "native-requester".to_owned(),
+                created_by: requester,
+                approver: approver.clone(),
+                access: RouterAccess::WorkspaceWrite,
+                scratch_path: "/tmp/native-approval-decision".to_owned(),
+                root_message_id: None,
+            })
+            .await
+            .expect("route registered");
+
+        let notices = Arc::new(Mutex::new(Vec::new()));
+        let delivered = Arc::new(tokio::sync::Notify::new());
+        let prepared_pushes_at_delivery = Arc::new(Mutex::new(Vec::new()));
+        broker
+            .install_session_delivery(Arc::new(CapturingInteractionDelivery {
+                notices,
+                delivered: Arc::clone(&delivered),
+                push_store: Some(broker.interaction_store()),
+                prepared_pushes_at_delivery,
+            }))
+            .expect("delivery route");
+
+        let request_broker = Arc::clone(&broker);
+        let request_task = tokio::spawn(async move {
+            request_broker
+                .request(BrokeredApprovalRequest {
+                    thread_id: "native-requester".to_owned(),
+                    generation,
+                    request: json!({
+                        "method":"item/commandExecution/requestApproval",
+                        "params":{"options":[
+                            {"optionId":"native-accept","name":"Allow once"},
+                            {"optionId":"native-decline","name":"Deny once"}
+                        ]}
+                    }),
+                })
+                .await
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(5), delivered.notified())
+            .await
+            .expect("native approval notice delivered");
+
+        let pending = native_approval_records(&broker).await;
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].state, ApprovalState::PendingClientDecision);
+        let request_id = pending[0].request_id.clone();
+        let result = broker
+            .decide(ApprovalDecideParams {
+                request_id: request_id.clone(),
+                decision: None,
+                option_id: Some(option_id.to_owned()),
+                acknowledge_persistent: false,
+                note: None,
+                actor: board_identity(&approver).expect("approver identity"),
+            })
+            .await
+            .expect("decision recorded");
+        assert_eq!(result.state, ApprovalState::Decided);
+        assert_eq!(result.decision, Some(decision));
+        assert!(matches!(
+            request_task.await.expect("request task"),
+            Ok(BrokeredApprovalOutcome::Selected { option_id: selected })
+                if selected == option_id
+        ));
+
+        let terminal = native_approval_records(&broker).await;
+        assert_eq!(terminal.len(), 1);
+        assert_eq!(terminal[0].request_id, request_id);
+        assert_eq!(terminal[0].state, ApprovalState::Decided);
+        assert_eq!(terminal[0].decision, Some(decision));
+
+        let service_id = broker.service_id.clone();
+        let backend = broker.backend.clone();
+        let database_path = directory.join("interaction.sqlite");
+        drop(broker);
+        let store = Arc::new(
+            interaction_storage::InteractionStore::open(database_path)
+                .await
+                .expect("reopen interaction store"),
+        );
+        let restarted = ServiceInteractionBroker::load(service_id, backend, store)
+            .await
+            .expect("restart broker");
+        let restored = native_approval_records(&restarted).await;
+        assert_eq!(restored.len(), 1);
+        assert_eq!(restored[0].request_id, request_id);
+        assert_eq!(restored[0].state, ApprovalState::Decided);
+        assert_eq!(restored[0].decision, Some(decision));
+    }
 }
 
 #[tokio::test]
@@ -468,7 +621,7 @@ async fn refused_typed_offer_preserves_reviewed_fields_and_order_without_legacy_
     assert!(matches!(
         &recorded[0],
         crate::interaction_broker::InteractionHistoryRecord::RefusedApproval { refusal: stored, .. }
-            if stored.request_id == "malformed-offer" && stored.options[0].label == "First" && stored.options[1].label == "Second"
+            if stored == &refusal && stored.options[0].label == "First" && stored.options[1].label == "Second"
     ));
     assert!(!directory.join("approval-history.json").exists());
     let detailed = broker.list_detailed(false).await.expect("detailed list");

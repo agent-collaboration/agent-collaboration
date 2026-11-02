@@ -139,7 +139,7 @@ pub enum ApprovalListResponse {
     Detailed(ApprovalDetailedListResult),
 }
 
-#[derive(schemars::JsonSchema, Clone, Debug, Serialize, Deserialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ApprovalRequestRecord {
     pub request_id: String,

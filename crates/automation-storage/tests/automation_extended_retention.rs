@@ -235,6 +235,143 @@ async fn two_month_run_wake_and_revision_pruning_preserves_current_and_owed_work
     Ok(())
 }
 
+#[tokio::test]
+async fn completed_summary_is_retained_for_existing_schedule_continuity() -> TestResult {
+    use agent_automation::{
+        ContinuityInput, ExecutionDestination, InstructionText, OperationId, RunId,
+        ScheduleDefinition, SummarySource, SummarySourceReference, TimingRule,
+    };
+    use automation_storage::ScheduleCreate;
+
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("automation.sqlite");
+    let mut store = AutomationStore::open(&path).await?;
+    let now_ms = chrono::DateTime::parse_from_rfc3339("2026-08-31T12:00:00Z")?.timestamp_millis();
+    let cutoff_ms =
+        chrono::DateTime::parse_from_rfc3339("2026-06-30T12:00:00Z")?.timestamp_millis();
+    let completed_at_ms = cutoff_ms - 1;
+    let instruction = store
+        .create_instruction(
+            &OperationId::generate(),
+            &InstructionText::try_from("Review the workspace".to_owned())?,
+            completed_at_ms,
+        )
+        .await?;
+    let schedule = store
+        .create_schedule(&ScheduleCreate::<String, String> {
+            operation_id: OperationId::generate(),
+            definition: ScheduleDefinition {
+                instruction_id: instruction.instruction_id,
+                timing: TimingRule::Interval { seconds: 60 },
+                enabled: true,
+                destination: ExecutionDestination::FreshEachRun {
+                    endpoint: "codex-local".to_owned(),
+                    cwd: "/workspace".into(),
+                },
+                execution_timeout_seconds: Some(120),
+                model: Some("gpt-5.6-sol".into()),
+                effort: Some("medium".into()),
+            },
+            imported_continuity: ContinuityInput::None,
+            now_ms: completed_at_ms,
+        })
+        .await?;
+
+    let summary_run_id = RunId::generate();
+    let obsolete_run_id = RunId::generate();
+    let source = serde_json::to_string(&SummarySource::Completed {
+        source_target: "previous-thread".to_owned(),
+        source_reference: SummarySourceReference::NativeTurn {
+            turn_id: "summary-turn".to_owned(),
+        },
+        summary_attempt_id: agent_automation::AttemptId::generate(),
+    })?;
+    let mut observer = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(&path)
+            .foreign_keys(true),
+    )
+    .await?;
+    for (run_id, status, summary_text, summary_source, run_completed_at_ms) in [
+        (
+            summary_run_id.as_str(),
+            "finished",
+            Some("Prior completed work"),
+            Some(source.as_str()),
+            Some(completed_at_ms),
+        ),
+        (
+            obsolete_run_id.as_str(),
+            "preparationFailed",
+            None,
+            None,
+            Some(completed_at_ms - 1),
+        ),
+    ] {
+        sqlx::query(
+            "INSERT INTO workflow_runs(run_id,schedule_id,due_at_ms,run_status,execution_evidence_json,summary_text,summary_source_json,completed_at_ms) VALUES (?,?,?,?,'{}',?,?,?)",
+        )
+        .bind(run_id)
+        .bind(schedule.schedule_id.as_str())
+        .bind(completed_at_ms)
+        .bind(status)
+        .bind(summary_text)
+        .bind(summary_source)
+        .bind(run_completed_at_ms)
+        .execute(&mut observer)
+        .await?;
+    }
+    observer.close().await?;
+
+    let pruned = store.prune_completed_workflow_runs(now_ms, 500).await?;
+    if pruned != 1 {
+        return Err(format!("pruned {pruned} old runs; expected only the unrelated run").into());
+    }
+    let package = store
+        .export_schedule::<String, String>(&schedule.schedule_id)
+        .await?;
+    let exported = package
+        .continuity
+        .as_ref()
+        .ok_or("schedule export lost its latest completed summary")?;
+    if exported.text.as_str() != "Prior completed work"
+        || exported.source_run_id != summary_run_id.as_str()
+        || exported.source_target != "previous-thread"
+    {
+        return Err("schedule export changed retained summary continuity".into());
+    }
+
+    let waiting_run_id = store
+        .enqueue_due_run::<String, String>(&schedule.schedule_id, now_ms)
+        .await?
+        .ok_or("due schedule did not enqueue work")?;
+    let admission = store
+        .admit_waiting_run::<String, String>(&schedule.schedule_id, now_ms)
+        .await?;
+    let automation_storage::RunAdmission::Admitted { run_id, inputs } = admission else {
+        return Err("due schedule did not admit its waiting run".into());
+    };
+    if run_id != waiting_run_id
+        || !matches!(
+            inputs.continuity,
+            ContinuityInput::LocalSummary {
+                text,
+                source_run_id,
+                source_target,
+                source_reference: SummarySourceReference::NativeTurn { turn_id },
+            } if text.as_str() == "Prior completed work"
+                && source_run_id == summary_run_id
+                && source_target == "previous-thread"
+                && turn_id == "summary-turn"
+        )
+    {
+        return Err("next run did not receive the retained local summary".into());
+    }
+
+    store.close().await?;
+    Ok(())
+}
+
 async fn insert_wake(
     transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     wake_id: &str,

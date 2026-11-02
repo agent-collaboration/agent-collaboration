@@ -9,7 +9,7 @@ pub(crate) const MAILBOX_DELIVERY_RETENTION_MONTHS: u32 = 2;
 /// Retains terminal operation receipts for two calendar months.
 pub(crate) const OPERATION_RECEIPT_RETENTION_MONTHS: u32 = 2;
 
-/// Retains completed workflow runs for two calendar months.
+/// Retains completed workflow runs for two calendar months, keeping each schedule's newest summary.
 pub(crate) const WORKFLOW_RUN_RETENTION_MONTHS: u32 = 2;
 
 /// Retains expired and cancelled wake definitions for two calendar months.
@@ -65,7 +65,7 @@ impl AutomationStore {
         Ok(result.rows_affected())
     }
 
-    /// Deletes one bounded batch of completed workflow runs older than the cutoff.
+    /// Deletes one bounded batch of old workflow runs, retaining each schedule's newest summary.
     pub async fn prune_completed_workflow_runs(
         &mut self,
         now_ms: i64,
@@ -76,11 +76,27 @@ impl AutomationStore {
         let result = sqlx::query(
             "DELETE FROM workflow_runs
               WHERE rowid IN (
-                  SELECT rowid
-                    FROM workflow_runs
-                   WHERE completed_at_ms < ?1
-                     AND run_status IN ('finished','preparationFailed')
-                   ORDER BY completed_at_ms,run_id
+                  SELECT candidate.rowid
+                    FROM workflow_runs AS candidate
+                   WHERE candidate.completed_at_ms < ?1
+                     AND candidate.run_status IN ('finished','preparationFailed')
+                     AND NOT (
+                         candidate.run_status='finished'
+                         AND candidate.summary_text IS NOT NULL
+                         AND candidate.summary_source_json IS NOT NULL
+                         AND candidate.run_id = (
+                             SELECT retained.run_id
+                               FROM workflow_runs AS retained
+                              WHERE retained.schedule_id=candidate.schedule_id
+                                AND retained.run_status='finished'
+                                AND retained.completed_at_ms IS NOT NULL
+                                AND retained.summary_text IS NOT NULL
+                                AND retained.summary_source_json IS NOT NULL
+                              ORDER BY retained.completed_at_ms DESC,retained.run_id DESC
+                              LIMIT 1
+                         )
+                     )
+                   ORDER BY candidate.completed_at_ms,candidate.run_id
                    LIMIT ?2
               )",
         )

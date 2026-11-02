@@ -201,3 +201,94 @@ async fn settled_history_prunes_after_two_calendar_months_but_pending_history_su
         .expect("durable prune");
     assert_eq!(count, 2);
 }
+
+#[tokio::test]
+async fn native_terminal_history_reopens_validates_and_expires_by_original_creation() {
+    use collaboration_protocol::{ApprovalDecision, ApprovalRequestRecord, ApprovalState};
+    let directory = tempfile::tempdir().expect("isolated native history");
+    let database = directory.path().join("interaction.sqlite");
+    let store = InteractionHistoryStore::load(database.clone())
+        .await
+        .expect("history owner");
+    let mut record: ApprovalRequestRecord = serde_json::from_value(serde_json::json!({
+        "requestId":"native-history", "requester":session_ref("requester"),
+        "approver":session_ref("approver"),
+        "generation":{"serviceEpoch":"018f47d2-24d5-7a68-b9ec-6f759c39458f","generation":1},
+        "state":"pendingClientDecision", "offeredOptions":[{"optionId":"native-accept","scope":{"kind":"allowOnce"}}],
+        "operation":{"method":"approval"}, "expiresAt":Utc::now().to_rfc3339()
+    })).expect("native facts");
+    store
+        .record_native_approval(record.clone())
+        .await
+        .expect("pending commit");
+    let original_creation = store.data.lock().await.created_at["native-history"];
+    record.state = ApprovalState::Decided;
+    record.decision = Some(ApprovalDecision::Allow);
+    store
+        .record_native_approval(record.clone())
+        .await
+        .expect("decision commit");
+    assert_eq!(
+        store.data.lock().await.created_at["native-history"],
+        original_creation
+    );
+    drop(store);
+    let reopened = InteractionHistoryStore::load(database)
+        .await
+        .expect("reopen native decision");
+    assert_eq!(
+        reopened.interaction("native-history").await,
+        Some(InteractionHistoryRecord::NativeApproval {
+            record: Box::new(record.clone())
+        })
+    );
+    let future = original_creation
+        .checked_add_months(chrono::Months::new(3))
+        .expect("retention clock");
+    assert_eq!(
+        reopened
+            .prune_expired(future, 10)
+            .await
+            .expect("bounded prune"),
+        1
+    );
+    record.decision = None;
+    assert!(
+        reopened.record_native_approval(record).await.is_err(),
+        "decided rows require a decision"
+    );
+}
+
+#[tokio::test]
+async fn native_pending_history_is_cancelled_durably_on_restart() {
+    let directory = tempfile::tempdir().expect("isolated native restart");
+    let database = directory.path().join("interaction.sqlite");
+    let store = InteractionHistoryStore::load(database.clone())
+        .await
+        .expect("history owner");
+    let record = serde_json::from_value(serde_json::json!({
+        "requestId":"native-pending", "requester":session_ref("requester"),
+        "approver":session_ref("approver"),
+        "generation":{"serviceEpoch":"018f47d2-24d5-7a68-b9ec-6f759c39458f","generation":1},
+        "state":"pendingClientDecision", "operation":{}, "expiresAt":Utc::now().to_rfc3339()
+    }))
+    .expect("pending native facts");
+    store
+        .record_native_approval(record)
+        .await
+        .expect("pending commit");
+    drop(store);
+    let reopened = InteractionHistoryStore::load(database.clone())
+        .await
+        .expect("reopen");
+    reopened
+        .reconcile_pending_on_startup()
+        .await
+        .expect("reconcile pending");
+    drop(reopened);
+    let durable = InteractionHistoryStore::load(database)
+        .await
+        .expect("reopen cancellation");
+    assert!(matches!(durable.interaction("native-pending").await,
+        Some(InteractionHistoryRecord::NativeApproval { record }) if record.state == collaboration_protocol::ApprovalState::Cancelled && record.reason.as_deref() == Some("hostRestarted")));
+}

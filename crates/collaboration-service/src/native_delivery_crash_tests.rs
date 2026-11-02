@@ -187,7 +187,11 @@ async fn native_delivery_process_loss_preserves_uncertainty_without_resend() -> 
         if serde_json::to_value(push_before)? != serde_json::to_value(push_after)? {
             return Err("automation recovery rewrote the settled push receipt".into());
         }
-        drop(store);
+        Arc::try_unwrap(store)
+            .map_err(|_| std::io::Error::other("fixture automation store remained shared"))?
+            .into_inner()
+            .close()
+            .await?;
         Arc::try_unwrap(interactions)
             .map_err(|_| "crash fixture interaction owner remained shared")?
             .close()
@@ -352,7 +356,11 @@ async fn interrupted_wake_attempt_survives_shared_restore_and_worker_delivers_on
     }
     drop(sender);
     drop(identity);
-    drop(store);
+    Arc::try_unwrap(store)
+        .map_err(|_| std::io::Error::other("fixture automation store remained shared"))?
+        .into_inner()
+        .close()
+        .await?;
     Arc::try_unwrap(interactions)
         .map_err(|_| "restart fixture interaction owner remained shared")?
         .close()

@@ -163,7 +163,7 @@ pub struct ServiceInteractionBroker {
     display_names: OnceLock<crate::SessionDisplayNameCache>,
     push_context: OnceLock<InteractionPushContext>,
     pending: Arc<Mutex<BTreeMap<String, PendingApproval>>>,
-    interaction_history: InteractionHistoryStore,
+    interaction_history: Arc<InteractionHistoryStore>,
     interaction_store: Arc<interaction_storage::InteractionStore>,
     typed_operations: Mutex<()>,
     typed_pending_approvals: Mutex<BTreeMap<String, TypedPendingApproval>>,
@@ -295,7 +295,7 @@ impl ServiceInteractionBroker {
             display_names: OnceLock::new(),
             push_context: OnceLock::new(),
             pending: Arc::new(Mutex::new(BTreeMap::new())),
-            interaction_history,
+            interaction_history: Arc::new(interaction_history),
             interaction_store,
             typed_operations: Mutex::new(()),
             typed_pending_approvals: Mutex::new(BTreeMap::new()),
@@ -432,6 +432,10 @@ impl ServiceInteractionBroker {
             legacy.retain(|record| record.state == ApprovalState::PendingClientDecision);
         }
         let typed = self.interaction_history.list_approvals(pending_only).await;
+        legacy.extend(typed.iter().filter_map(|record| match record {
+            InteractionHistoryRecord::NativeApproval { record } => Some(*record.clone()),
+            _ => None,
+        }));
         let mut approvals = Vec::with_capacity(legacy.len() + typed.len());
         for record in legacy {
             approvals.push(ApprovalDetailedRecord {
@@ -512,10 +516,6 @@ impl ServiceInteractionBroker {
         }
         Ok(ApprovalDetailedListResult { approvals })
     }
-
-    async fn remove_pending(&self, request_id: &str) -> bool {
-        self.pending.lock().await.remove(request_id).is_some()
-    }
 }
 
 fn native_option_records(options: &[Value]) -> Vec<ApprovalOfferedOption> {
@@ -577,6 +577,7 @@ fn map_native_options(
 struct CancellationMarker {
     request_id: String,
     pending: Arc<Mutex<BTreeMap<String, PendingApproval>>>,
+    history: Arc<InteractionHistoryStore>,
     armed: bool,
 }
 
@@ -587,8 +588,16 @@ impl Drop for CancellationMarker {
         }
         let request_id = self.request_id.clone();
         let pending = Arc::clone(&self.pending);
+        let history = Arc::clone(&self.history);
         tokio::spawn(async move {
-            pending.lock().await.remove(&request_id);
+            if let Some(mut request) = pending.lock().await.remove(&request_id) {
+                request.record.state = ApprovalState::Cancelled;
+                request.record.reason =
+                    Some("approval handler ended before a decision was recorded".to_owned());
+                if let Err(error) = history.record_native_approval(request.record).await {
+                    tracing::error!(%error, request_id, "failed to persist cancelled native approval");
+                }
+            }
         });
     }
 }
@@ -679,7 +688,13 @@ impl ServiceInteractionBroker {
             .unwrap_or(true)
         {
             drop(pending);
-            self.remove_pending(&params.request_id).await;
+            self.finish_pending(
+                &params.request_id,
+                ApprovalState::TimedOut,
+                Some("approval expired before a decision"),
+            )
+            .await
+            .map_err(|_| "unavailable")?;
             return Err(ApprovalDecisionError::Code("expired"));
         }
         let current_generation = self
@@ -691,7 +706,13 @@ impl ServiceInteractionBroker {
             .clone();
         if current_generation != request.record.generation {
             drop(pending);
-            self.remove_pending(&params.request_id).await;
+            self.finish_pending(
+                &params.request_id,
+                ApprovalState::Cancelled,
+                Some("approval was cancelled because its provider generation ended"),
+            )
+            .await
+            .map_err(|_| "unavailable")?;
             return Err(ApprovalDecisionError::Code("oldGeneration"));
         }
         let requester = board_identity(&request.record.requester)?;
@@ -728,6 +749,11 @@ impl ServiceInteractionBroker {
                     .map(|option| option.option_id.clone())
                     .collect(),
             })?;
+        let mut record = request.record.clone();
+        record.state = ApprovalState::Decided;
+        record.reason = None;
+        record.decision = Some(decision);
+        self.record(record).await.map_err(|_| "unavailable")?;
         let request = pending
             .remove(&params.request_id)
             .ok_or("approvalNotPending")?;

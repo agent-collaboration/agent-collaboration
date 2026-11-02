@@ -74,14 +74,57 @@ impl ApprovalBroker for ServiceInteractionBroker {
                 .and_then(Value::as_array)
                 .map(Vec::as_slice)
                 .unwrap_or_default();
+            let offered_options = native_option_records(native_options);
             if requester == route.approver {
+                let request_id = format!(
+                    "approval-{}",
+                    String::from(
+                        crate::new_service_uuid().map_err(|_| ApprovalBrokerError::Unavailable)?
+                    )
+                );
+                self.record(ApprovalRequestRecord {
+                    request_id,
+                    requester,
+                    approver: route.approver,
+                    generation: request.generation,
+                    state: ApprovalState::ApproverIsRequester,
+                    reason: Some("set a different approver".to_owned()),
+                    offered_options,
+                    presentation: None,
+                    decision: None,
+                    operation: request.request,
+                    expires_at: chrono::Utc::now().to_rfc3339(),
+                })
+                .await?;
                 return Ok(BrokeredApprovalOutcome::Cancelled);
             }
             let offered = match map_native_options(native_options) {
                 Ok(offered) => offered,
-                Err(_) => return Ok(BrokeredApprovalOutcome::Cancelled),
+                Err(reason) => {
+                    let request_id = format!(
+                        "approval-{}",
+                        String::from(
+                            crate::new_service_uuid()
+                                .map_err(|_| { ApprovalBrokerError::Unavailable })?
+                        )
+                    );
+                    self.record(ApprovalRequestRecord {
+                        request_id,
+                        requester,
+                        approver: route.approver,
+                        generation: request.generation,
+                        state: ApprovalState::Cancelled,
+                        reason: Some(reason.to_owned()),
+                        offered_options,
+                        presentation: None,
+                        decision: None,
+                        operation: request.request,
+                        expires_at: chrono::Utc::now().to_rfc3339(),
+                    })
+                    .await?;
+                    return Ok(BrokeredApprovalOutcome::Cancelled);
+                }
             };
-            let offered_options = native_option_records(native_options);
             let request_id = format!(
                 "approval-{}",
                 String::from(
@@ -104,6 +147,7 @@ impl ApprovalBroker for ServiceInteractionBroker {
                 expires_at,
                 decision: None,
             };
+            self.record(record.clone()).await?;
             let (completion, receiver) = oneshot::channel();
             self.pending.lock().await.insert(
                 request_id.clone(),
@@ -116,6 +160,7 @@ impl ApprovalBroker for ServiceInteractionBroker {
             let mut cancellation = CancellationMarker {
                 request_id: request_id.clone(),
                 pending: Arc::clone(&self.pending),
+                history: Arc::clone(&self.interaction_history),
                 armed: true,
             };
             let deadline = tokio::time::Instant::now() + APPROVAL_TIMEOUT;
@@ -124,21 +169,34 @@ impl ApprovalBroker for ServiceInteractionBroker {
             let delivery_result = tokio::select! {
                 biased;
                 () = tokio::time::sleep_until(deadline) => {
-                    self.remove_pending(&request_id).await;
+                    self.finish_pending(
+                        &request_id,
+                        ApprovalState::TimedOut,
+                        Some("approval timed out before the notice reached its approver"),
+                    ).await?;
                     cancellation.armed = false;
                     return Ok(BrokeredApprovalOutcome::Cancelled);
                 }
                 result = &mut delivery => result,
             };
             if delivery_result.is_err() {
-                self.remove_pending(&request_id).await;
+                self.finish_pending(
+                    &request_id,
+                    ApprovalState::ApproverUnreachable,
+                    Some("approval notice could not be delivered to the configured approver"),
+                )
+                .await?;
                 cancellation.armed = false;
                 return Ok(BrokeredApprovalOutcome::Cancelled);
             }
             tokio::select! {
                 biased;
                 () = tokio::time::sleep_until(deadline) => {
-                    self.remove_pending(&request_id).await;
+                    self.finish_pending(
+                        &request_id,
+                        ApprovalState::TimedOut,
+                        Some("approval timed out before an approver decided"),
+                    ).await?;
                     cancellation.armed = false;
                     Ok(BrokeredApprovalOutcome::Cancelled)
                 }
@@ -148,6 +206,7 @@ impl ApprovalBroker for ServiceInteractionBroker {
                     Ok(outcome)
                 }
                 Err(_) => {
+                    self.finish_pending(&request_id, ApprovalState::Cancelled, Some("approval response channel closed")).await?;
                     cancellation.armed = false;
                     Ok(BrokeredApprovalOutcome::Cancelled)
                 }
@@ -168,5 +227,31 @@ impl ApprovalBroker for ServiceInteractionBroker {
     > {
         let thread_id = thread_id.to_owned();
         Box::pin(async move { self.load_approval_route(&thread_id).await })
+    }
+}
+
+impl ServiceInteractionBroker {
+    pub(super) async fn record(
+        &self,
+        record: ApprovalRequestRecord,
+    ) -> Result<(), ApprovalBrokerError> {
+        self.interaction_history
+            .record_native_approval(record)
+            .await
+            .map_err(|_| ApprovalBrokerError::Unavailable)
+    }
+    pub(super) async fn finish_pending(
+        &self,
+        request_id: &str,
+        state: ApprovalState,
+        reason: Option<&str>,
+    ) -> Result<bool, ApprovalBrokerError> {
+        let Some(mut pending) = self.pending.lock().await.remove(request_id) else {
+            return Ok(false);
+        };
+        pending.record.state = state;
+        pending.record.reason = reason.map(str::to_owned);
+        self.record(pending.record).await?;
+        Ok(true)
     }
 }

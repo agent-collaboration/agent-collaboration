@@ -69,7 +69,11 @@ async fn sdk_wait_reports_skipped_one_shot_without_a_delivery()
         return Err("skipped one-shot did not return its typed terminal wait error".into());
     }
     served.stop().await?;
-    drop(store);
+    Arc::try_unwrap(store)
+        .map_err(|_| std::io::Error::other("fixture automation store remained shared"))?
+        .into_inner()
+        .close()
+        .await?;
     std::fs::remove_file(path)?;
     Ok(())
 }

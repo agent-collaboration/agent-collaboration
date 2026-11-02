@@ -67,6 +67,19 @@ impl FleetOutbox {
         )?))
     }
 
+    /// Releases replay input after creation commits or the directory rejects it.
+    pub async fn complete_creation_input(
+        &self,
+        request: &RequestId,
+    ) -> Result<(), RouterLocalStorageError> {
+        let _guard = self.database.writer.lock().await;
+        sqlx::query::<sqlx_turso::Turso>("DELETE FROM project_creation_inputs WHERE request_id=?")
+            .bind(request.as_str())
+            .execute(&self.database.pool)
+            .await?;
+        Ok(())
+    }
+
     pub async fn accepted_creation_page(
         &self,
         after: &str,

@@ -124,7 +124,7 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
         }
         let identity = crate::ApplicationFixture::new(service, service)?
             .with_automation_store(Arc::clone(&store))
-            .with_interaction_store(interactions)
+            .with_interaction_store(Arc::clone(&interactions))
             .with_scheduled_run_execution(fake);
         let application = (identity).build();
         let shown = application
@@ -154,8 +154,16 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
         }
         drop(application);
         drop(worker);
-        drop(store);
-        remove_store_directory_tolerating_sqlite_sidecars(&root)?;
+        Arc::try_unwrap(store)
+            .map_err(|_| std::io::Error::other("fixture automation store remained shared"))?
+            .into_inner()
+            .close()
+            .await?;
+        Arc::try_unwrap(interactions)
+            .map_err(|_| std::io::Error::other("fixture interaction store remained shared"))?
+            .close()
+            .await;
+        std::fs::remove_dir_all(&root)?;
     }
     Ok(())
 }
@@ -184,7 +192,7 @@ async fn provider_existing_preparation_is_inspectable_and_fresh_activation_is_re
     let fake: Arc<dyn ScheduledRunExecution> = Arc::new(FakeScheduledExecution {
         kind: FakeRouteKind::Provider,
         target: target.clone(),
-        interactions,
+        interactions: Arc::clone(&interactions),
         observed_push_ids: Arc::new(std::sync::Mutex::new(Vec::new())),
         generation,
         attempt_id: AttemptId::generate(),
@@ -306,8 +314,16 @@ async fn provider_existing_preparation_is_inspectable_and_fresh_activation_is_re
         return Err("operation/show lost the provider preparation evidence".into());
     }
     drop(application);
-    drop(store);
-    remove_store_directory_tolerating_sqlite_sidecars(&root)?;
+    Arc::try_unwrap(store)
+        .map_err(|_| std::io::Error::other("fixture automation store remained shared"))?
+        .into_inner()
+        .close()
+        .await?;
+    Arc::try_unwrap(interactions)
+        .map_err(|_| std::io::Error::other("fixture interaction store remained shared"))?
+        .close()
+        .await;
+    std::fs::remove_dir_all(&root)?;
     Ok(())
 }
 

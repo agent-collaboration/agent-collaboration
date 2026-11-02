@@ -10,7 +10,6 @@ use automation_storage::{
 };
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_client::protocol::{CodexGeneration, EndpointRef, NativeSendReceipt, SessionRef};
-use collaboration_runtime::test_support::remove_store_directory_tolerating_sqlite_sidecars;
 use serde_json::{Value, json};
 use std::os::unix::fs::DirBuilderExt;
 #[tokio::test]
@@ -247,6 +246,6 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
         return Err("reconciling finished Run changed its original outcome".into());
     }
     runtime.shutdown().await?;
-    remove_store_directory_tolerating_sqlite_sidecars(&root)?;
+    std::fs::remove_dir_all(&root)?;
     Ok(())
 }

@@ -193,7 +193,11 @@ async fn cli_summary_skip_preserves_worker_and_releases_schedule()
             "CLI skip lost worker outcome, fabricated summary or retained occupancy".into(),
         );
     }
-    drop(store);
+    Arc::try_unwrap(store)
+        .map_err(|_| std::io::Error::other("fixture automation store remained shared"))?
+        .into_inner()
+        .close()
+        .await?;
     for entry in std::fs::read_dir(&root)? {
         let entry = entry?;
         if !entry.file_type()?.is_file() {

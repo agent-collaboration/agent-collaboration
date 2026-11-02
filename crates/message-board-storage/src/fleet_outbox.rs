@@ -13,7 +13,7 @@ mod creation_tests;
 static OUTBOX_MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./fleet_outbox_migrations");
 const MAX_FLEET_OUTBOX_PRUNE_BATCH: u32 = 500;
 
-/// Retains completed fleet outbox requests and inputs for two calendar months.
+/// Retains completed fleet requests for two months; accepted creation inputs stay until local commit.
 pub(crate) const FLEET_OUTBOX_RETENTION_MONTHS: u32 = 2;
 
 fn fleet_outbox_retention_cutoff_ms(now_ms: i64) -> Result<i64, RouterLocalStorageError> {
@@ -226,7 +226,7 @@ impl FleetOutbox {
             return Err(error);
         }
         let candidates = sqlx::query::<sqlx_turso::Turso>(
-            "SELECT request_id,canonical_hash,request,state,settled_at_ms FROM fleet_outbox_requests WHERE json_extract(state,'$.kind')='decided' AND (settled_at_ms IS NULL OR settled_at_ms<?) ORDER BY COALESCE(settled_at_ms,0),request_id LIMIT ?",
+            "SELECT request_id,canonical_hash,request,state,settled_at_ms FROM fleet_outbox_requests AS outbox WHERE json_extract(state,'$.kind')='decided' AND (settled_at_ms IS NULL OR settled_at_ms<?) AND NOT EXISTS (SELECT 1 FROM project_creation_inputs AS creation WHERE creation.request_id=outbox.request_id) ORDER BY COALESCE(settled_at_ms,0),request_id LIMIT ?",
         )
         .bind(cutoff_ms)
         .bind(i64::from(batch_size))
@@ -240,12 +240,6 @@ impl FleetOutbox {
                 return Err(RouterLocalStorageError::InvalidRecord);
             };
             let request_id = entry.request.request_id.as_str();
-            sqlx::query::<sqlx_turso::Turso>(
-                "DELETE FROM project_creation_inputs WHERE request_id=?",
-            )
-            .bind(request_id)
-            .execute(&mut *transaction)
-            .await?;
             let deleted = sqlx::query::<sqlx_turso::Turso>(
                 "DELETE FROM fleet_outbox_requests WHERE request_id=? AND json_extract(state,'$.kind')='decided' AND settled_at_ms<?",
             )

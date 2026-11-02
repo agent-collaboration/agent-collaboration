@@ -2,7 +2,6 @@
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_client::CollaborationClient;
 use collaboration_client::protocol::{InstructionCreateParams, InstructionText, OperationId};
-use collaboration_runtime::test_support::remove_store_directory_tolerating_sqlite_sidecars;
 use serde_json::{Value, json};
 use std::os::unix::fs::DirBuilderExt;
 #[tokio::test]
@@ -202,6 +201,6 @@ async fn cli_creates_and_inspects_disabled_schedule() -> Result<(), Box<dyn std:
         return Err("unavailable prepare did not preserve no-allocation evidence".into());
     }
     runtime.shutdown().await?;
-    remove_store_directory_tolerating_sqlite_sidecars(&root)?;
+    std::fs::remove_dir_all(&root)?;
     Ok(())
 }

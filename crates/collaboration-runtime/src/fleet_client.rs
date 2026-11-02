@@ -318,6 +318,15 @@ impl FleetClient {
         Ok(self.outbox.creation_input(request).await?)
     }
 
+    /// Releases the complete input after creation commits or the directory rejects it.
+    pub async fn complete_creation_input(
+        &self,
+        request: &RequestId,
+    ) -> Result<(), FleetClientError> {
+        self.outbox.complete_creation_input(request).await?;
+        Ok(())
+    }
+
     pub async fn accepted_creation_page(
         &self,
         after: &str,

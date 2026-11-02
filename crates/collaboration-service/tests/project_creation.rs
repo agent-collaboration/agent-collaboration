@@ -139,6 +139,68 @@ async fn accepted_directory_survives_reopen_and_pending_registration_records_not
     clippy::panic_in_result_fn,
     reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
 )]
+async fn outbox_pruning_retains_pending_creation_until_registration_and_recovery_complete()
+-> Result<(), TestError> {
+    let fixture = BoardFixture::start().await?;
+    let request = request(&fixture)?;
+    assert_eq!(
+        fixture._admission.create_project(&request).await?.result,
+        RequestResult::ProjectCreationPending {
+            project: request.project_id.clone(),
+        }
+    );
+
+    let future_cutoff =
+        chrono::DateTime::parse_from_rfc3339("2030-03-01T00:00:00Z")?.timestamp_millis();
+    fixture
+        ._fleet
+        .prune_outbox_batch(future_cutoff, 500)
+        .await?;
+    assert_eq!(
+        fixture._fleet.creation_input(&request.request_id).await?,
+        Some(request.clone()),
+        "retention discarded the only replay input while registration was pending"
+    );
+
+    let fixture = fixture.restart_read_fixture().await?;
+    assert_eq!(
+        fixture._fleet.creation_input(&request.request_id).await?,
+        Some(request.clone()),
+        "restart lost the accepted creation input"
+    );
+    fixture.prepare_registered_creation(&request).await?;
+    fixture._admission.recover_creating_projects().await?;
+
+    let store = fixture
+        ._registry
+        .existing_project(&request.project_id)
+        .await?
+        .ok_or("registered creation store")?;
+    let mut read = store.snapshot().await?;
+    assert!(matches!(
+        read.record(&request.project_id.clone().into()).await?,
+        Some(Record::Project(_))
+    ));
+    assert!(
+        read.record(&request.request_id.clone().into())
+            .await?
+            .is_some()
+    );
+    read.finish().await?;
+    drop(store);
+    assert_eq!(
+        fixture._fleet.creation_input(&request.request_id).await?,
+        None,
+        "completed creating ledger retained its replay input"
+    );
+    fixture.stop().await
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn directory_refusal_keeps_its_structured_reason_without_creating_a_file()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start_offline().await?;
@@ -164,6 +226,22 @@ async fn directory_refusal_keeps_its_structured_reason_without_creating_a_file()
     assert_eq!(
         fixture._admission.create_project(&request).await?.result,
         expected
+    );
+    assert_eq!(
+        fixture._fleet.creation_input(&request.request_id).await?,
+        None,
+        "terminal directory refusal retained an unusable creation input"
+    );
+    fixture
+        ._fleet
+        .prune_outbox_batch(
+            chrono::DateTime::parse_from_rfc3339("2030-03-01T00:00:00Z")?.timestamp_millis(),
+            500,
+        )
+        .await?;
+    assert!(
+        fixture._fleet.request(&request.request_id).await?.is_none(),
+        "released rejected creation remained past the retention cutoff"
     );
     assert!(
         !fixture

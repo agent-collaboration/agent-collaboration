@@ -687,7 +687,6 @@ impl CollaborationRuntime {
         drop(message_routes.router);
         drop(subscription_presence);
         drop(approval_broker);
-        drop(automation_store);
         drop(interactions);
         let publication = publication.with_acp_listener()?;
         if let Some(settings) = settings_backend
@@ -817,6 +816,7 @@ impl CollaborationRuntime {
             project_admission,
             subscription_delivery,
             provider_store,
+            automation_store,
             external_provider_supervisor,
             provider_delivery_route,
             provider_retention: None,

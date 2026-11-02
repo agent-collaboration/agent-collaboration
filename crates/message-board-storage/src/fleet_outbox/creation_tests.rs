@@ -147,8 +147,7 @@ async fn authoritative_creation_decode_rejects_changed_input_and_pair_identity()
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn decided_request_and_creation_input_prune_at_two_calendar_months_but_pending_survives()
--> TestResult {
+async fn completed_creation_and_pending_requests_keep_their_outbox_retention_rules() -> TestResult {
     let temporary = tempfile::tempdir()?;
     let outbox = FleetOutbox::open(&temporary.path().join("outbox.sqlite")).await?;
     let (finished_input, finished_request) = inputs()?;
@@ -168,6 +167,9 @@ async fn decided_request_and_creation_input_prune_at_two_calendar_months_but_pen
             decided_at,
         )
         .await?;
+    outbox
+        .complete_creation_input(&finished_request.request_id)
+        .await?;
     let exact_boundary = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(decided_at)
         .ok_or("decision clock out of range")?
         .checked_add_months(chrono::Months::new(FLEET_OUTBOX_RETENTION_MONTHS))
@@ -185,7 +187,7 @@ async fn decided_request_and_creation_input_prune_at_two_calendar_months_but_pen
         outbox
             .creation_input(&finished_request.request_id)
             .await?
-            .is_some()
+            .is_none()
     );
     assert_eq!(outbox.prune_expired(exact_boundary + 1, 500).await?, 1);
     assert!(
@@ -205,6 +207,36 @@ async fn decided_request_and_creation_input_prune_at_two_calendar_months_but_pen
         outbox.creation_input(&pending_request.request_id).await?,
         Some(pending_input)
     );
+    outbox.close().await;
+    Ok(())
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
+#[tokio::test]
+async fn accepted_creation_input_blocks_retention_until_local_completion() -> TestResult {
+    let temporary = tempfile::tempdir()?;
+    let outbox = FleetOutbox::open(&temporary.path().join("outbox.sqlite")).await?;
+    let (input, directory) = inputs()?;
+    outbox.enqueue_creation(&directory, &input).await?;
+    outbox
+        .mark_decided(&input.request_id, &accepted_decision()?, 1_000)
+        .await?;
+    let after_retention = 100 * 24 * 60 * 60 * 1_000;
+
+    assert_eq!(outbox.prune_expired(after_retention, 500).await?, 0);
+    assert!(outbox.request(&input.request_id).await?.is_some());
+    assert_eq!(
+        outbox.creation_input(&input.request_id).await?,
+        Some(input.clone())
+    );
+
+    outbox.complete_creation_input(&input.request_id).await?;
+    assert_eq!(outbox.prune_expired(after_retention, 500).await?, 1);
+    assert!(outbox.request(&input.request_id).await?.is_none());
+    assert!(outbox.creation_input(&input.request_id).await?.is_none());
     outbox.close().await;
     Ok(())
 }
@@ -287,6 +319,9 @@ async fn migrated_decided_rows_age_from_migration_and_pending_rows_stay_unpruned
             .await?
             .is_some()
     );
+    outbox
+        .complete_creation_input(&finished_request.request_id)
+        .await?;
     let after_two_months = migrated_settlement + 100 * 24 * 60 * 60 * 1_000;
     assert_eq!(outbox.prune_expired(after_two_months, 500).await?, 1);
     assert!(

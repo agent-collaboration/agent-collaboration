@@ -888,12 +888,20 @@ async fn insert_pending(
         generation,
         state: ApprovalState::PendingClientDecision,
         reason: None,
-        offered_options: Vec::new(),
+        offered_options: vec![ApprovalOfferedOption {
+            option_id: "native-accept".to_owned(),
+            label: None,
+            scope: ApprovalOptionScope::AllowOnce,
+        }],
         presentation: None,
         decision: None,
         operation: json!({"params":{"options":[]}}),
         expires_at,
     };
+    broker
+        .record(record.clone())
+        .await
+        .expect("persist pending approval");
     let (completion, receiver) = oneshot::channel();
     broker.pending.lock().await.insert(
         request_id.clone(),

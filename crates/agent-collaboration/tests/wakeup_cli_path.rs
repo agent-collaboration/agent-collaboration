@@ -1,6 +1,5 @@
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_client::protocol::OperationId;
-use collaboration_runtime::test_support::remove_store_directory_tolerating_sqlite_sidecars;
 use std::os::unix::fs::DirBuilderExt;
 
 #[tokio::test]
@@ -267,7 +266,7 @@ async fn cli_creates_wakeup_with_harness_sender_and_reads_through_host()
     runtime.shutdown().await?;
     with_wakeup_test_io_context(
         "remove fixture store directory",
-        remove_store_directory_tolerating_sqlite_sidecars(&root),
+        std::fs::remove_dir_all(&root),
     )?;
     Ok(())
 }

@@ -119,6 +119,13 @@ impl InteractionHistoryStore {
             let mut next = records.clone();
             for record in next.records.values_mut() {
                 match record {
+                    InteractionHistoryRecord::NativeApproval { record }
+                        if record.state
+                            == collaboration_protocol::ApprovalState::PendingClientDecision =>
+                    {
+                        record.state = collaboration_protocol::ApprovalState::Cancelled;
+                        record.reason = Some("hostRestarted".to_owned());
+                    }
                     InteractionHistoryRecord::Approval { state, .. }
                         if *state == InteractionHistoryState::Pending =>
                     {
@@ -208,6 +215,35 @@ impl InteractionHistoryStore {
         state.revision = revision;
         outcome
     }
+    pub async fn record_native_approval(
+        &self,
+        record: collaboration_protocol::ApprovalRequestRecord,
+    ) -> Result<(), InteractionHistoryError> {
+        let record = InteractionHistoryRecord::NativeApproval {
+            record: Box::new(record),
+        };
+        if !record.is_valid_stored_value() {
+            return Err(InteractionHistoryError::Unavailable);
+        }
+        self.mutate_history(|records| {
+            let request_id = record.request_id().to_owned();
+            if records.get(&request_id).is_some_and(|existing| {
+                !matches!(existing, InteractionHistoryRecord::NativeApproval { .. })
+            }) {
+                return Err(InteractionHistoryError::AlreadyExists);
+            }
+            let created_at = records
+                .created_at
+                .get(&request_id)
+                .copied()
+                .unwrap_or_else(Utc::now);
+            let mut next = records.clone();
+            next.insert_with_timestamp(request_id, record, created_at);
+            Ok((next, ()))
+        })
+        .await
+    }
+
     pub async fn record(
         &self,
         record: InteractionHistoryRecord,
@@ -395,6 +431,11 @@ impl InteractionHistoryStore {
                 InteractionHistoryRecord::Approval { state, .. } => {
                     !pending_only || state == &InteractionHistoryState::Pending
                 }
+                InteractionHistoryRecord::NativeApproval { record } => {
+                    !pending_only
+                        && record.state
+                            != collaboration_protocol::ApprovalState::PendingClientDecision
+                }
                 InteractionHistoryRecord::RefusedApproval { .. } => !pending_only,
                 InteractionHistoryRecord::Question { .. } => false,
             })
@@ -424,7 +465,7 @@ impl InteractionHistoryStore {
             let record = records
                 .get(request_id)
                 .ok_or(InteractionHistoryError::NotPending)?;
-            if record.approver() != actor {
+            if record.approver() != Some(actor) {
                 return Err(InteractionHistoryError::WrongActor);
             }
             if record.approval_state() != Some(&InteractionHistoryState::Pending) {
@@ -511,6 +552,9 @@ impl InteractionHistoryStore {
 
 fn is_settled_history_record(record: &InteractionHistoryRecord) -> bool {
     match record {
+        InteractionHistoryRecord::NativeApproval { record } => {
+            record.state != collaboration_protocol::ApprovalState::PendingClientDecision
+        }
         InteractionHistoryRecord::Approval { state, .. } => {
             *state != InteractionHistoryState::Pending
         }
