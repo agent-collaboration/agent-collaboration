@@ -28,9 +28,12 @@ const literalHelp = [
 	'Ctrl+C Exit Quota unless a reset is being applied.',
 ];
 test('Help keeps the complete closed action set and conventions across physical wrapping', () => {
-	expect(checkQuotaHelpRows(literalHelp.flatMap((row) => [row.slice(0, 8), row.slice(8)]))).toEqual(
-		[],
-	);
+	expect(
+		checkQuotaHelpRows(
+			literalHelp.flatMap((row) => [row.slice(0, 8), row.slice(8)]),
+			true,
+		),
+	).toEqual([]);
 });
 test.each([
 	['missing action', literalHelp.filter((row) => row !== 'R Refresh')],
@@ -38,7 +41,7 @@ test.each([
 	['wrong key', literalHelp.map((row) => (row === 'F5 Pool' ? 'F8 Pool' : row))],
 	['wrong convention', literalHelp.map((row) => row.replace('stays on quota', 'quits quota'))],
 ])('Help rejects %s', (_label, rows) => {
-	expect(checkQuotaHelpRows(rows).length).toBeGreaterThan(0);
+	expect(checkQuotaHelpRows(rows, true).length).toBeGreaterThan(0);
 });
 test.each([
 	['Details Filters: All ▾ Pool Options Floor', true],
@@ -53,4 +56,41 @@ test.each([
 	} finally {
 		core.dispose();
 	}
+});
+
+const unavailableRefreshHelp = literalHelp.map((row) =>
+	row === 'R Refresh' ? 'R Refresh Quota refresh is unavailable' : row,
+);
+test('read-only Help requires the exact unavailable Refresh reason across physical wrapping', () => {
+	expect(
+		checkQuotaHelpRows(
+			unavailableRefreshHelp.flatMap((row) => [row.slice(0, 13), row.slice(13)]),
+			false,
+		),
+	).toEqual([]);
+});
+test.each([
+	['missing reason', literalHelp, false],
+	['reason on available refresh', unavailableRefreshHelp, true],
+	[
+		'wrong reason',
+		unavailableRefreshHelp.map((row) =>
+			row.replace('Quota refresh is unavailable', 'Quota refresh failed'),
+		),
+		false,
+	],
+	[
+		'unknown extra reason',
+		unavailableRefreshHelp.map((row) => row.replace('F5 Pool', 'F5 Pool Unavailable')),
+		false,
+	],
+	[
+		'extra action after reason',
+		unavailableRefreshHelp.map((row) =>
+			row.replace('Quota refresh is unavailable', 'Quota refresh is unavailable Export'),
+		),
+		false,
+	],
+] as const)('Help rejects capability mismatch: %s', (_name, rows, refreshAvailable) => {
+	expect(checkQuotaHelpRows(rows, refreshAvailable).length).toBeGreaterThan(0);
 });

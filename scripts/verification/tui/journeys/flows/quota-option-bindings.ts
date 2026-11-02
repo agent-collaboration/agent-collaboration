@@ -129,7 +129,7 @@ export function quotaOptionBindings(
 				focusedTarget: helpBody,
 			});
 			marked = result.marked;
-			const failures = checkQuotaHelpRows(result.rows);
+			const failures = checkQuotaHelpRows(result.rows, false);
 			if (failures.length > 0) throw new Error(failures.join('; '));
 			const rectangle = findDialog(first.grid, 'Help');
 			if (rectangle === null) throw new Error('quota Help absent');

@@ -75,13 +75,19 @@ const conventions = [
 	'Ctrl+C Exit Quota unless a reset is being applied.',
 ] as const;
 const compact = (text: string): string => text.replace(/[\s│█]/gu, '');
-export function checkQuotaHelpRows(rows: readonly string[]): readonly string[] {
+export function checkQuotaHelpRows(
+	rows: readonly string[],
+	refreshAvailable: boolean,
+): readonly string[] {
 	const text = compact(rows.join(' ')),
 		start = text.indexOf('Actions'),
 		end = text.indexOf('Inputconventions');
 	if (start < 0 || end <= start) return ['quota Help action/convention sections absent'];
 	const failures: string[] = [];
-	if (text.slice(start + 'Actions'.length, end) !== compact(quotaHelpActions.join(' ')))
+	const actions = quotaHelpActions.map((action) =>
+		action === 'R Refresh' && !refreshAvailable ? 'R Refresh Quota refresh is unavailable' : action,
+	);
+	if (text.slice(start + 'Actions'.length, end) !== compact(actions.join(' ')))
 		failures.push('quota Help closed action/key census differs');
 	const body = text.slice(end + 'Inputconventions'.length),
 		expected = compact(conventions.join(' '));
