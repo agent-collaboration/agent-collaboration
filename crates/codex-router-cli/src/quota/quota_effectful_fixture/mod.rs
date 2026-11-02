@@ -32,7 +32,7 @@ use receipts::FixtureEvents;
 use refresh_fixture::RefreshEffects;
 use serde_json::{Value, json};
 use std::{
-    io::{self, IsTerminal, Write},
+    io::{self, IsTerminal},
     sync::{Arc, Mutex},
 };
 use tokio::net::UnixListener;
@@ -283,11 +283,7 @@ async fn compiled_quota_effectful_fixture() -> FixtureResult<()> {
         return Err(io::Error::other("grouping-reopen unexpectedly launched a login child").into());
     }
     validation::validate(config.scenario, &summary)?;
-    let mut output = absent_file(&config.receipt)?;
-    serde_json::to_writer(&mut output, &summary)?;
-    writeln!(output)?;
-    output.sync_all()?;
-    events.write(json!({"kind":"fixture-finished","scenario":config.scenario,"outcome":"quit"}))?;
+    receipts::finish_receipt(absent_file(&config.receipt)?, &summary, config.scenario, &events)?;
     println!(
         "QUOTA_EFFECT_FIXTURE_FINISHED scenario={:?} outcome=Quit",
         config.scenario

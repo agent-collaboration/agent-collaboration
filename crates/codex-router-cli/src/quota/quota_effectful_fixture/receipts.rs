@@ -1,4 +1,5 @@
 //! Project actual owner facts; fixture setup and native dispatch have separate writers.
+use super::configuration::Scenario;
 use super::event_fence::{FixtureEventCompletions, FixtureEventFenceResult, FixtureEventKind};
 use crate::quota::quota_refresh_adapter::observation::{RefreshObservation, ServiceReturn};
 use agent_router_quota_tui::{
@@ -11,7 +12,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use std::{
     fs::File,
-    io::{self, Write},
+    io::{self, BufWriter, Write},
     sync::{Arc, Mutex},
 };
 
@@ -178,4 +179,23 @@ fn service_return(source: &ServiceReturn) -> Value {
         AccountRefreshStatus::Refreshed=>json!({"kind":"refreshed"}),AccountRefreshStatus::Failed {reason}=>json!({"kind":"failed","reason":reason}),AccountRefreshStatus::Skipped {reason}=>json!({"kind":"skipped","reason":reason}),
     }})).collect::<Vec<_>>();
     json!({"kind":kind,"accountOutcomes":outcomes,"message":match source {ServiceReturn::Error {message}=>Some(message),_=>None}})
+}
+
+/// Publish completion only after the complete receipt has reached its file.
+pub(super) fn finish_receipt(
+    mut output: File,
+    summary: &Value,
+    scenario: Scenario,
+    events: &FixtureEvents,
+) -> io::Result<()> {
+    write_summary(&mut output, summary)?;
+    output.sync_all()?;
+    events.write(json!({"kind":"fixture-finished","scenario":scenario,"outcome":"quit"}))
+}
+
+pub(super) fn write_summary(output: &mut impl Write, summary: &Value) -> io::Result<()> {
+    let mut output = BufWriter::new(output);
+    serde_json::to_writer(&mut output, summary).map_err(io::Error::other)?;
+    writeln!(output)?;
+    output.flush()
 }

@@ -23,3 +23,6 @@ mod preference_write;
 
 #[path = "event_fence_contract_test.rs"]
 mod event_fence;
+
+#[path = "summary_receipt_test.rs"]
+mod summary_receipt;
