@@ -101,6 +101,58 @@
       {
         "command": ["<root>/tmp/rust-tools/bin/sqlx", "database", "create"],
         "environment": {
+          "DATABASE_URL": "sqlite://<root>/tmp/<schema>/fleet-schema.sqlite"
+        }
+      },
+      {
+        "command": [
+          "<root>/tmp/rust-tools/bin/sqlx",
+          "migrate",
+          "run",
+          "--source",
+          "crates/codex-router-fleet-state/migrations"
+        ],
+        "environment": {
+          "DATABASE_URL": "sqlite://<root>/tmp/<schema>/fleet-schema.sqlite"
+        }
+      },
+      {
+        "command": [
+          "cargo",
+          "clean",
+          "--package",
+          "path+file://<root>/crates/codex-router-fleet-state"
+        ],
+        "environment": {
+          "SQLX_OFFLINE": "true",
+          "RUSTC_WRAPPER": "<wrapper>",
+          "SQLX_PREPARE_PACKAGE": "codex-router-fleet-state",
+          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/codex-router-fleet-state",
+          "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/fleet-schema.sqlite",
+          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/codex-router-fleet-state-metadata"
+        }
+      },
+      {
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--package",
+          "path+file://<root>/crates/codex-router-fleet-state",
+          "--all-targets"
+        ],
+        "environment": {
+          "SQLX_OFFLINE": "true",
+          "RUSTC_WRAPPER": "<wrapper>",
+          "SQLX_PREPARE_PACKAGE": "codex-router-fleet-state",
+          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/codex-router-fleet-state",
+          "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/fleet-schema.sqlite",
+          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/codex-router-fleet-state-metadata"
+        }
+      },
+      {
+        "command": ["<root>/tmp/rust-tools/bin/sqlx", "database", "create"],
+        "environment": {
           "DATABASE_URL": "sqlite://<root>/tmp/<schema>/provider-operation-schema.sqlite"
         }
       },
