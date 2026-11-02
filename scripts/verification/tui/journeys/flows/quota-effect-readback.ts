@@ -160,13 +160,16 @@ export const quotaEffectReceiptSchema = z.strictObject({
 });
 export type QuotaEffectReceipt = z.infer<typeof quotaEffectReceiptSchema>;
 
-export function checkQuotaRefreshReceipt(
+/** Live publication carries mapping facts; final provider request evidence remains mandatory at shutdown. */
+export const quotaRefreshLiveSchema = quotaRefreshReceiptSchema.omit({ requests: true });
+
+export function checkQuotaRefreshObservation(
 	scenario: QuotaEffectScenario,
 	value: unknown,
 ): readonly string[] {
 	if (!scenario.startsWith('refresh-'))
 		throw new Error('refresh reader requires a refresh scenario');
-	const receipt = quotaRefreshReceiptSchema.parse(value);
+	const receipt = quotaRefreshLiveSchema.parse(value);
 	const failures: string[] = [];
 	if (receipt.serviceCalls !== 1 || receipt.callsWhileHeld !== 1 || !receipt.released)
 		failures.push('refresh must settle one causally held invocation');
@@ -245,7 +248,17 @@ export function checkQuotaRefreshReceipt(
 		)
 			failures.push('mapper lost or changed per-account reasons');
 	}
-	const requests =
+	return failures;
+}
+
+export function checkQuotaRefreshReceipt(
+	scenario: QuotaEffectScenario,
+	value: unknown,
+): readonly string[] {
+	const receipt = quotaRefreshReceiptSchema.parse(value);
+	const { requests, ...live } = receipt;
+	const failures = [...checkQuotaRefreshObservation(scenario, live)];
+	const expectedRequestCount =
 		scenario === 'refresh-all-success'
 			? 8
 			: scenario === 'refresh-partial'
@@ -254,8 +267,8 @@ export function checkQuotaRefreshReceipt(
 					? 4
 					: 0;
 	if (
-		receipt.requests.length !== requests ||
-		receipt.requests.some((request) => request.method !== 'GET')
+		requests.length !== expectedRequestCount ||
+		requests.some((request) => request.method !== 'GET')
 	)
 		failures.push('refresh request set contains a retry or unexpected provider effect');
 	return failures;

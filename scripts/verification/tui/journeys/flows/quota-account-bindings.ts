@@ -373,7 +373,7 @@ export function quotaAccountBindings(options: {
 						quotaRemovalButtonAvailable,
 					);
 				else if (spec.action === 'disable' || spec.action === 'enable') {
-					const status = spec.action === 'disable' ? 'blocked' : 'available';
+					const status = spec.action === 'disable' ? 'blocked' : 'preferred';
 					await context.driver.waitForGrid('actual settled Details status', (grid) =>
 						quotaDialogInteriorRows(grid, 'Account details').some(
 							(row) => row.includes('Status') && row.includes(status),

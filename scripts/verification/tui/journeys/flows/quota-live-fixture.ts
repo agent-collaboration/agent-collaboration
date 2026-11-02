@@ -10,7 +10,7 @@ import {
 	quotaCapturedTargetSchema,
 	quotaEffectReceiptSchema,
 	quotaPoseSchema,
-	quotaRefreshReceiptSchema,
+	quotaRefreshLiveSchema,
 } from './quota-effect-readback.ts';
 import { QuotaEventJournal, quotaEventRecordSchema } from './quota-event-journal.ts';
 import { quotaEffectScenarioSchema } from './quota-fixture-contract.ts';
@@ -53,7 +53,7 @@ export const quotaLiveReadbackSchema = z.strictObject({
 	readback: quotaLivePoseSchema,
 	accounts: z.array(quotaAccountFactSchema),
 	accountCommands: quotaEffectReceiptSchema.shape.accountCommands,
-	refresh: quotaRefreshReceiptSchema.omit({ requests: true }).nullable(),
+	refresh: quotaRefreshLiveSchema.nullable(),
 });
 export type QuotaLiveReadback = z.infer<typeof quotaLiveReadbackSchema>;
 export const quotaObservationSchema = z.strictObject({

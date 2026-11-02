@@ -4,6 +4,8 @@ import {
 	checkQuotaEffectReceipt,
 	requireQuotaLoginParentExit,
 	checkQuotaRefreshReceipt,
+	checkQuotaRefreshObservation,
+	quotaRefreshReceiptSchema,
 	quotaEffectReceiptSchema,
 } from './quota-effect-readback.ts';
 import { quotaEffectConfigurationSchema, quotaJourneyScenarios } from './quota-fixture-contract.ts';
@@ -465,4 +467,17 @@ test('parent wait rejects child intent, absent identity, duplicate wait and fabr
 	])
 		expect(() => requireQuotaLoginParentExit(invalid, 7)).toThrow();
 	expect(() => requireQuotaLoginParentExit(valid, 0)).toThrow();
+});
+
+test('live refresh mapping and final provider requests retain separate strict contracts', () => {
+	const receipt = quotaRefreshReceiptSchema.parse(partialReceipt());
+	const { requests, ...live } = receipt;
+	expect(checkQuotaRefreshObservation('refresh-partial', live)).toEqual([]);
+	expect(() => checkQuotaRefreshReceipt('refresh-partial', live)).toThrow();
+	expect(
+		checkQuotaRefreshReceipt('refresh-partial', { ...receipt, requests: requests.slice(1) }),
+	).toContain('refresh request set contains a retry or unexpected provider effect');
+	expect(checkQuotaRefreshObservation('refresh-partial', { ...live, serviceCalls: 2 })).toContain(
+		'refresh must settle one causally held invocation',
+	);
 });

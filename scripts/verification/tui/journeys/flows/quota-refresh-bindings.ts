@@ -30,6 +30,7 @@ import type { QuotaLiveFixture, QuotaLiveReadback } from './quota-live-fixture.t
 import {
 	collectQuotaMenu,
 	currentQuotaMenu,
+	readQuotaMenu,
 	quotaMenuNavigationExpected,
 } from './quota-menu-observation.ts';
 import { collectPublishedQuotaDialog } from './quota-published-dialog.ts';
@@ -169,7 +170,23 @@ export function quotaRefreshBindings(options: {
 			disabled: ['refresh'],
 		});
 		active = quotaOverlay(1);
-		return collected.marked;
+		let marked = collected.marked;
+		const revealPending = async (index: number): Promise<void> => {
+			if (
+				readQuotaMenu(quotaMarkedFrame(marked).grid).items.some(
+					(item) => item.actionId === 'refresh',
+				)
+			)
+				return;
+			if (index >= currentQuotaMenu.length * 2)
+				throw new Error('pending Refresh title and reason were not revealed');
+			marked = await context.input.press('Down', [
+				quotaMenuNavigationExpected('Down', index, active, ['refresh']),
+			]);
+			await revealPending(index + 1);
+		};
+		await revealPending(0);
+		return marked;
 	};
 	const runMenu = async (context: NativeFlowContext): Promise<MarkedInputEvidence> => {
 		await initialize(context);
@@ -276,7 +293,8 @@ export function quotaRefreshBindings(options: {
 				'Refresh',
 				(grid) => {
 					const target = quotaDialogTarget(grid, '', 'Refresh');
-					return { label: target.label, bounds: target.bounds };
+					// Disabled label uses the shipped disabled role; the white Refreshing reason is not the click target.
+					return { label: target.label, bounds: target.bounds, foregrounds: [0xa6afbd] };
 				},
 			],
 		]),

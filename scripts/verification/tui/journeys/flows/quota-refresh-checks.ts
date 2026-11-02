@@ -3,7 +3,7 @@ import { canonicalJson } from '../../evidence/source-binding.ts';
 import { gridLines } from '../../terminal/terminal-grid.ts';
 import type { TerminalGrid } from '../../terminal/terminal-grid.ts';
 import type { FlowCheck } from './flow-definition.ts';
-import { checkQuotaRefreshReceipt } from './quota-effect-readback.ts';
+import { checkQuotaRefreshObservation } from './quota-effect-readback.ts';
 import type { QuotaEffectScenario } from './quota-fixture-contract.ts';
 import { quotaObservationSchema } from './quota-live-fixture.ts';
 import type { QuotaLiveReadback } from './quota-live-fixture.ts';
@@ -52,7 +52,7 @@ export function checkQuotaRefresh(options: {
 		return failures;
 	}
 	if (check === 'typed-refresh-result' || check === 'refresh-one-in-flight' || check === 'no-retry')
-		failures.push(...checkQuotaRefreshReceipt(scenario, refresh));
+		failures.push(...checkQuotaRefreshObservation(scenario, refresh));
 	if (check === 'refresh-values-and-details') {
 		if (body.length === 0) failures.push('actual refreshed body census absent');
 		const rows = live.readback.rows;
