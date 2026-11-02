@@ -56,7 +56,7 @@ pub(crate) struct PickerSurfaceContext {
     pub model: State<SessionsPickerModel>,
     pub group_preferences:
         State<crate::session_picker::grouping::session_group_preferences::SessionGroupPreferences>,
-    pub grouping_clock: picker_grouping::SessionGroupingClock,
+    pub grouping_clock: Option<picker_grouping::SessionGroupingClock>,
     pub outcome: State<Option<SessionsPickerOutcome>>,
     pub cancelled: State<bool>,
     pub error: State<Option<String>>,
@@ -276,7 +276,7 @@ pub(crate) fn empty_model() -> SurfaceResult<SurfaceModel> {
 }
 
 pub(crate) use crate::session_picker::grouping::picker_grouping::SessionGroupingClock;
-pub(crate) use crate::session_picker::grouping::picker_grouping::selection_rows;
+pub(crate) use crate::session_picker::grouping::picker_grouping::live_selection_rows;
 pub(crate) use crate::session_picker::screen::picker_screen_scope::build_screen;
 pub(crate) use crate::session_picker::screen::picker_screen_scope::synchronize_rows;
 pub(crate) use crate::session_picker::screen::picker_surface_view::PickerSurfaceView;

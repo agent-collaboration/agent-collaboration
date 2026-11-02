@@ -140,10 +140,10 @@ pub fn synchronize_rows(
     let (rows, focused_identity) = {
         let model = context.model.read();
         (
-            crate::session_picker::grouping::picker_grouping::selection_rows(
+            crate::session_picker::grouping::picker_grouping::live_selection_rows(
                 &model,
                 context.group_preferences.read().facet(),
-                (context.grouping_clock)(),
+                context.grouping_clock.as_ref(),
             )?,
             model.focused_identity().cloned(),
         )
