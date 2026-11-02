@@ -23,7 +23,8 @@ enum MachineWorkKind {
 pub(crate) struct MachineWorkResult {
     pub seq: WorkReportSequence,
     pub create: SessionCreateState,
-    pub input: FirstInputState,
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub input: Option<FirstInputState>,
 }
 
 pub(crate) struct MachineWorkItemRecord {
@@ -40,15 +41,17 @@ impl MachineWorkItemRecord {
             operation_id: self.entry.operation_id.clone(),
             state: self.state,
             create: self.result.as_ref().map(|result| result.create.clone()),
-            input: match &self.result {
-                Some(result) => Some(result.input.clone()),
-                None => self
-                    .entry
-                    .request
-                    .first_input
-                    .is_none()
-                    .then_some(FirstInputState::None),
-            },
+            input: self
+                .result
+                .as_ref()
+                .and_then(|result| result.input.clone())
+                .or_else(|| {
+                    self.entry
+                        .request
+                        .first_input
+                        .is_none()
+                        .then_some(FirstInputState::None)
+                }),
             report_seq: self.result.as_ref().map(|result| result.seq),
         }
     }

@@ -255,7 +255,7 @@ async fn report_cases(
     Ok(())
 }
 
-async fn admit_exact(
+pub(super) async fn admit_exact(
     source: &mut NativeBoardSession,
     target: &mut NativeBoardSession,
     request: &RemoteSessionCreateRequest,
@@ -267,8 +267,17 @@ async fn admit_exact(
             return Err(format!("central applied target policy at admission: {other:?}").into());
         }
     };
+    let expected_input = request
+        .definition
+        .first_input
+        .is_none()
+        .then_some(FirstInputState::None);
+    equal(
+        serde_json::to_value(&admitted.input)?,
+        serde_json::to_value(expected_input)?,
+    )?;
     check(
-        admitted.create.is_none() && admitted.input.is_none() && admitted.report_seq.is_none(),
+        admitted.create.is_none() && admitted.report_seq.is_none(),
         "requested first input was reported before the target",
     )?;
     let page = pull_work(target).await?;
@@ -373,7 +382,7 @@ pub(super) fn report_call(
             work_item_id: item_id.clone(),
             seq: seq.try_into()?,
             create: Box::new(create),
-            input,
+            input: Some(input),
         }],
     )?))
 }

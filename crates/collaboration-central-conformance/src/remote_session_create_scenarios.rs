@@ -10,6 +10,7 @@ use serde_json::json;
 mod corruption_cases;
 mod fixture;
 mod mixed_report_cases;
+mod nullable_report_cases;
 mod report_cases;
 mod restart_cases;
 pub use restart_cases::{
@@ -114,6 +115,7 @@ pub async fn run_remote_session_create_conformance(
             return Err("remote admission advanced the controlled business clock".into());
         }
         report_cases::run(client, &mut source, &mut target, &request, &admitted, frozen).await?;
+        Box::pin(nullable_report_cases::run(client,&mut source,&mut target,&source_service,&target_service)).await?;
         println!("REMOTE_CREATE_ADMISSION_RESULT {}", json!({
             "workItemId":admitted.work_item_id,"operationId":request.operation_id,
             "batchId":frozen.batch_id,"sameOffGridTime":before.now,

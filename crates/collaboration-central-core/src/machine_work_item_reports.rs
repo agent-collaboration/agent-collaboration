@@ -49,7 +49,7 @@ pub(crate) async fn apply<Scope: TransactionScope>(
     id: &WorkItemId,
     seq: WorkReportSequence,
     create: &SessionCreateState,
-    input: &FirstInputState,
+    input: &Option<FirstInputState>,
 ) -> AutomationStoreResult<()>
 where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
@@ -62,7 +62,7 @@ where
         .await
         .map_err(StoreError::backend)?
         .ok_or_else(|| StoreError::backend("validated machine-work item disappeared"))?;
-    if let Some(result) = advance_result(item.result.as_ref(), seq, create, input) {
+    if let Some(result) = advance_result(item.result.as_ref(), seq, create, input.as_ref()) {
         items::write_result(scope, id, &result).await?;
     }
     Ok(())
@@ -72,7 +72,7 @@ fn advance_result(
     previous: Option<&MachineWorkResult>,
     seq: WorkReportSequence,
     create: &SessionCreateState,
-    input: &FirstInputState,
+    input: Option<&FirstInputState>,
 ) -> Option<MachineWorkResult> {
     if previous.is_some_and(|previous| u64::from(previous.seq) >= u64::from(seq)) {
         return None;
@@ -83,14 +83,17 @@ fn advance_result(
             Some(known)
         }
     });
-    let final_input = previous.and_then(|previous| match &previous.input {
-        known @ (FirstInputState::Accepted | FirstInputState::Failed { .. }) => Some(known),
-        FirstInputState::None | FirstInputState::Unknown => None,
+    let previous_input = previous.and_then(|previous| previous.input.as_ref());
+    let final_input = previous_input.and_then(|input| match input {
+        known @ (FirstInputState::None
+        | FirstInputState::Accepted
+        | FirstInputState::Failed { .. }) => Some(known),
+        FirstInputState::Unknown => None,
     });
     Some(MachineWorkResult {
         seq,
         create: known_create.unwrap_or(create).clone(),
-        input: final_input.unwrap_or(input).clone(),
+        input: final_input.or(input).or(previous_input).cloned(),
     })
 }
 
@@ -118,7 +121,7 @@ mod tests {
                 Some(&previous),
                 4.try_into().expect("sequence"),
                 &SessionCreateState::Unknown,
-                &FirstInputState::Unknown,
+                Some(&FirstInputState::Unknown),
             )
             .expect("newer report");
             assert_eq!(u64::from(next.seq), 4);
@@ -130,7 +133,7 @@ mod tests {
                         Some(&previous),
                         seq.try_into().expect("sequence"),
                         &SessionCreateState::Unknown,
-                        &FirstInputState::Unknown
+                        Some(&FirstInputState::Unknown)
                     )
                     .is_none()
                 );
@@ -146,14 +149,14 @@ mod tests {
         let previous = MachineWorkResult {
             seq: 1.try_into().expect("sequence"),
             create: SessionCreateState::Unknown,
-            input: FirstInputState::Unknown,
+            input: Some(FirstInputState::Unknown),
         };
         for before in [None, Some(&previous)] {
             let next = advance_result(
                 before,
                 2.try_into().expect("sequence"),
                 &create,
-                &FirstInputState::None,
+                Some(&FirstInputState::None),
             )
             .expect("new report");
             assert_eq!(u64::from(next.seq), 2);
@@ -163,7 +166,7 @@ mod tests {
                     reason: collaboration_protocol::RemoteCreateRefusal::ApproverNotSupported
                 }
             ));
-            assert!(matches!(next.input, FirstInputState::None));
+            assert!(matches!(next.input, Some(FirstInputState::None)));
         }
     }
 }

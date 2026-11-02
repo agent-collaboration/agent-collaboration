@@ -264,7 +264,7 @@ fn session_report(work_item: &WorkItemId) -> ConformanceResult<WorkItemReport> {
         work_item_id: work_item.clone(),
         seq: 1.try_into()?,
         create: Box::new(SessionCreateState::Unknown),
-        input: FirstInputState::None,
+        input: Some(FirstInputState::None),
     })
 }
 

@@ -379,11 +379,14 @@ pub enum FirstInputState {
 )]
 pub enum WorkItemReport {
     Firing(FiringReport),
+    #[schemars(extend("allOf" = [{"properties":{"value":{"required":["input"]}}}]))]
     SessionCreate {
         work_item_id: WorkItemId,
         seq: WorkReportSequence,
         create: Box<SessionCreateState>,
-        input: FirstInputState,
+        /// Null is unreported input; the explicit `none` state records no requested input.
+        #[serde(deserialize_with = "Option::deserialize")]
+        input: Option<FirstInputState>,
     },
 }
 
