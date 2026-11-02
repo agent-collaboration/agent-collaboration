@@ -3,12 +3,20 @@
 use session_event_model::{PromptContent, ProviderSubmission, SkillView, ToolCallStatus};
 
 pub trait ProviderBehavior: Send + Sync {
+    fn initialization_authentication(&self) -> ProviderInitializationAuthentication;
     fn can_reuse_setting_confirmation(&self, kind: crate::ProviderSettingKind) -> bool;
     fn model_metadata_source(&self) -> crate::ModelMetadataSource;
     fn decode_model_metadata(&self, value: &serde_json::Value) -> crate::ModelReasoningMetadata;
     fn observe(&self, update: ProviderUpdate) -> Result<ProviderFacts, ProviderError>;
     fn prepare(&self, submission: ProviderSubmission) -> Result<Vec<PromptContent>, ProviderError>;
     fn compact(&self) -> Result<PreparedCompact, ProviderError>;
+}
+
+/// Connection startup policy; the runtime owns advertised-method validation and ACP I/O.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProviderInitializationAuthentication {
+    NotRequested,
+    RequiredAgentMethod { method_id: &'static str },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

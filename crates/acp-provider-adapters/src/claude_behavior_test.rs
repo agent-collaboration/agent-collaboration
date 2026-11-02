@@ -10,6 +10,19 @@ use session_event_model::{
 };
 
 #[test]
+fn initialization_authentication_retains_claudes_existing_launch_context() {
+    for source in [
+        ClaudeSkillSource::Annotated,
+        ClaudeSkillSource::Unavailable(SkillSourceError::UnestablishedClassification),
+    ] {
+        assert_eq!(
+            ClaudeAcpBehavior::new(source).initialization_authentication(),
+            acp_client_runtime::ProviderInitializationAuthentication::NotRequested
+        );
+    }
+}
+
+#[test]
 fn claude_splits_at_last_selected_token_and_puts_command_after_images() {
     let behavior = ClaudeAcpBehavior::new(ClaudeSkillSource::Annotated);
     let image = PromptContent::image("image/png".into(), "aGVsbG8=".into(), None).expect("image");

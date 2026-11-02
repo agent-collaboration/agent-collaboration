@@ -79,6 +79,7 @@ async fn start_model_fixture(
                     .into(),
                     receipt.display().to_string(),
                     scenario.into(),
+                    "cursor_login".into(),
                 ],
             )?,
         )],

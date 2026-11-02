@@ -18,7 +18,7 @@ use super::{
     fail_pending_session_admission, initialize_provider_connection, provider_lifecycle_requests,
     provider_session_restore, publish_pending_session_admission, record_permission_refusal,
     register_provider_session, register_static_provider_session, run_create_admission,
-    sanitized_initialization_error, spawn_external_approval_dispatch,
+    spawn_external_approval_dispatch,
 };
 
 impl<P: InteractionPort> AgentSessionClient<P> {
@@ -261,7 +261,17 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                         () = task_shutdown.cancelled() => {
                             return Ok(());
                         }
-                        response = initialize_provider_connection(&connection, model_picker) => response,
+                        response = tokio::time::timeout_at(
+                            initialize_deadline,
+                            initialize_provider_connection(
+                                &connection,
+                                model_picker,
+                                task_runtime_handles.behavior.initialization_authentication(),
+                            ),
+                        ) => match response {
+                            Ok(response) => response,
+                            Err(_) => Err(ExternalProviderRuntimeError::InitializeTimeout),
+                        },
                     };
                     let admission = match initialized {
                         Ok(response) if response.protocol_version == ProtocolVersion::V1 => {
@@ -290,11 +300,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                         Ok(response) => Err(ExternalProviderRuntimeError::UnsupportedProtocol {
                             actual: AcpProtocolVersion::from_sdk(response.protocol_version),
                         }),
-                        Err(error) => {
-                            Err(ExternalProviderRuntimeError::Initialize(
-                                sanitized_initialization_error(&error),
-                            ))
-                        }
+                        Err(error) => Err(error),
                     };
                     let admitted = admission.is_ok();
                     let session_mcp_servers = if matches!(
@@ -712,7 +718,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         });
 
         let (admission, base_capabilities) =
-            match tokio::time::timeout(initialize_timeout, ready_rx).await {
+            match tokio::time::timeout_at(initialize_deadline, ready_rx).await {
                 Ok(Ok(Ok(admission))) => admission,
                 Ok(Ok(Err(error))) => {
                     shutdown.cancel();

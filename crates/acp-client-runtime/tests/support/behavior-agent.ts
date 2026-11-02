@@ -1,9 +1,15 @@
 import { appendFileSync, writeFileSync } from "node:fs";
 import { AcpExchange } from "../../../../verification/fixtures/acp-exchange.ts";
 import { field } from "../../../../verification/exact-json.ts";
+import { requireArgument } from "../../../../verification/fixtures/acp-stdio.ts";
 const receipt = process.argv[2];
 if (!receipt) throw new Error("receipt path required");
 const compactCase = process.argv[3] ?? "manual";
+// Host fixtures explicitly select Cursor authentication; direct runtime behaviors retain theirs.
+const authenticationMethod = process.argv[4] === undefined ? undefined : requireArgument(4);
+if (authenticationMethod !== undefined && authenticationMethod !== "cursor_login")
+  throw new Error("unsupported fixture authentication method");
+const requiresConnectionAuthentication = authenticationMethod !== undefined;
 writeFileSync(receipt, "");
 const agent = new AcpExchange();
 await agent.initialize("behavior-fixture", {
@@ -12,7 +18,16 @@ await agent.initialize("behavior-fixture", {
     promptCapabilities: { image: true },
     _meta: { steering: { supported: true } },
   },
+  ...(requiresConnectionAuthentication
+    ? { authMethods: [{ id: "cursor_login", name: "Cursor login" }] }
+    : {}),
 });
+if (requiresConnectionAuthentication) {
+  const authentication = await agent.read("authenticate");
+  if (field(authentication.params, "methodId") !== "cursor_login")
+    throw new Error("unexpected initialization authentication method");
+  agent.respond(authentication, {});
+}
 let sequence = 0;
 let held: Record<string, unknown> | undefined;
 let currentModel = "old";

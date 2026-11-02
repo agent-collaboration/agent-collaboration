@@ -146,6 +146,11 @@ use session_event_model::{PromptContent, ProviderSubmission};
 /// A peer whose setting state cannot be inferred from one Session's cache.
 struct NonReusableTestBehavior;
 impl ProviderBehavior for NonReusableTestBehavior {
+    fn initialization_authentication(
+        &self,
+    ) -> acp_client_runtime::ProviderInitializationAuthentication {
+        acp_client_runtime::ProviderInitializationAuthentication::NotRequested
+    }
     fn can_reuse_setting_confirmation(&self, _: acp_client_runtime::ProviderSettingKind) -> bool {
         false
     }

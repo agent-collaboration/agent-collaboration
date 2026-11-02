@@ -6,8 +6,11 @@ import { field } from "../exact-json.ts";
 import { AcpExchange } from "./acp-exchange.ts";
 
 export async function runFixture(configuration: unknown): Promise<void> {
-  const { mode } = z
-    .object({ mode: z.enum(["composition", "acp", "tui", "startup", "failure", "exit"]) })
+  const { mode, authentication } = z
+    .object({
+      mode: z.enum(["composition", "acp", "tui", "startup", "failure", "exit"]),
+      authentication: z.literal("cursor_login").optional(),
+    })
     .parse(configuration);
   if (mode === "failure") {
     process.exitCode = 4;
@@ -53,7 +56,15 @@ export async function runFixture(configuration: unknown): Promise<void> {
     agentCapabilities: mode === "composition" || mode === "startup" ? { loadSession: true } : {},
     agentInfo: { name, version: "1" },
     ...(mode === "composition" ? { _meta: { steering: { supported: true } } } : {}),
+    ...(authentication === undefined
+      ? {}
+      : { authMethods: [{ id: authentication, name: "Cursor login" }] }),
   });
+  if (authentication !== undefined) {
+    const request = await agent.read("authenticate");
+    assert.deepEqual(request.params, { methodId: authentication });
+    agent.respond(request, {});
+  }
   if (mode !== "startup") {
     const sessionId =
       mode === "composition"

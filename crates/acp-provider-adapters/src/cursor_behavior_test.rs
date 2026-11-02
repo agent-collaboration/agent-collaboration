@@ -5,6 +5,16 @@ use session_event_model::{
     SkillRowErrorReason, SkillView,
 };
 
+#[test]
+fn initialization_authentication_requires_cursors_documented_agent_method() {
+    assert_eq!(
+        CursorAcpBehavior.initialization_authentication(),
+        acp_client_runtime::ProviderInitializationAuthentication::RequiredAgentMethod {
+            method_id: "cursor_login"
+        }
+    );
+}
+
 fn command(name: &str, description: &str) -> ProviderCommand {
     ProviderCommand {
         invocation_name: name.into(),

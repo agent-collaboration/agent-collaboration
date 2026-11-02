@@ -75,6 +75,11 @@ struct ScriptedBehavior {
     preparation: Preparation,
 }
 impl ProviderBehavior for ScriptedBehavior {
+    fn initialization_authentication(
+        &self,
+    ) -> acp_client_runtime::ProviderInitializationAuthentication {
+        acp_client_runtime::ProviderInitializationAuthentication::NotRequested
+    }
     fn can_reuse_setting_confirmation(
         &self,
         _kind: acp_client_runtime::ProviderSettingKind,

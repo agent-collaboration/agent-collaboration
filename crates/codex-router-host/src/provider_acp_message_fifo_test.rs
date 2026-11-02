@@ -460,6 +460,7 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
                 .into(),
                 receipt.display().to_string(),
                 "remove-on-cancel".into(),
+                "cursor_login".into(),
             ],
             environment: vec![],
             persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,

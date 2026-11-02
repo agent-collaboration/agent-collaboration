@@ -87,6 +87,10 @@ fn host_prompt_outcome(
 #[path = "external_provider_prompt_projection_test.rs"]
 mod prompt_projection_tests;
 
+#[cfg(test)]
+#[path = "external_provider_runtime_initialization_test.rs"]
+mod initialization_authentication_tests;
+
 pub struct ExternalProviderRuntime {
     client: AgentSessionClient<HostInteractionPort>,
     interaction_port: Arc<HostInteractionPort>,

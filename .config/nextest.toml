@@ -18,6 +18,14 @@ slow-timeout = { period = "60s", terminate-after = 5 }
 process-runtime = { max-threads = 1 }
 heavy-tests = { max-threads = 1 }
 
+# These nested global-CLI startup cases passed in isolation but exhausted their
+# unchanged 15-second initialization budget under the complete Host suite.
+# Reserve the existing process window; preserve every wire assertion and budget.
+[[profile.ci.overrides]]
+filter = "binary(=auth_file_reload) | binary(=external_provider_composition) | binary(=native_claude_catalogue) | binary(=global_harness_selection)"
+test-group = "process-runtime"
+threads-required = "num-test-threads"
+
 [[profile.ci.overrides]]
 filter = "binary(update_reexec) | binary(runtime_restart) | binary(compiled_cli_host_acceptance) | binary(quota_reset_pty_test) | (package(=codex-router-auth) & test(=claude_oauth::tests::refresh_timeout_is_ambiguous_and_never_returns_the_old_token)) | (package(=codex-router-proxy) & test(=tests::tunnel_affinity_tests::async_websocket_tunnel_does_not_gate_forwarding_on_slow_affinity_recorder))"
 test-group = "process-runtime"
