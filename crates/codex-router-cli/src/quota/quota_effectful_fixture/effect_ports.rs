@@ -164,7 +164,6 @@ impl AccountEffects {
             codex_router_state::account::AccountStatus::Enabled,
         )
         .await?;
-        self.removal_gate.release()?;
         Ok(())
     }
     pub(super) fn receipts(&self) -> Vec<Value> {
