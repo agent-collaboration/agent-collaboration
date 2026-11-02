@@ -201,3 +201,65 @@ test.each([
 	);
 	expect(existsSync(plan.output)).toBe(false);
 });
+
+test('wheel preflight declares measured viewport coordinates without inventing cells', () => {
+	const { plan } = controlledPlan('quota-list-option-navigation');
+	const expected = {
+		kind: 'viewport-mouse',
+		mouse: 'scrollDown',
+		modifiers: [],
+		coordinateRule: 'active-content-viewport-left-plus-two-top-plus-two',
+		surface: { kind: 'screen' },
+		target: '21:action:quota:accounts:scroll',
+		action: null,
+	};
+	const preflight = {
+		sources: [
+			{
+				path: '/declared/source.rs',
+				sha256: 'a'.repeat(64),
+				rules: ['ContentScroll owns one-row wheel input'],
+			},
+		],
+		cases: [
+			{
+				grid: '120x36',
+				keys: 'legacy',
+				keyboardFlags: 0,
+				inputs: [
+					{
+						operation: 'physical-row-census',
+						expected: [expected],
+						minimumRepeats: 0,
+						maximumRepeats: 4096,
+						condition: 'until actual painted content end',
+						sources: ['/declared/source.rs:1'],
+					},
+				],
+			},
+		],
+		retainedComparisons: [],
+	};
+	expect(
+		authoredFlowPlanSchema.safeParse({ ...plan, expectationPreflight: preflight }).success,
+	).toBe(true);
+	for (const wrong of [
+		{ ...expected, column: 0, row: 0 },
+		{ ...expected, coordinateRule: 'guessed-before-launch' },
+		{ ...expected, mouse: 'down' },
+		{ ...expected, button: 'left' },
+	]) {
+		const candidate = {
+			...preflight,
+			cases: [
+				{
+					...preflight.cases[0],
+					inputs: [{ ...preflight.cases[0]?.inputs[0], expected: [wrong] }],
+				},
+			],
+		};
+		expect(
+			authoredFlowPlanSchema.safeParse({ ...plan, expectationPreflight: candidate }).success,
+		).toBe(false);
+	}
+});
