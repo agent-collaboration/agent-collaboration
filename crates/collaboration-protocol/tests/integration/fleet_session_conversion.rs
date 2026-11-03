@@ -82,7 +82,7 @@ enum IdentityBoundaryNegative {
 #[test]
 fn both_domains_reject_invalid_identity_boundaries_without_normalizing() {
     let cases: Vec<IdentityBoundaryNegative> =
-        serde_json::from_str(include_str!("fixtures/fleet_identity_negatives.json")).unwrap();
+        serde_json::from_str(include_str!("../fixtures/fleet_identity_negatives.json")).unwrap();
     for case in cases {
         match case {
             IdentityBoundaryNegative::Session(input) => {
