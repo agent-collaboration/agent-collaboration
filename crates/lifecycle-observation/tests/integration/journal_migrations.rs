@@ -2,7 +2,7 @@ use collaboration_protocol::UuidIdentity;
 use lifecycle_observation::{JournalError, ObservationJournal};
 use sqlx::{Connection, SqliteConnection};
 
-const LEGACY_SCHEMA: &str = include_str!("fixtures/journal_v1.sql");
+const LEGACY_SCHEMA: &str = include_str!("../fixtures/journal_v1.sql");
 
 fn identity() -> Result<UuidIdentity, Box<dyn std::error::Error>> {
     Ok("00000000-0000-4000-8000-000000000001"
