@@ -7,6 +7,8 @@ mod fleet_lease_atomicity;
 mod composed_fleet_fixture;
 mod fleet_alarm_sql;
 mod fleet_archive_columns;
+mod fleet_claim_adapter;
+mod fleet_claim_adapter_fixture;
 mod fleet_claim_columns;
 mod fleet_claim_settlement;
 mod fleet_creation_columns;
