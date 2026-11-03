@@ -144,7 +144,7 @@ sequenceDiagram
 
 **What a lease is.** One machine at a time may write a project: it holds that project's lease. Central tells machines who holds each lease, stamped with a number that only goes up (`epoch`, `incarnation`, `change`). Each Router remembers the highest number it has seen and ignores anything lower, so stale or delayed messages can't undo a newer one (`writer_observation.rs:28–43`; `central_project_reads.rs:280–289`).
 
-**Normal running.** Central keeps the counter in its own store (`lease_incarnation`, today's `registry_lease_incarnation`, renamed) and advances it in the same transaction as the lease change, so a central restart never reuses a number.
+**Normal running.** The version stays integer counters (owner, 2026-11-02: “ok integer version is fine”); a lease is identified by its project's UUIDv7 id plus its epoch. Central keeps the counter in its own store (`lease_incarnation`, today's `registry_lease_incarnation`, renamed) and advances it in the same transaction as the lease change, so a central restart never reuses a number.
 
 **The staging wipe.** The new, empty central starts counting from 1, while every Router still remembers higher numbers from the old central. Without a fix, every Router would ignore the new central's leases as stale, and no machine could write its projects. A wiped central keeps the same URL and configured ids (`fleet_enrollment_file.rs:20–28`, `delivery_config.rs:1–9`, `machine_enrollment.rs:140–141`), so a Router can't tell it is new.
 
