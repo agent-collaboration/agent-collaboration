@@ -120,7 +120,13 @@ where
                 Ok(BootstrapReply::CopyStatus(Box::new(answer)))
             }
             command => {
-                let (reply, _effects) = self.driver.run(BootstrapProbeStep { command }).await?;
+                let (reply, _effects) = self
+                    .driver
+                    .run(BootstrapProbeStep {
+                        command,
+                        now: self.now,
+                    })
+                    .await?;
                 Ok(reply)
             }
         }
@@ -129,6 +135,7 @@ where
 
 struct BootstrapProbeStep {
     command: BootstrapCommand,
+    now: runtime_primitives::SyncTime,
 }
 impl<Store, Driver> StepCallback<Store, Driver> for BootstrapProbeStep
 where
@@ -234,7 +241,7 @@ where
                                 attach_seq: AttachSequence::new(1).map_err(StoreError::backend)?,
                                 support: SchemaSupport { max_version: 7 },
                             };
-                            fleet_sync_lease::report_schema_support(scope, &report)
+                            fleet_sync_lease::report_schema_support(scope, &report, self.now)
                                 .await
                                 .map_err(StoreError::backend)?;
                             let stored = fleet_sync_lease::accepted_schema_support(scope, peer)

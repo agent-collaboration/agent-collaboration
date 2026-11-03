@@ -130,6 +130,7 @@ where
     ) -> Result<(), OperationFailure> {
         let peer = input.peer;
         let limits = self.limits;
+        let now = context.now();
         context
             .local(
                 durable_steps::StepName::new("close_mailbox").map_err(|error| {
@@ -140,7 +141,7 @@ where
                 move |scope| {
                     Box::pin(async move {
                         Mailbox::<_, BoardDeliveryTypes>::new(scope, peer, limits)
-                            .close()
+                            .close(now)
                             .await
                             .map_err(StoreError::backend)?;
                         fleet_sync_delivery::admit_publications::<

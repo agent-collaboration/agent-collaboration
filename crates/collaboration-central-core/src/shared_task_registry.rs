@@ -50,11 +50,17 @@ where
     ))?;
     engine.register(RegistrationTask::<Store, Driver, Hook>::new(
         config,
+        host.clone(),
         hook.clone(),
     ))?;
-    engine.register(ImportTask::<Store, Driver, Hook>::new(config, hook.clone()))?;
+    engine.register(ImportTask::<Store, Driver, Hook>::new(
+        config,
+        host.clone(),
+        hook.clone(),
+    ))?;
     engine.register(RetirementTask::<Store, Driver, Hook>::new(
         config,
+        host.clone(),
         hook.clone(),
     ))?;
     engine.register(PreviewTakeoverTask::<Store, Driver>::new(config))?;

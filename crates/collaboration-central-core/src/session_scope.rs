@@ -170,7 +170,7 @@ where
                         session.peer,
                         installation.clone(),
                     )
-                    .acknowledge(through)
+                    .acknowledge(through, now)
                     .await
                     .map_err(StoreError::backend)?;
                     let bytes = serde_json::to_vec(&ServerFrame::<BoardConsumerProtocol>::Answer {

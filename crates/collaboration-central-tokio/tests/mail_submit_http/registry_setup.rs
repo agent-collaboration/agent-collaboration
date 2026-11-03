@@ -147,7 +147,9 @@ pub(super) async fn register_grant_history(
         sqlx_turso::Turso,
         fleet_sync_lease::NoLeaseChangeHook,
     >::new(
-        config, Arc::new(fleet_sync_lease::NoLeaseChangeHook)
+        config,
+        host.clone(),
+        Arc::new(fleet_sync_lease::NoLeaseChangeHook),
     ))?;
     engine.register(HolderChangeTask::<
         Store,
@@ -191,7 +193,7 @@ pub(super) async fn register_grant_history(
                         attach_seq:AttachSequence::new(1).map_err(durable_steps::StoreError::backend)?,support:SchemaSupport {max_version:status.schema.version},
                     },
                 };
-                fleet_sync_lease::report_schema_support(scope,&report).await.map_err(durable_steps::StoreError::backend)?;
+                fleet_sync_lease::report_schema_support(scope,&report,SetupIo.now()).await.map_err(durable_steps::StoreError::backend)?;
                 Ok(())
             })).await?;
             let request = HolderChangeRequest::Move { attempt: TransferId::new(Uuid::now_v7())?, database, from_epoch: *from_epoch, to: target, reason: HolderChangeReason::new("grant-history setup")? };
@@ -293,13 +295,15 @@ pub(super) async fn import_unheld(
         registry,
         host,
     } = GrantFixture::open(root, config, database).await?;
-    let mut engine = Engine::new(registry, host);
+    let mut engine = Engine::new(registry, host.clone());
     engine.register(fleet_sync_lease::ImportTask::<
         Store,
         sqlx_turso::Turso,
         fleet_sync_lease::NoLeaseChangeHook,
     >::new(
-        config, Arc::new(fleet_sync_lease::NoLeaseChangeHook)
+        config,
+        host.clone(),
+        Arc::new(fleet_sync_lease::NoLeaseChangeHook),
     ))?;
     let proof = async {
         let request = Import {
@@ -348,7 +352,9 @@ pub(super) async fn retire_unheld(
         sqlx_turso::Turso,
         fleet_sync_lease::NoLeaseChangeHook,
     >::new(
-        config, Arc::new(fleet_sync_lease::NoLeaseChangeHook)
+        config,
+        host.clone(),
+        Arc::new(fleet_sync_lease::NoLeaseChangeHook),
     ))?;
     engine.register(HolderChangeTask::<
         Store,
@@ -465,13 +471,15 @@ pub(super) async fn retire_imported_copy(
         registry,
         host,
     } = GrantFixture::open(root, config, database).await?;
-    let mut engine = Engine::new(registry.clone(), host);
+    let mut engine = Engine::new(registry.clone(), host.clone());
     engine.register(fleet_sync_lease::RetirementTask::<
         Store,
         sqlx_turso::Turso,
         fleet_sync_lease::NoLeaseChangeHook,
     >::new(
-        config, Arc::new(fleet_sync_lease::NoLeaseChangeHook)
+        config,
+        host.clone(),
+        Arc::new(fleet_sync_lease::NoLeaseChangeHook),
     ))?;
     let attempt = RequestId::new(Uuid::now_v7())?;
     let proof = async {

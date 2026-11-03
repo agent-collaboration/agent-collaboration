@@ -174,6 +174,7 @@ impl NoticeLedger {
         let mut registrations = self.registrations.lock().await;
         let staged = registrations.clone();
         let peer = self.peer;
+        let now = SystemClock.now();
         let (committed, effects) = self
             .store
             .transaction(move |inner| {
@@ -190,6 +191,7 @@ impl NoticeLedger {
                             position: NoticePosition::new(position),
                             kind: BoardNotice::MailWaiting { stream },
                         }),
+                        now,
                     )
                     .await
                     .map_err(StoreError::backend)?;

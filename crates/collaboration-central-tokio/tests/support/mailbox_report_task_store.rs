@@ -90,7 +90,7 @@ pub(super) async fn prepare_report(
         inbox.enqueue_local(item, &LocalCancelConsumer, now).await.map_err(delivery_rollback)?;
         let local = inbox.enqueue_local_cancel(cancel, &LocalCancelConsumer, now).await.map_err(delivery_rollback)?;
         if !local.effects.reports.is_empty() { return Err(StoreError::backend("Local cancellation emitted a remote report")); }
-        let receiving = inbox.begin_receive(DeliveryStream::Items).await.map_err(delivery_rollback)?
+        let receiving = inbox.begin_receive(DeliveryStream::Items, now).await.map_err(delivery_rollback)?
             .ok_or_else(|| StoreError::backend("original receive cycle absent"))?;
         let effects = inbox.store_batch(receiving, batch, &LocalCancelConsumer, now).await.map_err(delivery_rollback)?;
         let [report] = effects.reports.as_slice() else { return Err(StoreError::backend("expected one preserved final report")); };

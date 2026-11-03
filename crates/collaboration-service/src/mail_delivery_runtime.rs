@@ -227,7 +227,7 @@ impl MailDeliveryRuntime {
         if let Some(session) = &session {
             let remote = session.task_config(config)?;
             engine.register(SubmitMailTask::new(limits, consumer.clone(), host.clone()))?;
-            engine.register(ReceiveMailTask::new(remote, consumer.clone()))?;
+            engine.register(ReceiveMailTask::new(remote, consumer.clone(), host.clone()))?;
             engine.register(ReportMailTask::new(remote, host.clone()))?;
             engine.register(terminal_retirement::RetireTerminalMail { limits })?;
         }
@@ -270,12 +270,13 @@ impl MailDeliveryRuntime {
             return Err(StoreError::backend("remote mail session is not welcomed"));
         }
         let config = self.config;
+        let now = self.host.now();
         self.store
             .transaction(move |scope| {
                 Box::pin(async move {
                     for stream in streams {
                         Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
-                            .begin_receive_and_admit::<ReceiveMailTask>(stream)
+                            .begin_receive_and_admit::<ReceiveMailTask>(stream, now)
                             .await
                             .map_err(fleet_sync_delivery::delivery_rollback)?;
                     }
