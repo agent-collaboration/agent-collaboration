@@ -15,7 +15,7 @@ How D1's requirements will be shown to hold. A plan: nothing here has been obser
 | <a id="o5"></a>O5 | **Re-enrollment after an empty reset.** Wipe staging, keep URL, relay and receiver; re-enroll a Router that holds old observations; kill it mid-clearing once; write its project afterwards. | R2, R5 |
 | <a id="o6"></a>O6 | **Load on one Fleet object.** On staging Cloudflare, N Routers (debug, Luna) connected at once exchanging messages at a fixed rate; record request rate, CPU per request, errors and push latency from Cloudflare analytics and Router timings. | R1 (limit) |
 | <a id="o7"></a>O7 | **Project fault isolation.** Inject a failure into P1's project object (the central conformance fault seam); while it fails, A and B exchange messages and B reads and writes P2. | R3 |
-| <a id="o8"></a>O8 | **Fleet schema listing.** List the Fleet store's tables on each backend. | R6 |
+| <a id="o8"></a>O8 | **Fleet schema readback.** Read the Fleet store's schema on each backend: every table's name, columns and constraints. | R6, R13 |
 | <a id="o9"></a>O9 | **Same-machine send.** Two Luna sessions on A; one sends to the other; read A's inbox row (one, with UUIDv7 id and timestamps) and A's outbox (no row for it). | R8 |
 | <a id="o10"></a>O10 | **Online timing on both backends.** A and B both online; 20 messages A → B; record each send-to-inbox time on Tokio and on staging. | R12 |
 | <a id="o11"></a>O11 | **Unenrolled submit.** An installation D that never enrolled opens a session and submits; read the answer and the Fleet outbox count before and after. | R15 |
@@ -31,7 +31,7 @@ How D1's requirements will be shown to hold. A plan: nothing here has been obser
 | U6, messages (R12) | O10, plus O6 under load | [R12](../specification/mail.md#r12) | Tokio and staging, both online | lasting | the send-to-inbox times on both backends are reported and contain no fixed wait | none | no latency threshold set by the owner; reported, not judged |
 | U7, mail records (R13) | read every outbox and inbox row after O1 and O9 | [R13](../specification/mail.md#r13) | Tokio and staging | lasting | every message id is UUIDv7 and every row carries creation and per-holder times; a UUIDv4 id is refused | none | ids outside mail are D3 |
 | U9, inbox and outbox (R14) | O4 | [R14](../specification/mail.md#r14) | Tokio and staging, injected clock | lasting | present at day 59, gone at day 60 on every holder; a 61-day-old id is refused as too old | none | a real 60-day wall-clock run is not performed |
-| U11, central names (R6) | O8 | [R6](../specification/central-layout.md#r6) | Tokio and staging | lasting | every Fleet store table starts with its concern prefix (`fleet_`, `lease_`, `machine_`, `mail_`, `_fleet_sync_`, schema bookkeeping) | none | Router table names are D3 |
+| U11, central names (R6) | O8 | [R6](../specification/central-layout.md#r6) | Tokio and staging | lasting | every Fleet store table starts with its concern prefix (`fleet_`, `lease_`, `machine_`, `mail_`, `_fleet_sync_`, schema bookkeeping); every table outside the noted journal exception has its timestamps and no JSON column without a stated reason; CHECK constraints appear only on boolean columns. A build with a migration-history table lacking `applied_at` fails | none | Router table names are D3 |
 
 ## Product tests the plan must add
 
