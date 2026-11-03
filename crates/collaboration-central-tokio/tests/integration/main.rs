@@ -25,3 +25,4 @@ mod fleet_mail_selector;
 mod fleet_mail_settle;
 mod fleet_mail_status_wire;
 mod fleet_ownership_restart;
+mod fleet_status_stream;
