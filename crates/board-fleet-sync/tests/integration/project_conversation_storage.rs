@@ -1,10 +1,6 @@
 //! Native typed conversation, reader and historical-authority queries share one real owner.
 
-#[expect(
-    dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)]
-mod project_storage_support;
+use crate::project_storage_support;
 
 use message_board::*;
 use message_board_storage::{

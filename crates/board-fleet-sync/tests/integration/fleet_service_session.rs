@@ -1,3 +1,4 @@
+#[path = "../support/mod.rs"]
 mod support;
 
 use board_fleet_sync::{AccessServiceToken, ReqwestSessionTransport};

@@ -1,12 +1,8 @@
+use crate::project_storage_support;
 use message_board::*;
 use message_board_storage::{ImportRowKind, ProjectStorageError, ProjectWriteTransaction};
-use std::sync::Arc;
-#[expect(
-    dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)]
-mod project_storage_support;
 use project_storage_support::*;
+use std::sync::Arc;
 
 #[tokio::test]
 async fn commits_reopen_and_rollback_use_the_library_owned_write_and_read_scopes() {

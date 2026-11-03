@@ -1,10 +1,6 @@
 //! Native metadata keeps unknown import time and applies a precise cross-project sweep cut.
 
-#[expect(
-    dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)]
-mod project_storage_support;
+use crate::project_storage_support;
 use message_board::*;
 use message_board_storage::{
     FeedPageBounds, FeedPageDirection, ImportRowKeys, ImportRowKind, PostPageFilter, PostPageScope,
