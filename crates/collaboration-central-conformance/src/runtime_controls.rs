@@ -33,7 +33,6 @@ impl RuntimeControlRequest {
                 | RuntimeControl::ClearProjectFault,
                 ObjectAddress::Copy(_),
             )
-            | (RuntimeControl::SmallMailboxCapacity, ObjectAddress::Mailbox(_))
             | (
                 RuntimeControl::DropNextAnswer { .. } | RuntimeControl::AwaitDroppedAnswer { .. },
                 ObjectAddress::Fleet,
@@ -69,7 +68,6 @@ impl RuntimeControlRequest {
 pub enum RuntimeControl {
     ProjectUnavailable,
     ClearProjectFault,
-    SmallMailboxCapacity,
     SetTime {
         now: RegistryTime,
     },

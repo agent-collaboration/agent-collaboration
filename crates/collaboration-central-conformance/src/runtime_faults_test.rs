@@ -81,7 +81,7 @@ fn fleet_submit_controls_require_the_fleet_owner_and_destination()
     let item = "019f0000-0000-7000-8000-000000000811"
         .to_owned()
         .try_into()?;
-    let retired_mailbox = ObjectAddress::Mailbox(
+    let non_fleet = ObjectAddress::Copy(
         "019f0000-0000-7000-8000-000000000812"
             .to_owned()
             .try_into()?,
@@ -90,7 +90,7 @@ fn fleet_submit_controls_require_the_fleet_owner_and_destination()
         DispatchCallSelector::FleetMailSubmit,
         DispatchCallSelector::FleetMailSubmitFor { peer, item },
     ] {
-        for destination in [ObjectAddress::Fleet, retired_mailbox.clone()] {
+        for destination in [ObjectAddress::Fleet, non_fleet.clone()] {
             for command in [
                 RuntimeControl::HoldNextSelectedDispatch {
                     destination: destination.clone(),
@@ -105,7 +105,7 @@ fn fleet_submit_controls_require_the_fleet_owner_and_destination()
                     call,
                 },
             ] {
-                for address in [ObjectAddress::Fleet, retired_mailbox.clone()] {
+                for address in [ObjectAddress::Fleet, non_fleet.clone()] {
                     let request = RuntimeControlRequest {
                         address: address.clone(),
                         command: command.clone(),
@@ -121,6 +121,12 @@ fn fleet_submit_controls_require_the_fleet_owner_and_destination()
             }
         }
     }
+    assert!(
+        serde_json::from_value::<ObjectAddress>(
+            serde_json::json!({"kind":"mailbox","value":"019f0000-0000-7000-8000-000000000812"})
+        )
+        .is_err()
+    );
     for retired in [
         serde_json::json!("mailboxSubmit"),
         serde_json::json!({"mailboxSubmitFor":{"origin":peer,"item":item}}),

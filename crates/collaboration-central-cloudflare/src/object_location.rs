@@ -4,6 +4,5 @@ pub(crate) fn location(address: &ObjectAddress) -> (&'static str, String) {
     match address {
         ObjectAddress::Copy(project) => ("PROJECT_COPIES", project.to_string()),
         ObjectAddress::Fleet => ("FLEET", "fleet".into()),
-        ObjectAddress::Mailbox(service) => ("MAILBOXES", service.as_str().to_owned()),
     }
 }

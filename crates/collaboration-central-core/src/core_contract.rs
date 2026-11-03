@@ -36,7 +36,6 @@ pub struct RegistryTime(pub DateTime<Utc>);
 pub enum ObjectAddress {
     Copy(DatabaseId),
     Fleet,
-    Mailbox(message_board::ServiceId),
 }
 impl ObjectAddress {
     #[must_use]
@@ -44,7 +43,6 @@ impl ObjectAddress {
         match self {
             Self::Copy(_) => crate::CallerKind::Copy,
             Self::Fleet => crate::CallerKind::Fleet,
-            Self::Mailbox(_) => crate::CallerKind::Mailbox,
         }
     }
 }

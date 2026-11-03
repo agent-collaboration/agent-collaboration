@@ -77,7 +77,6 @@ const runtime = new Miniflare(
         durableObjects: {
           PROJECT_COPIES: { className: "ProjectCopyObject", useSQLite: true },
           FLEET: { className: "FleetObject", useSQLite: true },
-          MAILBOXES: { className: "MailboxObject", useSQLite: true },
           SCHEMA_PROBES: { className: "BootstrapObject", useSQLite: true },
         },
         bindings: templateBindings,

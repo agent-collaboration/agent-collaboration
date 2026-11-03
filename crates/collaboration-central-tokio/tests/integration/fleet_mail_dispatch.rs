@@ -89,16 +89,21 @@ impl Socket {
         Ok(())
     }
     pub(super) async fn next(&mut self) -> TestResult<ServerFrame<BoardConsumerProtocol>> {
-        match tokio::time::timeout(CAP, self.frames.recv())
-            .await?
-            .ok_or("socket ended")?
-        {
+        match self.next_command().await? {
             SocketCommand::Frame(bytes) => Ok(serde_json::from_slice(&bytes)?),
             SocketCommand::Close(reason) => Err(format!("socket closed: {reason:?}").into()),
         }
     }
+    pub(super) async fn next_command(&mut self) -> TestResult<SocketCommand> {
+        Ok(tokio::time::timeout(CAP, self.frames.recv())
+            .await?
+            .ok_or("socket ended")?)
+    }
     pub(super) async fn push(&mut self, expected: ItemId) -> TestResult<FrameId> {
         Ok(self.push_envelope(expected).await?.0)
+    }
+    pub(super) fn queued_commands(&self) -> usize {
+        self.frames.len()
     }
     pub(super) async fn push_envelope(
         &mut self,

@@ -133,7 +133,6 @@ where
                 (invocation.source_face, &invocation.source),
                 (CallerKind::Registry, ObjectAddress::Fleet)
                     | (CallerKind::Fleet, ObjectAddress::Fleet)
-                    | (CallerKind::Mailbox, ObjectAddress::Mailbox(_))
             )
         {
             return Err(CallFailure::AnswerLost);
@@ -142,12 +141,6 @@ where
             serde_json::from_value(invocation.target).map_err(encode_refusal)?;
         let notice: BoardNotice =
             serde_json::from_value(invocation.request).map_err(encode_refusal)?;
-        if let ObjectAddress::Mailbox(source) = &invocation.source
-            && (source != &target.installation
-                || !matches!(notice, BoardNotice::MailWaiting { .. }))
-        {
-            return Err(CallFailure::AnswerLost);
-        }
         let ObjectWork::Fleet {
             host,
             shared_host,

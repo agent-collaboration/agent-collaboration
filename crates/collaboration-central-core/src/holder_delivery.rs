@@ -175,11 +175,6 @@ where
         if invocation.kind == crate::machine_notice_delivery::DeliverMachineNotice::KIND {
             return self.receive_machine_notice(invocation).await;
         }
-        if invocation.kind
-            == fleet_sync_delivery::PublishCall::<board_sync_protocol::BoardDeliveryTypes>::KIND
-        {
-            return self.mail_publication(invocation).await;
-        }
         if !matches!(invocation.authority, CallAuthority::Object)
             || invocation.source != ObjectAddress::Fleet
             || invocation.source_face != CallerKind::Registry

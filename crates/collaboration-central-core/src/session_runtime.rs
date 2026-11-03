@@ -41,7 +41,7 @@ where
                 )),
                 shared_host.clone(),
             )),
-            ObjectWork::Copy { .. } | ObjectWork::Mailbox { .. } => Err(StoreError::Aborted {
+            ObjectWork::Copy { .. } => Err(StoreError::Aborted {
                 reason: "session runtime has a different face".into(),
             }),
         }

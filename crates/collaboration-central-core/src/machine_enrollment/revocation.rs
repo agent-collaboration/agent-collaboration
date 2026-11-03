@@ -35,7 +35,7 @@ pub(crate) struct RevokeInput {
 pub(crate) struct RevokeMachineTask<Store>(pub PhantomData<fn() -> Store>);
 impl<Store: AtomicStore> Task for RevokeMachineTask<Store> {
     const KIND: &'static str = REVOKE_TASK_KIND;
-    const VERSION: u32 = 1;
+    const VERSION: u32 = 2;
     type Store = Store;
     type Input = RevokeInput;
     type Output = ();
@@ -53,17 +53,6 @@ impl<Store: AtomicStore> Task for RevokeMachineTask<Store> {
                     }
                 })?,
                 EndPeerSessions { peer: input.peer },
-                (),
-            )
-            .await?;
-        context
-            .call(
-                durable_steps::StepName::new("close_mailbox").map_err(|error| {
-                    OperationFailure::InvalidPayload {
-                        message: error.to_string(),
-                    }
-                })?,
-                crate::mailbox_lifecycle::ClosePeerMailbox { peer: input.peer },
                 (),
             )
             .await?;

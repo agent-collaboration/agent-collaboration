@@ -98,7 +98,6 @@ fn source_matches(call: &ObjectCallEnvelope) -> bool {
             (ObjectAddress::Fleet, CallerKind::Registry)
                 | (ObjectAddress::Fleet, CallerKind::Fleet)
                 | (ObjectAddress::Copy(_), CallerKind::Copy)
-                | (ObjectAddress::Mailbox(_), CallerKind::Mailbox)
                 | (ObjectAddress::Fleet, CallerKind::Delivery)
         ),
         CallAuthority::Machine { .. } => {

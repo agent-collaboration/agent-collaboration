@@ -112,7 +112,6 @@ enum ObjectReplyFault {
 }
 struct FaultState {
     clock: Option<RegistryTime>,
-    small_mailbox_capacity: bool,
     storage: StorageFaultObservation,
     answer: AnswerFault,
     dispatch: DispatchFault,
@@ -123,7 +122,6 @@ impl Default for FaultState {
     fn default() -> Self {
         Self {
             clock: None,
-            small_mailbox_capacity: false,
             storage: StorageFaultObservation::Idle,
             answer: AnswerFault::Idle,
             dispatch: DispatchFault::Idle,
@@ -139,9 +137,6 @@ pub struct RuntimeFaults(Mutex<FaultState>);
 #[path = "runtime_faults_test.rs"]
 mod tests;
 impl RuntimeFaults {
-    pub fn small_mailbox_capacity(&self) -> Result<bool, RuntimeControlFailure> {
-        Ok(self.state()?.small_mailbox_capacity)
-    }
     fn state(&self) -> Result<MutexGuard<'_, FaultState>, RuntimeControlFailure> {
         self.0.lock().map_err(|_| RuntimeControlFailure::Poisoned)
     }
@@ -358,8 +353,6 @@ impl RuntimeFaults {
             RuntimeControl::ClearProjectFault => {
                 self.state()?.storage = StorageFaultObservation::Idle
             }
-            // Startup and live controls select the same fixed quota at the platform owner.
-            RuntimeControl::SmallMailboxCapacity => self.state()?.small_mailbox_capacity = true,
             RuntimeControl::SetTime { now } => self.state()?.clock = Some(now),
             RuntimeControl::CopyFull { after_writes } => {
                 let mut state = self.state()?;

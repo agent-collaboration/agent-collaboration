@@ -27,6 +27,12 @@ async fn activation_window() -> TestResult<ActivationWindow> {
     fixture
         .execute("UPDATE machine_enrollments SET state='revoked'")
         .await?;
+    fixture
+        .revocation_control(
+            enrollment.installation.clone(),
+            collaboration_central_core::RevocationControl::ArmActivation,
+        )
+        .await?;
     assert_eq!(
         fixture
             .runtime
@@ -34,11 +40,8 @@ async fn activation_window() -> TestResult<ActivationWindow> {
             .await?,
         EnrollmentDecision::EnrollmentInProgress
     );
-    // This seeds the persisted activation-before-finish precondition. The real
-    // open and a held engine finish remain separate C20 integration obligations.
-    fixture
-        .execute("UPDATE machine_enrollments SET state='enrolled'")
-        .await?;
+    // The actual activation step committed its local receipt, and the existing
+    // checkpoint keeps only the operation's final completion pending.
     let before = pending_snapshot(&fixture).await?;
     assert_eq!(
         before
@@ -150,7 +153,7 @@ async fn pending_snapshot(fixture: &Fixture) -> TestResult<serde_json::Value> {
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn an_unanswered_open_keeps_reserved_readmission_revoked_and_refuses_overlapping_changes()
+async fn pending_activation_keeps_reserved_readmission_revoked_and_refuses_overlapping_changes()
 -> TestResult {
     use collaboration_central_core::RevocationDecision;
 
@@ -170,10 +173,16 @@ async fn an_unanswered_open_keeps_reserved_readmission_revoked_and_refuses_overl
         &original,
     )?;
     // Seed the precondition already used by the identity/reopen case. The
-    // Registry journal and credential writes below are real; completed revoke,
-    // mailbox open and alarm wiring are separate integration obligations.
+    // Fleet journal and credential writes below are real; completed revoke and
+    // normal socket wiring are also exercised by the shared HTTP scenarios.
     fixture
         .execute("UPDATE machine_enrollments SET state='revoked'")
+        .await?;
+    fixture
+        .revocation_control(
+            original.installation.clone(),
+            collaboration_central_core::RevocationControl::ArmBeforeActivation,
+        )
         .await?;
     let mut reserved = original.clone();
     reserved.access_client_id = AccessClientId::new("reserved-client")?;
@@ -237,6 +246,12 @@ async fn an_unanswered_open_keeps_reserved_readmission_revoked_and_refuses_overl
     fixture.objects.close().await?;
     drop(fixture);
     let fixture = Fixture::open(root.path()).await?;
+    fixture
+        .revocation_control(
+            reserved.installation.clone(),
+            collaboration_central_core::RevocationControl::ArmBeforeActivation,
+        )
+        .await?;
     assert_eq!(
         fixture.authenticate(&reserved).await?,
         Err(AuthRefusal::Revoked)

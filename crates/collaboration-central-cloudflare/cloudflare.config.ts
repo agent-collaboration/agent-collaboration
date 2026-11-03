@@ -24,16 +24,10 @@ export default {
         exportName: "ProjectCopyObject",
       },
       FLEET: { type: "durable-object", worker: "replace-worker-name", exportName: "FleetObject" },
-      MAILBOXES: {
-        type: "durable-object",
-        worker: "replace-worker-name",
-        exportName: "MailboxObject",
-      },
     },
     exports: {
       ProjectCopyObject: { type: "durable-object", storage: "sqlite" },
       FleetObject: { type: "durable-object", storage: "sqlite" },
-      MailboxObject: { type: "durable-object", storage: "sqlite" },
     },
   },
 };

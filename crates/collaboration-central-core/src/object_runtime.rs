@@ -1,6 +1,5 @@
-//! One physical Fleet, project or intermediate Mailbox owner.
+//! One physical Fleet or project owner.
 use crate::{CoreHost, ObjectHost, ObjectKind, PlatformIo};
-use durable_steps::Engine;
 use std::{marker::PhantomData, sync::Arc};
 
 pub struct ObjectRuntime<Face: ObjectKind, Host: ObjectHost, Io: PlatformIo> {
@@ -28,15 +27,5 @@ pub(crate) enum ObjectWork<Host: ObjectHost, Io: PlatformIo> {
         copy_ack_wait: std::time::Duration,
         #[cfg(feature = "conformance")]
         wait_probe: Arc<crate::conformance_copy_wait::CopyWaitProbe>,
-    },
-    Mailbox {
-        engine: Engine<Host::Store, CoreHost<Io>>,
-        host: Arc<Host>,
-        shared_host: Arc<CoreHost<Io>>,
-        installation: message_board::ServiceId,
-        limits: fleet_sync_delivery::DeliveryLimits,
-        #[cfg(feature = "conformance")]
-        conformance_limits: std::sync::OnceLock<fleet_sync_delivery::DeliveryLimits>,
-        health: Arc<crate::mailbox_step::MailboxHealth>,
     },
 }

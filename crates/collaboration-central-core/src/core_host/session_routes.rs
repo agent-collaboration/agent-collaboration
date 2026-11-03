@@ -1,8 +1,8 @@
 //! Session callers can reach only these explicit DAG edges.
 use super::{
     CallFailure, CallId, CallTarget, CallerContext, CopyKind, CopyRead, DeliveryKind, FleetKind,
-    MailboxKind, ReceiverId, RegistryKind, SerializedObjectCall, SessionKind, decode,
-    encode_shared_call, no_route,
+    ReceiverId, RegistryKind, SerializedObjectCall, SessionKind, decode, encode_shared_call,
+    no_route,
 };
 
 pub(super) fn classify_session(
@@ -71,16 +71,6 @@ pub(super) fn classify_session(
                 caller,
                 (),
                 decode(target)?,
-                decode(request)?,
-                identity,
-            )
-        }
-        crate::mailbox_requests::MailboxRequest::KIND => {
-            let target: crate::mailbox_requests::MailboxRequest = decode(target)?;
-            encode_shared_call::<SessionKind, MailboxKind, crate::mailbox_requests::MailboxRequest>(
-                caller,
-                target.installation.clone(),
-                target,
                 decode(request)?,
                 identity,
             )

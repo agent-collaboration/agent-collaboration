@@ -24,9 +24,9 @@ type Acceptance = <BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Ac
 
 const CAP: Duration = Duration::from_secs(5);
 #[path = "../native_http/support.rs"]
-mod configuration;
+pub(super) mod configuration;
 
-async fn send_client_frame(
+pub(super) async fn send_client_frame(
     socket: &mut WebSocket,
     frame: ClientFrame<BoardConsumerProtocol>,
 ) -> TestResult {
@@ -35,7 +35,7 @@ async fn send_client_frame(
         .await?;
     Ok(())
 }
-async fn read_server_frame(
+pub(super) async fn read_server_frame(
     socket: &mut WebSocket,
 ) -> TestResult<ServerFrame<BoardConsumerProtocol>> {
     let message = tokio::time::timeout(CAP, socket.next())
@@ -54,7 +54,7 @@ fn new_call_id(step: &str) -> TestResult<durable_steps::CallId> {
         step: durable_steps::StepName::new(step)?,
     })
 }
-async fn receive_and_ack_publication(
+pub(super) async fn receive_and_ack_publication(
     socket: &mut WebSocket,
 ) -> TestResult<fleet_sync_protocol::StatusPublication<Acceptance>> {
     loop {

@@ -12,7 +12,6 @@ pub enum CallerKind {
     Registry,
     Copy,
     Fleet,
-    Mailbox,
     Delivery,
 }
 
@@ -85,11 +84,6 @@ macro_rules! object_kind {
 pub enum EdgeCall {}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum EdgeResult {}
-// This face accepts shared CallTargets only; it has no legacy WireCall family.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub enum MailboxCall {}
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub enum MailboxResult {}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum SharedCallOnly {}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -136,15 +130,6 @@ object_kind!(
     SharedAnswerOnly,
     |_: &()| ObjectAddress::Fleet
 );
-object_kind!(
-    MailboxKind,
-    4,
-    Mailbox,
-    ServiceId,
-    MailboxCall,
-    MailboxResult,
-    |v: &ServiceId| ObjectAddress::Mailbox(v.clone())
-);
 
 macro_rules! allowed_edges {
     ($( $from:ident => $to:ident ),+ $(,)?) => {
@@ -163,6 +148,5 @@ allowed_edges!(
     EdgeKind=>SessionKind, EdgeKind=>RegistryKind, EdgeKind=>FleetKind,
     SessionKind=>RegistryKind, SessionKind=>CopyKind, SessionKind=>FleetKind, SessionKind=>DeliveryKind,
     RegistryKind=>CopyKind, RegistryKind=>FleetKind, RegistryKind=>DeliveryKind,
-    SessionKind=>MailboxKind, RegistryKind=>MailboxKind, MailboxKind=>DeliveryKind,
     FleetKind=>CopyKind, FleetKind=>DeliveryKind,
 );

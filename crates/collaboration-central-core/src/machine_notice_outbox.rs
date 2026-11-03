@@ -30,22 +30,6 @@ impl<Store: AtomicStore> Task for FleetNoticeTask<Store> {
     }
 }
 
-pub(crate) struct MailboxNoticeTask<Store>(pub PhantomData<fn() -> Store>);
-impl<Store: AtomicStore> Task for MailboxNoticeTask<Store> {
-    const KIND: &'static str = "central.mailbox-notice";
-    const VERSION: u32 = 1;
-    type Store = Store;
-    type Input = MachineNoticeInput;
-    type Output = ();
-    async fn run<Context: OperationContext<Store = Store>>(
-        &self,
-        context: &mut Context,
-        input: &MachineNoticeInput,
-    ) -> Result<(), OperationFailure> {
-        deliver(context, input).await
-    }
-}
-
 async fn deliver<Context: OperationContext>(
     context: &mut Context,
     input: &MachineNoticeInput,

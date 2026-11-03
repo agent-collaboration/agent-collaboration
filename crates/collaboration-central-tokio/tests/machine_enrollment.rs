@@ -108,6 +108,26 @@ impl Fixture {
             runtime,
         })
     }
+    async fn revocation_control(
+        &self,
+        service: ServiceId,
+        control: collaboration_central_core::RevocationControl,
+    ) -> TestResult<collaboration_central_core::RevocationObservation> {
+        let call = serde_json::json!({
+            "source":{"kind":"fleet"},"sourceFace":"edge",
+            "authority":{"kind":"owner","value":"owner@example.test"},
+            "destination":{"kind":"fleet"},"destinationFace":"registry",
+            "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"readmission_window"},
+            "kind":"central.conformance-revocation","target":null,
+            "request":collaboration_central_core::RevocationControlInput {service,control},
+        });
+        let bytes = self
+            .runtime
+            .on_call(serde_json::to_vec(&call)?)
+            .await
+            .map_err(|failure| format!("readmission control: {failure:?}"))?;
+        Ok(serde_json::from_slice(&bytes)?)
+    }
     async fn authenticate(
         &self,
         request: &EnrollMachine,
@@ -174,7 +194,7 @@ fn peer(result: EnrollmentDecision, request: &EnrollMachine) -> TestResult<PeerI
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn v4_service_keeps_one_v7_peer_across_updates_and_pending_readmission_after_reopen()
+async fn v4_service_keeps_one_v7_peer_across_updates_and_paused_readmission_after_reopen()
 -> TestResult {
     let directory = tempfile::tempdir()?;
     let fixture = Fixture::open(directory.path()).await?;
@@ -242,6 +262,12 @@ async fn v4_service_keeps_one_v7_peer_across_updates_and_pending_readmission_aft
     fixture.objects.close().await?;
     drop(fixture);
     let fixture = Fixture::open(directory.path()).await?;
+    fixture
+        .revocation_control(
+            updated.installation.clone(),
+            collaboration_central_core::RevocationControl::ArmBeforeActivation,
+        )
+        .await?;
     assert_eq!(
         fixture
             .runtime
@@ -249,9 +275,8 @@ async fn v4_service_keeps_one_v7_peer_across_updates_and_pending_readmission_aft
             .await?,
         EnrollmentDecision::EnrollmentInProgress,
     );
-    // This fixture refuses every object call, including Open. Stable identity
-    // persists while activation waits; real completed readmission is exercised
-    // by revocation_carryover's two normal close/open cycles.
+    // Stable identity persists while the existing activation checkpoint is
+    // paused; real completed cycles are also exercised over HTTP and sockets.
     let reserved_peer = fixture
         .object
         .transaction(|scope| {

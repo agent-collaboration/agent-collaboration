@@ -409,7 +409,7 @@ async fn main() -> ConformanceResult<()> {
             let shared = collaboration_central_conformance::ConformanceClient::new(&format!(
                 "http://127.0.0.1:{port}"
             ))?;
-            collaboration_central_conformance::run_readmission_open_conformance(&shared).await
+            collaboration_central_conformance::run_readmission_reservation_conformance(&shared).await
         }
         Scenario::MailStatus => {
             let shared = collaboration_central_conformance::ConformanceClient::new(&format!(

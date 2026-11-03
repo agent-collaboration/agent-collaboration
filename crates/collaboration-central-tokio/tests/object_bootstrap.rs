@@ -106,7 +106,7 @@ async fn exported_engine_corpora_initialize_once_and_reopen_without_reapplying_t
         (EngineSchema::Registry, 6),
         (EngineSchema::Copy, 3),
         (EngineSchema::Session, 4),
-        (EngineSchema::Mailbox, 5),
+        (EngineSchema::Delivery, 5),
         (EngineSchema::Fleet, 10),
     ] {
         let directory = tempfile::tempdir()?;
@@ -117,7 +117,7 @@ async fn exported_engine_corpora_initialize_once_and_reopen_without_reapplying_t
         let probe = match schema {
             EngineSchema::Registry => Some(BootstrapProbe::Registry),
             EngineSchema::Copy => Some(BootstrapProbe::Copy),
-            EngineSchema::Mailbox => Some(BootstrapProbe::Mailbox),
+            EngineSchema::Delivery => Some(BootstrapProbe::Delivery),
             EngineSchema::Session | EngineSchema::Fleet => None,
         };
         if let Some(schema) = probe {
@@ -139,7 +139,7 @@ async fn exported_engine_corpora_initialize_once_and_reopen_without_reapplying_t
                 BootstrapProbeReply::Copy(answer) => assert!(
                     matches!(*answer, CopyStatusAnswer::Status(status) if status.fence.value() == 1 && status.acked.sequence.value() == 0)
                 ),
-                BootstrapProbeReply::Mailbox(query) => assert!(
+                BootstrapProbeReply::Delivery(query) => assert!(
                     query.statuses.iter().all(|status| matches!(
                         status.state,
                         fleet_sync_protocol::ItemStatusState::Unknown

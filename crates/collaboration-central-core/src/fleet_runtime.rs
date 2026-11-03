@@ -220,7 +220,7 @@ where
             EngineSchema::Fleet,
             EngineSchema::Registry,
             EngineSchema::Session,
-            EngineSchema::Mailbox,
+            EngineSchema::Delivery,
         ] {
             applied += bootstrap.initialize(schema).await?;
         }
@@ -469,7 +469,11 @@ where
         Box::pin(async move {
             let host = host.upgrade().ok_or(CallFailure::AnswerLost)?;
             let (item, _) = StepDriver::new(host.clone())
-                .run(ResolvePush { reference, limits })
+                .run(ResolvePush {
+                    reference,
+                    limits,
+                    now: io.now(),
+                })
                 .await
                 .map_err(|_| CallFailure::AnswerLost)?;
             let item = item.ok_or(CallFailure::AnswerLost)?;
@@ -505,6 +509,7 @@ where
 struct ResolvePush {
     reference: DeliveryItemRef,
     limits: DeliveryLimits,
+    now: runtime_primitives::SyncTime,
 }
 impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for ResolvePush
 where
@@ -525,6 +530,35 @@ where
                 .resolve_push(&self.reference)
                 .await
                 .map_err(StoreError::backend)?;
+            if let Some(item) = &item {
+                let recipient = item.recipient().peer;
+                let mut enrolled = crate::generated_enrollment::read_enrollments(
+                    scope,
+                    None,
+                    None,
+                    None,
+                    Some(recipient.to_string()),
+                )
+                .await
+                .map_err(StoreError::backend)?;
+                if enrolled.len() > 1 {
+                    return Err(crate::machine_enrollment_record::corrupt("peer_id"));
+                }
+                let Some(row) = enrolled.pop() else {
+                    return Ok((None, Vec::new()));
+                };
+                let machine = crate::machine_enrollment_record::StoredMachine::decode(row)?;
+                if machine.peer != recipient {
+                    return Err(crate::machine_enrollment_record::corrupt("peer_id"));
+                }
+                // Revocation admission precedes its EndSessions task. Older
+                // queued work must respect the committed gate during that gap.
+                if machine.state != crate::machine_enrollment_record::EnrollmentState::Enrolled
+                    || machine.expires_at.timestamp_millis() <= self.now.unix_millis()
+                {
+                    return Ok((None, Vec::new()));
+                }
+            }
             Ok((item.map(Box::new), Vec::new()))
         })
     }

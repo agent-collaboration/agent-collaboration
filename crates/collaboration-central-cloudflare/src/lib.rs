@@ -22,7 +22,7 @@ mod object_shell;
 mod platform;
 mod shared_object_store;
 mod storage_measurement;
-pub use object_shell::{FleetObject, MailboxObject, ProjectCopyObject};
+pub use object_shell::{FleetObject, ProjectCopyObject};
 pub use shared_object_store::CloudflareStorageHost;
 use worker::{Context, Env, Request, Response, Result, event};
 #[event(fetch)]

@@ -1,10 +1,7 @@
 //! Every enrollment answer exposes the deployment's configured relay identity.
-use collaboration_central_conformance::{
-    ConformanceResult, ObjectReplyFaultObservation, RuntimeControl, RuntimeControlRequest,
-    RuntimeFaultObservation, access_client_id, owner_assertion,
-};
+use collaboration_central_conformance::{ConformanceResult, access_client_id, owner_assertion};
 use collaboration_central_core::{
-    ObjectAddress, RevocationControl, RevocationControlInput, RevocationObservation,
+    RevocationControl, RevocationControlInput, RevocationObservation,
 };
 use durable_steps::OperationState;
 use fleet_sync_protocol::PeerId;
@@ -18,32 +15,8 @@ pub(super) async fn run(base_url: &str, expected_relay: PeerId) -> ConformanceRe
         "550e8400-e29b-41d4-a716-446655445240",
         "019f0000-0000-7000-8000-000000005249",
         "delivery-config",
-        ReadmissionReply::Delivered,
-    )
-    .await?;
-    run_case(
-        base_url,
-        expected_relay,
-        "550e8400-e29b-41d4-a716-446655445250",
-        "019f0000-0000-7000-8000-000000005259",
-        "delivery-config-lost-open",
-        ReadmissionReply::LostAfterApply,
     )
     .await
-}
-
-#[derive(Clone, Copy)]
-enum ReadmissionReply {
-    Delivered,
-    LostAfterApply,
-}
-impl ReadmissionReply {
-    fn marker(self) -> &'static str {
-        match self {
-            Self::Delivered => "DELIVERY_CONFIG_CASE",
-            Self::LostAfterApply => "DELIVERY_CONFIG_LOST_REPLY_CASE",
-        }
-    }
 }
 
 async fn run_case(
@@ -52,17 +25,13 @@ async fn run_case(
     installation: &str,
     peer: &str,
     client_token: &str,
-    readmission_reply: ReadmissionReply,
 ) -> ConformanceResult<()> {
     let http = reqwest::Client::builder()
         .no_proxy()
         .timeout(Duration::from_secs(10))
         .build()?;
-    let marker = readmission_reply.marker();
-    let (initial_hash, updated_hash) = match readmission_reply {
-        ReadmissionReply::Delivered => ("a".repeat(64), "b".repeat(64)),
-        ReadmissionReply::LostAfterApply => ("c".repeat(64), "d".repeat(64)),
-    };
+    let marker = "DELIVERY_CONFIG_CASE";
+    let (initial_hash, updated_hash) = ("a".repeat(64), "b".repeat(64));
     let mut body = json!({"kind":"enrollMachine","value":{
         "installation":installation,"peer":peer,"label":"configured relay enrollment",
         "access_client_id":access_client_id(client_token)?,
@@ -92,84 +61,19 @@ async fn run_case(
         return Err("relay configuration fixture did not complete real revocation".into());
     }
     await_lifecycle(&http, base_url, installation, Lifecycle::Revocation).await?;
-    if matches!(readmission_reply, ReadmissionReply::LostAfterApply) {
-        // The directory resolves this peer to its installation's Mailbox.
-        // Arm after Close completes so only the readmission Open can match.
-        control(
-            &http,
-            base_url,
-            RuntimeControl::DropNextObjectReply {
-                destination: ObjectAddress::Mailbox(installation.to_owned().try_into()?),
-            },
-        )
-        .await?;
-    }
     let readmitted = owner_post(&http, base_url, "enroll", &body).await?;
     if readmitted == json!({"kind":"enrollmentInProgress"}) {
         println!("{marker} readmission acknowledged pending");
     } else {
         enrollment(&readmitted, peer, expected_relay)?;
     }
-    if matches!(readmission_reply, ReadmissionReply::LostAfterApply) {
-        // Waiting for the drop must not give readiness another timeout window.
-        tokio::try_join!(
-            await_lifecycle(&http, base_url, installation, Lifecycle::Readmission),
-            await_lost_open_reply(&http, base_url, installation, peer),
-        )?;
-    } else {
-        await_lifecycle(&http, base_url, installation, Lifecycle::Readmission).await?;
-    }
+    await_lifecycle(&http, base_url, installation, Lifecycle::Readmission).await?;
     for stage in ["readmission-completed", "readmission-replay"] {
         let answer = owner_post(&http, base_url, "enroll", &body).await?;
         enrollment(&answer, peer, expected_relay)?;
         println!("{marker} {stage} configured_relay passed");
     }
     Ok(())
-}
-
-async fn await_lost_open_reply(
-    http: &reqwest::Client,
-    base_url: &str,
-    installation: &str,
-    peer: &str,
-) -> ConformanceResult<()> {
-    let observed = control(http, base_url, RuntimeControl::AwaitDroppedObjectReply).await?;
-    let ObjectReplyFaultObservation::Dropped {
-        destination,
-        request,
-    } = observed.object_reply
-    else {
-        return Err("readmission did not observe the successful Open reply being lost".into());
-    };
-    let request: Value = serde_json::from_slice(&request)?;
-    if destination != ObjectAddress::Mailbox(installation.to_owned().try_into()?)
-        || request.get("kind") != Some(&json!("central.open-peer-mailbox"))
-        || request.get("target") != Some(&json!({"peer":peer}))
-        || request.get("request") != Some(&Value::Null)
-    {
-        return Err(format!("lost reply was not this peer's real Mailbox Open: {request}").into());
-    }
-    println!("DELIVERY_CONFIG_LOST_REPLY_CASE successful_mailbox_open_reply_lost passed");
-    Ok(())
-}
-
-async fn control(
-    http: &reqwest::Client,
-    base_url: &str,
-    command: RuntimeControl,
-) -> ConformanceResult<RuntimeFaultObservation> {
-    Ok(http
-        .post(format!("{base_url}/admin/v1/conformance/runtime"))
-        .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
-        .json(&RuntimeControlRequest {
-            address: ObjectAddress::Fleet,
-            command,
-        })
-        .send()
-        .await?
-        .error_for_status()?
-        .json()
-        .await?)
 }
 
 #[derive(Clone, Copy, Debug)]

@@ -1,4 +1,5 @@
-//! Capture each real alarm's SQL, retaining unknown and mixed-owner statements.
+//! Fleet-owned SQL inventory with one control stream and no expired data.
+//! This is not total Cloudflare SQL, CPU, billing, or startup backfill cost.
 use super::composed_fleet_fixture::TestResult;
 use std::{
     collections::BTreeSet,

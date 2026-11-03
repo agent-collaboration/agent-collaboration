@@ -54,8 +54,6 @@ mod copy_write_calls;
 pub use copy_receiver_rules::{CopyDirectorySummary, CopyReceiverRules};
 mod delivery_config;
 pub use delivery_config::DeliveryConfig;
-#[cfg(feature = "conformance")]
-mod conformance_mailbox;
 mod effect_driver;
 mod fleet_mail_tasks;
 mod forward_calls;
@@ -103,16 +101,9 @@ mod machine_enrollment_record;
 mod mail_push_dispatch;
 mod mail_sender_calls;
 mod mail_status_dispatch;
-mod mail_status_receiver;
 mod mail_submit_admission;
 mod mail_submit_calls;
-mod mailbox_deadlines;
-mod mailbox_lifecycle;
 mod mailbox_limits;
-mod mailbox_requests;
-mod mailbox_runtime;
-mod mailbox_step;
-mod mailbox_submit_runtime;
 #[cfg(feature = "conformance")]
 pub use machine_enrollment::conformance_revocation::{
     LifecyclePauseObservation, RevocationControl, RevocationControlInput,
