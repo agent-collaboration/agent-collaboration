@@ -6,14 +6,14 @@
 plan path: docs/specs/2026-11-02-central-storage-reset/plans/2026-11-02-d1-central-layout-and-mail.md
 originating planner: plan-implementation
 supersedes: none
-planning result: ready (admitted when the four-document review of the D1 set returns ready)
+planning result: ready (review closed F1–F5; F6, the journal-table timestamp exception, is an open owner decision and no slice touches those tables until it is answered)
 governing planning basis:
   kind: reviewed-four-document-design
   Requirements: docs/specs/2026-11-02-central-storage-reset/requirements/index.md
   Specification: docs/specs/2026-11-02-central-storage-reset/specification/index.md
   Program Design: docs/specs/2026-11-02-central-storage-reset/program-design/d1-central-layout-and-mail.md
   Verification Design: docs/specs/2026-11-02-central-storage-reset/verification-design/d1-central-layout-and-mail.md
-  review: tmp/d1-review/review-e6d85e9b3.md (not ready, F1–F4) → corrections at 6fb9b616a → verification by the same Reviewer
+  review: tmp/d1-review/review-e6d85e9b3.md (F1–F4) → verify-6fb9b616a.md (F1–F3 closed; F5, F6 new) → verify-de0c0badb.md (F5 closed) → verify-a6c88b2a4.md (F4 closed; F6 awaiting owner)
   applicability anchors: codex-router origin/main fb3cf6b5 (0.1.121); agent-fleet-sync origin/main b9da4b5 (v0.4.0)
 delivery context:
   requested terminal: pr-ready-unmerged
