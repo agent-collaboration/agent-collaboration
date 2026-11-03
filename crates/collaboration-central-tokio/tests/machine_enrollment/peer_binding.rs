@@ -4,13 +4,13 @@ use serde_json::{Value, json};
 
 async fn stored_bindings(fixture: &Fixture) -> TestResult<Value> {
     Ok(fixture.object.transaction(|scope| Box::pin(async move {
-        let rows = query::<sqlx_turso::Turso>("SELECT peer_id, service_id, machine_label, access_client_id, credential_hash, state, expires_at, last_enrollment_operation, last_revocation_operation FROM machine_enrollments ORDER BY service_id")
+        let rows = query::<sqlx_turso::Turso>("SELECT machine_id, service_id, machine_label, access_client_id, credential_hash, state, expires_at, last_enrollment_operation_id, last_revocation_operation_id FROM machine_enrollments ORDER BY service_id")
             .fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
         let rows = rows.into_iter().map(|row| {
-            let fields = ["peer_id", "service_id", "machine_label", "access_client_id", "credential_hash", "state", "expires_at"]
+            let fields = ["machine_id", "service_id", "machine_label", "access_client_id", "credential_hash", "state", "expires_at"]
                 .into_iter().map(|field| row.try_get::<String, _>(field).map_err(StoreError::backend))
                 .collect::<Result<Vec<_>, _>>()?;
-            let operations = ["last_enrollment_operation", "last_revocation_operation"]
+            let operations = ["last_enrollment_operation_id", "last_revocation_operation_id"]
                 .into_iter().map(|field| row.try_get::<Option<String>, _>(field).map_err(StoreError::backend))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(json!({"fields":fields,"operations":operations}))

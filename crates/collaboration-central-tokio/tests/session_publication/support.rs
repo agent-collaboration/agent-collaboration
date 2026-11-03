@@ -383,10 +383,7 @@ impl Fixture {
         self.socket_for(PeerId::new(durable_steps::Uuid::now_v7())?)
             .await
     }
-    pub async fn socket_for(
-        &self,
-        peer: PeerId,
-    ) -> Result<(ConnectionBinding, SessionId, mpsc::Receiver<SocketCommand>), TestError> {
+    pub async fn enroll(&self, peer: PeerId) -> Result<(), TestError> {
         let installation = self.installation.clone();
         self.host.store.object.transaction(move |scope| Box::pin(async move {
             // This session component fixture supplies the enrollment that normal HTTP admission owns.
@@ -395,6 +392,13 @@ impl Fixture {
                 .execute(scope.executor()).await.map_err(StoreError::backend)?;
             Ok(())
         })).await?;
+        Ok(())
+    }
+    pub async fn socket_for(
+        &self,
+        peer: PeerId,
+    ) -> Result<(ConnectionBinding, SessionId, mpsc::Receiver<SocketCommand>), TestError> {
+        self.enroll(peer).await?;
         let connection = ConnectionId::new(durable_steps::Uuid::now_v7())?;
         let session = SessionId::new(durable_steps::Uuid::now_v7())?;
         let binding = ConnectionBinding::new(

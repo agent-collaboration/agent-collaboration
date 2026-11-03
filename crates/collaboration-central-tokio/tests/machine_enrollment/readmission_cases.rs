@@ -129,18 +129,18 @@ async fn an_active_row_revokes_immediately_while_its_enrollment_finish_is_pendin
 
 async fn pending_snapshot(fixture: &Fixture) -> TestResult<serde_json::Value> {
     Ok(fixture.object.transaction(|scope| Box::pin(async move {
-        let row = query::<sqlx_turso::Turso>("SELECT peer_id, state, machine_label, access_client_id, credential_hash, expires_at, last_enrollment_operation, last_revocation_operation FROM machine_enrollments")
+        let row = query::<sqlx_turso::Turso>("SELECT machine_id, state, machine_label, access_client_id, credential_hash, expires_at, last_enrollment_operation_id, last_revocation_operation_id FROM machine_enrollments")
             .fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
-        let operation: Option<String> = row.try_get("last_enrollment_operation").map_err(StoreError::backend)?;
+        let operation: Option<String> = row.try_get("last_enrollment_operation_id").map_err(StoreError::backend)?;
         let operation = operation.ok_or_else(|| StoreError::Aborted { reason: "readmission was not journaled".into() })?;
         let record = scope.operation(OperationId::try_from(operation).map_err(StoreError::backend)?)
             .await?.ok_or_else(|| StoreError::Aborted { reason: "readmission journal missing".into() })?;
         assert_eq!(record.kind, "central.readmit-machine");
         assert!(matches!(record.status().state, OperationState::Running { .. }));
-        let fields = ["peer_id", "state", "machine_label", "access_client_id", "credential_hash", "expires_at"]
+        let fields = ["machine_id", "state", "machine_label", "access_client_id", "credential_hash", "expires_at"]
             .into_iter().map(|field| row.try_get::<String, _>(field).map_err(StoreError::backend))
             .collect::<Result<Vec<_>, _>>()?;
-        let revoke: Option<String> = row.try_get("last_revocation_operation").map_err(StoreError::backend)?;
+        let revoke: Option<String> = row.try_get("last_revocation_operation_id").map_err(StoreError::backend)?;
         Ok(json!({"fields":fields,"operation":record.id,"revoke":revoke}))
     })).await?)
 }

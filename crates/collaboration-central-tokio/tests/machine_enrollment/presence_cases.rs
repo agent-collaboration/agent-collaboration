@@ -42,9 +42,13 @@ fn config() -> TestResult<RegistryConfig> {
         move_needs_renewal_within: None,
     })
 }
-type PresenceRuntime = ObjectRuntime<RegistryKind, TokioStorageHost<CoreHost<Io>>, PresenceIo>;
+type PresenceRuntime = ObjectRuntime<
+    collaboration_central_core::FleetKind,
+    TokioStorageHost<CoreHost<Io>>,
+    PresenceIo,
+>;
 fn runtime(fixture: &Fixture, clock: &PresenceIo) -> TestResult<PresenceRuntime> {
-    Ok(ObjectRuntime::registry(
+    Ok(ObjectRuntime::fleet(
         Arc::new(TokioStorageHost::new(fixture.object.clone())),
         clock.clone(),
         config()?,
@@ -53,6 +57,7 @@ fn runtime(fixture: &Fixture, clock: &PresenceIo) -> TestResult<PresenceRuntime>
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },
+        std::time::Duration::from_secs(2),
     )?)
 }
 async fn observed(fixture: &Fixture) -> TestResult<Option<String>> {
@@ -60,11 +65,11 @@ async fn observed(fixture: &Fixture) -> TestResult<Option<String>> {
         .object
         .transaction(|scope| {
             Box::pin(async move {
-                query::<sqlx_turso::Turso>("SELECT last_seen FROM machine_enrollments")
+                query::<sqlx_turso::Turso>("SELECT last_seen_at FROM machine_enrollments")
                     .fetch_one(scope.executor())
                     .await
                     .map_err(StoreError::backend)?
-                    .try_get("last_seen")
+                    .try_get("last_seen_at")
                     .map_err(StoreError::backend)
             })
         })
@@ -77,8 +82,8 @@ async fn invoke(
     request: serde_json::Value,
 ) -> TestResult<Vec<u8>> {
     Ok(runtime.on_call(serde_json::to_vec(&json!({
-        "source":{"kind":"connection","value":service},"sourceFace":"session","authority":{"kind":"object"},
-        "destination":{"kind":"registry"},"destinationFace":"registry",
+        "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":service}},
+        "destination":{"kind":"fleet"},"destinationFace":"registry",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"presence_case"},
         "kind":kind,"target":null,"request":request
     }))?).await?)
@@ -179,6 +184,46 @@ async fn only_a_new_verified_admission_sets_presence_and_a_renewal_does_not() ->
     let fixture = Fixture::open(root.path()).await?;
     clock.0.store(first_time + 10_000, Ordering::SeqCst);
     let registry = runtime(&fixture, &clock)?;
+    // The real renewal hook owns a directory view, so supply its normal Fleet parent records.
+    let workspace = message_board::WorkspaceId::generate();
+    let board = message_board::BoardId::generate();
+    for operation in [
+        fleet_admission::FleetOperation::WorkspaceCreate {
+            name: "presence workspace".to_owned().try_into()?,
+            description: "renewal directory precondition".to_owned().try_into()?,
+        },
+        fleet_admission::FleetOperation::BoardCreate {
+            board: board.clone(),
+            name: "presence board".to_owned().try_into()?,
+            description: "renewal directory precondition".to_owned().try_into()?,
+            board_kind: message_board::BoardKind::Area {},
+        },
+        fleet_admission::FleetOperation::ProjectDirectoryCreate {
+            project: database.to_string().try_into()?,
+            board,
+            title: "presence project".to_owned().try_into()?,
+        },
+    ] {
+        let answer = registry.on_call(serde_json::to_vec(&json!({
+            "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":request.installation}},
+            "destination":{"kind":"fleet"},"destinationFace":"fleet",
+            "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"presence_directory"},
+            "kind":"central.fleet-metadata","target":null,"request":{
+                "origin":{"installation":request.installation,"machine":"presence fixture"},
+                "request":fleet_admission::FleetRequest {
+                    request_id:message_board::RequestId::generate(),workspace:workspace.clone(),
+                    actor:message_board::RecordedActor::Human {human_id:"fixture owner".to_owned().try_into()?},
+                    acting_for:None,protocol_version:message_board::ProtocolVersion::CURRENT,operation,
+                }
+            }
+        }))?).await.map_err(|error|format!("presence directory precondition: {error:?}"))?;
+        assert!(matches!(
+            serde_json::from_slice::<fleet_admission::FleetRequestResult>(&answer)?,
+            fleet_admission::FleetRequestResult::Decided(
+                message_board::RequestDecision::Accepted { .. }
+            )
+        ));
+    }
     let bytes=invoke(&registry,&request.installation,"central.session-lease",json!({
         "session":fleet_sync_session::SessionKey {peer:request.peer,session_id:next.session_id},
         "request":LeaseRequest::Renew(RenewRequest {attempt:RequestId::new(durable_steps::Uuid::now_v7())?,database,epoch:Epoch::new(1)?})
@@ -255,7 +300,7 @@ async fn inject_presence(fixture: &Fixture, value: &str) -> TestResult {
         .object
         .transaction(move |scope| {
             Box::pin(async move {
-                query::<sqlx_turso::Turso>("UPDATE machine_enrollments SET last_seen = ?")
+                query::<sqlx_turso::Turso>("UPDATE machine_enrollments SET last_seen_at = ?")
                     .bind(value)
                     .execute(scope.executor())
                     .await

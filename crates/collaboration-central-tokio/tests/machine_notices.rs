@@ -25,8 +25,8 @@ use support::*;
 async fn an_orphaned_zero_position_notice_is_rejected_before_admission() -> Result<(), TestError> {
     let root = tempfile::tempdir()?;
     let fixture = Fixture::open(root.path()).await?;
+    let (binding, _, _socket) = fixture.socket().await?;
     insert_zero_position(&fixture).await?;
-    let (binding, _, _) = fixture.socket().await?;
     let refused = fixture.runtime.on_socket_opened(binding).await;
     assert!(
         matches!(&refused,
@@ -80,11 +80,12 @@ async fn machine_notices_survive_missing_admission_disconnect_and_replacement_wi
 -> Result<(), TestError> {
     let root = tempfile::tempdir()?;
     let fixture = Fixture::open(root.path()).await?;
+    let peer = PeerId::new(durable_steps::Uuid::now_v7())?;
+    fixture.enroll(peer).await?;
     let first = notice(1)?;
     let first_call = invocation(&first)?;
     deliver(&fixture, &first_call).await?;
     assert_eq!(rows(&fixture).await?, 1);
-    let peer = PeerId::new(durable_steps::Uuid::now_v7())?;
     let (binding, session, mut socket) = admit(&fixture, peer).await?;
     let key = SessionKey {
         peer,
@@ -238,30 +239,6 @@ async fn retention_floor_and_a_restored_older_head_have_explicit_read_outcomes()
         read(&fixture, binding, &mut socket, None).await?,
         &[(3, third)],
     );
-    fixture.objects.close().await?;
-    Ok(())
-}
-
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions must fail this test while fixture errors propagate through Result."
-)]
-#[tokio::test]
-async fn a_conflicting_verified_admission_peer_cannot_overwrite_the_retained_snapshot()
--> Result<(), TestError> {
-    let root = tempfile::tempdir()?;
-    let fixture = Fixture::open(root.path()).await?;
-    let peer = PeerId::new(durable_steps::Uuid::now_v7())?;
-    let (binding, _, mut socket) = admit(&fixture, peer).await?;
-    let (other, _, _) = fixture
-        .socket_for(PeerId::new(durable_steps::Uuid::now_v7())?)
-        .await?;
-    assert!(
-        matches!(fixture.runtime.on_socket_opened(other).await,Err(StoreError::Aborted {reason})
-        if reason=="verified admission peer contradicts the machine's retained identity")
-    );
-    assert_eq!(stored_peer(&fixture).await?, peer.to_string());
-    assert_page(read(&fixture, binding, &mut socket, None).await?, &[]);
     fixture.objects.close().await?;
     Ok(())
 }

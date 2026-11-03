@@ -57,7 +57,8 @@ impl PlatformIo for Io {
         })
     }
 }
-type Runtime = ObjectRuntime<RegistryKind, TokioStorageHost<CoreHost<Io>>, Io>;
+type Runtime =
+    ObjectRuntime<collaboration_central_core::FleetKind, TokioStorageHost<CoreHost<Io>>, Io>;
 struct Fixture {
     objects: ObjectStore<CoreHost<Io>>,
     object: Arc<TokioObject<CoreHost<Io>>>,
@@ -69,12 +70,12 @@ impl Fixture {
         let receiver = ReceiverId::try_from("019f0000-0000-7000-8000-000000000801".to_owned())?;
         let object = objects
             .object(
-                ObjectKey::new("registry")?,
+                ObjectKey::new("fleet")?,
                 Default::default(),
                 Arc::new(CoreHost::conformance_registry(Io, receiver)),
             )
             .await?;
-        let runtime = ObjectRuntime::registry(
+        let runtime = ObjectRuntime::fleet(
             Arc::new(TokioStorageHost::new(object.clone())),
             Io,
             RegistryConfig {
@@ -91,6 +92,7 @@ impl Fixture {
                     "019f0000-0000-7000-8000-000000005240".to_owned(),
                 )?,
             },
+            std::time::Duration::from_secs(2),
         )?;
         runtime.initialize().await?;
         Ok(Self {
@@ -248,11 +250,11 @@ async fn v4_service_keeps_one_v7_peer_across_updates_and_pending_readmission_aft
         .transaction(|scope| {
             Box::pin(async move {
                 let stored: String =
-                    query::<sqlx_turso::Turso>("SELECT peer_id FROM machine_enrollments")
+                    query::<sqlx_turso::Turso>("SELECT machine_id FROM machine_enrollments")
                         .fetch_one(scope.executor())
                         .await
                         .map_err(StoreError::backend)?
-                        .try_get("peer_id")
+                        .try_get("machine_id")
                         .map_err(StoreError::backend)?;
                 PeerId::try_from(stored).map_err(StoreError::backend)
             })
@@ -496,7 +498,10 @@ async fn verified_edge_authority_reaches_the_shared_registry_and_forged_sources_
         let original: serde_json::Value = serde_json::from_slice(call.bytes())?;
         for (field, value) in [
             ("sourceFace", serde_json::json!("copy")),
-            ("source", serde_json::json!({"kind":"fleet"})),
+            (
+                "source",
+                serde_json::json!({"kind":"copy","value":"019f0000-0000-7000-8000-000000000806"}),
+            ),
             ("destinationFace", serde_json::json!("fleet")),
             ("authority", serde_json::json!({"kind":"object"})),
         ] {
