@@ -62,15 +62,26 @@ pub async fn prepare_fleet(root: &Path, successor: bool) -> TestResult<Fixture> 
 }
 
 pub async fn admit_settlement(fixture: &Fixture, granted_epoch: u64) -> TestResult<OperationId> {
+    admit_settlement_outcome(
+        fixture,
+        SettleOutcome::Granted {
+            epoch: Epoch::new(granted_epoch)?,
+        },
+    )
+    .await
+}
+
+pub async fn admit_settlement_outcome(
+    fixture: &Fixture,
+    outcome: SettleOutcome,
+) -> TestResult<OperationId> {
     let input = ClaimSettlement {
         change: HolderChangeRequest::Claim {
             attempt: TransferId::new(durable_steps::Uuid::now_v7())?,
             database: PROJECT.to_owned().try_into()?,
             claimant: A.to_owned().try_into()?,
         },
-        outcome: SettleOutcome::Granted {
-            epoch: Epoch::new(granted_epoch)?,
-        },
+        outcome,
     };
     let key = RequestKey::new(format!("claim-adapter:{}", durable_steps::Uuid::now_v7()))?;
     Ok(fixture
@@ -131,6 +142,10 @@ pub async fn hold_next_settlement(fixture: &Fixture) -> TestResult {
 }
 
 pub async fn held_settlement(fixture: &Fixture) -> TestResult<Value> {
+    held_settlement_kind(fixture, "central.claim-granted").await
+}
+
+pub async fn held_settlement_kind(fixture: &Fixture, kind: &str) -> TestResult<Value> {
     let key = settlement_key();
     let observed = tokio::time::timeout(
         WAIT_BOUND,
@@ -144,7 +159,7 @@ pub async fn held_settlement(fixture: &Fixture) -> TestResult<Value> {
         return Err("settlement never reached its actual local dispatch barrier".into());
     };
     let call: Value = serde_json::from_slice(&request)?;
-    if call.get("kind") != Some(&json!("central.claim-granted")) {
+    if call.get("kind") != Some(&json!(kind)) {
         return Err(format!("settlement barrier captured another call: {call}").into());
     }
     Ok(call)
