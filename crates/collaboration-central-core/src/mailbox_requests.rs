@@ -73,7 +73,10 @@ where
         };
         if target.installation != *installation
             || input.request.call() != &call.identity
-            || !matches!(call.authority, CallAuthority::Object)
+            || !matches!(
+                call.authority,
+                CallAuthority::Object | CallAuthority::Machine { .. }
+            )
         {
             return Err(refused());
         }
