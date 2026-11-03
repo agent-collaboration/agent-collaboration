@@ -15,6 +15,7 @@ import {
 import { ObservationOpen, Receipt } from "./receipt.ts";
 import { prepareRun, type PreparedRun } from "./run-setup.ts";
 import { RunLifetime } from "./run-lifetime.ts";
+import { assessD1Coverage, d1Observations } from "./observations/d1-coverage.ts";
 
 async function declarationFromArguments(): Promise<Declaration> {
   const path = process.argv[2];
@@ -95,7 +96,35 @@ async function executeCases(input: {
     }
   }
 }
+function printPreparation(): boolean {
+  if (process.argv.length === 3 && process.argv[2] === "--help") {
+    process.stdout.write(
+      "node verification/run.ts PRIVATE_DECLARATION.json\n" +
+        "Run the existing declared cross-machine cases.\n" +
+        "node verification/run.ts --d1-plan\n" +
+        "Print D1 O1–O11 requirements and all-open coverage. No launch, network, credentials or writes.\n" +
+        "D1 live composition awaits declared conformance controls and target; preparation only.\n",
+    );
+    return true;
+  }
+  if (process.argv.length === 3 && process.argv[2] === "--d1-plan") {
+    process.stdout.write(
+      `${encode({
+        suite: "d1-central-layout-and-mail",
+        verificationDesign:
+          "docs/specs/2026-11-02-central-storage-reset/verification-design/d1-central-layout-and-mail.md",
+        executed: false,
+        productProofEligible: false,
+        observations: d1Observations,
+        outcomes: Object.fromEntries(assessD1Coverage({ backend: "tokio", checks: new Map() })),
+      })}\n`,
+    );
+    return true;
+  }
+  return false;
+}
 async function main(): Promise<void> {
+  if (printPreparation()) return;
   const declaration = await declarationFromArguments();
   const receipt = new Receipt(declaration.evidenceDirectory);
   await receipt.begin(declaration);

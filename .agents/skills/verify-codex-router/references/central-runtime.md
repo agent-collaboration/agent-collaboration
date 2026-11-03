@@ -1,5 +1,7 @@
 # Central runtime
 
+For central-storage-reset D1, use [D1 central mail](d1-central-mail.md). Its three-Router/two-project topology and new Push controls are not supplied by the historical recipes below. The D1 entry currently prepares coverage only; no live D1 result is implied.
+
 ## Current entry
 
 The wrapper retired in 0.1.102. Current native conformance belongs to `crates/collaboration-central-tokio/tests/`; the retained local-process CI selection is:

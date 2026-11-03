@@ -19,6 +19,7 @@ serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 signal-hook = "=0.3.18"
+uuid.workspace = true
 
 [dev-dependencies]
 axum = { workspace = true, features = ["http1", "tokio", "json"] }
