@@ -1,6 +1,6 @@
 # Program Design: D1, central layout and mail
 
-How D1 realizes [R1–R6](../specification/central-layout.md) and [R7–R15](../specification/mail.md). Evidence: the Worker inventory in `tmp/d1-inventory/` (source-verified at `fb3cf6b5`, library `v0.4.0` `b9da4b5`). **Scope assumes option A (pending the owner):** every table D1 creates or reshapes gets the full storage rule; tables D1 only moves get a prefix rename; project tables are out of scope (owner: “it’s out of scope”).
+How D1 realizes [R1–R6](../specification/central-layout.md) and [R7–R15](../specification/mail.md). Evidence: the Worker inventory in `tmp/d1-inventory/` (source-verified at `fb3cf6b5`, library `v0.4.0` `b9da4b5`). **Scope (owner, 2026-11-02): one PR covering D1 and D1b.** Every table in the Fleet store gets the full storage rule (prefix, UUIDv7, timestamps, typed columns, JSON only with a stated reason); project tables are out of scope. Machines have one id, the UUIDv7 installation peer id (owner: “yes v7 id only for machines”); session addresses move to it in D3.
 
 ## What you will be able to do
 
@@ -66,17 +66,19 @@ Central: **one Fleet store** (`fleet.db` on Tokio; one `FLEET` Durable Object on
 | `_fleet_sync_status_owed`, `_fleet_sync_status_events`, `_fleet_sync_status_state` | add `machine_id` (the submitter the status goes back to); `status_state` one row per machine, not a singleton; typed columns | today one sender per store (`status_stream.rs:99`) |
 | `_fleet_sync_outbox_cancel_links` | add `created_at`; cancellation itself is carried by `cancel_outcome` and `cancel_target_item_id` on the outbox item | cancel keeps working through Fleet |
 
-### Moved, prefix rename only (full rule later, scope option A)
+### Moved and converted to typed columns (D1b, same PR)
+
+Each table below moves into the Fleet store under its new name and its JSON `record` column is replaced by typed columns: one column per field of its record type, nested values as their own columns or a child table, plus `created_at` and `updated_at`. JSON stays only where a field is free-form by nature, with the reason written next to the table. The exact columns of each table are listed on `d1.html` for the owner before that table's queries are rewritten.
 
 | Today | After |
 | --- | --- |
 | `workspaces`, `boards`, `project_directory`, `workspace_adrs`, `repository_attachments`, `archive_reports`, `creation_decisions`, `feed_readers`, `admin_imports` | `fleet_workspaces`, `fleet_boards`, `fleet_project_directory`, `fleet_workspace_adrs`, `fleet_repository_attachments`, `fleet_archive_reports`, `fleet_creation_decisions`, `fleet_feed_readers`, `fleet_admin_imports` |
-| `fleet_feed`, `fleet_feed_state`, `fleet_request_decisions`, `fleet_decision_receipts` | unchanged (already `fleet_`) |
+| `fleet_feed`, `fleet_feed_state`, `fleet_request_decisions`, `fleet_decision_receipts` | same names (already `fleet_`), typed columns |
 | `claim_reservations`, `claim_settlement_receipts` | `lease_claim_reservations`, `lease_claim_settlement_receipts` (they still protect a claim from racing an archive) |
 | `registry_lease_incarnation` | `lease_incarnation`, the one monotonic incarnation counter (see Lease versions) |
-| library lease tables `_fleet_sync_databases`, `_fleet_sync_leases`, `_fleet_sync_epoch_floor`, … (11) | unchanged; keyed per project, they don't need their own store |
-| library session tables `_fleet_sync_sessions`, `_fleet_sync_notices`, `_fleet_sync_attach_sequences` | unchanged; already keyed per machine peer |
-| journal and migration bookkeeping (`_fleet_sync_operations`, `_fleet_sync_steps`, `_fleet_sync_schema`, `_fleet_sync_migrations`, `central_schema_migrations`, `central_schema_migration_failures`) | unchanged |
+| library lease tables `_fleet_sync_databases`, `_fleet_sync_leases`, `_fleet_sync_epoch_floor`, … (11) | names kept (L10); typed columns in the library; keyed per project, they don't need their own store |
+| library session tables `_fleet_sync_sessions`, `_fleet_sync_notices`, `_fleet_sync_attach_sequences` | names kept; typed columns in the library; already keyed per machine peer |
+| journal and migration bookkeeping (`_fleet_sync_operations`, `_fleet_sync_steps`, `_fleet_sync_schema`, `_fleet_sync_migrations`, `central_schema_migrations`, `central_schema_migration_failures`) | unchanged. JSON kept with a reason: the journal stores each task's input as the task's own serialized form, which the journal library owns and never queries by field |
 
 ### Deleted from central
 
@@ -92,7 +94,7 @@ Central: **one Fleet store** (`fleet.db` on Tokio; one `FLEET` Durable Object on
 | Table | Change |
 | --- | --- |
 | `_fleet_sync_outbox_items` (machine) | same typed columns and timestamps as Fleet's; `relay` is the Fleet |
-| `_fleet_sync_inbox_items` | typed columns; `created_at`, `accepted_at`, `delivered_at`; accepts pushed items |
+| `_fleet_sync_inbox_items` | typed columns: `item_id` UUIDv7 PK, `digest`, `sender` (kind plus typed fields), `recipient_session` (service, endpoint, session id), `relay_machine_id` (the Fleet), `status_kind`, `report_seq`, `created_at` (from the id), `accepted_at`, `delivered_at`, `payload`, `payload_bytes`; accepts pushed items (see Mail protocol) |
 | all inbox and outbox rows | removed 60 days after `created_at`; ids older than 60 days refused (R14) |
 
 Router app tables (`router_pushes` and the rest) are renamed in D3, not D1.
@@ -122,7 +124,7 @@ sequenceDiagram
   F-->>A: status
 ```
 
-**Who may answer for an item.** Fleet accepts a receipt or report for an item only from that item's recipient: the socket's authenticated machine must equal `recipient_machine_id`, and the session identity must match, as Mailbox checks today (`mailbox_requests.rs:97–113`). The report sequence is checked against `last_report_seq` so a replay never moves status backwards (`mailbox_rules.rs:315–388`). The outcome and the status owed to the sender commit in **one transaction** before Fleet answers B. A commits a status before acknowledging it.
+**Who may answer for an item.** Fleet accepts a receipt or report for an item only from that item's recipient machine: the socket's authenticated machine must equal the item's `recipient_machine_id`, as Mailbox checks the authenticated machine today (`mailbox_requests.rs:97–113`, `mailbox_rules.rs:310`). There is no separate session check: authority is the enrolled machine (owner rule), and B's inbox routes to the session from the item's address. The report sequence is checked against `last_report_seq` so a replay never moves status backwards (`mailbox_rules.rs:315–388`). The outcome and the status owed to the sender commit in **one transaction** before Fleet answers B. A commits a status before acknowledging it.
 
 **Failure cases (each has a proof row):**
 
@@ -152,6 +154,33 @@ sequenceDiagram
 
 **Proof:** wipe staging, keep the same URL and ids, re-enroll a Router that still remembers old numbers: it accepts the new central's lease and writes its project. Kill it while it is forgetting: on restart it finishes before reading from central.
 
+## Fleet and project objects
+
+Today a project object accepts reads and writes only from a per-machine Connection, and lease control only from the Registry (`copy_calls.rs:80–84, 106`; `copy_write_calls.rs:172`). The call graph allows project → Fleet but not Fleet → project (`call_graph.rs:162–168`). D1 replaces both callers with the Fleet:
+
+| Call | Direction | Allowed caller and provenance | Failure |
+| --- | --- | --- | --- |
+| Project read | Fleet → project, synchronous | caller is the Fleet; the call carries the authenticated machine id of the socket it serves | the error goes back to that machine's request only |
+| Project write | Fleet → project, synchronous | caller is the Fleet; carries the machine id and the writer's lease epoch; the project object checks the epoch fence as today | refused write returns to the writer; nothing else waits |
+| Lease and fence control | Fleet → project, synchronous | caller is the Fleet's lease authority (today's Registry duty) | the lease workflow retries through its journal |
+| Project summary for the directory | project → Fleet, **asynchronous only** | the project object's existing durable follow-up (`copy_directory_summary.rs:23`) delivers it; the Fleet never waits on it | retried by the project object's journal |
+
+**Call graph after D1:** Fleet ranks above project objects; the only synchronous edge is Fleet → project; project → Fleet exists only as a durable asynchronous delivery, so there is no cycle. **Containment:** the Fleet never holds its transaction open across a project call, and no mail operation waits on a project call, so a failed project object affects only requests for that project (R3).
+
+## Mail protocol
+
+New and changed calls, all over the machine's one WebSocket. Existing names are kept where the meaning is unchanged.
+
+| Call | From → to | Request | Answers | Commits before answering |
+| --- | --- | --- | --- | --- |
+| Submit (existing `mail_submit`, new sink) | A → Fleet | the frozen item: id, digest, sender, recipient machine and session address, body | `accepted {status, version}` · `replayed {current status, version}` (same id, same digest) · `refused {conflict \| sender not enrolled \| recipient not enrolled \| too old \| no capacity}` | Fleet: outbox item admitted (or nothing, if refused) |
+| **Push** (new server call) | Fleet → B | the item, as submitted | `accepted {accepted_at}` · `replayed {current inbox status}` (B already has it) · `conflict {existing digest}` · `refused {too old \| not this machine \| no capacity}` | B: inbox item stored |
+| Push result | Fleet, on B's answer | n/a | n/a | Fleet: on `accepted`/`replayed`, drop the content, set status “in recipient's inbox”, owe that status to the submitter, all in one transaction |
+| **Report** (changed) | B → Fleet | item id, report sequence, outcome `delivered \| refused {reason} \| unknown` | `ack {report_seq}` · `replayed {report_seq}` (sequence already applied) · `refused {not the recipient}` | Fleet: status advanced and owed to the submitter, together |
+| Status (existing `PublishStatus`, plus catch-up on welcome) | Fleet → A | item id, status, version | `applied` | A: status stored |
+
+Fleet keeps what it needs after the content is dropped on the outbox item itself: `recipient_machine_id` for the report check, `submitter_machine_id` for status, `last_report_seq`, the status and its version (see the table above). The session address is only needed by B and travels in the content.
+
 ## Library changes (`agent-fleet-sync`, new tag)
 
 1. Outbox items: typed columns (including the retained delivery state above), timestamps, submitter, content dropped only after the next holder's receipt.
@@ -162,4 +191,24 @@ sequenceDiagram
 
 ## Not in D1
 
-Fleet sending its own messages and remote create (D2); renaming Router app tables, JSON files, the machine-id change (D3, pending the owner's A/B/C choice; until then both `machine_id` and `service_id` are kept); wakes and notifications (D4a); schedules (D4b); D1b, right after D1: the Fleet store’s prefix-renamed tables (Fleet directory, library lease and session tables) to typed columns with timestamps. Project tables are out of scope.
+Fleet sending its own messages and remote create (D2); renaming Router app tables, JSON files, and moving session addresses to the machine id (D3); wakes and notifications (D4a); schedules (D4b). Until D3, `machine_enrollments` keeps `service_id` because every session address still carries it. Project tables are out of scope.
+
+## Trace: obligations to owners and proof seams
+
+| R | Owner | Interface or state | Proof seam |
+| --- | --- | --- | --- |
+| R1 | Tokio and Cloudflare hosts | object keys and bindings: Fleet plus projects only | central store listing |
+| R2 | Fleet runtime | machine socket attaches to the Fleet | socket count on Fleet; reconnect |
+| R3 | Fleet ↔ project boundary | the four calls in “Fleet and project objects” | project fault injection with mail and a second project running |
+| R4 | both hosts | same core runtime | every proof on both backends |
+| R5 | Router enrollment | forget central-derived state on enroll | wipe and re-enroll |
+| R6 | Fleet schema | prefixed tables | schema listing |
+| R7 | Fleet outbox, B inbox | Submit, Push | offline then online delivery |
+| R8 | Router mail runtime | local inbox admission | same-machine send |
+| R9 | each holder | drop content after the next holder's commit | crash matrix |
+| R10 | Fleet outbox, B inbox | `replayed` and `conflict` answers | resubmit and conflict cases |
+| R11 | Fleet status, Router `message show` | Push result, Report, Status | status read at each held stage |
+| R12 | Fleet push | push at admission when B is connected | online timing |
+| R13 | library tables | UUIDv7 ids, timestamps | row readback; v4 refusal |
+| R14 | Fleet and Router removal work | 60-day removal, too-old refusal | injected clock |
+| R15 | Fleet admission | Submit `refused {sender not enrolled}` | unenrolled submit |
