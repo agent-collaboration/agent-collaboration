@@ -70,18 +70,35 @@ pub(super) fn parse_native_settings(
                 .get("model")
                 .and_then(Value::as_str)
                 .ok_or(ThreadMethodError::InvalidParams)?;
-            let effort = match optional_string(settings.get("reasoning_effort"))? {
-                Some(value) => value,
-                None => match catalog
-                    .iter()
-                    .find(|entry| entry.id() == model)
-                    .map(ProviderModelEntry::reasoning)
-                {
-                    Some(crate::ProviderModelReasoning::Select { default_value, .. }) => {
-                        default_value
+            let hint = optional_string(settings.get("reasoning_effort"))?;
+            let selected = catalog.iter().find(|entry| entry.id() == model);
+            // This declared model-only family delegates an unavailable mask hint.
+            // Other Default masks keep their existing precedence and validation.
+            let delegates_effort = matches!(source, NativeSettingsSource::SettingsUpdate)
+                && top_model == Some(model)
+                && !model.is_empty()
+                && !model.contains('\0')
+                && model != "provider-default"
+                && top_effort.is_none()
+                && hint.is_none_or(|value| !value.is_empty() && !value.contains('\0'))
+                && selected.is_some_and(|entry| match entry.reasoning() {
+                    crate::ProviderModelReasoning::ProviderSettings => true,
+                    crate::ProviderModelReasoning::Select { choices, .. } => {
+                        hint.is_some_and(|hint| !choices.iter().any(|choice| choice.value == hint))
                     }
-                    Some(crate::ProviderModelReasoning::ProviderSettings) | None => "provider",
-                },
+                });
+            let effort = if delegates_effort {
+                "provider"
+            } else {
+                match hint {
+                    Some(value) => value,
+                    None => match selected.map(ProviderModelEntry::reasoning) {
+                        Some(crate::ProviderModelReasoning::Select { default_value, .. }) => {
+                            default_value
+                        }
+                        Some(crate::ProviderModelReasoning::ProviderSettings) | None => "provider",
+                    },
+                }
             };
             (Some(model), Some(effort))
         }
@@ -123,6 +140,10 @@ pub(super) fn parse_native_settings(
         },
     })
 }
+
+#[cfg(test)]
+#[path = "native_provider_model_only_test.rs"]
+mod model_only_tests;
 
 fn optional_string(value: Option<&Value>) -> Result<Option<&str>, ThreadMethodError> {
     match value {

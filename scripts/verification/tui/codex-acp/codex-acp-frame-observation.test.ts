@@ -22,26 +22,39 @@ const END = '\u001b[?2026l';
 const frame = (...lines: string[]): string =>
 	`${BEGIN}\u001b[H\u001b[2J${lines.join('\r\n')}${END}`;
 const SAVE_ERROR = '■ Failed to save default model: Saving Codex defaults is not supported';
+// The early red cell an original 0.165 primary Enter drew before its success cell, exactly as
+// captured on the real and the controlled Cursor runs (frame 37 of the 35a2a67 run; frame 36 of
+// the bdef71cff controlled run). Codex shows only the eyre outer context, so it is the whole line.
+const SETTINGS_ERROR = '■ Failed to update thread settings: thread/settings/update failed in TUI';
 const SUCCESS = '• Model changed to claude-haiku-5-5 high';
+// Each early error a later clean success frame must not hide from the whole-run ledger.
+const EARLY_ERRORS = [
+	['the default-save refusal', SAVE_ERROR],
+	['the settings-update refusal', SETTINGS_ERROR],
+] as const;
 const bytes = (text: string): Uint8Array => Buffer.from(text, 'utf8');
 const roots: string[] = [];
 afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-test('an error frame followed by a clean frame in one write is still seen, with its place', async () => {
-	const run = frame(SAVE_ERROR) + frame(SUCCESS);
-	const observed = await observeCompletedFrames(bytes(run), []);
-	expect(observed.completedFrames).toBe(2);
-	expect(observed.errors).toEqual([
-		{ frame: 1, byteOffset: Buffer.byteLength(frame(SAVE_ERROR)), line: SAVE_ERROR },
-	]);
-	// The final screen alone, which a single snapshot per write reads, is clean.
-	expect(observed.finalLines.some((line) => line.startsWith('■ '))).toBe(false);
-	expect(() => requireNoWholeRunError(observed)).toThrow(
-		`error cell in the whole run (frame 1, after byte ${Buffer.byteLength(frame(SAVE_ERROR))}): ${SAVE_ERROR}`,
-	);
-});
+test.each(EARLY_ERRORS)(
+	'%s followed by a clean success frame in one write is still seen, with its place',
+	async (_name, error) => {
+		const run = frame(error) + frame(SUCCESS);
+		const observed = await observeCompletedFrames(bytes(run), []);
+		expect(observed.completedFrames).toBe(2);
+		expect(observed.errors).toEqual([
+			{ frame: 1, byteOffset: Buffer.byteLength(frame(error)), line: error },
+		]);
+		// The final screen alone, which a single snapshot per write reads, is clean.
+		expect(observed.finalLines.some((line) => line.startsWith('■ '))).toBe(false);
+		expect(observed.finalLines.some((line) => line.trimEnd() === SUCCESS)).toBe(true);
+		expect(() => requireNoWholeRunError(observed)).toThrow(
+			`error cell in the whole run (frame 1, after byte ${Buffer.byteLength(frame(error))}): ${error}`,
+		);
+	},
+);
 
 test('a clean run passes, and a repainted success cell is not an error', async () => {
 	const observed = await observeCompletedFrames(
@@ -160,41 +173,44 @@ process.stdin.on('data', (chunk) => {
 });
 `;
 
-test('a forbidden error cannot hide behind a later clean checkpoint in the same read', async () => {
-	const root = temporaryRoot();
-	roots.push(root);
-	const run = Buffer.from(frame(SAVE_ERROR) + frame(SUCCESS), 'utf8');
-	// Split the run inside the second frame's opening sequence, across two driver reads.
-	const split = Buffer.byteLength(frame(SAVE_ERROR)) + 3;
-	writeFileSync(
-		join(root, 'replies.json'),
-		JSON.stringify([
-			`BYTES ${run.subarray(0, split).toString('hex')}`,
-			`BYTES ${run.subarray(split).toString('hex')}`,
-		]),
-	);
-	const driver = await PtyGridDriver.start({
-		repository: root,
-		driver: controlledExecutable(root, 'drive-terminal', LINE_PROTOCOL_STANDIN),
-		surface: 'codex-acp',
-		keys: 'legacy',
-		evidence: root,
-		publicEnvironment: { TUI_STANDIN_REPLIES: join(root, 'replies.json') },
-	});
-	try {
-		// The checkpoint only ever sees each read's last state: the clean success frame.
-		const grid = await driver.waitForGrid('success', (candidate) =>
-			gridLines(candidate).some((line) => line.trimEnd() === SUCCESS),
+test.each(EARLY_ERRORS)(
+	'%s cannot hide behind a later clean checkpoint across driver reads',
+	async (_name, error) => {
+		const root = temporaryRoot();
+		roots.push(root);
+		const run = Buffer.from(frame(error) + frame(SUCCESS), 'utf8');
+		// Split the run inside the second frame's opening sequence, across two driver reads.
+		const split = Buffer.byteLength(frame(error)) + 3;
+		writeFileSync(
+			join(root, 'replies.json'),
+			JSON.stringify([
+				`BYTES ${run.subarray(0, split).toString('hex')}`,
+				`BYTES ${run.subarray(split).toString('hex')}`,
+			]),
 		);
-		expect(gridLines(grid).some((line) => line.startsWith('■ '))).toBe(false);
-		const observed = await observeCompletedFrames(driver.bytes(), driver.resizeHistory());
-		requireReplayMatchesLiveGrid(observed, gridLines(driver.grid()));
-		expect(observed.errors.map((error) => error.line)).toEqual([SAVE_ERROR]);
-		expect(() => requireNoWholeRunError(observed)).toThrow(SAVE_ERROR);
-		expect(() => requireReplayMatchesLiveGrid(observed, ['another grid'])).toThrow(
-			'does not end on the live grid',
-		);
-	} finally {
-		await driver.stop();
-	}
-});
+		const driver = await PtyGridDriver.start({
+			repository: root,
+			driver: controlledExecutable(root, 'drive-terminal', LINE_PROTOCOL_STANDIN),
+			surface: 'codex-acp',
+			keys: 'legacy',
+			evidence: root,
+			publicEnvironment: { TUI_STANDIN_REPLIES: join(root, 'replies.json') },
+		});
+		try {
+			// The checkpoint only ever sees each read's last state: the clean success frame.
+			const grid = await driver.waitForGrid('success', (candidate) =>
+				gridLines(candidate).some((line) => line.trimEnd() === SUCCESS),
+			);
+			expect(gridLines(grid).some((line) => line.startsWith('■ '))).toBe(false);
+			const observed = await observeCompletedFrames(driver.bytes(), driver.resizeHistory());
+			requireReplayMatchesLiveGrid(observed, gridLines(driver.grid()));
+			expect(observed.errors.map((seen) => seen.line)).toEqual([error]);
+			expect(() => requireNoWholeRunError(observed)).toThrow(error);
+			expect(() => requireReplayMatchesLiveGrid(observed, ['another grid'])).toThrow(
+				'does not end on the live grid',
+			);
+		} finally {
+			await driver.stop();
+		}
+	},
+);

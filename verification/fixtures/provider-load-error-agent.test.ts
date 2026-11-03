@@ -7,6 +7,7 @@ test("unsupported model discovery preserves the original correlated load error a
   const marker = "ACP_PROVIDER_PRIVATE_MARKER_8F39B1";
   const requests = [
     { jsonrpc: "2.0", id: 1, method: "initialize", params: {} },
+    { jsonrpc: "2.0", id: "auth-2", method: "authenticate", params: { methodId: "cursor_login" } },
     { jsonrpc: "2.0", id: "models-2", method: "cursor/list_available_models", params: {} },
     {
       jsonrpc: "2.0",
@@ -35,8 +36,10 @@ test("unsupported model discovery preserves the original correlated load error a
         protocolVersion: 1,
         agentCapabilities: { loadSession: true },
         agentInfo: { name: "error-fixture", version: "1" },
+        authMethods: [{ id: "cursor_login", name: "Cursor login" }],
       },
     },
+    { jsonrpc: "2.0", id: "auth-2", result: {} },
     {
       jsonrpc: "2.0",
       id: "models-2",

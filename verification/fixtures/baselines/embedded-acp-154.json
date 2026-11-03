@@ -7,7 +7,7 @@
   "configuration": null,
   "expected": {
     "exit": 0,
-    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true, \"sessionCapabilities\": {\"resume\": {}}}, \"agentInfo\": {\"name\": \"source-policy-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"created-by-source\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {}}\n",
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true, \"sessionCapabilities\": {\"resume\": {}}}, \"agentInfo\": {\"name\": \"source-policy-fixture\", \"version\": \"1\"}, \"authMethods\": [{\"id\": \"cursor_login\", \"name\": \"Cursor login\"}]}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"created-by-source\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {}}\n",
     "stderr": "",
     "receipt": null,
     "files": {

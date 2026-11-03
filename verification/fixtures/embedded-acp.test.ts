@@ -32,11 +32,13 @@ const baselineSchema = z.object({
   }),
 });
 const directory = new URL("./baselines/", import.meta.url);
+// original/originalSHA256 retain historical port provenance; expected is the
+// reviewed current wire contract, including explicitly adopted protocol changes.
 for (const name of readdirSync(directory)
   .filter((name) => /^embedded-acp-\d+\.json$/.test(name))
   .sort()) {
   const fixture = baselineSchema.parse(decodeEvidenceJson(readFileSync(new URL(name, directory))));
-  test(`embedded ACP port matches original wire and receipt bytes: ${name} ${fixture.target}`, (): void => {
+  test(`embedded ACP fixture matches declared wire and receipt bytes: ${name} ${fixture.target}`, (): void => {
     const root = createFixtureDirectory("embedded-acp");
     const receipt = join(root, "receipt.json");
     try {
