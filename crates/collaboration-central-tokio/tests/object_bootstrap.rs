@@ -103,10 +103,10 @@ impl Fixture {
 async fn exported_engine_corpora_initialize_once_and_reopen_without_reapplying_the_alter()
 -> Result<(), TestError> {
     for (schema, expected) in [
-        (EngineSchema::Registry, 6),
+        (EngineSchema::Registry, 8),
         (EngineSchema::Copy, 3),
-        (EngineSchema::Session, 4),
-        (EngineSchema::Delivery, 5),
+        (EngineSchema::Session, 5),
+        (EngineSchema::Delivery, 10),
         (EngineSchema::Fleet, 10),
     ] {
         let directory = tempfile::tempdir()?;

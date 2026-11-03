@@ -1,7 +1,7 @@
 //! The selected fault remains armed when another call uses the same destination.
 
 use super::*;
-use crate::DispatchCallSelector;
+use crate::{DispatchCallSelector, DispatchFaultObservation, DispatchKey};
 use serde_json::json;
 use std::time::Duration;
 
@@ -34,19 +34,20 @@ async fn fleet_submit_selector_holds_only_its_authenticated_peer_and_item() -> T
     let other_peer = serde_json::to_vec(&submission("019f0000-0000-7000-8000-000000000915", item))?;
     let faults = RuntimeFaults::default();
     let destination = ObjectAddress::Fleet;
+    let key = DispatchKey::new(
+        destination.clone(),
+        DispatchCallSelector::FleetMailSubmitFor {
+            peer: peer.to_owned().try_into()?,
+            item: item.to_owned().try_into()?,
+        },
+    );
     faults
-        .control(RuntimeControl::HoldNextSelectedDispatch {
-            destination: destination.clone(),
-            call: DispatchCallSelector::FleetMailSubmitFor {
-                peer: peer.to_owned().try_into()?,
-                item: item.to_owned().try_into()?,
-            },
-        })
+        .control(RuntimeControl::HoldNextDispatch { key: key.clone() })
         .await?;
     for unrelated in [&other_item, &other_peer] {
         tokio::time::timeout(BOUND, faults.before_dispatch(&destination, unrelated)).await??;
         assert!(matches!(
-            faults.observe()?.dispatch,
+            faults.observe()?.dispatch(&key),
             DispatchFaultObservation::Armed { .. }
         ));
     }
@@ -57,12 +58,14 @@ async fn fleet_submit_selector_holds_only_its_authenticated_peer_and_item() -> T
         "current Fleet submission bypassed its exact selector"
     );
     assert!(
-        matches!(faults.control(RuntimeControl::AwaitHeldDispatch).await?.dispatch,DispatchFaultObservation::Held {request,..} if request==expected)
+        matches!(faults.control(RuntimeControl::AwaitHeldDispatch { key: key.clone() }).await?.dispatch(&key),DispatchFaultObservation::Held {request,..} if request==expected)
     );
     for unrelated in [&other_item, &other_peer] {
         tokio::time::timeout(BOUND, faults.before_dispatch(&destination, unrelated)).await??;
     }
-    faults.control(RuntimeControl::ResumeDispatch).await?;
+    faults
+        .control(RuntimeControl::ResumeDispatch { key: key.clone() })
+        .await?;
     tokio::time::timeout(BOUND, selected).await??;
     faults
         .control(RuntimeControl::DropNextSelectedObjectReply {
@@ -102,12 +105,10 @@ async fn selected_hold(
     kind: &str,
     destination: ObjectAddress,
 ) -> TestResult {
+    let key = DispatchKey::new(destination.clone(), call);
     let faults = Arc::new(RuntimeFaults::default());
     faults
-        .control(RuntimeControl::HoldNextSelectedDispatch {
-            destination: destination.clone(),
-            call,
-        })
+        .control(RuntimeControl::HoldNextDispatch { key: key.clone() })
         .await?;
     let unrelated = invocation("central.sender-mail")?;
     let status = serde_json::to_vec(&json!({
@@ -124,7 +125,7 @@ async fn selected_hold(
         .await??;
     }
     assert!(matches!(
-        faults.observe()?.dispatch,
+        faults.observe()?.dispatch(&key),
         DispatchFaultObservation::Armed { .. }
     ));
     let expected = invocation(kind)?;
@@ -135,10 +136,13 @@ async fn selected_hold(
     let held_destination = destination.clone();
     let forwarding =
         tokio::spawn(async move { caller.before_dispatch(&held_destination, &request).await });
-    let held =
-        tokio::time::timeout(BOUND, faults.control(RuntimeControl::AwaitHeldDispatch)).await??;
+    let held = tokio::time::timeout(
+        BOUND,
+        faults.control(RuntimeControl::AwaitHeldDispatch { key: key.clone() }),
+    )
+    .await??;
     assert!(
-        matches!(held.dispatch, DispatchFaultObservation::Held { destination: actual, request }
+        matches!(held.dispatch(&key), DispatchFaultObservation::Held { destination: actual, request }
         if actual == destination && request == expected)
     );
     assert!(!forwarding.is_finished());
@@ -149,30 +153,35 @@ async fn selected_hold(
     tokio::time::timeout(BOUND, faults.before_dispatch(&destination, &expected)).await??;
     assert!(!forwarding.is_finished());
     faults
-        .control(RuntimeControl::ResumeDispatchAndHoldNextSelected {
-            destination: destination.clone(),
-            call,
+        .control(RuntimeControl::ResumeDispatchAndHoldNext {
+            key: key.clone(),
+            next: key.clone(),
         })
         .await?;
     tokio::time::timeout(BOUND, forwarding).await???;
     tokio::time::timeout(BOUND, faults.before_dispatch(&destination, &unrelated)).await??;
     assert!(matches!(
-        faults.observe()?.dispatch,
+        faults.observe()?.dispatch(&key),
         DispatchFaultObservation::Armed { .. }
     ));
     let caller = faults.clone();
     let request = expected.clone();
     let forwarding =
         tokio::spawn(async move { caller.before_dispatch(&destination, &request).await });
-    let retry =
-        tokio::time::timeout(BOUND, faults.control(RuntimeControl::AwaitHeldDispatch)).await??;
+    let retry = tokio::time::timeout(
+        BOUND,
+        faults.control(RuntimeControl::AwaitHeldDispatch { key: key.clone() }),
+    )
+    .await??;
     assert!(
-        matches!(retry.dispatch, DispatchFaultObservation::Held { request, .. } if request == expected)
+        matches!(retry.dispatch(&key), DispatchFaultObservation::Held { request, .. } if request == expected)
     );
-    faults.control(RuntimeControl::ResumeDispatch).await?;
+    faults
+        .control(RuntimeControl::ResumeDispatch { key: key.clone() })
+        .await?;
     tokio::time::timeout(BOUND, forwarding).await???;
     assert!(matches!(
-        faults.observe()?.dispatch,
+        faults.observe()?.dispatch(&key),
         DispatchFaultObservation::Idle
     ));
     Ok(())
@@ -299,24 +308,28 @@ async fn existing_any_controls_still_accept_opaque_calls_and_resume_before_the_n
 -> TestResult {
     let faults = Arc::new(RuntimeFaults::default());
     let destination = ObjectAddress::Fleet;
+    let key = DispatchKey::any(destination.clone());
     faults
-        .control(RuntimeControl::HoldNextDispatch {
-            destination: destination.clone(),
-        })
+        .control(RuntimeControl::HoldNextDispatch { key: key.clone() })
         .await?;
     let first = faults.clone();
     let held_destination = destination.clone();
     let forwarding =
         tokio::spawn(async move { first.before_dispatch(&held_destination, b"opaque").await });
-    tokio::time::timeout(BOUND, faults.control(RuntimeControl::AwaitHeldDispatch)).await??;
+    tokio::time::timeout(
+        BOUND,
+        faults.control(RuntimeControl::AwaitHeldDispatch { key: key.clone() }),
+    )
+    .await??;
     faults
         .control(RuntimeControl::ResumeDispatchAndHoldNext {
-            destination: destination.clone(),
+            key: key.clone(),
+            next: key.clone(),
         })
         .await?;
     tokio::time::timeout(BOUND, forwarding).await???;
     assert!(matches!(
-        faults.observe()?.dispatch,
+        faults.observe()?.dispatch(&key),
         DispatchFaultObservation::Armed { .. }
     ));
     let second = faults.clone();
@@ -326,12 +339,17 @@ async fn existing_any_controls_still_accept_opaque_calls_and_resume_before_the_n
             .before_dispatch(&held_destination, b"second opaque")
             .await
     });
-    let held =
-        tokio::time::timeout(BOUND, faults.control(RuntimeControl::AwaitHeldDispatch)).await??;
+    let held = tokio::time::timeout(
+        BOUND,
+        faults.control(RuntimeControl::AwaitHeldDispatch { key: key.clone() }),
+    )
+    .await??;
     assert!(
-        matches!(held.dispatch, DispatchFaultObservation::Held { request, .. } if request == b"second opaque")
+        matches!(held.dispatch(&key), DispatchFaultObservation::Held { request, .. } if request == b"second opaque")
     );
-    faults.control(RuntimeControl::ResumeDispatch).await?;
+    faults
+        .control(RuntimeControl::ResumeDispatch { key: key.clone() })
+        .await?;
     tokio::time::timeout(BOUND, forwarding).await???;
     faults
         .control(RuntimeControl::DropNextObjectReply {
@@ -370,11 +388,9 @@ async fn fleet_item_selection_ignores_other_peers_items_cancels_and_queries() ->
     let selector = serde_json::from_value(serde_json::to_value(selector)?)?;
     let faults = RuntimeFaults::default();
     let destination = ObjectAddress::Fleet;
+    let key = DispatchKey::new(destination.clone(), selector);
     faults
-        .control(RuntimeControl::HoldNextSelectedDispatch {
-            destination: destination.clone(),
-            call: selector,
-        })
+        .control(RuntimeControl::HoldNextDispatch { key: key.clone() })
         .await?;
     let expected = fleet_submit_identity(peer, item, operation);
     let mut wrong_peer = expected.clone();
@@ -406,7 +422,7 @@ async fn fleet_item_selection_ignores_other_peers_items_cancels_and_queries() ->
         )
         .await??;
         assert!(matches!(
-            faults.observe()?.dispatch,
+            faults.observe()?.dispatch(&key),
             DispatchFaultObservation::Armed { .. }
         ));
     }
@@ -414,12 +430,16 @@ async fn fleet_item_selection_ignores_other_peers_items_cancels_and_queries() ->
     let forwarding = faults.before_dispatch(&destination, &expected);
     tokio::pin!(forwarding);
     assert!(futures_util::poll!(&mut forwarding).is_pending());
-    let held = faults.control(RuntimeControl::AwaitHeldDispatch).await?;
+    let held = faults
+        .control(RuntimeControl::AwaitHeldDispatch { key: key.clone() })
+        .await?;
     assert!(
-        matches!(held.dispatch, DispatchFaultObservation::Held { request, .. }
+        matches!(held.dispatch(&key), DispatchFaultObservation::Held { request, .. }
         if request == expected)
     );
-    faults.control(RuntimeControl::ResumeDispatch).await?;
+    faults
+        .control(RuntimeControl::ResumeDispatch { key: key.clone() })
+        .await?;
     tokio::time::timeout(BOUND, forwarding).await??;
     Ok(())
 }
@@ -432,17 +452,20 @@ async fn fleet_item_selection_ignores_other_peers_items_cancels_and_queries() ->
 async fn held_reply_binding_rejects_unheld_states_and_preserves_an_armed_fault() -> TestResult {
     let faults = RuntimeFaults::default();
     let destination = ObjectAddress::Fleet;
+    let key = DispatchKey::any(destination.clone());
     assert!(matches!(
-        faults.control(RuntimeControl::DropHeldDispatchReply).await,
+        faults
+            .control(RuntimeControl::DropHeldDispatchReply { key: key.clone() })
+            .await,
         Err(RuntimeControlFailure::NotHeld)
     ));
     faults
-        .control(RuntimeControl::HoldNextDispatch {
-            destination: destination.clone(),
-        })
+        .control(RuntimeControl::HoldNextDispatch { key: key.clone() })
         .await?;
     assert!(matches!(
-        faults.control(RuntimeControl::DropHeldDispatchReply).await,
+        faults
+            .control(RuntimeControl::DropHeldDispatchReply { key: key.clone() })
+            .await,
         Err(RuntimeControlFailure::NotHeld)
     ));
     assert!(matches!(
@@ -458,16 +481,20 @@ async fn held_reply_binding_rejects_unheld_states_and_preserves_an_armed_fault()
         })
         .await?;
     assert!(matches!(
-        faults.control(RuntimeControl::DropHeldDispatchReply).await,
+        faults
+            .control(RuntimeControl::DropHeldDispatchReply { key: key.clone() })
+            .await,
         Err(RuntimeControlFailure::AlreadyArmed)
     ));
     assert!(!faults.drop_successful_object_reply(&destination, b"held request")?);
     assert!(faults.drop_successful_object_reply(&other_object()?, b"original fault")?);
     // As with the existing reply controls, Dropped can be replaced by a new arm.
     faults
-        .control(RuntimeControl::DropHeldDispatchReply)
+        .control(RuntimeControl::DropHeldDispatchReply { key: key.clone() })
         .await?;
-    faults.control(RuntimeControl::ResumeDispatch).await?;
+    faults
+        .control(RuntimeControl::ResumeDispatch { key: key.clone() })
+        .await?;
     tokio::time::timeout(BOUND, forwarding).await??;
     assert!(faults.drop_successful_object_reply(&destination, b"held request")?);
     Ok(())
@@ -482,6 +509,7 @@ async fn held_reply_binding_ignores_a_bypassing_submit_and_same_item_with_new_ca
 -> TestResult {
     let faults = RuntimeFaults::default();
     let destination = ObjectAddress::Fleet;
+    let key = DispatchKey::any(destination.clone());
     let expected = fleet_submit_identity(
         "019f0000-0000-7000-8000-000000000810",
         "019f0000-0000-7000-8000-000000000811",
@@ -494,15 +522,13 @@ async fn held_reply_binding_ignores_a_bypassing_submit_and_same_item_with_new_ca
     new_call["identity"]["operation"] = json!("019f0000-0000-7000-8000-000000000814");
     let expected = serde_json::to_vec(&expected)?;
     faults
-        .control(RuntimeControl::HoldNextDispatch {
-            destination: destination.clone(),
-        })
+        .control(RuntimeControl::HoldNextDispatch { key: key.clone() })
         .await?;
     let forwarding = faults.before_dispatch(&destination, &expected);
     tokio::pin!(forwarding);
     assert!(futures_util::poll!(&mut forwarding).is_pending());
     faults
-        .control(RuntimeControl::DropHeldDispatchReply)
+        .control(RuntimeControl::DropHeldDispatchReply { key: key.clone() })
         .await?;
     for unrelated in [serde_json::to_vec(&cancel)?, serde_json::to_vec(&new_call)?] {
         tokio::time::timeout(BOUND, faults.before_dispatch(&destination, &unrelated)).await??;
@@ -513,7 +539,9 @@ async fn held_reply_binding_ignores_a_bypassing_submit_and_same_item_with_new_ca
         ));
     }
     assert!(!faults.drop_successful_object_reply(&other_object()?, &expected)?);
-    faults.control(RuntimeControl::ResumeDispatch).await?;
+    faults
+        .control(RuntimeControl::ResumeDispatch { key: key.clone() })
+        .await?;
     tokio::time::timeout(BOUND, forwarding).await??;
     assert!(faults.drop_successful_object_reply(&destination, &expected)?);
     let dropped = faults

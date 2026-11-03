@@ -13,18 +13,32 @@ pub struct RuntimeControlRequest {
 }
 impl RuntimeControlRequest {
     pub fn validate(&self) -> Result<(), RuntimeControlFailure> {
-        if let RuntimeControl::HoldNextSelectedDispatch { destination, call }
-        | RuntimeControl::ResumeDispatchAndHoldNextSelected { destination, call }
-        | RuntimeControl::DropNextSelectedObjectReply { destination, call } = &self.command
-            && matches!(
+        let (selected, next) = match &self.command {
+            RuntimeControl::HoldNextDispatch { key }
+            | RuntimeControl::AwaitHeldDispatch { key }
+            | RuntimeControl::ResumeDispatch { key }
+            | RuntimeControl::DropHeldDispatchReply { key } => {
+                (Some((&key.destination, &key.call)), None)
+            }
+            RuntimeControl::ResumeDispatchAndHoldNext { key, next } => (
+                Some((&key.destination, &key.call)),
+                Some((&next.destination, &next.call)),
+            ),
+            RuntimeControl::DropNextSelectedObjectReply { destination, call } => {
+                (Some((destination, call)), None)
+            }
+            _ => (None, None),
+        };
+        for (destination, call) in [selected, next].into_iter().flatten() {
+            if matches!(
                 call,
                 DispatchCallSelector::FleetMailSubmit
                     | DispatchCallSelector::FleetMailSubmitFor { .. }
-            )
-            && (!matches!(self.address, ObjectAddress::Fleet)
+            ) && (!matches!(self.address, ObjectAddress::Fleet)
                 || !matches!(destination, ObjectAddress::Fleet))
-        {
-            return Err(RuntimeControlFailure::WrongObjectKind);
+            {
+                return Err(RuntimeControlFailure::WrongObjectKind);
+            }
         }
         match (&self.command, &self.address) {
             (
@@ -40,14 +54,12 @@ impl RuntimeControlRequest {
             | (
                 RuntimeControl::SetTime { .. }
                 | RuntimeControl::HoldNextDispatch { .. }
-                | RuntimeControl::HoldNextSelectedDispatch { .. }
-                | RuntimeControl::AwaitHeldDispatch
-                | RuntimeControl::ResumeDispatch
+                | RuntimeControl::AwaitHeldDispatch { .. }
+                | RuntimeControl::ResumeDispatch { .. }
                 | RuntimeControl::ResumeDispatchAndHoldNext { .. }
-                | RuntimeControl::ResumeDispatchAndHoldNextSelected { .. }
                 | RuntimeControl::DropNextObjectReply { .. }
                 | RuntimeControl::DropNextSelectedObjectReply { .. }
-                | RuntimeControl::DropHeldDispatchReply
+                | RuntimeControl::DropHeldDispatchReply { .. }
                 | RuntimeControl::AwaitDroppedObjectReply
                 | RuntimeControl::Observe,
                 _,
@@ -83,20 +95,17 @@ pub enum RuntimeControl {
         frame: FrameId,
     },
     HoldNextDispatch {
-        destination: ObjectAddress,
+        key: DispatchKey,
     },
-    HoldNextSelectedDispatch {
-        destination: ObjectAddress,
-        call: DispatchCallSelector,
+    AwaitHeldDispatch {
+        key: DispatchKey,
     },
-    AwaitHeldDispatch,
-    ResumeDispatch,
+    ResumeDispatch {
+        key: DispatchKey,
+    },
     ResumeDispatchAndHoldNext {
-        destination: ObjectAddress,
-    },
-    ResumeDispatchAndHoldNextSelected {
-        destination: ObjectAddress,
-        call: DispatchCallSelector,
+        key: DispatchKey,
+        next: DispatchKey,
     },
     DropNextObjectReply {
         destination: ObjectAddress,
@@ -106,20 +115,42 @@ pub enum RuntimeControl {
         call: DispatchCallSelector,
     },
     /// Bind the reply fault to the current held dispatch, without releasing it.
-    DropHeldDispatchReply,
+    DropHeldDispatchReply {
+        key: DispatchKey,
+    },
     AwaitDroppedObjectReply,
     Observe,
 }
 
 /// Select an invocation kind or one Fleet submit's authenticated peer and item.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum DispatchCallSelector {
+    Any,
     FleetMailSubmit,
     FleetMailSubmitFor { peer: PeerId, item: ItemId },
     InstallationPeer,
     ForwardRoute,
     CopyWrite,
+    CopyFence,
+}
+
+/// One invocation selection at one physical destination.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DispatchKey {
+    pub destination: ObjectAddress,
+    pub call: DispatchCallSelector,
+}
+impl DispatchKey {
+    #[must_use]
+    pub const fn new(destination: ObjectAddress, call: DispatchCallSelector) -> Self {
+        Self { destination, call }
+    }
+    #[must_use]
+    pub const fn any(destination: ObjectAddress) -> Self {
+        Self::new(destination, DispatchCallSelector::Any)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -219,8 +250,24 @@ pub struct RuntimeFaultObservation {
     pub clock: ClockObservation,
     pub storage: StorageFaultObservation,
     pub answer: AnswerFaultObservation,
-    pub dispatch: DispatchFaultObservation,
+    pub dispatches: Vec<DispatchHoldObservation>,
     pub object_reply: ObjectReplyFaultObservation,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DispatchHoldObservation {
+    pub key: DispatchKey,
+    pub state: DispatchFaultObservation,
+}
+impl RuntimeFaultObservation {
+    #[must_use]
+    pub fn dispatch(&self, key: &DispatchKey) -> DispatchFaultObservation {
+        self.dispatches
+            .iter()
+            .find(|entry| entry.key == *key)
+            .map_or(DispatchFaultObservation::Idle, |entry| entry.state.clone())
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -232,6 +279,8 @@ pub enum RuntimeControlFailure {
     AlreadyArmed,
     NotHeld,
     DifferentFrame,
+    TooManyDispatchKeys,
+    AmbiguousDispatchKey,
 }
 impl std::fmt::Display for RuntimeControlFailure {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

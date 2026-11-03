@@ -19,7 +19,6 @@ impl Fixture {
     pub async fn open() -> ConformanceResult<Self> {
         let root = tempfile::tempdir()?;
         let keys = JwksFixtureServer::start().await?;
-        let config = configuration::registry_config()?;
         let database = DatabaseId::new(durable_steps::Uuid::now_v7())?;
         let server = support::start(root.path(), &keys.url).await?;
         let mut old = support::admit(&server).await?;
@@ -30,25 +29,30 @@ impl Fixture {
             &[database],
         )
         .await;
-        let closed = old
-            .socket
-            .close(reqwest_websocket::CloseCode::Normal, None)
-            .await;
-        server.shutdown().await?;
-        closed?;
         arranged?;
-        // Only the initial registration is arranged through an existing public
-        // task helper. Its gate is a setup stand-in; all admin actions are real.
-        registry_setup::register_grant_history(
-            root.path(),
-            config,
-            database,
-            vec![(Epoch::new(1)?, PeerId::try_from(PEER.to_owned())?)],
+        // Normal Register commits the Fleet projection and ownership notice
+        // through its real lease-change hook before the owner actions begin.
+        let registered = support::answer(
+            &mut old.socket,
+            OperationRequest::Lease(LeaseRequest::Register(Registration {
+                attempt: RequestId::new(durable_steps::Uuid::now_v7())?,
+                database,
+                writer: PeerId::try_from(PEER.to_owned())?,
+                origin: Origin::Empty,
+            })),
         )
         .await?;
-        let server = support::start(root.path(), &keys.url).await?;
-        let mut old = support::connect(&server).await?.socket;
-        // Setup's retained clock is old. A genuine current renewal establishes
+        if !matches!(
+            registered,
+            OperationAnswer::Lease(LeaseAnswer::Register(RegistrationAnswer::Registered {
+                replayed: false,
+                ..
+            }))
+        ) {
+            return Err("owner fixture did not complete its normal Register".into());
+        }
+        let mut old = old.socket;
+        // A genuine current renewal establishes
         // the Move recency predicate instead of changing production policy.
         if !matches!(
             support::answer(
@@ -113,6 +117,9 @@ impl Fixture {
                 })?
                 .into(),
             ))
+            .await?;
+        ConformanceClient::new(self.server.base_url())?
+            .wake_due_after_hello(session_id)
             .await?;
         let received = tokio::time::timeout(Duration::from_secs(8), replacement.next())
             .await?

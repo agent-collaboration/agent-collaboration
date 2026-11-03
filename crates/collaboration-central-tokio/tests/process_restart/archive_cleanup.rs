@@ -1,5 +1,6 @@
 //! A refused Claim's exact settlement and archive completion survive process loss.
 use super::*;
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     AdmittedPeerSocket, ObjectReplyFaultObservation, RuntimeControlRequest, owner_assertion,
 };
@@ -116,7 +117,7 @@ async fn run_cleanup_restart(loss: CleanupLoss) -> ConformanceResult<()> {
         RuntimeControlRequest {
             address: ObjectAddress::Fleet,
             command: RuntimeControl::HoldNextDispatch {
-                destination: ObjectAddress::Fleet,
+                key: DispatchKey::any(ObjectAddress::Fleet),
             },
         },
     ];
@@ -125,7 +126,9 @@ async fn run_cleanup_restart(loss: CleanupLoss) -> ConformanceResult<()> {
     let _ = control(
         &second.base,
         ObjectAddress::Fleet,
-        RuntimeControl::ResumeDispatch,
+        RuntimeControl::ResumeDispatch {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+        },
     )
     .await;
     let stopped = second.stop().await;

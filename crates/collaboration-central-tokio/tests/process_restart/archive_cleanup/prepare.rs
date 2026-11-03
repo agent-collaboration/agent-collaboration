@@ -1,5 +1,6 @@
 //! Force a real schema refusal only after Active has blocked the accepted archive.
 use super::*;
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::enroll_open_peer_with_label;
 use fleet_sync_protocol::{CopyStatusAnswer, ReplicationAnswer, ReplicationRequest, SettleOutcome};
 use futures_util::SinkExt;
@@ -84,7 +85,7 @@ pub(super) async fn prepare_cleanup(
         base,
         ObjectAddress::Fleet,
         RuntimeControl::HoldNextDispatch {
-            destination: copy.clone(),
+            key: DispatchKey::any(copy.clone()),
         },
     )
     .await?;
@@ -116,7 +117,8 @@ pub(super) async fn prepare_cleanup(
         base,
         ObjectAddress::Fleet,
         RuntimeControl::ResumeDispatchAndHoldNext {
-            destination: copy.clone(),
+            key: DispatchKey::any(copy.clone()),
+            next: DispatchKey::any(copy.clone()),
         },
     )
     .await?;
@@ -157,7 +159,8 @@ pub(super) async fn prepare_cleanup(
                 base,
                 ObjectAddress::Fleet,
                 RuntimeControl::ResumeDispatchAndHoldNext {
-                    destination: ObjectAddress::Fleet,
+                    key: DispatchKey::any(ObjectAddress::Copy(database)),
+                    next: DispatchKey::any(ObjectAddress::Fleet),
                 },
             )
             .await?;
@@ -171,7 +174,14 @@ pub(super) async fn prepare_cleanup(
                 },
             )
             .await?;
-            control(base, ObjectAddress::Fleet, RuntimeControl::ResumeDispatch).await?;
+            control(
+                base,
+                ObjectAddress::Fleet,
+                RuntimeControl::ResumeDispatch {
+                    key: DispatchKey::any(ObjectAddress::Copy(database)),
+                },
+            )
+            .await?;
         }
     }
     let call = match loss {
@@ -273,7 +283,9 @@ async fn await_call(base: &str, destination: &ObjectAddress) -> ConformanceResul
         control(
             base,
             ObjectAddress::Fleet,
-            RuntimeControl::AwaitHeldDispatch,
+            RuntimeControl::AwaitHeldDispatch {
+                key: DispatchKey::any(destination.clone()),
+            },
         ),
     )
     .await
@@ -281,7 +293,7 @@ async fn await_call(base: &str, destination: &ObjectAddress) -> ConformanceResul
     let DispatchFaultObservation::Held {
         destination: actual,
         request,
-    } = observed.dispatch
+    } = observed.dispatch(&DispatchKey::any(destination.clone()))
     else {
         return Err("actual cleanup dispatch did not reach its barrier".into());
     };

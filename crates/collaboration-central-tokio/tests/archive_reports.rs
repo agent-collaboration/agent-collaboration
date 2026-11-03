@@ -14,11 +14,7 @@ async fn archive_reports_preserve_first_report_and_exact_no_ledger_finalization(
     let jwks = JwksFixtureServer::start().await?;
     let server = clocked_server::ClockedServer::start(root.path(), &jwks.url).await?;
     let client = ConformanceClient::new(server.base_url())?;
-    let proof = run_archive_report_with_clock(&client, |at| {
-        server.clock.set_time(at);
-        std::future::ready(Ok(()))
-    })
-    .await;
+    let proof = run_archive_report_with_clock(&client, |at| server.clock.set_time(at)).await;
     server.shutdown().await?;
     jwks.shutdown().await?;
     proof

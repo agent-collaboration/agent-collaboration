@@ -25,6 +25,7 @@ mod fixture;
 mod owner_registry_scenarios;
 
 use board_sync_protocol::{BoardAnnotation, BoardConsumerProtocol};
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     ConformanceResult, DispatchFaultObservation, RuntimeControl, RuntimeControlRequest,
     RuntimeFaultObservation, machine_assertion, owner_assertion,
@@ -166,9 +167,9 @@ async fn exact_held_renewal_resends_on_the_same_session_replacement_and_then_rep
             chrono::DateTime::from_timestamp_millis(fixture::time(900_000)?.unix_millis()).ok_or("inflight Registry time outside range")?
         )).await?;
         let request=RenewRequest {attempt:RequestId::new(Uuid::now_v7())?,database:fixture.database,epoch:Epoch::new(1)?};
-        control(fixture.base(),RuntimeControl::HoldNextDispatch {destination:ObjectAddress::Fleet}).await?;
+        control(fixture.base(),RuntimeControl::HoldNextDispatch { key: DispatchKey::any(ObjectAddress::Fleet) }).await?;
         let original_frame=creation_scenarios::send(&mut fixture.old,OperationRequest::Lease(LeaseRequest::Renew(request.clone()))).await?;
-        let DispatchFaultObservation::Held {destination,request:bytes}=control(fixture.base(),RuntimeControl::AwaitHeldDispatch).await?.dispatch else {return Err("registered renewal did not reach the real owned hold".into());};
+        let DispatchFaultObservation::Held {destination,request:bytes}=control(fixture.base(),RuntimeControl::AwaitHeldDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet) }).await?.dispatch(&DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet)) else {return Err("registered renewal did not reach the real owned hold".into());};
         if destination!=ObjectAddress::Fleet {return Err("inflight renewal hold targeted another object".into());}
         let held:Value=serde_json::from_slice(&bytes)?;
         let session_id=exact_held_renewal(&held,&request)?;
@@ -184,7 +185,7 @@ async fn exact_held_renewal_resends_on_the_same_session_replacement_and_then_rep
         println!("SESSION_INFLIGHT_STAGE same_session_Welcome_and_old_typed_physical_close passed");
         // Native may cancel the old call on physical close. Same-key retry must
         // settle safely whether that original call committed or was cancelled.
-        control(fixture.base(),RuntimeControl::ResumeDispatch).await?;
+        control(fixture.base(),RuntimeControl::ResumeDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet) }).await?;
         let socket=new_socket.as_mut().ok_or("replacement socket missing")?;
         let answer=creation_scenarios::operation_answer(socket,OperationRequest::Lease(LeaseRequest::Renew(request.clone()))).await?;
         let OperationAnswer::Lease(LeaseAnswer::Renew(RenewAnswer::Renewed {replayed,..}))=&answer else {return Err("replacement resend did not return its actual renewal result".into());};
@@ -207,7 +208,13 @@ async fn exact_held_renewal_resends_on_the_same_session_replacement_and_then_rep
         println!("SESSION_INFLIGHT_CASE exact_held_renewal_replaced_and_settled_receipt_replayed passed original_frame={original_frame:?}");
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
     }.await;
-    let _ = control(fixture.base(), RuntimeControl::ResumeDispatch).await;
+    let _ = control(
+        fixture.base(),
+        RuntimeControl::ResumeDispatch {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+        },
+    )
+    .await;
     if let Some(socket) = new_socket {
         let _ = socket
             .close(reqwest_websocket::CloseCode::Normal, None)

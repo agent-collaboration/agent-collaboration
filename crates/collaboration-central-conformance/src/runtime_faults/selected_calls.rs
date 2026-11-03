@@ -52,6 +52,8 @@ enum SelectedInvocationKind {
     ForwardRoute,
     #[serde(rename = "central.copy-session-write")]
     CopyWrite,
+    #[serde(rename = "fleet-sync.copy-fence")]
+    CopyFence,
     #[serde(other)]
     Other,
 }
@@ -59,7 +61,7 @@ enum SelectedInvocationKind {
 impl DispatchSelection {
     pub(super) fn matches(&self, request: &[u8]) -> bool {
         match self {
-            Self::Any => true,
+            Self::Any | Self::Call(DispatchCallSelector::Any) => true,
             Self::ExactRequest(expected) => expected == request,
             Self::Call(DispatchCallSelector::FleetMailSubmitFor { peer, item }) => {
                 serde_json::from_slice::<FleetInvocation>(request).is_ok_and(|invocation| {
@@ -84,6 +86,9 @@ impl DispatchSelection {
                         ) | (
                             DispatchCallSelector::CopyWrite,
                             SelectedInvocationKind::CopyWrite
+                        ) | (
+                            DispatchCallSelector::CopyFence,
+                            SelectedInvocationKind::CopyFence
                         )
                     )
                 })

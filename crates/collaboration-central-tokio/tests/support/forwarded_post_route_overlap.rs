@@ -7,6 +7,7 @@ use super::{
     },
 };
 use board_sync_protocol::ForwardOutcome;
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     ConformanceResult, DispatchCallSelector, DispatchFaultObservation, RuntimeControl,
     RuntimeFaultObservation,
@@ -38,9 +39,8 @@ where
         now: RegistryTime(started.into()),
     })
     .await?;
-    control(RuntimeControl::HoldNextSelectedDispatch {
-        destination: ObjectAddress::Fleet,
-        call: DispatchCallSelector::ForwardRoute,
+    control(RuntimeControl::HoldNextDispatch {
+        key: DispatchKey::new(ObjectAddress::Fleet, DispatchCallSelector::ForwardRoute),
     })
     .await?;
     let proof = overlap_sequence(
@@ -53,8 +53,23 @@ where
     )
     .await;
     let released = match control(RuntimeControl::Observe).await {
-        Ok(state) if matches!(state.dispatch, DispatchFaultObservation::Held { .. }) => {
-            control(RuntimeControl::ResumeDispatch).await.map(|_| ())
+        Ok(state)
+            if matches!(
+                state.dispatch(&DispatchKey::new(
+                    collaboration_central_core::ObjectAddress::Fleet,
+                    collaboration_central_conformance::DispatchCallSelector::ForwardRoute
+                )),
+                DispatchFaultObservation::Held { .. }
+            ) =>
+        {
+            control(RuntimeControl::ResumeDispatch {
+                key: DispatchKey::new(
+                    collaboration_central_core::ObjectAddress::Fleet,
+                    collaboration_central_conformance::DispatchCallSelector::ForwardRoute,
+                ),
+            })
+            .await
+            .map(|_| ())
         }
         Ok(_) => Ok(()),
         Err(error) => Err(error),
@@ -83,7 +98,16 @@ where
     ObserveFuture: Future<Output = ConformanceResult<Value>>,
 {
     let original = post(sender, database).await?;
-    require_route_hold(control(RuntimeControl::AwaitHeldDispatch).await?, database)?;
+    require_route_hold(
+        control(RuntimeControl::AwaitHeldDispatch {
+            key: DispatchKey::new(
+                collaboration_central_core::ObjectAddress::Fleet,
+                collaboration_central_conformance::DispatchCallSelector::ForwardRoute,
+            ),
+        })
+        .await?,
+        database,
+    )?;
     let pending = pending_record(
         &observe(false).await?,
         database,
@@ -108,7 +132,13 @@ where
     if fresh_delivered == old_frame {
         return Err("fresh request reused the expired route frame".into());
     }
-    control(RuntimeControl::ResumeDispatch).await?;
+    control(RuntimeControl::ResumeDispatch {
+        key: DispatchKey::new(
+            collaboration_central_core::ObjectAddress::Fleet,
+            collaboration_central_conformance::DispatchCallSelector::ForwardRoute,
+        ),
+    })
+    .await?;
     await_completed(observe, old_frame).await?;
     live_records(
         &observe(false).await?,
@@ -133,7 +163,10 @@ fn require_route_hold(
     let DispatchFaultObservation::Held {
         destination,
         request,
-    } = held.dispatch
+    } = held.dispatch(&DispatchKey::new(
+        collaboration_central_core::ObjectAddress::Fleet,
+        collaboration_central_conformance::DispatchCallSelector::ForwardRoute,
+    ))
     else {
         return Err("the original forwarding route never reached its real hold".into());
     };

@@ -74,7 +74,7 @@ fn project_fault_controls_refuse_the_fleet_owner() {
 )]
 fn fleet_submit_controls_require_the_fleet_owner_and_destination()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use crate::{DispatchCallSelector, RuntimeControlRequest};
+    use crate::{DispatchCallSelector, DispatchKey, RuntimeControlRequest};
     let peer = "019f0000-0000-7000-8000-000000000810"
         .to_owned()
         .try_into()?;
@@ -92,13 +92,12 @@ fn fleet_submit_controls_require_the_fleet_owner_and_destination()
     ] {
         for destination in [ObjectAddress::Fleet, non_fleet.clone()] {
             for command in [
-                RuntimeControl::HoldNextSelectedDispatch {
-                    destination: destination.clone(),
-                    call,
+                RuntimeControl::HoldNextDispatch {
+                    key: DispatchKey::new(destination.clone(), call),
                 },
-                RuntimeControl::ResumeDispatchAndHoldNextSelected {
-                    destination: destination.clone(),
-                    call,
+                RuntimeControl::ResumeDispatchAndHoldNext {
+                    key: DispatchKey::new(destination.clone(), call),
+                    next: DispatchKey::new(destination.clone(), call),
                 },
                 RuntimeControl::DropNextSelectedObjectReply {
                     destination: destination.clone(),

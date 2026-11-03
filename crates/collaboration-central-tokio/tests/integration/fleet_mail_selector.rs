@@ -6,6 +6,7 @@ use super::{
 use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerProtocol, BoardConsumerRequest, MailSubmitAnswer,
 };
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     DispatchCallSelector, DispatchFaultObservation, RuntimeControl,
 };
@@ -45,12 +46,14 @@ async fn fleet_selector_holds_the_produced_session_call_while_another_item_answe
     let selected_frame = FrameId::new(durable_steps::Uuid::now_v7())?;
     let faults = fixture.io.local_call_faults.clone();
     faults
-        .control(RuntimeControl::HoldNextSelectedDispatch {
-            destination: ObjectAddress::Fleet,
-            call: DispatchCallSelector::FleetMailSubmitFor {
-                peer: A.to_owned().try_into()?,
-                item: selected_item,
-            },
+        .control(RuntimeControl::HoldNextDispatch {
+            key: DispatchKey::new(
+                ObjectAddress::Fleet,
+                DispatchCallSelector::FleetMailSubmitFor {
+                    peer: A.to_owned().try_into()?,
+                    item: selected_item,
+                },
+            ),
         })
         .await?;
 
@@ -61,12 +64,29 @@ async fn fleet_selector_holds_the_produced_session_call_while_another_item_answe
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     };
     let controller = async {
-        let observed =
-            tokio::time::timeout(CAP, faults.control(RuntimeControl::AwaitHeldDispatch)).await??;
+        let observed = tokio::time::timeout(
+            CAP,
+            faults.control(RuntimeControl::AwaitHeldDispatch {
+                key: DispatchKey::new(
+                    collaboration_central_core::ObjectAddress::Fleet,
+                    DispatchCallSelector::FleetMailSubmitFor {
+                        peer: A.to_owned().try_into()?,
+                        item: selected_item,
+                    },
+                ),
+            }),
+        )
+        .await??;
         let DispatchFaultObservation::Held {
             destination,
             request,
-        } = observed.dispatch
+        } = observed.dispatch(&DispatchKey::new(
+            collaboration_central_core::ObjectAddress::Fleet,
+            DispatchCallSelector::FleetMailSubmitFor {
+                peer: A.to_owned().try_into()?,
+                item: selected_item,
+            },
+        ))
         else {
             return Err("produced Fleet call was not held".into());
         };
@@ -92,10 +112,26 @@ async fn fleet_selector_holds_the_produced_session_call_while_another_item_answe
             matches!(sender.next().await?, ServerFrame::Answer {frame, body:OperationAnswer::Consumer(BoardConsumerAnswer::MailSubmit(MailSubmitAnswer::Submitted(SubmitResult::Accepted {..})))} if frame==other_frame)
         );
         assert!(matches!(
-            faults.observe()?.dispatch,
+            faults.observe()?.dispatch(&DispatchKey::new(
+                collaboration_central_core::ObjectAddress::Fleet,
+                DispatchCallSelector::FleetMailSubmitFor {
+                    peer: A.to_owned().try_into()?,
+                    item: selected_item
+                }
+            )),
             DispatchFaultObservation::Held { .. }
         ));
-        faults.control(RuntimeControl::ResumeDispatch).await?;
+        faults
+            .control(RuntimeControl::ResumeDispatch {
+                key: DispatchKey::new(
+                    collaboration_central_core::ObjectAddress::Fleet,
+                    DispatchCallSelector::FleetMailSubmitFor {
+                        peer: A.to_owned().try_into()?,
+                        item: selected_item,
+                    },
+                ),
+            })
+            .await?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     };
     Box::pin(tokio::time::timeout(CAP, async {

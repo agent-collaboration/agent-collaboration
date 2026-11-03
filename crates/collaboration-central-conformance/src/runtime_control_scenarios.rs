@@ -3,8 +3,8 @@
 use crate::composed_client::copy_probe;
 use crate::{
     AnswerFaultObservation, ComposedNumericScenario, ConformanceClient, ConformanceResult,
-    DispatchFaultObservation, RuntimeControl, RuntimeControlRequest, RuntimeFaultObservation,
-    StorageFaultObservation, enroll_admitted_peer,
+    DispatchCallSelector, DispatchFaultObservation, DispatchKey, RuntimeControl,
+    RuntimeControlRequest, RuntimeFaultObservation, StorageFaultObservation, enroll_admitted_peer,
 };
 use board_sync_protocol::{
     BoardAnnotation, BoardConsumerAnswer, BoardConsumerProtocol, BoardConsumerRequest,
@@ -35,6 +35,8 @@ pub async fn run_runtime_control_conformance(client: &ConformanceClient) -> Conf
         fixture.database.to_string(),
     )?);
     let session = ObjectAddress::Fleet;
+    let copy_key = DispatchKey::new(copy.clone(), DispatchCallSelector::CopyWrite);
+    let route_key = DispatchKey::new(ObjectAddress::Fleet, DispatchCallSelector::ForwardRoute);
     let proof = async {
         refused_controls(client, session.clone()).await?;
         control(client, copy.clone(), RuntimeControl::CopyFull { after_writes: NonZeroU64::new(2).ok_or("positive write threshold")? }).await?;
@@ -74,13 +76,13 @@ pub async fn run_runtime_control_conformance(client: &ConformanceClient) -> Conf
             return Err("the lost answer did not retain its real copy receipt".into());
         }
 
-        control(client, session.clone(), RuntimeControl::HoldNextSelectedDispatch { destination: copy.clone(), call: crate::DispatchCallSelector::CopyWrite }).await?;
+        control(client, session.clone(), RuntimeControl::HoldNextDispatch { key: copy_key.clone() }).await?;
         independent_read(client, fixture.database, 3, None).await?;
         let held_frame = FrameId::new(durable_steps::Uuid::now_v7())?;
         let fourth = row_piece(fixture.database, 3, 4)?;
         send(&mut peer.socket, held_frame, OperationRequest::Replication(ReplicationRequest::Piece(fourth.clone()))).await?;
-        let observed = control(client, session.clone(), RuntimeControl::AwaitHeldDispatch).await?;
-        let DispatchFaultObservation::Held { destination, request } = observed.dispatch else { return Err("the selected dispatch never reached its hold".into()); };
+        let observed = control(client, session.clone(), RuntimeControl::AwaitHeldDispatch { key: copy_key.clone() }).await?;
+        let DispatchFaultObservation::Held { destination, request } = observed.dispatch(&copy_key) else { return Err("the selected dispatch never reached its hold".into()); };
         if destination != copy { return Err("dispatch hold selected another physical copy".into()); }
         let envelope: serde_json::Value = serde_json::from_slice(&request)?;
         let held: Piece<BoardAnnotation> = serde_json::from_value(envelope.pointer("/request/request/value").cloned().ok_or("held request omitted its exact piece")?)?;
@@ -91,16 +93,14 @@ pub async fn run_runtime_control_conformance(client: &ConformanceClient) -> Conf
         let read = require_status(&mut observer.socket, fixture.database, 3).await;
         let closed = observer.socket.close(reqwest_websocket::CloseCode::Normal, None).await;
         // Release the exact hold even when the independent read failed.
-        let released = control(client, session.clone(), RuntimeControl::ResumeDispatch).await;
+        let released = control(client, session.clone(), RuntimeControl::ResumeDispatch { key: copy_key.clone() }).await;
         read?; closed?; released?;
         let applied = receive(&mut peer.socket, held_frame).await?;
         if !matches!(applied, OperationAnswer::Replication(ReplicationAnswer::Applied { through }) if through == position(4)?) {
             return Err("resuming the real dispatch did not apply its exact piece".into());
         }
         require_status(&mut peer.socket, fixture.database, 4).await?;
-        control(client, session.clone(), RuntimeControl::HoldNextSelectedDispatch {
-            destination: ObjectAddress::Fleet, call: crate::DispatchCallSelector::ForwardRoute,
-        }).await?;
+        control(client, session.clone(), RuntimeControl::HoldNextDispatch { key: route_key.clone() }).await?;
         let local_frame = FrameId::new(durable_steps::Uuid::now_v7())?;
         let project = message_board::ProjectId::try_from(durable_steps::Uuid::now_v7().to_string())?;
         send(&mut peer.socket, local_frame, OperationRequest::Consumer(BoardConsumerRequest::ForwardedPost {
@@ -109,7 +109,7 @@ pub async fn run_runtime_control_conformance(client: &ConformanceClient) -> Conf
                 body: BoardPayload::encode(&serde_json::json!({"local":"dispatch hold"}))?,
             },
         })).await?;
-        let DispatchFaultObservation::Held {destination, request} = control(client, session.clone(), RuntimeControl::AwaitHeldDispatch).await?.dispatch
+        let DispatchFaultObservation::Held {destination, request} = control(client, session.clone(), RuntimeControl::AwaitHeldDispatch { key: route_key.clone() }).await?.dispatch(&route_key)
             else {return Err("the local Session-to-Fleet call bypassed its dispatch hold".into());};
         let held: serde_json::Value = serde_json::from_slice(&request)?;
         if destination != ObjectAddress::Fleet || held.get("kind") != Some(&serde_json::json!("central.forward-route"))
@@ -118,7 +118,7 @@ pub async fn run_runtime_control_conformance(client: &ConformanceClient) -> Conf
             || held.pointer("/request/project") != Some(&serde_json::json!(project)) {
             return Err("the local dispatch hold captured another call or principal".into());
         }
-        control(client, session.clone(), RuntimeControl::ResumeDispatch).await?;
+        control(client, session.clone(), RuntimeControl::ResumeDispatch { key: route_key.clone() }).await?;
         if !matches!(receive(&mut peer.socket, local_frame).await?, OperationAnswer::Consumer(BoardConsumerAnswer::ForwardedPost(board_sync_protocol::ForwardOutcome::NotHeld))) {
             return Err("resuming the local dispatch did not complete its exact missing-project request".into());
         }
@@ -139,7 +139,14 @@ pub async fn run_runtime_control_conformance(client: &ConformanceClient) -> Conf
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }.await;
     // Do not leave a dispatcher blocked on an early assertion failure.
-    let _ = control(client, session, RuntimeControl::ResumeDispatch).await;
+    for key in [copy_key, route_key] {
+        let _ = control(
+            client,
+            session.clone(),
+            RuntimeControl::ResumeDispatch { key },
+        )
+        .await;
+    }
     let _ = peer
         .socket
         .close(reqwest_websocket::CloseCode::Normal, None)
