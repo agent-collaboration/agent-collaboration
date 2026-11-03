@@ -77,7 +77,7 @@ Edges: C1 → C2 → C3; C1 → C4 (needs L2); C4 → C5 (needs L2, L3); C1 → 
 | U1 (O2, O7) | C3, C7 | Verifier | Central runtime + Central staging journeys with three Routers and two projects |
 | U2 (O2) | C1, C7 | Verifier | same, store listing |
 | U3 (O5) | C5, C7 | Verifier | Central staging wipe and re-enroll case |
-| U4 (O1, O3, O9, O11) | C4, C5, C7 | Verifier | Cross-machine journey with poll-mode recipient and failure matrix |
+| U4 (O1, O3, O9, O11) | C4, C5, C7 | Verifier | Cross-machine journey with a queue-mode message held on a not-running recipient session, and the failure matrix |
 | U6 (O10, O6) | C5, C7 | Verifier | online timing on both backends; staging load |
 | U7 (row readback) | L1, C5, C7 | Verifier | row readback after O1 and O9 |
 | U9 (O4) | L3, C5, C7 | Verifier | injected-clock retention case |
