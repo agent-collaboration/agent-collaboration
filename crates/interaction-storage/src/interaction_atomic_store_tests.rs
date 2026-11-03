@@ -175,6 +175,9 @@ async fn enqueue_and_project(
                     .enqueue_and_admit::<NativeSubmit>(
                         item,
                         PeerId::new(uuid::Uuid::now_v7()).expect("relay"),
+                        PeerId::try_from("019f0000-0000-7000-8000-000000008131".to_owned())
+                            .unwrap(),
+                        NoDispatchHost.now(),
                     )
                     .await
                     .map_err(StoreError::backend)?;

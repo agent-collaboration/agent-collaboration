@@ -142,3 +142,7 @@ impl InteractionStore {
         Ok(route_json)
     }
 }
+
+#[cfg(test)]
+#[path = "interaction_store_reopen_test.rs"]
+mod reopen_tests;

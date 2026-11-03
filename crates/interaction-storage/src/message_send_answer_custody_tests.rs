@@ -26,6 +26,9 @@ async fn enqueue_with_answer(
                     .enqueue_and_admit::<NativeSubmit>(
                         item,
                         PeerId::new(uuid::Uuid::now_v7()).unwrap(),
+                        PeerId::try_from("019f0000-0000-7000-8000-000000008131".to_owned())
+                            .unwrap(),
+                        NoDispatchHost.now(),
                     )
                     .await
                     .map_err(StoreError::backend)?;
