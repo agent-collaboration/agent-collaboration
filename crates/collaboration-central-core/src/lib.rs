@@ -56,6 +56,7 @@ mod delivery_config;
 pub use delivery_config::DeliveryConfig;
 mod effect_driver;
 mod fleet_mail_tasks;
+mod fleet_outbox_limits;
 mod forward_calls;
 mod forward_delivery;
 mod forward_registry;
@@ -103,7 +104,7 @@ mod mail_sender_calls;
 mod mail_status_dispatch;
 mod mail_submit_admission;
 mod mail_submit_calls;
-mod mailbox_limits;
+pub use fleet_outbox_limits::fleet_outbox_limits;
 #[cfg(feature = "conformance")]
 pub use machine_enrollment::conformance_revocation::{
     LifecyclePauseObservation, RevocationControl, RevocationControlInput,
@@ -112,7 +113,6 @@ pub use machine_enrollment::conformance_revocation::{
 pub use machine_enrollment::{
     AdmittedMachine, EnrollMachine, EnrollmentDecision, EnrollmentRefusal, RevocationDecision,
 };
-pub use mailbox_limits::central_mailbox_limits;
 mod object_bootstrap;
 mod object_runtime;
 mod object_transport;

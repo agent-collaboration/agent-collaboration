@@ -87,12 +87,6 @@ fn project_calls_require_the_fleet_physical_owner() -> serde_json::Result<()> {
             false,
         ),
         (
-            json!({"kind":"mailbox","value":"019f0000-0000-7000-8000-000000000807"}),
-            "mailbox",
-            json!({"kind":"object"}),
-            false,
-        ),
-        (
             json!({"kind":"fleet"}),
             "registry",
             json!({"kind":"object"}),
@@ -122,6 +116,25 @@ fn project_calls_require_the_fleet_physical_owner() -> serde_json::Result<()> {
             expected,
             "source facet: {face}"
         );
+    }
+    Ok(())
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Removed physical addresses and caller faces must fail decoding before dispatch."
+)]
+#[test]
+fn removed_mailbox_addresses_and_faces_are_rejected_before_dispatch() -> serde_json::Result<()> {
+    for (source, face) in [
+        (
+            json!({"kind":"mailbox","value":"019f0000-0000-7000-8000-000000000807"}),
+            "registry",
+        ),
+        (json!({"kind":"fleet"}), "mailbox"),
+    ] {
+        let bytes = object_envelope(source, face, "copy")?;
+        assert!(serde_json::from_slice::<ObjectCallEnvelope>(&bytes).is_err());
     }
     Ok(())
 }

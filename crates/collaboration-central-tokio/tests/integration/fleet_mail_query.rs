@@ -102,7 +102,7 @@ async fn query_preserves_order_and_digest_before_and_after_recipient_commit_and_
             let receipt = inbox
                 .accept(
                     pushed,
-                    collaboration_central_core::central_mailbox_limits()
+                    collaboration_central_core::fleet_outbox_limits()
                         .map_err(StoreError::backend)?,
                 )
                 .await

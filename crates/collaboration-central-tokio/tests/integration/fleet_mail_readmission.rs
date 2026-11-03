@@ -193,7 +193,7 @@ async fn same_peer_readmission_pushes_and_receipts_the_pre_revoke_item_once() ->
         assert_eq!(pushed.1.id(),item_id);
         assert_eq!(pushed.1.digest(),&digest);
         assert_eq!(serde_json::to_vec(&pushed.1)?,frozen);
-        let receipt = inbox.accept(pushed.1,collaboration_central_core::central_mailbox_limits()?).await?;
+        let receipt = inbox.accept(pushed.1,collaboration_central_core::fleet_outbox_limits()?).await?;
         assert!(matches!(receipt,PushResult::Accepted {..}));
         send_client_frame(&mut recipient.socket,ClientFrame::Answer {frame:pushed.0,body:ClientAnswer::Crate(ServerCallAnswer::Pushed(receipt))}).await?;
         let publication = receive_and_ack_publication(&mut sender.socket).await?;

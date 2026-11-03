@@ -144,7 +144,7 @@ where
                     frame,
                     operation: OperationRequest::Delivery(DeliveryRequest::Report { report, .. }),
                 } => {
-                    let limits = crate::central_mailbox_limits().map_err(StoreError::backend)?;
+                    let limits = crate::fleet_outbox_limits().map_err(StoreError::backend)?;
                     let result =
                         fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes>::new(self, limits)
                             .recipient_report::<crate::fleet_mail_tasks::FleetStatusTask<
