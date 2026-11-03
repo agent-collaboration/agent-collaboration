@@ -140,13 +140,17 @@ sequenceDiagram
 
 **One journal, one dispatcher, one alarm.** Today each old object registers only its own task kinds (`shared_task_registry.rs:15–71`), and an engine that claims a task kind it doesn't know fails it as `unknown_kind` (library `operation_drive.rs:88–90`). The Fleet object registers **every** surviving task kind with one engine over its one journal: enrollment and lease workflows, control-notice delivery and expiry, forward deadlines, session upkeep, status publication, mail push and 60-day removal. One alarm arbiter wakes it for the earliest due item (Tokio slot timer `native_objects.rs:301`; Cloudflare `AlarmOwner` `shared_object_store.rs:63`). Proof includes a restart with several task kinds due.
 
-## Lease versions after the handshake is gone
+## Lease numbers and the staging wipe
 
-Machines see a lease as an ordered version (`epoch`, `incarnation`, `change`) and keep the highest one they have seen: an older stored observation wins over a lower incoming version, and an equal version with different content is refused (`writer_observation.rs:28–43`; `central_project_reads.rs:280–289`).
+**What a lease is.** One machine at a time may write a project: it holds that project's lease. Central tells machines who holds each lease, stamped with a number that only goes up (`epoch`, `incarnation`, `change`). Each Router remembers the highest number it has seen and ignores anything lower, so stale or delayed messages can't undo a newer one (`writer_observation.rs:28–43`; `central_project_reads.rs:280–289`).
 
-- **Durable source:** `lease_incarnation` (today's `registry_lease_incarnation`, renamed) stays the one monotonic incarnation counter, advanced in the same transaction as the lease change. Restarts never reuse a value.
-- **Cutover:** staging starts empty (U3), so versions start low again while every Router still holds higher observations from before. A wiped staging central can keep the same URL, relay and receiver identities (they are deployment configuration: `fleet_enrollment_file.rs:20–28`, `delivery_config.rs:1–9`, `machine_enrollment.rs:140–141`), so a Router cannot tell from those that central is new. Therefore **every successful enrollment clears that Router's central-derived state** (its Fleet cache, project read copies and stored lease observations) and records that the clearing finished, durably, before the Router reads from central again. It never touches local project content, pending outbox items, approvals and history, or the machine's identity. Re-enrolling an unchanged central just costs one refresh.
-- Proof: wipe staging, keep the same URL, relay and receiver, re-enroll a Router that still holds old observations; it accepts the new central's leases and writes its project. Kill the Router mid-clearing; on restart it finishes clearing before reading.
+**Normal running.** Central keeps the counter in its own store (`lease_incarnation`, today's `registry_lease_incarnation`, renamed) and advances it in the same transaction as the lease change, so a central restart never reuses a number.
+
+**The staging wipe.** The new, empty central starts counting from 1, while every Router still remembers higher numbers from the old central. Without a fix, every Router would ignore the new central's leases as stale, and no machine could write its projects. A wiped central keeps the same URL and configured ids (`fleet_enrollment_file.rs:20–28`, `delivery_config.rs:1–9`, `machine_enrollment.rs:140–141`), so a Router can't tell it is new.
+
+**The rule:** on every successful enrollment, a Router forgets what it learned from central (lease numbers, its cached Fleet directory, project read copies) and starts fresh. It records that the forgetting finished before it talks to central again; if it crashes halfway, it finishes on restart. Its own project content, unsent messages, approvals, history and machine identity are never touched. Re-enrolling with an unchanged central just costs one refresh.
+
+**Proof:** wipe staging, keep the same URL and ids, re-enroll a Router that still remembers old numbers: it accepts the new central's lease and writes its project. Kill it while it is forgetting: on restart it finishes before reading from central.
 
 ## Library changes (`agent-fleet-sync`, new tag)
 
