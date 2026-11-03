@@ -14,6 +14,7 @@ mod fleet_mail_admission;
 mod fleet_mail_backpressure;
 mod fleet_mail_dispatch;
 mod fleet_mail_inbox_fixture;
+mod fleet_mail_query;
 mod fleet_mail_receipt_loss;
 mod fleet_mail_reports;
 mod fleet_mail_settle;

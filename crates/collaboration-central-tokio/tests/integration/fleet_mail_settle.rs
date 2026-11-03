@@ -7,7 +7,7 @@ use fleet_sync_protocol::{
 };
 use serde_json::json;
 
-async fn settle(
+pub(super) async fn settle(
     fixture: &Fixture,
     socket: &mut Socket,
     item: ItemId,

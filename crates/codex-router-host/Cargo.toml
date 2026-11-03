@@ -82,7 +82,7 @@ codex-router-host = { path = ".", features = ["runtime-test-support"] }
 reqwest-websocket = "=0.5.1"
 board-legacy-upgrade = { version = "0.1.100", path = "../board-legacy-upgrade" }
 collaboration-central-conformance = { version = "0.1.100", path = "../collaboration-central-conformance" }
-sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "1e76a3f7b7cef28e9103fe3e1dc485ca4efd0f68", default-features = false, features = ["runtime-tokio"] }
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "f5945a6c0458618479173dbdabbc4e60f8f5f0fe", default-features = false, features = ["runtime-tokio"] }
 collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.96" }
 fleet-sync-delivery = { workspace = true, features = ["test-support"] }
 fleet-sync-writer = { workspace = true, features = ["test-support"] }

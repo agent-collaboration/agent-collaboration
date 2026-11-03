@@ -141,6 +141,31 @@ where
             {
                 return Ok((SenderRoute::Refused, Vec::new()));
             }
+            if let DeliveryRequest::Query { items, .. } = self.input.request.as_ref() {
+                let mut statuses = Vec::with_capacity(items.len());
+                let mut outbox =
+                    fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes>::new(scope, self.limits);
+                for item in items {
+                    match outbox.relay_query(self.input.session.peer, *item).await {
+                        Ok(status) => statuses.push(status),
+                        Err(fleet_sync_delivery::DeliveryError::Refused { reason }) => {
+                            return Ok((
+                                SenderRoute::Answered(DeliveryAnswer::MailboxUnavailable {
+                                    reason,
+                                }),
+                                Vec::new(),
+                            ));
+                        }
+                        Err(error) => return Err(fleet_sync_delivery::delivery_rollback(error)),
+                    }
+                }
+                return Ok((
+                    SenderRoute::Answered(DeliveryAnswer::Query(
+                        fleet_sync_protocol::QueryResult { statuses },
+                    )),
+                    Vec::new(),
+                ));
+            }
             if let DeliveryRequest::Settle { item, digest, .. } = self.input.request.as_ref() {
                 let answer =
                     fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes>::new(scope, self.limits)
