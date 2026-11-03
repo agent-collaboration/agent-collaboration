@@ -1,9 +1,11 @@
+use crate::conversation_operation_recorder;
 use codex_acp_adapter::{
     AcpSchemaCatalog, AcpSessionBinding, PendingAcpPrompt, PromptEvent, SessionSetupInputs,
 };
 use codex_native_integration::{
     NativePayloadSchemas, NativeProtocolConnection, NativeSchemaBundle,
 };
+use conversation_operation_recorder::AcceptingConversationRecorder;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, sync::Arc};
@@ -11,9 +13,6 @@ use tokio_tungstenite::{
     WebSocketStream,
     tungstenite::{Message, protocol::Role},
 };
-#[path = "support/conversation_operation_recorder.rs"]
-mod conversation_operation_recorder;
-use conversation_operation_recorder::AcceptingConversationRecorder;
 
 #[tokio::test]
 async fn prompt_rechecks_native_activity_before_starting_a_turn() {

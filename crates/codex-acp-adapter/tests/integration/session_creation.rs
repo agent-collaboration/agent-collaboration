@@ -1,25 +1,23 @@
+use crate::conversation_operation_recorder;
+use crate::native_permission_echo;
 use codex_acp_adapter::{
     AcpSchemaCatalog, AcpSessionBinding, McpConfiguration, SessionSetupError, SessionSetupInputs,
 };
 use codex_native_integration::{
     NativePayloadSchemas, NativeProtocolConnection, NativeSchemaBundle,
 };
+use conversation_operation_recorder::AcceptingConversationRecorder;
 use futures_util::{SinkExt, StreamExt};
+use native_permission_echo::applied_router_sandbox;
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, sync::Arc};
 use tokio_tungstenite::{
     WebSocketStream,
     tungstenite::{Message, protocol::Role},
 };
-#[path = "support/native_permission_echo.rs"]
-mod native_permission_echo;
-use native_permission_echo::applied_router_sandbox;
-#[path = "support/conversation_operation_recorder.rs"]
-mod conversation_operation_recorder;
-use conversation_operation_recorder::AcceptingConversationRecorder;
 
 #[cfg(target_os = "macos")]
-#[path = "session_creation/private_scratch_alias.rs"]
+#[path = "../session_creation/private_scratch_alias.rs"]
 mod private_scratch_alias;
 
 const TEST_SCRATCH: &str =

@@ -25,12 +25,10 @@ use tokio_tungstenite::{
     tungstenite::{Message, protocol::Role},
 };
 
-#[path = "support/native_permission_echo.rs"]
-mod native_permission_echo;
-use native_permission_echo::applied_router_sandbox;
-#[path = "support/conversation_operation_recorder.rs"]
-mod conversation_operation_recorder;
+use crate::conversation_operation_recorder;
+use crate::native_permission_echo;
 use conversation_operation_recorder::AcceptingConversationRecorder;
+use native_permission_echo::applied_router_sandbox;
 
 const TEST_SCRATCH: &str =
     "/tmp/router-acp-tests/scratch/session-00000000-0000-4000-8000-000000000099";

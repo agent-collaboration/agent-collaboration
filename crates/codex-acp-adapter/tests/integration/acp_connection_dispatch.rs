@@ -1,8 +1,12 @@
+use crate::conversation_operation_recorder;
+use crate::native_permission_echo;
 use codex_acp_adapter::{
     AcpConnectionInputs, AcpSessionBinding, AcpStoredSessions, HeldBindingCheckout,
     UnmaterializedBindingStore, serve_acp_connection,
 };
 use codex_native_integration::{NativePayloadSchemas, NativeSchemaBundle};
+use conversation_operation_recorder::AcceptingConversationRecorder;
+use native_permission_echo::applied_router_sandbox;
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
@@ -13,12 +17,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-#[path = "support/native_permission_echo.rs"]
-mod native_permission_echo;
-use native_permission_echo::applied_router_sandbox;
-#[path = "support/conversation_operation_recorder.rs"]
-mod conversation_operation_recorder;
-use conversation_operation_recorder::AcceptingConversationRecorder;
 
 struct FixtureCatalog;
 #[derive(Default)]
