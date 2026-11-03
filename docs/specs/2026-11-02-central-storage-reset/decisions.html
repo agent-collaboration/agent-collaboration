@@ -79,7 +79,7 @@ flowchart LR
 <tr><td>D1 Central layout and mail</td><td>One Fleet object plus project objects. A message from A reaches B through Fleet's outbox. No per-machine central objects</td><td>Two debug Routers, B offline then online: A's message reaches B once, on Tokio and on staging Cloudflare</td></tr>
 <tr><td>D2 Fleet sends, remote create</td><td>Fleet sends its own messages. An enrolled machine creates a session on another</td><td>From A, create a session on B and get B's agent reply; a machine not enrolled is refused</td></tr>
 <tr><td>D3 Local cleanup</td><td>Every Router table has one concern prefix; JSON only where a file is right; 60-day removal</td><td>Fresh debug Router: new table names; existing journeys still pass</td></tr>
-<tr><td>D4a Wakes and notifications</td><td>Wakes are definitions in Fleet, fired through D2, at most every 10 minutes. A subscription is a wake: it gathers new activity and sends one listing through outbox → inbox. Nothing writes straight into the push table any more</td><td>Set a wake from A for a session on B with A off: it lands in B's inbox once. A burst of board activity arrives as one listing, then the next one at least 10 minutes later</td></tr>
+<tr><td>D4a Wakes and notifications</td><td>Wakes are definitions in Fleet, fired through D2, at most every 10 minutes. A subscription is a wake: it gathers new activity and sends one listing through outbox → inbox. Notifications no longer write straight into the push table (approvals and questions keep their current path)</td><td>Set a wake from A for a session on B with A off: it lands in B's inbox once. A burst of board activity arrives as one listing, then the next one at least 10 minutes later</td></tr>
 <tr><td>D4b Schedules</td><td>Schedules are definitions in Fleet, fired through D2. <code>automation.sqlite</code> and the local timers are deleted</td><td>A schedule made on A runs in its session on B at its time, with no automation storage left on any Router</td></tr>
 </tbody>
 </table>
@@ -97,7 +97,7 @@ flowchart LR
 | An inbox today either pulls numbered batches from a Mailbox or takes a local shortcut that sends no receipts; nothing accepts a pushed message with receipts | `inbox_receive.rs:21`; `inbox_storage.rs:306` |
 | Inbox and outbox tables have no time columns, and keep their data as a JSON blob in `record TEXT` | `migrations/0001_delivery_custody.sql:17–28` |
 | Mail ids are already UUIDv7 | `crates/collaboration-mail-protocol/src/mail_identity.rs:47` → `crates/message-board/src/board_identity.rs:56` |
-| Fleet's outbox space is one shared pool: 256 MiB, 50,000 items | `crates/collaboration-central-core/src/mailbox_limits.rs:6–14` |
+| Today's central delivery settings include outbox limits of 256 MiB and 50,000 items per store; there is no Fleet outbox yet, and its limits are not chosen | `crates/collaboration-central-core/src/mailbox_limits.rs:6–14` |
 | Machines and central talk over one WebSocket per machine | Router: `fleet-sync-transport-websocket/src/client_socket.rs:55`; Tokio: `crates/collaboration-central-tokio/src/platform.rs:267`; Cloudflare: `crates/collaboration-central-cloudflare/src/object_shell.rs:404` |
 | Project notifications are sent by the machine holding the project's lease, not by central | `crates/collaboration-central-core/src/mail_submit_admission.rs:91` |
 | Repeating wakes may fire every 5 minutes today | `crates/automation-storage/src/wake_limits.rs:9` |
