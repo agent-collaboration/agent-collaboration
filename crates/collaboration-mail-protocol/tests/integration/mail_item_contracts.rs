@@ -7,7 +7,7 @@ use serde_json::{Value, json};
     reason = "Invalid test fixtures must fail the test immediately."
 )] // Fixed wire literals must fail the test if invalid.
 fn fixture() -> Value {
-    serde_json::from_str(include_str!("fixtures/message_item.json"))
+    serde_json::from_str(include_str!("../fixtures/message_item.json"))
         .expect("valid literal mail fixture")
 }
 #[expect(
