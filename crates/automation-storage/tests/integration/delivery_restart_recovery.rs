@@ -1,3 +1,4 @@
+use crate::wake_push_test_support;
 use agent_automation::{
     AcceptedDeliveryEffect, CessationEvidence, DurableMessage, ExpiryRule, NativeEffectEvidence,
     OperationId, PreparationEffect, SubmissionEffect, TimingRule,
@@ -7,8 +8,6 @@ use automation_storage::{
     WakeEvaluation,
 };
 use serde::{Deserialize, Serialize};
-#[path = "support/wake_push_draft.rs"]
-mod wake_push_test_support;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Message {
     target: String,

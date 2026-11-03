@@ -1,3 +1,4 @@
+use crate::wake_push_test_support;
 use agent_automation::{
     AcceptedDeliveryEffect, CessationEvidence, ClaudeCodePeerEffectEvidence, DeliveryStatus,
     DurableMessage, ExpiryRule, NativeEffectEvidence, OperationId, PeerWriteEffect,
@@ -9,8 +10,6 @@ use automation_storage::{
     WakeEvaluation,
 };
 use serde::{Deserialize, Serialize};
-#[path = "support/wake_push_draft.rs"]
-mod wake_push_test_support;
 
 #[derive(Clone, Serialize, Deserialize)]
 struct StoredMessage {

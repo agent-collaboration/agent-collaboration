@@ -1,10 +1,9 @@
 //! Wake admission protects an occupying session slot and the bounded timer budget.
+use crate::wake_push_test_support as wake_push_draft;
 use agent_automation::{ExpiryRule, OperationId, TimingRule};
 use automation_storage::{AutomationStore, WakeAction, WakeCreate, WakeMutation};
 use collaboration_protocol::{SavedMessage, WakeCreator, WakeRefusal};
 use serde_json::json;
-#[path = "support/wake_push_draft.rs"]
-mod wake_push_draft;
 
 macro_rules! ensure {
     ($condition:expr $(,)?) => { ensure!($condition, "assertion failed: {}", stringify!($condition)); };

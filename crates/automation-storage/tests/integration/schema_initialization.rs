@@ -2,7 +2,7 @@ use automation_storage::{AutomationStore, StorageError};
 use sqlx::{Connection, Row, SqliteConnection};
 use std::path::{Path, PathBuf};
 
-const LEGACY_V1_SCHEMA: &str = include_str!("fixtures/automation_v1.sql");
+const LEGACY_V1_SCHEMA: &str = include_str!("../fixtures/automation_v1.sql");
 
 macro_rules! ensure {
     ($condition:expr) => {
@@ -40,7 +40,7 @@ macro_rules! ensure_eq {
     }};
 }
 
-#[path = "schema_initialization/fixtures.rs"]
+#[path = "../schema_initialization/fixtures.rs"]
 mod fixtures;
 use fixtures::{WakeFixture, assert_preserved_domain_state, seed_all_domain_tables};
 

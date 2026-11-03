@@ -1,3 +1,4 @@
+use crate::wake_push_test_support;
 use agent_automation::{
     DurableMessage, ExpiryRule, FirstFire, OperationId, TimingRule, WakeRecord,
 };
@@ -10,8 +11,6 @@ use collaboration_protocol::{
 use serde::{Deserialize, Serialize};
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::path::PathBuf;
-#[path = "support/wake_push_draft.rs"]
-mod wake_push_test_support;
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 struct Message {
     target: String,
