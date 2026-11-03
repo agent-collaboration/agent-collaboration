@@ -4,14 +4,14 @@
     "core_migrations/0000_migration_history.sql": "d30bfbde01af17b339ef44b0c4034fd22250680b09b07011287a80f2b10be539",
     "core_migrations/0001_fleet_decisions.sql": "32dbcb0f9130a307c10c0f4be5d0d229a400915ff0a77fc8d1361cf51282e770",
     "core_migrations/0002_fleet_decision_receipts.sql": "4e56a7411eaba1fbd0c20601f38c215c0f73f1fa52a352cdecb400c620216cfb",
-    "core_migrations/0003_fleet_records.sql": "1a041693581c32700f46f6ef51bb7bbe82722977a2f743ec03162be1d906ce64",
+    "core_migrations/0003_fleet_records.sql": "a13a088af015134e34d40b1819f2d1ce29e2bc8364bfe01d160cb51bf0b2ade4",
     "core_migrations/0004_directory_copy_summary.sql": "0fd0ccb64479650ee17ea2c46c88b12617631bba3c5b18c9533671cd239ee148",
     "core_migrations/0005_claim_lease_projection.sql": "146e147f98735156bd5436aec61e2d982972f787c996fe612129f605411bb27f",
     "core_migrations/0006_archive_reports.sql": "0a808b5c57a9fb3250fd46ff0208638ef7bc8440b48a79defedeb08d6156cffb",
     "core_migrations/0007_creation_decisions.sql": "51f95c896d06ae224ab1cb97d111e6e93ea3fad126d5e293606c93ddade3c5ba",
-    "core_migrations/0008_feed_readers.sql": "8d47a7e1753c5c6a72c596d8ec9fa266e27fe19f8f207ab3094e15699a58a185",
+    "core_migrations/0008_feed_readers.sql": "dda67da87b76d2cc87645e4ae7c2119a704ee88603f3bab40c9357019b9d3a47",
     "core_migrations/0009_migration_failures.sql": "cb66a15734e44a6dd6d022dc79601ae018824125c51104f95b8859cbdaf70674",
-    "fleet-feed-queries.json": "72b4f7f39ec52af4df9878a83eeb6cb7b39a72feeef0f2727f3a4db7e1e9c532",
+    "fleet-feed-queries.json": "b600a83378f41c74fcb8d497c0babd7387feeeb083228ffd476056af5ac7ffb2",
     "generator:fleet-sync-query-gen/Cargo.toml": "01210c567dcbccb4ff127626a0ff7625641edd4c5f0787ea41777757b1eaa3e6",
     "generator:fleet-sync-query-gen/src/expression_classes.rs": "14dc40abaec059e437d3e44bc187b9560812b0ed21ee2ad9d558364032fb097e",
     "generator:fleet-sync-query-gen/src/lib.rs": "df50be1a279adf266fdd12d184637b0113740390c0cef7273d1995dea0475152",
@@ -64,19 +64,19 @@
     "generator:sqlx-turso/src/lib.rs": "32ec3ac4ca4d0d703a452496262928a3a00ddfdf71eac8cbbe4ce1a3da69d9b5",
     "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
-    "sql/fleet/advance_fleet_feed_floor.sql": "dc81ed6122932402a270728bb8395f4501a9b985efb456da813f1ff305b4f3d6",
-    "sql/fleet/advance_fleet_feed_head.sql": "36b1add5db411c15d194abbab6eb9874dd429e4a9dd2388a8696e5816798cffa",
+    "sql/fleet/advance_fleet_feed_floor.sql": "4dba2573fd6a48c3029d2a7ead48dd57b436c25142b95b062776f94e2d861505",
+    "sql/fleet/advance_fleet_feed_head.sql": "921f8c85d09fdb0211ce3c14fb29cdd6695500e356a2a0a519b12276c89f50e5",
     "sql/fleet/append_fleet_feed.sql": "bf706a6d4c32029ff60df6e967e3181574717150fcab6b6ac1f189b13dea4502",
-    "sql/fleet/initialize_fleet_feed_state.sql": "32625f489ee65c9dbc0c2cf439baec8d5e3de230f0242108ef2ed6d374dabf0e",
+    "sql/fleet/initialize_fleet_feed_state.sql": "dff3d765640be703f22dbf51359ce5f903a2e5addfbc4bdc56259dd7da26bfdd",
     "sql/fleet/prune_fleet_feed.sql": "9e7075068789cbc375c584ae1f99c8732b8db363a8723c9fb62454dfc20eccad",
     "sql/fleet/read_expired_fleet_feed.sql": "9f122d139544f7a1a3909375db7229a00006710cd09a704cf60ebc89db775c71",
-    "sql/fleet/read_feed_readers.sql": "691a304ea93331802bd6591e9421089c2a9fc27eea455cc036982872ef340ece",
+    "sql/fleet/read_feed_readers.sql": "d56bb10702dcf2b7941ce6fe59d5046112a23cb2b0f4930a89cbc0dbc9b5a8fd",
     "sql/fleet/read_fleet_feed_page.sql": "7026aad31e4eac1637b36c5aed40a855e595629f365674e3da85f2eab6584fff",
-    "sql/fleet/read_fleet_feed_state.sql": "806493cb956f3f82fca74b5d7d5629ad52f0b8d630905aefaa8024372cebf980",
-    "sql/fleet/store_feed_reader.sql": "19f06bc488518cfab127d43c947c5f140f2a2dc030150f15b724126f7d914f71",
-    "src/generated_fleet_feed.rs": "0146bfda2d36a630dafa98fa22aa409351bc629ffbd6ab5bdfb4e487b39a5d17"
+    "sql/fleet/read_fleet_feed_state.sql": "b2afa4e5535b641419a7b59471acbca7a9649c258037b17783505c7a1e72aeb1",
+    "sql/fleet/store_feed_reader.sql": "3e19452a8ec8d283d26488575a71c9e74762b51c64b3130ef791ce1fbf2ee237",
+    "src/generated_fleet_feed.rs": "0686b8cc32dfc318baa34c2ad73ff3491aec2b93098821d4bbb5d92eba8901b8"
   },
-  "queries_digest": "a39538c88f39fa552d00d5c659ab6a543cdf7046927a504a055fe13c8faeaa90",
+  "queries_digest": "5ed6a0cacd2b71e99cb8178e48257ae48b2b48610c01634d405b7d5bffd2ce27",
   "queries": [
     {
       "name": "read_fleet_feed_state",
@@ -123,22 +123,50 @@
           "rust_type": "Option<String>",
           "nullable": null,
           "type_source": "typeof"
+        },
+        {
+          "name": "created_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "created_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "updated_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "updated_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
         }
       ]
     },
     {
       "name": "initialize_fleet_feed_state",
-      "bind_slots": 1,
+      "bind_slots": 2,
       "columns": []
     },
     {
       "name": "advance_fleet_feed_head",
-      "bind_slots": 1,
+      "bind_slots": 2,
       "columns": []
     },
     {
       "name": "advance_fleet_feed_floor",
-      "bind_slots": 1,
+      "bind_slots": 2,
       "columns": []
     },
     {
@@ -334,12 +362,40 @@
           "rust_type": "Option<String>",
           "nullable": null,
           "type_source": "typeof"
+        },
+        {
+          "name": "created_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "created_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "updated_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "updated_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
         }
       ]
     },
     {
       "name": "store_feed_reader",
-      "bind_slots": 3,
+      "bind_slots": 4,
       "columns": []
     }
   ]

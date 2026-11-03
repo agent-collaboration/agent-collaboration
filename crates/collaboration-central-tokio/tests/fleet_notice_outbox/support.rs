@@ -231,7 +231,7 @@ impl Fixture {
     }
     pub async fn reader_rows(&self) -> TestResult<Vec<(String, String, i64)>> {
         Ok(self.object.transaction(|scope|Box::pin(async move {
-            query::<sqlx_turso::Turso>("SELECT reader_id,installation,last_read_position FROM feed_readers ORDER BY installation").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|Ok((row.try_get("reader_id").map_err(StoreError::backend)?,row.try_get("installation").map_err(StoreError::backend)?,row.try_get("last_read_position").map_err(StoreError::backend)?))).collect()
+            query::<sqlx_turso::Turso>("SELECT reader_id,installation,last_read_position FROM fleet_feed_readers ORDER BY installation").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|Ok((row.try_get("reader_id").map_err(StoreError::backend)?,row.try_get("installation").map_err(StoreError::backend)?,row.try_get("last_read_position").map_err(StoreError::backend)?))).collect()
         })).await?)
     }
 }

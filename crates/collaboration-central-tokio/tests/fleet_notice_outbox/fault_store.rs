@@ -48,7 +48,7 @@ impl AtomicStore for FaultStore {
                 let count:i64=row.try_get("count").map_err(StoreError::backend)?;
                 if count>0 && armed.swap(false,Ordering::SeqCst) {
                     injected.store(true,Ordering::SeqCst);
-                    query::<sqlx_turso::Turso>("INSERT INTO feed_readers(reader_id,installation,last_read_position) SELECT reader_id,installation,last_read_position FROM feed_readers LIMIT 1").execute(scope.executor()).await.map_err(StoreError::backend)?;
+                    query::<sqlx_turso::Turso>("INSERT INTO fleet_feed_readers(reader_id,installation,last_read_position,created_at,updated_at) SELECT reader_id,installation,last_read_position,created_at,updated_at FROM fleet_feed_readers LIMIT 1").execute(scope.executor()).await.map_err(StoreError::backend)?;
                     return Err(StoreError::Aborted {reason:"expected a real feed-reader uniqueness error".into()});
                 }
             }

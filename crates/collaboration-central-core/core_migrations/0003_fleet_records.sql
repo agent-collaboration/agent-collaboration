@@ -72,7 +72,9 @@ CREATE TABLE fleet_feed_state (
     state_id TEXT NOT NULL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     last_position INTEGER NOT NULL,
-    retained_through INTEGER NOT NULL
+    retained_through INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
 );
 
 CREATE TABLE fleet_request_decisions_with_origin (

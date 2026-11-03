@@ -61,6 +61,16 @@ where
         });
     };
     check_private_id(&required(row.state_id, "feed_state.id")?, "feed_state.id")?;
+    crate::fleet_record_codec::check_millis(
+        row.created_at,
+        row.created_class,
+        "feed_state.created_at",
+    )?;
+    crate::fleet_record_codec::check_millis(
+        row.updated_at,
+        row.updated_class,
+        "feed_state.updated_at",
+    )?;
     if required(row.name, "feed_state.name")? != "fleet" {
         return Err(corrupt("feed_state.name", "unknown feed state"));
     }
@@ -143,9 +153,13 @@ where
         return Ok(());
     }
     if state.head == FleetPosition::ZERO {
-        queries::initialize_fleet_feed_state(scope, row_ids.next()?.to_string())
-            .await
-            .map_err(StoreError::backend)?;
+        queries::initialize_fleet_feed_state(
+            scope,
+            row_ids.next()?.to_string(),
+            now.timestamp_millis().to_string(),
+        )
+        .await
+        .map_err(StoreError::backend)?;
     }
     let mut previous = state.head;
     for entry in entries {
@@ -171,9 +185,13 @@ where
         .map_err(StoreError::backend)?;
         previous = entry.position;
     }
-    queries::advance_fleet_feed_head(scope, previous.get().to_string())
-        .await
-        .map_err(StoreError::backend)
+    queries::advance_fleet_feed_head(
+        scope,
+        previous.get().to_string(),
+        now.timestamp_millis().to_string(),
+    )
+    .await
+    .map_err(StoreError::backend)
 }
 
 /// Retention is a clock rule even when no new records are appended.
@@ -209,9 +227,13 @@ where
         floor = entry.position;
     }
     if floor != state.floor {
-        queries::advance_fleet_feed_floor(scope, floor.get().to_string())
-            .await
-            .map_err(StoreError::backend)?;
+        queries::advance_fleet_feed_floor(
+            scope,
+            floor.get().to_string(),
+            now.timestamp_millis().to_string(),
+        )
+        .await
+        .map_err(StoreError::backend)?;
         queries::prune_fleet_feed(scope, cutoff)
             .await
             .map_err(StoreError::backend)?;
