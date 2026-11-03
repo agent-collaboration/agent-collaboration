@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Central storage reset: decisions</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content"></ex-nav>
+<ex-document id="content">
+
+<h1>Central storage reset: decisions</h1>
+
+<p>What is decided, what is still open, and the code it rests on. Code facts cite codex-router <code>origin/main</code> <code>fb3cf6b5</code> (0.1.121) and the delivery library <code>agent-fleet-sync</code> <code>v0.4.0</code> (<code>b9da4b5</code>). Earlier notes and designs are not used as evidence.</p>
+
+<ex-callout title="Status" tone="tldr" icon="book-open">
+<p>Everything below is decided. Next: the design set and the details of D1.</p>
+</ex-callout>
+
+<h2 id="target">The target</h2>
+
+<p>Central is one Fleet object plus one object per project. Every machine has an inbox and an outbox, and every message and notification travels through them. A message from A goes out of A's outbox, Fleet routes it straight into Fleet's outbox, and Fleet's outbox delivers it to B's inbox. Fleet has no inbox. Fleet's own messages (automation firings, create-session requests) leave through the same outbox. Every machine keeps one WebSocket to the Fleet object.</p>
+
+<ex-mermaid id="target-map" label="Central target" data-width="canvas"><script type="text/plain">
+flowchart LR
+  A["Machine A<br/>outbox + inbox"] -->|"message"| FO["Fleet outbox<br/>routes and delivers"]
+  FO -->|"message"| B["Machine B<br/>inbox + outbox"]
+  B -.->|"receipt"| FO
+  FO -.->|"status"| A
+  AUTO["Automation definitions<br/>in Fleet"] --> FO
+  P["Project objects<br/>one per project"]
+  class A slot1
+  class B slot1
+  class FO slot3
+  class AUTO slot3
+  class P slot4
+</script></ex-mermaid>
+
+<details>
+<summary>Today, for comparison: one Connection and one Mailbox per machine, and Fleet cannot send</summary>
+<p>Central has five kinds of object (<code>crates/collaboration-central-core/src/core_contract.rs:36</code>): Fleet and Registry once each, a Connection and a Mailbox for every machine, and a Copy per project. A message's sender can only be a session, a human or a project (<code>crates/collaboration-mail-protocol/src/mail_content.rs:18</code>).</p>
+</details>
+
+<h2 id="decided">Decided</h2>
+
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Topic</th><th>Decision</th><th>Basis</th></tr></thead>
+<tbody>
+<tr><td>Central layout</td><td>One org, one Fleet: one Fleet object plus one object per project, on Tokio and Cloudflare</td><td>You: “one org one fleet”; “1 object. with n project objects”</td></tr>
+<tr><td>Mail</td><td>Every machine has an inbox and an outbox. Fleet has only an outbox and routes an arriving message straight into it</td><td>You, and your yes to L0</td></tr>
+<tr><td>Notifications</td><td>Notifications are messages too: they go only through the inbox and outbox system</td><td>You: “notification also only go with inbox outbox system”</td></tr>
+<tr><td>Fleet sends</td><td>Fleet sends its own messages and asks machines to create sessions</td><td>You: “enable fleet to send messages and create sessions”</td></tr>
+<tr><td>Remote create</td><td>Any machine enrolled in this Fleet may create a session on another. <strong>Temporary:</strong> permission rules come later, and code comments say so. Best effort: you hear “B has your request”, then the new session or “B said no”; if B can't tell whether it started one, it says “not sure” rather than trying again</td><td>You: “for now if a machine is registered in workspace it can create”; “put note in comments so other agents don't think this is forever”; “best effort”</td></tr>
+<tr><td>Sending cadence</td><td>Messages are sent at once. Notifications go out at most every 10 minutes, with up to 1 minute of random jitter per machine</td><td>You: “for now just send whenever”; “notification only every 10 minutes ok? with jitter”</td></tr>
+<tr><td>60 days</td><td>Every message, on every machine and in central, is removed 60 days after it was created. A message older than 60 days is not accepted</td><td>You: “60 days remove”</td></tr>
+<tr><td>Ids and times</td><td>Every id we generate is UUIDv7, never UUIDv4, and every message and entity has timestamps. This is now in <code>AGENTS.md</code>. The one place that makes UUIDv4 today, the machine service id (<code>crates/collaboration-runtime/src/service_identity_storage.rs:37</code>), is fixed. Ids that Codex, Claude and other tools create are theirs and kept as given</td><td>You: “all messages and entities in my system should have uuid v7 and timestamps”; “we should never use uuidv4 i explicitly forbade it … put this in agents.md”; “only uuidv7”</td></tr>
+<tr><td>Table names</td><td>Every table we own has one prefix naming its concern; automation tables start <code>automation_</code>; approval and question tables are renamed too. Library <code>_fleet_sync_</code> names stay. <code>router_pushes</code> stays as a table, possibly renamed</td><td>You, and your answers to L10, L11, L14</td></tr>
+<tr><td>JSON</td><td>Clean up and consolidate JSON files; keep JSON only with a stated reason</td><td>You</td></tr>
+<tr><td>Automations</td><td>Schedules and wakes live only in central as definitions; no Router has automations; no migration</td><td>You</td></tr>
+<tr><td>Delivery library</td><td>Design the mail model first, then keep, rewrite or delete each part of <code>agent-fleet-sync</code> and central against it; cut a new tag</td><td>You: “the code is fucked”; your yes to L3</td></tr>
+<tr><td>Staging cutover</td><td>Staging central starts empty; queued messages may be dropped; you re-enroll the machines</td><td>You</td></tr>
+<tr><td>Out of scope</td><td>Replicating approvals and interactions; workspace membership and permission rules; migrating automation data; per-firing history; multiple orgs; Windows</td><td>You, and your yes to L2</td></tr>
+<tr><td>Capabilities</td><td><code>central-layout</code>, <code>mail</code>, <code>remote-sessions</code>, <code>local-storage</code>, <code>automations</code></td><td>Your keep on L1</td></tr>
+<tr><td>Order</td><td>D1 one Fleet object passing messages → D2 Fleet sends and creates sessions → D4a wakes in central and notifications as wakes → D4b schedules in central. D3 (local tables, JSON, 60-day removal) alongside</td><td>Your keep on L9; your “if it's another deliverable for notifications and wakes that's fine, then we do automation”</td></tr>
+<tr><td>Proof</td><td>Every deliverable on a debug Router against Tokio central and staging Cloudflare central</td><td>Your keep on L12</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="deliverables">The four deliverables</h2>
+
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Deliverable</th><th>What becomes true</th><th>How you test it</th></tr></thead>
+<tbody>
+<tr><td>D1 Central layout and mail</td><td>One Fleet object plus project objects. A message from A reaches B through Fleet's outbox. No per-machine central objects</td><td>Two debug Routers, B offline then online: A's message reaches B once, on Tokio and on staging Cloudflare</td></tr>
+<tr><td>D2 Fleet sends, remote create</td><td>Fleet sends its own messages. An enrolled machine creates a session on another</td><td>From A, create a session on B and get B's agent reply; a machine not enrolled is refused</td></tr>
+<tr><td>D3 Local cleanup</td><td>Every Router table has one concern prefix; JSON only where a file is right; 60-day removal</td><td>Fresh debug Router: new table names; existing journeys still pass</td></tr>
+<tr><td>D4a Wakes and notifications</td><td>Wakes are definitions in Fleet, fired through D2, at most every 10 minutes. A subscription is a wake: it gathers new activity and sends one listing through outbox → inbox. Nothing writes straight into the push table any more</td><td>Set a wake from A for a session on B with A off: it lands in B's inbox once. A burst of board activity arrives as one listing, then the next one at least 10 minutes later</td></tr>
+<tr><td>D4b Schedules</td><td>Schedules are definitions in Fleet, fired through D2. <code>automation.sqlite</code> and the local timers are deleted</td><td>A schedule made on A runs in its session on B at its time, with no automation storage left on any Router</td></tr>
+</tbody>
+</table>
+</div>
+
+<details>
+<summary>Code facts the design rests on</summary>
+<ex-markdown id="facts" label="Code facts"><script type="text/markdown">
+| Fact | Where |
+| --- | --- |
+| Same-machine sends go straight into the local inbox; cross-machine sends go through the sender's outbox | `crates/collaboration-service/src/collaboration_application/message_operations.rs:218` |
+| An outbox recognises a resend: same id and content → current status; different content → refused | `agent-fleet-sync` `fleet-sync-delivery/src/outbox_admission.rs:177–183` |
+| An outbox drops its copy once the next holder answers; fine when the next holder is a durable inbox | `outbox_rules.rs:160` |
+| An outbox item records where it goes, not who handed it over | `outbox_record.rs:7–25` |
+| An inbox today either pulls numbered batches from a Mailbox or takes a local shortcut that sends no receipts; nothing accepts a pushed message with receipts | `inbox_receive.rs:21`; `inbox_storage.rs:306` |
+| Inbox and outbox tables have no time columns, and keep their data as a JSON blob in `record TEXT` | `migrations/0001_delivery_custody.sql:17–28` |
+| Mail ids are already UUIDv7 | `crates/collaboration-mail-protocol/src/mail_identity.rs:47` → `crates/message-board/src/board_identity.rs:56` |
+| Fleet's outbox space is one shared pool: 256 MiB, 50,000 items | `crates/collaboration-central-core/src/mailbox_limits.rs:6–14` |
+| Machines and central talk over one WebSocket per machine | Router: `fleet-sync-transport-websocket/src/client_socket.rs:55`; Tokio: `crates/collaboration-central-tokio/src/platform.rs:267`; Cloudflare: `crates/collaboration-central-cloudflare/src/object_shell.rs:404` |
+| Project notifications are sent by the machine holding the project's lease, not by central | `crates/collaboration-central-core/src/mail_submit_admission.rs:91` |
+| Repeating wakes may fire every 5 minutes today | `crates/automation-storage/src/wake_limits.rs:9` |
+| Board notifications bypass mail: a due subscription window writes straight into the local push table | `crates/collaboration-service/src/subscription_delivery/subscription_push.rs:196`; windows `subscription_windows.rs:505–515` |
+| Cloudflare: 10 GB per object, ~1,000 requests/s soft limit, 32,768 hibernating sockets, one alarm at a time | [limits](https://developers.cloudflare.com/durable-objects/platform/limits/), [state API](https://developers.cloudflare.com/durable-objects/api/state/), [alarms](https://developers.cloudflare.com/durable-objects/api/alarms/) |
+</script></ex-markdown>
+</details>
+
+</ex-document>
+</body>
+</html>

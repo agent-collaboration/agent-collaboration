@@ -10,6 +10,10 @@ After reducing cycles or their edges, update `architecture/module-cycle-baseline
 - No Python in this repository. Write code in TypeScript or Rust; for any
   other language, ask the owner first.
 
+## Identifiers
+
+- Every identifier we generate is UUIDv7. Never UUIDv4.
+
 ## Verification Tooling
 
 - Install tooling dependencies with `pnpm --dir verification install --frozen-lockfile`.
