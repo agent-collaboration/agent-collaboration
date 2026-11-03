@@ -261,7 +261,10 @@ fn run_crash_child(
 ) -> TestResult {
     let status = Command::new(std::env::current_exe()?)
         .arg("--exact")
-        .arg("crash_child_records_durable_boundary")
+        .arg(crate::child_test_selector(
+            module_path!(),
+            "crash_child_records_durable_boundary",
+        ))
         .arg("--nocapture")
         .env(CHILD_MODE, mode)
         .env(DATABASE_PATH, database_path)

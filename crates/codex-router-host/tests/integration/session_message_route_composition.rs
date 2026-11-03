@@ -1,14 +1,9 @@
 //! The Host's real router selects provider and peer clients through the collaboration API.
-#[path = "support/session_follow_fixture.rs"]
+#[path = "../support/session_follow_fixture.rs"]
 mod follow_fixture;
-#[path = "support/registered_route_project.rs"]
-mod registered_route_project;
+use crate::registered_route_project;
 use follow_fixture::post_thread_activity_for_sessions;
-#[path = "support/session_message_route_fixture.rs"]
-#[expect(
-    dead_code,
-    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
-)]
+#[path = "../support/session_message_route_fixture.rs"]
 mod route_fixture;
 use codex_router_host::{
     CollaborationRuntime, CollaborationRuntimeInputs, ExternalProviderLaunchBinding,

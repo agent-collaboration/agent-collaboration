@@ -1,7 +1,7 @@
 #![cfg(unix)]
 //! Common Host startup must select the global native CLI, never the bridge SDK bundle.
 
-#[path = "support/global_claude_fixture.rs"]
+#[path = "../support/global_claude_fixture.rs"]
 mod global_claude_fixture;
 use collaboration_protocol::EndpointAvailability;
 use global_claude_fixture::{GLOBAL_VERSION, HarnessIdentity, HarnessSelectionFixture};

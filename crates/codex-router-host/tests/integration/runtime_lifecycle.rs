@@ -30,8 +30,7 @@ use codex_router_host::TerminalClassification;
 use codex_router_test_support::native_app_server::run_native_app_server_fixture;
 use codex_router_test_support::router_health::PersistentRouterHealthFixture;
 
-#[path = "support/operator_client.rs"]
-mod operator_client;
+use crate::operator_client;
 use operator_client::send_operator_request;
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -59,7 +58,10 @@ async fn runtime_recovery_restart_is_bounded_and_idle_is_event_driven()
         )
         .with_arguments([
             "--exact",
-            "runtime_native_app_server_child_entrypoint",
+            &crate::child_test_selector(
+                module_path!(),
+                "runtime_native_app_server_child_entrypoint",
+            ),
             "--nocapture",
         ])
         .with_environment(
@@ -550,5 +552,5 @@ impl Drop for TestDirectory {
     }
 }
 
-#[path = "support/runtime_peer_registry.rs"]
+#[path = "../support/runtime_peer_registry.rs"]
 mod runtime_peer_registry;

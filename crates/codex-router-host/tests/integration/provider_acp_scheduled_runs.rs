@@ -1,6 +1,5 @@
 //! A provider run waits for an idle actor and summarizes its own prompt settlement.
-#[path = "support/provider_fixture_launch.rs"]
-mod provider_fixture_launch;
+use crate::provider_fixture_launch;
 
 use agent_automation::{
     CapturedRunInputs, ExecutionTiming, RouteEffectEvidence, RunId, RunPhase, SubmissionEffect,

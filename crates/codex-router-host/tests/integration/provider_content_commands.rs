@@ -1,7 +1,5 @@
 //! Host content admission preserves actor authority and ACP block order.
 
-#[path = "support/provider_fixture_launch.rs"]
-mod provider_fixture_launch;
 use codex_router_host::{
     ExternalProviderBinding, ExternalProviderLaunch, ExternalProviderRuntime,
     ExternalProviderSupervisor, ProviderAcpDeliveryRoute, ProviderPromptContentsError,
@@ -15,12 +13,7 @@ use collaboration_runtime::ProviderSessionRecord;
 use session_event_model::{InputId, PromptContent};
 use std::{path::PathBuf, sync::Arc};
 
-#[path = "support/provider_acp_message_fifo_support.rs"]
-#[expect(
-    dead_code,
-    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
-)]
-mod support;
+use crate::provider_acp_message_fifo_support as support;
 use support::{NoLivePeer, available_directory, provider_binding, target};
 
 fn two_block_fixture() -> ExternalProviderLaunch {

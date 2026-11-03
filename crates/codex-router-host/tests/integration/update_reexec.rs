@@ -21,17 +21,15 @@ use codex_router_host::inherited_lock_environment;
 use codex_router_test_support::native_app_server::run_native_app_server_fixture;
 use codex_router_test_support::router_health::PersistentRouterHealthFixture;
 
-#[path = "support/operator_client.rs"]
-mod operator_client;
+use crate::operator_client;
 use operator_client::send_operator_request;
 
-#[path = "support/host_replacement_cleanup.rs"]
-mod host_replacement_cleanup;
+use crate::host_replacement_cleanup;
 use host_replacement_cleanup::finish_fixture_proof;
 use host_replacement_cleanup::reap_fixture_host;
 use host_replacement_cleanup::terminate_logged_fixture_processes;
 
-#[path = "support/update_reexec_fixture.rs"]
+#[path = "../support/update_reexec_fixture.rs"]
 mod update_reexec_fixture;
 use update_reexec_fixture::TestDirectory;
 use update_reexec_fixture::UpdateFixtureMode;
@@ -99,7 +97,7 @@ async fn explicit_host_restart_executes_the_requesting_cli_and_retains_host_proj
     host_process
         .args([
             "--exact",
-            "explicit_host_restart_child_entrypoint",
+            &crate::child_test_selector(module_path!(), "explicit_host_restart_child_entrypoint"),
             "--nocapture",
         ])
         .env("CODEX_HOST_RESTART_CHILD", "1")
@@ -207,7 +205,10 @@ async fn invalid_host_restart_executable_fails_before_child_teardown()
         ChildCommandSpec::new(current_executable.clone())
             .with_arguments([
                 "--exact",
-                "update_matrix_app_server_child_entrypoint",
+                &crate::child_test_selector(
+                    module_path!(),
+                    "update_matrix_app_server_child_entrypoint",
+                ),
                 "--nocapture",
             ])
             .with_environment("CODEX_HOST_UPDATE_APP_SOCKET", &app_server_socket)
@@ -318,7 +319,10 @@ async fn host_restart_exec_failure_releases_singleton_after_settling_children()
         ChildCommandSpec::new(current_executable)
             .with_arguments([
                 "--exact",
-                "update_matrix_app_server_child_entrypoint",
+                &crate::child_test_selector(
+                    module_path!(),
+                    "update_matrix_app_server_child_entrypoint",
+                ),
                 "--nocapture",
             ])
             .with_environment("CODEX_HOST_UPDATE_APP_SOCKET", &app_server_socket)
@@ -422,7 +426,10 @@ async fn explicit_host_restart_child_entrypoint() -> Result<(), Box<dyn std::err
         ChildCommandSpec::new(current_executable)
             .with_arguments([
                 "--exact",
-                "update_matrix_app_server_child_entrypoint",
+                &crate::child_test_selector(
+                    module_path!(),
+                    "update_matrix_app_server_child_entrypoint",
+                ),
                 "--nocapture",
             ])
             .with_environment("CODEX_HOST_UPDATE_APP_SOCKET", &app_server_socket)
@@ -434,7 +441,10 @@ async fn explicit_host_restart_child_entrypoint() -> Result<(), Box<dyn std::err
     let replacement = ChildCommandSpec::new(PathBuf::from("/configured/stale/codex-router"))
         .with_arguments([
             "--exact",
-            "explicit_host_restart_replacement_child_entrypoint",
+            &crate::child_test_selector(
+                module_path!(),
+                "explicit_host_restart_replacement_child_entrypoint",
+            ),
             "--nocapture",
         ])
         .with_environment("CODEX_HOST_RESTART_RETAINED", "retained-host-environment");
@@ -522,7 +532,10 @@ async fn changed_update_host_child_entrypoint() -> Result<(), Box<dyn std::error
         ChildCommandSpec::new(current_executable.clone())
             .with_arguments([
                 "--exact",
-                "update_matrix_app_server_child_entrypoint",
+                &crate::child_test_selector(
+                    module_path!(),
+                    "update_matrix_app_server_child_entrypoint",
+                ),
                 "--nocapture",
             ])
             .with_environment("CODEX_HOST_UPDATE_APP_SOCKET", &app_server_socket)
@@ -533,7 +546,10 @@ async fn changed_update_host_child_entrypoint() -> Result<(), Box<dyn std::error
     );
     let replacement = ChildCommandSpec::new(current_executable).with_arguments([
         "--exact",
-        "changed_update_replacement_child_entrypoint",
+        &crate::child_test_selector(
+            module_path!(),
+            "changed_update_replacement_child_entrypoint",
+        ),
         "--nocapture",
     ]);
     let result = Box::pin(HostRuntime::run(

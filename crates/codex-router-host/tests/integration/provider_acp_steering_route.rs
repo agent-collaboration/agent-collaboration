@@ -1,6 +1,5 @@
 //! A running Claude prompt identifies the operation receiving a steered message.
-#[path = "support/provider_fixture_launch.rs"]
-mod provider_fixture_launch;
+use crate::provider_fixture_launch;
 
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};
 use codex_router_host::{

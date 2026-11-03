@@ -174,7 +174,10 @@ async fn app_server_force_escalation_kills_the_complete_process_group()
     let mut command = Command::new(std::env::current_exe()?);
     command
         .arg("--exact")
-        .arg("app_server_group_parent_child_entrypoint")
+        .arg(crate::child_test_selector(
+            module_path!(),
+            "app_server_group_parent_child_entrypoint",
+        ))
         .arg("--nocapture")
         .env("CODEX_ROUTER_HOST_APP_SERVER_GROUP_PARENT", "1")
         .env("CODEX_ROUTER_HOST_APP_SERVER_GROUP_LOG", &process_log)
@@ -413,7 +416,10 @@ async fn updater_group_signal_terminates_parent_and_descendant()
     let mut command = Command::new(std::env::current_exe()?);
     command
         .arg("--exact")
-        .arg("updater_group_parent_child_entrypoint")
+        .arg(crate::child_test_selector(
+            module_path!(),
+            "updater_group_parent_child_entrypoint",
+        ))
         .arg("--nocapture")
         .env("CODEX_ROUTER_HOST_UPDATER_GROUP_PARENT", "1")
         .env("CODEX_ROUTER_HOST_UPDATER_GROUP_LOG", &process_log)
@@ -439,7 +445,10 @@ async fn updater_group_parent_child_entrypoint() -> Result<(), Box<dyn std::erro
     let mut descendant = Command::new(std::env::current_exe()?);
     descendant
         .arg("--exact")
-        .arg("updater_group_descendant_child_entrypoint")
+        .arg(crate::child_test_selector(
+            module_path!(),
+            "updater_group_descendant_child_entrypoint",
+        ))
         .arg("--nocapture")
         .env("CODEX_ROUTER_HOST_UPDATER_GROUP_DESCENDANT", "1")
         .env("CODEX_ROUTER_HOST_UPDATER_GROUP_LOG", &process_log)
@@ -474,7 +483,10 @@ async fn app_server_group_parent_child_entrypoint() -> Result<(), Box<dyn std::e
     let mut descendant = Command::new(std::env::current_exe()?);
     descendant
         .arg("--exact")
-        .arg("app_server_group_descendant_child_entrypoint")
+        .arg(crate::child_test_selector(
+            module_path!(),
+            "app_server_group_descendant_child_entrypoint",
+        ))
         .arg("--nocapture")
         .env("CODEX_ROUTER_HOST_APP_SERVER_GROUP_DESCENDANT", "1")
         .env("CODEX_ROUTER_HOST_APP_SERVER_GROUP_LOG", &process_log)
@@ -577,7 +589,10 @@ fn signal_fixture_command(
     let mut command = Command::new(std::env::current_exe()?);
     command
         .arg("--exact")
-        .arg("signal_recording_child_entrypoint")
+        .arg(crate::child_test_selector(
+            module_path!(),
+            "signal_recording_child_entrypoint",
+        ))
         .arg("--nocapture")
         .env("CODEX_ROUTER_HOST_SIGNAL_FIXTURE_MODE", mode)
         .env("CODEX_ROUTER_HOST_SIGNAL_EVENT_FILE", event_file)
@@ -593,7 +608,10 @@ fn native_app_server_fixture_command(
     let mut command = Command::new(std::env::current_exe()?);
     command
         .arg("--exact")
-        .arg("native_app_server_child_entrypoint")
+        .arg(crate::child_test_selector(
+            module_path!(),
+            "native_app_server_child_entrypoint",
+        ))
         .arg("--nocapture")
         .env("CODEX_ROUTER_HOST_NATIVE_SOCKET", socket_path)
         .env("CODEX_ROUTER_HOST_NATIVE_VERSION", running_version)

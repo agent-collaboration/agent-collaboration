@@ -19,12 +19,7 @@ use std::{os::unix::fs::PermissionsExt as _, path::Path, time::Duration};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
-#[path = "support/provider_conversation_submission.rs"]
-#[expect(
-    dead_code,
-    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
-)]
-mod provider_conversation_submission;
+use crate::provider_conversation_submission;
 use provider_conversation_submission::{
     spawn_provider_prompt, submit_provider_cancel, submit_provider_create,
 };

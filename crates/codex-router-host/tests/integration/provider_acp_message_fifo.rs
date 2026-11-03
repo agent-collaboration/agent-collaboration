@@ -1,7 +1,5 @@
 //! Queue draining and inspectable provider queue operation behavior.
 
-#[path = "support/provider_fixture_launch.rs"]
-mod provider_fixture_launch;
 use codex_router_host::{
     ExternalProviderBinding, ExternalProviderRuntime, ExternalProviderSupervisor,
     ProviderAcpDeliveryRoute,
@@ -16,8 +14,7 @@ use collaboration_runtime::ProviderSessionRecord;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
-#[path = "support/provider_acp_message_fifo_support.rs"]
-mod provider_acp_message_fifo_support;
+use crate::provider_acp_message_fifo_support;
 use provider_acp_message_fifo_support::{
     NoLivePeer, RecordedEvidence, available_directory, cursor_prompt_fixture,
     first_prompt_refusal_fixture, multiblock_queue_fixture, provider_binding,

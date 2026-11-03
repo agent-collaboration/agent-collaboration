@@ -23,7 +23,7 @@ async fn host_composes_job_discovery_when_canonical_claude_has_no_acp_channel() 
         tokio::process::Command::new(std::env::current_exe().unwrap())
             .args([
                 "--exact",
-                "isolated_host_native_catalogue_probe",
+                &crate::child_test_selector(module_path!(), "isolated_host_native_catalogue_probe"),
                 "--ignored",
                 "--nocapture",
             ])
@@ -41,6 +41,7 @@ async fn host_composes_job_discovery_when_canonical_claude_has_no_acp_channel() 
     .await
     .unwrap()
     .unwrap();
+    crate::assert_one_child_test_passed(&output.stdout);
     assert!(
         output.status.success(),
         "{} {}",

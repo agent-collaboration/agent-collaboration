@@ -11,8 +11,7 @@ use codex_router_test_support::router_health::PersistentRouterHealthFixture;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 
-#[path = "support/operator_client.rs"]
-mod operator_client;
+use crate::operator_client;
 
 #[tokio::test]
 async fn auth_file_atomic_rotation_reloads_once_and_refuses_account_switch()
@@ -27,9 +26,12 @@ async fn auth_file_atomic_rotation_reloads_once_and_refuses_account_switch()
     let socket = directory.path().join("native.sock");
     let executable = directory.path().join("managed-codex");
     let process_log = directory.path().join("process.log");
+    let child_selector = crate::child_test_selector(module_path!(), "auth_reload_fixture_child");
     std::fs::write(
         &executable,
-        "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'codex-cli 1.2.3'; else exec \"$AUTH_RELOAD_FIXTURE_BINARY\" --exact auth_reload_fixture_child --nocapture; fi\n",
+        format!(
+            "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'codex-cli 1.2.3'; else exec \"$AUTH_RELOAD_FIXTURE_BINARY\" --exact {child_selector} --nocapture; fi\n"
+        ),
     )?;
     std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700))?;
     let identity = codex_native_integration::executable_identity(&executable).await?;

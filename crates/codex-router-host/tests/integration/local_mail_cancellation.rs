@@ -1,5 +1,5 @@
 //! The real Host resolves a pending Local cancel before admitting its original.
-#[path = "support/local_mail_cancellation_fixture.rs"]
+#[path = "../support/local_mail_cancellation_fixture.rs"]
 mod fixture;
 use collaboration_client::{CollaborationClient, MessageSendRequest, PublicMessageContent};
 use collaboration_protocol::{

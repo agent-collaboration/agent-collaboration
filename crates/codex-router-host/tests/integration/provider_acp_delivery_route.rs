@@ -1,7 +1,6 @@
 //! Provider route decisions before any client effect.
 
-#[path = "support/provider_fixture_launch.rs"]
-mod provider_fixture_launch;
+use crate::provider_fixture_launch;
 
 use agent_automation::{
     ProviderAcpEffectEvidence, ProviderBindingReference, ProviderSettlementEffect,
@@ -34,7 +33,7 @@ use std::{
 };
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
-#[path = "support/provider_delivery_fixture.rs"]
+#[path = "../support/provider_delivery_fixture.rs"]
 mod provider_delivery_fixture;
 use provider_delivery_fixture::{
     LivePeer, NoLivePeer, RecordedEvidence, StaleRunningClaimRoute,
@@ -721,8 +720,8 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
     }
 }
 
-#[path = "provider_acp_delivery_route/provider_failure_tests.rs"]
+#[path = "../provider_acp_delivery_route/provider_failure_tests.rs"]
 mod provider_failure_tests;
 
-#[path = "provider_acp_delivery_route/auto_direct_message_tests.rs"]
+#[path = "../provider_acp_delivery_route/auto_direct_message_tests.rs"]
 mod auto_direct_message_tests;

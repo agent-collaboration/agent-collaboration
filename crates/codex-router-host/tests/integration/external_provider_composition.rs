@@ -13,12 +13,7 @@ use collaboration_protocol::{
 };
 use std::os::unix::fs::PermissionsExt as _;
 
-#[path = "support/provider_conversation_submission.rs"]
-#[expect(
-    dead_code,
-    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
-)]
-mod provider_conversation_submission;
+use crate::provider_conversation_submission;
 use provider_conversation_submission::{submit_provider_create, submit_provider_prompt};
 
 #[tokio::test]

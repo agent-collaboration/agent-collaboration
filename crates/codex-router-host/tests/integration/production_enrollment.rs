@@ -19,10 +19,9 @@ use std::{
     time::Duration,
 };
 
-#[path = "support/production_enrollment_fixture.rs"]
+#[path = "../support/production_enrollment_fixture.rs"]
 mod enrollment_fixture;
-#[path = "support/operator_client.rs"]
-mod operator_client;
+use crate::operator_client;
 use enrollment_fixture::{EnrollmentLocation, ProductionEnrollmentFixture};
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -342,6 +341,7 @@ fn write_enrollment(root: &Path, central: &TestCentral) -> TestResult {
 struct OwnedHost {
     child: tokio::process::Child,
     operator: PathBuf,
+    output: PathBuf,
 }
 impl OwnedHost {
     fn spawn(root: &Path, router: SocketAddr) -> TestResult<Self> {
@@ -349,7 +349,7 @@ impl OwnedHost {
         let child = tokio::process::Command::new(std::env::current_exe()?)
             .args([
                 "--exact",
-                "production_enrollment_host_child",
+                &crate::child_test_selector(module_path!(), "production_enrollment_host_child"),
                 "--ignored",
                 "--nocapture",
             ])
@@ -363,6 +363,7 @@ impl OwnedHost {
         Ok(Self {
             child,
             operator: root.join("router/operator.sock"),
+            output: root.join("host-output.log"),
         })
     }
 
@@ -387,13 +388,19 @@ impl OwnedHost {
     }
 
     async fn stop(&mut self) -> TestResult<ExitStatus> {
-        if let Some(status) = self.child.try_wait()? {
-            return Ok(status);
+        let status = if let Some(status) = self.child.try_wait()? {
+            status
+        } else {
+            let process_id = i32::try_from(self.child.id().ok_or("Host PID missing")?)?;
+            let process_id =
+                rustix::process::Pid::from_raw(process_id).ok_or("invalid Host PID")?;
+            rustix::process::kill_process(process_id, rustix::process::Signal::TERM)?;
+            tokio::time::timeout(BOUND, self.child.wait()).await??
+        };
+        if status.success() {
+            crate::assert_one_child_test_passed(&std::fs::read(&self.output)?);
         }
-        let process_id = i32::try_from(self.child.id().ok_or("Host PID missing")?)?;
-        let process_id = rustix::process::Pid::from_raw(process_id).ok_or("invalid Host PID")?;
-        rustix::process::kill_process(process_id, rustix::process::Signal::TERM)?;
-        Ok(tokio::time::timeout(BOUND, self.child.wait()).await??)
+        Ok(status)
     }
 }
 
@@ -421,7 +428,7 @@ async fn production_enrollment_host_child() -> TestResult {
     let command = ChildCommandSpec::new(managed.clone())
         .with_arguments([
             "--exact",
-            "production_enrollment_native_child",
+            &crate::child_test_selector(module_path!(), "production_enrollment_native_child"),
             "--ignored",
             "--nocapture",
         ])

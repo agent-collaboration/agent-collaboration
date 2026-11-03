@@ -1,8 +1,6 @@
 //! Real Board/automation storage and authenticated Claude peer composition for resume proof.
-#[path = "../../../collaboration-service/tests/support/native_mail_owner.rs"]
-mod native_mail_owner;
-#[path = "../../../collaboration-service/tests/support/native_registry.rs"]
-mod native_registry;
+use crate::board_fixture::native_mail_owner;
+use crate::board_fixture::native_registry;
 #[path = "claude_peer_subscription_clock.rs"]
 mod observed_clock;
 #[path = "claude_peer_subscription_transport.rs"]
@@ -24,7 +22,6 @@ use collaboration_protocol::{
 use collaboration_runtime::FleetClient;
 use collaboration_runtime::ProjectStoreRegistry;
 use collaboration_runtime::SessionDeliveryRouter;
-use collaboration_service as mail_service;
 use collaboration_service::ApplicationFixture;
 use collaboration_service::CollaborationApplication;
 

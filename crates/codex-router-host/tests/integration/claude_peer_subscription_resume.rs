@@ -1,6 +1,6 @@
 //! A held subscription Batch reaches its real Claude peer once the peer returns.
 
-#[path = "support/claude_peer_subscription_fixture.rs"]
+#[path = "../support/claude_peer_subscription_fixture.rs"]
 #[expect(
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."

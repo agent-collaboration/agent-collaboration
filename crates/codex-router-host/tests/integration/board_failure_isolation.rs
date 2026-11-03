@@ -3,14 +3,8 @@ use collaboration_client::{BoardClientError, CollaborationClient};
 use message_board::{BoardFailureKind, PageLimit, PageRequest, WorkspaceListRequest};
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 
-#[path = "../../collaboration-service/tests/support/board_fixture.rs"]
-// This Host restart proof uses the shared board setup, not every fixture journey.
-#[expect(
-    dead_code,
-    reason = "Shared test fixture helpers serve different callers."
-)]
-mod board_fixture;
-#[path = "support/native_project_fixture.rs"]
+use crate::board_fixture;
+#[path = "../support/native_project_fixture.rs"]
 mod native_project_fixture;
 
 #[tokio::test]

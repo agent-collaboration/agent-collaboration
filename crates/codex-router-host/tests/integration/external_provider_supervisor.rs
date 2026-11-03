@@ -30,7 +30,7 @@ use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::Message;
 
-#[path = "../src/external_provider_runtime/approval_push_fixture.rs"]
+#[path = "../../src/external_provider_runtime/approval_push_fixture.rs"]
 mod approval_push_fixture;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -429,11 +429,11 @@ async fn await_admission(
     .map_err(|_| "provider admission timed out")?
 }
 
-#[path = "external_provider_supervisor/settings_projection_tests.rs"]
+#[path = "../external_provider_supervisor/settings_projection_tests.rs"]
 mod settings_projection_tests;
 
-#[path = "external_provider_supervisor/lifecycle_tests.rs"]
+#[path = "../external_provider_supervisor/lifecycle_tests.rs"]
 mod lifecycle_tests;
 
-#[path = "external_provider_supervisor/cursor_settings_tests.rs"]
+#[path = "../external_provider_supervisor/cursor_settings_tests.rs"]
 mod cursor_settings_tests;

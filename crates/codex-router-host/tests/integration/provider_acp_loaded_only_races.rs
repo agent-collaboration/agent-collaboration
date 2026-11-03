@@ -1,7 +1,6 @@
 //! Real-provider races where LoadedOnly must refuse a newly unloaded session.
 
-#[path = "support/provider_fixture_launch.rs"]
-mod provider_fixture_launch;
+use crate::provider_fixture_launch;
 
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};
 use claude_code_peer_messaging::{ClaudeCodePeerSocket, ClaudeCodeSessionRegistry};
@@ -35,12 +34,7 @@ use std::{
     sync::Arc,
 };
 
-#[path = "support/provider_acp_message_fifo_support.rs"]
-#[expect(
-    dead_code,
-    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
-)]
-mod provider_acp_message_fifo_support;
+use crate::provider_acp_message_fifo_support;
 use provider_acp_message_fifo_support::{
     NoLivePeer, RecordedEvidence, available_directory, provider_binding, refusing_load_fixture,
     request, target,

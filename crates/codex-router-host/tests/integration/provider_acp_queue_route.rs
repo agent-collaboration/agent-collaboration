@@ -1,6 +1,5 @@
 //! Explicit queue mode is shared by both ACP providers.
-#[path = "support/provider_fixture_launch.rs"]
-mod provider_fixture_launch;
+use crate::provider_fixture_launch;
 
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};
 use codex_router_host::{

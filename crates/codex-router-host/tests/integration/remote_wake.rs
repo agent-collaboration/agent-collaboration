@@ -12,8 +12,7 @@ use sha2::{Digest, Sha256};
 use std::{os::unix::fs::PermissionsExt, path::Path, time::Duration};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
-#[path = "support/registered_route_project.rs"]
-mod registered_route_project;
+use crate::registered_route_project;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 const BOUND: Duration = Duration::from_secs(20);

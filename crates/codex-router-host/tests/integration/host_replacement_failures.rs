@@ -28,12 +28,10 @@ use codex_router_test_support::native_app_server::run_native_app_server_fixture;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 
-#[path = "support/operator_client.rs"]
-mod operator_client;
+use crate::operator_client;
 use operator_client::send_operator_request;
 
-#[path = "support/host_replacement_cleanup.rs"]
-mod host_replacement_cleanup;
+use crate::host_replacement_cleanup;
 use host_replacement_cleanup::finish_fixture_proof;
 use host_replacement_cleanup::reap_fixture_host;
 use host_replacement_cleanup::terminate_logged_fixture_processes;
@@ -62,7 +60,10 @@ async fn retained_router_teardown_failure_keeps_restart_busy_and_never_executes(
         ChildCommandSpec::new(current_executable.clone())
             .with_arguments([
                 "--exact",
-                "host_replacement_failure_app_server_entrypoint",
+                &crate::child_test_selector(
+                    module_path!(),
+                    "host_replacement_failure_app_server_entrypoint",
+                ),
                 "--nocapture",
             ])
             .with_environment("CODEX_HOST_FAILURE_APP_SOCKET", &app_server_socket)
@@ -74,7 +75,10 @@ async fn retained_router_teardown_failure_keeps_restart_busy_and_never_executes(
     let router_command = ChildCommandSpec::new(current_executable)
         .with_arguments([
             "--exact",
-            "host_replacement_ignoring_router_entrypoint",
+            &crate::child_test_selector(
+                module_path!(),
+                "host_replacement_ignoring_router_entrypoint",
+            ),
             "--nocapture",
         ])
         .with_environment(
@@ -201,7 +205,7 @@ async fn signal_owns_shutdown_while_host_replacement_teardown_is_retained()
     host_process
         .args([
             "--exact",
-            "host_replacement_signal_child_entrypoint",
+            &crate::child_test_selector(module_path!(), "host_replacement_signal_child_entrypoint"),
             "--nocapture",
         ])
         .env("CODEX_HOST_SIGNAL_CHILD", "1")
@@ -319,7 +323,10 @@ async fn host_replacement_signal_child_entrypoint() -> Result<(), Box<dyn std::e
         ChildCommandSpec::new(current_executable.clone())
             .with_arguments([
                 "--exact",
-                "host_replacement_failure_app_server_entrypoint",
+                &crate::child_test_selector(
+                    module_path!(),
+                    "host_replacement_failure_app_server_entrypoint",
+                ),
                 "--nocapture",
             ])
             .with_environment("CODEX_HOST_FAILURE_APP_SOCKET", &app_server_socket)
@@ -331,7 +338,10 @@ async fn host_replacement_signal_child_entrypoint() -> Result<(), Box<dyn std::e
     let router_command = ChildCommandSpec::new(current_executable)
         .with_arguments([
             "--exact",
-            "host_replacement_ignoring_router_entrypoint",
+            &crate::child_test_selector(
+                module_path!(),
+                "host_replacement_ignoring_router_entrypoint",
+            ),
             "--nocapture",
         ])
         .with_environment(

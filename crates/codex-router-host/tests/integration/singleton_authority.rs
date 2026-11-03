@@ -71,7 +71,10 @@ async fn inherited_lock_bootstrap_rejects_wrong_descriptor_without_disturbing_ow
     let owner_socket_inode = std::fs::metadata(paths.operator_socket())?.ino();
     let output = Command::new(std::env::current_exe()?)
         .arg("--exact")
-        .arg("wrong_inherited_lock_descriptor_child_entrypoint")
+        .arg(crate::child_test_selector(
+            module_path!(),
+            "wrong_inherited_lock_descriptor_child_entrypoint",
+        ))
         .arg("--nocapture")
         .stdin(Stdio::null())
         .env("CODEX_ROUTER_HOST_TEST_WRONG_DESCRIPTOR_CHILD", "1")
@@ -84,6 +87,7 @@ async fn inherited_lock_bootstrap_rejects_wrong_descriptor_without_disturbing_ow
             paths.instance_lock(),
         )
         .output()?;
+    crate::assert_one_child_test_passed(&output.stdout);
 
     check(
         output.status.success(),
@@ -193,7 +197,10 @@ fn inherited_lock_bootstrap_filters_marker_before_fresh_descendant_acquisition()
 
     let output = Command::new(std::env::current_exe()?)
         .arg("--exact")
-        .arg("inherited_lock_child_entrypoint")
+        .arg(crate::child_test_selector(
+            module_path!(),
+            "inherited_lock_child_entrypoint",
+        ))
         .arg("--nocapture")
         .stdin(Stdio::from(held_lock.try_clone()?))
         .env("CODEX_ROUTER_HOST_TEST_INHERITED_CHILD", "1")
@@ -215,6 +222,7 @@ fn inherited_lock_bootstrap_filters_marker_before_fresh_descendant_acquisition()
             directory.path().join("fresh-instance.lock"),
         )
         .output()?;
+    crate::assert_one_child_test_passed(&output.stdout);
 
     check(
         output.status.success(),
@@ -240,7 +248,10 @@ fn prepare_lock_for_exec_uses_stdin_without_unsafe_code() -> Result<(), Box<dyn 
     );
     let output = Command::new(std::env::current_exe()?)
         .arg("--exact")
-        .arg("prepare_lock_child_entrypoint")
+        .arg(crate::child_test_selector(
+            module_path!(),
+            "prepare_lock_child_entrypoint",
+        ))
         .arg("--nocapture")
         .env("CODEX_ROUTER_HOST_TEST_PREPARE_CHILD", "1")
         .env(
@@ -252,6 +263,7 @@ fn prepare_lock_for_exec_uses_stdin_without_unsafe_code() -> Result<(), Box<dyn 
             paths.instance_lock(),
         )
         .output()?;
+    crate::assert_one_child_test_passed(&output.stdout);
 
     check(
         output.status.success(),
@@ -272,7 +284,10 @@ fn failed_exec_releases_prepared_singleton_authority() -> Result<(), Box<dyn std
     );
     let output = Command::new(std::env::current_exe()?)
         .arg("--exact")
-        .arg("failed_exec_lock_release_child_entrypoint")
+        .arg(crate::child_test_selector(
+            module_path!(),
+            "failed_exec_lock_release_child_entrypoint",
+        ))
         .arg("--nocapture")
         .env("CODEX_ROUTER_HOST_TEST_FAILED_EXEC_CHILD", "1")
         .env(
@@ -284,6 +299,7 @@ fn failed_exec_releases_prepared_singleton_authority() -> Result<(), Box<dyn std
             paths.instance_lock(),
         )
         .output()?;
+    crate::assert_one_child_test_passed(&output.stdout);
 
     check(
         output.status.success(),
@@ -308,14 +324,18 @@ async fn inherited_lock_child_entrypoint() -> Result<(), Box<dyn std::error::Err
         paths.operator_socket().exists(),
         "inherited owner must publish the operator socket",
     )?;
+    let stdout_path = paths.instance_lock().with_extension("descendant.stdout");
     let mut command = tokio::process::Command::new(std::env::current_exe()?);
     command
         .arg("--exact")
-        .arg("fresh_descendant_host_child_entrypoint")
+        .arg(crate::child_test_selector(
+            module_path!(),
+            "fresh_descendant_host_child_entrypoint",
+        ))
         .arg("--nocapture")
         .env("CODEX_ROUTER_HOST_TEST_FRESH_DESCENDANT", "1")
         .env("CODEX_ROUTER_HOST_TEST_RETAINED_ENVIRONMENT", "retained")
-        .stdout(Stdio::null());
+        .stdout(Stdio::from(std::fs::File::create(&stdout_path)?));
     let mut descendant = ProcessGroupChild::spawn(&mut command)?;
     let status =
         match tokio::time::timeout(std::time::Duration::from_secs(2), descendant.wait()).await {
@@ -330,6 +350,7 @@ async fn inherited_lock_child_entrypoint() -> Result<(), Box<dyn std::error::Err
         status.success(),
         "ordinary child must use normal singleton acquisition for a fresh root",
     )?;
+    crate::assert_one_child_test_passed(&std::fs::read(&stdout_path)?);
     drop(instance);
     check(
         !paths.operator_socket().exists(),

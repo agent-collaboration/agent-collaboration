@@ -24,8 +24,7 @@ use codex_router_host::TerminalClassification;
 use codex_router_test_support::native_app_server::run_native_app_server_fixture;
 use codex_router_test_support::router_health::run_persistent_router_health_fixture;
 
-#[path = "support/operator_client.rs"]
-mod operator_client;
+use crate::operator_client;
 use operator_client::send_operator_request;
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -62,7 +61,10 @@ async fn owned_router_restart_replaces_only_router_and_preserves_app_server_stat
         ChildCommandSpec::new(current_executable.clone())
             .with_arguments([
                 "--exact",
-                "owned_router_restart_app_server_child_entrypoint",
+                &crate::child_test_selector(
+                    module_path!(),
+                    "owned_router_restart_app_server_child_entrypoint",
+                ),
                 "--nocapture",
             ])
             .with_environment("CODEX_HOST_RESTART_APP_SOCKET", &app_server_socket)
@@ -75,7 +77,7 @@ async fn owned_router_restart_replaces_only_router_and_preserves_app_server_stat
     let router_command = ChildCommandSpec::new(current_executable)
         .with_arguments([
             "--exact",
-            "owned_router_restart_child_entrypoint",
+            &crate::child_test_selector(module_path!(), "owned_router_restart_child_entrypoint"),
             "--nocapture",
         ])
         .with_environment(
