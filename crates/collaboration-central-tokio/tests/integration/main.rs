@@ -14,6 +14,7 @@ mod fleet_claim_receiver;
 mod fleet_claim_restart;
 mod fleet_claim_settlement;
 mod fleet_creation_columns;
+mod fleet_directory_version;
 mod fleet_feed_notices;
 mod fleet_feed_timestamps;
 mod fleet_mail_admission;
