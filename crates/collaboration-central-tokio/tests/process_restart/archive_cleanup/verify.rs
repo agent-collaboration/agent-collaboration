@@ -29,7 +29,7 @@ pub(super) async fn verify_cleanup(
                 tokio::task::yield_now().await;
             }
         }).await.map_err(|_|"original refused-settlement debt kept retrying after recipient finalization")??;
-        if lease_publication::reservation(base,input.database,match &input.original.change {HolderChangeRequest::Claim {attempt,..}=>*attempt,_=>return Err("saved settlement is not Claim".into())}).await?
+        if read_claim_reservation(base,input.database,match &input.original.change {HolderChangeRequest::Claim {attempt,..}=>*attempt,_=>return Err("saved settlement is not Claim".into())}).await?
             !=Some(ClaimReservationState::Settled {outcome:ClaimReservationOutcome::Refused}) {return Err("recovered settlement did not retain Refused for its exact original attempt".into());}
         let before_ledger=exact_ledger_decision(base,input.archive.request_id.clone()).await?;
         if decide(&mut reader,&input.archive).await?!=input.decision {return Err("archive replay changed its exact original request decision".into());}

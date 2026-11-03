@@ -15,11 +15,12 @@ async fn retirement_resumes_its_stored_step_after_the_server_process_dies() -> C
     let database = DatabaseId::try_from("019f0000-0000-7000-8000-000000000a83".to_owned())?;
     arrange(root.path(), database).await?;
     let first = ServerProcess::start(root.path(), &jwks.url).await?;
+    let retirement_key = DispatchKey::any(ObjectAddress::Copy(database));
     control(
         &first.base,
         ObjectAddress::Fleet,
         RuntimeControl::HoldNextDispatch {
-            key: DispatchKey::any(ObjectAddress::Copy(database)),
+            key: retirement_key.clone(),
         },
     )
     .await?;
@@ -34,13 +35,12 @@ async fn retirement_resumes_its_stored_step_after_the_server_process_dies() -> C
         &first.base,
         ObjectAddress::Fleet,
         RuntimeControl::AwaitHeldDispatch {
-            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+            key: retirement_key.clone(),
         },
     )
     .await?;
-    let DispatchFaultObservation::Held { request: bytes, .. } = held.dispatch(&DispatchKey::any(
-        collaboration_central_core::ObjectAddress::Fleet,
-    )) else {
+    let DispatchFaultObservation::Held { request: bytes, .. } = held.dispatch(&retirement_key)
+    else {
         return Err("retirement did not reach its Copy barrier".into());
     };
     let call: Value = serde_json::from_slice(&bytes)?;

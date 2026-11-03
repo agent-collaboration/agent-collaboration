@@ -27,8 +27,6 @@ mod imported_board_fixture;
 )]
 #[path = "support/imported_claim_scenarios.rs"]
 mod imported_claim_scenarios;
-#[path = "process_restart/lease_publication.rs"]
-mod lease_publication;
 #[expect(
     dead_code,
     reason = "shared fixture module serves separate integration targets with different helper subsets"

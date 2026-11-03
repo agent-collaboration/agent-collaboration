@@ -108,8 +108,7 @@ pub(super) async fn prepare_cleanup(
             format!("Claim did not hold its actual Copy status path: {status_call}").into(),
         );
     }
-    if lease_publication::reservation(base, database, attempt).await?
-        != Some(ClaimReservationState::Active)
+    if read_claim_reservation(base, database, attempt).await? != Some(ClaimReservationState::Active)
     {
         return Err("normal Claim did not create its real Active reservation".into());
     }
@@ -242,7 +241,7 @@ pub(super) async fn prepare_cleanup(
     let settled_before = match loss {
         CleanupLoss::Dispatch => {
             if read_fleet(&mut reader.socket).await? != before
-                || lease_publication::reservation(base, database, attempt).await?
+                || read_claim_reservation(base, database, attempt).await?
                     != Some(ClaimReservationState::Active)
             {
                 return Err("pre-dispatch loss already applied the refused settlement".into());
