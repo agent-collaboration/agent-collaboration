@@ -295,7 +295,7 @@ jobs:
       - name: Test isolated default Router port cutover
         # Keep the same opt-in case, with a per-test elapsed status as well as
         # its uncaptured CLI proof. The default profile adds no CI deadline.
-        run: cargo nextest run --locked --profile default --status-level all --final-status-level all -p codex-router-cli --features keychain-test-support --test default_router_port_cutover --run-ignored only --no-capture
+        run: cargo nextest run --locked --profile default --status-level all --final-status-level all -p codex-router-cli --features keychain-test-support --test e2e --run-ignored only --no-capture
       - name: Save pinned Rust tools
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.rust_tools.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4

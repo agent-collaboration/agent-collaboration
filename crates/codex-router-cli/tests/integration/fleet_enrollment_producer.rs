@@ -9,15 +9,15 @@ use collaboration_client::CollaborationClient;
 use message_board::public_replies::{RequestDecision, RequestResult, WriteReply};
 use sha2::{Digest, Sha256};
 use std::{error::Error, io, time::Duration};
-#[path = "support/fleet_enrollment_failures.rs"]
+#[path = "../support/fleet_enrollment_failures.rs"]
 mod failures;
-#[path = "support/fleet_cli.rs"]
+#[path = "../support/fleet_cli.rs"]
 mod fleet_cli;
-#[path = "support/fleet_fixture.rs"]
+#[path = "../support/fleet_fixture.rs"]
 mod fleet_fixture;
-#[path = "support/fleet_host.rs"]
+#[path = "../support/fleet_host.rs"]
 mod fleet_host;
-#[path = "support/fleet_enrollment_status.rs"]
+#[path = "../support/fleet_enrollment_status.rs"]
 mod status;
 use fleet_fixture::ProducerFixture;
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;

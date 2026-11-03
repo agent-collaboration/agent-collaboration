@@ -19,7 +19,7 @@ process-runtime = { max-threads = 1 }
 heavy-tests = { max-threads = 1 }
 
 [[profile.ci.overrides]]
-filter = "(package(=codex-router-host) & binary(=integration) & test(/^update_reexec::/)) | (package(=codex-router-host) & binary(=integration) & test(/^runtime_restart::/)) | binary(compiled_cli_host_acceptance) | (package(=codex-router-quota-reset-test-harness) & binary(=e2e)) | (package(=codex-router-auth) & test(=claude_oauth::tests::refresh_timeout_is_ambiguous_and_never_returns_the_old_token)) | (package(=codex-router-proxy) & test(=tests::tunnel_affinity_tests::async_websocket_tunnel_does_not_gate_forwarding_on_slow_affinity_recorder))"
+filter = "(package(=codex-router-host) & binary(=integration) & test(/^update_reexec::/)) | (package(=codex-router-host) & binary(=integration) & test(/^runtime_restart::/)) | (package(=codex-router-cli) & binary(=integration) & test(/^compiled_cli_host_acceptance::/)) | (package(=codex-router-quota-reset-test-harness) & binary(=e2e)) | (package(=codex-router-auth) & test(=claude_oauth::tests::refresh_timeout_is_ambiguous_and_never_returns_the_old_token)) | (package(=codex-router-proxy) & test(=tests::tunnel_affinity_tests::async_websocket_tunnel_does_not_gate_forwarding_on_slow_affinity_recorder))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
@@ -34,7 +34,7 @@ threads-required = "num-test-threads"
 # Keep the exact TERM recorder grace and compiled WebSocket frame/count proof
 # in the existing process-runtime window, apart from unrelated fixture load.
 [[profile.ci.overrides]]
-filter = "binary(=proxy_overload_passthrough) | (package(=codex-router-host) & binary(=integration) & test(=process_lifecycle::app_server_force_escalation_signals_and_reaps_once))"
+filter = "(package(=codex-router-cli) & binary(=integration) & test(/^proxy_overload_passthrough::/)) | (package(=codex-router-host) & binary(=integration) & test(=process_lifecycle::app_server_force_escalation_signals_and_reaps_once))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 

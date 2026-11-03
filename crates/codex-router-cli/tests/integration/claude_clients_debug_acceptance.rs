@@ -1,9 +1,9 @@
-#[path = "support/claude_clients_debug_acceptance.rs"]
-mod claude_clients_debug_acceptance;
-#[path = "support/claude_fake_anthropic.rs"]
+#[path = "../support/claude_clients_debug_acceptance.rs"]
+mod claude_acceptance_fixture;
+#[path = "../support/claude_fake_anthropic.rs"]
 mod claude_fake_anthropic;
 
-use claude_clients_debug_acceptance::{
+use claude_acceptance_fixture::{
     ACP_PROMPT_MARKER, HostProcess, IsolatedAcceptanceRoot, NEW_PROMPT_MARKER,
     RESUME_PROMPT_MARKER, SYNTHETIC_ACCOUNT_ACCESS, SYNTHETIC_ACCOUNT_REFRESH, UPSTREAM_ADDRESS,
 };

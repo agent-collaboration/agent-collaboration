@@ -17,7 +17,7 @@ use futures_util::StreamExt;
 use serde_json::Value;
 use tokio_tungstenite::tungstenite::Message;
 
-#[path = "support/host_replacement_observation.rs"]
+#[path = "../support/host_replacement_observation.rs"]
 mod host_replacement_observation;
 use host_replacement_observation::{binary_version, observe_continuous_lock, verify_host_image};
 
@@ -723,9 +723,15 @@ async fn wait_for_operator_socket(
 }
 
 fn install_managed_fixture(executable: &Path) -> std::io::Result<()> {
+    let child_namespace = module_path!()
+        .split_once("::")
+        .map_or(module_path!(), |(_, namespace)| namespace);
+    let child_selector = format!("{child_namespace}::compiled_cli_app_server_child_entrypoint");
     std::fs::write(
         executable,
-        b"#!/bin/sh\nif [ \"$2\" = \"generate-json-schema\" ]; then exit 1; fi\nif [ \"$1\" = \"--version\" ]; then echo 'codex-cli 1.2.3'; exit 0; fi\nif [ \"$1\" = \"update\" ]; then if [ \"$CODEX_ROUTER_COMPILED_CLI_UPDATE_CHANGES\" = \"1\" ]; then printf '\\n# changed by update fixture\\n' >> \"$0\"; fi; exit 0; fi\nexec \"$CODEX_ROUTER_COMPILED_CLI_TEST_BINARY\" --exact compiled_cli_app_server_child_entrypoint --nocapture\n",
+        format!(
+            "#!/bin/sh\nif [ \"$2\" = \"generate-json-schema\" ]; then exit 1; fi\nif [ \"$1\" = \"--version\" ]; then echo 'codex-cli 1.2.3'; exit 0; fi\nif [ \"$1\" = \"update\" ]; then if [ \"$CODEX_ROUTER_COMPILED_CLI_UPDATE_CHANGES\" = \"1\" ]; then printf '\\n# changed by update fixture\\n' >> \"$0\"; fi; exit 0; fi\nexec \"$CODEX_ROUTER_COMPILED_CLI_TEST_BINARY\" --exact {child_selector} --nocapture\n"
+        ),
     )?;
     std::fs::set_permissions(executable, std::fs::Permissions::from_mode(0o700))
 }

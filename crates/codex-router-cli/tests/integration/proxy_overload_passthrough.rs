@@ -1,9 +1,9 @@
 #[cfg(not(feature = "keychain-test-support"))]
 compile_error!("proxy overload process tests require keychain-test-support");
 
-#[path = "support/proxy_overload_process.rs"]
+#[path = "../support/proxy_overload_process.rs"]
 mod proxy_overload_process;
-#[path = "support/proxy_overload_wire_peer.rs"]
+#[path = "../support/proxy_overload_wire_peer.rs"]
 mod proxy_overload_wire_peer;
 
 use futures_util::SinkExt;
