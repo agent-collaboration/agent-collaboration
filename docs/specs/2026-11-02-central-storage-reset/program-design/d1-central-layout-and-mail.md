@@ -258,3 +258,15 @@ Library batch (L4, session tables in `fleet-sync-session`). Counters stay as tod
 | `_fleet_sync_sessions` | `id` UUIDv7 PK; `peer` UUIDv7; `session_id` UUIDv7; `state_kind`; `connection_id` UUIDv7 (nullable); `detached_since` (nullable); `end_reason` (nullable); `notice_head` (decimal u64); `created_at`; `updated_at`; UNIQUE(`peer`, `session_id`) |
 | `_fleet_sync_notices` | `id` UUIDv7 PK; `peer`; `session_id`; `position` (decimal u64); `notice_kind`; `database_id` UUIDv7 (nullable, for lease-changed notices); `consumer_body` (nullable; serialized, because the consumer owns the notice schema, the same reason as delivery values); `created_at`; `updated_at`; UNIQUE(`peer`, `session_id`, `position`) |
 | `_fleet_sync_attach_sequences` | `peer` UUIDv7 PK (an existing UUIDv7 key stays the key); `sequence` (decimal u64); `created_at`; `updated_at` |
+
+Library batch (L4, lease tables in `fleet-sync-lease`, first seven). Existing UUIDv7 keys stay the key (database, attempt, peer, and the takeover preview token, already a validated UUIDv7: `lifecycle_message.rs:33–49`). Counters are decimal u64 text, as in the session tables. Every table also has `created_at` and `updated_at`.
+
+| Table | Columns |
+| --- | --- |
+| `_fleet_sync_databases` | `database` PK; `lifecycle_kind`; `origin_kind`, `origin_epoch`, `origin_sequence`, `import_digest` (nullable); `retiring_attempt`, `retired_at` (nullable); `revision_epoch`; `revision_change` (non-zero); `changed_at` |
+| `_fleet_sync_leases` | `database` PK; `holder`; `epoch`; `expires_at`; `last_renewed_at` |
+| `_fleet_sync_epoch_floor` | `database` PK; `epoch` |
+| `_fleet_sync_epoch_history` | `id` UUIDv7 PK (new); `database`; `epoch`; `holder`; `granted_at`; `ended_epoch`, `ended_sequence` (nullable); UNIQUE(`database`, `epoch`) |
+| `_fleet_sync_takeover_previews` | `token` PK; `database`; `fence`; `acked_epoch`; `acked_sequence`; `holder`; `last_seen` (nullable) |
+| `_fleet_sync_transfer_cancels` | `attempt` PK; `cancelled_by` (actor, scalar); `reason`; `cancelled_at` |
+| `_fleet_sync_schema_support` | `peer` PK; `session_id`; `attach_seq` (non-zero); `max_version` |
