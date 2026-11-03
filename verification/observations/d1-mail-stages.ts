@@ -23,7 +23,7 @@ export async function requireNoD1Turns(
     throw new Error("a native turn started during the no-model fixture drive");
 }
 
-async function senderStage(input: {
+export async function senderStage(input: {
   sender: D1Machine;
   item: string;
   kinds: readonly string[];

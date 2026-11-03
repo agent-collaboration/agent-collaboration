@@ -20,6 +20,7 @@ import {
 import { createD1Project } from "./d1-projects.ts";
 import { requireD1RoutingConfiguration } from "./d1-routing-safety.ts";
 import { nativeTurnStarts } from "./d1-native-activity.ts";
+import { driveD1OnlineTiming, reportD1OnlineTiming } from "./d1-online-timing.ts";
 
 export const d1HarnessSchema = z
   .object({
@@ -44,7 +45,9 @@ export const d1HarnessSchema = z
       );
     }),
     deadline: z.iso.datetime(),
-    queueScenario: z.enum(["none", "online-held", "offline-reopen"]).default("none"),
+    queueScenario: z
+      .enum(["none", "online-held", "offline-reopen", "online-timing"])
+      .default("none"),
     twoProjects: z.boolean().default(false),
   })
   .strict();
@@ -249,7 +252,7 @@ async function driveSelected(
   declaration: D1HarnessDeclaration,
   machines: readonly D1Machine[],
   receipt: Receipt,
-): Promise<void> {
+): Promise<readonly string[]> {
   const sender = machines[0],
     recipient = machines[1];
   if (sender === undefined || recipient === undefined)
@@ -262,7 +265,10 @@ async function driveSelected(
     await driveQueueHeld({ sender, recipient, receipt });
   if (declaration.queueScenario === "online-held")
     await driveLiveHeld({ sender, recipient, receipt });
+  if (declaration.queueScenario === "online-timing")
+    return driveD1OnlineTiming({ sender, recipient, receipt });
   await requireNoD1Turns(machines, receipt);
+  return [];
 }
 
 async function startMachine(input: {
@@ -378,6 +384,7 @@ export async function runD1Harness(declaration: D1HarnessDeclaration): Promise<v
   const lifetime = new RunLifetime(receipt);
   const machines: D1Machine[] = [];
   let failure: string | null = null;
+  let timingItems: readonly string[] = [];
   try {
     await qualifyArtifact(declaration.driver);
     await qualifyArtifact(declaration.cli);
@@ -427,12 +434,19 @@ export async function runD1Harness(declaration: D1HarnessDeclaration): Promise<v
       modelInputSent: false,
       productLayoutClaim: "not evaluated on old composition",
     });
-    await driveSelected(declaration, machines, receipt);
+    timingItems = await driveSelected(declaration, machines, receipt);
   } catch (error: unknown) {
     failure = error instanceof Error ? error.message : "unknown harness failure";
     await receipt.save("failure.json", { failure });
   }
   const cleanupFailures = await lifetime.close();
+  if (timingItems.length !== 0 && failure === null && cleanupFailures.length === 0) {
+    failure = await reportD1OnlineTiming({
+      repository: declaration.repository,
+      items: timingItems,
+      receipt,
+    });
+  }
   const actualTurnsStarted = machines.reduce(
     (sum, machine): number => sum + observedD1Turns(machine),
     0,
