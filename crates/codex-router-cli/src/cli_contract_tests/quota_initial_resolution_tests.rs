@@ -198,7 +198,7 @@ async fn assert_delayed_initial_failure_preserves_newer_authority(successful_gen
     assert!(
         matches!(
             older_result,
-            Err(codex_router_quota_service::quota_service_error::QuotaServiceError::ProviderResponse { .. })
+            Err(codex_router_quota_service::quota_service_error::QuotaServiceError::AllAccountsFailed { .. })
         ),
         "the older initial resolver error must make its refresh command fail"
     );
@@ -427,7 +427,7 @@ async fn newer_initial_resolver_failure_stales_quota_and_suppresses_credit() {
     assert!(matches!(
         result,
         Err(
-            codex_router_quota_service::quota_service_error::QuotaServiceError::ProviderResponse { .. }
+            codex_router_quota_service::quota_service_error::QuotaServiceError::AllAccountsFailed { .. }
         )
     ));
     stop_server.notify_one();
@@ -551,7 +551,7 @@ async fn assert_initial_success_generation_handling(returned_generation: u64) {
     } else {
         assert!(matches!(
             result,
-            Err(codex_router_quota_service::quota_service_error::QuotaServiceError::ProviderResponse { .. })
+            Err(codex_router_quota_service::quota_service_error::QuotaServiceError::AllAccountsFailed { .. })
         ));
         assert_eq!(
             request_count, 0,

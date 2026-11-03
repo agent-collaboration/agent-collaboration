@@ -1,7 +1,7 @@
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 
 import { controlledExecutable } from '../fixtures/controlled-child-fixtures.ts';
 import { temporaryRoot } from '../fixtures/receipt-fixtures.ts';
@@ -10,93 +10,100 @@ import { gridLines } from './terminal-grid.ts';
 
 const roots: string[] = [];
 afterEach(() => {
+	vi.useRealTimers();
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-// A controlled stand-in for the Rust drive_terminal line protocol: READY, then one scripted reply
-// per `read` (recording its bound), OK for writes, FINISHED on finish/stop. Never a real PTY.
-const LINE_PROTOCOL_STANDIN = `
-const { appendFileSync, readFileSync } = require('node:fs');
-const replies = JSON.parse(readFileSync(process.env.TUI_STANDIN_REPLIES, 'utf8'));
-process.stdout.write('TUI_GRID READY 120 36\\n');
-let pending = '';
-process.stdin.on('data', (chunk) => {
-	pending += chunk.toString('utf8');
-	while (pending.includes('\\n')) {
-		const line = pending.slice(0, pending.indexOf('\\n'));
-		pending = pending.slice(pending.indexOf('\\n') + 1);
-		const [command, argument] = line.split(' ');
-		if (command === 'read') {
-			appendFileSync(process.env.TUI_STANDIN_READS, argument + '\\n');
-			process.stdout.write('TUI_GRID ' + (replies.shift() ?? 'EOF') + '\\n');
-		} else if (command === 'finish' || command === 'stop') {
-			process.stdout.write('TUI_GRID FINISHED 0\\n');
-			process.exit(0);
-		} else process.stdout.write('TUI_GRID OK\\n');
+// The peer publishes output without read commands. Inputs release a frame, a stream error or EOF.
+const STREAM_PEER = `
+const fs = require('node:fs');
+const readline = require('node:readline');
+const emit = (record) => process.stdout.write('TUI_GRID ' + record + '\\n');
+emit('READY 120 36 STREAM');
+readline.createInterface({input: process.stdin}).on('line', (line) => {
+	fs.appendFileSync(process.env.TUI_STANDIN_LOG, line + '\\n');
+	const [command, argument] = line.split(' ');
+	if (command === 'finish' || command === 'stop') { emit('FINISHED 0'); process.exit(0); }
+	if (command === 'write') {
+		const input = Buffer.from(argument, 'hex').toString();
+		if (input === 'marker') emit('BYTES ' + Buffer.from('ACP_BRIDGE_CLAUDE_7FA28C|ALPHA|RED').toString('hex'));
+		if (input === 'fail') { emit('READ_ERROR disconnected before EOF'); return; }
+		if (input === 'eof') emit('EOF');
 	}
+	emit('OK');
 });
 `;
 
-async function standInDriver(replies: readonly string[]): Promise<{
-	readonly driver: PtyGridDriver;
-	readonly reads: () => number[];
-}> {
+async function standInDriver(): Promise<{ readonly driver: PtyGridDriver; readonly root: string }> {
 	const root = temporaryRoot();
 	roots.push(root);
-	const script = controlledExecutable(root, 'drive-terminal', LINE_PROTOCOL_STANDIN);
-	writeFileSync(join(root, 'replies.json'), JSON.stringify(replies));
-	writeFileSync(join(root, 'reads.txt'), '');
 	const driver = await PtyGridDriver.start({
 		repository: root,
-		driver: script,
+		driver: controlledExecutable(root, 'stream-peer', STREAM_PEER),
 		surface: 'codex-acp',
 		keys: 'legacy',
 		evidence: root,
-		publicEnvironment: {
-			TUI_STANDIN_REPLIES: join(root, 'replies.json'),
-			TUI_STANDIN_READS: join(root, 'reads.txt'),
-		},
+		publicEnvironment: { TUI_STANDIN_LOG: join(root, 'commands.txt') },
 	});
-	return {
-		driver,
-		reads: () =>
-			readFileSync(join(root, 'reads.txt'), 'utf8').trim().split('\n').filter(Boolean).map(Number),
-	};
+	return { driver, root };
 }
-const QUIET = 'READ_ERROR timed out waiting on channel';
-const MARKER = `BYTES ${Buffer.from('ACP_BRIDGE_CLAUDE_7FA28C|ALPHA|RED').toString('hex')}`;
 const showsMarker = (grid: Parameters<typeof gridLines>[0]): boolean =>
 	gridLines(grid).join('\n').includes('ACP_BRIDGE_CLAUDE_7FA28C|ALPHA|RED');
 
-test('the default 8 s checkpoint still fails on its first quiet read', async () => {
-	const { driver } = await standInDriver([QUIET, MARKER]);
+test('the default checkpoint fails at its unchanged eight-second deadline', async () => {
+	const { driver } = await standInDriver();
 	try {
-		await expect(driver.waitForGrid('marker', showsMarker)).rejects.toThrow(QUIET);
-	} finally {
-		await driver.stop();
-	}
-});
-
-test('a declared long checkpoint waits through quiet reads, each still bounded by 8 s', async () => {
-	const { driver, reads } = await standInDriver([QUIET, QUIET, MARKER]);
-	try {
-		const grid = await driver.waitForGrid('marker', showsMarker, -1, 120_000);
-		expect(showsMarker(grid)).toBe(true);
-		expect(reads()).toHaveLength(3);
-		expect(reads().every((bound) => bound >= 1 && bound <= 8_000)).toBe(true);
-	} finally {
-		await driver.stop();
-	}
-});
-
-test('a declared long checkpoint still fails on any other read error', async () => {
-	const { driver } = await standInDriver([
-		'READ_ERROR channel is empty and sending half is closed',
-	]);
-	try {
-		await expect(driver.waitForGrid('marker', showsMarker, -1, 120_000)).rejects.toThrow(
-			'channel is empty and sending half is closed',
+		vi.useFakeTimers();
+		const rejected = expect(driver.waitForGrid('marker', showsMarker)).rejects.toThrow(
+			'PTY output deadline',
 		);
+		await vi.advanceTimersByTimeAsync(8_000);
+		await rejected;
+	} finally {
+		vi.useRealTimers();
+		await driver.stop();
+	}
+});
+
+test('a declared long checkpoint accepts a later streamed frame without issuing read commands', async () => {
+	const { driver, root } = await standInDriver();
+	try {
+		vi.useFakeTimers();
+		let settled = false;
+		const waiting = driver.waitForGrid('marker', showsMarker, -1, 120_000).then((grid) => {
+			settled = true;
+			return grid;
+		});
+		await vi.advanceTimersByTimeAsync(8_000);
+		expect(settled).toBe(false);
+		await driver.send(Buffer.from('marker'));
+		expect(showsMarker(await waiting)).toBe(true);
+		expect(readFileSync(join(root, 'commands.txt'), 'utf8')).toBe('write 6d61726b6572\n');
+	} finally {
+		vi.useRealTimers();
+		await driver.stop();
+	}
+});
+
+test('a declared long checkpoint still rejects an actual stream failure', async () => {
+	const { driver } = await standInDriver();
+	try {
+		const rejected = expect(driver.waitForGrid('marker', showsMarker, -1, 120_000)).rejects.toThrow(
+			'disconnected before EOF',
+		);
+		await expect(driver.send(Buffer.from('fail'))).rejects.toThrow('disconnected before EOF');
+		await rejected;
+	} finally {
+		await driver.stop();
+	}
+});
+
+test('EOF completion comes from the stream and does not require a read command', async () => {
+	const { driver } = await standInDriver();
+	try {
+		await driver.send(Buffer.from('eof'));
+		await driver.waitForEof('normal quit');
+		expect(await driver.finish()).toBe(0);
 	} finally {
 		await driver.stop();
 	}

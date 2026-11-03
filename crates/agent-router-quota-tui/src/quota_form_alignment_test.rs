@@ -1,4 +1,4 @@
-use super::super::{quota_account_options::*, quota_floor_editor::*, quota_provider_filters::*};
+use super::super::{quota_account_options::*, quota_floor_editor::*};
 use super::*;
 
 #[derive(Props)]
@@ -15,10 +15,6 @@ fn QuotaFormFixture(
     let editor =
         WeeklyFloorEditorState::new(model.rows[0].account_id.clone(), "ssdev".to_owned(), 7);
     let editor_state = hooks.use_state(|| Some(editor.clone()));
-    let filters = hooks.use_state(QuotaFilterState::default);
-    let choice = hooks.use_state(agent_collaboration_tui::SearchSelectState::default);
-    let view_model = hooks.use_state(|| model.clone());
-    let focused_account_id = hooks.use_state(|| None);
     let options = hooks.use_state(|| None);
     match props.dialog {
         0 => super::super::quota_floor_editor::render_weekly_floor_editor(
@@ -27,19 +23,16 @@ fn QuotaFormFixture(
             20,
             editor_state,
         ),
-        1 => super::super::quota_provider_filter_rendering::render_quota_filter_chooser(
-            QuotaFilterDraft {
-                filters: QuotaAccountFilters::default(),
-                focus: QuotaFilterFocus::Provider,
-            },
-            100,
-            QuotaFilterController {
-                state: filters,
-                choice,
-                view_model,
-                focused_account_id,
-            },
-        ),
+        1 => {
+            crate::test_support::quota_control_fixture(crate::test_support::QuotaFixtureOptions {
+                view_model: model,
+                ports: Default::default(),
+                width: 100,
+                height: 36,
+                control: crate::test_support::QuotaFixtureControl::Filters,
+            })
+            .element
+        }
         _ => {
             let mut state = AccountOptionsState::new(&model.rows[0], 1);
             state.tab = AccountOptionsTab::Credits;
@@ -113,11 +106,29 @@ fn luna_422_floor_fields_share_value_origin() {
     );
 }
 
-#[test]
-fn luna_422_filter_fields_share_value_origin_and_focus_gutter() {
-    let frame = element!(QuotaFormFixture(dialog:1usize))
-        .render(Some(100))
-        .to_string();
+#[tokio::test]
+async fn luna_422_filter_fields_share_value_origin_and_focus_gutter() {
+    let mut fixture =
+        crate::test_support::quota_control_fixture(crate::test_support::QuotaFixtureOptions {
+            view_model: quota_view_model(),
+            ports: Default::default(),
+            width: 100,
+            height: 36,
+            control: crate::test_support::QuotaFixtureControl::Filters,
+        })
+        .element;
+    let frames = fixture.mock_terminal_render_loop(MockTerminalConfig::with_events(
+        futures_util::stream::pending(),
+    ));
+    tokio::pin!(frames);
+    let frame = crate::quota_frame_observation::next_matching_frame(
+        frames.as_mut(),
+        Duration::from_secs(2),
+        |canvas| canvas.to_string().contains("Account provider"),
+    )
+    .await
+    .unwrap()
+    .to_string();
     assert_origins(
         &frame,
         &[

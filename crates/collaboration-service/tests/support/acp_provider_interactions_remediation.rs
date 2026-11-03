@@ -13,6 +13,10 @@ async fn acp_attach_does_not_represent_resolved_historical_approval() -> TestRes
     let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
     let provider = Arc::new(ScriptedProviderBackend::new()?);
     let owner: Identity = serde_json::from_value(json!({"kind":"human","humanId":"owner"}))?;
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
+            .await?,
+    );
     *provider.snapshot_events.lock().expect("snapshot lock") = vec![
         HubEvent {
             sequence: 3,
@@ -39,7 +43,7 @@ async fn acp_attach_does_not_represent_resolved_historical_approval() -> TestRes
             gate: NativeGenerationGate::default(),
             codex_home: directory.path().to_path_buf(),
         },
-        directory.path().join("approval-routes.json"),
+        interaction_store,
     )
     .await?;
     let socket = directory.path().join("codex-acp.sock");
@@ -103,6 +107,10 @@ async fn rejected_persistent_acp_choice_is_visible_and_retryable() -> TestResult
     let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
     let provider = Arc::new(ScriptedProviderBackend::new()?);
     let owner: Identity = serde_json::from_value(json!({"kind":"human","humanId":"owner"}))?;
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
+            .await?,
+    );
     let broker = ServiceInteractionBroker::load(
         service_id.to_owned().try_into()?,
         NativeControlBackend {
@@ -112,7 +120,7 @@ async fn rejected_persistent_acp_choice_is_visible_and_retryable() -> TestResult
             gate: NativeGenerationGate::default(),
             codex_home: directory.path().to_path_buf(),
         },
-        directory.path().join("approval-routes.json"),
+        interaction_store,
     )
     .await?;
     let socket = directory.path().join("codex-acp.sock");

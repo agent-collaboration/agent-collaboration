@@ -28,9 +28,10 @@ use codex_native_integration::ResumeModelChoice;
 /// Runs the sessions command.
 pub fn run_sessions_command<W: Write>(
     stdout: &mut W,
-    command: SessionsCommand,
+    mut command: SessionsCommand,
     context: &CliContext,
 ) -> Result<(), SessionsCommandError> {
+    resolve_resume_selector(&mut command, context)?;
     if command.provider.is_claude_code() {
         return run_claude_sessions_command(
             stdout,
@@ -45,11 +46,23 @@ pub fn run_sessions_command<W: Write>(
     let launch_target = sessions_launch_target(&command, context)?;
     let mut runner = ProcessSessionsCommandRunner { launch_target };
     let mut picker = TerminalSessionsPicker::for_context(context);
-    run_sessions_command_with_dependencies(stdout, command, context, &mut runner, &mut picker)
+    run_resolved_sessions_command(stdout, command, context, &mut runner, &mut picker)
 }
 
 /// Runs the sessions command with injectable launch and picker dependencies.
+#[cfg(any(test, feature = "quota-reset-test-harness"))]
 pub(crate) fn run_sessions_command_with_dependencies<W: Write>(
+    stdout: &mut W,
+    mut command: SessionsCommand,
+    context: &CliContext,
+    runner: &mut impl SessionsCommandRunner,
+    picker: &mut impl SessionsPicker,
+) -> Result<(), SessionsCommandError> {
+    resolve_resume_selector(&mut command, context)?;
+    run_resolved_sessions_command(stdout, command, context, runner, picker)
+}
+
+fn run_resolved_sessions_command<W: Write>(
     stdout: &mut W,
     command: SessionsCommand,
     context: &CliContext,
@@ -85,6 +98,40 @@ pub(crate) fn run_sessions_command_with_dependencies<W: Write>(
         return run_last_session(stdout, command, context, &launch_target, runner);
     }
     run_interactive_session(command, context, &launch_target, runner, picker)
+}
+
+fn resolve_resume_selector(
+    command: &mut SessionsCommand,
+    context: &CliContext,
+) -> Result<(), SessionsCommandError> {
+    let Some(id) = command.id.as_deref() else {
+        return Ok(());
+    };
+    if validate_exact_uuid_session_id(id).is_ok()
+        && command.provider != agent_session_inventory::sessions::SessionsProvider::Any
+    {
+        return Ok(());
+    }
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(SessionsCommandError::Runtime)?;
+    let claude = if command.provider == agent_session_inventory::sessions::SessionsProvider::Any
+        || command.provider.is_claude_code()
+    {
+        Some(agent_session_inventory::sessions::claude_launch_target::ClaudeLaunchTarget::resolve_for_service(
+            context.env_var("HOME").map(std::path::Path::new), crate::session_environment::collaboration_service_directory(context)?)?)
+    } else {
+        None
+    };
+    runtime.block_on(
+        agent_session_inventory::sessions::session_resume_selector::resolve_session_resume_selector(
+            command,
+            &codex_home(context)?,
+            context.current_dir(),
+            claude.as_ref(),
+        ),
+    )
 }
 
 fn run_session_listing<W: Write>(
@@ -455,6 +502,10 @@ impl SessionsPicker for TerminalSessionsPicker {
             Some(crate::session_client_composition::production_ports(
                 self.context.clone(),
             )),
+            crossterm::terminal::size().map_err(SessionsCommandError::Picker)?,
+            crate::session_environment::collaboration_service_directory(&self.context)
+                .ok()
+                .as_deref(),
         )
         .map_err(SessionsCommandError::Picker)
     }

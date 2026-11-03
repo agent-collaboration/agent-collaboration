@@ -69,7 +69,11 @@ async fn export_rejects_package_that_fits_response_but_not_import()
         .await;
     let rejected = matches!(result, Err(collaboration_client::ScheduleClientError::Rejected(error)) if error.field.as_deref() == Some("packageUtf8"));
     served.stop().await?;
-    drop(store);
+    Arc::try_unwrap(store)
+        .map_err(|_| std::io::Error::other("fixture automation store remained shared"))?
+        .into_inner()
+        .close()
+        .await?;
     std::fs::remove_file(path)?;
     if !rejected {
         return Err(

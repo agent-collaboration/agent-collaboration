@@ -52,6 +52,10 @@ async fn pinned_codex_tui_shows_unsupported_multichoice_question()
         "serviceId":backend.endpoint.service_id,
         "endpointId":"claude-local"
     }))?;
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
+            .await?,
+    );
     let broker = ServiceInteractionBroker::load(
         backend.endpoint.service_id.as_str().to_owned().try_into()?,
         NativeControlBackend {
@@ -59,7 +63,7 @@ async fn pinned_codex_tui_shows_unsupported_multichoice_question()
             gate: NativeGenerationGate::default(),
             codex_home: codex_home.clone(),
         },
-        directory.path().join("questions.json"),
+        interaction_store,
     )
     .await?;
     let context = Arc::new(

@@ -1,9 +1,9 @@
-use crossterm::terminal;
 use iocraft::prelude::*;
 
-use super::quota_provider_filters::QuotaInteractionMode;
-use super::quota_status_component::MIN_QUOTA_WIDTH;
-use super::quota_status_component::QUOTA_STATUS_SPINNER_TICKS;
+#[cfg(test)]
+use super::quota_view_configuration::MIN_QUOTA_WIDTH;
+use super::quota_view_configuration::QUOTA_STATUS_SPINNER_TICKS;
+use super::quota_view_configuration::QuotaInteractionMode;
 use codex_router_quota_service::quota_display_model::QuotaStatusAccountViewModel;
 use codex_router_quota_service::quota_display_model::QuotaStatusViewModel;
 
@@ -65,10 +65,6 @@ pub(crate) fn quota_spinner_tick(tick: usize) -> &'static str {
         .get(tick % QUOTA_STATUS_SPINNER_TICKS.len())
         .copied()
         .unwrap_or("⠋")
-}
-
-pub(crate) fn quota_status_height(height: usize) -> usize {
-    height.max(1)
 }
 
 pub(crate) fn quota_body_budget(height: usize) -> usize {
@@ -221,6 +217,7 @@ pub(crate) fn quota_body_layout(
     }
 }
 
+#[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum QuotaFocusMove {
     Previous,
@@ -236,6 +233,7 @@ pub(crate) fn focused_row_index_for_account(
         .position(|row| &row.account_id == focused_account_id)
 }
 
+#[cfg(test)]
 pub(crate) fn moved_quota_focus_index(
     current_index: Option<usize>,
     row_count: usize,
@@ -289,10 +287,7 @@ pub(crate) fn visible_account_window_start(
         .min(row_count.saturating_sub(visible_rows))
 }
 
-pub(crate) fn current_terminal_width() -> Option<usize> {
-    terminal::size().ok().map(|(width, _)| usize::from(width))
-}
-
+#[cfg(test)]
 pub(crate) fn apply_live_terminal_width_sample(
     observed_width: &mut usize,
     terminal_width: Option<usize>,
@@ -320,28 +315,6 @@ pub(crate) fn use_quota_status_spinner(
         loop {
             interval.tick().await;
             tick += 1;
-        }
-    });
-}
-
-pub(crate) fn use_live_terminal_width(
-    hooks: &mut Hooks,
-    enabled: bool,
-    mut observed_width: State<usize>,
-    read_terminal_width: fn() -> Option<usize>,
-) {
-    hooks.use_future(async move {
-        if !enabled {
-            return;
-        }
-        let mut interval = tokio::time::interval(std::time::Duration::from_millis(80));
-        interval.tick().await;
-        loop {
-            interval.tick().await;
-            let mut width = observed_width.get();
-            if apply_live_terminal_width_sample(&mut width, read_terminal_width()) {
-                observed_width.set(width);
-            }
         }
     });
 }

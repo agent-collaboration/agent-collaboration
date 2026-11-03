@@ -22,7 +22,9 @@ const definitions = z
     crates: z.array(z.string()),
     subtrees: z.record(z.string(), z.string()),
   })
-  .parse(JSON.parse(readFileSync(new URL("release-runtime-checks.json", import.meta.url), "utf8")));
+  .parse(
+    JSON.parse(readFileSync(new URL("./release-runtime-checks.json", import.meta.url), "utf8")),
+  );
 export type RuntimeCheck = z.infer<typeof checkSchema>;
 export interface GuardFailure {
   readonly kind:

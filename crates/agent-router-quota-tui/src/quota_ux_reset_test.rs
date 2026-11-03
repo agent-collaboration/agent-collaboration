@@ -81,7 +81,7 @@ async fn actual_confirmation_frame(width: usize, height: usize) -> String {
         .mock_terminal_render_loop(MockTerminalConfig::with_events(events))
         .map(|canvas| canvas.to_string())
         .inspect(move |frame| {
-            if phase == 0 && frame.contains("Quota status") {
+            if phase == 0 && frame.contains("Quota ·") {
                 sender
                     .send(TerminalEvent::Key(clarity_control_key('r')))
                     .unwrap();
@@ -142,7 +142,7 @@ async fn reset_landing_keeps_inspect_without_a_routine_prose_blob() {
         36,
         vec![
             (
-                "Quota status",
+                "Quota ·",
                 vec![TerminalEvent::Key(clarity_control_key('r'))],
             ),
             (
@@ -270,7 +270,7 @@ async fn actual_confirmation_pointer_and_keys_share_selection_and_disabled_yes_c
                                 sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
                                 phase = 2;
                             }
-                            2 if frame.contains("Reset quota?") => {
+                            2 if frame.contains("Confirm reset") => {
                                 let (no_column, no_row) =
                                     confirmation_choice_position(&frame, "No");
                                 let (yes_column, yes_row) =
@@ -314,11 +314,22 @@ async fn actual_confirmation_pointer_and_keys_share_selection_and_disabled_yes_c
                                     phase = 3;
                                 } else {
                                     sender.send(provider_filter_key(KeyCode::Right)).unwrap();
-                                    sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
+                                    sender
+                                        .send(TerminalEvent::Key({
+                                            let mut key =
+                                                KeyEvent::new(KeyEventKind::Press, KeyCode::Enter);
+                                            key.modifiers = KeyModifiers::CONTROL;
+                                            key
+                                        }))
+                                        .unwrap();
                                     phase = 5;
                                 }
                             }
-                            3 if frame.contains("Reset quota?") => {
+                            3 if frame.contains("Confirm reset")
+                                && frame
+                                    .lines()
+                                    .any(|line| line.contains("No") && line.contains("● Yes")) =>
+                            {
                                 let (yes_column, yes_row) =
                                     confirmation_choice_position(&frame, "Yes");
                                 if canvas
@@ -338,7 +349,8 @@ async fn actual_confirmation_pointer_and_keys_share_selection_and_disabled_yes_c
                                             .text_style()
                                             .unwrap()
                                             .color,
-                                        Some(Color::White)
+                                        Some(Color::White),
+                                        "deselected No: pointer={pointer} enabled={enabled} {width}x{height}: {frame}"
                                     );
                                     sender
                                         .send(if pointer {
@@ -356,7 +368,11 @@ async fn actual_confirmation_pointer_and_keys_share_selection_and_disabled_yes_c
                                     phase = 4;
                                 }
                             }
-                            4 if frame.contains("Reset quota?") => {
+                            4 if frame.contains("Confirm reset")
+                                && frame
+                                    .lines()
+                                    .any(|line| line.contains("● No") && line.contains("Yes")) =>
+                            {
                                 let (no_column, no_row) =
                                     confirmation_choice_position(&frame, "No");
                                 if canvas
@@ -367,7 +383,14 @@ async fn actual_confirmation_pointer_and_keys_share_selection_and_disabled_yes_c
                                     .color
                                     == Some(Color::Yellow)
                                 {
-                                    sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
+                                    sender
+                                        .send(TerminalEvent::Key({
+                                            let mut key =
+                                                KeyEvent::new(KeyEventKind::Press, KeyCode::Enter);
+                                            key.modifiers = KeyModifiers::CONTROL;
+                                            key
+                                        }))
+                                        .unwrap();
                                     phase = 5;
                                 }
                             }
@@ -403,7 +426,7 @@ fn confirmation_choice_position(frame: &str, choice: &str) -> (usize, usize) {
     let (row, line) = frame
         .lines()
         .enumerate()
-        .find(|(_, line)| line.contains("Reset quota?") && line.contains(choice))
+        .find(|(_, line)| line.contains("No") && line.contains("Yes") && line.contains(choice))
         .expect("actual choice group is visible");
     let byte = line.find(choice).unwrap();
     (

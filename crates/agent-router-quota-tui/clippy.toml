@@ -1,0 +1,14 @@
+allow-expect-in-tests = true
+allow-indexing-slicing-in-tests = true
+allow-panic-in-tests = true
+allow-unwrap-in-tests = true
+
+# Keep the lint baseline at Clippy's default 16 KiB future threshold.
+future-size-threshold = 16384
+
+# R5: InputOwner owns terminal events and resize observation.
+disallowed-methods = [
+  { path = "iocraft::hooks::UseTerminalEvents::use_terminal_events", reason = "Quota declares controls; InputOwner owns terminal input (R5)" },
+  { path = "iocraft::hooks::UseTerminalEvents::use_local_terminal_events", reason = "Quota declares controls; InputOwner owns terminal input (R5)" },
+  { path = "iocraft::hooks::UseTerminalSize::use_terminal_size", reason = "InputOwner owns resize events; quota receives the viewport (R5)" },
+]

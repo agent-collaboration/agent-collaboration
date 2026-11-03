@@ -4,10 +4,19 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish = false
+autotests = false
 
 [[bin]]
 name = "codex-router-quota-reset-test-harness"
 path = "src/main.rs"
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"
+
+[[test]]
+name = "e2e"
+path = "tests/e2e/main.rs"
 
 [features]
 default = ["quota-reset-test-harness"]
@@ -20,6 +29,9 @@ workspace = true
 agent-collaboration = { version = "0.1.105", path = "../agent-collaboration", features = ["quota-reset-test-harness"] }
 codex-router-cli = { path = "../codex-router-cli", version = "0.1.4", default-features = false, features = ["quota-reset-test-harness", "keychain-test-support"] }
 tokio.workspace = true
+nix = { workspace = true, features = ["term", "process"] }
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 axum.workspace = true
@@ -29,4 +41,7 @@ codex-router-secret-store = { path = "../codex-router-secret-store", version = "
 codex-router-state = { path = "../codex-router-state", version = "0.1.4" }
 portable-pty = "0.9.0"
 regex = "=1.12.4"
+rustix.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 sha2.workspace = true

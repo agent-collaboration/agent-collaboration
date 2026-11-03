@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/theme.rs b/crates/agent-collaboration-tui/src/theme.rs
---- a/crates/agent-collaboration-tui/src/theme.rs
-+++ b/crates/agent-collaboration-tui/src/theme.rs
-@@ -117,3 +117,3 @@ impl UiGlyph {
-         match self {
--            Self::Menu => "≡",
-+            Self::Menu => "☰",
-             Self::Dropdown => "▾",

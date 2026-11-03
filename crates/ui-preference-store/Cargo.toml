@@ -1,0 +1,17 @@
+[package]
+name = "ui-preference-store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+sqlx = { workspace = true, features = ["macros", "migrate", "sqlite"] }
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile = "3.27.0"
+tokio = { workspace = true, features = ["macros", "rt"] }

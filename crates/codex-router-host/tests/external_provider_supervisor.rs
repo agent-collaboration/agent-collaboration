@@ -277,10 +277,13 @@ async fn approval_broker_fixture(
         endpoint: approver.endpoint.clone(),
         gate,
     };
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(root.path().join("interaction.sqlite")).await?,
+    );
     let broker = ServiceInteractionBroker::load(
         service_id.clone(),
         native_backend.clone(),
-        root.path().join("approval-routes.json"),
+        interaction_store,
     )
     .await?;
     let route: Arc<dyn collaboration_contracts::SessionDeliveryRoute> =

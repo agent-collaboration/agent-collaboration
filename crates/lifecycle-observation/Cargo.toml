@@ -14,6 +14,7 @@ collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.14
 serde.workspace = true
 serde_json.workspace = true
 sqlx = { workspace = true, features = ["macros", "migrate", "sqlite"] }
+sqlite-storage-maintenance = { path = "../sqlite-storage-maintenance", version = "0.1.118" }
 tokio.workspace = true
 tokio-util.workspace = true
 thiserror.workspace = true
@@ -21,4 +22,5 @@ tracing.workspace = true
 
 [dev-dependencies]
 futures-util.workspace = true
+tempfile = "3.27.0"
 tokio-tungstenite.workspace = true

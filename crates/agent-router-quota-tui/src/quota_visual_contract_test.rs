@@ -1,3 +1,4 @@
+// Owner 71efc57bb/873f62923, clarified by a12f9c2db: interactive weekly-only rows.
 //! Literal C1–C7 contracts at the actual row and mounted controller boundaries.
 use super::*;
 use codex_router_quota_service::quota_display_model::QuotaDisplayWindow;
@@ -55,7 +56,7 @@ fn compact_windows_keep_known_amount_when_reset_is_unknown_and_missing_has_no_me
         .render(None);
     let frame = canvas.to_string();
     assert!(
-        frame.contains("92% · week") && !frame.contains("· —"),
+        frame.contains("92%") && frame.contains("Weekly · unknown") && !frame.contains("· —"),
         "{frame}"
     );
     assert!(
@@ -71,8 +72,8 @@ fn compact_windows_keep_known_amount_when_reset_is_unknown_and_missing_has_no_me
             .chars()
             .filter(|glyph| matches!(*glyph, '█' | '░'))
             .count(),
-        7,
-        "only the known weekly meter remains: {frame}"
+        33,
+        "the wider weekly meter fills its unchanged37-cell column: {frame}"
     );
 }
 
@@ -98,7 +99,7 @@ async fn pool_f5_census_and_modal_precedence_restore_same_account() {
         36,
         vec![
             (
-                "Quota status",
+                "Quota ·",
                 vec![
                     provider_filter_key(KeyCode::Down),
                     provider_filter_key(KeyCode::F(5)),
@@ -116,7 +117,7 @@ async fn pool_f5_census_and_modal_precedence_restore_same_account() {
                     provider_filter_key(KeyCode::Esc),
                 ],
             ),
-            ("Filters", vec![provider_filter_key(KeyCode::Enter)]),
+            ("Quota ·", vec![provider_filter_key(KeyCode::Enter)]),
             (
                 "Account details",
                 vec![
@@ -124,24 +125,32 @@ async fn pool_f5_census_and_modal_precedence_restore_same_account() {
                     provider_filter_key(KeyCode::Esc),
                 ],
             ),
-            ("Filters", vec![provider_filter_key(KeyCode::Esc)]),
+            ("Quota ·", vec![provider_filter_key(KeyCode::Esc)]),
         ],
         None,
     )
     .await;
     let pool = frames
         .iter()
-        .find(|frame| frame.contains("Accounts: 14"))
+        .find(|frame| {
+            frame
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .contains("Accounts 14")
+        })
         .expect("F5 opens read-only census");
+    // Lead taste review 01a18f46 item 11: column whitespace replaces colons.
+    let pool = pool.split_whitespace().collect::<Vec<_>>().join(" ");
     for fact in [
-        "Usable: 2",
-        "Reserve: 3",
-        "Blocked: 4",
-        "Pool unknown: 5",
-        "Excluded: 0",
-        "Fresh: 6",
-        "Stale: 7",
-        "Data unknown: 8",
+        "Usable 2",
+        "Reserve 3",
+        "Blocked 4",
+        "Pool unknown 5",
+        "Excluded 0",
+        "Fresh 6",
+        "Stale 7",
+        "Data unknown 8",
     ] {
         assert!(pool.contains(fact), "{pool}");
     }
@@ -176,7 +185,7 @@ async fn f5_behind_account_or_filter_modal_preserves_that_active_snapshot() {
             |canvas| {
                 canvas.width() == 120
                     && canvas.height() == 36
-                    && canvas.to_string().contains("Quota status")
+                    && canvas.to_string().contains("Quota ·")
             },
         )
         .await
@@ -307,13 +316,11 @@ fn quota_caller_binds_week_and_short_amount_label_and_meter_to_distinct_tones() 
         reset_in_seconds: Some(7800),
         stale: false,
     };
-    let canvas = super::super::quota_account_groups::render_interactive_account(row, 110, false)
-        .render(None);
-    let frame = canvas.to_string();
-    for (percent, label, expected) in [
+    for (fallback, percent, label, expected) in [
         (
+            false,
             "92%",
-            "week",
+            "Weekly",
             Color::Rgb {
                 r: 237,
                 g: 240,
@@ -321,6 +328,7 @@ fn quota_caller_binds_week_and_short_amount_label_and_meter_to_distinct_tones() 
             },
         ),
         (
+            true,
             "83%",
             "5h",
             Color::Rgb {
@@ -330,12 +338,19 @@ fn quota_caller_binds_week_and_short_amount_label_and_meter_to_distinct_tones() 
             },
         ),
     ] {
-        let (row, line) = frame
-            .lines()
-            .enumerate()
-            .find(|(_, line)| line.contains(percent))
-            .unwrap();
+        if fallback {
+            row.display_weekly = QuotaDisplayWindow::Unknown;
+        }
+        let canvas =
+            super::super::quota_account_groups::render_interactive_account(row, 110, false)
+                .render(None);
+        let frame = canvas.to_string();
         for token in [percent, label, "█"] {
+            let (row, line) = frame
+                .lines()
+                .enumerate()
+                .find(|(_, line)| line.contains(token))
+                .unwrap();
             let column = unicode_width::UnicodeWidthStr::width(line.split_once(token).unwrap().0);
             assert_eq!(
                 canvas
@@ -362,7 +377,7 @@ async fn mounted_quota_only_selection_is_filled_and_name_origin_stays_fixed() {
         element!(QuotaStatusComponent(view_model:model,width:120usize,height:36usize));
     let canvases = component
         .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
-            [provider_filter_key(KeyCode::Esc)],
+            [provider_filter_key(KeyCode::Char('q'))],
         )))
         .collect::<Vec<_>>()
         .await;
@@ -374,7 +389,14 @@ async fn mounted_quota_only_selection_is_filled_and_name_origin_stays_fixed() {
         .find(|(_, line)| line.contains("Account") && line.contains("Extra"))
         .unwrap();
     let column = unicode_width::UnicodeWidthStr::width(line.split_once("Account").unwrap().0);
-    assert_eq!(canvas.cell(column, row).unwrap().background_color, None);
+    assert_eq!(
+        canvas.cell(column, row).unwrap().background_color,
+        Some(Color::Rgb {
+            r: 39,
+            g: 44,
+            b: 52
+        })
+    );
     assert_eq!(
         canvas
             .cell(column, row)
@@ -390,8 +412,22 @@ async fn mounted_quota_only_selection_is_filled_and_name_origin_stays_fixed() {
     );
     let mut origins = Vec::new();
     for (account, expected) in [
-        ("acct00", None),
-        ("acct01", None),
+        (
+            "acct00",
+            Some(Color::Rgb {
+                r: 39,
+                g: 44,
+                b: 52,
+            }),
+        ),
+        (
+            "acct01",
+            Some(Color::Rgb {
+                r: 39,
+                g: 44,
+                b: 52,
+            }),
+        ),
         (
             "acct02",
             Some(Color::Rgb {
@@ -450,16 +486,16 @@ fn quota_account_background_is_uniform_at_wide_and_folded_widths() {
 }
 
 const POOL_CENSUS_FACTS: [&str; 10] = [
-    "Accounts: 14",
-    "Usable: 2",
-    "Reserve: 3",
-    "Blocked: 4",
-    "Pool unknown: 5",
-    "Excluded: 0",
-    "Fresh: 6",
-    "Stale: 7",
-    "Data unknown: 8",
-    "Clients: 9",
+    "Accounts 14",
+    "Usable 2",
+    "Reserve 3",
+    "Blocked 4",
+    "Pool unknown 5",
+    "Excluded 0",
+    "Fresh 6",
+    "Stale 7",
+    "Data unknown 8",
+    "Clients 9",
 ];
 
 fn observed_pool_body_facts(frames: &[String]) -> std::collections::BTreeSet<&'static str> {
@@ -477,7 +513,8 @@ fn observed_pool_body_facts(frames: &[String]) -> std::collections::BTreeSet<&'s
         );
         let dialog = super::quota_ux_clarity_test::actual_dialog_text(&scoped, "Pool details");
         let rows = dialog.lines().collect::<Vec<_>>();
-        if !rows.iter().any(|row| row.trim() == "Pool details") {
+        let title = rows.iter().find(|row| !row.trim().is_empty());
+        if !title.is_some_and(|row| row.split_whitespace().eq(["Pool", "details", "Help", "F1"])) {
             return std::collections::BTreeSet::new();
         }
         let footer = rows
@@ -487,7 +524,11 @@ fn observed_pool_body_facts(frames: &[String]) -> std::collections::BTreeSet<&'s
         // Exclude the fixed title and footer. Match each entire literal fact row,
         // removing only whitespace and the body's one-cell scrollbar track.
         for row in &rows[1..footer] {
-            let row = row.trim_matches([' ', '│']);
+            let row = row
+                .trim_matches([' ', '│'])
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
             for fact in POOL_CENSUS_FACTS {
                 if row == fact {
                     observed.insert(fact);
@@ -496,6 +537,40 @@ fn observed_pool_body_facts(frames: &[String]) -> std::collections::BTreeSet<&'s
         }
     }
     observed
+}
+
+// Lead taste review 01a18f46 item 11: remove the real aligned field, retaining
+// cell positions. The old colon-line replacement no longer injected a fault.
+fn change_pool_fact(frame: &str, fact: &str, replacement_value: Option<&str>) -> String {
+    let (label, value) = fact.rsplit_once(' ').expect("label and literal value");
+    frame
+        .lines()
+        .map(|line| {
+            let mut altered = line.to_owned();
+            for (start, _) in line.match_indices(label) {
+                let rest = line
+                    .get(start + label.len()..)
+                    .expect("literal label ends at a character boundary");
+                let gap = rest.len() - rest.trim_start().len();
+                if gap > 0
+                    && rest
+                        .trim_start()
+                        .strip_prefix(value)
+                        .is_some_and(|suffix| suffix.starts_with(' ') || suffix.starts_with('│'))
+                {
+                    let end = start + label.len() + gap + value.len();
+                    if let Some(replacement) = replacement_value {
+                        altered.replace_range(end - value.len()..end, replacement);
+                    } else {
+                        altered.replace_range(start..end, &" ".repeat(end - start));
+                    }
+                    break;
+                }
+            }
+            altered
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[tokio::test]
@@ -654,7 +729,7 @@ async fn pool_census_all_ten_facts_are_reachable_in_body_at_six_grids_and_restor
     for fact in POOL_CENSUS_FACTS {
         let missing = short_observations
             .iter()
-            .map(|frame| frame.replace(fact, &" ".repeat(fact.len())))
+            .map(|frame| change_pool_fact(frame, fact, None))
             .collect::<Vec<_>>();
         assert_eq!(
             observed_pool_body_facts(&missing).len(),
@@ -670,18 +745,15 @@ async fn pool_census_all_ten_facts_are_reachable_in_body_at_six_grids_and_restor
             !observed_pool_body_facts(&outside).contains(fact),
             "outside-modal {fact} replaced a missing body row"
         );
-        let (label, value) = fact.rsplit_once(' ').unwrap();
-        let wrong = format!(
-            "{label} {}",
-            if value == "9" {
-                "0".to_owned()
-            } else {
-                "9".repeat(value.len())
-            }
-        );
+        let (_, value) = fact.rsplit_once(' ').unwrap();
+        let wrong = if value == "9" {
+            "0".to_owned()
+        } else {
+            "9".repeat(value.len())
+        };
         let wrong_frames = short_observations
             .iter()
-            .map(|frame| frame.replace(fact, &wrong))
+            .map(|frame| change_pool_fact(frame, fact, Some(&wrong)))
             .collect::<Vec<_>>();
         assert!(
             !observed_pool_body_facts(&wrong_frames).contains(fact),
@@ -695,19 +767,23 @@ async fn pool_census_all_ten_facts_are_reachable_in_body_at_six_grids_and_restor
 
 #[test]
 fn unknown_reset_keeps_known_amount_and_staleness_in_actual_row() {
-    for (reset_in_seconds, expected) in [(None, "5% · week"), (Some(0), "5% · week · 0m")] {
+    for (reset_in_seconds, stale, expected) in [
+        (None, true, "Weekly · stale"),
+        (Some(0), true, "Weekly · stale"),
+        (None, false, "Weekly · unknown"),
+        (Some(0), false, "Weekly · 0m"),
+    ] {
         let mut model = quota_two_account_view_model();
         let row = &mut model.rows[0];
         row.display_weekly = QuotaDisplayWindow::Known {
             remaining_percent: 5,
             reset_in_seconds,
-            stale: true,
+            stale,
         };
         let frame = super::super::quota_account_groups::render_interactive_account(row, 120, false)
             .render(None)
             .to_string();
-        assert!(frame.contains(expected), "{frame}");
-        assert!(frame.contains("week stale"), "{frame}");
+        assert!(frame.contains("5%") && frame.contains(expected), "{frame}");
     }
 }
 
@@ -737,20 +813,25 @@ async fn pool_help_names_its_parent_and_restores_selected_account() {
             .unwrap()
             .unwrap()
             .to_string();
-        assert!(pool.contains("Accounts:"), "actual Pool body: {pool}");
+        assert!(pool.contains("Accounts"), "actual Pool body: {pool}");
         sender.send(provider_filter_key(KeyCode::F(1))).unwrap();
         let help = super::super::quota_frame_observation::next_current_frame(frames.as_mut())
             .await
             .unwrap()
             .unwrap()
             .to_string();
-        let help = super::quota_ux_clarity_test::actual_dialog_text(&help, "Quota Help");
+        let help = super::quota_ux_clarity_test::actual_dialog_text(&help, "Help");
         assert!(
-            help.lines().any(|line| line.trim() == "Pool details"),
+            help.lines()
+                .any(|line| line.split_whitespace().collect::<Vec<_>>()
+                    == ["Screen", "Pool", "details"]),
             "Pool context title: {help}"
         );
         assert!(
-            !help.lines().any(|line| line.trim() == "Account details"),
+            !help
+                .lines()
+                .any(|line| line.split_whitespace().collect::<Vec<_>>()
+                    == ["Screen", "Account", "details"]),
             "wrong Account context: {help}"
         );
         sender.send(provider_filter_key(KeyCode::Esc)).unwrap();

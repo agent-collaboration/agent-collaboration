@@ -42,6 +42,11 @@ async fn typed_broker_interactions_publish_pending_and_resolution_in_order() {
     let approver = ProviderIdentity::Human {
         human_id: "owner".to_owned().try_into().expect("human ID"),
     };
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(root.path().join("interaction.sqlite"))
+            .await
+            .expect("interaction store"),
+    );
     let broker = ServiceInteractionBroker::load(
         service_id.clone(),
         NativeControlBackend {
@@ -49,7 +54,7 @@ async fn typed_broker_interactions_publish_pending_and_resolution_in_order() {
             endpoint: approver_endpoint,
             gate: NativeGenerationGate::default(),
         },
-        root.path().join("approval-routes.json"),
+        interaction_store,
     )
     .await
     .expect("broker");

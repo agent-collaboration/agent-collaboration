@@ -152,9 +152,9 @@ pub use native_session_catalog::{
 };
 pub use push_line::{
     MAX_MACHINE_LABEL_SCALARS, MAX_PUSH_LINE_BYTES, MachineId, MachineLabel, MachineLabelError,
-    ParsedPushLineHeader, PushHeaderFacts, PushId, PushIdError, PushKind, PushLineError,
-    PushLineInput, PushOrigin, RouterLink, escape_push_line_field, parse_push_line_header,
-    render_push_line,
+    ParsedPushLine, ParsedPushLineHeader, PushHeaderFacts, PushId, PushIdError, PushKind,
+    PushLineError, PushLineInput, PushOrigin, RouterLink, escape_push_line_field, parse_push_line,
+    parse_push_line_header, render_push_line,
 };
 pub use push_record::{
     CancelledAfterDelivery, MAX_DIRECT_MESSAGE_BODY_BYTES, MAX_PUSH_ACTIVITY_RANGES,

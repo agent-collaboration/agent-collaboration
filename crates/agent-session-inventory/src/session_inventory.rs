@@ -5,10 +5,14 @@ pub mod session_launch_selection;
 pub use session_launch_selection::SessionsLaunchTarget;
 #[path = "session_commands/claude_launch_target.rs"]
 pub mod claude_launch_target;
+#[path = "session_commands/claude_resume_inventory.rs"]
+mod claude_resume_inventory;
 #[path = "session_commands/claude_session_commands.rs"]
 pub mod claude_session_commands;
 #[path = "session_commands/claude_transcript_inventory.rs"]
 mod claude_transcript_inventory;
+#[path = "session_commands/session_resume_selector.rs"]
+pub mod session_resume_selector;
 pub use claude_session_commands::run_claude_sessions_command;
 #[path = "session_commands/claude_terminal_launch.rs"]
 pub mod claude_terminal_launch;

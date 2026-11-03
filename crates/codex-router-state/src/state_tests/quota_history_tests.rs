@@ -120,3 +120,79 @@ async fn async_quota_history_appends_queries_and_purges_old_observations() {
         Ok(vec![other_window])
     );
 }
+
+#[tokio::test]
+async fn quota_history_retention_deletes_bounded_old_batches_and_keeps_cutoff_rows() {
+    const NOW_UNIX_SECONDS: u64 = 8 * 86_400 + 41;
+    let cutoff = NOW_UNIX_SECONDS - crate::sqlite::QUOTA_HISTORY_OBSERVATION_RETENTION_SECONDS;
+    let temp_dir = TestTempDir::new("async_quota_history_retention_boundary");
+    let database_path = temp_dir.path().join("state.sqlite");
+    let store = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("state store should open");
+    seed_account_records(&store, Provider::Openai, &["acct_retention_boundary"]).await;
+    let account_id = account_id("acct_retention_boundary");
+
+    for timestamp in [cutoff - 1, cutoff - 1, cutoff - 1, cutoff, cutoff + 1] {
+        store
+            .append_quota_history_observation(&quota_history_observation(
+                account_id.clone(),
+                "responses",
+                18_000,
+                timestamp,
+                50,
+                None,
+            ))
+            .await
+            .expect("quota history should append");
+    }
+
+    assert_eq!(
+        crate::sqlite::QUOTA_HISTORY_OBSERVATION_RETENTION_SECONDS,
+        7 * 86_400
+    );
+    assert_eq!(
+        store
+            .prune_quota_history_observations_before(cutoff, 2)
+            .await
+            .expect("quota history batch should prune"),
+        2
+    );
+    assert_eq!(
+        store
+            .quota_history_observations_for_window(&account_id, "responses", 18_000, 0, cutoff - 1)
+            .await
+            .expect("remaining old quota history should load")
+            .len(),
+        1
+    );
+    assert_eq!(
+        store
+            .prune_quota_history_observations_before(cutoff, 2)
+            .await
+            .expect("second quota history batch should prune"),
+        1
+    );
+    assert_eq!(
+        store
+            .quota_history_observations_for_window(&account_id, "responses", 18_000, 0, cutoff - 1)
+            .await
+            .expect("old quota history should remain queryable for the bounded-batch check")
+            .len(),
+        0
+    );
+    assert_eq!(
+        store
+            .quota_history_observations_for_window(
+                &account_id,
+                "responses",
+                18_000,
+                cutoff,
+                cutoff + 1,
+            )
+            .await
+            .expect("cutoff and newer quota history should remain queryable")
+            .len(),
+        2
+    );
+}

@@ -1,0 +1,20 @@
+╭──────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                      │
+│ Session details                         Feature design session · thread-a  Help F1   │
+│                                                                                      │
+│ Session ID: thread-a                                                               █ │
+│ HISTORY_ROW_0                                                                      █ │
+│ HISTORY_ROW_1                                                                      █ │
+│ HISTORY_ROW_2                                                                      │ │
+│ HISTORY_ROW_3                                                                      │ │
+│ HISTORY_ROW_4                                                                      │ │
+│ HISTORY_ROW_5                                                                      │ │
+│ HISTORY_ROW_6                                                                      │ │
+│ HISTORY_ROW_7                                                                      │ │
+│ HISTORY_ROW_8                                                                      │ │
+│ HISTORY_ROW_9                                                                      │ │
+│ HISTORY_ROW_10                                                                     │ │
+│                                                                                      │
+│  Close Esc    Copy session ID    Copy path    Fork Ctrl+Shift+Enter    ● Resume      │
+│                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────╯

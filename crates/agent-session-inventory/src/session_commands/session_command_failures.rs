@@ -4,6 +4,9 @@ use thiserror::Error;
 /// Sessions command failures.
 #[derive(Debug, Error)]
 pub enum SessionsCommandError {
+    /// A selector could not identify one session safely.
+    #[error("{0}")]
+    ResumeSelection(String),
     /// Reusable stored-session catalog failure.
     #[error(transparent)]
     SessionCatalog(collaboration_client::session_catalog::SessionCatalogError),

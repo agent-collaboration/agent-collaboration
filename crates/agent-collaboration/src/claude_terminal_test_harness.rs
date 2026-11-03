@@ -66,7 +66,13 @@ pub(crate) fn run() -> io::Result<()> {
         native_arguments: ["--model", "haiku"].map(std::ffi::OsString::from).to_vec(),
         ..SessionsPickerRequest::default()
     };
-    let outcome = run_sessions_picker(request, None, Some(ports))?;
+    let outcome = run_sessions_picker(
+        request,
+        None,
+        Some(ports),
+        crossterm::terminal::size()?,
+        None,
+    )?;
     let Some(SessionsPickerOutcome::LaunchNativeClaude(request, mode)) = outcome else {
         return Err(io::Error::other(
             "foreground Claude did not return its terminal handoff",

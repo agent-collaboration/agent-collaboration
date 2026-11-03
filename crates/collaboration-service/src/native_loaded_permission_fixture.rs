@@ -22,10 +22,16 @@ impl RecordedPolicyFixture {
         let (backend, generation, endpoint) = backend(directory.path());
         let scratch = directory.path().join("scratch");
         tokio::fs::create_dir(&scratch).await?;
+        let interaction_store = Arc::new(
+            interaction_storage::InteractionStore::open(
+                directory.path().join("interaction.sqlite"),
+            )
+            .await?,
+        );
         let broker = ServiceInteractionBroker::load(
             SERVICE.to_owned().try_into()?,
             backend.clone(),
-            directory.path().join("approval-routes.json"),
+            Arc::clone(&interaction_store),
         )
         .await?;
         if register_route {
@@ -41,10 +47,17 @@ impl RecordedPolicyFixture {
                 .await?;
         }
         drop(broker);
+        drop(interaction_store);
+        let interaction_store = Arc::new(
+            interaction_storage::InteractionStore::open(
+                directory.path().join("interaction.sqlite"),
+            )
+            .await?,
+        );
         let broker = ServiceInteractionBroker::load(
             SERVICE.to_owned().try_into()?,
             backend.clone(),
-            directory.path().join("approval-routes.json"),
+            interaction_store,
         )
         .await?;
         Ok(Self {

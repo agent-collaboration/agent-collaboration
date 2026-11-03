@@ -11,6 +11,9 @@ const RECEIPT: &str = include_str!("claude_bg_2_1_312.txt");
 #[path = "resume_read_safety_tests.rs"]
 mod resume_read_safety_tests;
 
+#[path = "resume_mode_test.rs"]
+mod resume_mode_test;
+
 fn background_new_command(
     fixture: &ClaudeProcessFixture,
     receipt: &str,
@@ -383,7 +386,7 @@ async fn local_claude_terminal_handoff_does_not_retarget_a_captured_directory() 
     )
     .await;
     let error = result.expect_err("a stale captured directory must be rejected, not replaced");
-    assert!(error.to_string().contains("directory changed"));
+    assert!(error.to_string().contains("directory changed"), "{error}");
     assert!(invocations(&fixture).unwrap().is_empty());
     api.stop().await.unwrap();
 }

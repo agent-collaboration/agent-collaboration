@@ -2,7 +2,7 @@
 use super::claude_launch_target::{ClaudeLaunchTarget, RoutedClaudeEnvironment};
 use super::session_command_failures::SessionsCommandError;
 use collaboration_client::protocol::{
-    NativeClaudeBackgroundState, NativeClaudeJobHandle, NativeSessionView, ProviderSessionSummary,
+    NativeClaudeBackgroundState, NativeClaudeJobHandle, ProviderSessionSummary,
 };
 use std::{
     ffi::OsString,
@@ -88,43 +88,67 @@ pub async fn prepare_claude_terminal(
     request: ClaudeTerminalRequest<'_>,
     environment: RoutedClaudeEnvironment,
 ) -> Result<Command, SessionsCommandError> {
-    let mut working_directory = request.working_directory.map(Path::to_path_buf);
-    let (session_id, arguments) = match request.action {
+    match request.action {
         ClaudeTerminalAction::New { arguments } => {
-            return Ok(launch.foreground_command(
-                arguments,
-                working_directory.as_deref(),
-                environment,
-            ));
+            Ok(launch.foreground_command(arguments, request.working_directory, environment))
         }
         ClaudeTerminalAction::Resume { session_id } => {
-            if let Some((directory, job)) = resume_target(launch, session_id).await? {
-                if working_directory
-                    .as_deref()
-                    .is_some_and(|captured| captured != directory.as_path())
-                {
-                    return Err(SessionsCommandError::ClaudeLaunch("Claude's working directory changed. Refresh the list before opening this session.".to_owned()));
-                }
-                working_directory = Some(directory);
-                if let Some(job) = job {
-                    return Ok(launch.attach_command(
-                        &job,
-                        working_directory.as_deref(),
-                        environment,
-                    ));
-                }
+            let plan = plan_claude_resume(launch, session_id).await?;
+            if request
+                .working_directory
+                .is_some_and(|captured| captured != plan.working_directory.as_path())
+            {
+                return Err(SessionsCommandError::ClaudeLaunch("Claude's working directory changed. Refresh the list before opening this session.".to_owned()));
             }
-            (Some(session_id), &[][..])
+            let command = plan.command(launch, environment.clone());
+            if matches!(plan.mode, ClaudeResumeMode::RestartBackground { .. }) {
+                let handle = start_background_and_read_handle(command).await?;
+                Ok(launch.attach_command(&handle, Some(&plan.working_directory), environment))
+            } else {
+                Ok(command)
+            }
         }
-    };
-    let command = launch.command(
-        session_id,
-        arguments,
-        working_directory.as_deref(),
-        environment.clone(),
-    );
-    let handle = start_background_and_read_handle(command).await?;
-    Ok(launch.attach_command(&handle, working_directory.as_deref(), environment))
+    }
+}
+
+/// The native action chosen from discovery; preparing it never starts a child.
+pub(super) struct ClaudeResumePlan {
+    working_directory: PathBuf,
+    mode: ClaudeResumeMode,
+}
+
+enum ClaudeResumeMode {
+    Foreground { session_id: String },
+    Attach { job_handle: NativeClaudeJobHandle },
+    RestartBackground { session_id: String },
+}
+
+impl ClaudeResumePlan {
+    pub(super) fn arguments(&self) -> Vec<OsString> {
+        match &self.mode {
+            ClaudeResumeMode::Foreground { session_id } => {
+                vec!["--resume".into(), session_id.into()]
+            }
+            ClaudeResumeMode::Attach { job_handle } => {
+                vec!["attach".into(), String::from(job_handle.clone()).into()]
+            }
+            ClaudeResumeMode::RestartBackground { session_id } => {
+                vec!["--bg".into(), "--resume".into(), session_id.into()]
+            }
+        }
+    }
+
+    fn command(
+        &self,
+        launch: &ClaudeLaunchTarget,
+        environment: RoutedClaudeEnvironment,
+    ) -> Command {
+        launch.foreground_command(
+            &self.arguments(),
+            Some(&self.working_directory),
+            environment,
+        )
+    }
 }
 
 async fn start_background_and_read_handle(
@@ -173,82 +197,79 @@ pub fn parse_background_receipt(
     handle.to_owned().try_into().map_err(|_| error())
 }
 
-async fn resume_target(
+pub(super) async fn plan_claude_resume(
     launch: &ClaudeLaunchTarget,
-    session_id: &str,
-) -> Result<Option<(PathBuf, Option<NativeClaudeJobHandle>)>, SessionsCommandError> {
-    for view in [NativeSessionView::Loaded, NativeSessionView::Stored] {
-        let inventory = launch.native_session_inventory(view, usize::MAX).await
-            .map_err(|message| SessionsCommandError::ClaudeLaunch(format!("Could not verify the Claude session: {message}. Check claude agents before opening it again.")))?;
-        if let Some(conflict) = inventory
-            .conflicts
-            .iter()
-            .find(|conflict| String::from(conflict.target.session_id.clone()) == session_id)
-        {
-            return Err(SessionsCommandError::ClaudeLaunch(format!(
-                "Claude session {session_id}: {}. Resolve the duplicate live peers before opening it again.",
-                conflict.reason.description()
-            )));
-        }
-        if let Some(summary) = inventory
-            .sessions
-            .into_iter()
-            .find(|summary| String::from(summary.target().session_id.clone()) == session_id)
-        {
-            return match summary {
-                ProviderSessionSummary::ClaudeCodeBackground { working_directory, peer, job_handle, state, .. } => {
-                    if peer.is_some() && !state.is_loaded() {
-                        return Err(SessionsCommandError::ClaudeLaunch("This Claude session is already open without an attachable background job. Use its current terminal, or stop it before opening it here.".to_owned()));
-                    }
-                    let directory = PathBuf::from(String::from(peer.and_then(|peer| peer.working_directory).unwrap_or(working_directory)));
-                    match state {
-                        NativeClaudeBackgroundState::Working | NativeClaudeBackgroundState::Blocked => Ok(Some((directory, Some(job_handle)))),
-                        NativeClaudeBackgroundState::Done | NativeClaudeBackgroundState::Failed | NativeClaudeBackgroundState::Stopped => Ok(Some((directory, None))),
-                        NativeClaudeBackgroundState::Unknown { .. } => Err(SessionsCommandError::ClaudeLaunch("Claude's session state is unknown. Check claude agents before opening it again.".to_owned())),
-                    }
-                },
-                _ => Err(SessionsCommandError::ClaudeLaunch("This Claude session is already open without an attachable background job. Use its current terminal, or stop it before opening it here.".to_owned())),
-            };
-        }
-        if let Some(notice) = inventory.read_notice {
-            return Err(SessionsCommandError::ClaudeLaunch(format!(
-                "Claude discovery is incomplete: {notice}. Check claude agents before opening this session."
-            )));
-        }
+    selector: &str,
+) -> Result<ClaudeResumePlan, SessionsCommandError> {
+    let by_session_id = super::validate_exact_uuid_session_id(selector).is_ok();
+    let inventory = launch.complete_resume_inventory().await?;
+    let matching = inventory.sessions.into_iter().find(|summary| {
+        if by_session_id { String::from(summary.target().session_id.clone()).eq_ignore_ascii_case(selector) }
+        else { matches!(summary, ProviderSessionSummary::ClaudeCodeBackground { job_handle, .. } if String::from(job_handle.clone()).eq_ignore_ascii_case(selector)) }
+    });
+    let target_id = matching
+        .as_ref()
+        .map(|summary| String::from(summary.target().session_id.clone()));
+    if let Some(conflict) = inventory.conflicts.iter().find(|conflict| {
+        let id = String::from(conflict.target.session_id.clone());
+        id.eq_ignore_ascii_case(selector) || target_id.as_ref() == Some(&id)
+    }) {
+        return Err(SessionsCommandError::ClaudeLaunch(format!(
+            "Claude session {selector}: {}. Resolve the duplicate live peers before opening it again.",
+            conflict.reason.description()
+        )));
     }
-    Ok(None)
+    let already_open = || {
+        SessionsCommandError::ClaudeLaunch("This Claude session is already open without an attachable background job. Use its current terminal, or stop it before opening it here.".to_owned())
+    };
+    let Some(summary) = matching else {
+        if !by_session_id {
+            return Err(SessionsCommandError::ResumeSelection(format!(
+                "no session with that ID: {selector}"
+            )));
+        }
+        return Ok(ClaudeResumePlan {
+            working_directory: launch.transcript_resume_directory(selector).await?,
+            mode: ClaudeResumeMode::Foreground {
+                session_id: selector.to_owned(),
+            },
+        });
+    };
+    match summary {
+        ProviderSessionSummary::ClaudeCodeBackground {
+            target,
+            working_directory,
+            peer,
+            job_handle,
+            state,
+            ..
+        } => {
+            if peer.is_some() && !state.is_loaded() {
+                return Err(already_open());
+            }
+            let directory = PathBuf::from(String::from(
+                peer.and_then(|peer| peer.working_directory)
+                    .unwrap_or(working_directory),
+            ));
+            if matches!(state, NativeClaudeBackgroundState::Unknown { .. }) {
+                return Err(SessionsCommandError::ClaudeLaunch("Claude's session state is unknown. Check claude agents before opening it again.".to_owned()));
+            }
+            let mode = if !by_session_id || state.is_loaded() {
+                ClaudeResumeMode::Attach { job_handle }
+            } else {
+                ClaudeResumeMode::RestartBackground {
+                    session_id: String::from(target.session_id),
+                }
+            };
+            Ok(ClaudeResumePlan {
+                working_directory: directory,
+                mode,
+            })
+        }
+        _ => Err(already_open()),
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn background_receipt_accepts_recorded_named_and_unnamed_vendor_output() {
-        for receipt in [
-            "backgrounded · a1b2c3d4 · <redacted> (idle — send a prompt to start)\n  claude attach a1b2c3d4    open in this terminal\n",
-            "backgrounded · a1b2c3d4 (idle — send a prompt to start)\n  claude attach a1b2c3d4    open in this terminal\n",
-        ] {
-            let handle = parse_background_receipt(receipt.as_bytes())
-                .expect("recorded Claude2.1.312 background receipt");
-            assert_eq!(String::from(handle), "a1b2c3d4");
-        }
-    }
-
-    #[test]
-    fn background_receipt_does_not_guess_or_accept_ambiguous_handles() {
-        for receipt in [
-            "",
-            "  claude attach a1b2c3d4 open in this terminal\n",
-            "backgrounded · not-a-job · name\n",
-            "backgrounded · a1b2c3d4 · one\nbackgrounded · deadbeef · two\n",
-        ] {
-            let message = parse_background_receipt(receipt.as_bytes())
-                .unwrap_err()
-                .to_string();
-            assert!(
-                message.contains("claude agents") && message.contains("do not start another copy")
-            );
-        }
-    }
-}
+#[path = "claude_terminal_launch_test.rs"]
+mod claude_terminal_launch_test;

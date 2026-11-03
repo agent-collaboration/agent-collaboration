@@ -45,7 +45,7 @@ mod account_login_identity;
 #[path = "account_options.rs"]
 mod account_options;
 #[path = "account_removal.rs"]
-mod account_removal;
+pub(crate) mod account_removal;
 use account_help::{
     ACCOUNT_DISABLE_HELP_TEXT, ACCOUNT_ENABLE_HELP_TEXT, ACCOUNT_HELP_TEXT, ACCOUNT_LIST_HELP_TEXT,
     ACCOUNT_LOGIN_HELP_TEXT, ACCOUNT_REMOVE_HELP_TEXT, ACCOUNT_SET_WEEKLY_FLOOR_HELP_TEXT,

@@ -21,7 +21,7 @@ exercise; fixture programs are kept separate from the test runner's discovery.
 | `fixtures/`  | Controlled child programs and shared test fixtures                |
 | `cli/`       | Command-line argument validation                                  |
 
-Use Node 26.12.1 and pnpm 12.14.0, from the repository root:
+Use a privately retained Node 26.13.0 runtime and pnpm 12.14.0, from the repository root. Copy the complete Node runtime (including libnode) into an owned toolchain directory before declaring its canonical executable path and SHA-256; a mutable Homebrew symlink is not the retained runtime. Keep its dependency inventory with the declaration and re-qualify after any runtime dependency change. Historical 26.12.1 receipts remain evidence for their original runs only:
 
 ```sh
 pnpm --dir scripts/verification/tui install --frozen-lockfile
@@ -34,19 +34,34 @@ node scripts/verification/tui/capture/capture-run.ts PLAN.json --check
 node scripts/verification/tui/capture/capture-run.ts PLAN.json
 ```
 
-`gridCapturePlanSchema` in `capture-run.ts` declares the repository, exact source
+`gridCapturePlanSchema` in `capture/capture-run.ts` declares the repository, exact source
 head, signed driver/product/component artifact paths and SHA-256s, fresh output,
 journey name, `legacy` or `kitty` keys, and optional Chrome executable. The driver
-is the prebuilt `quota_storyboard_capture_test` libtest, not Cargo. Component
+uses a prebuilt signed libtest, not Cargo. Quota and component routes use the
+`e2e` entry `quota_storyboard::compiled_grid_terminal_observation`. All S8 picker, quota and showcase routes use that namespaced entry; public
+Sessions uses `quota_storyboard::compiled_public_sessions_grid_observation`.
+The S9 cutover retires the historical flat-entry driver selection. Discovery and
+launch share `ptyGridDriverEntry`; no alternate entry is tried. Component
 journeys require the exact fixture-bearing Quota library test executable; the
 runner checks its test entry before launching it. Source files and artifact hashes
 are recorded and checked for drift. Build provenance remains the producer's duty.
 
-`journey-catalogue.ts` names 24 literal journeys: Sessions, Quota, Normal43 and
-hard cases at 120×36, 76×30, 48×24, 48×12, 40×24 and 32×24. Data ports exist for all
-six grids; the S0 pilot observed only 120×36. A definition is not a passing receipt.
-`baseline-journeys.ts` separately records the component-system's pre-change
+`journeys/screens/` contains one data definition each for Sessions, Quota,
+Normal43 and hard cases. `journeys/journey-catalogue.ts` expands them over the
+canonical `journeyGridSizes` in `journeys/journey-definition.ts`: 120×36, 76×30,
+48×12 and 32×24. The 16 screen/grid variants retain their checkpoint IDs, action
+bursts and finish sequence. Size-specific scrolling is data inside each screen
+file. A definition is not a passing receipt.
+`capture/baseline-journeys.ts` separately records the component-system's pre-change
 failures, passing isolation cases, absent future entries, and unobserved fixtures.
+
+The quota B draft binds seventeen journeys through `journeys/flows/authored-flow-run.ts`.
+Read-only toolbar/navigation use the component libtest; account/login/grouping/
+refresh use the separately declared effectful CLI role. Middle removal and each
+refresh outcome require fresh child phases. Registry admission and reader tests
+are preparation only; exact signed artifacts, transport/startup qualification and
+native observations remain required. See the S9 recipe for its source/ACK inventory
+and frame, effect and teardown obligations.
 
 Every checkpoint keeps raw ANSI, JSON cells, text and assertion results. Each
 original keeps its byte/image hashes, renderer/WASM/Chrome identities, source,
@@ -54,7 +69,7 @@ build, viewport and checkpoint. Each journey rejects the actual empty-core and
 retained wrong-scene controls before writing a success receipt. An entry timeout
 is an apparatus/feasibility failure, never a product defect.
 
-`public-sessions-run.ts PLAN.json --check` qualifies the separately authorized
+`sessions/public-sessions-run.ts PLAN.json --check` qualifies the separately authorized
 public route without launching its TUI. Its Host/process/health/effect checks,
 normal HOME/CODEX_HOME, exact public argv/cwd and job-settlement boundary remain
 separate from fixture zero-effect receipts. Running that route requires its own
@@ -62,7 +77,7 @@ allowed-effects packet. S0 does not launch it.
 
 Native wrapper tests still exercise the real PTY, kernel resizing, retained-child
 cleanup and durable fixture receipts. They require nominated canonical
-`QUOTA_STORYBOARD_NODE` and `QUOTA_STORYBOARD_NODE_SHA256` matching Node 26.12.1.
+`QUOTA_STORYBOARD_NODE` and `QUOTA_STORYBOARD_NODE_SHA256` matching Node 26.13.0.
 Their stand-ins prove wrapper contracts, not product appearance or real provider
 jobs. Never install debug product binaries or replace production processes.
 

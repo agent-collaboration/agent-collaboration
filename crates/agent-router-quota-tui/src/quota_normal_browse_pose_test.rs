@@ -14,33 +14,41 @@ const FACTS: [&str; 3] = ["62.5k credits", "Weekly pace", "⏳"];
 
 fn body_bounds(frame: &str) -> (usize, usize) {
     let rows = frame.lines().collect::<Vec<_>>();
-    let footer = rows
-        .iter()
-        .position(|row| row.contains("F4 Details"))
-        .unwrap();
+    let footer = rows.iter().position(|row| row.contains("╰")).unwrap();
     let top = rows
         .iter()
         .position(|row| row.contains('┌'))
+        .map(|row| row + 1)
         .unwrap_or_else(|| {
             rows.iter()
-                .position(|row| row.contains("Disabled: Shown"))
-                .unwrap()
+                .position(|row| row.contains("Account"))
+                .expect("actual first account group")
         });
     let bottom = rows
         .iter()
         .rposition(|row| row.contains('└'))
         .unwrap_or(footer);
     assert!(top < bottom);
-    assert!(rows[bottom..].iter().any(|row| row.contains("F4")));
-    (top + 1, bottom)
+    assert!(
+        rows[..top].iter().any(|row| row.contains("Menu F10")),
+        "the overflow menu remains above the list at every width"
+    );
+    if rows
+        .first()
+        .is_some_and(|row| unicode_width::UnicodeWidthStr::width(*row) >= 40)
+    {
+        assert!(
+            rows[..top].iter().any(|row| row.contains("F4")),
+            "Details remains in the toolbar when room"
+        );
+    }
+    (top, bottom)
 }
 
 async fn reach_normal_short_group<TRenderedFrames>(
     sender: &tokio::sync::mpsc::UnboundedSender<TerminalEvent>,
     mut frames: std::pin::Pin<&mut TRenderedFrames>,
     reference_rows: &[(bool, String)],
-    reverse_page_count: usize,
-    wheel_steps: usize,
     reference_row_slice: std::ops::Range<usize>,
 ) -> Canvas
 where
@@ -52,11 +60,19 @@ where
     let bottom = super::super::quota_frame_observation::next_matching_frame(
         frames.as_mut(),
         Duration::from_secs(2),
-        |canvas| normalized_body(canvas).as_slice() == &reference_rows[31..35],
+        |canvas| {
+            let (top, bottom) = body_bounds(&canvas.to_string());
+            let visible = bottom - top;
+            normalized_body(canvas).as_slice() == &reference_rows[reference_rows.len() - visible..]
+        },
     )
     .await
     .unwrap();
     let bottom_rows = normalized_body(&bottom);
+    let visible = bottom_rows.len();
+    let travel = reference_rows.len() - visible - reference_row_slice.start;
+    let reverse_page_count = travel / visible;
+    let wheel_steps = travel % visible;
     assert!(bottom_rows.iter().any(|(_, text)| text == "2 resets"));
     println!("NORMAL SHORT SATURATED BOTTOM:\n{bottom}");
     for _ in 0..reverse_page_count {
@@ -67,8 +83,8 @@ where
         Duration::from_secs(2),
         |canvas| {
             normalized_body(canvas).as_slice()
-                == &reference_rows[reference_rows.len() - 4 - reverse_page_count * 4
-                    ..reference_rows.len() - reverse_page_count * 4]
+                == &reference_rows[reference_rows.len() - visible - reverse_page_count * visible
+                    ..reference_rows.len() - reverse_page_count * visible]
         },
     )
     .await
@@ -81,11 +97,11 @@ where
                 6,
             )))
             .unwrap();
-        let start = reference_rows.len() - 4 - reverse_page_count * 4 - step * 3;
+        let start = reference_rows.len() - visible - reverse_page_count * visible - step;
         canvas = super::super::quota_frame_observation::next_matching_frame(
             frames.as_mut(),
             Duration::from_secs(2),
-            |canvas| normalized_body(canvas).as_slice() == &reference_rows[start..start + 4],
+            |canvas| normalized_body(canvas).as_slice() == &reference_rows[start..start + visible],
         )
         .await
         .unwrap();
@@ -159,7 +175,15 @@ async fn normal_short_browse_groups_retain_alpha_and_return_exactly() {
     .unwrap()
     .unwrap()
     .unwrap();
-    let reference_rows = normalized_body(&reference_canvas);
+    let mut reference_rows = normalized_body(&reference_canvas);
+    // Lead taste review 01a18f3c item 6: the box fills height; only trailing
+    // filler is outside the unchanged natural row and two-account-gap oracle.
+    while reference_rows
+        .last()
+        .is_some_and(|(_, text)| text.is_empty())
+    {
+        reference_rows.pop();
+    }
     assert_eq!(
         reference_rows.len(),
         35,
@@ -197,16 +221,19 @@ async fn normal_short_browse_groups_retain_alpha_and_return_exactly() {
             initial.contains("東京") && initial.contains("Alpha"),
             "{initial}"
         );
-        for (reverse_page_count, wheel_steps, reference_row_slice, literals) in [
-            (3, 2, 13..17, &["Extra", "62.5k credits", "2 resets"][..]),
-            (3, 3, 10..14, &["Weekly pace", "⏳"][..]),
+        let (body_top, body_bottom) = body_bounds(&initial);
+        let visible = body_bottom - body_top;
+        for (reference_row_slice, literals) in [
+            (
+                17 - visible..17,
+                &["Extra", "62.5k credits", "2 resets"][..],
+            ),
+            (10..10 + visible, &["Weekly pace", "⏳"][..]),
         ] {
             let pose_canvas = reach_normal_short_group(
                 &sender,
                 frames.as_mut(),
                 &reference_rows,
-                reverse_page_count,
-                wheel_steps,
                 reference_row_slice.clone(),
             )
             .await;
@@ -214,7 +241,11 @@ async fn normal_short_browse_groups_retain_alpha_and_return_exactly() {
             let pose = pose_canvas.to_string();
             println!("NORMAL SHORT GROUP {literals:?} ORIGINAL:\n{pose}");
             let pose_rows = normalized_body(&pose_canvas);
-            assert_eq!(pose_rows.len(), 4, "four body rows above the footer");
+            assert_eq!(
+                pose_rows.len(),
+                visible,
+                "actual body viewport above its border"
+            );
             for literal in literals {
                 assert!(
                     pose_rows.iter().any(|(_, text)| text == *literal),
@@ -231,8 +262,8 @@ async fn normal_short_browse_groups_retain_alpha_and_return_exactly() {
                 "exact independently measured Alpha group"
             );
             assert!(
-                pose.contains("F4 Details") && pose.contains("Ctrl+E Floor"),
-                "footer remains usable: {pose}"
+                pose.contains("Details F4") && pose.contains("Menu F10"),
+                "top toolbar and complete menu remain reachable: {pose}"
             );
 
             // Assert captured identity from the lower pose and the existing top return.
@@ -270,8 +301,6 @@ async fn normal_short_browse_groups_retain_alpha_and_return_exactly() {
                 &sender,
                 frames.as_mut(),
                 &reference_rows,
-                reverse_page_count,
-                wheel_steps,
                 reference_row_slice.clone(),
             )
             .await;
@@ -298,8 +327,6 @@ async fn normal_short_browse_groups_retain_alpha_and_return_exactly() {
                 &sender,
                 frames.as_mut(),
                 &reference_rows,
-                reverse_page_count,
-                wheel_steps,
                 reference_row_slice.clone(),
             )
             .await;
@@ -372,10 +399,19 @@ fn normalized_body(canvas: &Canvas) -> Vec<(bool, String)> {
                         })
                 })
             });
-            (
-                selected,
-                text.replace(['│', '┃', '❯'], " ").trim().to_owned(),
-            )
+            (selected, {
+                let mut cell_column = 0usize;
+                text.chars()
+                    .filter(|character| {
+                        let column = cell_column;
+                        cell_column +=
+                            unicode_width::UnicodeWidthChar::width(*character).unwrap_or(0);
+                        column + 5 < canvas.width() && !matches!(character, '│' | '┃' | '❯')
+                    })
+                    .collect::<String>()
+                    .trim()
+                    .to_owned()
+            })
         })
         .collect()
 }
@@ -478,9 +514,27 @@ async fn normal_browse_literal_facts_reachable_at_six_grids_and_restore_alpha() 
                     .unwrap();
             let initial = canvas.to_string();
             assert!(initial.contains("東京"));
+            sender.send(provider_filter_key(KeyCode::F(10))).unwrap();
+            let menu = crate::quota_frame_observation::next_matching_frame(
+                frames.as_mut(),
+                Duration::from_secs(2),
+                |canvas| canvas.to_string().contains("Floor"),
+            )
+            .await
+            .unwrap();
             assert!(
-                initial.contains("Floor"),
+                menu.to_string().contains("Floor"),
                 "same available Floor action as compiled fixture"
+            );
+            sender.send(provider_filter_key(KeyCode::Esc)).unwrap();
+            canvas = crate::quota_frame_observation::next_current_frame(frames.as_mut())
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                canvas.to_string(),
+                initial,
+                "menu close restores the actual initial pose"
             );
             let mut poses = [None; 3];
             let mut originals = Vec::new();

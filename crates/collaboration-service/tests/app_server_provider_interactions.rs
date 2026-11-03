@@ -34,6 +34,10 @@ async fn app_server_approver_decides_exact_option_and_answers_question() -> Test
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
     let service_id = "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89";
     let backend = Arc::new(ScriptedProviderBackend::new()?);
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
+            .await?,
+    );
     let broker = ServiceInteractionBroker::load(
         service_id.to_owned().try_into()?,
         NativeControlBackend {
@@ -43,7 +47,7 @@ async fn app_server_approver_decides_exact_option_and_answers_question() -> Test
             gate: NativeGenerationGate::default(),
             codex_home: directory.path().to_path_buf(),
         },
-        directory.path().join("approval-routes.json"),
+        interaction_store,
     )
     .await?;
     let actor: Identity = serde_json::from_value(json!({"kind":"human","humanId":"owner"}))?;

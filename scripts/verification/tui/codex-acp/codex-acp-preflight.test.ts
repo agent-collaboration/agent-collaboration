@@ -68,7 +68,12 @@ const PROMPT = 'Reply with only the product of 4321 and 5678, digits only';
 const COMPLETION = '24534638';
 // The actual Node running this test, bound once: the preflight requires its own process binary.
 const NODE = captureArtifact(process.execPath);
-const LISTING = ['compiled_codex_acp_grid_observation', '--exact', '--list', '--ignored'];
+const LISTING = [
+	'quota_storyboard::compiled_codex_acp_grid_observation',
+	'--exact',
+	'--list',
+	'--ignored',
+];
 
 /** One wrong or right binding, applied while its own fixture is built. */
 interface Variant {
@@ -100,7 +105,7 @@ function preflightCase(variant: Variant = {}): PreflightCase {
 		root,
 		'quota_storyboard_capture_test',
 		`require('node:fs').appendFileSync(${JSON.stringify(driverLog)}, JSON.stringify(process.argv.slice(2)) + '\\n');
-if (process.argv.slice(2).join(' ') === ${JSON.stringify(LISTING.join(' '))}) process.stdout.write('compiled_codex_acp_grid_observation: test\\n');
+if (process.argv.slice(2).join(' ') === ${JSON.stringify(LISTING.join(' '))}) process.stdout.write('quota_storyboard::compiled_codex_acp_grid_observation: test\\n');
 else process.exitCode = 1;`,
 	);
 	// Codex never runs in the preflight; this stand-in records it if it ever does.

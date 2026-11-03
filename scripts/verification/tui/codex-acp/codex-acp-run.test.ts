@@ -269,14 +269,9 @@ test('a PTY child that is not the declared Codex, or is gone, is refused', async
 	expect(() => codexChild(output, plan.target)).toThrow('not the declared installed Codex');
 });
 
-// A stand-in for the drive_terminal line protocol that keeps Codex 0.165's composer rule for
-// typed text (chat_composer.rs handle_input_basic, paste_burst.rs): text written as one burst is
-// buffered until the next frame is drawn, and an Enter that arrives first becomes a newline, so
-// the PTY never ends. Enter after the drawn rows dispatches the typed command and the PTY ends,
-// as /quit does, and as today's client does when a refused /rename takes the CodexOp fatal path.
-// Optional Router side effects at the two moments that decide a route baseline's placement: one
-// audit row when the typed text arrives, one when the Enter after the drawn frame submits it,
-// which then draws the reply frame instead of ending the PTY.
+// A streaming drive_terminal peer retains the composer rule: a completed frame precedes
+// command dispatch. Enter in the still-buffered text burst remains a newline. Route audit
+// effects distinguish typing from the later submitted command.
 interface RouteStandInEffects {
 	readonly auditFile: string;
 	readonly onTyped: string;
@@ -302,7 +297,7 @@ let state = 'idle';
 const typed = ${JSON.stringify(typed)};
 const frame = ${JSON.stringify(frame)};
 const effects = ${JSON.stringify(effects === null ? null : { ...effects, replyFrame: standInFrame(effects.replyRows) })};
-process.stdout.write('TUI_GRID READY 120 36\\n');
+process.stdout.write('TUI_GRID READY 120 36 STREAM\\n');
 let pending = '';
 process.stdin.on('data', (chunk) => {
 	pending += chunk.toString('utf8');
@@ -313,17 +308,19 @@ process.stdin.on('data', (chunk) => {
 		const [command, argument] = line.split(' ');
 		const bytes = command === 'write' ? Buffer.from(argument, 'hex').toString('utf8') : '';
 		let reply = 'OK';
-		if (command === 'write' && bytes === typed) {
-			state = 'buffered';
+		if (command === 'write' && bytes === typed + '\\r') {
+			state = 'newline';
+		} else if (command === 'write' && bytes === typed) {
+			state = 'drawn';
 			if (effects) appendFileSync(effects.auditFile, effects.onTyped);
+			appendFileSync(process.env.TUI_STANDIN_LOG, 'frame-drawn\\n');
+			process.stdout.write('TUI_GRID BYTES ' + frame + '\\n');
 		} else if (command === 'write' && bytes === '\\r') {
-			if (state === 'drawn' && effects) { appendFileSync(effects.auditFile, effects.onEnter); state = 'replied'; }
-			else state = state === 'drawn' ? 'exiting' : 'newline';
-		} else if (command === 'read') {
-			if (state === 'buffered') { state = 'drawn'; reply = 'BYTES ' + frame; }
-			else if (state === 'replied') { state = 'answered'; reply = 'BYTES ' + effects.replyFrame; }
-			else if (state === 'exiting') reply = 'EOF';
-			else reply = 'READ_ERROR timed out waiting on channel';
+			if (state === 'drawn' && effects) {
+				appendFileSync(effects.auditFile, effects.onEnter); state = 'answered';
+				process.stdout.write('TUI_GRID BYTES ' + effects.replyFrame + '\\n');
+			} else if (state === 'drawn') { state = 'exiting'; process.stdout.write('TUI_GRID EOF\\n'); }
+			else state = 'newline';
 		} else if (command === 'finish' || command === 'stop') {
 			process.stdout.write('TUI_GRID FINISHED 0\\n');
 			process.exit(0);
@@ -369,10 +366,8 @@ test('Codex exits normally only when Enter follows the drawn /quit row', async (
 		const typed = commands.indexOf(`write ${Buffer.from('/quit').toString('hex')}`);
 		const enter = commands.indexOf('write 0d');
 		expect(typed).toBeGreaterThanOrEqual(0);
-		// At least one read (the drawn frame) separates the typed command from its Enter.
-		expect(commands.slice(typed + 1, enter).some((command) => command.startsWith('read '))).toBe(
-			true,
-		);
+		// The completed streamed frame separates typed text from its Enter.
+		expect(commands.slice(typed + 1, enter).includes('frame-drawn')).toBe(true);
 	} finally {
 		await driver.stop();
 	}
@@ -381,9 +376,8 @@ test('Codex exits normally only when Enter follows the drawn /quit row', async (
 test('an Enter sent with the still-buffered /quit never ends the PTY', async () => {
 	const { driver } = await composerStandIn();
 	try {
-		await driver.send(Buffer.from('/quit'));
-		await driver.send(Buffer.from('\r'));
-		await expect(driver.waitForEof('codex /quit')).rejects.toThrow('timed out waiting on channel');
+		await driver.send(Buffer.from('/quit\r'));
+		await expect(driver.waitForEof('codex /quit', 50)).rejects.toThrow('PTY output deadline');
 	} finally {
 		await driver.stop();
 	}
@@ -407,9 +401,7 @@ test('a client that exits after the prompt Enter never reaches the reply scene',
 		const commands = log();
 		const typed = commands.indexOf(`write ${Buffer.from(PROMPT.prompt).toString('hex')}`);
 		const enter = commands.indexOf('write 0d');
-		expect(commands.slice(typed + 1, enter).some((command) => command.startsWith('read '))).toBe(
-			true,
-		);
+		expect(commands.slice(typed + 1, enter).includes('frame-drawn')).toBe(true);
 		expect(commands.filter((command) => command.startsWith('write ')).length).toBe(2);
 	} finally {
 		await driver.stop();
@@ -455,9 +447,7 @@ test('a client that exits on the refused /rename never reaches the recovery scen
 		const commands = log();
 		const typed = commands.indexOf(`write ${Buffer.from('/rename Fixture Title').toString('hex')}`);
 		const enter = commands.indexOf('write 0d');
-		expect(commands.slice(typed + 1, enter).some((command) => command.startsWith('read '))).toBe(
-			true,
-		);
+		expect(commands.slice(typed + 1, enter).includes('frame-drawn')).toBe(true);
 	} finally {
 		await driver.stop();
 	}

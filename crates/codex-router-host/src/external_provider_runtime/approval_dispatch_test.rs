@@ -233,6 +233,9 @@ async fn approval_broker_fixture(
         root.path().join("unused-native.sock"),
         None,
     )?;
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(root.path().join("interaction.sqlite")).await?,
+    );
     let broker = ServiceInteractionBroker::load(
         service_id.clone(),
         NativeControlBackend {
@@ -243,7 +246,7 @@ async fn approval_broker_fixture(
             gate,
             codex_home: root.path().to_owned(),
         },
-        root.path().join("approval-routes.json"),
+        interaction_store,
     )
     .await?;
     let push_fixture =

@@ -49,24 +49,19 @@ async fn local_cancel_commits_after_its_target_push_is_pruned_without_recreating
     let push_id = draft.push_id.clone();
     let item = fixture.settle_with_peer_receipt(draft.clone()).await;
     let answer_id = item.as_uuid().to_string().try_into().unwrap();
-    let answer = serde_json::to_value(
-        fixture
-            .owner
-            .message_send_answer(&answer_id)
-            .await
-            .unwrap()
-            .unwrap()
-            .result
-            .unwrap(),
-    )
-    .unwrap();
     assert_eq!(
         fixture
             .owner
-            .prune_push_records(recorded_at() + chrono::Duration::days(31), 10)
+            .prune_push_records(
+                recorded_at()
+                    .checked_add_months(chrono::Months::new(2))
+                    .unwrap()
+                    + chrono::Duration::milliseconds(1),
+                10,
+            )
             .await
             .unwrap(),
-        1
+        2
     );
     let control = ItemId::new(uuid::Uuid::now_v7()).unwrap();
 
@@ -85,19 +80,14 @@ async fn local_cancel_commits_after_its_target_push_is_pruned_without_recreating
             .unwrap()
             .is_none()
     );
-    assert_eq!(
-        serde_json::to_value(
-            fixture
-                .owner
-                .message_send_answer(&answer_id)
-                .await
-                .unwrap()
-                .unwrap()
-                .result
-                .unwrap()
-        )
-        .unwrap(),
-        answer
+    assert!(
+        fixture
+            .owner
+            .message_send_answer(&answer_id)
+            .await
+            .unwrap()
+            .is_none(),
+        "settled send answer expires with its two-month replay window"
     );
     assert_eq!(fixture.host.calls.load(Ordering::SeqCst), 1);
     let fixture = fixture.reopen().await;

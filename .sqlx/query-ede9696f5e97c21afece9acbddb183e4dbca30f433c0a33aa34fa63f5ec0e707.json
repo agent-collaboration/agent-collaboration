@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO ui_preferences (preference_id, screen, setting, value) VALUES (?, ?, ?, ?) ON CONFLICT(screen, setting) DO UPDATE SET preference_id = excluded.preference_id, value = excluded.value",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "ede9696f5e97c21afece9acbddb183e4dbca30f433c0a33aa34fa63f5ec0e707"
+}

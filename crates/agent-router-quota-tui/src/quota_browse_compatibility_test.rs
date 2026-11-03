@@ -1,3 +1,4 @@
+// Owner 71efc57bb/873f62923, clarified by a12f9c2db: interactive weekly-only rows.
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -11,6 +12,7 @@ use iocraft::MouseButton;
 use iocraft::prelude::*;
 
 use super::quota_status_component::*;
+use super::quota_view_configuration::*;
 use super::quota_status_entrypoint::*;
 use super::responsive_quota_layout::*;
 use super::*;
@@ -117,23 +119,9 @@ async fn quota_browse_matches_canonical_responsive_goldens() {
 }
 
 #[tokio::test]
-async fn quota_browse_top_line_exposes_help_for_account_options() {
-    let text = render_quota_capture_model_at(
-        quota_view_model(),
-        160,
-        24,
-        vec![TerminalEvent::Key(KeyEvent::new(
-            KeyEventKind::Press,
-            KeyCode::Esc,
-        ))],
-    )
-    .await;
-
-    assert!(
-        text.lines()
-            .any(|line| line.contains("Quota status") && line.contains("Help")),
-        "{text}"
-    );
+async fn quota_browse_menu_exposes_help_for_account_options() {
+    let text=quota_menu_canvas(quota_view_model(),160,24).await.to_string();
+    assert!(text.contains("Quota ·")&&text.contains("Help")&&text.contains("Options"),"{text}");
 }
 
 #[tokio::test]
@@ -295,7 +283,7 @@ async fn quota_browse_empty_and_error_states_are_structurally_explicit() {
     let error = render_quota_capture_model_at(quota_error_view_model(), 100, 24, exit).await;
 
     assert!(
-        empty.contains("Pool details") && empty.contains("0/0"),
+        empty.contains("Menu F10") && empty.contains("0/0"),
         "{empty}"
     );
     assert!(empty.contains("No accounts match these filters"), "{empty}");
@@ -320,7 +308,7 @@ async fn quota_status_reflows_when_terminal_width_changes() {
         vec![
             TerminalEvent::Resize(159, 40),
             TerminalEvent::Resize(160, 40),
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'))),
         ],
     )))
     .map(|canvas| canvas.to_string())
@@ -399,7 +387,7 @@ async fn quota_status_keeps_focused_account_visible_when_height_clips_list() {
     let text = frames.last().expect("focused account rendered");
     assert!(text.contains("❯ acct06"), "{text}");
     assert!(
-        text.contains('┃'),
+        text.contains(agent_collaboration_tui::foundation::theme::UiGlyph::ScrollThumb.text()),
         "measured scroll position remains visible: {text}"
     );
 }
@@ -418,7 +406,7 @@ async fn quota_status_vertical_browse_preserves_list_without_automatic_details()
     .await;
 
     assert!(
-        !text.contains("Selected account") && text.contains("Pool details"),
+        !text.contains("Selected account") && text.contains("Menu F10"),
         "vertical 100x24 quota view should expose explicit details without consuming the list:\n{text}"
     );
     assert!(
@@ -505,7 +493,7 @@ async fn quota_status_stacked_without_authoritative_selection_shows_focused_acco
         100,
         24,
         vec![
-            ("Pool details", vec![provider_filter_key(KeyCode::F(4))]),
+            ("Quota ·", vec![provider_filter_key(KeyCode::F(4))]),
             (
                 "Account details",
                 vec![TerminalEvent::Key({
@@ -570,7 +558,7 @@ async fn quota_status_narrow_rows_preserve_quota_windows_and_forecast() {
         48,
         48,
         vec![
-            ("Pool details", vec![provider_filter_key(KeyCode::F(4))]),
+            ("Quota ·", vec![provider_filter_key(KeyCode::F(4))]),
             (
                 "Account details",
                 vec![TerminalEvent::Key({

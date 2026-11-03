@@ -196,7 +196,8 @@ pub fn quota_refresh_error_class(error: &QuotaServiceError) -> QuotaRefreshError
             QuotaRefreshErrorClass::RateLimited
         }
         QuotaServiceError::ProviderStatus { .. } => QuotaRefreshErrorClass::ProviderError,
-        QuotaServiceError::ProviderResponse { .. } => QuotaRefreshErrorClass::ParseError,
+        QuotaServiceError::ProviderResponse { .. }
+        | QuotaServiceError::AllAccountsFailed { .. } => QuotaRefreshErrorClass::ParseError,
         QuotaServiceError::DisallowedBaseUrl { .. }
         | QuotaServiceError::RefreshNotImplemented
         | QuotaServiceError::StateStore(_)

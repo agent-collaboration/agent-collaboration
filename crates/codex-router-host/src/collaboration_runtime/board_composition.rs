@@ -71,6 +71,10 @@ pub(super) struct BoardComposition {
 }
 
 impl BoardComposition {
+    pub fn fleet_client(&self) -> Option<Arc<FleetClient>> {
+        self.fleet.upgrade()
+    }
+
     pub fn mail_session(&self) -> Option<MailDeliverySession> {
         self.session.as_ref().map(|session| MailDeliverySession {
             requests: session.requests.clone(),

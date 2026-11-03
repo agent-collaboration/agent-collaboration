@@ -160,9 +160,15 @@ async fn cross_project_references_and_unread_summaries_keep_independent_scope()
     assert!(times.first() >= times.get(1));
     drop(client);
     let fixture = fixture.restart_read_fixture().await?;
-    // The real Host reopens project handles through creation recovery before
-    // serving bare post/thread references; this fixture starts only the API.
-    fixture._admission.recover_creating_projects().await?;
+    // The real Host warms existing project handles during startup before it
+    // serves bare post/thread references; this fixture starts only the API.
+    for project in fixture._registry.project_ids().await? {
+        let _store = fixture
+            ._registry
+            .existing_project(&project)
+            .await?
+            .ok_or("persisted project disappeared while warming the restart fixture")?;
+    }
     let client = fixture.api.client("reopened cross-project proof").await?;
     assert_eq!(
         client

@@ -117,9 +117,6 @@ async fn cli_configures_and_inspects_future_attempt_budgets()
         return Err("completed-operation reconciliation changed the original receipt".into());
     }
     runtime.shutdown().await?;
-    for entry in std::fs::read_dir(&root)? {
-        std::fs::remove_file(entry?.path())?;
-    }
-    std::fs::remove_dir(root)?;
+    std::fs::remove_dir_all(&root)?;
     Ok(())
 }

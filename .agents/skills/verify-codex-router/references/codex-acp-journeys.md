@@ -45,7 +45,7 @@ Declare these before any input:
 - **Identities:** the raw provider SessionRef session ID (opaque) and its native thread alias. The alias is the hyphenated UUID, or `UUIDv5(URL, "codex-router:session:<service>:<endpoint>:<raw>")` (`nativeThreadAlias`). The run plan's target and the observer plan must carry the same pair. Both refuse a wrong alias before launch or readback.
 - **Working directories:** two, and they may differ. The launch cwd is the trusted directory Codex gets with `--cd`. The Session cwd is the provider Session's own working directory, often its private fixture workspace. The observer plan declares the Session cwd. The observer refuses unless native `thread/read` and `thread/resume` report that same `cwd`, and it lists skills there.
 - **Fixture skills:** project skills in a private provider workspace, never the owner's setup: `.claude/skills/<name>/SKILL.md` and `.cursor/skills/<name>/SKILL.md`. Each body replies `<own prefix>|<argument>|<image colour>`. That reply is absent from the typed text, the skill name and the description. Also declare the provider commands that must not appear as skills: Claude `compact`, `model`; Cursor `copy-request-id`.
-- **Tools:** Node v26.12.1 (exact path and hash), frozen `scripts/verification/tui` dependencies (wterm 0.5.7), the signed `quota_storyboard_capture_test` binary, and a Chrome binding.
+- **Tools:** retained Node v26.13.0 (exact path and hash), frozen `scripts/verification/tui` dependencies (wterm 0.5.7), the signed `e2e` libtest with the exact `quota_storyboard::compiled_codex_acp_grid_observation` entry, and a Chrome binding. Historical Node v26.12.1 receipts qualify only their original runs.
 
 ## Drive
 

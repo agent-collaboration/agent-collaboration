@@ -80,7 +80,7 @@ pub(crate) fn render_account_options_content(
             flex_shrink:0.0_f32,max_width:100pct,
         ) {
             #(show_tabs.then(||element! {View(width:100pct,flex_direction:FlexDirection::Row,column_gap:2) {#(resets_tab) #(credits_tab)}}))
-            #(props.options.pending_tab.is_some().then(|| element!(agent_collaboration_tui::FocusReveal(has_focus:true) {Text(content: "Tab change pending", color: Color::Grey, wrap: TextWrap::Wrap)}).into_any()))
+            #(props.options.pending_tab.is_some().then(|| element!(agent_collaboration_tui::controls::list::ScrollReveal(focused:true) {Text(content: "Tab change pending", color: Color::Grey, wrap: TextWrap::Wrap)}).into_any()))
             #((show_tabs&&has_body).then(||element!(View(width:100pct,height:1,border_style:BorderStyle::Single,border_edges:Edges::Bottom,border_color:Color::DarkGrey))))
             #((show_tabs&&has_body).then(||element!(View(height:1))))
             #(body)
@@ -146,7 +146,7 @@ pub(crate) fn account_options_message_text(message: AccountOptionsMessage) -> &'
     }
 }
 
-fn account_options_message_role(
+pub(crate) fn account_options_message_role(
     message: AccountOptionsMessage,
 ) -> agent_collaboration_tui::UiTextRole {
     use agent_collaboration_tui::UiTextRole;
@@ -193,8 +193,6 @@ pub(crate) struct CreditUsageBodyProps<'a> {
     editor: Option<&'a super::CreditPolicyEditorState>,
     message: Option<AccountOptionsMessage>,
     pending_tab: Option<super::AccountOptionsTab>,
-    on_select: Handler<codex_router_core::credit_usage::CreditUsagePolicy>,
-    on_open: Handler<()>,
 }
 
 pub(crate) fn render_credit_usage_body(props: CreditUsageBodyProps<'_>) -> AnyElement<'static> {
@@ -205,8 +203,6 @@ pub(crate) fn render_credit_usage_body(props: CreditUsageBodyProps<'_>) -> AnyEl
         editor,
         message,
         pending_tab,
-        on_select,
-        on_open,
     } = props;
     let entitlement = credit_entitlement_label(usage);
     let freshness = credit_freshness_label(usage.freshness);
@@ -243,8 +239,6 @@ pub(crate) fn render_credit_usage_body(props: CreditUsageBodyProps<'_>) -> AnyEl
         editing: is_editing,
         has_focus: pending_tab.is_none() && message.is_none(),
         editor,
-        on_select,
-        on_open,
     });
     let provider_note = provider_control_note(usage);
     let floor_note = (weekly_quota_floor_percent > 0)
@@ -282,7 +276,7 @@ pub(crate) fn render_credit_usage_body(props: CreditUsageBodyProps<'_>) -> AnyEl
             text.to_owned()
         };
         notices.push(
-            element!(agent_collaboration_tui::FocusReveal(has_focus:pending_tab.is_none() && message.is_none()) {agent_collaboration_tui::UiText(content:text,role,wrap:TextWrap::Wrap)}).into_any(),
+            element!(agent_collaboration_tui::controls::list::ScrollReveal(focused:pending_tab.is_none() && message.is_none()) {agent_collaboration_tui::UiText(content:text,role,wrap:TextWrap::Wrap)}).into_any(),
         );
     }
     if let Some((text, role)) = message {
@@ -291,13 +285,13 @@ pub(crate) fn render_credit_usage_body(props: CreditUsageBodyProps<'_>) -> AnyEl
         } else {
             text.to_owned()
         };
-        notices.push(element!(agent_collaboration_tui::FocusReveal(has_focus:pending_tab.is_none()) {agent_collaboration_tui::UiText(content:text,role,wrap:TextWrap::Wrap)}).into_any());
+        notices.push(element!(agent_collaboration_tui::controls::list::ScrollReveal(focused:pending_tab.is_none()) {agent_collaboration_tui::UiText(content:text,role,wrap:TextWrap::Wrap)}).into_any());
     }
     let has_notices = !notices.is_empty();
 
     element! {
         View(width: u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_shrink:0.0_f32,flex_direction: FlexDirection::Column) {
-            agent_collaboration_tui::FormFields(stacked:width<52) {
+            agent_collaboration_tui::controls::fields::FormFields(stacked:width<52) {
             #(balance_heading)
             #(account_options_field_line(if form {"Balance"}else {"Status"}, &entitlement, Color::White))
             #((!form||usage.freshness!=codex_router_quota_service::quota::CreditUsageFreshness::Fresh).then(||account_options_field_line("Freshness",freshness,freshness_color(usage.freshness))))
@@ -315,51 +309,8 @@ pub(crate) fn render_credit_usage_body(props: CreditUsageBodyProps<'_>) -> AnyEl
 fn render_credit_tab_body(
     options: &AccountOptionsState,
     width: usize,
-    state: Option<State<Option<AccountOptionsState>>>,
+    _state: Option<State<Option<AccountOptionsState>>>,
 ) -> AnyElement<'static> {
-    let expected_account = options.target.account_id.clone();
-    let open_account = expected_account.clone();
-    let expected_session = options.session_generation;
-    let expected_operation = options
-        .editor
-        .as_ref()
-        .map(|editor| editor.operation_generation);
-    let on_select = Handler::from(move |policy| {
-        if let Some(mut state) = state {
-            let mut current = state.write();
-            if let Some(options) = current.as_mut().filter(|options| {
-                options.target.account_id == expected_account
-                    && options.session_generation == expected_session
-            }) && let Some(editor) = options.editor.as_mut().filter(|editor| {
-                Some(editor.operation_generation) == expected_operation
-                    && matches!(
-                        editor.phase,
-                        CreditPolicyEditorPhase::Editing | CreditPolicyEditorPhase::SaveFailed(_)
-                    )
-            }) {
-                editor.draft_policy = policy;
-                editor.phase = CreditPolicyEditorPhase::Editing;
-                editor.choice = agent_collaboration_tui::SearchSelectState::Closed;
-            }
-        }
-    });
-    let on_open = Handler::from(move |_| {
-        if let Some(mut state) = state {
-            let mut current = state.write();
-            if let Some(options) = current.as_mut().filter(|options| {
-                options.target.account_id == open_account
-                    && options.session_generation == expected_session
-            }) && let Some(editor) = options.editor.as_mut().filter(|editor| {
-                Some(editor.operation_generation) == expected_operation
-                    && matches!(
-                        editor.phase,
-                        CreditPolicyEditorPhase::Editing | CreditPolicyEditorPhase::SaveFailed(_)
-                    )
-            }) {
-                editor.choice.open(editor.draft_policy);
-            }
-        }
-    });
     render_credit_usage_body(CreditUsageBodyProps {
         usage: &options.target.credit_usage,
         weekly_quota_floor_percent: options.target.weekly_quota_floor_percent,
@@ -367,8 +318,6 @@ fn render_credit_tab_body(
         editor: options.editor.as_ref(),
         message: options.message,
         pending_tab: options.pending_tab,
-        on_select,
-        on_open,
     })
 }
 
@@ -404,7 +353,7 @@ fn render_resets_tab_body(
     let explanation =
         unavailable_reason.or_else(|| reset_target.map(|_| "Checking reset eligibility…"));
     if explanation.is_none() && options.message.is_none() {
-        return Some(element!(agent_collaboration_tui::FormFields(stacked:width<52) {#(account_options_field_line("Eligibility", "Not checked", Color::White))}).into_any());
+        return Some(element!(agent_collaboration_tui::controls::fields::FormFields(stacked:width<52) {#(account_options_field_line("Eligibility", "Not checked", Color::White))}).into_any());
     }
     Some(element! {
         View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
@@ -428,19 +377,15 @@ struct CreditPolicyRowProps<'a> {
     editing: bool,
     has_focus: bool,
     editor: Option<&'a super::CreditPolicyEditorState>,
-    on_select: Handler<codex_router_core::credit_usage::CreditUsagePolicy>,
-    on_open: Handler<()>,
 }
 fn render_policy_row(
     props: CreditPolicyRowProps<'_>,
-) -> Element<'static, agent_collaboration_tui::FormField> {
+) -> Element<'static, agent_collaboration_tui::controls::fields::FormField> {
     let CreditPolicyRowProps {
         policy,
         editing,
         has_focus,
         editor,
-        on_select,
-        on_open,
     } = props;
     let label = if policy == codex_router_core::credit_usage::CreditUsagePolicy::Allow {
         "Allow"
@@ -448,30 +393,20 @@ fn render_policy_row(
         "Disallow"
     };
     if !editing {
-        return element!(agent_collaboration_tui::FormField(label:"Use credits".to_owned(),has_focus:editor.is_none()&&has_focus) {Text(content:label,color:Color::White)});
+        return element!(agent_collaboration_tui::controls::fields::FormField(label:"Use credits".to_owned(),has_focus:editor.is_none()&&has_focus) {Text(content:label,color:Color::White)});
     }
-    let choice = editor
-        .map(|editor| editor.choice.clone())
-        .unwrap_or_default();
-    let expanded = choice.is_open();
-    let body = if expanded {
-        element!(agent_collaboration_tui::SearchSelect<codex_router_core::credit_usage::CreditUsagePolicy>(state:choice,options:super::credit_policy_choices(),on_select)).into_any()
-    } else {
-        element! {agent_collaboration_tui::DialogButton(handler:on_open) {Text(content:format!("{label} ▾"),color:if has_focus {Color::Yellow}else {Color::White})}}
-            .into_any()
-    };
-    element! {agent_collaboration_tui::FormField(label:"Use credits".to_owned(),has_focus:has_focus&&editor.is_some_and(|editor|editor.phase==CreditPolicyEditorPhase::Editing)) {#(body)}}
+    element! {agent_collaboration_tui::controls::fields::FormField(label:"Use credits".to_owned(),has_focus:has_focus&&editor.is_some_and(|editor|editor.phase==CreditPolicyEditorPhase::Editing)) {Text(content:format!("{label} ▾"),color:if has_focus {Color::Yellow}else{Color::White})}}
 }
 
 fn account_options_field_line(
     label: &str,
     value: &str,
     value_color: Color,
-) -> Element<'static, agent_collaboration_tui::FormField> {
-    element! {agent_collaboration_tui::FormField(label:label.to_owned()) {Text(content:value.to_owned(),color:value_color)}}
+) -> Element<'static, agent_collaboration_tui::controls::fields::FormField> {
+    element! {agent_collaboration_tui::controls::fields::FormField(label:label.to_owned()) {Text(content:value.to_owned(),color:value_color)}}
 }
 
-fn credit_entitlement_label(usage: &CreditUsageStatus) -> String {
+pub(crate) fn credit_entitlement_label(usage: &CreditUsageStatus) -> String {
     match usage.provider_observation.availability() {
         CreditAvailability::Unknown => "Unknown".to_owned(),
         CreditAvailability::Depleted => "Depleted".to_owned(),
@@ -488,7 +423,7 @@ fn credit_entitlement_label(usage: &CreditUsageStatus) -> String {
     }
 }
 
-fn credit_freshness_label(freshness: CreditUsageFreshness) -> &'static str {
+pub(crate) fn credit_freshness_label(freshness: CreditUsageFreshness) -> &'static str {
     match freshness {
         CreditUsageFreshness::Fresh => "Fresh",
         CreditUsageFreshness::Stale => "Stale",
@@ -504,7 +439,7 @@ fn freshness_color(freshness: CreditUsageFreshness) -> Color {
     }
 }
 
-fn provider_control_note(usage: &CreditUsageStatus) -> Option<String> {
+pub(crate) fn provider_control_note(usage: &CreditUsageStatus) -> Option<String> {
     use codex_router_core::credit_usage::CreditSpendControl;
 
     match usage.provider_observation.spend_control() {

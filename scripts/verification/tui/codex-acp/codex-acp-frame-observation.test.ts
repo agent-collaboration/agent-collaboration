@@ -152,11 +152,12 @@ test('settling keeps the evidence first, then refuses only a forbidding journey'
 	).rejects.toThrow('does not end on the live grid');
 });
 
-// The Rust drive_terminal line protocol, scripted: READY, one reply per read, OK for writes.
+// Streaming peer: first record at startup; an explicit test input releases the second.
 const LINE_PROTOCOL_STANDIN = `
 const { readFileSync } = require('node:fs');
 const replies = JSON.parse(readFileSync(process.env.TUI_STANDIN_REPLIES, 'utf8'));
-process.stdout.write('TUI_GRID READY 120 36\\n');
+process.stdout.write('TUI_GRID READY 120 36 STREAM\\n');
+process.stdout.write('TUI_GRID ' + replies.shift() + '\\n');
 let pending = '';
 process.stdin.on('data', (chunk) => {
 	pending += chunk.toString('utf8');
@@ -164,7 +165,10 @@ process.stdin.on('data', (chunk) => {
 		const line = pending.slice(0, pending.indexOf('\\n'));
 		pending = pending.slice(pending.indexOf('\\n') + 1);
 		const [command] = line.split(' ');
-		if (command === 'read') process.stdout.write('TUI_GRID ' + (replies.shift() ?? 'EOF') + '\\n');
+		if (command === 'write') {
+			process.stdout.write('TUI_GRID ' + (replies.shift() ?? 'EOF') + '\\n');
+			process.stdout.write('TUI_GRID OK\\n');
+		}
 		else if (command === 'finish' || command === 'stop') {
 			process.stdout.write('TUI_GRID FINISHED 0\\n');
 			process.exit(0);
@@ -174,12 +178,12 @@ process.stdin.on('data', (chunk) => {
 `;
 
 test.each(EARLY_ERRORS)(
-	'%s cannot hide behind a later clean checkpoint across driver reads',
+	'%s cannot hide behind a later clean checkpoint across streamed records',
 	async (_name, error) => {
 		const root = temporaryRoot();
 		roots.push(root);
 		const run = Buffer.from(frame(error) + frame(SUCCESS), 'utf8');
-		// Split the run inside the second frame's opening sequence, across two driver reads.
+		// Split inside the second opening sequence; the release input separates both records.
 		const split = Buffer.byteLength(frame(error)) + 3;
 		writeFileSync(
 			join(root, 'replies.json'),
@@ -197,7 +201,10 @@ test.each(EARLY_ERRORS)(
 			publicEnvironment: { TUI_STANDIN_REPLIES: join(root, 'replies.json') },
 		});
 		try {
-			// The checkpoint only ever sees each read's last state: the clean success frame.
+			await driver.receive();
+			expect(driver.bytes()).toEqual(run.subarray(0, split));
+			await driver.send(Buffer.from('release-next'));
+			// The final checkpoint is clean, but the ledger must retain the earlier error.
 			const grid = await driver.waitForGrid('success', (candidate) =>
 				gridLines(candidate).some((line) => line.trimEnd() === SUCCESS),
 			);

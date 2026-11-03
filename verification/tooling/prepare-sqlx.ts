@@ -35,6 +35,11 @@ export const sqlitePreparationTargets: readonly SqlitePreparationTarget[] = [
     ],
     databaseFilename: "provider-operation-schema.sqlite",
   },
+  {
+    packageName: "ui-preference-store",
+    migrationSources: ["crates/ui-preference-store/migrations"],
+    databaseFilename: "ui-preferences-schema.sqlite",
+  },
 ];
 
 export interface PreparationOptions {

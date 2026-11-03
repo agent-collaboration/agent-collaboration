@@ -47,9 +47,6 @@ pub(crate) fn handle_account_options_key_event(
     let Some(options) = account_options.read().clone() else {
         return false;
     };
-    if phase == WorkflowPhase::Browse && handle_credit_choice(account_options, code, modifiers) {
-        return true;
-    }
     let action = account_options_key_action(&options, phase, code, modifiers);
     let expected_inspection_attempt =
         reset_snapshot.and_then(ResetWorkflowSnapshot::inspection_attempt_generation);
@@ -109,49 +106,6 @@ pub(crate) fn handle_account_options_key_event(
     true
 }
 
-fn handle_credit_choice(
-    state: &mut State<Option<AccountOptionsState>>,
-    code: KeyCode,
-    modifiers: KeyModifiers,
-) -> bool {
-    if super::super::quota_reset_component_input::forced_quota_exit_key(code, modifiers) {
-        return false;
-    }
-    let Some(mut options) = state.read().clone() else {
-        return false;
-    };
-    let Some(editor) = options.editor.as_mut().filter(|editor| {
-        matches!(
-            editor.phase,
-            CreditPolicyEditorPhase::Editing | CreditPolicyEditorPhase::SaveFailed(_)
-        )
-    }) else {
-        return false;
-    };
-    if !editor.choice.is_open() {
-        if !matches!(code, KeyCode::Left | KeyCode::Right | KeyCode::Char(' ')) {
-            return false;
-        }
-        editor.choice.open(editor.draft_policy);
-    }
-    if !modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER) {
-        let choices = super::credit_policy_choices();
-        let code = match code {
-            KeyCode::Left => KeyCode::Up,
-            KeyCode::Right => KeyCode::Down,
-            other => other,
-        };
-        if let agent_collaboration_tui::ChoiceTransition::Selected(policy) =
-            editor.choice.handle_key(code, &choices)
-        {
-            editor.draft_policy = policy;
-            editor.phase = CreditPolicyEditorPhase::Editing;
-        }
-        state.set(Some(options));
-    }
-    true
-}
-
 fn close_account_options(
     account_options: &mut State<Option<AccountOptionsState>>,
     reset_target: &mut State<Option<ResetPaneTarget>>,
@@ -193,7 +147,7 @@ pub(crate) fn open_account_options_for_account(
     }
 }
 
-fn apply_account_options_key_action(
+pub(crate) fn apply_account_options_key_action(
     account_options: &mut State<Option<AccountOptionsState>>,
     command_port: &AccountOptionsCommandPort,
     action: AccountOptionsKeyAction,
@@ -234,7 +188,9 @@ fn apply_account_options_key_action(
     account_options.set(Some(options));
 }
 
-fn reset_pane_target_for_account(row: &QuotaStatusAccountViewModel) -> Option<ResetPaneTarget> {
+pub(crate) fn reset_pane_target_for_account(
+    row: &QuotaStatusAccountViewModel,
+) -> Option<ResetPaneTarget> {
     if !row.enabled {
         return None;
     }

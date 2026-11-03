@@ -49,6 +49,7 @@ async fn enqueue_with_answer(
                             target_identity: "remote recipient".into(),
                         },
                     },
+                    chrono::Utc::now().timestamp_millis(),
                 )
                 .await
                 .map_err(|error| StoreError::backend(format!("queued answer write: {error:?}")))?;
@@ -110,6 +111,7 @@ async fn queued_answer_reopens_with_custody_and_failure_rolls_back_without_a_pus
         serde_json::to_value(answer.result.unwrap()).unwrap(),
         expected
     );
+    let settled_at_ms = answer.settled_at.unwrap().timestamp_millis();
     assert!(
         owner
             .message_send_answer(&rejected_id)
@@ -120,6 +122,22 @@ async fn queued_answer_reopens_with_custody_and_failure_rolls_back_without_a_pus
     let counts: (i64,i64,i64,i64) = sqlx::query_as("SELECT (SELECT count(*) FROM router_pushes),(SELECT count(*) FROM _fleet_sync_outbox_items),(SELECT count(*) FROM _fleet_sync_operations),(SELECT count(*) FROM message_send_answers)")
         .fetch_one(&mut *owner.writer.lock().await).await.unwrap();
     assert_eq!(counts, (0, 1, 1, 1));
+
+    sqlx::query("UPDATE message_send_answers SET settled_at_ms=NULL WHERE item_id=?")
+        .bind(id.as_str())
+        .execute(&mut *owner.writer.lock().await)
+        .await
+        .unwrap();
+    assert!(matches!(
+        owner.message_send_answer(&id).await,
+        Err(crate::StorageError::InvalidStoredRecord)
+    ));
+    sqlx::query("UPDATE message_send_answers SET settled_at_ms=? WHERE item_id=?")
+        .bind(settled_at_ms)
+        .bind(id.as_str())
+        .execute(&mut *owner.writer.lock().await)
+        .await
+        .unwrap();
 
     // Corrupt a saved identity: decode must refuse rather than replay a different item.
     let mut corrupt = expected;
@@ -132,6 +150,16 @@ async fn queued_answer_reopens_with_custody_and_failure_rolls_back_without_a_pus
         .unwrap();
     assert!(matches!(
         owner.message_send_answer(&id).await,
+        Err(crate::StorageError::InvalidStoredRecord)
+    ));
+    sqlx::query("INSERT INTO message_send_answers(item_id,target_identity,result,recorded_at,settled_at_ms) VALUES (?,?,NULL,'2026-10-20T12:00:00.000000000Z',1)")
+        .bind(rejected_id.as_str())
+        .bind("pending recipient")
+        .execute(&mut *owner.writer.lock().await)
+        .await
+        .unwrap();
+    assert!(matches!(
+        owner.message_send_answer(&rejected_id).await,
         Err(crate::StorageError::InvalidStoredRecord)
     ));
     owner.close().await.unwrap();

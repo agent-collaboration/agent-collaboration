@@ -6,8 +6,10 @@ use std::process::Command;
 
 use serde::Deserialize;
 
-const LAYER_POLICY: [(&str, &[&str]); 15] = [
+const LAYER_POLICY: [(&str, &[&str]); 17] = [
     ("node-test-fixture", &[]),
+    ("ui-preference-store", &[]),
+    ("sqlite-storage-maintenance", &[]),
     ("codex-router-quota", &[]),
     ("codex-router-selection", &["codex-router-quota"]),
     (
@@ -28,7 +30,10 @@ const LAYER_POLICY: [(&str, &[&str]); 15] = [
         &["codex-router-quota-service", "agent-collaboration-tui"],
     ),
     ("collaboration-contracts", &[]),
-    ("collaboration-runtime", &["collaboration-contracts"]),
+    (
+        "collaboration-runtime",
+        &["collaboration-contracts", "sqlite-storage-maintenance"],
+    ),
     (
         "collaboration-service",
         &["collaboration-contracts", "collaboration-runtime"],
@@ -45,6 +50,7 @@ const LAYER_POLICY: [(&str, &[&str]); 15] = [
     (
         "agent-session-tui",
         &[
+            "ui-preference-store",
             "agent-session-inventory",
             "agent-collaboration-tui",
             "collaboration-contracts",
@@ -74,6 +80,8 @@ const LAYER_POLICY: [(&str, &[&str]); 15] = [
     (
         "codex-router-cli",
         &[
+            // The quota composition root wires its preference adapter to this leaf store.
+            "ui-preference-store",
             "codex-router-quota-service",
             "agent-router-quota-tui",
             "agent-collaboration-tui",
