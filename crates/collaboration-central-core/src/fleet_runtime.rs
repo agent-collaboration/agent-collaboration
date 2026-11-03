@@ -99,22 +99,15 @@ where
         engine.register(crate::session_revocation::EndSessionsTask::<Host, Io>(
             PhantomData,
         ))?;
-        engine.register(fleet_sync_delivery::PublishStatus::<
+        engine.register(crate::fleet_mail_tasks::FleetStatusTask::<
             crate::session_store::CoreSessionStore<Host, Io>,
             Host::Database,
-            board_sync_protocol::BoardDeliveryTypes,
         >::new())?;
-        engine.register(fleet_sync_delivery::PushItem::<
+        engine.register(crate::fleet_mail_tasks::FleetPushTask::<
             crate::session_store::CoreSessionStore<Host, Io>,
             Host::Database,
-            board_sync_protocol::BoardDeliveryTypes,
-            fleet_sync_delivery::PublishStatus<
-                crate::session_store::CoreSessionStore<Host, Io>,
-                Host::Database,
-                board_sync_protocol::BoardDeliveryTypes,
-            >,
         >::new(mail_limits, shared_host.clone()))?;
-        engine.register(fleet_sync_delivery::RemoveDeliveryRecord::<
+        engine.register(crate::fleet_mail_tasks::FleetMailRemoval::<
             crate::session_store::CoreSessionStore<Host, Io>,
             Host::Database,
         >::new())?;

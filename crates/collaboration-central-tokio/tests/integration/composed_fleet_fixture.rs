@@ -23,8 +23,10 @@ pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>
 pub const PROJECT: &str = "019f0000-0000-7000-8000-000000008199";
 pub const A: &str = "019f0000-0000-7000-8000-000000008111";
 pub const B: &str = "019f0000-0000-7000-8000-000000008112";
+pub const C: &str = "019f0000-0000-7000-8000-000000008113";
 pub const SERVICE_A: &str = "019f0000-0000-7000-8000-000000008101";
 pub const SERVICE_B: &str = "019f0000-0000-7000-8000-000000008102";
+pub const SERVICE_C: &str = "019f0000-0000-7000-8000-000000008103";
 pub const NOW: i64 = 1_792_281_600_000;
 type Route = Arc<dyn Fn(Vec<u8>) -> BoxFuture<'static, Result<Vec<u8>, CallFailure>> + Send + Sync>;
 #[derive(Clone)]
@@ -32,6 +34,14 @@ pub struct Io {
     pub now: Arc<AtomicI64>,
     routes: Arc<Mutex<Option<(Route, Route)>>>,
     wakes: Arc<Mutex<Vec<SyncTime>>>,
+    time_changed: tokio::sync::watch::Sender<i64>,
+    pub reply_deadlines: tokio::sync::watch::Sender<usize>,
+}
+impl Io {
+    pub fn advance(&self, millis: i64) {
+        let now = self.now.fetch_add(millis, Ordering::SeqCst) + millis;
+        self.time_changed.send_replace(now);
+    }
 }
 impl Clock for Io {
     fn now(&self) -> SyncTime {
@@ -55,11 +65,27 @@ impl WakeScheduler for Io {
     }
 }
 impl PlatformIo for Io {
+    #[expect(
+        clippy::expect_used,
+        reason = "The fixture retains its injected clock for every active call."
+    )]
     fn reply_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
-        tokio::time::sleep(remaining)
+        let deadline = self.now().after(remaining);
+        let mut changed = self.time_changed.subscribe();
+        let now = self.now.clone();
+        let started = self.reply_deadlines.clone();
+        async move {
+            started.send_modify(|count| *count += 1);
+            while now.load(Ordering::SeqCst) < deadline.unix_millis() {
+                changed
+                    .changed()
+                    .await
+                    .expect("fixture clock remains owned");
+            }
+        }
     }
 
     async fn object_call(
@@ -105,6 +131,8 @@ impl Fixture {
             now: Arc::new(AtomicI64::new(now)),
             routes: Arc::default(),
             wakes: Arc::default(),
+            time_changed: tokio::sync::watch::channel(now).0,
+            reply_deadlines: tokio::sync::watch::channel(0).0,
         };
         let receiver = ReceiverId::try_from("019f0000-0000-7000-8000-000000000010".to_owned())?;
         let objects = ObjectStore::open(path).await?;
@@ -168,7 +196,7 @@ impl Fixture {
         ));
         // Supplied authenticated enrollment is this ObjectRuntime component fixture's input.
         store.transaction(|scope|Box::pin(async move {
-            for (peer,service) in [(A,SERVICE_A),(B,SERVICE_B)] {
+            for (peer,service) in [(A,SERVICE_A),(B,SERVICE_B),(C,SERVICE_C)] {
                 query::<sqlx_turso::Turso>("INSERT INTO machine_enrollments(machine_id,service_id,machine_label,access_client_id,credential_hash,state,expires_at,created_at,updated_at) VALUES(?,?,'composed fixture',?,?,'enrolled','2033-05-18T03:33:20+00:00','2026-10-18T00:00:00+00:00','2026-10-18T00:00:00+00:00') ON CONFLICT(machine_id) DO NOTHING")
                     .bind(peer).bind(service).bind(format!("fixture-client-{peer}")).bind(format!("fixture-credential-{peer}")).execute(scope.executor()).await.map_err(StoreError::backend)?;
             } Ok(())
@@ -195,7 +223,7 @@ impl Fixture {
             json!({"kind":"machine","value":{"installation":SERVICE_A}})
         };
         let bytes = serde_json::to_vec(
-            &json!({"source":{"kind":"fleet"},"sourceFace":face,"authority":authority,"destination":{"kind":"fleet"},"destinationFace":if kind=="central.owner-registry" || kind=="central.session-lease" {"registry"} else {"fleet"},"identity":{"operation":durable_steps::Uuid::now_v7(),"step":"component_call"},"kind":kind,"target":target,"request":request}),
+            &json!({"source":{"kind":"fleet"},"sourceFace":face,"authority":authority,"destination":{"kind":"fleet"},"destinationFace":if matches!(kind,"central.owner-registry" | "central.session-lease" | "central.mail-submit-registry") {"registry"} else {"fleet"},"identity":{"operation":durable_steps::Uuid::now_v7(),"step":"component_call"},"kind":kind,"target":target,"request":request}),
         )?;
         let answer = self
             .runtime

@@ -1,20 +1,16 @@
-//! Registry mail admission releases its transaction before the mailbox call.
+//! Fleet commits mail custody before answering the authenticated submitter.
 use crate::FleetKind;
 
 use crate::{
     CallerKind, ObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
-    mail_submit_admission::{AdmitMailSubmit, MailSubmitAdmission},
-    mail_submit_calls::{MailSubmitRegistry, MailSubmitReply, MailSubmitRequest},
+    mail_submit_admission::AdmitMailSubmit,
+    mail_submit_calls::{MailSubmitRegistry, MailSubmitRequest},
     object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork,
     step_driver::StepDriver,
 };
-use board_sync_protocol::MailSubmitAnswer;
-use durable_steps::{
-    AtomicStore, CallFailure, Host as _, NotSentReason, storage::TransactionScope,
-};
-use fleet_sync_protocol::DeliveryAnswer;
+use durable_steps::{AtomicStore, CallFailure, NotSentReason, storage::TransactionScope};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -51,38 +47,21 @@ where
         let request: MailSubmitRequest =
             serde_json::from_value(invocation.request).map_err(|_| refused())?;
         let ObjectWork::Fleet {
-            host, shared_host, ..
+            host, io, delivery, ..
         } = &self.work
         else {
             return Err(refused());
         };
-        let (admission, _) = StepDriver::new(host.clone())
-            .run(AdmitMailSubmit { source, request })
+        let (answer, _) = StepDriver::new(host.clone())
+            .run(AdmitMailSubmit {
+                source,
+                request,
+                limits: crate::central_mailbox_limits().map_err(|_| CallFailure::AnswerLost)?,
+                relay: delivery.relay_peer,
+                now: io.now(),
+            })
             .await
             .map_err(|_| CallFailure::AnswerLost)?;
-        let answer = match admission {
-            MailSubmitAdmission::Reply(reply) => reply,
-            MailSubmitAdmission::Submit { target, request } => {
-                let answer = shared_host
-                    .dispatch(target, request, invocation.identity)
-                    .await?;
-                let answer = match answer {
-                    DeliveryAnswer::Submit(result) => MailSubmitAnswer::Submitted(result),
-                    DeliveryAnswer::MailboxUnavailable { reason } => {
-                        MailSubmitAnswer::MailboxUnavailable { reason }
-                    }
-                    DeliveryAnswer::Fetch(_)
-                    | DeliveryAnswer::Received(_)
-                    | DeliveryAnswer::Report(_)
-                    | DeliveryAnswer::StatusFetch(_)
-                    | DeliveryAnswer::StatusAck(_)
-                    | DeliveryAnswer::Query(_)
-                    | DeliveryAnswer::Retire(_)
-                    | DeliveryAnswer::Settle(_) => return Err(CallFailure::AnswerLost),
-                };
-                MailSubmitReply::Answer(answer)
-            }
-        };
         serde_json::to_vec(&answer).map_err(|_| CallFailure::AnswerLost)
     }
 }

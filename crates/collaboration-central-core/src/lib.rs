@@ -57,6 +57,7 @@ pub use delivery_config::DeliveryConfig;
 #[cfg(feature = "conformance")]
 mod conformance_mailbox;
 mod effect_driver;
+mod fleet_mail_tasks;
 mod forward_calls;
 mod forward_delivery;
 mod forward_registry;
