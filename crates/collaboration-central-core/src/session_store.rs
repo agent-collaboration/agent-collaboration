@@ -62,7 +62,7 @@ pub(crate) enum SessionTransportEffect {
         frame: fleet_sync_protocol::FrameId,
         request: crate::fleet_read_calls::FleetReadRequest,
     },
-    MailboxRequest {
+    SenderMailRequest {
         connection: ConnectionId,
         session: fleet_sync_session::SessionKey,
         frame: fleet_sync_protocol::FrameId,

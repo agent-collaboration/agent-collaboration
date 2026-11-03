@@ -29,7 +29,7 @@ mod fleet_requests;
 mod forwards;
 mod installation_reads;
 mod mail_submit;
-mod mailbox_requests;
+mod sender_mail;
 
 pub(crate) struct EffectDriver<Host: ObjectHost, Io: PlatformIo> {
     host: Arc<Host>,
@@ -175,14 +175,14 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
                             .await;
                     }
                 }
-                SessionTransportEffect::MailboxRequest {
+                SessionTransportEffect::SenderMailRequest {
                     connection,
                     session,
                     frame,
                     request,
                 } => {
                     if !published.close.contains(&connection) {
-                        self.answer_mailbox_request(connection, session, frame, request)
+                        self.answer_sender_mail(connection, session, frame, request)
                             .await;
                     }
                 }

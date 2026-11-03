@@ -59,17 +59,14 @@ where
             OperationRequest::Delivery(request) => {
                 use fleet_sync_protocol::DeliveryRequest;
                 match request {
-                    request @ (DeliveryRequest::Fetch { .. }
-                    | DeliveryRequest::Received { .. }
-                    | DeliveryRequest::Query { .. }
-                    | DeliveryRequest::Settle { .. }
-                    | DeliveryRequest::Retire { .. }) => {
-                        self.transport.push(SessionTransportEffect::MailboxRequest {
-                            connection,
-                            session,
-                            frame,
-                            request: Box::new(request),
-                        })
+                    request @ (DeliveryRequest::Query { .. } | DeliveryRequest::Settle { .. }) => {
+                        self.transport
+                            .push(SessionTransportEffect::SenderMailRequest {
+                                connection,
+                                session,
+                                frame,
+                                request: Box::new(request),
+                            })
                     }
                     DeliveryRequest::StatusAck { .. }
                     | DeliveryRequest::StatusFetch { .. }
@@ -80,7 +77,10 @@ where
                     }
                     // Board mail must enter MailSubmit's provenance/epoch gate.
                     // Raw Submit is a permanent designed refusal (decision523).
-                    DeliveryRequest::Submit { .. } => self.stage_operation_answer(
+                    DeliveryRequest::Submit { .. }
+                    | DeliveryRequest::Fetch { .. }
+                    | DeliveryRequest::Received { .. }
+                    | DeliveryRequest::Retire { .. } => self.stage_operation_answer(
                         connection,
                         frame,
                         OperationAnswer::InvalidShape {

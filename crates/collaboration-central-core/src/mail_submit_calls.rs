@@ -9,9 +9,9 @@ use message_board::ServiceId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
-pub(crate) struct MailSubmitRegistry;
-impl CallTarget for MailSubmitRegistry {
-    const KIND: &'static str = "central.mail-submit-registry";
+pub(crate) struct FleetMailSubmit;
+impl CallTarget for FleetMailSubmit {
+    const KIND: &'static str = "central.mail-submit";
     type Request = MailSubmitRequest;
     type Answer = MailSubmitReply;
 }

@@ -259,7 +259,14 @@ where
         key: &RequestKey,
         input: &SharedTask::Input,
     ) -> Result<Admitted, StartRefusal> {
-        self.inner.admit::<SharedTask>(key, input).await
+        let admitted = self.inner.admit::<SharedTask>(key, input).await?;
+        // Native journal admission records work but does not arm a timer.
+        // Capture its deadline in the session commit, so the host wakes only
+        // after the transaction and registration publication succeed.
+        if let Some(at) = self.inner.earliest().await? {
+            self.ensure_wake(at).await?;
+        }
+        Ok(admitted)
     }
     async fn ensure_wake(&mut self, at: SyncTime) -> Result<(), StoreError> {
         self.inner.ensure_wake(at).await?;

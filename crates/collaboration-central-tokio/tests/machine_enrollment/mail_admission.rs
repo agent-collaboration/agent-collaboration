@@ -42,8 +42,8 @@ async fn corrupt_epoch_history_cannot_be_reported_as_not_writer() -> TestResult 
     fixture.object.transaction(move |scope| Box::pin(async move {
         // Deliberate on-disk corruption, outside production code. The query's
         // schema comes from the pinned public lease migration corpus.
-        query::<sqlx_turso::Turso>("INSERT INTO _fleet_sync_epoch_history(database,epoch,record) VALUES(?,'1','not valid JSON')")
-            .bind(database.to_string()).execute(scope.executor()).await.map_err(StoreError::backend)?;
+        query::<sqlx_turso::Turso>("INSERT INTO _fleet_sync_epoch_history(id,database,epoch,holder,granted_at,created_at,updated_at) VALUES(?,?,'1','not a peer',1792281600000,1792281600000,1792281600000)")
+            .bind(durable_steps::Uuid::now_v7().to_string()).bind(database.to_string()).execute(scope.executor()).await.map_err(StoreError::backend)?;
         Ok(())
     })).await?;
     let corruption = fixture
@@ -79,17 +79,43 @@ async fn corrupt_epoch_history_cannot_be_reported_as_not_writer() -> TestResult 
     )?);
     let invocation = serde_json::to_vec(&json!({
         "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":origin.installation}},
-        "destination":{"kind":"fleet"},"destinationFace":"registry",
+        "destination":{"kind":"fleet"},"destinationFace":"fleet",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"mail_submit"},
-        "kind":"central.mail-submit-registry","target":null,"request":{
+        "kind":"central.mail-submit","target":null,"request":{
             "session":{"peer":sender,"sessionId":durable_steps::Uuid::now_v7()},
             "origin":{"installation":origin.installation,"machine":origin.label},"item":item,"originEpoch":1
         }
     }))?;
-    let answer = fixture.runtime.on_call(invocation).await;
+    let answer = fixture.runtime.on_call(invocation.clone()).await;
     assert!(
         matches!(answer, Err(CallFailure::AnswerLost)),
         "corrupt history produced a MailSubmitAnswer: {answer:?}"
+    );
+    fixture
+        .object
+        .transaction(move |scope| {
+            Box::pin(async move {
+                query::<sqlx_turso::Turso>(
+                    "UPDATE _fleet_sync_epoch_history SET holder=? WHERE database=?",
+                )
+                .bind(sender.to_string())
+                .bind(database.to_string())
+                .execute(scope.executor())
+                .await
+                .map_err(StoreError::backend)?;
+                Ok(())
+            })
+        })
+        .await?;
+    let repaired =
+        fixture.runtime.on_call(invocation).await.map_err(|error| {
+            format!("repaired history did not reach Fleet admission: {error:?}")
+        })?;
+    let repaired: serde_json::Value = serde_json::from_slice(&repaired)?;
+    assert_eq!(
+        repaired.pointer("/value/value/kind"),
+        Some(&json!("accepted")),
+        "{repaired}"
     );
     fixture.objects.close().await?;
     Ok(())

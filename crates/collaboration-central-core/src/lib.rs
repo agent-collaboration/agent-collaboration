@@ -133,7 +133,6 @@ mod owner_retirement;
 mod peer_request;
 mod registry_lease_calls;
 mod registry_lease_store;
-mod registry_mail_calls;
 mod registry_peer_lookup;
 mod registry_session_calls;
 pub use object_transport::{SerializedObjectCall, deserialize_object_reply, serialize_object_call};

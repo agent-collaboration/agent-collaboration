@@ -6,8 +6,9 @@ use super::{
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use durable_steps::StoreError;
 use fleet_sync_protocol::{
-    ClientFrame, DeliveryAnswer, DeliveryRefusal, DeliveryRequest, DeliveryStatus, FrameId, ItemId,
-    ItemStatusState, OperationAnswer, OperationRequest, ServerFrame,
+    ClientFrame, DeliveryAnswer, DeliveryRefusal, DeliveryRequest, DeliverySeq, DeliveryStatus,
+    DeliveryStream, FrameId, ItemId, ItemStatusState, OperationAnswer, OperationRequest,
+    ServerFrame,
 };
 use serde_json::json;
 
@@ -182,4 +183,70 @@ async fn compacted_settlement_query_keeps_its_digest_and_sender_after_the_fleet_
         matches!(absent.statuses.as_slice(),[status] if status.item==unknown && matches!(status.state,ItemStatusState::Unknown))
     );
     reopened.close().await
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Retired operations must be refused before a Mailbox hop and the same admitted session must retain and query its custody."
+)]
+#[tokio::test]
+async fn retired_fetch_received_and_retire_requests_are_invalid_and_leave_custody_queryable()
+-> TestResult {
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path(), NOW).await?;
+    let mut sender = Socket::open(&fixture, A, SERVICE_A).await?;
+    let item = envelope(B, SERVICE_B)?;
+    submit(&fixture, &item).await?;
+    let call: durable_steps::CallId = serde_json::from_value(
+        json!({"operation":durable_steps::Uuid::now_v7(),"step":"retired_operation"}),
+    )?;
+    let requests: [DeliveryRequest<BoardDeliveryTypes>; 3] = [
+        DeliveryRequest::Fetch {
+            call: call.clone(),
+            stream: DeliveryStream::Items,
+            after: DeliverySeq::new(0),
+            max_items: 1,
+            max_bytes: 1_024,
+            inbox_room_bytes: Some(1_024),
+        },
+        DeliveryRequest::Received {
+            call: call.clone(),
+            stream: DeliveryStream::Items,
+            through: DeliverySeq::new(1),
+        },
+        DeliveryRequest::Retire {
+            call,
+            mailbox: B.to_owned().try_into()?,
+            items: vec![item.id()],
+        },
+    ];
+    for request in requests {
+        let frame = FrameId::new(durable_steps::Uuid::now_v7())?;
+        fixture
+            .runtime
+            .on_frame(
+                sender.binding,
+                serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Request {
+                    frame,
+                    body: OperationRequest::Delivery(request),
+                })?,
+            )
+            .await?;
+        loop {
+            if let ServerFrame::Answer {
+                frame: answered,
+                body,
+            } = sender.next().await?
+            {
+                assert_eq!(answered, frame);
+                assert!(matches!(body,OperationAnswer::InvalidShape {field} if field=="operation"));
+                break;
+            }
+        }
+    }
+    assert_eq!(custody(&fixture, item.id()).await?, ("sent".into(), true));
+    assert!(
+        matches!(query(&fixture,&mut sender,vec![item.id()]).await?,DeliveryAnswer::Query(result) if matches!(result.statuses.as_slice(),[status] if matches!(status.state,ItemStatusState::Known {status:DeliveryStatus::Sent,..})))
+    );
+    fixture.close().await
 }

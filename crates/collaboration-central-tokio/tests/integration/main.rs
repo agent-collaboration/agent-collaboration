@@ -19,4 +19,5 @@ mod fleet_mail_query;
 mod fleet_mail_receipt_loss;
 mod fleet_mail_reports;
 mod fleet_mail_settle;
+mod fleet_mail_status_wire;
 mod fleet_ownership_restart;
