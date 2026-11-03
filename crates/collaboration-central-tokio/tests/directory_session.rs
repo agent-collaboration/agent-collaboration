@@ -3,6 +3,12 @@
 
 #[path = "directory_session/claim_routes.rs"]
 mod claim_routes;
+#[expect(
+    dead_code,
+    reason = "The shared composed fixture supplies only actual import setup to this HTTP target."
+)]
+#[path = "integration/composed_fleet_fixture.rs"]
+mod composed_fleet_fixture;
 #[path = "native_http/support.rs"]
 mod configuration;
 #[expect(

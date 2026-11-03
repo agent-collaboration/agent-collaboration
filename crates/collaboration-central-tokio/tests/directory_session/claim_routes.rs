@@ -1,10 +1,6 @@
 //! Public library preconditions, then real normal-session lease decisions and repair.
 //! The setup admission gates remain the existing arranger's explicit stand-ins.
 use super::*;
-use serde::Deserialize;
-use sqlx_core::{query::query, row::Row};
-use sqlx_turso::sqlx::{ConnectOptions, Connection};
-use std::num::NonZeroU64;
 
 #[expect(
     clippy::panic_in_result_fn,
@@ -178,19 +174,11 @@ enum ExpectedRetirement {
 async fn retirement_precedence(expected: ExpectedRetirement) -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
-    let config = configuration::registry_config()?;
-    let database = DatabaseId::new(durable_steps::Uuid::now_v7())?;
+    let database = DatabaseId::try_from(composed_fleet_fixture::PROJECT.to_owned())?;
     let old_claim = RequestId::new(durable_steps::Uuid::now_v7())?;
     let old_registration = RequestId::new(durable_steps::Uuid::now_v7())?;
     let server = support::start(root.path(), &jwks.url).await?;
     let mut machine = support::admit(&server).await?;
-    support::create_graph(
-        &mut machine.socket,
-        &WorkspaceId::generate(),
-        &BoardId::generate(),
-        &[database],
-    )
-    .await?;
     assert_eq!(
         claim(&mut machine.socket, database, old_claim).await?,
         HolderChangeAnswer::Refused(HolderChangeRefusal::NotFound)
@@ -200,7 +188,28 @@ async fn retirement_precedence(expected: ExpectedRetirement) -> ConformanceResul
         .close(reqwest_websocket::CloseCode::Normal, None)
         .await?;
     server.shutdown().await?;
-    registry_setup::import_unheld(root.path(), config, database).await?;
+    // Existing conformance setup supplies an archived parent board, then runs
+    // the actual registered ImportTask/hook and physical project seed.
+    let composed =
+        composed_fleet_fixture::Fixture::open(root.path(), composed_fleet_fixture::NOW).await?;
+    let owner = collaboration_central_core::OwnerIdentity::from_access(
+        collaboration_central_core::AccessCaller::Owner {
+            email: "fixture@example.test".into(),
+        },
+    )?;
+    let position = composed
+        .runtime
+        .conformance_imported_unheld(
+            database,
+            owner,
+            collaboration_central_core::ConformanceBoardState::Archived,
+        )
+        .await?;
+    assert_eq!(
+        position,
+        ReplicationPosition::new(Epoch::new(1)?, CommitSequence::new(1))
+    );
+    composed.close().await?;
     let server = support::start(root.path(), &jwks.url).await?;
     let mut machine = support::connect(&server).await?;
     let cached = RegistrationAnswer::Refused(RegistrationRefusal::NotWriter { current: None });
@@ -217,25 +226,44 @@ async fn retirement_precedence(expected: ExpectedRetirement) -> ConformanceResul
         .close(reqwest_websocket::CloseCode::Normal, None)
         .await?;
     server.shutdown().await?;
-    let (retirement, retired) = registry_setup::retire_imported_copy(
-        root.path(),
-        config,
-        database,
-        Epoch::new(match expected {
-            ExpectedRetirement::Retired => 1,
-            ExpectedRetirement::Retiring => 2,
-        })?,
-    )
-    .await?;
+    let server = support::start(root.path(), &jwks.url).await?;
+    let retirement = RequestId::new(durable_steps::Uuid::now_v7())?;
+    let retired: collaboration_central_admin_protocol::OwnerRetirementAnswer =
+        reqwest::Client::builder()
+            .no_proxy()
+            .build()?
+            .post(format!(
+                "{}/admin/v1/projects/{database}/retire",
+                server.base_url()
+            ))
+            .header(
+                "Cf-Access-Jwt-Assertion",
+                collaboration_central_conformance::owner_assertion()?,
+            )
+            .json(&collaboration_central_admin_protocol::OwnerRetirement {
+                request_id: retirement,
+                expect_fence: Epoch::new(match expected {
+                    ExpectedRetirement::Retired => 1,
+                    ExpectedRetirement::Retiring => 2,
+                })?,
+                expect_acked: position,
+            })
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
     if matches!(expected, ExpectedRetirement::Retiring) {
         assert!(
-            matches!(retired, RetirementAnswer::Refused(RetirementRefusal::CopyMismatch { fence, acked })
-            if fence == Epoch::new(1)? && acked == ReplicationPosition::new(Epoch::new(1)?, CommitSequence::new(0)))
+            matches!(retired, collaboration_central_admin_protocol::OwnerRetirementAnswer::Refused(RetirementRefusal::CopyMismatch { fence, acked })
+            if fence == Epoch::new(1)? && acked == position)
         );
     } else {
-        assert!(matches!(retired, RetirementAnswer::Retired { .. }));
+        assert!(matches!(
+            retired,
+            collaboration_central_admin_protocol::OwnerRetirementAnswer::Retired { .. }
+        ));
     }
-    let server = support::start(root.path(), &jwks.url).await?;
     let mut machine = support::connect(&server).await?;
     let proof = async {
         assert_eq!(
@@ -268,7 +296,7 @@ async fn retirement_precedence(expected: ExpectedRetirement) -> ConformanceResul
             repeated
         );
         if matches!(expected, ExpectedRetirement::Retiring) {
-            wait_publication(root.path(), database, Epoch::new(1)?, 2).await?;
+            assert_directory_version(&mut machine.socket, database, Epoch::new(1)?, 2).await?;
             let entries =
                 support::directory(&mut machine.socket, DirectoryQuery::default()).await?;
             let entry = entries
@@ -355,52 +383,6 @@ async fn claim(
         }
     })
     .await?
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct ObservedPublicationVersion {
-    epoch: Epoch,
-    incarnation: NonZeroU64,
-    change: NonZeroU64,
-}
-
-async fn wait_publication(
-    root: &Path,
-    database: DatabaseId,
-    epoch: Epoch,
-    expected_change: u64,
-) -> ConformanceResult<()> {
-    let mut connection = sqlx_turso::TursoConnectOptions::new()
-        .filename(root.join("fleet.db"))
-        .read_only(true)
-        .connect()
-        .await?;
-    let observed = tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            let row = query::<sqlx_turso::Turso>(
-                "SELECT version FROM registry_lease_acknowledgements WHERE project_id=?",
-            )
-            .bind(database.to_string())
-            .fetch_optional(&mut connection)
-            .await?;
-            if let Some(row) = row {
-                // A narrow typed observation of the private version, never a write or a second owner.
-                let version: ObservedPublicationVersion =
-                    serde_json::from_str(&row.try_get::<String, _>("version")?)?;
-                if version.epoch == epoch && version.change.get() == expected_change {
-                    assert!(version.incarnation.get() > 0);
-                    return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
-                }
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await;
-    let closed = connection.close().await;
-    observed??;
-    closed?;
-    Ok(())
 }
 
 async fn assert_directory_holder(
