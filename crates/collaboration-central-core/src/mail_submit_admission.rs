@@ -103,7 +103,7 @@ where
                     reason: "mail constructor returned a different operation".into(),
                 });
             };
-            match (item.sender(), origin_epoch) {
+            let submitter = match (item.sender(), origin_epoch) {
                 (collaboration_mail_protocol::MailSender::Project { project }, Some(epoch)) => {
                     let database = DatabaseId::try_from(project.as_str().to_owned())
                         .map_err(StoreError::backend)?;
@@ -113,12 +113,13 @@ where
                     if !grant.is_some_and(|grant| grant.holder == session.peer) {
                         return reply(MailSubmitReply::Answer(MailSubmitAnswer::NotWriter));
                     }
+                    fleet_sync_protocol::Submitter::Project(database)
                 }
                 (
                     collaboration_mail_protocol::MailSender::Session(_)
                     | collaboration_mail_protocol::MailSender::HumanUser { .. },
                     None,
-                ) => {}
+                ) => fleet_sync_protocol::Submitter::Machine(session.peer),
                 (collaboration_mail_protocol::MailSender::Project { .. }, None)
                 | (
                     collaboration_mail_protocol::MailSender::Session(_)
@@ -129,8 +130,12 @@ where
                         field: "originEpoch".into(),
                     });
                 }
-            }
-            let mut outbox = Outbox::<_, BoardDeliveryTypes>::new(scope, self.limits);
+            };
+            let mut outbox = Outbox::<_, BoardDeliveryTypes, _>::new(
+                scope,
+                self.limits,
+                &crate::fleet_sender_binding::FleetSenderBinding,
+            );
             if recipient_revoked
                 && !fleet_sync_delivery::item_is_too_old(item.id(), self.now)
                 && matches!(
@@ -154,7 +159,7 @@ where
                 .submit_relay::<
                     crate::fleet_mail_tasks::FleetPushTask<Store, Driver>,
                     crate::fleet_mail_tasks::FleetMailRemoval<Store, Driver>,
-                >(session.peer, *item, self.relay, origin.installation, self.now)
+                >(submitter, *item, self.relay, origin.installation, self.now)
                 .await
                 .map_err(fleet_sync_delivery::delivery_rollback)?;
             Ok((

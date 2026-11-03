@@ -20,9 +20,9 @@ collaboration-protocol = { path = "../../../crates/collaboration-protocol" }
 message-board = { path = "../../../crates/message-board" }
 message-board-storage = { path = "../../../crates/message-board-storage" }
 fleet-admission = { path = "../../../crates/fleet-admission" }
-fleet-sync-protocol = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "7b69ca029f3d77910fb192cae3903ad2e148155b" }
-fleet-sync-lease = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "7b69ca029f3d77910fb192cae3903ad2e148155b", default-features = false }
-sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "7b69ca029f3d77910fb192cae3903ad2e148155b", default-features = false }
+fleet-sync-protocol = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "48d7505b85b9fccb54b4504da7a77cca75e2b6fe" }
+fleet-sync-lease = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "48d7505b85b9fccb54b4504da7a77cca75e2b6fe", default-features = false }
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "48d7505b85b9fccb54b4504da7a77cca75e2b6fe", default-features = false }
 collaboration-central-tokio = { path = "../../../crates/collaboration-central-tokio", features = ["conformance"] }
 collaboration-central-conformance = { path = "../../../crates/collaboration-central-conformance" }
 serde = { version = "=1.0.228", features = ["derive"] }

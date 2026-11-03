@@ -283,12 +283,15 @@ where
                             let item =
                                 ItemId::try_from("019f0000-0000-7000-8000-000000000604".to_owned())
                                     .map_err(StoreError::backend)?;
-                            let status = fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes>::new(
-                                scope, limits,
-                            )
-                            .relay_query(peer, item)
-                            .await
-                            .map_err(StoreError::backend)?;
+                            let status =
+                                fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
+                                    scope,
+                                    limits,
+                                    &crate::fleet_sender_binding::FleetSenderBinding,
+                                )
+                                .relay_query(fleet_sync_protocol::Submitter::Machine(peer), item)
+                                .await
+                                .map_err(StoreError::backend)?;
                             let result = QueryResult {
                                 statuses: vec![status],
                             };

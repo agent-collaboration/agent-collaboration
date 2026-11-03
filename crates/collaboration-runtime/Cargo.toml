@@ -53,6 +53,6 @@ thiserror.workspace = true
 [dev-dependencies]
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts", features = ["test-support"] }
 fleet-sync-delivery = { workspace = true, features = ["test-support"] }
-sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "7b69ca029f3d77910fb192cae3903ad2e148155b" }
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "48d7505b85b9fccb54b4504da7a77cca75e2b6fe" }
 tempfile = "3.27.0"
 tokio = { workspace = true, features = ["test-util"] }

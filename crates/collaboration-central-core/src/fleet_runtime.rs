@@ -22,7 +22,7 @@ use durable_steps::{
     storage::{JournalStorage, TransactionScope},
 };
 use fleet_sync_delivery::{DeliveryLimits, Outbox};
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItemRef, ServerCall};
+use fleet_sync_protocol::{DeliveryItemRef, ServerCall};
 use message_board::RequestEffectsRequest;
 use runtime_primitives::WakeScheduler;
 use serde::{Deserialize, Serialize};
@@ -125,7 +125,11 @@ where
         engine.register(crate::fleet_mail_tasks::FleetPushTask::<
             crate::session_store::CoreSessionStore<Host, Io>,
             Host::Database,
-        >::new(mail_limits, shared_host.clone()))?;
+        >::new(
+            mail_limits,
+            shared_host.clone(),
+            Arc::new(crate::fleet_sender_binding::FleetSenderBinding),
+        ))?;
         engine.register(crate::fleet_mail_tasks::FleetMailRemoval::<
             crate::session_store::CoreSessionStore<Host, Io>,
             Host::Database,
@@ -468,15 +472,16 @@ where
         let replies = replies.clone();
         Box::pin(async move {
             let host = host.upgrade().ok_or(CallFailure::AnswerLost)?;
-            let (item, _) = StepDriver::new(host.clone())
+            let (resolved, _) = StepDriver::new(host.clone())
                 .run(ResolvePush {
                     reference,
                     limits,
                     now: io.now(),
                 })
                 .await
-                .map_err(|_| CallFailure::AnswerLost)?;
-            let item = item.ok_or(CallFailure::AnswerLost)?;
+                .map_err(crate::mail_push_dispatch::store_failure)?;
+            let resolved = resolved.ok_or(CallFailure::AnswerLost)?;
+            let item = resolved.item;
             if item.recipient().peer != target.recipient {
                 return Err(CallFailure::AnswerLost);
             }
@@ -486,7 +491,11 @@ where
                 io.clone(),
                 replies,
                 target.recipient,
-                ServerCall::Push { call, item: *item },
+                ServerCall::Push {
+                    call,
+                    submitter: resolved.submitter,
+                    item,
+                },
                 timeout,
                 move |remaining| async move { deadline_io.reply_deadline(remaining).await },
             )
@@ -519,19 +528,23 @@ where
     for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'row> &'row str: ColumnIndex<Driver::Row>,
 {
-    type Output = Option<Box<DeliveryEnvelope<BoardDeliveryTypes>>>;
+    type Output = Option<fleet_sync_delivery::ResolvedPush<BoardDeliveryTypes>>;
     type Effect = Infallible;
     fn run<'scope, 'transaction>(
         self,
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
-            let item = Outbox::<_, BoardDeliveryTypes>::new(scope, self.limits)
-                .resolve_push(&self.reference)
-                .await
-                .map_err(StoreError::backend)?;
+            let item = Outbox::<_, BoardDeliveryTypes, _>::new(
+                scope,
+                self.limits,
+                &crate::fleet_sender_binding::FleetSenderBinding,
+            )
+            .resolve_push(&self.reference, self.now)
+            .await
+            .map_err(fleet_sync_delivery::delivery_rollback)?;
             if let Some(item) = &item {
-                let recipient = item.recipient().peer;
+                let recipient = item.item.recipient().peer;
                 let mut enrolled = crate::generated_enrollment::read_enrollments(
                     scope,
                     None,
@@ -559,7 +572,7 @@ where
                     return Ok((None, Vec::new()));
                 }
             }
-            Ok((item.map(Box::new), Vec::new()))
+            Ok((item, Vec::new()))
         })
     }
 }

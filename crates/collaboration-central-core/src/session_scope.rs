@@ -145,14 +145,17 @@ where
                     operation: OperationRequest::Delivery(DeliveryRequest::Report { report, .. }),
                 } => {
                     let limits = crate::fleet_outbox_limits().map_err(StoreError::backend)?;
-                    let result =
-                        fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes>::new(self, limits)
-                            .recipient_report::<crate::fleet_mail_tasks::FleetStatusTask<
-                                crate::session_store::CoreSessionStore<Host, Io>,
-                                Host::Database,
-                            >>(session.peer, report, now)
-                            .await
-                            .map_err(fleet_sync_delivery::delivery_rollback)?;
+                    let result = fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
+                        self,
+                        limits,
+                        &crate::fleet_sender_binding::FleetSenderBinding,
+                    )
+                    .recipient_report::<crate::fleet_mail_tasks::FleetStatusTask<
+                        crate::session_store::CoreSessionStore<Host, Io>,
+                        Host::Database,
+                    >>(session.peer, report, now)
+                    .await
+                    .map_err(fleet_sync_delivery::delivery_rollback)?;
                     self.stage_operation_answer(
                         connection,
                         frame,
@@ -167,7 +170,7 @@ where
                 } => {
                     let result = fleet_sync_delivery::StatusStream::<_, BoardDeliveryTypes>::new(
                         self,
-                        session.peer,
+                        fleet_sync_protocol::Submitter::Machine(session.peer),
                         installation.clone(),
                     )
                     .acknowledge(through, now)
@@ -194,10 +197,14 @@ where
                     let answer =
                         match fleet_sync_delivery::StatusStream::<_, BoardDeliveryTypes>::new(
                             self,
-                            session.peer,
+                            fleet_sync_protocol::Submitter::Machine(session.peer),
                             installation.clone(),
                         )
-                        .fetch(session.peer, after, limit)
+                        .fetch(
+                            fleet_sync_protocol::Submitter::Machine(session.peer),
+                            after,
+                            limit,
+                        )
                         .await
                         {
                             Ok(result) => {
