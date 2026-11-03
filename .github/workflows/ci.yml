@@ -15,14 +15,9 @@ permissions:
   contents: read
   actions: read
 
-# Four independent Linux jobs feed the existing validation gate. Light static
-# checks overlap serial Cargo work; feature-specific E2E binaries keep their
-# own target and runner instead of competing with workspace tests.
-#
-#   static ─┐
-#   wasm ───┤
-#   test ───┼─► validated
-#   e2e ────┘
+# Static checks, Worker conformance, workspace tests and E2E each report
+# their result. Light static checks overlap serial Cargo work; feature-specific
+# E2E binaries keep their own runner instead of competing with workspace tests.
 #
 # Every job installs all rust-toolchain.toml components up front: otherwise
 # parallel background cargo steps race rustup's on-demand component download.
@@ -110,8 +105,6 @@ jobs:
           pnpm --dir scripts/verification/tui lint
           pnpm --dir scripts/verification/tui format:check
           pnpm --dir scripts/verification/tui test
-      - name: Test workflow timing parser
-        run: bash scripts/tests/test_workflow_timing.sh
       - name: Test main cache pruning
         run: bash scripts/tests/test_main_cache_pruning.sh
       - name: Check Rust formatting
@@ -162,7 +155,7 @@ jobs:
           install_root="${RUNNER_TEMP}/codex-router-cli-all-features-install"
           # Keep installation-shape assertions on the dev build. The release
           # workflow owns optimized production builds, signing and packaging.
-          cargo install --debug --path crates/codex-router-cli --all-features --root "${install_root}"
+          cargo install --debug --target-dir target --path crates/codex-router-cli --all-features --root "${install_root}"
           test -x "${install_root}/bin/codex-router"
           test "$(find "${install_root}/bin" -maxdepth 1 -type f | wc -l | tr -d ' ')" = "1"
           cargo build -p codex-router-quota-reset-test-harness --bin codex-router-quota-reset-test-harness
@@ -269,9 +262,9 @@ jobs:
           cache-hit: ${{ steps.rust_tools.outputs.cache-hit }}
       - name: Wait for runner disk cleanup
         wait-all:
-      # Build each selection once, then run both workspace partitions and quota
-      # tests from the built artifacts on this runner. Keep each build
-      # selection and feature set identical to its run so binaries are reused.
+      # Compile every test binary once, then run workspace and quota tests from
+      # the built artifacts so they do not contend for Cargo's build lock.
+      # Keep each build selection and feature set identical to its run.
       # Real Host, importer and forwarding-timer roots run in e2e below.
       # Keep the build/run exclusions and slower-job inventory identical.
       - name: Build test binaries
@@ -281,25 +274,17 @@ jobs:
       - name: Build quota-reset test binaries
         if: github.event_name != 'pull_request' || steps.quota_scope.outputs.changed == 'true'
         run: cargo nextest run --profile ci --status-level all --final-status-level all -p codex-router-quota-reset-test-harness --no-run
-      - name: Test Rust workspace (partition 1/2)
-        id: workspace_partition_1
-        background: true
-        run: |
-          # Exercise private fixture setup under the ordinary Unix mask.
-          umask 022
-          cargo nextest run --profile ci --status-level all --final-status-level all --partition hash:1/2 --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))'
-      - name: Test Rust workspace (partition 2/2)
-        id: workspace_partition_2
-        background: true
-        run: |
-          # Exercise private fixture setup under the ordinary Unix mask.
-          umask 022
-          cargo nextest run --profile ci --status-level all --final-status-level all --partition hash:2/2 --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))'
       - name: Test quota-reset terminal integration
         id: quota_reset_terminal_integration
         if: github.event_name != 'pull_request' || steps.quota_scope.outputs.changed == 'true'
         background: true
         run: cargo nextest run --profile ci --status-level all --final-status-level all -p codex-router-quota-reset-test-harness
+      - name: Test Rust workspace
+        id: workspace_tests
+        run: |
+          # Exercise private fixture setup under the ordinary Unix mask.
+          umask 022
+          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))'
       - name: Wait for tests
         wait-all:
       - name: Test isolated default Router port cutover
@@ -560,30 +545,3 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/tooling/prune-main-caches.sh --apply
-
-  validated:
-    name: Validate Rust workspace
-    if: always()
-    needs: [static, wasm, test, e2e]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - name: Report workflow step and test timings
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: scripts/tooling/report-workflow-timings.sh "$GITHUB_RUN_ID" "$RUNNER_TEMP/workflow-report"
-      - name: Retain workflow timing inventory
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ci-timing-inventory
-          path: |
-            ${{ runner.temp }}/workflow-report/*.tsv
-            ${{ runner.temp }}/workflow-report/jobs.json
-            ${{ runner.temp }}/workflow-report/summary.md
-      - name: Require every validation job
-        run: |
-          for result in "${{ needs.static.result }}" "${{ needs.wasm.result }}" "${{ needs.test.result }}" "${{ needs.e2e.result }}"; do
-            test "${result}" = "success"
-          done
