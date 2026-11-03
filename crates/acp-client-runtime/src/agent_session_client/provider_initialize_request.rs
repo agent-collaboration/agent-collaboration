@@ -1,6 +1,8 @@
 //! ACP v1 initialization and the injected provider's required authentication.
 
-use super::{ExternalProviderRuntimeError, sanitized_acp_error, sanitized_initialization_error};
+use super::provider_client_contract::{
+    ExternalProviderRuntimeError, sanitized_acp_error, sanitized_initialization_error,
+};
 
 use agent_client_protocol::schema::v1::{AuthMethod, AuthenticateRequest, InitializeResponse};
 use agent_client_protocol::{Agent, ConnectionTo, Error, UntypedMessage};
