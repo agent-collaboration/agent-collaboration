@@ -1626,7 +1626,17 @@ name = "codex-router-tailnet-verification-host"
 version = "0.1.121"
 dependencies = [
  "axum",
+ "board-fleet-sync",
  "chrono",
+ "codex-native-integration",
+ "codex-router-host",
+ "collaboration-central-conformance",
+ "collaboration-central-core",
+ "collaboration-central-tokio",
+ "collaboration-runtime",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-session",
  "fs2",
  "nix",
  "reqwest 0.12.28",

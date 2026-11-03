@@ -71,6 +71,10 @@ pub fn require_unaliased_ancestors(path: &Path) -> DriverResult<()> {
 
 impl D1NativeReadinessPlan {
     pub fn validate(&self) -> DriverResult<()> {
+        self.validate_allocation(true)
+    }
+
+    pub fn validate_allocation(&self, fresh: bool) -> DriverResult<()> {
         require_deadline(&self.deadline)?;
         if !absolute_without_traversal(&self.repository)
             || self.repository.canonicalize()? != self.repository
@@ -96,13 +100,24 @@ impl D1NativeReadinessPlan {
         if !absolute_without_traversal(&self.run_root)
             || self.run_root.parent() != Some(allocation.as_path())
             || self.run_root.file_name().is_none()
-            || self.run_root.symlink_metadata().is_ok()
+            || (fresh && self.run_root.symlink_metadata().is_ok())
         {
             return Err(DriverError::Invalid(
                 "D1 run root must be a fresh allocation child",
             ));
         }
         require_unaliased_ancestors(&self.run_root)?;
+        if !fresh {
+            let metadata = self.run_root.symlink_metadata()?;
+            if !metadata.is_dir()
+                || metadata.uid() != rustix::process::getuid().as_raw()
+                || metadata.mode() & 0o077 != 0
+            {
+                return Err(DriverError::Invalid(
+                    "D1 existing allocation is not owner-private",
+                ));
+            }
+        }
         if !absolute_without_traversal(&self.native.path)
             || self.native.sha256.len() != 64
             || !self
@@ -137,7 +152,9 @@ impl D1NativeReadinessPlan {
     }
 }
 
-pub fn read_d1_plan(path: &Path) -> DriverResult<D1NativeReadinessPlan> {
+pub fn read_private_d1_record<TRecord: serde::de::DeserializeOwned>(
+    path: &Path,
+) -> DriverResult<TRecord> {
     let file = OpenOptions::new()
         .read(true)
         .custom_flags(nix::libc::O_NOFOLLOW)
@@ -154,9 +171,37 @@ pub fn read_d1_plan(path: &Path) -> DriverResult<D1NativeReadinessPlan> {
     }
     let mut bytes = Vec::new();
     file.take(1024 * 1024 + 1).read_to_end(&mut bytes)?;
-    let plan: D1NativeReadinessPlan = serde_json::from_slice(&bytes)?;
+    Ok(serde_json::from_slice(&bytes)?)
+}
+
+pub fn read_d1_plan(path: &Path) -> DriverResult<D1NativeReadinessPlan> {
+    let plan: D1NativeReadinessPlan = read_private_d1_record(path)?;
     plan.validate()?;
     Ok(plan)
+}
+
+pub fn require_service_directory(repository: &Path, directory: &Path) -> DriverResult<()> {
+    if directory.parent() != Some(repository.join("tmp").as_path())
+        || !matches!(
+            directory.file_name().and_then(|name| name.to_str()),
+            Some("a" | "b" | "c")
+        )
+    {
+        return Err(DriverError::Invalid(
+            "D1 service directory must be tmp/a, tmp/b or tmp/c",
+        ));
+    }
+    require_unaliased_ancestors(directory)?;
+    if let Ok(metadata) = directory.symlink_metadata()
+        && (!metadata.is_dir()
+            || metadata.uid() != rustix::process::getuid().as_raw()
+            || metadata.mode() & 0o077 != 0)
+    {
+        return Err(DriverError::Invalid(
+            "D1 service directory is not owner-private",
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

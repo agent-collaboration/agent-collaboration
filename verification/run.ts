@@ -16,6 +16,8 @@ import { ObservationOpen, Receipt } from "./receipt.ts";
 import { prepareRun, type PreparedRun } from "./run-setup.ts";
 import { RunLifetime } from "./run-lifetime.ts";
 import { assessD1Coverage, d1Observations } from "./observations/d1-coverage.ts";
+import { readD1HarnessDeclaration, runD1Harness } from "./observations/d1-harness.ts";
+import { d1ReadbackSchema, readD1Stores } from "./observations/d1-sqlite-readback.ts";
 
 async function declarationFromArguments(): Promise<Declaration> {
   const path = process.argv[2];
@@ -103,7 +105,11 @@ function printPreparation(): boolean {
         "Run the existing declared cross-machine cases.\n" +
         "node verification/run.ts --d1-plan\n" +
         "Print D1 O1–O11 requirements and all-open coverage. No launch, network, credentials or writes.\n" +
-        "D1 live composition awaits declared conformance controls and target; preparation only.\n",
+        "node verification/run.ts --d1-harness PRIVATE_DECLARATION.json\n" +
+        "Drive three isolated native-backed Hosts and selected no-model fixtures on local Tokio.\n" +
+        "node verification/run.ts --d1-readback PRIVATE_DECLARATION.json\n" +
+        "Read exact stopped task stores after consumer checks.\n" +
+        "D1 full outcome credit requires declared controls/target; staging is never executed here.\n",
     );
     return true;
   }
@@ -123,7 +129,23 @@ function printPreparation(): boolean {
   }
   return false;
 }
+async function runD1Action(): Promise<boolean> {
+  if (process.argv.length === 4 && process.argv[2] === "--d1-readback") {
+    const path = process.argv[3];
+    if (path === undefined) throw new Error("D1 readback declaration absent");
+    await readD1Stores(d1ReadbackSchema.parse(JSON.parse(await readFile(path, "utf8"))));
+    return true;
+  }
+  if (process.argv.length === 4 && process.argv[2] === "--d1-harness") {
+    const path = process.argv[3];
+    if (path === undefined) throw new Error("D1 declaration path absent");
+    await runD1Harness(await readD1HarnessDeclaration(path));
+    return true;
+  }
+  return false;
+}
 async function main(): Promise<void> {
+  if (await runD1Action()) return;
   if (printPreparation()) return;
   const declaration = await declarationFromArguments();
   const receipt = new Receipt(declaration.evidenceDirectory);

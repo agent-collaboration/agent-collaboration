@@ -23,12 +23,12 @@ use crate::{
     process_identity::observe_owned,
 };
 
-fn private_directory(path: &Path) -> DriverResult<()> {
+pub(crate) fn private_directory(path: &Path) -> DriverResult<()> {
     DirBuilder::new().mode(0o700).create(path)?;
     Ok(())
 }
 
-fn write_private(path: &Path, bytes: &[u8]) -> DriverResult<()> {
+pub(crate) fn write_private(path: &Path, bytes: &[u8]) -> DriverResult<()> {
     let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -38,7 +38,7 @@ fn write_private(path: &Path, bytes: &[u8]) -> DriverResult<()> {
     Ok(())
 }
 
-fn native_config(port: u16) -> String {
+pub(crate) fn native_config(port: u16) -> String {
     format!(
         "model = \"gpt-6-luna\"\n\
          model_provider = \"codex-router-debug\"\n\
@@ -52,6 +52,36 @@ fn native_config(port: u16) -> String {
          requires_openai_auth = false\n\
          supports_websockets = true\n"
     )
+}
+
+pub(crate) fn stage_native(
+    plan: &D1NativeReadinessPlan,
+) -> DriverResult<(std::path::PathBuf, std::path::PathBuf)> {
+    plan.validate()?;
+    if sha256(&plan.native.path)? != plan.native.sha256 {
+        return Err(DriverError::Invalid("D1 declared native hash mismatch"));
+    }
+    let allocation = plan.repository.join("tmp/d1-verify/allocation");
+    if !allocation.exists() {
+        private_directory(&allocation)?;
+    }
+    require_unaliased_ancestors(&allocation)?;
+    private_directory(&plan.run_root)?;
+    let home = plan.run_root.join("codex");
+    private_directory(&home)?;
+    let package = home.join("packages");
+    private_directory(&package)?;
+    let standalone = package.join("standalone");
+    private_directory(&standalone)?;
+    let current = standalone.join("current");
+    private_directory(&current)?;
+    let binary = current.join("codex");
+    std::fs::copy(&plan.native.path, &binary)?;
+    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700))?;
+    if sha256(&binary)? != plan.native.sha256 {
+        return Err(DriverError::Invalid("staged D1 native bytes differ"));
+    }
+    Ok((home, binary))
 }
 
 #[derive(Deserialize)]
@@ -125,30 +155,7 @@ fn require_no_client_auth(value: Value) -> DriverResult<()> {
 }
 
 pub fn run_native_readiness(plan: &D1NativeReadinessPlan) -> DriverResult<()> {
-    plan.validate()?;
-    if sha256(&plan.native.path)? != plan.native.sha256 {
-        return Err(DriverError::Invalid("D1 declared native hash mismatch"));
-    }
-    let allocation = plan.repository.join("tmp/d1-verify/allocation");
-    if !allocation.exists() {
-        private_directory(&allocation)?;
-    }
-    require_unaliased_ancestors(&allocation)?;
-    private_directory(&plan.run_root)?;
-    let home = plan.run_root.join("codex");
-    private_directory(&home)?;
-    let package = home.join("packages");
-    private_directory(&package)?;
-    let standalone = package.join("standalone");
-    private_directory(&standalone)?;
-    let current = standalone.join("current");
-    private_directory(&current)?;
-    let binary = current.join("codex");
-    std::fs::copy(&plan.native.path, &binary)?;
-    std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700))?;
-    if sha256(&binary)? != plan.native.sha256 {
-        return Err(DriverError::Invalid("staged D1 native bytes differ"));
-    }
+    let (home, binary) = stage_native(plan)?;
     let upstream_guard = TcpListener::bind(("127.0.0.1", 0))?;
     upstream_guard.set_nonblocking(true)?;
     let config = native_config(upstream_guard.local_addr()?.port());

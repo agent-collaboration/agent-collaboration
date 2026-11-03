@@ -2,7 +2,7 @@
 
 Use this journey for central-storage-reset D1. The oracle is `docs/specs/2026-11-02-central-storage-reset/verification-design/d1-central-layout-and-mail.md`, corrected at `c133916d8`, and its linked central-layout and mail specifications. Plan r4 schedules the observation controls. This recipe grants no staging, deployment, enrollment or model input.
 
-**Draft: live composition is not qualified.** The available entry prints the deciding checks and eleven open outcomes; it resolves no credentials, starts no process, makes no request and writes no evidence:
+**Coverage remains partial.** The preparation entry prints the deciding checks and eleven open outcomes; it resolves no credentials, starts no process, makes no request and writes no evidence:
 
 ```sh
 node verification/run.ts --help
@@ -22,7 +22,40 @@ scripts/cargo_debug_signing_runner.sh target/debug/codex-router-tailnet-verifica
 
 Build only after the shared build owner releases the slot. The owner-private JSON follows `D1NativeReadinessPlan` in `crates/tailnet-verification-host/src/d1_host_plan.rs`: canonical repository, fresh direct child of `tmp/d1-verify/allocation/`, exact declared native path/hash/version, explicit auth policy, timezone-aware deadline. The policy variants are `awaitingOwner`, `sharedDebugProxy` with a loopback origin, or `dedicatedDebugAccounts`. Pending policy is allowed only because this entry sends no model input.
 
+The package's launcher test starts `CARGO_BIN_EXE` directly. Sign that rebuilt helper before the tests; the Cargo runner's test-executable signature does not sign a helper launched by the test. Cargo can restore the linked artifact over the public path even without recompiling. Set `D1_LINKED_HELPER` to the current build's actual executable `target/debug/deps/codex_router_tailnet_verification_host-<hash>` (not its `.d` file or a test executable), sign both paths, and verify the public signature again after Cargo:
+
+```sh
+scripts/cargo_debug_signing_runner.sh --sign-only "$D1_LINKED_HELPER" target/debug/codex-router-tailnet-verification-host
+cargo test --locked -p codex-router-tailnet-verification-host
+cargo clippy --locked -p codex-router-tailnet-verification-host --all-targets -- -D warnings
+cargo fmt -p codex-router-tailnet-verification-host -- --check
+```
+
 The driver copies only the declared executable bytes into its fresh Codex home, writes an ephemeral-auth configuration with `requires_openai_auth=false`, and clears inherited credential environment. It sends `initialize`, `initialized` and `account/read` with `refreshToken=false` over stdio. Require `account=null`, `requiresOpenaiAuth=false`, zero observed connections to its held loopback upstream guard, no auth file, exit zero and an errors-free empty cleanup inventory. Keep `qualification-plan.json`, `native-ready.json`, `host-started.json`, `host-settlement.json` and diagnostics. This qualifies stdio native startup only: no Unix endpoint, Router, model access or D1 observation receives credit from it. The existing Tailnet mode still uses its own plan and normal-home guards.
+
+## Three-Host Tokio driver
+
+The maintained executable entry is:
+
+```sh
+node verification/run.ts --d1-harness "$D1_HARNESS_DECLARATION"
+```
+
+Use an owner-private JSON file matching `d1HarnessSchema` in `verification/observations/d1-harness.ts`. Declare `suite: "d1-harness"`, canonical `repository`, signed `driver` and `cli` artifacts (path, SHA-256, signing identifier and team), declared `native` bytes/version, a fresh `evidenceDirectory` under `tmp/d1-verify/`, a separately authorized loopback `debugProxyOrigin`, and a live UTC `deadline`. The driver is `codex-router-tailnet-verification-host`; the CLI is the matching debug `agent-collaboration`. Capture signed immutable artifacts after the compiling window and qualify them again at launch. No standing Router is started by this entry.
+
+`queueScenario` selects `none` (default), `online-held`, or `offline-reopen`. `twoProjects` defaults to false; true creates P1 on A and P2 on B through public board calls, grants each real Session its first lead role and reads back a workstream marker. Unload each actor and observe the empty native loaded-thread list before notifying writes. Pending board operations retain their original request ID; a timeout fails the drive and must not generate a replacement operation.
+
+The Rust driver launches an enrolled Tokio central and three independent native-backed debug Hosts. It uses fresh Router/Codex roots under `tmp/d1-verify/allocation/` and the commissioned short service directories `tmp/a`, `tmp/b`, `tmp/c`. Before another run, require the previous owners settled and their exact directories unused; preserve previous state under the task root rather than overwriting it. It retains real SessionGate Welcome frames, public installation identity, Unix native/schema readiness, actual Fleet socket-owner inventory and real `gpt-6-luna` thread metadata. It parses generated routing configuration and requires the single declared debug provider, ephemeral credentials and first-party auth disabled. These are startup and routing observations, not model-service readiness.
+
+`offline-reopen` stops B, sends one public queue message from A, reads sender Sent while B is offline, reopens B against the same stores without loading its recipient, then reads sender Held, B's public held record and same-ID replay. `online-held` unloads B and observes held custody with both Hosts online. Both stop before native input release. On the intermediate implementation these paths use its actual public Sent/Held DTOs and do not close final Push/layout or delivered-turn obligations. Keep `queue-*.json`, `central-sockets.json`, raw lifecycle evidence and `result.json`. A successful run requires no failure, no cleanup failures and zero actual native turn starts across every connection, including connections replaced during reopen. An automatic notification turn invalidates a no-model run even when no explicit `turn/start` was sent.
+
+For read-only SQLite evidence after every consumer has settled:
+
+```sh
+node verification/run.ts --d1-readback "$D1_READBACK_PLAN"
+```
+
+The JSON follows `d1ReadbackSchema`: canonical `repository`, `databases` with explicit `fleet`/`sender`/`recipient` roles and canonical task-owned paths, exact UUIDv7 `itemIds`, and fresh task-owned `output`. The reader refuses an occupied or unverified database, retains full DDL/column/key/index definitions and selected mail metadata, and reports payload/body presence without copying message content. It explicitly does not prove an owning reopen. Join this evidence to the public mail ID and owner lifecycle evidence; absence without the correct holder/table and item is insufficient.
 
 ## Target and readiness
 

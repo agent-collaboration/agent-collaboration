@@ -37,6 +37,27 @@ fn run() -> DriverResult<()> {
             &codex_router_tailnet_verification_host::d1_host_plan::read_d1_plan(Path::new(&path))?,
         );
     }
+    if action == "d1-central" || action == "d1-host" {
+        let path = arguments
+            .next()
+            .ok_or(DriverError::Invalid("D1 plan required"))?;
+        if arguments.next().is_some() {
+            return Err(DriverError::Invalid("unexpected D1 argument"));
+        }
+        if action == "d1-central" {
+            let plan =
+                codex_router_tailnet_verification_host::d1_host_plan::read_private_d1_record(
+                    Path::new(&path),
+                )?;
+            return tokio::runtime::Runtime::new()?
+                .block_on(codex_router_tailnet_verification_host::d1_central_runtime::run(plan));
+        }
+        return codex_router_tailnet_verification_host::d1_native_runtime::run(
+            codex_router_tailnet_verification_host::d1_host_plan::read_private_d1_record(
+                Path::new(&path),
+            )?,
+        );
+    }
     if action != "host" {
         return Err(DriverError::Invalid("expected host action"));
     }
