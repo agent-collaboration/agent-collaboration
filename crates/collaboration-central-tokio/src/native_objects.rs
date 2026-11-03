@@ -156,7 +156,7 @@ struct ObjectSlot {
     runtime: OnceCell<Arc<RuntimeFace>>,
     alarm_task: OnceLock<()>,
     #[cfg(test)]
-    alarm_owner_ready: tokio::sync::watch::Sender<bool>,
+    alarm_owner_generation: tokio::sync::watch::Sender<u64>,
 }
 
 pub(crate) struct NativeObjects {
@@ -330,7 +330,7 @@ impl NativeObjects {
                         runtime: OnceCell::new(),
                         alarm_task: OnceLock::new(),
                         #[cfg(test)]
-                        alarm_owner_ready: tokio::sync::watch::channel(false).0,
+                        alarm_owner_generation: tokio::sync::watch::channel(0_u64).0,
                     })
                 })
                 .clone()
@@ -413,7 +413,7 @@ impl NativeObjects {
             let clock = self.clock.clone();
             let stop = self.stop.clone();
             #[cfg(test)]
-            let ready = slot.alarm_owner_ready.clone();
+            let ready = slot.alarm_owner_generation.clone();
             self.tasks.spawn(alarm_owner::run(
                 runtime,
                 wake,
