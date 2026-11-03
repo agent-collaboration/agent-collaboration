@@ -42,11 +42,10 @@ where
         {
             return Err(CallFailure::AnswerLost);
         }
-        let ObjectWork::Session {
+        let ObjectWork::Fleet {
             host,
             shared_host,
             replies,
-            installation,
             ..
         } = &self.work
         else {
@@ -59,9 +58,6 @@ where
         let PublicationTarget::StatusStream { sender, route } = target.target else {
             return encode(crate::mail_status_dispatch::invalid_route());
         };
-        if &route != installation {
-            return encode(crate::mail_status_dispatch::invalid_route());
-        }
         let store = Arc::new(CoreSessionStore::new(
             host.clone(),
             shared_host.clone(),

@@ -304,7 +304,7 @@ where
             return self.mailbox_request_call(invocation).await;
         }
         if !matches!(invocation.authority, CallAuthority::Object)
-            || invocation.source != ObjectAddress::Registry
+            || invocation.source != ObjectAddress::Fleet
             || invocation.source_face != CallerKind::Registry
         {
             return Err(refused());

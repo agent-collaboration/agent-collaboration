@@ -74,13 +74,16 @@ where
         if call.kind == crate::admin_import_copy::AdminCopySeed::KIND {
             return self.admin_copy_seed(call).await;
         }
-        if !matches!(call.authority, CallAuthority::Object) {
+        if !matches!(
+            call.authority,
+            CallAuthority::Object | CallAuthority::Machine { .. }
+        ) {
             return Err(refused());
         }
         if call.kind == CopySessionRead::KIND {
             let target: CopySessionRead = decode(call.target)?;
             if call.source_face != CallerKind::Session
-                || !matches!(call.source, ObjectAddress::Connection(_))
+                || !matches!(call.source, ObjectAddress::Fleet)
                 || target.copy != *receiver
                 || target.database != *database
             {
@@ -103,7 +106,7 @@ where
             }
             return encode(answer);
         }
-        if call.source_face != CallerKind::Registry || call.source != ObjectAddress::Registry {
+        if call.source_face != CallerKind::Registry || call.source != ObjectAddress::Fleet {
             return Err(refused());
         }
         #[cfg(feature = "conformance")]

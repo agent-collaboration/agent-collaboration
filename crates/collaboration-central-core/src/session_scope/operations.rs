@@ -149,6 +149,8 @@ where
                     project,
                     phase: crate::forward_store::ForwardPhase::Routing,
                     deadline: now.after(std::time::Duration::from_secs(30)),
+                    created_at: now,
+                    updated_at: now,
                 };
                 self.stage_forward(pending, post).await?;
             }
@@ -269,7 +271,8 @@ where
                             );
                         }
                     };
-                    let page = crate::machine_notice_store::read(self, after, now).await?;
+                    let page =
+                        crate::machine_notice_store::read(self, session.peer, after, now).await?;
                     self.stage_operation_answer(
                         connection,
                         frame,

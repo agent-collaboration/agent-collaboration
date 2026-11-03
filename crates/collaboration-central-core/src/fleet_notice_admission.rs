@@ -12,13 +12,16 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 
-pub(crate) async fn admit_mutation_notices<Store: AtomicStore, Driver: Database>(
-    scope: &mut Store::Scope<'_>,
+pub(crate) async fn admit_mutation_notices<
+    Store: AtomicStore,
+    Driver: Database,
+    Scope: TransactionScope<Database = Driver> + JournalScope,
+>(
+    scope: &mut Scope,
     previous: FleetPosition,
     now: SyncTime,
 ) -> Result<(), StoreError>
 where
-    for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
     Driver::Arguments: IntoArguments<Driver>,
     for<'value> String: Type<Driver> + Encode<'value, Driver>,
     for<'value> Option<String>: Type<Driver> + Decode<'value, Driver>,
@@ -42,7 +45,7 @@ where
             continue;
         }
         for installation in holder_installations(scope, &board.board_id, now).await? {
-            admit::<Store>(
+            admit::<Store, _>(
                 scope,
                 format!(
                     "fleet-archive-notice:{}:{}:{}",
@@ -86,8 +89,8 @@ where
     Ok(())
 }
 
-async fn admit<Store: AtomicStore>(
-    scope: &mut Store::Scope<'_>,
+async fn admit<Store: AtomicStore, Scope: JournalScope>(
+    scope: &mut Scope,
     key: String,
     input: MachineNoticeInput,
     now: SyncTime,

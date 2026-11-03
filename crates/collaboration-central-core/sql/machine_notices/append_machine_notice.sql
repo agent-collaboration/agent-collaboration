@@ -1,1 +1,1 @@
-INSERT INTO machine_notices(notice_id,position,kind,created_at,expires_at) VALUES(?,CAST(? AS INTEGER),?,CAST(? AS INTEGER),CAST(? AS INTEGER));
+INSERT INTO machine_control_notices(notice_id,machine_id,position,kind,board_id,project_id,epoch,feed_through,created_at,expires_at,updated_at) VALUES(?1,?2,CAST(?3 AS INTEGER),?4,?5,?6,CAST(?7 AS INTEGER),CAST(?8 AS INTEGER),CAST(?9 AS INTEGER),CAST(?10 AS INTEGER),CAST(?9 AS INTEGER));

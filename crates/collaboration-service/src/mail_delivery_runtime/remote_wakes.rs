@@ -135,6 +135,7 @@ impl MailDeliveryRuntime {
         let deadline_ms = request.valid_until_ms;
         let relay = session.relay;
         let limits = self.config.limits;
+        let submitter = self.config.owner;
         let clock = self.clock.clone();
         let retirement = fleet_sync_delivery::SubmitInput {
             item: id,
@@ -148,7 +149,8 @@ impl MailDeliveryRuntime {
                 Box::pin(async move {
                     // Peer lookup or the store lock may have consumed the deadline.
                     // Inspect custody again atomically, without admitting expired work.
-                    if clock.now().timestamp_millis() >= deadline_ms {
+                    let admitted_at = clock.now();
+                    if admitted_at.timestamp_millis() >= deadline_ms {
                         return Outbox::<_, RouterDeliveryTypes>::new(scope, limits)
                             .status(id)
                             .await
@@ -156,7 +158,12 @@ impl MailDeliveryRuntime {
                             .map_err(delivery_rollback);
                     }
                     let (answer, _) = Outbox::<_, RouterDeliveryTypes>::new(scope, limits)
-                        .enqueue_and_admit::<SubmitMailTask>(item, relay)
+                        .enqueue_and_admit::<SubmitMailTask>(
+                            item,
+                            relay,
+                            submitter,
+                            SyncTime::from_unix_millis(admitted_at.timestamp_millis()),
+                        )
                         .await
                         .map_err(delivery_rollback)?;
                     super::terminal_retirement::admit_terminal_retirement(

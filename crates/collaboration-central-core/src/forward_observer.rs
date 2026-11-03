@@ -1,4 +1,5 @@
 //! Conformance-only raw owning rows and completed route callbacks, never a forwarding store.
+use crate::FleetKind;
 use crate::{
     ObjectHost, ObjectRuntime, PlatformIo, SessionKind,
     object_runtime::ObjectWork,
@@ -20,12 +21,23 @@ pub struct ForwardStateRequest {
     pub service: message_board::ServiceId,
 }
 
-/// Raw JSON is intentional: decoding PendingForward would hide unknown retained content.
+/// Raw typed columns preserve malformed values for the independent observer.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ForwardStoredRecord {
-    pub key: Option<String>,
-    pub record: Option<String>,
+    pub id: Option<String>,
+    pub forward_frame_id: Option<String>,
+    pub side: Option<String>,
+    pub request_frame_id: Option<String>,
+    pub origin_machine_id: Option<String>,
+    pub origin_session_id: Option<String>,
+    pub connection_id: Option<String>,
+    pub expected_holder_machine_id: Option<String>,
+    pub project_id: Option<String>,
+    pub phase: Option<String>,
+    pub deadline_at: Option<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -57,7 +69,7 @@ impl ForwardRouteProbe {
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<SessionKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -67,7 +79,7 @@ where
     for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
 {
     pub async fn conformance_forward_state(&self) -> Result<ForwardStateObservation, StoreError> {
-        let ObjectWork::Session {
+        let ObjectWork::Fleet {
             host, shared_host, ..
         } = &self.work
         else {
@@ -100,17 +112,28 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
-            let pending = crate::generated_forwards::read_pending_forwards(scope)
+            let pending = crate::generated_forwards::read_forward_rows(scope, "origin".into())
                 .await
                 .map_err(StoreError::backend)?;
-            let delivered = crate::generated_forwards::read_delivered_forwards(scope)
+            let delivered = crate::generated_forwards::read_forward_rows(scope, "holder".into())
                 .await
                 .map_err(StoreError::backend)?;
             let raw = |rows: Vec<crate::generated_forwards::StoredForwardRow>| {
                 rows.into_iter()
                     .map(|row| ForwardStoredRecord {
-                        key: row.forward_frame,
-                        record: row.record,
+                        id: row.id,
+                        forward_frame_id: row.forward_frame_id,
+                        side: row.side,
+                        request_frame_id: row.request_frame_id,
+                        origin_machine_id: row.origin_machine_id,
+                        origin_session_id: row.origin_session_id,
+                        connection_id: row.connection_id,
+                        expected_holder_machine_id: row.expected_holder_machine_id,
+                        project_id: row.project_id,
+                        phase: row.phase,
+                        deadline_at: row.deadline_at,
+                        created_at: row.created_at,
+                        updated_at: row.updated_at,
                     })
                     .collect()
             };

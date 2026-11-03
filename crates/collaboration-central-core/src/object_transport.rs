@@ -1,4 +1,5 @@
 //! The core binds call authority to its source before a runtime transports bytes.
+use crate::FleetKind;
 
 use crate::object_call_envelope::{ObjectCallEnvelope, encode_envelope, encode_refusal};
 use crate::{
@@ -82,19 +83,19 @@ impl ObjectCallEnvelope {
 fn source_matches(call: &ObjectCallEnvelope) -> bool {
     match &call.authority {
         CallAuthority::Owner(_) | CallAuthority::AccessMachine(_) => {
-            call.source_face == CallerKind::Edge && call.source == ObjectAddress::Registry
+            call.source_face == CallerKind::Edge && call.source == ObjectAddress::Fleet
         }
         CallAuthority::Object => matches!(
             (&call.source, call.source_face),
-            (ObjectAddress::Registry, CallerKind::Registry)
+            (ObjectAddress::Fleet, CallerKind::Registry)
                 | (ObjectAddress::Fleet, CallerKind::Fleet)
                 | (ObjectAddress::Copy(_), CallerKind::Copy)
                 | (ObjectAddress::Mailbox(_), CallerKind::Mailbox)
-                | (
-                    ObjectAddress::Connection(_),
-                    CallerKind::Session | CallerKind::Delivery
-                )
+                | (ObjectAddress::Fleet, CallerKind::Delivery)
         ),
+        CallAuthority::Machine { .. } => {
+            call.source == ObjectAddress::Fleet && call.source_face == CallerKind::Session
+        }
     }
 }
 fn refused() -> CallFailure {
@@ -103,8 +104,9 @@ fn refused() -> CallFailure {
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
+    Host::Store: durable_steps::ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
@@ -114,9 +116,9 @@ where
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
 {
-    pub async fn on_call(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
+    pub(crate) async fn on_registry_call(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
         let invocation =
-            ObjectCallEnvelope::decode(&bytes, ObjectAddress::Registry, CallerKind::Registry)?;
+            ObjectCallEnvelope::decode(&bytes, ObjectAddress::Fleet, CallerKind::Registry)?;
         if invocation.kind == crate::owner_registry_calls::OwnerRegistryOperations::KIND {
             return self.owner_registry_call(invocation).await;
         }
@@ -214,80 +216,5 @@ where
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    fn object_envelope(
-        source: serde_json::Value,
-        source_face: &str,
-        destination: &str,
-    ) -> serde_json::Result<Vec<u8>> {
-        serde_json::to_vec(&json!({
-            "source": source,
-            "sourceFace": source_face,
-            "authority": {"kind": "object"},
-            "destination": {"kind": destination},
-            "destinationFace": destination,
-            "identity": {"operation": "019f0000-0000-7000-8000-000000000806", "step": "object"},
-            "kind": "central.installation-peer",
-            "target": {"installation": "550e8400-e29b-41d4-a716-446655440806"},
-            "request": null,
-        }))
-    }
-
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "Assertions must fail this test while fixture errors propagate through Result."
-    )]
-    #[test]
-    fn decoder_refuses_the_well_formed_copy_to_registry_edge() -> serde_json::Result<()> {
-        let bytes = object_envelope(
-            json!({"kind": "copy", "value": "019f0000-0000-7000-8000-000000000806"}),
-            "copy",
-            "registry",
-        )?;
-        assert!(matches!(
-            ObjectCallEnvelope::decode(&bytes, ObjectAddress::Registry, CallerKind::Registry),
-            Err(CallFailure::NotSent {
-                reason: NotSentReason::Unreachable { last_seen: None }
-            })
-        ));
-        Ok(())
-    }
-
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "Assertions must fail this test while fixture errors propagate through Result."
-    )]
-    #[test]
-    fn decoder_allows_the_session_to_registry_edge() -> serde_json::Result<()> {
-        let bytes = object_envelope(
-            json!({"kind": "connection", "value": "550e8400-e29b-41d4-a716-446655440806"}),
-            "session",
-            "registry",
-        )?;
-        assert!(
-            ObjectCallEnvelope::decode(&bytes, ObjectAddress::Registry, CallerKind::Registry)
-                .is_ok()
-        );
-        Ok(())
-    }
-
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "Assertions must fail this test while fixture errors propagate through Result."
-    )]
-    #[test]
-    fn decoder_allows_the_copy_to_fleet_edge() -> serde_json::Result<()> {
-        let bytes = object_envelope(
-            json!({"kind": "copy", "value": "019f0000-0000-7000-8000-000000000806"}),
-            "copy",
-            "fleet",
-        )?;
-        assert!(
-            ObjectCallEnvelope::decode(&bytes, ObjectAddress::Fleet, CallerKind::Fleet).is_ok()
-        );
-        Ok(())
-    }
-}
+#[path = "object_transport_test.rs"]
+mod tests;

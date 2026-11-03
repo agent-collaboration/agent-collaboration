@@ -41,18 +41,20 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Session
-            || !matches!(invocation.authority, CallAuthority::Object)
+            || !matches!(invocation.authority, CallAuthority::Machine { .. })
         {
             return Err(unsent());
         }
-        let ObjectAddress::Connection(source) = invocation.source else {
+        let CallAuthority::Machine {
+            installation: source,
+        } = invocation.authority
+        else {
             return Err(unsent());
         };
-        let ObjectWork::Session {
+        let ObjectWork::Fleet {
             host,
             shared_host,
             replies,
-            installation,
             ..
         } = &self.work
         else {
@@ -63,9 +65,6 @@ where
             DeliverForward::KIND => {
                 let target: DeliverForward =
                     serde_json::from_value(invocation.target).map_err(encode_refusal)?;
-                if target.installation != *installation {
-                    return Err(unsent());
-                }
                 let request: ForwardDeliveryRequest =
                     serde_json::from_value(invocation.request).map_err(encode_refusal)?;
                 let selection = host.clone();
@@ -86,6 +85,11 @@ where
                                 if existing.sender != source
                                     || existing.project != request.post.project
                                     || existing.deadline != request.deadline
+                                    || existing.holder != request.holder
+                                    || existing.origin_session != request.origin_session
+                                    || existing.request_frame != request.request_frame
+                                    || existing.connection != request.connection
+                                    || existing.created_at != request.created_at
                                 {
                                     return Err(StoreError::Corrupt {
                                         field: "delivered_forwards.forward_frame".into(),
@@ -122,6 +126,11 @@ where
                                         project: request.post.project.clone(),
                                         holder: binding.peer,
                                         deadline: request.deadline,
+                                        origin_session: request.origin_session,
+                                        request_frame: request.request_frame,
+                                        connection: request.connection,
+                                        created_at: request.created_at,
+                                        updated_at: now,
                                     },
                                 )
                                 .await?;
@@ -151,9 +160,6 @@ where
             AnswerForward::KIND => {
                 let target: AnswerForward =
                     serde_json::from_value(invocation.target).map_err(encode_refusal)?;
-                if target.installation != *installation {
-                    return Err(unsent());
-                }
                 let request: ForwardAnswerRequest =
                     serde_json::from_value(invocation.request).map_err(encode_refusal)?;
                 let clock = shared_host.clone();

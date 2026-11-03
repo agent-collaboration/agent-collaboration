@@ -40,7 +40,6 @@ pub(crate) fn bind<Host, Io>(
     host: Weak<Host>,
     io: Arc<Io>,
     replies: Arc<HolderReplyHub>,
-    installation: ServiceId,
     timeout: Duration,
 ) -> PublicationDispatcher
 where
@@ -59,14 +58,10 @@ where
         let host = host.clone();
         let io = io.clone();
         let replies = replies.clone();
-        let installation = installation.clone();
         Box::pin(async move {
-            let PublicationTarget::Peer { peer, route } = &target.target else {
+            let PublicationTarget::Peer { peer, .. } = &target.target else {
                 return Ok(invalid_route());
             };
-            if route != &installation {
-                return Ok(invalid_route());
-            }
             let peer = *peer;
             let host = host.upgrade().ok_or(CallFailure::AnswerLost)?;
             let reference = PublicationRef {

@@ -131,7 +131,7 @@ where
 }
 
 fn require_registry(call: &ObjectCallEnvelope) -> Result<(), CallFailure> {
-    if call.source == ObjectAddress::Registry
+    if call.source == ObjectAddress::Fleet
         && call.source_face == CallerKind::Registry
         && matches!(call.authority, CallAuthority::Object)
     {

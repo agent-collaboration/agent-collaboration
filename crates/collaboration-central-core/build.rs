@@ -1,4 +1,5 @@
 fn main() -> Result<(), fleet_sync_query_gen::GenerateError> {
+    fleet_sync_query_gen::verify_manifest("fleet-schema-queries.json")?;
     fleet_sync_query_gen::verify_manifest("forward-queries.json")?;
     fleet_sync_query_gen::verify_manifest("admin-import-queries.json")?;
     fleet_sync_query_gen::verify_manifest("checked-queries.json")?;

@@ -109,7 +109,7 @@ impl CentralPlatform for CloudflareCentralPlatform {
                         .map_err(|_| UpgradeFailure::NotAnUpgrade)?;
                 }
             }
-            let address = ObjectAddress::Connection(admission_origin.installation.clone());
+            let address = ObjectAddress::Fleet;
             let attachment = crate::binding_attachment::BindingAttachment {
                 connection: binding.connection,
                 peer: binding.peer,

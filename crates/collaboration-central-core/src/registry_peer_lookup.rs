@@ -2,7 +2,7 @@
 
 use crate::{
     ObjectHost, generated_enrollment,
-    machine_enrollment::service_for_stored_peer,
+    machine_enrollment_record::service_for_stored_peer,
     step_driver::{StepCallback, StepDriver, StepResult},
 };
 use durable_steps::{

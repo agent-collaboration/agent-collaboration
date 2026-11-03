@@ -21,7 +21,9 @@ impl PreparedRuntimeControls {
                 | RuntimeControl::HoldNextSelectedDispatch { .. }
                 | RuntimeControl::DropNextObjectReply { .. }
                 | RuntimeControl::DropNextSelectedObjectReply { .. } => {}
-                RuntimeControl::AwaitDroppedAnswer { .. }
+                RuntimeControl::ProjectUnavailable
+                | RuntimeControl::ClearProjectFault
+                | RuntimeControl::AwaitDroppedAnswer { .. }
                 | RuntimeControl::AwaitHeldDispatch
                 | RuntimeControl::ResumeDispatch
                 | RuntimeControl::ResumeDispatchAndHoldNext { .. }

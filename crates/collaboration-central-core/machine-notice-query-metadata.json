@@ -53,37 +53,32 @@
     "generator:sqlx-turso/src/lib.rs": "32ec3ac4ca4d0d703a452496262928a3a00ddfdf71eac8cbbe4ce1a3da69d9b5",
     "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
-    "machine-notice-queries.json": "14c2442359160bcb92dd886c2008712bce3092afee752abfd6c8d230a3781a11",
-    "session_migrations/0001_machine_notices.sql": "c716ca292ae09a28394b7b03cb459baf796bb037e70e18ec518a7c7085dcefb0",
-    "session_migrations/0002_forward_correlations.sql": "f07f026d7a1058b0aefba392b243b9853b6607dee9122ac7c79107e360650e8c",
-    "sql/machine_notices/advance_machine_notice_floor.sql": "730eb869493dd765aa0c154a3eb1ace2693b47ef1c93584e3c6a2eb63b9fe41e",
-    "sql/machine_notices/advance_machine_notice_head.sql": "2a6f2968b7ccd39bdc09590ed12effa5855f455f851c47abb546dee486f018ce",
-    "sql/machine_notices/append_machine_notice.sql": "e2f575dc660bad95cc7fa98731dcb8100c28d7f7a2f498a2bddb8916fca0e147",
-    "sql/machine_notices/initialize_machine_notice_state.sql": "d9cf55cabb6d344ba19fcd5c6b824be11d94547bbed015acb2d25f8c581aa40b",
-    "sql/machine_notices/prune_machine_notices.sql": "08f930e7dbad3cbf9b5eb12dcdef87135d1745a61ef829f20d5479db6bbe1d9d",
-    "sql/machine_notices/read_expired_machine_notices.sql": "81fd29da790ece1b09fe04cc528c11821b9480f424a1095405f3bba4ecbfa7f1",
-    "sql/machine_notices/read_machine_notice_bounds.sql": "1705b4fb7f061efa3a895f62f6819d1b3691bef952f1a7125aae808f099720f1",
-    "sql/machine_notices/read_machine_notice_expiry.sql": "ef3a3df18a051211ce061802a06107482dbcaf6e7d06eb9f06b2536cbf9100e5",
-    "sql/machine_notices/read_machine_notice_state.sql": "83ee8155959e2c1fc7d275b53d031435327e77a44a57cba9af63ad0ed78ff21b",
-    "sql/machine_notices/read_machine_notices.sql": "f47c1d6037026bf3d0f93ad93c39e7dcbdb20d3c2ac96431cca42823c73c4ce9",
-    "sql/machine_notices/remember_machine_notice_peer.sql": "d634fe8aa8c4e10de41e2236a11f6fa6b4c7a1ee0d24e7243277869b0b55720f",
-    "src/generated_machine_notices.rs": "302673166b7d0e59b72a868a60ea5e789cf554a7437125d23de95da5f5dbc787"
+    "machine-notice-queries.json": "44d902cf0e337acdeebfbec443d4b2fbdc9549189cc92511137d482465f65b59",
+    "registry_migrations/0001_machine_enrollments.sql": "9ad00775473cd1ab27e95a20396eb7b2426accc95e226441bff409055384f3c7",
+    "registry_migrations/0002_lease_incarnation.sql": "c43062856051d08a1038ff40e89311918873426a1c158c7b55cb19bc8889aa59",
+    "session_migrations/0011_machine_notices.sql": "98aa3abb60904b6b33d6fe66f1b160a4c7242d0136229e72e579c778b790e3c5",
+    "session_migrations/0012_forward_correlations.sql": "1c7d4cd8c2996317ac6b57c9ac3916fdf30f296fbf7fc7024ebabfe6e567df14",
+    "sql/machine_notices/advance_machine_notice_floor.sql": "f80ae0b9c7ac7bb4d6f5e33f719364279d5ad5d94a05a29c0db30b3b3cbc3f6a",
+    "sql/machine_notices/advance_machine_notice_head.sql": "472e53c5477a7b24e947641e3dcbc6be30fc225fbaba1b1bc30e725628c001be",
+    "sql/machine_notices/append_machine_notice.sql": "0190357f7f7e592e60341a4bda81f2542bf709d4dafe882ae40da863b18fe596",
+    "sql/machine_notices/initialize_machine_notice_state.sql": "86d2092b51c8e37e22ed5981b930954b429115158d60ede3044a1a4561c3f6a6",
+    "sql/machine_notices/prune_machine_notices.sql": "7378db948ece6104547c6c6284f0abbf2c9ef889fb5113194710e9e314e87c1c",
+    "sql/machine_notices/read_expired_machine_notices.sql": "db5ce3d3da0828c06262a49e8467afbc5c683e38146233a11e786939f8b95851",
+    "sql/machine_notices/read_machine_notice_bounds.sql": "a540234b7c2818a5b13ad822dc41b21d6d38cdc57af57d32cf9bd679237961ba",
+    "sql/machine_notices/read_machine_notice_expiry.sql": "b4641787f48e08e73670f795d6c7f77c1dcccc3a7a6161658352b57c81d529b4",
+    "sql/machine_notices/read_machine_notice_peers.sql": "284708436c57a1e0a4fff9546f1661f8102e6e381b717320d19bfc68e3cc8b93",
+    "sql/machine_notices/read_machine_notice_state.sql": "f21b0e887f450ed49988cd371ec73872d4ed910a921c179d0e941e355ab1a50b",
+    "sql/machine_notices/read_machine_notices.sql": "df0b6548f624195581729101f6aab44f2b124ef2401970136a70665b41032dc2",
+    "src/generated_machine_notices.rs": "139cf7fcc3a8478143039501500a7c3afc7e143598d5342c2044ec592735b292"
   },
-  "queries_digest": "9b38b2431c6d8a8bb6720ad196581d5ff2453a72f61d2dc5f237aa452336d5b2",
+  "queries_digest": "47091eb9e00694b7345789f14a3efa963baa568c35db581759b5157760564a56",
   "queries": [
     {
       "name": "read_machine_notice_state",
-      "bind_slots": 0,
+      "bind_slots": 1,
       "columns": [
         {
-          "name": "state_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "name",
+          "name": "machine_id",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
@@ -118,7 +113,46 @@
           "type_source": "typeof"
         },
         {
-          "name": "peer_id",
+          "name": "created_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "created_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "updated_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "updated_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        }
+      ]
+    },
+    {
+      "name": "initialize_machine_notice_state",
+      "bind_slots": 2,
+      "columns": []
+    },
+    {
+      "name": "read_machine_notice_peers",
+      "bind_slots": 0,
+      "columns": [
+        {
+          "name": "machine_id",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
@@ -127,36 +161,33 @@
       ]
     },
     {
-      "name": "initialize_machine_notice_state",
-      "bind_slots": 1,
-      "columns": []
-    },
-    {
-      "name": "remember_machine_notice_peer",
-      "bind_slots": 1,
-      "columns": []
-    },
-    {
       "name": "advance_machine_notice_head",
-      "bind_slots": 1,
+      "bind_slots": 3,
       "columns": []
     },
     {
       "name": "advance_machine_notice_floor",
-      "bind_slots": 1,
+      "bind_slots": 3,
       "columns": []
     },
     {
       "name": "append_machine_notice",
-      "bind_slots": 5,
+      "bind_slots": 10,
       "columns": []
     },
     {
       "name": "read_machine_notices",
-      "bind_slots": 1,
+      "bind_slots": 2,
       "columns": [
         {
           "name": "notice_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "machine_id",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
@@ -184,6 +215,34 @@
           "type_source": "driver"
         },
         {
+          "name": "board_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "project_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "epoch",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "feed_through",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
           "name": "created_at",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
@@ -206,6 +265,20 @@
         },
         {
           "name": "expiry_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "updated_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "updated_class",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
@@ -215,10 +288,17 @@
     },
     {
       "name": "read_expired_machine_notices",
-      "bind_slots": 1,
+      "bind_slots": 2,
       "columns": [
         {
           "name": "notice_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "machine_id",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
@@ -244,6 +324,34 @@
           "rust_type": "Option<String>",
           "nullable": null,
           "type_source": "driver"
+        },
+        {
+          "name": "board_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "project_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "epoch",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "feed_through",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
         },
         {
           "name": "created_at",
@@ -272,12 +380,26 @@
           "rust_type": "Option<String>",
           "nullable": null,
           "type_source": "typeof"
+        },
+        {
+          "name": "updated_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "updated_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
         }
       ]
     },
     {
       "name": "prune_machine_notices",
-      "bind_slots": 1,
+      "bind_slots": 2,
       "columns": []
     },
     {
@@ -295,7 +417,7 @@
     },
     {
       "name": "read_machine_notice_bounds",
-      "bind_slots": 0,
+      "bind_slots": 1,
       "columns": [
         {
           "name": "first_position",

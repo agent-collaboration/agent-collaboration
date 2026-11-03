@@ -80,8 +80,6 @@ impl PlatformIo for CloudflareObjectIo {
 type StoreHost = CloudflareStorageHost<CoreHost<CloudflareObjectIo>>;
 enum RuntimeFace {
     Fleet(ObjectRuntime<FleetKind, StoreHost, CloudflareObjectIo>),
-    Registry(ObjectRuntime<RegistryKind, StoreHost, CloudflareObjectIo>),
-    Session(ObjectRuntime<SessionKind, StoreHost, CloudflareObjectIo>),
     Copy(ObjectRuntime<CopyKind, StoreHost, CloudflareObjectIo>),
     Mailbox(ObjectRuntime<MailboxKind, StoreHost, CloudflareObjectIo>),
 }
@@ -89,8 +87,6 @@ impl RuntimeFace {
     async fn initialize(&self) -> Result<()> {
         match self {
             Self::Fleet(runtime) => runtime.initialize().await.map_err(error)?,
-            Self::Registry(runtime) => runtime.initialize().await.map_err(error)?,
-            Self::Session(runtime) => runtime.initialize().await.map_err(error)?,
             // Copy's core classifies Health before its call/alarm prelude.
             Self::Copy(_) => 0,
             Self::Mailbox(runtime) => runtime.initialize().await.map_err(error)?,
@@ -100,12 +96,6 @@ impl RuntimeFace {
     async fn on_alarm(&self) -> Result<()> {
         match self {
             Self::Fleet(runtime) => {
-                runtime.on_alarm().await.map_err(error)?;
-            }
-            Self::Registry(runtime) => {
-                runtime.on_alarm().await.map_err(error)?;
-            }
-            Self::Session(runtime) => {
                 runtime.on_alarm().await.map_err(error)?;
             }
             Self::Copy(runtime) => runtime.on_alarm().await.map_err(error)?,
@@ -118,8 +108,6 @@ impl RuntimeFace {
 }
 #[derive(Clone, Copy)]
 enum PhysicalKind {
-    Connection,
-    Registry,
     Copy,
     Fleet,
     Mailbox,
@@ -128,9 +116,7 @@ impl PhysicalKind {
     fn matches(self, address: &ObjectAddress) -> bool {
         matches!(
             (self, address),
-            (Self::Connection, ObjectAddress::Connection(_))
-                | (Self::Registry, ObjectAddress::Registry)
-                | (Self::Copy, ObjectAddress::Copy(_))
+            (Self::Copy, ObjectAddress::Copy(_))
                 | (Self::Fleet, ObjectAddress::Fleet)
                 | (Self::Mailbox, ObjectAddress::Mailbox(_))
         )
@@ -242,22 +228,6 @@ impl ShellActor {
             faults: self.faults.clone(),
         };
         let runtime = match address {
-            ObjectAddress::Registry => RuntimeFace::Registry(
-                ObjectRuntime::registry(host.clone(), io, config, self.delivery_config()?)
-                    .map_err(error)?,
-            ),
-            ObjectAddress::Connection(service) => RuntimeFace::Session(
-                ObjectRuntime::session(
-                    host.clone(),
-                    io,
-                    config.authoritative_receiver,
-                    service,
-                    serde_json::from_str(
-                        &self.env.var("CENTRAL_HOLDER_ANSWER_TIMEOUT")?.to_string(),
-                    )?,
-                )
-                .map_err(error)?,
-            ),
             ObjectAddress::Copy(project) => RuntimeFace::Copy(ObjectRuntime::copy(
                 host.clone(),
                 io,
@@ -276,8 +246,16 @@ impl ShellActor {
                 .map_err(error)?,
             ),
             ObjectAddress::Fleet => RuntimeFace::Fleet(
-                ObjectRuntime::fleet(host.clone(), io, config.authoritative_receiver)
-                    .map_err(error)?,
+                ObjectRuntime::fleet(
+                    host.clone(),
+                    io,
+                    config,
+                    self.delivery_config()?,
+                    serde_json::from_str(
+                        &self.env.var("CENTRAL_HOLDER_ANSWER_TIMEOUT")?.to_string(),
+                    )?,
+                )
+                .map_err(error)?,
             ),
         };
         let runtime = Arc::new(runtime);
@@ -288,16 +266,28 @@ impl ShellActor {
             .map_err(|_| error("object runtime already constructed"))?;
         Ok((host, runtime))
     }
+    #[cfg(feature = "conformance")]
+    async fn restore_conformance_state(&self) -> Result<()> {
+        let now = self
+            .state
+            .storage()
+            .get::<collaboration_central_core::RegistryTime>(crate::composed_control::CLOCK_KEY)
+            .await?;
+        self.faults.restore_clock(now).map_err(error)?;
+        let unavailable = self
+            .state
+            .storage()
+            .get::<bool>(crate::composed_control::PROJECT_FAULT_KEY)
+            .await?
+            .unwrap_or(false);
+        self.faults
+            .restore_project_fault(unavailable)
+            .map_err(error)?;
+        Ok(())
+    }
     async fn runtime(&self, address: ObjectAddress) -> Result<(Arc<StoreHost>, Arc<RuntimeFace>)> {
         #[cfg(feature = "conformance")]
-        {
-            let now = self
-                .state
-                .storage()
-                .get::<collaboration_central_core::RegistryTime>(crate::composed_control::CLOCK_KEY)
-                .await?;
-            self.faults.restore_clock(now).map_err(error)?;
-        }
+        self.restore_conformance_state().await?;
         let (host, runtime) = self.runtime_handles(address)?;
         host.migrate_store().await.map_err(error)?;
         runtime.initialize().await?;
@@ -311,6 +301,34 @@ impl ShellActor {
         let address = self
             .address(Some(serde_json::from_str(&requested)?))
             .await?;
+        #[cfg(feature = "conformance")]
+        if request.path() == crate::composed_control::OBJECT_PATH
+            || request.path() == "/test/fleet-schema"
+        {
+            self.restore_conformance_state().await?;
+            let (host, runtime) = self.runtime_handles(address.clone())?;
+            if let Some(response) = self
+                .conformance_fetch(&mut request, host.as_ref(), runtime.as_ref())
+                .await?
+            {
+                return Ok(response);
+            }
+        }
+        #[cfg(feature = "conformance")]
+        if request.path() == "/call" && matches!(address, ObjectAddress::Copy(_)) {
+            let unavailable = self
+                .state
+                .storage()
+                .get::<bool>(crate::composed_control::PROJECT_FAULT_KEY)
+                .await?
+                .unwrap_or(false);
+            if unavailable {
+                return Ok(Response::from_json(
+                    &cloudflare_transport::WireCallFailure::Unreachable { last_seen: None },
+                )?
+                .with_status(409));
+            }
+        }
         let (host, runtime) = self.runtime(address.clone()).await?;
         #[cfg(feature = "conformance")]
         if let Some(response) = self
@@ -321,15 +339,6 @@ impl ShellActor {
         }
         match (request.path().as_str(), runtime.as_ref()) {
             ("/call", RuntimeFace::Fleet(runtime)) => {
-                match runtime.on_call(request.bytes().await?).await {
-                    Ok(bytes) => Response::from_bytes(bytes),
-                    Err(failure) => Ok(Response::from_json(
-                        &cloudflare_transport::WireCallFailure::from(failure),
-                    )?
-                    .with_status(409)),
-                }
-            }
-            ("/call", RuntimeFace::Registry(runtime)) => {
                 match runtime.on_call(request.bytes().await?).await {
                     Ok(bytes) => Response::from_bytes(bytes),
                     Err(failure) => Ok(Response::from_json(
@@ -369,21 +378,7 @@ impl ShellActor {
                     .with_status(409)),
                 }
             }
-            ("/call", RuntimeFace::Session(runtime)) => {
-                match runtime
-                    .delivery()
-                    .map_err(error)?
-                    .on_call(request.bytes().await?)
-                    .await
-                {
-                    Ok(bytes) => Response::from_bytes(bytes),
-                    Err(failure) => Ok(Response::from_json(
-                        &cloudflare_transport::WireCallFailure::from(failure),
-                    )?
-                    .with_status(409)),
-                }
-            }
-            ("/session", RuntimeFace::Session(runtime)) => {
+            ("/session", RuntimeFace::Fleet(runtime)) => {
                 use base64::Engine;
                 let encoded = request
                     .headers()
@@ -393,8 +388,7 @@ impl ShellActor {
                     .decode(encoded)
                     .map_err(error)?;
                 let attachment: BindingAttachment = serde_json::from_slice(&bytes)?;
-                if address
-                    != ObjectAddress::Connection(attachment.admission_origin.installation.clone())
+                if address != ObjectAddress::Fleet
                     || attachment.registration
                         != fleet_sync_session::ConnectionRegistration::Opening
                 {
@@ -424,7 +418,7 @@ impl ShellActor {
     ) -> Result<()> {
         let address = self.address(None).await?;
         let (host, runtime) = self.runtime(address).await?;
-        let RuntimeFace::Session(runtime) = runtime.as_ref() else {
+        let RuntimeFace::Fleet(runtime) = runtime.as_ref() else {
             return Err(error("socket on non-session object"));
         };
         let binding = host.binding(&socket).map_err(error)?;
@@ -437,7 +431,7 @@ impl ShellActor {
     async fn disconnected(&self, socket: WebSocket) -> Result<()> {
         let address = self.address(None).await?;
         let (host, runtime) = self.runtime(address).await?;
-        let RuntimeFace::Session(runtime) = runtime.as_ref() else {
+        let RuntimeFace::Fleet(runtime) = runtime.as_ref() else {
             return Err(error("socket on non-session object"));
         };
         runtime
@@ -495,8 +489,6 @@ macro_rules! shell {
         }
     };
 }
-shell!(ConnectionObject, Connection);
-shell!(LeaseRegistryObject, Registry);
 shell!(ProjectCopyObject, Copy);
 shell!(FleetObject, Fleet);
 shell!(MailboxObject, Mailbox);

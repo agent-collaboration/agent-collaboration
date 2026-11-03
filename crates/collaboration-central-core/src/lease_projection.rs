@@ -73,6 +73,9 @@ impl LeaseProjection {
         })
     }
 
+    pub(crate) fn snapshot(&self) -> &RegistrySnapshot {
+        &self.snapshot
+    }
     pub(crate) fn database(&self) -> DatabaseId {
         self.snapshot.database
     }

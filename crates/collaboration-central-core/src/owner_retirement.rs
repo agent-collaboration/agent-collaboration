@@ -1,4 +1,5 @@
 //! The library commits retirement; existing alarm publication owns Directory.
+use crate::FleetKind;
 use crate::{
     ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
     object_runtime::ObjectWork,
@@ -22,7 +23,7 @@ use sqlx_core::{
 };
 use std::convert::Infallible;
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -38,7 +39,7 @@ where
         database: DatabaseId,
         request: OwnerRetirement,
     ) -> Result<OwnerRetirementAnswer, CallFailure> {
-        let ObjectWork::Registry { engine, host, .. } = &self.work else {
+        let ObjectWork::Fleet { engine, host, .. } = &self.work else {
             return Err(CallFailure::AnswerLost);
         };
         let attempt = request.request_id;
@@ -47,7 +48,7 @@ where
         // Always bind the request before consulting current lifecycle. A final
         // tombstone cannot make changed content under the same ID acceptable.
         let operation = match engine
-            .start::<RetirementTask<Host::Store, Host::Database>>(
+            .start_retirement(
                 &key,
                 Retirement {
                     attempt,
@@ -131,13 +132,9 @@ where
         request_id: fleet_sync_protocol::RequestId,
         at: SyncTime,
     ) -> Result<OwnerRetirementAnswer, CallFailure> {
-        let ObjectWork::Registry { shared_host, .. } = &self.work else {
+        let ObjectWork::Fleet { shared_host, .. } = &self.work else {
             return Err(CallFailure::AnswerLost);
         };
-        shared_host
-            .request_lease_publication_repair()
-            .await
-            .map_err(|_| CallFailure::AnswerLost)?;
         if shared_host
             .retirement_directory_acknowledged(database, at)
             .await

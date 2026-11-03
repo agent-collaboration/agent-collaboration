@@ -117,7 +117,7 @@ async fn mailbox_submit_hold_ignores_mailbox_requests_and_preserves_the_selected
         ),
         (DispatchCallSelector::ForwardRoute, "central.forward-route"),
     ] {
-        selected_hold(call, kind, ObjectAddress::Registry).await?;
+        selected_hold(call, kind, ObjectAddress::Fleet).await?;
     }
     Ok(())
 }
@@ -128,7 +128,7 @@ async fn installation_peer_hold_ignores_other_outer_kinds_and_releases_only_the_
     selected_hold(
         DispatchCallSelector::InstallationPeer,
         "central.installation-peer",
-        ObjectAddress::Registry,
+        ObjectAddress::Fleet,
     )
     .await
 }
@@ -158,7 +158,7 @@ async fn copy_write_hold_ignores_status_and_unknown_calls_without_freezing_later
 
 async fn selected_drop(call: DispatchCallSelector, kind: &str) -> TestResult {
     let faults = RuntimeFaults::default();
-    let destination = ObjectAddress::Registry;
+    let destination = ObjectAddress::Fleet;
     faults
         .control(RuntimeControl::DropNextSelectedObjectReply {
             destination: destination.clone(),
@@ -233,7 +233,7 @@ async fn copy_write_reply_drop_selects_only_the_outer_write_kind_once() -> TestR
 async fn existing_any_controls_still_accept_opaque_calls_and_resume_before_the_next_hold()
 -> TestResult {
     let faults = Arc::new(RuntimeFaults::default());
-    let destination = ObjectAddress::Registry;
+    let destination = ObjectAddress::Fleet;
     faults
         .control(RuntimeControl::HoldNextDispatch {
             destination: destination.clone(),
@@ -304,7 +304,7 @@ async fn mailbox_item_selection_ignores_other_origins_items_cancels_and_queries(
     );
     let selector = serde_json::from_value(serde_json::to_value(selector)?)?;
     let faults = RuntimeFaults::default();
-    let destination = ObjectAddress::Registry;
+    let destination = ObjectAddress::Fleet;
     faults
         .control(RuntimeControl::HoldNextSelectedDispatch {
             destination: destination.clone(),
@@ -356,7 +356,7 @@ async fn mailbox_item_selection_ignores_other_origins_items_cancels_and_queries(
 )]
 async fn held_reply_binding_rejects_unheld_states_and_preserves_an_armed_fault() -> TestResult {
     let faults = RuntimeFaults::default();
-    let destination = ObjectAddress::Registry;
+    let destination = ObjectAddress::Fleet;
     assert!(matches!(
         faults.control(RuntimeControl::DropHeldDispatchReply).await,
         Err(RuntimeControlFailure::NotHeld)
@@ -406,7 +406,7 @@ async fn held_reply_binding_rejects_unheld_states_and_preserves_an_armed_fault()
 async fn held_reply_binding_ignores_a_bypassing_submit_and_same_item_with_new_call_bytes()
 -> TestResult {
     let faults = RuntimeFaults::default();
-    let destination = ObjectAddress::Registry;
+    let destination = ObjectAddress::Fleet;
     let expected = mailbox_submit_identity(
         "019f0000-0000-7000-8000-000000000810",
         "019f0000-0000-7000-8000-000000000811",

@@ -1,23 +1,35 @@
 {
   "migrations": [
+    "registry_migrations",
     "session_migrations"
   ],
   "output": "src/generated_forwards.rs",
   "metadata": "forward-query-metadata.json",
   "queries": [
     {
-      "name": "read_pending_forwards",
-      "sql": "sql/forwards/read_pending_forwards.sql",
+      "name": "read_forward_rows",
+      "sql": "sql/forwards/read_forward_rows.sql",
       "row": "StoredForwardRow",
       "result": "many",
-      "parameters": []
+      "parameters": [
+        {
+          "name": "side",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
     },
     {
-      "name": "read_pending_forward",
-      "sql": "sql/forwards/read_pending_forward.sql",
+      "name": "read_forward_row",
+      "sql": "sql/forwards/read_forward_row.sql",
       "row": "StoredForwardRow",
       "result": "optional",
       "parameters": [
+        {
+          "name": "side",
+          "kind": "text",
+          "nullable": false
+        },
         {
           "name": "forward_frame",
           "kind": "text",
@@ -26,80 +38,89 @@
       ]
     },
     {
-      "name": "store_pending_forward",
-      "sql": "sql/forwards/store_pending_forward.sql",
+      "name": "store_forward_row",
+      "sql": "sql/forwards/store_forward_row.sql",
       "row": null,
       "result": "execute",
       "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
         {
           "name": "forward_frame",
           "kind": "text",
           "nullable": false
         },
         {
-          "name": "record",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "delete_pending_forward",
-      "sql": "sql/forwards/delete_pending_forward.sql",
-      "row": null,
-      "result": "execute",
-      "parameters": [
-        {
-          "name": "forward_frame",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "read_delivered_forwards",
-      "sql": "sql/forwards/read_delivered_forwards.sql",
-      "row": "StoredForwardRow",
-      "result": "many",
-      "parameters": []
-    },
-    {
-      "name": "read_delivered_forward",
-      "sql": "sql/forwards/read_delivered_forward.sql",
-      "row": "StoredForwardRow",
-      "result": "optional",
-      "parameters": [
-        {
-          "name": "forward_frame",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "store_delivered_forward",
-      "sql": "sql/forwards/store_delivered_forward.sql",
-      "row": null,
-      "result": "execute",
-      "parameters": [
-        {
-          "name": "forward_frame",
+          "name": "side",
           "kind": "text",
           "nullable": false
         },
         {
-          "name": "record",
+          "name": "request_frame",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_machine",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_session",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "connection",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "expected_holder",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "project",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "phase",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "deadline",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "updated_at",
           "kind": "text",
           "nullable": false
         }
       ]
     },
     {
-      "name": "delete_delivered_forward",
-      "sql": "sql/forwards/delete_delivered_forward.sql",
+      "name": "delete_forward_row",
+      "sql": "sql/forwards/delete_forward_row.sql",
       "row": null,
       "result": "execute",
       "parameters": [
+        {
+          "name": "side",
+          "kind": "text",
+          "nullable": false
+        },
         {
           "name": "forward_frame",
           "kind": "text",

@@ -1,4 +1,5 @@
 //! Owner requests admit local work, then drive the existing library outside it.
+use crate::FleetKind;
 use crate::{
     CallerKind, ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
     caller_context::CallAuthority,
@@ -25,7 +26,7 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -49,7 +50,7 @@ where
             serde_json::from_value(call.target).map_err(encode_refusal)?;
         let request: OwnerRegistryCall =
             serde_json::from_value(call.request).map_err(encode_refusal)?;
-        let ObjectWork::Registry {
+        let ObjectWork::Fleet {
             engine,
             host,
             shared_host,
@@ -76,10 +77,7 @@ where
                         ))
                         .map_err(encode_refusal)?;
                         let id = engine
-                            .start::<PreviewTakeoverTask<Host::Store, Host::Database>>(
-                                &key,
-                                PreviewTakeover { database },
-                            )
+                            .start_preview(&key, PreviewTakeover { database })
                             .await
                             .map_err(|_| CallFailure::AnswerLost)?;
                         engine
@@ -125,7 +123,7 @@ where
         database: fleet_sync_protocol::DatabaseId,
         offer: OwnerTransferOffer,
     ) -> Result<OwnerTransferAnswer, CallFailure> {
-        let ObjectWork::Registry {
+        let ObjectWork::Fleet {
             engine,
             host,
             shared_host,
@@ -157,9 +155,7 @@ where
         if matches!(
             &answer,
             OwnerTransferAnswer::Moved { .. } | OwnerTransferAnswer::Granted { .. }
-        ) {
-            let _ = shared_host.request_lease_publication_repair().await;
-        }
+        ) {}
         Ok(answer)
     }
 }

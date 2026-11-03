@@ -49,6 +49,10 @@ pub(crate) struct ForwardDeliveryRequest {
     pub forward_frame: FrameId,
     pub holder: PeerId,
     pub deadline: SyncTime,
+    pub origin_session: SessionKey,
+    pub request_frame: FrameId,
+    pub connection: fleet_sync_protocol::ConnectionId,
+    pub created_at: SyncTime,
     pub post: VerifiedForwardedPost,
 }
 #[derive(Serialize, Deserialize)]

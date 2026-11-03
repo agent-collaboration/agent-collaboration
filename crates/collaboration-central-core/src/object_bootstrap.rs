@@ -230,17 +230,17 @@ static SESSION_MIGRATIONS: std::sync::LazyLock<Vec<sqlx_core::migrate::Migration
         };
         vec![
             Migration::new(
-                1,
+                11,
                 "machine notices".into(),
                 MigrationType::Simple,
-                include_str!("../session_migrations/0001_machine_notices.sql").into_sql_str(),
+                include_str!("../session_migrations/0011_machine_notices.sql").into_sql_str(),
                 false,
             ),
             Migration::new(
-                2,
+                12,
                 "forward correlations".into(),
                 MigrationType::Simple,
-                include_str!("../session_migrations/0002_forward_correlations.sql").into_sql_str(),
+                include_str!("../session_migrations/0012_forward_correlations.sql").into_sql_str(),
                 false,
             ),
         ]
@@ -262,16 +262,6 @@ static REGISTRY_MIGRATIONS: std::sync::LazyLock<Vec<sqlx_core::migrate::Migratio
                 2,
                 "lease incarnation",
                 include_str!("../registry_migrations/0002_lease_incarnation.sql"),
-            ),
-            (
-                3,
-                "lease publication acknowledgements",
-                include_str!("../registry_migrations/0003_lease_acknowledgements.sql"),
-            ),
-            (
-                4,
-                "registry notice marks",
-                include_str!("../registry_migrations/0004_notice_marks.sql"),
             ),
         ]
         .into_iter()

@@ -59,12 +59,15 @@ where
             return Err(OperationFailure::Retry { after_ms: 100 });
         }
         let peer = input.peer;
+        let updated_at = chrono::DateTime::from_timestamp_millis(context.now().unix_millis())
+            .ok_or_else(|| invalid_step("readmission clock is outside the timestamp range"))?
+            .to_rfc3339();
         context
             .local(
                 durable_steps::StepName::new("activate_enrollment").map_err(invalid_step)?,
                 move |scope| {
                     Box::pin(async move {
-                        queries::activate_enrollment(scope, peer.to_string())
+                        queries::activate_enrollment(scope, updated_at, peer.to_string())
                             .await
                             .map_err(StoreError::backend)?;
                         Ok(())

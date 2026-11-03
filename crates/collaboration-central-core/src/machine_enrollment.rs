@@ -1,5 +1,7 @@
 //! The registry owns the stable mapping from a Router identity to a library peer.
+use crate::FleetKind;
 
+use crate::machine_enrollment_record::{EnrollmentState, StoredMachine, corrupt, valid_hash};
 use crate::{
     AccessClientId, AdmissionOrigin, ObjectHost, ObjectRuntime, OwnerIdentity, PlatformIo,
     RegistryKind, generated_enrollment as queries,
@@ -105,7 +107,7 @@ impl AdmittedMachine {
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -121,7 +123,7 @@ where
         _owner: &OwnerIdentity,
         request: EnrollMachine,
     ) -> Result<EnrollmentDecision, StoreError> {
-        let ObjectWork::Registry {
+        let ObjectWork::Fleet {
             host,
             shared_host,
             engine,
@@ -174,7 +176,7 @@ where
         access_client_id: AccessClientId,
         credential_hash: String,
     ) -> Result<Result<AdmittedMachine, AuthRefusal>, StoreError> {
-        let ObjectWork::Registry {
+        let ObjectWork::Fleet {
             host, shared_host, ..
         } = &self.work
         else {
@@ -287,7 +289,9 @@ where
             }
             let peer = request.peer;
             if let Some(machine) = previous {
-                if machine.state == EnrollmentState::Enrolled && machine.matches(&request) {
+                if machine.state == EnrollmentState::Enrolled
+                    && enrollment_matches(&machine, &request)
+                {
                     return Ok((
                         EnrollmentAdmission::Answered(EnrollmentDecision::MachineEnrolled {
                             peer,
@@ -307,7 +311,7 @@ where
                 .await?
                 {
                     return Ok((
-                        if machine.matches(&request) {
+                        if enrollment_matches(&machine, &request) {
                             EnrollmentAdmission::Readmitting {
                                 operation: machine
                                     .last_enrollment_operation
@@ -341,6 +345,7 @@ where
                         request.credential_hash,
                         request.expires_at.to_rfc3339(),
                         String::from(operation),
+                        self.now.to_rfc3339(),
                         peer.to_string(),
                     )
                     .await
@@ -367,6 +372,7 @@ where
                     request.access_client_id.as_str().into(),
                     request.credential_hash,
                     request.expires_at.to_rfc3339(),
+                    self.now.to_rfc3339(),
                     peer.to_string(),
                 )
                 .await
@@ -380,6 +386,8 @@ where
                     request.access_client_id.as_str().into(),
                     request.credential_hash,
                     request.expires_at.to_rfc3339(),
+                    self.now.to_rfc3339(),
+                    self.now.to_rfc3339(),
                 )
                 .await
                 .map_err(StoreError::backend)?;
@@ -450,84 +458,12 @@ where
     }
 }
 
-#[derive(Eq, PartialEq)]
-#[cfg_attr(feature = "conformance", derive(Serialize))]
-enum EnrollmentState {
-    Enrolled,
-    Revoked,
-}
-#[cfg_attr(feature = "conformance", derive(Serialize))]
-struct StoredMachine {
-    peer: PeerId,
-    origin: AdmissionOrigin,
-    access_client_id: AccessClientId,
-    credential_hash: String,
-    state: EnrollmentState,
-    expires_at: DateTime<Utc>,
-    last_seen: Option<SyncTime>,
-    last_revocation_operation: Option<durable_steps::OperationId>,
-    last_enrollment_operation: Option<OperationId>,
-}
-impl StoredMachine {
-    fn matches(&self, request: &EnrollMachine) -> bool {
-        self.origin.installation == request.installation
-            && self.origin.machine == request.label
-            && self.access_client_id == request.access_client_id
-            && self.credential_hash == request.credential_hash
-            && self.expires_at == request.expires_at
-    }
-    fn decode(row: queries::StoredEnrollment) -> Result<Self, StoreError> {
-        let peer =
-            PeerId::try_from(required(row.peer_id, "peer_id")?).map_err(|_| corrupt("peer_id"))?;
-        let installation = ServiceId::try_from(required(row.service_id, "service_id")?)
-            .map_err(|_| corrupt("service_id"))?;
-        let label = required(row.machine_label, "machine_label")?;
-        let machine =
-            MachineLabel::try_from(label.clone()).map_err(|_| corrupt("machine_label"))?;
-        if machine.as_str() != label {
-            return Err(corrupt("machine_label"));
-        }
-        let access_client_id =
-            AccessClientId::new(required(row.access_client_id, "access_client_id")?)
-                .map_err(|_| corrupt("access_client_id"))?;
-        let credential_hash = required(row.credential_hash, "credential_hash")?;
-        if !valid_hash(&credential_hash) {
-            return Err(corrupt("credential_hash"));
-        }
-        let state = match required(row.state, "state")?.as_str() {
-            "enrolled" => EnrollmentState::Enrolled,
-            "revoked" => EnrollmentState::Revoked,
-            _ => return Err(corrupt("state")),
-        };
-        let expires_at = required(row.expires_at, "expires_at")?
-            .parse()
-            .map_err(|_| corrupt("expires_at"))?;
-        let last_seen = stored_presence(row.last_seen)?;
-        let last_revocation_operation = row
-            .last_revocation_operation
-            .map(durable_steps::OperationId::try_from)
-            .transpose()
-            .map_err(|_| corrupt("last_revocation_operation"))?;
-        let last_enrollment_operation = row
-            .last_enrollment_operation
-            .map(OperationId::try_from)
-            .transpose()
-            .map_err(|_| corrupt("last_enrollment_operation"))?;
-        Ok(Self {
-            peer,
-            origin: AdmissionOrigin {
-                installation,
-                machine,
-            },
-            access_client_id,
-            credential_hash,
-            state,
-            expires_at,
-            last_seen,
-            last_revocation_operation,
-            last_enrollment_operation,
-        })
-    }
+fn enrollment_matches(machine: &StoredMachine, request: &EnrollMachine) -> bool {
+    machine.origin.installation == request.installation
+        && machine.origin.machine == request.label
+        && machine.access_client_id == request.access_client_id
+        && machine.credential_hash == request.credential_hash
+        && machine.expires_at == request.expires_at
 }
 async fn operation_pending<Scope: JournalStorage>(
     scope: &mut Scope,
@@ -550,65 +486,8 @@ async fn operation_pending<Scope: JournalStorage>(
         OperationExecution::Completed { .. }
     ))
 }
-fn valid_hash(value: &str) -> bool {
-    !value.is_empty() && value.trim() == value && !value.chars().any(char::is_control)
-}
-fn required(value: Option<String>, field: &str) -> Result<String, StoreError> {
-    value.ok_or_else(|| corrupt(field))
-}
-fn corrupt(field: &str) -> StoreError {
-    StoreError::Corrupt {
-        field: format!("machine_enrollments.{field}"),
-        message: "invalid stored enrollment".into(),
-    }
-}
 fn wrong_face() -> StoreError {
     StoreError::Aborted {
         reason: "registry runtime has a different face".into(),
     }
-}
-
-fn stored_presence(value: Option<String>) -> Result<Option<SyncTime>, StoreError> {
-    value
-        .map(|value| {
-            let parsed: DateTime<Utc> = value.parse().map_err(|_| corrupt("last_seen"))?;
-            let millis = parsed.timestamp_millis();
-            let exact =
-                DateTime::from_timestamp_millis(millis).ok_or_else(|| corrupt("last_seen"))?;
-            if exact != parsed {
-                return Err(corrupt("last_seen"));
-            }
-            Ok(SyncTime::from_unix_millis(millis))
-        })
-        .transpose()
-}
-
-pub(crate) fn service_for_stored_peer(
-    row: queries::StoredEnrollment,
-    expected: PeerId,
-) -> Result<ServiceId, StoreError> {
-    let machine = StoredMachine::decode(row)?;
-    if machine.peer != expected {
-        return Err(corrupt("peer_id"));
-    }
-    Ok(machine.origin.installation)
-}
-
-/// Identity and Registry presence stay readable after revocation; authentication
-/// and submit-time revocation decisions remain with their existing owners.
-pub(crate) struct EnrollmentIdentity {
-    pub peer: PeerId,
-    pub origin: AdmissionOrigin,
-    pub last_seen: Option<SyncTime>,
-}
-
-pub(crate) fn identity_from_stored_enrollment(
-    row: queries::StoredEnrollment,
-) -> Result<EnrollmentIdentity, StoreError> {
-    let machine = StoredMachine::decode(row)?;
-    Ok(EnrollmentIdentity {
-        peer: machine.peer,
-        origin: machine.origin,
-        last_seen: machine.last_seen,
-    })
 }

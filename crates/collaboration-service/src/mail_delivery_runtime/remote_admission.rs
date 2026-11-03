@@ -74,6 +74,7 @@ impl MailDeliveryRuntime {
         };
         let target = draft.target;
         let limits = self.config.limits;
+        let submitter = self.config.owner;
         let now = self.clock.now();
         let retirement = fleet_sync_delivery::SubmitInput {
             item: item.id(),
@@ -86,7 +87,12 @@ impl MailDeliveryRuntime {
             .transaction(move |scope| {
                 Box::pin(async move {
                     let (admission, _) = Outbox::<_, RouterDeliveryTypes>::new(scope, limits)
-                        .enqueue_and_admit::<SubmitMailTask>(item, relay)
+                        .enqueue_and_admit::<SubmitMailTask>(
+                            item,
+                            relay,
+                            submitter,
+                            runtime_primitives::SyncTime::from_unix_millis(now.timestamp_millis()),
+                        )
                         .await
                         .map_err(delivery_rollback)?;
                     super::terminal_retirement::admit_terminal_retirement(

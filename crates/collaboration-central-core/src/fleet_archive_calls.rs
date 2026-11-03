@@ -37,11 +37,14 @@ where
         call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if call.source_face != CallerKind::Session
-            || !matches!(call.authority, CallAuthority::Object)
+            || !matches!(call.authority, CallAuthority::Machine { .. })
         {
             return Err(refused());
         }
-        let ObjectAddress::Connection(installation) = call.source else {
+        let CallAuthority::Machine {
+            installation: installation,
+        } = call.authority
+        else {
             return Err(refused());
         };
         let _: FleetArchiveReport = serde_json::from_value(call.target).map_err(|_| refused())?;

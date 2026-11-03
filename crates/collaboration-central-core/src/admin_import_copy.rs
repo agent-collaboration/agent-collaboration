@@ -88,7 +88,7 @@ where
         mut call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if call.source_face != CallerKind::Edge
-            || call.source != ObjectAddress::Registry
+            || call.source != ObjectAddress::Fleet
             || !matches!(call.authority, CallAuthority::Owner(_))
         {
             return Err(refused());

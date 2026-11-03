@@ -76,7 +76,7 @@ where
         &self,
         call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
-        if call.source != ObjectAddress::Registry
+        if call.source != ObjectAddress::Fleet
             || call.source_face != CallerKind::Edge
             || !matches!(call.authority, CallAuthority::Owner(_))
         {

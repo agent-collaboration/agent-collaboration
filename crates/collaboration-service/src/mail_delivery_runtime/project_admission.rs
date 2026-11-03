@@ -73,6 +73,7 @@ impl MailDeliveryRuntime {
                 DeliveryTransactionFailure::OutcomeUnknown(StoreError::backend(error))
             })?;
         let limits = self.config.limits;
+        let submitter = self.config.owner;
         let now = self.clock.now();
         let read_context = collaboration_protocol::MailReadContext::Project {
             project: project.clone(),
@@ -94,7 +95,12 @@ impl MailDeliveryRuntime {
                     let original_id = item.id();
                     let mut outbox = Outbox::<_, RouterDeliveryTypes>::new(scope, limits);
                     let (admission, operation) = outbox
-                        .enqueue_and_admit::<SubmitMailTask>(item, relay)
+                        .enqueue_and_admit::<SubmitMailTask>(
+                            item,
+                            relay,
+                            submitter,
+                            runtime_primitives::SyncTime::from_unix_millis(now.timestamp_millis()),
+                        )
                         .await
                         .map_err(delivery_rollback)?;
                     if matches!(

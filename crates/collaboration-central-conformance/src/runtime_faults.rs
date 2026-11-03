@@ -131,6 +131,9 @@ impl Default for FaultState {
 
 #[derive(Default)]
 pub struct RuntimeFaults(Mutex<FaultState>);
+#[cfg(test)]
+#[path = "runtime_faults_test.rs"]
+mod tests;
 impl RuntimeFaults {
     pub fn small_mailbox_capacity(&self) -> Result<bool, RuntimeControlFailure> {
         Ok(self.state()?.small_mailbox_capacity)
@@ -148,14 +151,30 @@ impl RuntimeFaults {
     pub fn storage_armed(&self) -> Result<bool, RuntimeControlFailure> {
         Ok(matches!(
             self.state()?.storage,
-            StorageFaultObservation::Armed { .. }
+            StorageFaultObservation::Armed { .. } | StorageFaultObservation::Unavailable
         ))
+    }
+    pub fn project_unavailable(&self) -> Result<bool, RuntimeControlFailure> {
+        Ok(matches!(
+            self.state()?.storage,
+            StorageFaultObservation::Unavailable
+        ))
+    }
+    pub fn restore_project_fault(&self, unavailable: bool) -> Result<(), RuntimeControlFailure> {
+        let mut state = self.state()?;
+        if unavailable {
+            state.storage = StorageFaultObservation::Unavailable;
+        } else if matches!(state.storage, StorageFaultObservation::Unavailable) {
+            state.storage = StorageFaultObservation::Idle;
+        }
+        Ok(())
     }
     /// A late callback failure follows real writes and is rolled back by the real store.
     /// `written` is the measured SQLite total_changes delta, not an invented count.
     pub fn fail_after_writes(&self, written: u64) -> Result<bool, RuntimeControlFailure> {
         let mut state = self.state()?;
         match state.storage {
+            StorageFaultObservation::Unavailable => Ok(true),
             StorageFaultObservation::Armed { after_writes } if written >= after_writes.get() => {
                 state.storage = StorageFaultObservation::Triggered {
                     after_writes,
@@ -315,6 +334,12 @@ impl RuntimeFaults {
         command: RuntimeControl,
     ) -> Result<RuntimeFaultObservation, RuntimeControlFailure> {
         match command {
+            RuntimeControl::ProjectUnavailable => {
+                self.state()?.storage = StorageFaultObservation::Unavailable
+            }
+            RuntimeControl::ClearProjectFault => {
+                self.state()?.storage = StorageFaultObservation::Idle
+            }
             // Startup and live controls select the same fixed quota at the platform owner.
             RuntimeControl::SmallMailboxCapacity => self.state()?.small_mailbox_capacity = true,
             RuntimeControl::SetTime { now } => self.state()?.clock = Some(now),

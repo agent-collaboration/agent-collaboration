@@ -1,4 +1,5 @@
 //! ImportTask reserves identity; it never answers admin publication completion.
+use crate::FleetKind;
 
 use crate::{
     CallerKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
@@ -40,7 +41,7 @@ pub(crate) enum ReservationAnswer {
     Resolved(ImportAnswer),
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -56,7 +57,7 @@ where
         call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if call.source_face != CallerKind::Edge
-            || call.source != ObjectAddress::Registry
+            || call.source != ObjectAddress::Fleet
             || !matches!(call.authority, CallAuthority::Owner(_))
         {
             return Err(refused());
@@ -64,7 +65,7 @@ where
         let _: AdminImportReservation =
             serde_json::from_value(call.target).map_err(|_| refused())?;
         let input: Import = serde_json::from_value(call.request).map_err(|_| refused())?;
-        let ObjectWork::Registry {
+        let ObjectWork::Fleet {
             host,
             engine,
             shared_host,
@@ -121,7 +122,10 @@ where
         Box::pin(async move {
             let key = lifecycle_request_key(self.input.attempt).map_err(StoreError::backend)?;
             let admitted = scope
-                .admit::<ImportTask<Store, Driver>>(&key, &self.input)
+                .admit::<ImportTask<Store, Driver, fleet_sync_lease::NoLeaseChangeHook>>(
+                    &key,
+                    &self.input,
+                )
                 .await
                 .map_err(StoreError::backend)?;
             scope.ensure_wake(self.now).await?;

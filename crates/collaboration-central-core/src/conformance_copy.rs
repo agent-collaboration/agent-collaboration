@@ -1,4 +1,5 @@
 //! Copy proof uses the real Registry caller, Copy object and durable step journal.
+use crate::FleetKind;
 
 use crate::{
     AccessCaller, CallerKind, CentralApplication, CentralPlatform, ObjectAddress, ObjectHost,
@@ -227,7 +228,7 @@ pub(crate) async fn drive_tokens<Platform: CentralPlatform>(
     probe_response(invoke_probe(&application, caller, ObserveDriveTokens, ()).await)
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -245,7 +246,7 @@ where
         check_owner(&invocation)?;
         let _: CopyProbe = serde_json::from_value(invocation.target).map_err(|_| refused())?;
         let input = serde_json::from_value(invocation.request).map_err(|_| refused())?;
-        let ObjectWork::Registry {
+        let ObjectWork::Fleet {
             host,
             engine,
             shared_host,
@@ -288,7 +289,7 @@ where
             serde_json::from_value(invocation.target).map_err(|_| refused())?;
         let input: CopyWaitInput =
             serde_json::from_value(invocation.request).map_err(|_| refused())?;
-        let ObjectWork::Registry { shared_host, .. } = &self.work else {
+        let ObjectWork::Fleet { shared_host, .. } = &self.work else {
             return Err(refused());
         };
         // The observer neither admits nor drives journal operations. The control
@@ -314,7 +315,7 @@ where
         let _: ObserveDriveTokens =
             serde_json::from_value(invocation.target).map_err(|_| refused())?;
         let _: () = serde_json::from_value(invocation.request).map_err(|_| refused())?;
-        let ObjectWork::Registry { host, .. } = &self.work else {
+        let ObjectWork::Fleet { host, .. } = &self.work else {
             return Err(refused());
         };
         let rejected = host
@@ -349,7 +350,7 @@ impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for Admit
 }
 fn check_owner(invocation: &ObjectCallEnvelope) -> Result<(), CallFailure> {
     if invocation.source_face == CallerKind::Edge
-        && invocation.source == ObjectAddress::Registry
+        && invocation.source == ObjectAddress::Fleet
         && matches!(invocation.authority, CallAuthority::Owner(_))
     {
         Ok(())

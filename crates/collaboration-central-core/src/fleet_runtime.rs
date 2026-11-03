@@ -28,6 +28,7 @@ impl CallTarget for FleetRequestEffects {
 
 impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
+    Host::Store: durable_steps::ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
@@ -40,33 +41,168 @@ where
     pub fn fleet(
         host: Arc<Host>,
         io: Io,
-        authoritative_receiver: fleet_sync_protocol::ReceiverId,
+        config: fleet_sync_lease::RegistryConfig,
+        delivery: crate::DeliveryConfig,
+        holder_answer_timeout: std::time::Duration,
     ) -> Result<Self, StoreError> {
         let io = Arc::new(io);
-        let shared_host = Arc::new(CoreHost::fleet(io.clone(), authoritative_receiver));
+        let replies = Arc::new(crate::holder_reply_hub::HolderReplyHub::default());
+        let publication = crate::mail_status_dispatch::bind(
+            Arc::downgrade(&host),
+            io.clone(),
+            replies.clone(),
+            holder_answer_timeout,
+        );
+        let shared_host = Arc::new(
+            CoreHost::registry(
+                io.clone(),
+                config.authoritative_receiver,
+                crate::registry_peer_lookup::bind(Arc::downgrade(&host)),
+                Some(crate::registry_lease_store::bind(Arc::downgrade(&host))),
+            )
+            .with_publication(publication),
+        );
+        let store = Arc::new(crate::session_store::CoreSessionStore::new(
+            host.clone(),
+            shared_host.clone(),
+            replies.clone(),
+        ));
+        type NoticeTask<Host, Io> = crate::machine_notice_delivery::MachineNoticeTask<Host, Io>;
+        type LeaseHook<Host, Io> = crate::fleet_lease_projection_step::FleetLeaseChangeHook<
+            crate::session_store::CoreSessionStore<Host, Io>,
+            NoticeTask<Host, Io>,
+        >;
+        let hook = Arc::new(LeaseHook::<Host, Io>::new(io.clone()));
+        let mut engine = crate::shared_task_registry::registry_engine::<_, Host::Database, _, _>(
+            store,
+            shared_host.clone(),
+            config,
+            hook,
+        )?;
+        engine.register(crate::machine_notice_outbox::FleetNoticeTask::<
+            crate::session_store::CoreSessionStore<Host, Io>,
+        >(PhantomData))?;
+        engine
+            .register(crate::machine_notice_delivery::MachineNoticeTask::<Host, Io>(PhantomData))?;
+        engine.register(fleet_sync_session::PublishSchemaSupport::<
+            crate::session_store::CoreSessionStore<Host, Io>,
+            Host::Database,
+        >::default())?;
+        engine.register(crate::session_revocation::EndSessionsTask::<Host, Io>(
+            PhantomData,
+        ))?;
+        engine.register(fleet_sync_delivery::PublishStatus::<
+            crate::session_store::CoreSessionStore<Host, Io>,
+            Host::Database,
+            board_sync_protocol::BoardDeliveryTypes,
+        >::new())?;
         let engine =
-            crate::shared_task_registry::fleet_engine(Arc::clone(host.store()), shared_host)?;
+            crate::fleet_task_engine::own_engine::<_, _, Host::Database, LeaseHook<Host, Io>>(
+                engine,
+            );
+        let weak_host = Arc::downgrade(&host);
+        let weak_shared = Arc::downgrade(&shared_host);
+        let weak_engine = Arc::downgrade(&engine);
+        let local_io = io.clone();
+        let local_replies = replies.clone();
+        shared_host.install_local_calls(Arc::new(move |bytes| {
+            let host = weak_host.clone();
+            let shared = weak_shared.clone();
+            let engine = weak_engine.clone();
+            let io = local_io.clone();
+            let replies = local_replies.clone();
+            Box::pin(async move {
+                let runtime = ObjectRuntime::<FleetKind, Host, Io> {
+                    work: ObjectWork::Fleet {
+                        host: host.upgrade().ok_or(CallFailure::AnswerLost)?,
+                        shared_host: shared.upgrade().ok_or(CallFailure::AnswerLost)?,
+                        engine: engine.upgrade().ok_or(CallFailure::AnswerLost)?,
+                        io,
+                        replies,
+                        config,
+                        delivery,
+                        holder_answer_timeout,
+                    },
+                    face: PhantomData,
+                };
+                runtime.on_call(bytes).await
+            })
+        }))?;
         Ok(Self {
-            work: ObjectWork::Fleet { host, io, engine },
+            work: ObjectWork::Fleet {
+                host,
+                io,
+                engine,
+                shared_host,
+                replies,
+                config,
+                delivery,
+                holder_answer_timeout,
+            },
             face: PhantomData,
         })
     }
     pub async fn on_alarm(&self) -> Result<durable_steps::DriveReport, StoreError> {
-        let ObjectWork::Fleet { engine, .. } = &self.work else {
+        let ObjectWork::Fleet {
+            engine,
+            host,
+            replies,
+            shared_host,
+            ..
+        } = &self.work
+        else {
             return Err(wrong_face());
         };
         self.prune_feed().await?;
-        engine.drive_due().await
+        let now = runtime_primitives::Clock::now(shared_host.as_ref());
+        replies.expire(now);
+        if let Some(at) = replies.next_deadline() {
+            host.wake().wake_at(at).await.map_err(StoreError::backend)?;
+        }
+        let (store, shared) = self.session_store()?;
+        let now = runtime_primitives::Clock::now(shared.as_ref());
+        store
+            .transaction(move |scope| {
+                Box::pin(async move {
+                    scope.expire_forwards(now).await?;
+                    crate::machine_notice_store::prune(scope, now).await?;
+                    if let Some(at) = crate::machine_notice_store::next_expiry(scope).await? {
+                        durable_steps::JournalScope::ensure_wake(scope, at).await?;
+                    }
+                    Ok(())
+                })
+            })
+            .await?;
+        let report = engine.drive_due().await?;
+        Ok(report)
     }
     pub async fn initialize(&self) -> Result<usize, StoreError> {
         let ObjectWork::Fleet { host, io, .. } = &self.work else {
             return Err(wrong_face());
         };
-        let applied = ObjectBootstrap::new(host.clone(), io.now())
-            .initialize(EngineSchema::Fleet)
-            .await?;
+        let bootstrap = ObjectBootstrap::new(host.clone(), io.now());
+        let mut applied = 0;
+        for schema in [
+            EngineSchema::Fleet,
+            EngineSchema::Registry,
+            EngineSchema::Session,
+            EngineSchema::Mailbox,
+        ] {
+            applied += bootstrap.initialize(schema).await?;
+        }
         self.prune_feed().await?;
         Ok(applied)
+    }
+    #[cfg(feature = "conformance")]
+    pub async fn conformance_schema(&self) -> Result<Vec<crate::FleetSchemaObject>, StoreError> {
+        let ObjectWork::Fleet { host, .. } = &self.work else {
+            return Err(wrong_face());
+        };
+        host.store()
+            .transaction(|scope| {
+                Box::pin(async move { crate::fleet_schema_observation::read_schema(scope).await })
+            })
+            .await
     }
     async fn prune_feed(&self) -> Result<(), StoreError> {
         let ObjectWork::Fleet { host, io, .. } = &self.work else {
@@ -80,7 +216,12 @@ where
         Ok(())
     }
     pub async fn on_call(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
-        let answer = self.dispatch_call(bytes).await;
+        let envelope: ObjectCallEnvelope = serde_json::from_slice(&bytes).map_err(|_| refused())?;
+        let answer = match envelope.destination_face {
+            CallerKind::Registry => self.on_registry_call(bytes).await,
+            CallerKind::Delivery => self.delivery().map_err(|_| refused())?.on_call(bytes).await,
+            _ => self.dispatch_call(bytes).await,
+        };
         let ObjectWork::Fleet { host, .. } = &self.work else {
             return Err(refused());
         };
@@ -148,9 +289,9 @@ where
         if call.kind == crate::conformance_fleet::FleetReceiptProbe::KIND {
             return self.receipt_probe(call).await;
         }
-        if !matches!(call.authority, CallAuthority::Object)
+        if !matches!(call.authority, CallAuthority::Machine { .. })
             || call.source_face != CallerKind::Session
-            || !matches!(call.source, ObjectAddress::Connection(_))
+            || !matches!(call.source, ObjectAddress::Fleet)
             || call.kind != FleetRequestEffects::KIND
         {
             return Err(refused());

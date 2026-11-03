@@ -173,9 +173,9 @@ where
         &self,
         call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
-        if !matches!(call.authority, CallAuthority::Object)
+        if !matches!(call.authority, CallAuthority::Machine { .. })
             || call.source_face != CallerKind::Session
-            || !matches!(call.source, ObjectAddress::Connection(_))
+            || !matches!(call.source, ObjectAddress::Fleet)
         {
             return Err(refused());
         }

@@ -79,12 +79,17 @@ enum Command {
 }
 fn registry(
     host: Arc<ReceiptStoreHost>,
-) -> Result<ObjectRuntime<RegistryKind, ReceiptStoreHost, crate::conformance_core_store::ControlIo>>
-{
+) -> Result<
+    ObjectRuntime<
+        collaboration_central_core::FleetKind,
+        ReceiptStoreHost,
+        crate::conformance_core_store::ControlIo,
+    >,
+> {
     let receiver = ReceiverId::try_from("019f0000-0000-7000-8000-000000000010".to_owned())
         .map_err(|e| Error::RustError(e.to_string()))?;
     let io = crate::conformance_core_store::ControlIo::new(host.wake().clone());
-    ObjectRuntime::registry(
+    ObjectRuntime::fleet(
         host,
         io,
         RegistryConfig {
@@ -102,6 +107,7 @@ fn registry(
             )
             .map_err(|error| worker::Error::RustError(error.to_string()))?,
         },
+        Duration::from_secs(20),
     )
     .map_err(|e| Error::RustError(e.to_string()))
 }
@@ -142,7 +148,7 @@ pub(crate) async fn forward(env: &Env, mut request: Request) -> Result<Response>
         };
         return crate::composed_control::forward(
             env,
-            &collaboration_central_core::ObjectAddress::Registry,
+            &collaboration_central_core::ObjectAddress::Fleet,
             IMPORTED_UNHELD_PATH,
             Some(serde_json::to_string(&(database, owner, board_state))?),
         )

@@ -21,6 +21,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                 database,
             },
             publication: None,
+            local_calls: Default::default(),
             authoritative_receiver: receiver,
             #[cfg(feature = "conformance")]
             dispatches: Default::default(),

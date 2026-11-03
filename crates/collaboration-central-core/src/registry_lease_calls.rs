@@ -1,4 +1,5 @@
 //! Authenticated session lease requests use the library's registry rules.
+use crate::FleetKind;
 
 use crate::{
     CallerKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
@@ -27,8 +28,9 @@ use sqlx_core::{
 };
 use std::convert::Infallible;
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
+    Host::Store: durable_steps::ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
@@ -43,21 +45,25 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Session
-            || !matches!(invocation.authority, CallAuthority::Object)
+            || !matches!(invocation.authority, CallAuthority::Machine { .. })
         {
             return Err(refused());
         }
-        let ObjectAddress::Connection(service) = invocation.source else {
+        let CallAuthority::Machine {
+            installation: service,
+        } = invocation.authority
+        else {
             return Err(refused());
         };
         let _: SessionLeaseRegistry =
             serde_json::from_value(invocation.target).map_err(|_| refused())?;
         let SessionLeaseRequest { session, request } =
             serde_json::from_value(invocation.request).map_err(|_| refused())?;
-        let ObjectWork::Registry {
+        let ObjectWork::Fleet {
             engine,
             host,
             shared_host,
+            io,
             config,
             ..
         } = &self.work
@@ -98,7 +104,7 @@ where
                 // start owns admission and immediate driving; it is outside
                 // the committed caller/lifecycle read section above.
                 let operation = engine
-                    .start::<RegistrationTask<Host::Store, Host::Database>>(&key, request)
+                    .start_registration(&key, request)
                     .await
                     .map_err(|_| CallFailure::AnswerLost)?;
                 engine
@@ -122,13 +128,33 @@ where
                 }
             }
             LeaseRequest::Renew(request) => {
-                let (reply, _) = StepDriver::new(host.clone())
-                    .run(RenewStep {
-                        service,
-                        session,
-                        request,
-                        now: shared_host.now(),
-                        policy: config.lease,
+                let now = shared_host.now();
+                let policy = config.lease;
+                let hook = crate::fleet_lease_projection_step::FleetLeaseChangeHook::<
+                    crate::session_store::CoreSessionStore<Host, Io>,
+                    crate::machine_notice_delivery::MachineNoticeTask<Host, Io>,
+                >::new(io.clone());
+                let (store, _) = self.session_store().map_err(|_| CallFailure::AnswerLost)?;
+                let reply = store
+                    .transaction(move |scope| {
+                        Box::pin(async move {
+                            if service_for_peer(scope, session.peer).await?.as_ref()
+                                != Some(&service)
+                            {
+                                return Ok(None);
+                            }
+                            let answer = fleet_sync_lease::renew(
+                                scope,
+                                &request,
+                                &session.peer,
+                                now,
+                                &policy,
+                                &hook,
+                            )
+                            .await
+                            .map_err(StoreError::backend)?;
+                            Ok(Some(LeaseAnswer::Renew(answer)))
+                        })
                     })
                     .await
                     .map_err(|_| CallFailure::AnswerLost)?;
@@ -171,19 +197,6 @@ where
                 LeaseAnswer::Claim(answer.unwrap_or(HolderChangeAnswer::Pending { transfer }))
             }
         };
-        if matches!(
-            &reply,
-            LeaseAnswer::Renew(fleet_sync_protocol::RenewAnswer::Renewed {
-                replayed: false,
-                ..
-            }) | LeaseAnswer::Register(RegistrationAnswer::Registered {
-                replayed: false,
-                ..
-            }) | LeaseAnswer::Claim(HolderChangeAnswer::Granted { .. })
-        ) {
-            // The existing object's alarm publishes; the lease answer never waits on Fleet.
-            let _ = shared_host.request_lease_publication_repair().await;
-        }
         serde_json::to_vec(&reply).map_err(|_| CallFailure::AnswerLost)
     }
 }
@@ -282,44 +295,6 @@ where
     }
 }
 
-struct RenewStep {
-    service: ServiceId,
-    session: SessionKey,
-    request: RenewRequest,
-    now: SyncTime,
-    policy: LeasePolicy,
-}
-impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for RenewStep
-where
-    for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
-    Driver::Arguments: IntoArguments<Driver>,
-    for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
-    for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
-    for<'row> &'row str: ColumnIndex<Driver::Row>,
-{
-    type Output = Option<LeaseAnswer>;
-    type Effect = Infallible;
-    fn run<'scope, 'transaction>(
-        self,
-        scope: &'scope mut Store::Scope<'transaction>,
-    ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
-        Box::pin(async move {
-            if service_for_peer(scope, self.session.peer).await?.as_ref() != Some(&self.service) {
-                return Ok((None, Vec::new()));
-            }
-            let reply = fleet_sync_lease::renew(
-                scope,
-                &self.request,
-                &self.session.peer,
-                self.now,
-                &self.policy,
-            )
-            .await
-            .map_err(StoreError::backend)?;
-            Ok((Some(LeaseAnswer::Renew(reply)), Vec::new()))
-        })
-    }
-}
 fn refused() -> CallFailure {
     CallFailure::NotSent {
         reason: NotSentReason::Unreachable { last_seen: None },

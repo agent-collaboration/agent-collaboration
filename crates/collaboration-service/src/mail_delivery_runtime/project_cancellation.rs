@@ -77,7 +77,13 @@ impl MailDeliveryRuntime {
                     let (admission, operation) =
                         Outbox::<_, RouterDeliveryTypes>::new(scope, config.limits)
                             .enqueue_cancel_and_admit::<SubmitMailTask, _>(
-                                cancel, relay, &*consumer,
+                                cancel,
+                                relay,
+                                config.owner,
+                                runtime_primitives::SyncTime::from_unix_millis(
+                                    now.timestamp_millis(),
+                                ),
+                                &*consumer,
                             )
                             .await
                             .map_err(delivery_rollback)?;

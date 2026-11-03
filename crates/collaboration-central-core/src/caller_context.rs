@@ -32,6 +32,9 @@ impl<Face: ObjectKind> CallerContext<Face> {
 )]
 pub(crate) enum CallAuthority {
     Object,
+    Machine {
+        installation: message_board::ServiceId,
+    },
     Owner(OwnerIdentity),
     AccessMachine(AccessClientId),
 }
@@ -56,5 +59,15 @@ impl CallerContext<EdgeKind> {
             face: PhantomData,
             authority,
         })
+    }
+}
+
+impl CallerContext<crate::SessionKind> {
+    pub(crate) fn for_machine(installation: message_board::ServiceId) -> Self {
+        Self {
+            address: installation.clone(),
+            face: PhantomData,
+            authority: CallAuthority::Machine { installation },
+        }
     }
 }

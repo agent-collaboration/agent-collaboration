@@ -53,20 +53,14 @@
     "generator:sqlx-turso/src/lib.rs": "32ec3ac4ca4d0d703a452496262928a3a00ddfdf71eac8cbbe4ce1a3da69d9b5",
     "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
-    "registry-lease-queries.json": "40e3944a5bbfc62bd51ef9ed83b0d702c5f01e3a9e9807d23d2c56b783b09074",
-    "registry_migrations/0001_machine_enrollments.sql": "220f288d9566909f2fbc117dd72ac5494add2dbd7feab2dcfffc34d24974f1f4",
-    "registry_migrations/0002_lease_incarnation.sql": "55945fb64440b5ac2dc5a5c689ca8ce857b26e33567a462743f7e1418e94ca30",
-    "registry_migrations/0003_lease_acknowledgements.sql": "508c8ddbe10b5ac7d82fd67abca61d7ddeba5e0cdaad86af71d7279f0ce5c3c9",
-    "registry_migrations/0004_notice_marks.sql": "6aea832c04abc09175eeca0b41737704bd4c58f6c546653a89ab9ad13e16a8af",
-    "sql/read_registry_incarnation.sql": "701ba411c74133d03dd58ca575a870dcbe35a73456560ffc862be20ba84f43b4",
-    "sql/read_registry_lease_ack.sql": "e261c6ae1575936fa175e559543047f351032a9bef07ba549568ac708e87a717",
-    "sql/read_registry_notice_mark.sql": "e0479420b3bcc10f614252f26681f576ac53c2d22610da2e4978ffb11ea7ac74",
-    "sql/store_registry_incarnation.sql": "643ba6203f6b0d05f4467f8fb6fce1e7901bc563a7ed3bdaf88263162056abf3",
-    "sql/store_registry_lease_ack.sql": "0184655c8fb877cb1aa10298eadc3d3b973be9d7be56339a507bc1ffc6362787",
-    "sql/store_registry_notice_mark.sql": "471c81603dbc8203f8b7d4e34509344090291c3e5ef13315b6118a25a47ff313",
-    "src/generated_registry_lease.rs": "9b6e289b33ac1e6f089d39564e50d9404a6c020e260d0bb47a51cceb2cc45d02"
+    "registry-lease-queries.json": "39bd8076d103cb60ce347160435c6cc3d7ae188b7401f575260ea25f4e3718b6",
+    "registry_migrations/0001_machine_enrollments.sql": "9ad00775473cd1ab27e95a20396eb7b2426accc95e226441bff409055384f3c7",
+    "registry_migrations/0002_lease_incarnation.sql": "c43062856051d08a1038ff40e89311918873426a1c158c7b55cb19bc8889aa59",
+    "sql/read_registry_incarnation.sql": "a48bdf0cf3ba143b4be35654a84a7c77b669168e3c54baa38d8414d0fbf9e879",
+    "sql/store_registry_incarnation.sql": "f89f60b3fe58ca2af7b0541809cc73a0b9a319cc820bc0be9a35a52fea6f041a",
+    "src/generated_registry_lease.rs": "db81b4a686b019b736f555425f1b254f9016bf6911fa05c644e758b34c41b2ec"
   },
-  "queries_digest": "e2f8036015d003845b3e52b0e4f1f688bd9c8ff600b89dc4524c9272a7763881",
+  "queries_digest": "d399ea71be6f7b91a85a2c6672acf6b78576e4fa25d27b3fff533dd6ad806b46",
   "queries": [
     {
       "name": "read_registry_incarnation",
@@ -84,70 +78,13 @@
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
-          "type_source": "driver"
+          "type_source": "cast"
         }
       ]
     },
     {
       "name": "store_registry_incarnation",
-      "bind_slots": 2,
-      "columns": []
-    },
-    {
-      "name": "read_registry_lease_ack",
-      "bind_slots": 1,
-      "columns": [
-        {
-          "name": "row_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "project_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "version",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        }
-      ]
-    },
-    {
-      "name": "store_registry_lease_ack",
       "bind_slots": 3,
-      "columns": []
-    },
-    {
-      "name": "read_registry_notice_mark",
-      "bind_slots": 1,
-      "columns": [
-        {
-          "name": "database_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "mark",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        }
-      ]
-    },
-    {
-      "name": "store_registry_notice_mark",
-      "bind_slots": 2,
       "columns": []
     }
   ]

@@ -14,11 +14,16 @@ pub struct RuntimeControlRequest {
 impl RuntimeControlRequest {
     pub fn validate(&self) -> Result<(), RuntimeControlFailure> {
         match (&self.command, &self.address) {
-            (RuntimeControl::CopyFull { .. }, ObjectAddress::Copy(_))
+            (
+                RuntimeControl::CopyFull { .. }
+                | RuntimeControl::ProjectUnavailable
+                | RuntimeControl::ClearProjectFault,
+                ObjectAddress::Copy(_),
+            )
             | (RuntimeControl::SmallMailboxCapacity, ObjectAddress::Mailbox(_))
             | (
                 RuntimeControl::DropNextAnswer { .. } | RuntimeControl::AwaitDroppedAnswer { .. },
-                ObjectAddress::Connection(_),
+                ObjectAddress::Fleet,
             )
             | (
                 RuntimeControl::SetTime { .. }
@@ -49,6 +54,8 @@ impl RuntimeControlRequest {
     deny_unknown_fields
 )]
 pub enum RuntimeControl {
+    ProjectUnavailable,
+    ClearProjectFault,
     SmallMailboxCapacity,
     SetTime {
         now: RegistryTime,
@@ -125,6 +132,7 @@ pub enum ClockObservation {
 )]
 pub enum StorageFaultObservation {
     Idle,
+    Unavailable,
     Armed {
         after_writes: NonZeroU64,
     },

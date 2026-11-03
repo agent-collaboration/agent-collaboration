@@ -95,7 +95,7 @@ pub enum SharedCallOnly {}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum SharedAnswerOnly {}
 object_kind!(EdgeKind, 0, Edge, (), EdgeCall, EdgeResult, |_: &()| {
-    ObjectAddress::Registry
+    ObjectAddress::Fleet
 });
 object_kind!(
     SessionKind,
@@ -104,7 +104,7 @@ object_kind!(
     ServiceId,
     SharedCallOnly,
     SharedAnswerOnly,
-    |v: &ServiceId| ObjectAddress::Connection(v.clone())
+    |_: &ServiceId| ObjectAddress::Fleet
 );
 object_kind!(
     RegistryKind,
@@ -113,7 +113,7 @@ object_kind!(
     (),
     RegistryCall,
     RegistryResult,
-    |_: &()| ObjectAddress::Registry
+    |_: &()| ObjectAddress::Fleet
 );
 object_kind!(
     CopyKind,
@@ -134,7 +134,7 @@ object_kind!(
     ServiceId,
     SharedCallOnly,
     SharedAnswerOnly,
-    |v: &ServiceId| ObjectAddress::Connection(v.clone())
+    |_: &ServiceId| ObjectAddress::Fleet
 );
 object_kind!(
     MailboxKind,

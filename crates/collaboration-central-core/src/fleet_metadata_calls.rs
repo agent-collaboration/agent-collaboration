@@ -98,14 +98,15 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Session
-            || !matches!(invocation.authority, CallAuthority::Object)
+            || !matches!(invocation.authority, CallAuthority::Machine { .. })
         {
             return Err(refused());
         }
         let _: FleetMetadata = serde_json::from_value(invocation.target).map_err(|_| refused())?;
         let bound: FleetMetadataRequest =
             serde_json::from_value(invocation.request).map_err(|_| refused())?;
-        if invocation.source != ObjectAddress::Connection(bound.origin.installation.clone())
+        if invocation.source != ObjectAddress::Fleet
+            || !matches!(&invocation.authority, CallAuthority::Machine { installation } if installation == &bound.origin.installation)
             || !bound.actor_matches_origin()
         {
             return Err(refused());

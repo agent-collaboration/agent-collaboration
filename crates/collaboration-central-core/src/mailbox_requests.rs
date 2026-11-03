@@ -94,9 +94,15 @@ where
             // streams belong to Session. Neither enters this relay call.
             _ => return Err(refused()),
         };
-        let allowed = match (&call.source, call.source_face) {
-            (ObjectAddress::Registry, CallerKind::Registry) => true,
-            (ObjectAddress::Connection(service), CallerKind::Session) => {
+        let allowed = match (&call.authority, &call.source, call.source_face) {
+            (CallAuthority::Object, ObjectAddress::Fleet, CallerKind::Registry) => true,
+            (
+                CallAuthority::Machine {
+                    installation: service,
+                },
+                ObjectAddress::Fleet,
+                CallerKind::Session,
+            ) => {
                 service == installation
                     && input.actor == target.recipient
                     && matches!(

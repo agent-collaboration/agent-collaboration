@@ -214,6 +214,13 @@ impl TokioCentralPlatform {
 
     /// Read-only observation of attachments created by the real HTTP upgrade.
     #[cfg(feature = "conformance")]
+    pub async fn conformance_socket_inventory(
+        &self,
+    ) -> Result<Vec<crate::SocketOwnerSnapshot>, collaboration_central_core::SocketFailure> {
+        self.objects.socket_inventory().await
+    }
+
+    #[cfg(feature = "conformance")]
     pub async fn conformance_socket_origins(
         &self,
         service: &message_board::ServiceId,

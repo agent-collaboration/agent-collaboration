@@ -1,4 +1,5 @@
 //! Session publication and Welcome reads use the registry's real shared rules.
+use crate::FleetKind;
 
 use crate::{
     CallerKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
@@ -33,7 +34,7 @@ enum SessionRegistryReply {
     Refused,
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -49,11 +50,14 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Session
-            || !matches!(invocation.authority, CallAuthority::Object)
+            || !matches!(invocation.authority, CallAuthority::Machine { .. })
         {
             return Err(refused());
         }
-        let ObjectAddress::Connection(service) = invocation.source else {
+        let CallAuthority::Machine {
+            installation: service,
+        } = invocation.authority
+        else {
             return Err(refused());
         };
         let request = match invocation.kind.as_str() {
@@ -73,7 +77,7 @@ where
             }
             _ => return Err(refused()),
         };
-        let ObjectWork::Registry {
+        let ObjectWork::Fleet {
             host, shared_host, ..
         } = &self.work
         else {
@@ -101,7 +105,7 @@ where
         &self,
         peer: PeerId,
     ) -> Result<Option<ReportSchemaSupport>, StoreError> {
-        let ObjectWork::Registry { host, .. } = &self.work else {
+        let ObjectWork::Fleet { host, .. } = &self.work else {
             return Err(StoreError::Aborted {
                 reason: "not a registry runtime".into(),
             });

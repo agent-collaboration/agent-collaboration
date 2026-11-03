@@ -1,4 +1,5 @@
 //! The connection object's delivery face sends outside local exclusion.
+use crate::FleetKind;
 
 use crate::{
     CallerKind, DeliveryKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, SessionKind,
@@ -20,7 +21,7 @@ use sqlx_core::{
 };
 use std::{marker::PhantomData, sync::Arc};
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<SessionKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -33,24 +34,28 @@ where
     for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
 {
     pub fn delivery(&self) -> Result<ObjectRuntime<DeliveryKind, Host, Io>, StoreError> {
-        let ObjectWork::Session {
+        let ObjectWork::Fleet {
             host,
+            io,
+            engine,
             shared_host,
             replies,
-            installation,
+            config,
+            delivery,
             holder_answer_timeout,
         } = &self.work
         else {
-            return Err(StoreError::Aborted {
-                reason: "session runtime has a different face".into(),
-            });
+            return Err(StoreError::backend("delivery requires Fleet"));
         };
         Ok(ObjectRuntime {
-            work: ObjectWork::Session {
+            work: ObjectWork::Fleet {
                 host: host.clone(),
+                io: io.clone(),
+                engine: engine.clone(),
                 shared_host: Arc::new(shared_host.delivery()),
                 replies: replies.clone(),
-                installation: installation.clone(),
+                config: *config,
+                delivery: *delivery,
                 holder_answer_timeout: *holder_answer_timeout,
             },
             face: PhantomData,
@@ -66,9 +71,10 @@ where
         request: fleet_sync_protocol::ReleaseRequest,
         identity: durable_steps::CallId,
     ) -> Result<fleet_sync_protocol::ReleaseAnswer, CallFailure> {
-        let ObjectWork::Session { installation, .. } = &self.work else {
+        let ObjectWork::Fleet { shared_host, .. } = &self.work else {
             return Err(unsent());
         };
+        let installation = shared_host.service_for_peer(holder).await?;
         let call = crate::object_call_envelope::encode_shared_call::<
             crate::RegistryKind,
             DeliveryKind,
@@ -94,7 +100,7 @@ where
     /// Read-only causal observer of validated answer events and current waiters.
     #[cfg(feature = "conformance")]
     pub fn conformance_holder_observation(&self) -> Result<(usize, u64), StoreError> {
-        let ObjectWork::Session { replies, .. } = &self.work else {
+        let ObjectWork::Fleet { replies, .. } = &self.work else {
             return Err(StoreError::Aborted {
                 reason: "session runtime has a different face".into(),
             });
@@ -104,7 +110,7 @@ where
 
     #[cfg(feature = "conformance")]
     pub fn conformance_holder_frames(&self) -> Result<Vec<FrameId>, StoreError> {
-        let ObjectWork::Session { replies, .. } = &self.work else {
+        let ObjectWork::Fleet { replies, .. } = &self.work else {
             return Err(StoreError::Aborted {
                 reason: "session runtime has a different face".into(),
             });
@@ -114,7 +120,7 @@ where
 
     #[cfg(feature = "conformance")]
     pub fn conformance_holder_session_identity(&self) -> Result<(), StoreError> {
-        let ObjectWork::Session { shared_host, .. } = &self.work else {
+        let ObjectWork::Fleet { shared_host, .. } = &self.work else {
             return Err(StoreError::Aborted {
                 reason: "session runtime has a different face".into(),
             });
@@ -152,21 +158,18 @@ where
     for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
 {
     pub async fn on_call(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
-        let ObjectWork::Session {
+        let ObjectWork::Fleet {
             host,
             shared_host,
             replies,
-            installation,
             holder_answer_timeout,
+            ..
         } = &self.work
         else {
             return Err(unsent());
         };
-        let invocation = ObjectCallEnvelope::decode(
-            &bytes,
-            ObjectAddress::Connection(installation.clone()),
-            CallerKind::Delivery,
-        )?;
+        let invocation =
+            ObjectCallEnvelope::decode(&bytes, ObjectAddress::Fleet, CallerKind::Delivery)?;
         if matches!(
             invocation.kind.as_str(),
             crate::forward_calls::DeliverForward::KIND | crate::forward_calls::AnswerForward::KIND
@@ -182,7 +185,7 @@ where
             return self.mail_publication(invocation).await;
         }
         if !matches!(invocation.authority, CallAuthority::Object)
-            || invocation.source != ObjectAddress::Registry
+            || invocation.source != ObjectAddress::Fleet
             || invocation.source_face != CallerKind::Registry
         {
             return Err(unsent());

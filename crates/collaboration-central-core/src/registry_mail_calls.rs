@@ -1,4 +1,5 @@
 //! Registry mail admission releases its transaction before the mailbox call.
+use crate::FleetKind;
 
 use crate::{
     CallerKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
@@ -19,7 +20,7 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -35,18 +36,21 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Session
-            || !matches!(invocation.authority, CallAuthority::Object)
+            || !matches!(invocation.authority, CallAuthority::Machine { .. })
         {
             return Err(refused());
         }
-        let ObjectAddress::Connection(source) = invocation.source else {
+        let CallAuthority::Machine {
+            installation: source,
+        } = invocation.authority
+        else {
             return Err(refused());
         };
         let _: MailSubmitRegistry =
             serde_json::from_value(invocation.target).map_err(|_| refused())?;
         let request: MailSubmitRequest =
             serde_json::from_value(invocation.request).map_err(|_| refused())?;
-        let ObjectWork::Registry {
+        let ObjectWork::Fleet {
             host, shared_host, ..
         } = &self.work
         else {

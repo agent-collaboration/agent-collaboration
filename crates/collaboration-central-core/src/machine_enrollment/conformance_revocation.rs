@@ -1,4 +1,5 @@
 //! Hold and replay real enrollment lifecycle calls; observe the owning row and journal.
+use crate::FleetKind;
 
 use super::{
     AtomicStore, BoxFuture, ColumnIndex, Database, Decode, Deserialize, Encode, EnrollmentState,
@@ -231,7 +232,7 @@ pub(crate) async fn control<Platform: CentralPlatform>(
     )
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -247,7 +248,7 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Edge
-            || invocation.source != ObjectAddress::Registry
+            || invocation.source != ObjectAddress::Fleet
             || !matches!(invocation.authority, CallAuthority::Owner(_))
         {
             return Err(CallFailure::AnswerLost);
@@ -256,7 +257,7 @@ where
             serde_json::from_value(invocation.target).map_err(|_| CallFailure::AnswerLost)?;
         let input: RevocationControlInput =
             serde_json::from_value(invocation.request).map_err(|_| CallFailure::AnswerLost)?;
-        let ObjectWork::Registry {
+        let ObjectWork::Fleet {
             host, shared_host, ..
         } = &self.work
         else {

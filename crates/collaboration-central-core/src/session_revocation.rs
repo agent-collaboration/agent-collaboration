@@ -102,7 +102,7 @@ where
         let target: EndPeerSessions =
             serde_json::from_value(invocation.target).map_err(encode_refusal)?;
         let (): () = serde_json::from_value(invocation.request).map_err(encode_refusal)?;
-        let ObjectWork::Session {
+        let ObjectWork::Fleet {
             host,
             shared_host,
             replies,

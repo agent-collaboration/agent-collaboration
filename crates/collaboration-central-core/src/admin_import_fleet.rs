@@ -53,7 +53,7 @@ where
             }
             _ => {
                 call.source_face == CallerKind::Edge
-                    && call.source == ObjectAddress::Registry
+                    && call.source == ObjectAddress::Fleet
                     && matches!(call.authority, CallAuthority::Owner(_))
             }
         };

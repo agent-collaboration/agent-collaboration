@@ -1,4 +1,5 @@
 //! Sender query, retirement and settlement use the authenticated Registry mapping.
+use crate::FleetKind;
 use crate::{
     CallerKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
     caller_context::CallAuthority,
@@ -37,7 +38,7 @@ impl CallTarget for SenderMailboxRegistry {
     type Answer = DeliveryAnswer<BoardDeliveryTypes>;
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -53,11 +54,14 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Session
-            || !matches!(invocation.authority, CallAuthority::Object)
+            || !matches!(invocation.authority, CallAuthority::Machine { .. })
         {
             return Err(refused());
         }
-        let ObjectAddress::Connection(source) = invocation.source else {
+        let CallAuthority::Machine {
+            installation: source,
+        } = invocation.authority
+        else {
             return Err(refused());
         };
         let _: SenderMailboxRegistry =
@@ -67,7 +71,7 @@ where
         if request.request.call() != &invocation.identity {
             return Err(refused());
         }
-        let ObjectWork::Registry {
+        let ObjectWork::Fleet {
             host, shared_host, ..
         } = &self.work
         else {

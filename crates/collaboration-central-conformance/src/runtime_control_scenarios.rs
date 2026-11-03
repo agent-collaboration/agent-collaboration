@@ -34,9 +34,7 @@ pub async fn run_runtime_control_conformance(client: &ConformanceClient) -> Conf
     let copy = ObjectAddress::Copy(fleet_sync_protocol::DatabaseId::try_from(
         fixture.database.to_string(),
     )?);
-    let session = ObjectAddress::Connection(message_board::ServiceId::try_from(
-        fixture.service.to_string(),
-    )?);
+    let session = ObjectAddress::Fleet;
     let proof = async {
         refused_controls(client, session.clone()).await?;
         pin_fleet_clock(client, &mut peer.socket).await?;

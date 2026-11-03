@@ -7,7 +7,7 @@ use fleet_sync_protocol::{
     DeliveryAnswer, DeliveryRequest, ItemId, OperationAnswer, OperationRequest, StatusAckResult,
     StatusPublication,
 };
-use runtime_primitives::{IdSource, OperationId, StepName, UuidV7Ids};
+use runtime_primitives::{Clock, IdSource, OperationId, StepName, UuidV7Ids};
 use std::collections::BTreeSet;
 
 pub(super) fn status_call(step: &str) -> Result<CallId, StoreError> {
@@ -70,11 +70,12 @@ impl MailDeliveryRuntime {
             let empty = batch.events.is_empty();
             let through = batch.through;
             let items: Vec<_> = batch.events.iter().map(|event| event.item).collect();
+            let observed_at = self.host.now();
             self.store
                 .transaction(move |scope| {
                     Box::pin(async move {
                         Outbox::<_, RouterDeliveryTypes>::new(scope, limits)
-                            .apply_status_batch(after, batch)
+                            .apply_status_batch(after, batch, observed_at)
                             .await
                             .map_err(delivery_rollback)?;
                         Ok(())
@@ -113,13 +114,14 @@ impl MailDeliveryRuntime {
     ) -> Result<(), StoreError> {
         let limits = self.config.limits;
         let item = publication.item;
+        let observed_at = self.host.now();
         self.store
             .transaction(move |scope| {
                 Box::pin(async move {
                     // This applies one canonical item only. The SDK catch-up cursor
                     // belongs to apply_status_batch and is never advanced by a live hint.
                     Outbox::<_, RouterDeliveryTypes>::new(scope, limits)
-                        .publish_status(publication)
+                        .publish_status(publication, observed_at)
                         .await
                         .map_err(delivery_rollback)?;
                     Ok(())

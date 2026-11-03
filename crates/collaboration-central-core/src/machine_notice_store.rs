@@ -1,11 +1,14 @@
-//! The connection object's authoritative notice stream and verified peer snapshot.
+//! Fleet control streams retain an independent contiguous prefix for each machine.
+#[path = "machine_notice_columns.rs"]
+mod notice_columns;
 use crate::{
-    fleet_record_codec::{check_private_id, corrupt, decode_json, required},
+    fleet_record_codec::{check_private_id, corrupt, required},
     generated_machine_notices as queries,
 };
 use board_sync_protocol::{BoardNotice, NoticeRead, PositionedBoardNotice};
 use durable_steps::{StoreError, storage::TransactionScope};
 use fleet_sync_protocol::{NoticePosition, PeerId, SyncTime};
+use notice_columns::{NoticeColumns, decode_notice};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -15,10 +18,10 @@ const RETENTION_MILLIS: i64 = 7 * 24 * 60 * 60 * 1_000;
 struct NoticeState {
     head: u64,
     floor: u64,
-    peer: Option<PeerId>,
 }
 async fn state<Scope: TransactionScope>(
     scope: &mut Scope,
+    peer: PeerId,
 ) -> Result<Option<NoticeState>, StoreError>
 where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
@@ -26,13 +29,13 @@ where
     for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    let mut rows = queries::read_machine_notice_state(scope)
+    let mut rows = queries::read_machine_notice_state(scope, peer.to_string())
         .await
         .map_err(StoreError::backend)?;
     if rows.len() > 1 {
         return Err(corrupt("machine_notices.state", "multiple stream heads"));
     }
-    let bounds = queries::read_machine_notice_bounds(scope)
+    let bounds = queries::read_machine_notice_bounds(scope, peer.to_string())
         .await
         .map_err(StoreError::backend)?
         .ok_or_else(|| corrupt("machine_notices.range", "bounds query returned no row"))?;
@@ -45,13 +48,22 @@ where
         }
         return Ok(None);
     };
-    check_private_id(
-        &required(row.state_id, "machine_notices.state_id")?,
-        "machine_notices.state_id",
-    )?;
-    if required(row.name, "machine_notices.name")? != "machine" {
-        return Err(corrupt("machine_notices.name", "unknown stream"));
+    if required(row.machine_id, "machine_control_progress.machine_id")? != peer.to_string() {
+        return Err(corrupt(
+            "machine_control_progress.machine_id",
+            "identity differs",
+        ));
     }
+    integer(
+        row.created_at,
+        row.created_class,
+        "machine_control_progress.created_at",
+    )?;
+    integer(
+        row.updated_at,
+        row.updated_class,
+        "machine_control_progress.updated_at",
+    )?;
     let head = position(row.last_position, row.position_class)?;
     let floor = position(row.pruned_through, row.floor_class)?;
     if floor > head {
@@ -69,54 +81,12 @@ where
             ));
         }
     }
-    let peer = row
-        .peer_id
-        .map(|value| {
-            let peer = PeerId::try_from(value.clone())
-                .map_err(|error| corrupt("machine_notices.peer", error))?;
-            if peer.to_string() != value {
-                return Err(corrupt("machine_notices.peer", "noncanonical peer"));
-            }
-            Ok(peer)
-        })
-        .transpose()?;
-    Ok(Some(NoticeState { head, floor, peer }))
+    Ok(Some(NoticeState { head, floor }))
 }
 
 pub(crate) async fn remember_peer<Scope: TransactionScope>(
     scope: &mut Scope,
     peer: PeerId,
-    state_id: String,
-) -> Result<(), StoreError>
-where
-    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
-    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
-    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
-    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
-{
-    let stored = state(scope).await?;
-    if stored
-        .as_ref()
-        .and_then(|state| state.peer)
-        .is_some_and(|stored| stored != peer)
-    {
-        return Err(StoreError::Aborted {
-            reason: "verified admission peer contradicts the machine's retained identity".into(),
-        });
-    }
-    if stored.is_none() {
-        check_private_id(&state_id, "machine_notices.state_id")?;
-        queries::initialize_machine_notice_state(scope, state_id)
-            .await
-            .map_err(StoreError::backend)?;
-    }
-    queries::remember_machine_notice_peer(scope, peer.to_string())
-        .await
-        .map_err(StoreError::backend)
-}
-
-pub(crate) async fn prune<Scope: TransactionScope>(
-    scope: &mut Scope,
     now: SyncTime,
 ) -> Result<(), StoreError>
 where
@@ -125,13 +95,40 @@ where
     for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    let Some(stored) = state(scope).await? else {
+    if state(scope, peer).await?.is_none() {
+        queries::initialize_machine_notice_state(
+            scope,
+            peer.to_string(),
+            now.unix_millis().to_string(),
+        )
+        .await
+        .map_err(StoreError::backend)?;
+    }
+    Ok(())
+}
+
+async fn prune_peer<Scope: TransactionScope>(
+    scope: &mut Scope,
+    peer: PeerId,
+    now: SyncTime,
+) -> Result<(), StoreError>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    let Some(stored) = state(scope, peer).await? else {
         return Ok(());
     };
     let mut floor = stored.floor;
-    for row in queries::read_expired_machine_notices(scope, now.unix_millis().to_string())
-        .await
-        .map_err(StoreError::backend)?
+    for row in queries::read_expired_machine_notices(
+        scope,
+        peer.to_string(),
+        now.unix_millis().to_string(),
+    )
+    .await
+    .map_err(StoreError::backend)?
     {
         let notice = decode(row)?;
         if floor.checked_add(1) != Some(notice.position.value())
@@ -145,18 +142,48 @@ where
         floor = notice.position.value();
     }
     if floor != stored.floor {
-        queries::advance_machine_notice_floor(scope, floor.to_string())
-            .await
-            .map_err(StoreError::backend)?;
-        queries::prune_machine_notices(scope, floor.to_string())
+        queries::advance_machine_notice_floor(
+            scope,
+            floor.to_string(),
+            now.unix_millis().to_string(),
+            peer.to_string(),
+        )
+        .await
+        .map_err(StoreError::backend)?;
+        queries::prune_machine_notices(scope, peer.to_string(), floor.to_string())
             .await
             .map_err(StoreError::backend)?;
     }
     Ok(())
 }
 
+pub(crate) async fn prune<Scope: TransactionScope>(
+    scope: &mut Scope,
+    now: SyncTime,
+) -> Result<(), StoreError>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    for row in queries::read_machine_notice_peers(scope)
+        .await
+        .map_err(StoreError::backend)?
+    {
+        let machine_id = required(row.machine_id, "machine_control_progress.machine_id")?;
+        check_private_id(&machine_id, "machine_control_progress.machine_id")?;
+        let peer = machine_id
+            .try_into()
+            .map_err(|error| corrupt("machine_control_progress.machine_id", error))?;
+        prune_peer(scope, peer, now).await?;
+    }
+    Ok(())
+}
+
 pub(crate) async fn append<Scope: TransactionScope>(
     scope: &mut Scope,
+    peer: PeerId,
     notice_id: String,
     kind: BoardNotice,
     now: SyncTime,
@@ -164,22 +191,23 @@ pub(crate) async fn append<Scope: TransactionScope>(
 where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
     for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
-    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'value> Option<String>:
+        Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    prune(scope, now).await?;
+    prune_peer(scope, peer, now).await?;
     check_private_id(&notice_id, "machine_notices.notice_id")?;
-    let stored = if let Some(stored) = state(scope).await? {
+    let stored = if let Some(stored) = state(scope, peer).await? {
         stored
     } else {
-        queries::initialize_machine_notice_state(scope, notice_id.clone())
-            .await
-            .map_err(StoreError::backend)?;
-        NoticeState {
-            head: 0,
-            floor: 0,
-            peer: None,
-        }
+        queries::initialize_machine_notice_state(
+            scope,
+            peer.to_string(),
+            now.unix_millis().to_string(),
+        )
+        .await
+        .map_err(StoreError::backend)?;
+        NoticeState { head: 0, floor: 0 }
     };
     let next = stored
         .head
@@ -190,30 +218,42 @@ where
         .unix_millis()
         .checked_add(RETENTION_MILLIS)
         .ok_or_else(|| corrupt("machine_notices.expiry", "time overflow"))?;
+    let columns = NoticeColumns::from_notice(kind);
     queries::append_machine_notice(
         scope,
         notice_id,
+        peer.to_string(),
         next.to_string(),
-        serde_json::to_string(&kind).map_err(StoreError::backend)?,
+        columns.kind.into(),
+        columns.board,
+        columns.project,
+        columns.epoch,
+        columns.feed_through,
         now.unix_millis().to_string(),
         expires_at.to_string(),
     )
     .await
     .map_err(StoreError::backend)?;
-    queries::advance_machine_notice_head(scope, next.to_string())
-        .await
-        .map_err(StoreError::backend)?;
+    queries::advance_machine_notice_head(
+        scope,
+        next.to_string(),
+        now.unix_millis().to_string(),
+        peer.to_string(),
+    )
+    .await
+    .map_err(StoreError::backend)?;
     Ok((
         PositionedBoardNotice {
             position: NoticePosition::new(next),
-            kind,
+            kind: columns.notice,
         },
-        stored.peer,
+        Some(peer),
     ))
 }
 
 pub(crate) async fn read<Scope: TransactionScope>(
     scope: &mut Scope,
+    peer: PeerId,
     after: Option<NoticePosition>,
     now: SyncTime,
 ) -> Result<NoticeRead, StoreError>
@@ -223,12 +263,10 @@ where
     for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    prune(scope, now).await?;
-    let stored = state(scope).await?.unwrap_or(NoticeState {
-        head: 0,
-        floor: 0,
-        peer: None,
-    });
+    prune_peer(scope, peer, now).await?;
+    let stored = state(scope, peer)
+        .await?
+        .unwrap_or(NoticeState { head: 0, floor: 0 });
     let after = after.map_or(stored.floor, |position| position.value());
     if after > stored.head {
         return Ok(NoticeRead::CursorInvalid);
@@ -240,7 +278,7 @@ where
     }
     let mut notices = Vec::new();
     let mut previous = after;
-    for row in queries::read_machine_notices(scope, after.to_string())
+    for row in queries::read_machine_notices(scope, peer.to_string(), after.to_string())
         .await
         .map_err(StoreError::backend)?
     {
@@ -317,6 +355,10 @@ fn bound_position(value: Option<String>, class: Option<String>) -> Result<Option
 }
 fn decode(row: queries::StoredMachineNotice) -> Result<PositionedBoardNotice, StoreError> {
     check_private_id(
+        &required(row.machine_id, "machine_control_notices.machine_id")?,
+        "machine_control_notices.machine_id",
+    )?;
+    check_private_id(
         &required(row.notice_id, "machine_notices.notice_id")?,
         "machine_notices.notice_id",
     )?;
@@ -337,6 +379,17 @@ fn decode(row: queries::StoredMachineNotice) -> Result<PositionedBoardNotice, St
         row.expiry_class,
         "machine_notices.expires_at",
     )?;
+    if integer(
+        row.updated_at,
+        row.updated_class,
+        "machine_control_notices.updated_at",
+    )? != created
+    {
+        return Err(corrupt(
+            "machine_control_notices.updated_at",
+            "an immutable notice has a different update time",
+        ));
+    }
     if created.checked_add(RETENTION_MILLIS) != Some(expires) {
         return Err(corrupt(
             "machine_notices.retention",
@@ -345,9 +398,16 @@ fn decode(row: queries::StoredMachineNotice) -> Result<PositionedBoardNotice, St
     }
     Ok(PositionedBoardNotice {
         position: NoticePosition::new(position),
-        kind: decode_json(
-            &required(row.kind, "machine_notices.kind")?,
-            "machine_notices.kind",
+        kind: decode_notice(
+            row.kind,
+            row.board_id,
+            row.project_id,
+            row.epoch,
+            row.feed_through,
         )?,
     })
 }
+
+#[cfg(test)]
+#[path = "machine_notice_store_test.rs"]
+mod tests;
