@@ -237,4 +237,16 @@ Times are Unix milliseconds unless noted; enum and variant fields are validated 
 | `lease_claim_settlement_receipts` | `receipt_id` UUIDv7 PK; `operation_id` UUIDv7; `step_name`; `attempt_id` FK reservations; `project_id` FK directory; `result_kind` (`applied`, `duplicate`, `older`, `conflict`); `stored_epoch`, `stored_incarnation`, `stored_change` (only for `older`/`conflict`); `created_at`; `updated_at`; UNIQUE(`operation_id`, `step_name`). The old `fenced` variant goes with the removed handshake |
 | `fleet_archive_reports` | `report_id` UUIDv7 PK; `board_id` FK `fleet_boards`; `project_id` FK directory; `epoch`; `commit_sequence`; `installation`; `reported_at` (RFC3339, the domain time); `created_at`; `updated_at`; UNIQUE(`board_id`, `project_id`) |
 
-Directory, feed, decision and import tables follow in the next batch.
+
+Second batch (directory). Every row below also carries the **record envelope columns**: `actor_kind`, `actor_human_id`, `actor_service_id`, `actor_endpoint_id`, `actor_session_id`, `actor_router_component` (set per actor kind), `request_id`, `fleet_position`, `router_time` (RFC3339), `time_basis` (`router`, `legacy_unknown`), `origin_installation`, `origin_machine`, `import_digest`, `created_at`, `updated_at`.
+
+| Table | Columns |
+| --- | --- |
+| `fleet_workspaces` | `workspace_id` UUIDv7 PK; `name` UNIQUE; `description`; `state` (`active`, `archiving`, `archived`) |
+| `fleet_boards` | `board_id` UUIDv7 PK; `workspace_id` FK; `name`; `description`; `board_kind` (`initiative`, `area`); `initiative_goal`; `initiative_done_when`; `state` (`open`, `closed`, `archiving`, `archived`); UNIQUE(`workspace_id`, `name`) |
+| `fleet_project_directory` | `project_id` UUIDv7 PK; `workspace_id` FK; `board_id` (FK with `workspace_id` to boards); `name`, UNIQUE(`board_id`, `name`). Copy summary: `copy_epoch`, `copy_sequence`, `copy_acked_at`, `copy_latest_time_basis`, `copy_latest_record_at`. Lease view kept current by the lease hook in the same transaction, so each feed record stands alone: `lease_epoch`, `lease_change`, `lease_incarnation`, `lease_changed_at`, `lease_lifecycle_kind`, `lease_origin_kind`, `lease_origin_epoch`, `lease_origin_sequence`, `lease_import_digest`, `lease_retiring_attempt_id`, `lease_retired_at`, `lease_holder_machine_id`, `lease_holder_service_id` (until D3), `lease_expires_at`, `lease_digest` |
+| `fleet_workspace_adrs` | `adr_id` UUIDv7 PK; `workspace_id` FK; `title`; `text` (Markdown); `status` (`proposed`, `accepted`, `superseded`, `withdrawn`); `supersedes_adr_id` FK; `made_in_kind`; `made_in_record_id`; `revision` |
+| `fleet_adr_repository_files` | `id` UUIDv7 PK; `adr_id` FK; `ordinal`; `repository_origin`; `path`; `commit_sha`; `created_at`; `updated_at`; UNIQUE(`adr_id`, `ordinal`) (the ordered file list, without JSON) |
+| `fleet_repository_attachments` | `attachment_id` UUIDv7 PK; `workspace_id` FK; `reference_kind` (`origin`, `local`); `normalized_origin`; `service_id`; `common_directory`; `router_time`; `time_basis`; `origin_installation`; `origin_machine`; `import_digest`; `created_at`; `updated_at`; UNIQUE(`workspace_id`, `normalized_origin`) for origins, UNIQUE(`workspace_id`, `service_id`, `common_directory`) for local |
+
+Feed, decision and import tables follow in the next batch.
