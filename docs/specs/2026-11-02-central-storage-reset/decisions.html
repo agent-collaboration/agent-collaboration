@@ -98,7 +98,7 @@ flowchart LR
 | Inbox and outbox tables have no time columns, and keep their data as a JSON blob in `record TEXT` | `migrations/0001_delivery_custody.sql:17–28` |
 | Mail ids are already UUIDv7 | `crates/collaboration-mail-protocol/src/mail_identity.rs:47` → `crates/message-board/src/board_identity.rs:56` |
 | Today's central delivery settings include outbox limits of 256 MiB and 50,000 items per store; there is no Fleet outbox yet, and its limits are not chosen | `crates/collaboration-central-core/src/mailbox_limits.rs:6–14` |
-| Machines and central talk over one WebSocket per machine | Router: `fleet-sync-transport-websocket/src/client_socket.rs:55`; Tokio: `crates/collaboration-central-tokio/src/platform.rs:267`; Cloudflare: `crates/collaboration-central-cloudflare/src/object_shell.rs:404` |
+| Machines and central talk over one WebSocket per machine | Router: `crates/board-fleet-sync/src/reqwest_session_transport.rs:50–99` (not the library's WebSocket client); Tokio: `crates/collaboration-central-tokio/src/platform.rs:267`; Cloudflare: `crates/collaboration-central-cloudflare/src/object_shell.rs:404` |
 | Project notifications are sent by the machine holding the project's lease, not by central | `crates/collaboration-central-core/src/mail_submit_admission.rs:91` |
 | Repeating wakes may fire every 5 minutes today | `crates/automation-storage/src/wake_limits.rs:9` |
 | Board notifications bypass mail: a due subscription window writes straight into the local push table | `crates/collaboration-service/src/subscription_delivery/subscription_push.rs:196`; windows `subscription_windows.rs:505–515` |
