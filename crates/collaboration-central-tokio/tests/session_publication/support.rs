@@ -68,19 +68,25 @@ impl PlatformIo for Transport {
         tokio::time::sleep(remaining)
     }
 
-    fn before_local_call(
-        &self,
-        bytes: &[u8],
-    ) -> impl Future<Output = Result<(), CallFailure>> + Send {
-        let recorded = (|| {
-            let call = serde_json::from_slice(bytes).map_err(|_| CallFailure::AnswerLost)?;
-            self.local_calls
-                .lock()
+    async fn before_local_call(&self, bytes: &[u8]) -> Result<(), CallFailure> {
+        let call: serde_json::Value =
+            serde_json::from_slice(bytes).map_err(|_| CallFailure::AnswerLost)?;
+        let schema_publication = call.get("kind").and_then(serde_json::Value::as_str)
+            == Some("fleet-sync.report-schema-support");
+        self.local_calls
+            .lock()
+            .map_err(|_| CallFailure::AnswerLost)?
+            .push(call);
+        if schema_publication && self.schema.hold.load(Ordering::SeqCst) {
+            self.schema.entered.add_permits(1);
+            self.schema
+                .release
+                .acquire()
+                .await
                 .map_err(|_| CallFailure::AnswerLost)?
-                .push(call);
-            Ok(())
-        })();
-        std::future::ready(recorded)
+                .forget();
+        }
+        Ok(())
     }
     async fn object_call(
         &self,
@@ -94,18 +100,7 @@ impl PlatformIo for Transport {
             .map_err(|_| CallFailure::AnswerLost)?
             .push(call.clone());
         match call.get("kind").and_then(serde_json::Value::as_str) {
-            Some("fleet-sync.report-schema-support") => {
-                if self.schema.hold.load(Ordering::SeqCst) {
-                    self.schema.entered.add_permits(1);
-                    self.schema
-                        .release
-                        .acquire()
-                        .await
-                        .map_err(|_| CallFailure::AnswerLost)?
-                        .forget();
-                }
-                Ok(b"null".to_vec())
-            }
+            Some("fleet-sync.report-schema-support") => Ok(b"null".to_vec()),
             Some("central.welcome-leases") => {
                 if self.gather.hold.load(Ordering::SeqCst) {
                     self.gather.entered.add_permits(1);
@@ -147,7 +142,6 @@ pub struct TestStore {
     pub rollback: Arc<AtomicU8>,
     pub injected: Arc<AtomicBool>,
     pub after_rollback: Arc<Mutex<Option<String>>>,
-    schema: Arc<PublicationProbe>,
 }
 impl ReborrowScope for TestStore {
     fn reborrow<'scope, 'transaction: 'scope>(
@@ -170,21 +164,8 @@ impl AtomicStore for TestStore {
     {
         let rollback = self.rollback.clone();
         let injected = self.injected.clone();
-        let schema = self.schema.clone();
         let result = self.object.transaction(move |scope| Box::pin(async move {
-            let before = if schema.hold.load(Ordering::SeqCst) {
-                Some(query::<sqlx_turso::Turso>("SELECT COALESCE(group_concat(record),'') AS reports FROM _fleet_sync_schema_support")
-                    .fetch_one(scope.executor()).await.map_err(StoreError::backend)?.try_get::<String,_>("reports").map_err(StoreError::backend)?)
-            } else { None };
             let output = run(scope).await?;
-            if let Some(before) = before {
-                let after = query::<sqlx_turso::Turso>("SELECT COALESCE(group_concat(record),'') AS reports FROM _fleet_sync_schema_support")
-                    .fetch_one(scope.executor()).await.map_err(StoreError::backend)?.try_get::<String,_>("reports").map_err(StoreError::backend)?;
-                if before != after {
-                    schema.entered.add_permits(1);
-                    schema.release.acquire().await.map_err(StoreError::backend)?.forget();
-                }
-            }
             let fault = rollback.load(Ordering::SeqCst);
             if fault != 0 {
                 // This is the real journal row written after the finalization callback.
@@ -363,7 +344,6 @@ impl Fixture {
                 rollback: Arc::new(AtomicU8::new(0)),
                 injected: Arc::new(AtomicBool::new(false)),
                 after_rollback: Arc::default(),
-                schema: io.schema.clone(),
             }),
             probe: Arc::default(),
             welcome: io.gather.clone(),

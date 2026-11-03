@@ -181,6 +181,9 @@ impl Fixture {
                 .into(),
             ))
             .await?;
+        ConformanceClient::new(self.base())?
+            .wake_due_after_hello(session_id)
+            .await?;
         let welcome = tokio::time::timeout(Duration::from_secs(5), replacement.next())
             .await?
             .ok_or("target closed before schema-support Welcome")??;

@@ -38,6 +38,8 @@ use reqwest_websocket::{Message, RequestBuilderExt, WebSocket};
 use serde_json::{Value, json};
 use std::time::Duration;
 
+#[path = "integration/credential_expiry_fixture.rs"]
+mod credential_expiry_fixture;
 #[path = "session_credentials/transport_refusal.rs"]
 mod transport_refusal;
 
@@ -258,9 +260,7 @@ async fn replace_registered_socket_before_revocation(
     proof
 }
 
-async fn reconnect_unrelated_installation_after_revocation(
-    fixture: &mut fixture::Fixture,
-) -> ConformanceResult<()> {
+async fn reconnect_unrelated_installation(fixture: &mut fixture::Fixture) -> ConformanceResult<()> {
     let response = upgrade(&fixture.http, fixture.base(), "normal Move target").await?;
     if response.status() != reqwest::StatusCode::SWITCHING_PROTOCOLS {
         let status = response.status();
@@ -336,6 +336,11 @@ async fn revoked_registered_machine_gets_typed_physical_close_and_cannot_upgrade
             );
         }
         println!("SESSION_CREDENTIAL_STAGE actual_registered_machine_revoked passed");
+        creation_scenarios::pin_registry_clock(
+            fixture.base(),
+            RegistryTime("2030-03-17T17:46:40Z".parse()?),
+        )
+        .await?;
         typed_physical_close(&mut fixture.old, AuthRefusal::Revoked).await?;
         println!(
             "SESSION_CREDENTIAL_STAGE registered_revoked_socket_typed_and_physically_closed passed"
@@ -348,7 +353,7 @@ async fn revoked_registered_machine_gets_typed_physical_close_and_cannot_upgrade
         )
         .await?;
         fixture.copy_from_target_unchanged().await?;
-        reconnect_unrelated_installation_after_revocation(&mut fixture).await?;
+        reconnect_unrelated_installation(&mut fixture).await?;
         println!(
             "SESSION_CREDENTIAL_CASE revoked_registered_close_upgrade_and_retained_Copy passed"
         );
@@ -364,6 +369,7 @@ async fn revoked_registered_machine_gets_typed_physical_close_and_cannot_upgrade
 async fn expired_machine_credential_closes_on_frame_and_refuses_a_fresh_access_verified_upgrade()
 -> ConformanceResult<()> {
     let mut fixture = fixture::Fixture::open().await?;
+    credential_expiry_fixture::retain_unrelated_credential(&mut fixture).await?;
     let proof=async {
         if fixture.renew_old().await?!=expected_renewal(fixture.database)? {return Err("expiry fixture was not a live registered holder".into());}
         // The reused normal enrollment verifies its requested2033 expiry. Only

@@ -68,6 +68,9 @@ pub(super) async fn connect(server: &TokioServer) -> ConformanceResult<Connected
             .into(),
         ))
         .await?;
+    ConformanceClient::new(server.base_url())?
+        .wake_due_after_hello(session_id)
+        .await?;
     let received = tokio::time::timeout(Duration::from_secs(8), socket.next())
         .await?
         .ok_or("reopened Directory session ended before Welcome")??;

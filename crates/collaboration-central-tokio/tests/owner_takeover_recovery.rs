@@ -348,6 +348,9 @@ async fn reconnect(
             .into(),
         ))
         .await?;
+    ConformanceClient::new(base)?
+        .wake_due_after_hello(session_id)
+        .await?;
     let message = tokio::time::timeout(Duration::from_secs(5), socket.next())
         .await?
         .ok_or("reopened holder ended before Welcome")??;
