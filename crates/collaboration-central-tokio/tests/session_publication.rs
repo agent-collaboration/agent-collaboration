@@ -133,18 +133,15 @@ async fn hello_commits_attaching_before_engine_publication_then_welcomes_once()
         socket.try_recv(),
         Err(tokio::sync::mpsc::error::TryRecvError::Empty)
     ));
-    assert_eq!(
-        fixture
-            .io
-            .calls
-            .lock()
-            .map_err(|_| "call mutex poisoned")?
-            .iter()
-            .filter(|call| call.get("kind").and_then(serde_json::Value::as_str)
-                == Some("fleet-sync.report-schema-support"))
-            .count(),
-        1
-    );
+    let report = fixture
+        .runtime
+        .conformance_schema_report(binding.peer)
+        .await?
+        .ok_or("committed schema report absent")?;
+    assert_eq!(report.peer, binding.peer);
+    assert_eq!(report.session_id, session_id);
+    assert_eq!(report.support.max_version, 7);
+    assert_eq!(report.attach_seq.value(), 1);
     fixture.objects.close().await?;
     Ok(())
 }
@@ -349,7 +346,7 @@ async fn interruption_after_commit_does_not_undo_the_receipt_or_emit_welcome()
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn welcome_gather_releases_local_exclusion_before_the_network_wait() -> Result<(), TestError>
+async fn welcome_transport_releases_local_exclusion_before_the_socket_send() -> Result<(), TestError>
 {
     let directory = tempfile::tempdir()?;
     let fixture = Fixture::open(directory.path()).await?;

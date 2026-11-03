@@ -131,10 +131,10 @@ object_kind!(
     DeliveryKind,
     5,
     Delivery,
-    ServiceId,
+    (),
     SharedCallOnly,
     SharedAnswerOnly,
-    |_: &ServiceId| ObjectAddress::Fleet
+    |_: &()| ObjectAddress::Fleet
 );
 object_kind!(
     MailboxKind,

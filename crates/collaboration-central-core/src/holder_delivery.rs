@@ -71,17 +71,13 @@ where
         request: fleet_sync_protocol::ReleaseRequest,
         identity: durable_steps::CallId,
     ) -> Result<fleet_sync_protocol::ReleaseAnswer, CallFailure> {
-        let ObjectWork::Fleet { shared_host, .. } = &self.work else {
-            return Err(unsent());
-        };
-        let installation = shared_host.service_for_peer(holder).await?;
         let call = crate::object_call_envelope::encode_shared_call::<
             crate::RegistryKind,
             DeliveryKind,
             HolderRelease,
         >(
             &crate::CallerContext::for_object(()),
-            installation.clone(),
+            (),
             HolderRelease {
                 holder,
                 database: request.database,

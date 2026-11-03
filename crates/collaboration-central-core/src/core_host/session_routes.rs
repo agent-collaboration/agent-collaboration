@@ -25,7 +25,7 @@ pub(super) fn classify_session(
             let target: crate::forward_calls::DeliverForward = decode(target)?;
             encode_shared_call::<SessionKind, DeliveryKind, crate::forward_calls::DeliverForward>(
                 caller,
-                target.installation.clone(),
+                (),
                 target,
                 decode(request)?,
                 identity,
@@ -35,7 +35,7 @@ pub(super) fn classify_session(
             let target: crate::forward_calls::AnswerForward = decode(target)?;
             encode_shared_call::<SessionKind, DeliveryKind, crate::forward_calls::AnswerForward>(
                 caller,
-                target.installation.clone(),
+                (),
                 target,
                 decode(request)?,
                 identity,

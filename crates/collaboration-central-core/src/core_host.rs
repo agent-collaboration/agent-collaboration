@@ -169,12 +169,6 @@ impl<Io: PlatformIo> CoreHost<Io> {
             durable_steps::StoreError::backend("Fleet local dispatcher already installed")
         })
     }
-    pub(crate) async fn service_for_peer(&self, peer: PeerId) -> Result<ServiceId, CallFailure> {
-        let SharedTaskCaller::Registry { peer_directory, .. } = &self.caller else {
-            return Err(no_route());
-        };
-        peer_directory(peer).await
-    }
     pub(crate) fn mailbox(io: Io, receiver: ReceiverId, installation: ServiceId) -> Self {
         let mut host = Self::for_store(io, receiver);
         host.caller = SharedTaskCaller::Mailbox(CallerContext::for_object(installation));
@@ -283,13 +277,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                         MailboxKind,
                         DeliveryKind,
                         crate::machine_notice_delivery::DeliverMachineNotice,
-                    >(
-                        caller,
-                        target.installation.clone(),
-                        target,
-                        notice,
-                        identity,
-                    );
+                    >(caller, (), target, notice, identity);
                 }
                 if Call::KIND != fleet_sync_delivery::PublishCall::<board_sync_protocol::BoardDeliveryTypes>::KIND {
                     return Err(no_route());
@@ -297,8 +285,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                 let target: fleet_sync_delivery::PublishCall<
                     board_sync_protocol::BoardDeliveryTypes,
                 > = decode(target)?;
-                let fleet_sync_delivery::PublicationTarget::StatusStream { route, .. } =
-                    &target.target
+                let fleet_sync_delivery::PublicationTarget::StatusStream { .. } = &target.target
                 else {
                     return Err(no_route());
                 };
@@ -306,7 +293,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                     MailboxKind,
                     DeliveryKind,
                     fleet_sync_delivery::PublishCall<board_sync_protocol::BoardDeliveryTypes>,
-                >(caller, route.clone(), target, decode(request)?, identity)
+                >(caller, (), target, decode(request)?, identity)
             }
             SharedTaskCaller::Session(caller) => session_routes::classify_session(
                 Call::KIND,
@@ -371,7 +358,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                     crate::machine_notice_delivery::DeliverMachineNotice::KIND => {
                         let target: crate::machine_notice_delivery::DeliverMachineNotice = decode(target)?;
                         encode_shared_call::<RegistryKind, DeliveryKind, crate::machine_notice_delivery::DeliverMachineNotice>(
-                            caller, target.installation.clone(), target, decode(request)?, identity,
+                            caller, (), target, decode(request)?, identity,
                         )
                     }
                     crate::mail_submit_calls::MailboxSubmit::KIND => {
@@ -418,7 +405,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                         let target: crate::machine_enrollment::EndPeerSessions = decode(target)?;
                         encode_shared_call::<RegistryKind, DeliveryKind, crate::machine_enrollment::EndPeerSessions>(
                             caller,
-                            peer_directory(target.peer).await?,
+                            (),
                             target,
                             decode(request)?,
                             identity,
@@ -452,7 +439,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                         }
                         encode_shared_call::<RegistryKind, DeliveryKind, HolderRelease>(
                             caller,
-                            peer_directory(target.holder).await?,
+                            (),
                             target,
                             request,
                             identity,
@@ -462,7 +449,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                         let target: HolderWithdrawal = decode(target)?;
                         encode_shared_call::<RegistryKind, DeliveryKind, HolderWithdrawal>(
                             caller,
-                            peer_directory(target.holder).await?,
+                            (),
                             target,
                             decode(request)?,
                             identity,
