@@ -322,37 +322,126 @@ async fn fleet_registration_native_competing_transitions_have_one_winner_and_kee
 async fn fleet_registration_native_decode_rejects_each_invalid_typed_column_without_deleting_rows()
 {
     let directory = tempfile::tempdir().unwrap();
-    let text_columns = [
-        "registration_id",
-        "operation_id",
-        "installation_id",
-        "binding_address",
-        "endpoint_service_id",
-        "endpoint_id",
-        "project_id",
-        "checked_workspace_id",
-        "started_by_kind",
-        "started_by_service_id",
-        "started_by_endpoint_id",
-        "started_by_session_id",
-        "remote_start_id",
-        "isolation_kind",
-        "isolation_instance_id",
-        "working_directory",
-        "repository",
-        "commit_id",
-        "model",
-        "machine_environment",
-        "lifecycle_state",
-        "creation_state",
-        "session_service_id",
-        "session_endpoint_id",
-        "session_id",
-        "organization_id",
-        "abandonment_cause",
-        "refused_setting",
+    let updates: &[(&str, &'static str)] = &[
+        (
+            "registration_id",
+            "UPDATE fleet_session_registrations SET registration_id=?",
+        ),
+        (
+            "operation_id",
+            "UPDATE fleet_session_registrations SET operation_id=?",
+        ),
+        (
+            "installation_id",
+            "UPDATE fleet_session_registrations SET installation_id=?",
+        ),
+        (
+            "binding_address",
+            "UPDATE fleet_session_registrations SET binding_address=?",
+        ),
+        (
+            "endpoint_service_id",
+            "UPDATE fleet_session_registrations SET endpoint_service_id=?",
+        ),
+        (
+            "endpoint_id",
+            "UPDATE fleet_session_registrations SET endpoint_id=?",
+        ),
+        (
+            "project_id",
+            "UPDATE fleet_session_registrations SET project_id=?",
+        ),
+        (
+            "checked_workspace_id",
+            "UPDATE fleet_session_registrations SET checked_workspace_id=?",
+        ),
+        (
+            "started_by_kind",
+            "UPDATE fleet_session_registrations SET started_by_kind=?",
+        ),
+        (
+            "started_by_service_id",
+            "UPDATE fleet_session_registrations SET started_by_service_id=?",
+        ),
+        (
+            "started_by_endpoint_id",
+            "UPDATE fleet_session_registrations SET started_by_endpoint_id=?",
+        ),
+        (
+            "started_by_session_id",
+            "UPDATE fleet_session_registrations SET started_by_session_id=?",
+        ),
+        (
+            "remote_start_id",
+            "UPDATE fleet_session_registrations SET remote_start_id=?",
+        ),
+        (
+            "isolation_kind",
+            "UPDATE fleet_session_registrations SET isolation_kind=?",
+        ),
+        (
+            "isolation_instance_id",
+            "UPDATE fleet_session_registrations SET isolation_instance_id=?",
+        ),
+        (
+            "working_directory",
+            "UPDATE fleet_session_registrations SET working_directory=?",
+        ),
+        (
+            "repository",
+            "UPDATE fleet_session_registrations SET repository=?",
+        ),
+        (
+            "commit_id",
+            "UPDATE fleet_session_registrations SET commit_id=?",
+        ),
+        ("model", "UPDATE fleet_session_registrations SET model=?"),
+        (
+            "machine_environment",
+            "UPDATE fleet_session_registrations SET machine_environment=?",
+        ),
+        (
+            "lifecycle_state",
+            "UPDATE fleet_session_registrations SET lifecycle_state=?",
+        ),
+        (
+            "creation_state",
+            "UPDATE fleet_session_registrations SET creation_state=?",
+        ),
+        (
+            "session_service_id",
+            "UPDATE fleet_session_registrations SET session_service_id=?",
+        ),
+        (
+            "session_endpoint_id",
+            "UPDATE fleet_session_registrations SET session_endpoint_id=?",
+        ),
+        (
+            "session_id",
+            "UPDATE fleet_session_registrations SET session_id=?",
+        ),
+        (
+            "organization_id",
+            "UPDATE fleet_session_registrations SET organization_id=?",
+        ),
+        (
+            "abandonment_cause",
+            "UPDATE fleet_session_registrations SET abandonment_cause=?",
+        ),
+        (
+            "refused_setting",
+            "UPDATE fleet_session_registrations SET refused_setting=?",
+        ),
+        (
+            "created_at",
+            "UPDATE fleet_session_registrations SET created_at=?",
+        ),
+        (
+            "updated_at",
+            "UPDATE fleet_session_registrations SET updated_at=?",
+        ),
     ];
-    for column in text_columns.into_iter().chain(["created_at", "updated_at"]) {
+    for &(column, sql) in updates {
         let path = directory.path().join(format!("corrupt-{column}.sqlite"));
         let cache = FleetCache::open_with_sources(
             &path,
@@ -369,15 +458,14 @@ async fn fleet_registration_native_decode_rejects_each_invalid_typed_column_with
         )
         .unwrap();
         cache.insert(&record).await.unwrap();
-        let sql = format!("UPDATE fleet_session_registrations SET {column}=?");
         if matches!(column, "created_at" | "updated_at") {
-            sqlx::query(&sql)
+            sqlx::query(sql)
                 .bind(-1_i64)
                 .execute(&cache.database.pool)
                 .await
                 .unwrap();
         } else {
-            sqlx::query(&sql)
+            sqlx::query(sql)
                 .bind("")
                 .execute(&cache.database.pool)
                 .await
