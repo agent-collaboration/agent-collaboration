@@ -253,6 +253,18 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         .await
         .expect("first delivery acceptance commits")
         .expect("wake worker retains its completion sender");
+    let next_due_at_ms = store
+        .lock()
+        .await
+        .read_wakeup::<SavedMessage>(&wake.definition.wakeup_id)
+        .await
+        .expect("read wake after first acceptance commits")
+        .next_due_at_ms;
+    assert_eq!(
+        next_due_at_ms,
+        Some(first_due_ms + MINIMUM_REPEAT_GAP_MILLIS),
+        "the stored next wake must be scheduled exactly 300 logical seconds after the first"
+    );
     advance_wake_clock(&clock, first_due_ms + 300_000).await;
     let second_delivery = next_native_queue_delivery(&mut observation_receiver)
         .await
