@@ -148,3 +148,9 @@ test("a snapshot cannot mutate retained Push ids, including after a connection e
     pushedItemIds: { items: [itemId], controls: [] },
   });
 });
+
+test("Session snapshots expose no retired mail-waiting counter", (): void => {
+  const { audit, connection } = openedAudit();
+  send(audit, connection, { kind: "notice", value: {} });
+  assert.equal(Object.hasOwn(audit.snapshot(), "mailWaiting"), false);
+});
