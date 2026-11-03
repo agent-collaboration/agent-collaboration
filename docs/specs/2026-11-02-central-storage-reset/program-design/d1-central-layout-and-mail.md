@@ -144,6 +144,9 @@ sequenceDiagram
 
 **One journal, one dispatcher, one alarm.** Today each old object registers only its own task kinds (`shared_task_registry.rs:15–71`), and an engine that claims a task kind it doesn't know fails it as `unknown_kind` (library `operation_drive.rs:88–90`). The Fleet object registers **every** surviving task kind with one engine over its one journal: enrollment and lease workflows, control-notice delivery and expiry, forward deadlines, session upkeep, status publication, mail push and 60-day removal. One alarm arbiter wakes it for the earliest due item (Tokio slot timer `native_objects.rs:301`; Cloudflare `AlarmOwner` `shared_object_store.rs:63`). Proof includes a restart with several task kinds due.
 
+
+**Lease-change hook (library contract).** `fleet-sync-lease` owns its lease-change transactions internally (`change_completion.rs:168, 290`; registration and retirement tasks likewise), and today central admits notices in a later, separate transaction (`registry_lease_store.rs:148–165`). D1 adds one consumer hook to the lease library, called **inside** every lease-change transaction with the project, the old holder and epoch, and the new holder and epoch, the same pattern the delivery library uses for its receive and outcome hooks. The Fleet's hook appends the old and new holders' control notices and updates the directory projection in that same commit. The later-transaction notice admission and its repair scan are deleted.
+
 ## Lease numbers and the staging wipe
 
 **What a lease is.** One machine at a time may write a project: it holds that project's lease. Central tells machines who holds each lease, stamped with a number that only goes up (`epoch`, `incarnation`, `change`). Each Router remembers the highest number it has seen and ignores anything lower, so stale or delayed messages can't undo a newer one (`writer_observation.rs:28–43`; `central_project_reads.rs:280–289`).
@@ -190,6 +193,7 @@ Fleet keeps what it needs after the content is dropped on the outbox item itself
 3. Status: scoped per submitting machine; report sequence kept on the outbox item.
 4. 60-day removal for outbox and inbox rows.
 5. Remove the Mailbox role (mail items, controls, fetch cycle) once codex-router no longer uses it.
+6. Lease-change hook: a consumer callback inside every lease-change transaction (see “Lease-change hook”).
 
 ## Not in D1
 
