@@ -28,11 +28,6 @@ export const sqlitePreparationTargets: readonly SqlitePreparationTarget[] = [
     databaseFilename: "account-schema.sqlite",
   },
   {
-    packageName: "codex-router-fleet-state",
-    migrationSources: ["crates/codex-router-fleet-state/migrations"],
-    databaseFilename: "fleet-schema.sqlite",
-  },
-  {
     packageName: "collaboration-runtime",
     migrationSources: [
       "crates/collaboration-runtime/migrations",

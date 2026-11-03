@@ -1,0 +1,84 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT row_id AS \"row_id!: String\",enrollment_id AS \"enrollment_id!: String\",sign_in AS \"sign_in!: String\",organization_id AS \"organization_id!: String\",machine_environment AS \"machine_environment!: String\",receiver_id AS \"receiver_id!: String\",relay_peer_id AS \"relay_peer_id!: String\",created_at AS \"created_at!: i64\",updated_at AS \"updated_at!: i64\" FROM fleet_login",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "row_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "enrollment_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "sign_in!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "organization_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "machine_environment!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "receiver_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "relay_peer_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "updated_at!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "02d56af793d24e83d2f7a4b20f57240503210841fadbed6d8f041c2da4a74070"
+}

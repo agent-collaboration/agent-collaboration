@@ -46,8 +46,7 @@ pub use provider_conversation_contract::{
     ProviderOperationEffect, ProviderOperationKind, ProviderOperationStage,
     ProviderPermissionOutcome, ProviderPromptStopReason, ProviderReconciliationState,
     ProviderRequestedPolicy, ProviderRequestedSettings, ProviderRuntimeIdentity,
-    ProviderSettingName, ProviderSettingsMappingStatus, ProviderTransport,
-    ProviderWorkingDirectory,
+    ProviderSettingsMappingStatus, ProviderTransport, ProviderWorkingDirectory,
 };
 pub use provider_identity::ProviderIdentity;
 pub use provider_settings_contract::{
@@ -333,3 +332,9 @@ pub use automation_configuration_contract::{
 
 // The facade preserves mail identity through every local message boundary.
 pub use collaboration_mail_protocol::{MailDigest, MailItemId};
+
+mod session_setup_outcome;
+pub use session_setup_outcome::SessionSetupAbandonmentCause;
+
+mod provider_setting_name;
+pub use provider_setting_name::ProviderSettingName;

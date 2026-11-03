@@ -75,7 +75,17 @@ async fn router_rebuild_keeps_the_old_view_until_older_then_newer_catchup_finish
     tokio::time::timeout(BOUND, refresh).await???;
     assert_visible(&reader.fleet, &router_root, "catch-up state 129", 772).await?;
     assert!(
-        !router_root.join("fleet.sqlite").exists(),
+        std::fs::read_dir(&router_root)?
+            .collect::<Result<Vec<_>, _>>()?
+            .iter()
+            .all(|entry| entry
+                .path()
+                .extension()
+                .is_none_or(|extension| extension != "sqlite")
+                || matches!(
+                    entry.file_name().to_str(),
+                    Some("fleet-cache.sqlite" | "fleet-outbox.sqlite")
+                )),
         "Router recreated a local fleet authority"
     );
     reader.shutdown().await?;

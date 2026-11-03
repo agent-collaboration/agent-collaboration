@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "DELETE FROM fleet_login WHERE enrollment_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "f368f145f91792616f60fa738aaaf80c6d9e1b6ef1af22e5bda22039cc2c0c92"
+}
