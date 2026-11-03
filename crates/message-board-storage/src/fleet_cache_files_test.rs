@@ -1,11 +1,11 @@
-use super::FleetCache;
+use super::login_storage_tests::open_fleet_cache_with_fixed_sources;
 use std::os::unix::fs::PermissionsExt;
 
 #[tokio::test]
 async fn fleet_cache_permissions_cover_the_actual_native_file_set() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("fleet-cache.sqlite");
-    let cache = FleetCache::open(&path).await.unwrap();
+    let cache = open_fleet_cache_with_fixed_sources(&path).await.unwrap();
     let entries = std::fs::read_dir(directory.path())
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
@@ -36,14 +36,14 @@ async fn fleet_cache_permissions_cover_the_actual_native_file_set() {
 async fn fleet_cache_permissions_tighten_a_populated_0644_cache_without_rewriting_rows() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("fleet-cache.sqlite");
-    let cache = FleetCache::open(&path).await.unwrap();
+    let cache = open_fleet_cache_with_fixed_sources(&path).await.unwrap();
     sqlx::query("UPDATE fleet_cache_checkpoint SET position=73 WHERE singleton=1")
         .execute(&cache.database.pool)
         .await
         .unwrap();
     cache.close().await;
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
-    let reopened = FleetCache::open(&path).await.unwrap();
+    let reopened = open_fleet_cache_with_fixed_sources(&path).await.unwrap();
     assert_eq!(
         std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
         0o600
@@ -65,7 +65,7 @@ async fn fleet_cache_permissions_refuse_a_symlink_without_tightening_its_target(
     std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o644)).unwrap();
     let path = directory.path().join("fleet-cache.sqlite");
     std::os::unix::fs::symlink(&target, &path).unwrap();
-    let result = FleetCache::open(&path).await;
+    let result = open_fleet_cache_with_fixed_sources(&path).await;
     assert!(matches!(
         result,
         Err(crate::RouterLocalStorageError::PrivateFleetCache)
