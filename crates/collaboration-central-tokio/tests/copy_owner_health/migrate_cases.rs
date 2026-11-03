@@ -51,7 +51,7 @@ async fn migrate_sweep_bounds_orders_and_continues_after_a_real_copy_failure()
     bad.execute(migration.sql.as_ref()).await?;
     bad.close().await?;
     let jwks = JwksFixtureServer::start().await?;
-    let server = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let server = TokioServer::start_conformance(settings(root.path(), &jwks.url)?).await?;
     let proof = async {
         let http = reqwest::Client::builder().no_proxy().build()?;
         let route = format!("{}/admin/v1/copies/migrate", server.base_url());

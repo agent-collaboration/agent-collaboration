@@ -1,5 +1,8 @@
 //! Real HTTP/1.1 sends on one physical socket exercise Worker refusal handling.
 use collaboration_central_conformance::{ConformanceResult, access_client_id, owner_assertion};
+use collaboration_central_core::{
+    BODY_ORDER_HEADER, BodyObservationId, BodyOrderCommand, BodyOrderObservation,
+};
 use serde_json::json;
 use std::time::Duration;
 use tokio::{
@@ -15,6 +18,28 @@ struct Connection {
 struct Reply {
     status: u16,
     body: Vec<u8>,
+}
+
+enum BodyOrderEvidence {
+    NotObserved,
+    AfterBody,
+    BeforeBody,
+}
+
+async fn observe_body(
+    client: &reqwest::Client,
+    host: &str,
+    command: BodyOrderCommand,
+) -> ConformanceResult<BodyOrderObservation> {
+    Ok(client
+        .post(format!("http://{host}/__conformance/admission"))
+        .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
+        .json(&json!({"kind":"bodyOrder","value":{"command":command}}))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?)
 }
 impl Connection {
     async fn open(base_url: &str) -> ConformanceResult<Self> {
@@ -38,40 +63,102 @@ impl Connection {
         assertion: Option<&str>,
         body: &[u8],
         withhold_suffix: bool,
-    ) -> ConformanceResult<(Reply, bool)> {
+    ) -> ConformanceResult<(Reply, BodyOrderEvidence)> {
         let auth = assertion.map_or_else(String::new, |value| {
             format!("Cf-Access-Jwt-Assertion: {value}\r\n")
         });
+        let observation: Option<BodyObservationId> = if withhold_suffix {
+            Some(
+                "019f0000-0000-7000-8000-000000000540"
+                    .to_owned()
+                    .try_into()?,
+            )
+        } else {
+            None
+        };
+        let annotation = observation.as_ref().map_or_else(String::new, |id| {
+            format!("{BODY_ORDER_HEADER}: {}\r\n", id.as_str())
+        });
         let head = format!(
-            "{method} {path} HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: keep-alive\r\n{auth}\r\n",
+            "{method} {path} HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: keep-alive\r\n{auth}{annotation}\r\n",
             self.host,
             body.len()
         );
+        let mut waiting_for = "owner capture registration";
         tokio::time::timeout(Duration::from_secs(10), async {
+            let client = reqwest::Client::builder().no_proxy().build()?;
+            if let Some(id) = observation.as_ref()
+                && observe_body(&client, &self.host, BodyOrderCommand::Begin { request: id.clone() }).await?
+                    != (BodyOrderObservation::Reading { bytes_read: 0 })
+            {
+                return Err("body-order capture was not registered before the upload".into());
+            }
+            waiting_for = "request header write";
             self.socket.get_mut().write_all(head.as_bytes()).await?;
-            let early_response = if withhold_suffix {
+            let mut status_prefix = Vec::new();
+            let early_response = if let Some(id) = observation.as_ref() {
                 let (prefix, suffix) = body.split_at(1);
                 self.socket.get_mut().write_all(prefix).await?;
                 self.socket.get_mut().flush().await?;
-                // The socket becoming readable is the early-response barrier.
-                // A bounded observation window releases a correct server that
-                // waits for the withheld upload; it is not server readiness.
-                let early = tokio::time::timeout(
-                    Duration::from_millis(250),
-                    self.socket.get_mut().readable(),
-                )
-                .await
-                .is_ok();
+                // Keep partially read response bytes across cancellation. The
+                // actual adapter read releases the suffix; a response wins only
+                // when its real head arrives, never by an absence interval.
+                waiting_for = "actual body prefix read or premature response head";
+                let early = tokio::select! {
+                    result = self.socket.read_until(b'\n', &mut status_prefix) => {
+                        if result? == 0 { return Err("HTTP connection ended before its response head".into()); }
+                        true
+                    }
+                    observed = observe_body(&client, &self.host, BodyOrderCommand::AwaitRead {
+                        request: id.clone(),
+                        minimum_bytes: std::num::NonZeroU64::new(1).ok_or("positive body prefix")?,
+                    }) => {
+                        match observed? {
+                            BodyOrderObservation::Reading { bytes_read: 1 } => {
+                                println!("HTTP_BODY_EVENT actual_prefix_read bytes=1 suffix_held=true");
+                                false
+                            }
+                            BodyOrderObservation::ResponseBeforeEnd { .. } => true,
+                            other => return Err(format!("body prefix was not consumed by the actual stream: {other:?}").into()),
+                        }
+                    }
+                };
+                waiting_for = "withheld body suffix write";
                 self.socket.get_mut().write_all(suffix).await?;
                 early
             } else {
+                waiting_for = "complete body write";
                 self.socket.get_mut().write_all(body).await?;
                 false
             };
+            waiting_for = "body flush and response following body EOF";
             self.socket.get_mut().flush().await?;
-            Ok((self.reply().await?, early_response))
+            let reply = self.reply(status_prefix).await?;
+            let order = if let Some(id) = observation {
+                waiting_for = "actual body EOF and response-order observation";
+                let completed = observe_body(&client, &self.host, BodyOrderCommand::Finish { request: id }).await?;
+                match completed {
+                    BodyOrderObservation::ResponseBeforeEnd { .. } => BodyOrderEvidence::BeforeBody,
+                    _ if early_response => BodyOrderEvidence::BeforeBody,
+                    BodyOrderObservation::ResponseAfterEnd { bytes_read }
+                        if bytes_read == u64::try_from(body.len())? => {
+                            println!("HTTP_BODY_EVENT actual_response_after_eof bytes={bytes_read}");
+                            BodyOrderEvidence::AfterBody
+                        }
+                    other => return Err(format!("body EOF/response ordering was not observed: {other:?}").into()),
+                }
+            } else {
+                BodyOrderEvidence::NotObserved
+            };
+            Ok::<_, Box<dyn std::error::Error + Send + Sync>>((reply, order))
         })
-        .await?
+        .await
+        .map_err(|error| {
+            format!("HTTP body request exceeded its existing bound while waiting for {waiting_for}: {error}")
+        })?
+        .map_err(|error| {
+            format!("HTTP body request failed while waiting for {waiting_for}: {error}").into()
+        })
     }
     async fn line(&mut self) -> ConformanceResult<String> {
         let mut line = String::new();
@@ -83,10 +170,16 @@ impl Connection {
         }
         Ok(line)
     }
-    async fn reply(&mut self) -> ConformanceResult<Reply> {
-        let status = self
-            .line()
-            .await?
+    async fn reply(&mut self, mut status_prefix: Vec<u8>) -> ConformanceResult<Reply> {
+        if !status_prefix.ends_with(b"\n")
+            && self.socket.read_until(b'\n', &mut status_prefix).await? == 0
+        {
+            return Err("HTTP connection closed before its response status".into());
+        }
+        if status_prefix.len() > 8192 {
+            return Err("HTTP fixture response header exceeded its bound".into());
+        }
+        let status = String::from_utf8(status_prefix)?
             .split_whitespace()
             .nth(1)
             .ok_or("HTTP response status missing")?
@@ -201,9 +294,16 @@ pub(super) async fn refused_then_valid_enrollment_uses_the_same_physical_connect
                 .into(),
         );
     }
-    if early_response {
-        return Err("production refusal arrived before its request body completed".into());
+    match early_response {
+        BodyOrderEvidence::BeforeBody => {
+            return Err("production refusal arrived before its request body completed".into());
+        }
+        BodyOrderEvidence::NotObserved => {
+            return Err("Worker body-order observation was missing".into());
+        }
+        BodyOrderEvidence::AfterBody => {}
     }
+    println!("HTTP_BODY_SCOPE body order: Worker adapter only; native counterpart not exercised");
     println!("HTTP_BODY_CASE refused_then_valid_enrollment_one_physical_connection passed");
     Ok(())
 }

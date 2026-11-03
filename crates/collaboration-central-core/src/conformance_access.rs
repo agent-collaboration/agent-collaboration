@@ -45,6 +45,7 @@ impl AccessVerificationOutcome {
 pub(crate) struct VerifyAccessInput {
     assertion: String,
     path: String,
+    now: Option<crate::RegistryTime>,
 }
 
 pub(crate) async fn verify<Platform: CentralPlatform>(
@@ -54,6 +55,14 @@ pub(crate) async fn verify<Platform: CentralPlatform>(
 ) -> Response {
     if !matches!(caller, AccessCaller::Owner { .. }) {
         return StatusCode::UNAUTHORIZED.into_response();
+    }
+    if let Some(now) = input.now {
+        let Some(clock) = application.platform.conformance_access_clock() else {
+            return StatusCode::CONFLICT.into_response();
+        };
+        clock.set(runtime_primitives::SyncTime::from_unix_millis(
+            now.0.timestamp_millis(),
+        ));
     }
     Json(AccessVerificationOutcome::of(
         application

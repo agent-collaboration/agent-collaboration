@@ -381,7 +381,7 @@ async fn normal_held_order(base: &str, order: ReleaseOrder) -> ConformanceResult
 async fn native_held_order(order: ReleaseOrder) -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         root: root.path().into(),
         access_policy: fixture_policy(),
         jwks_url: jwks.url.clone(),

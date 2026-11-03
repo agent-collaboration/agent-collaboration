@@ -38,7 +38,9 @@ pub struct ClockedServer {
 impl ClockedServer {
     pub async fn start(root: &std::path::Path, jwks: &str) -> ConformanceResult<Self> {
         let clock = SuppliedClock(Arc::new(AtomicI64::new(
-            runtime_primitives::SystemClock.now().unix_millis(),
+            collaboration_central_conformance::fixture_time()?
+                .0
+                .timestamp_millis(),
         )));
         let platform = TokioCentralPlatform::new(
             jwks,

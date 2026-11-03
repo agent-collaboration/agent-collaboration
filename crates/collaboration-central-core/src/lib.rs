@@ -23,6 +23,21 @@ pub use admin_import_store::AdminImportRefusal;
 #[cfg(feature = "conformance")]
 mod conformance_access;
 #[cfg(feature = "conformance")]
+mod conformance_body_order;
+#[cfg(feature = "conformance")]
+pub use conformance_body_order::{
+    BODY_ORDER_HEADER, BodyObservationId, BodyOrderCapture, BodyOrderCommand, BodyOrderObservation,
+    BodyOrderProbe,
+};
+#[cfg(feature = "conformance")]
+mod conformance_clock;
+#[cfg(feature = "conformance")]
+pub use conformance_clock::ConformanceAccessClock;
+#[cfg(feature = "conformance")]
+pub use conformance_copy_wait::CopyWaitDeadline;
+#[cfg(feature = "conformance")]
+pub use fleet_identity_protocol::UnixMillis;
+#[cfg(feature = "conformance")]
 mod conformance_fleet;
 #[cfg(feature = "conformance")]
 mod conformance_fleet_entity;

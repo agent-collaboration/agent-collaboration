@@ -44,8 +44,19 @@ impl ShellActor {
             let RuntimeFace::Session(runtime) = runtime else {
                 return Err(error("not a connection runtime"));
             };
-            return Response::from_json(&runtime.conformance_forward_state().await.map_err(error)?)
-                .map(Some);
+            let deadline = self
+                .state
+                .storage()
+                .get_alarm()
+                .await?
+                .map(collaboration_central_core::UnixMillis);
+            return Response::from_json(
+                &runtime
+                    .conformance_forward_state(deadline)
+                    .await
+                    .map_err(error)?,
+            )
+            .map(Some);
         }
         if request.path() == "/test/holder-frames" {
             let RuntimeFace::Session(runtime) = runtime else {
@@ -179,6 +190,13 @@ impl ShellActor {
                 return Err(error("holder observation requires a Connection object"));
             };
             return Response::from_json(&runtime.conformance_holder_observation().map_err(error)?)
+                .map(Some);
+        }
+        if request.path() == "/test/holder-observation/deadline" {
+            let RuntimeFace::Session(runtime) = runtime else {
+                return Err(error("not a connection runtime"));
+            };
+            return Response::from_json(&runtime.conformance_holder_deadline().map_err(error)?)
                 .map(Some);
         }
         Ok(None)

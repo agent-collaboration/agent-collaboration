@@ -11,7 +11,7 @@ pub(super) async fn run(case: ForwardCase) -> ConformanceResult<()> {
     let mut server = None;
     let proof = async {
         server = Some(
-            TokioServer::start(TokioSettings {
+            TokioServer::start_conformance(TokioSettings {
                 root: root.path().into(),
                 access_policy: fixture_policy(),
                 jwks_url: jwks.url.clone(),
@@ -29,6 +29,9 @@ pub(super) async fn run(case: ForwardCase) -> ConformanceResult<()> {
         forwarded_post_scenarios::run(
             server.as_ref().ok_or("native server absent")?.base_url(),
             case,
+            |base, _service, credential, _now| {
+                super::forwarded_post_wire::connect(base, credential)
+            },
         )
         .await
     }

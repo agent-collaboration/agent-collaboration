@@ -27,6 +27,7 @@ pub(super) struct Observation {
     notifications: u64,
     read_gap_reached: bool,
     pub(super) calls: Vec<durable_steps::CallId>,
+    pub(super) deadlines: Vec<collaboration_central_core::CopyWaitDeadline>,
 }
 
 #[derive(Clone)]
@@ -92,18 +93,24 @@ impl CopyClient {
         database: DatabaseId,
         ready: impl Fn(&Observation) -> bool,
     ) -> ConformanceResult<Observation> {
+        let mut last_observed = None;
         tokio::time::timeout(Duration::from_secs(8), async {
             loop {
                 let observed = self.control(database, "observe").await?;
+                last_observed = Some((observed.attempts, observed.waiting, observed.reads));
                 if ready(&observed) {
                     return Ok(observed);
                 }
                 // This observer has no mutation or drive. Its next authoritative
                 // snapshot establishes readiness, never the backoff itself.
-                tokio::time::sleep(Duration::from_millis(20)).await;
             }
         })
-        .await?
+        .await
+        .map_err(|error| {
+            format!(
+                "Copy observation did not reach its predicate before the existing bound: {error}; last (attempts, waiting, reads): {last_observed:?}"
+            )
+        })?
     }
     pub(super) async fn completed(
         &self,
@@ -121,7 +128,7 @@ impl CopyClient {
                 if reply.get("kind").and_then(Value::as_str) != Some("pending") {
                     return Err(format!("copy operation did not return its typed answer: {reply}; expected {expected}").into());
                 }
-                tokio::time::sleep(Duration::from_millis(20)).await;
+
             }
         }).await?
     }
@@ -165,7 +172,7 @@ impl CopyClient {
                         return Ok(step);
                     }
                 }
-                tokio::time::sleep(Duration::from_millis(20)).await;
+
             }
         }).await?
     }
@@ -334,9 +341,16 @@ async fn cases(client: &CopyClient, caller: &mut Caller) -> ConformanceResult<()
     let expiring = database("905")?;
     client.create(expiring).await?;
     client.start_wait(caller, expiring, position(1)?);
-    client
+    let pending_attempt = client
         .observed(expiring, |state| state.attempts == 1 && state.waiting == 1)
         .await?;
+    let deadline = pending_attempt
+        .deadlines
+        .first()
+        .ok_or("the real Copy wait has no armed deadline")?;
+    if deadline.deadline.0 - deadline.armed_at.0 != 2_000 {
+        return Err("the real Copy wait did not arm its configured two-second deadline".into());
+    }
     let operation = pending_operation(&reply(caller).await?)?;
     let step = client
         .pending_reach(operation, CallReach::MayHaveReached)

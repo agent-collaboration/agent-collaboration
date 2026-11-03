@@ -40,6 +40,7 @@ pub async fn run_shared_access_conformance(
                 client_id: access_client_id(credential)?,
             },
             false,
+            crate::fixture_time()?,
         );
         for (label, path, assertion, expected) in
             crate::access_scenarios::refused_assertions(claims.clone())?

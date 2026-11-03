@@ -22,8 +22,16 @@ where
     Observe: FnMut() -> Observed,
     Observed: Future<Output = ConformanceResult<Vec<FrameId>>>,
 {
+    use collaboration_central_core::{ObjectAddress, RegistryTime};
+    let clock = ConformanceClient::new(base)?;
+    let started = collaboration_central_conformance::fixture_time()?;
     let copy = CopyClient::new(base)?;
     let database = database("911")?;
+    let connection =
+        ObjectAddress::Connection(message_board::ServiceId::try_from(SERVICE.to_owned())?);
+    for address in [ObjectAddress::Registry, ObjectAddress::Copy(database)] {
+        clock.set_object_time(address, started).await?;
+    }
     copy.create(database).await?;
     let mut peer = enroll_admitted_peer(
         &ConformanceClient::new(base)?,
@@ -33,6 +41,7 @@ where
         "019f0000-0000-7000-8000-000000000912",
     )
     .await?;
+    clock.set_object_time(connection.clone(), started).await?;
     let http = reqwest::Client::builder()
         .no_proxy()
         .timeout(Duration::from_secs(75))
@@ -49,17 +58,18 @@ where
     let mut callers = JoinSet::new();
     start(&http, base, &mut callers, input.clone());
     let result = async {
-        let (frame, first) = received(&mut peer.socket).await?;
-        let started = tokio::time::Instant::now();
+        let (frame, first) = received(&mut peer.socket).await
+            .map_err(|error| format!("Copy overlap initial Release was not observed: {error}"))?;
         let ServerCall::Release { call, request } = first else {
             return Err("sequential caller did not send Release".into());
         };
         if request.database != database || observe().await? != vec![frame] {
             return Err("sequential Release did not own exactly its expected waiter".into());
         }
-        // These clock boundaries choose the scenario's elapsed lease time;
-        // observed calls and store results, not sleeps, establish readiness.
-        tokio::time::sleep_until(started + Duration::from_secs(18)).await;
+        let release_at = RegistryTime(started.0 + chrono::TimeDelta::seconds(18));
+        for address in [ObjectAddress::Registry, ObjectAddress::Copy(database), connection.clone()] {
+            clock.set_object_time(address, release_at).await?;
+        }
         send(
             &mut peer.socket,
             frame,
@@ -70,13 +80,22 @@ where
         .await?;
         let first = copy
             .observed(database, |state| state.attempts == 1 && state.waiting == 1)
-            .await?;
-        let wait_started = tokio::time::Instant::now();
+            .await
+            .map_err(|error| format!("first Copy waiter after Release was not observed: {error}"))?;
+        let armed = first.deadlines.first().ok_or("Copy wait has no actual armed deadline")?;
+        if armed.armed_at.0 != release_at.0.timestamp_millis()
+            || armed.deadline.0 - armed.armed_at.0 != 20_000
+        {
+            return Err("the actual armed Copy deadline differs from the configured 20 seconds".into());
+        }
         if !matches!(first.calls.as_slice(), [identity]
             if identity.operation == call.operation && identity.step.as_str() == "copy_request") {
             return Err("Copy wait did not follow Release in the same real operation".into());
         }
-        tokio::time::sleep_until(started + Duration::from_secs(31)).await;
+        let replay_at = RegistryTime(started.0 + chrono::TimeDelta::seconds(31));
+        for address in [ObjectAddress::Registry, ObjectAddress::Copy(database), connection.clone()] {
+            clock.set_object_time(address, replay_at).await?;
+        }
         let before = copy.control(database, "observe").await?;
         if before.attempts != 1 || before.waiting != 1 || before.calls != first.calls {
             return Err("the original drive lost its single Copy waiter before replay".into());
@@ -105,10 +124,25 @@ where
         }
         // Only expiry of the original full Copy attempt releases the live drive.
         // The next attempt must replay the saved Release and retain its CallId.
-        let retried = copy.observed(database, |state| state.attempts == 2 && state.waiting == 1).await?;
-        let elapsed = started.elapsed();
-        if elapsed < Duration::from_secs(37)
-            || wait_started.elapsed() < Duration::from_millis(19_900)
+        let expires_at = RegistryTime(
+            chrono::DateTime::from_timestamp_millis(armed.deadline.0).ok_or("Copy fixture deadline")?,
+        );
+        for address in [ObjectAddress::Registry, connection.clone(), ObjectAddress::Copy(database)] {
+            clock.set_object_time(address, expires_at).await?;
+        }
+        // The HTTP response follows recording this attempt's outcome. Its
+        // retry has a positive Engine backoff, so cross that with logical
+        // fixture input before waking the durable caller again.
+        callers.join_next().await.ok_or("Copy caller task disappeared")???;
+        let retry_at = RegistryTime(expires_at.0 + chrono::TimeDelta::seconds(1));
+        for address in [ObjectAddress::Copy(database), connection.clone(), ObjectAddress::Registry] {
+            clock.set_object_time(address, retry_at).await?;
+        }
+        let retried = copy.observed(database, |state| state.attempts == 2 && state.waiting == 1).await
+            .map_err(|error| format!("retried Copy waiter after expiry and caller completion was not observed: {error}"))?;
+        let elapsed = armed.deadline.0 - started.0.timestamp_millis();
+        let waited = armed.deadline.0 - armed.armed_at.0;
+        if elapsed < 37_000 || waited < 19_900
         {
             return Err("the Copy attempt ended before its full configured wait".into());
         }
@@ -136,9 +170,8 @@ where
             return Err("converged operation retained an obsolete Copy waiter".into());
         }
         println!(
-            "COPY_DRIVE_CASE release_18s_then_copy_20s_crosses_30s_lease replay=pending replay_copy_calls=1 release_calls=1 copy_calls=2 retry_waiters=1 obsolete_waiters=0 actual_old_token_rejections={} elapsed_ms={} terminal=retired passed",
-            rejected.iter().filter(|id| **id == call.operation).count(),
-            elapsed.as_millis()
+            "COPY_DRIVE_CASE release_18s_then_copy_20s_crosses_30s_lease replay=pending replay_copy_calls=1 release_calls=1 copy_calls=2 retry_waiters=1 obsolete_waiters=0 actual_old_token_rejections={} elapsed_ms={elapsed} terminal=retired passed",
+            rejected.iter().filter(|id| **id == call.operation).count()
         );
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }

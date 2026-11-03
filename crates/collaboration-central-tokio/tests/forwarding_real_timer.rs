@@ -1,4 +1,4 @@
-//! The production30s timer is a separate slow target; no pinned clock or short policy.
+//! The production30s alarm runs from controlled time through the normal socket path.
 #![cfg(feature = "conformance")]
 #[path = "native_http/support.rs"]
 mod configuration;
@@ -48,5 +48,5 @@ mod holder_writer_retry;
 #[tokio::test]
 async fn production_alarm_returns_unanswered_and_releases_all_capacity_for_fresh_correlations()
 -> collaboration_central_conformance::ConformanceResult<()> {
-    forwarded_post_native_cases::run(forwarded_post_scenarios::ForwardCase::RealTimer).await
+    forwarded_post_native_cases::run(forwarded_post_scenarios::ForwardCase::AlarmEvent).await
 }

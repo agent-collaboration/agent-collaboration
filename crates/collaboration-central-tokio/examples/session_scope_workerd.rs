@@ -193,7 +193,7 @@ async fn main() -> ConformanceResult<()> {
             Scenario::ForwardPost(forwarded_post_scenarios::ForwardCase::TerminalRelease)
         }
         Some("forward-real-timer") => {
-            Scenario::ForwardPost(forwarded_post_scenarios::ForwardCase::RealTimer)
+            Scenario::ForwardPost(forwarded_post_scenarios::ForwardCase::AlarmEvent)
         }
         Some("claim-retiring") => Scenario::ClaimRetiring,
         Some("claim-retired") => Scenario::ClaimRetired,
@@ -331,7 +331,7 @@ async fn main() -> ConformanceResult<()> {
         Scenario::MailboxCancel => mailbox_cancel_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::DeliveryConfigRefusals => Err("config refusal scenario owns its process lifetimes".into()),
         Scenario::ForwardReopen => Err("reopen scenario must own its two process lifetimes".into()),
-        Scenario::ForwardPost(case) => forwarded_post_scenarios::run(&format!("http://127.0.0.1:{port}"), case).await,
+        Scenario::ForwardPost(case) => forwarded_post_scenarios::run(&format!("http://127.0.0.1:{port}"), case, normal_session_support::reconnect_forwarding_peer).await,
         Scenario::ClaimRetiring => retirement_claim_scenarios::run(&format!("http://127.0.0.1:{port}"),retirement_claim_scenarios::ExpectedRetirement::Retiring).await,
         Scenario::ClaimRetired => retirement_claim_scenarios::run(&format!("http://127.0.0.1:{port}"),retirement_claim_scenarios::ExpectedRetirement::Retired).await,
         Scenario::ClaimArchived => imported_claim_scenarios::run_archived(&format!("http://127.0.0.1:{port}")).await,
@@ -453,6 +453,11 @@ async fn main() -> ConformanceResult<()> {
                     .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
                     .json(&json!({"kind":"holderFrames","value":{"service":holder_full_wait::SERVICE}}))
                     .send().await?.error_for_status()?.json::<Vec<fleet_sync_protocol::FrameId>>().await?)
+            }, || async {
+                Ok(client.http.post(format!("{base}/__conformance/admission"))
+                    .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
+                    .json(&json!({"kind":"holderDeadline","value":{"service":holder_full_wait::SERVICE}}))
+                    .send().await?.error_for_status()?.json::<Option<collaboration_central_core::UnixMillis>>().await?)
             }).await
         }
         Scenario::Holder => {

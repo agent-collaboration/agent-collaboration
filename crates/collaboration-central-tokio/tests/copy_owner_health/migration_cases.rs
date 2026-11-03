@@ -32,7 +32,7 @@ where
     Scenario: FnOnce(String) -> Run,
     Run: Future<Output = ConformanceResult<()>>,
 {
-    let server = TokioServer::start(settings(root, jwks)?).await?;
+    let server = TokioServer::start_conformance(settings(root, jwks)?).await?;
     let observed = scenario(server.base_url().to_owned()).await;
     server.shutdown().await?;
     observed

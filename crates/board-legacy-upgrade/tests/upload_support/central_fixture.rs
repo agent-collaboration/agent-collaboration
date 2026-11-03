@@ -119,7 +119,7 @@ pub async fn start_server(
     root: &std::path::Path,
     jwks: &JwksFixtureServer,
 ) -> TestResult<TokioServer> {
-    Ok(TokioServer::start(settings(root, jwks)?).await?)
+    Ok(TokioServer::start_conformance(settings(root, jwks)?).await?)
 }
 
 pub async fn start_server_on(
@@ -127,7 +127,7 @@ pub async fn start_server_on(
     jwks: &JwksFixtureServer,
     listen: SocketAddr,
 ) -> TestResult<TokioServer> {
-    Ok(TokioServer::start_on(settings(root, jwks)?, listen).await?)
+    Ok(TokioServer::start_conformance_on(settings(root, jwks)?, listen).await?)
 }
 
 fn settings(root: &std::path::Path, jwks: &JwksFixtureServer) -> TestResult<TokioSettings> {

@@ -16,10 +16,7 @@ use collaboration_central_core::{ObjectAddress, RegistryTime};
 use fleet_sync_protocol::{DatabaseId, FrameId};
 use reqwest_websocket::WebSocket;
 use serde_json::{Value, json};
-use std::{
-    future::Future,
-    time::{Duration, SystemTime},
-};
+use std::{future::Future, time::Duration};
 
 pub(super) async fn late_route<Control, ControlFuture, Observe, ObserveFuture>(
     sender: &mut WebSocket,
@@ -34,9 +31,9 @@ where
     Observe: FnMut(bool) -> ObserveFuture,
     ObserveFuture: Future<Output = ConformanceResult<Value>>,
 {
-    let started = SystemTime::now();
+    let started = collaboration_central_conformance::fixture_time()?.0;
     control(RuntimeControl::SetTime {
-        now: RegistryTime(started.into()),
+        now: RegistryTime(started),
     })
     .await?;
     control(RuntimeControl::HoldNextSelectedDispatch {
@@ -73,7 +70,7 @@ async fn overlap_sequence<Control, ControlFuture, Observe, ObserveFuture>(
     sender: &mut WebSocket,
     holder: &mut WebSocket,
     database: DatabaseId,
-    started: SystemTime,
+    started: chrono::DateTime<chrono::Utc>,
     control: &mut Control,
     observe: &mut Observe,
 ) -> ConformanceResult<()>
@@ -98,7 +95,7 @@ where
             .clone(),
     )?;
     control(RuntimeControl::SetTime {
-        now: RegistryTime((started + Duration::from_secs(30)).into()),
+        now: RegistryTime(started + chrono::TimeDelta::seconds(30)),
     })
     .await?;
     if outcome(sender, original).await? != ForwardOutcome::Unanswered {

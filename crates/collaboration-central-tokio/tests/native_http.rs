@@ -15,7 +15,7 @@ async fn a_missing_committed_holder_mapping_never_dispatches_to_an_object() -> C
 {
     let jwks = JwksFixtureServer::start().await?;
     let directory = tempfile::tempdir()?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
@@ -52,7 +52,7 @@ async fn sequential_release_and_copy_wait_keep_live_drive_replay_pending() -> Co
 {
     let jwks = JwksFixtureServer::start().await?;
     let directory = tempfile::tempdir()?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
@@ -86,7 +86,7 @@ async fn full_holder_attempt_finishes_inside_the_original_drive_lease_without_wa
 -> ConformanceResult<()> {
     let jwks = JwksFixtureServer::start().await?;
     let directory = tempfile::tempdir()?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
@@ -101,12 +101,21 @@ async fn full_holder_attempt_finishes_inside_the_original_drive_lease_without_wa
     })
     .await?;
     let service = message_board::ServiceId::try_from(holder_full_wait::SERVICE.to_owned())?;
-    let result = holder_full_wait::run(server.base_url(), || async {
-        Ok(server
-            .conformance_platform()
-            .conformance_holder_frames(&service)
-            .await?)
-    })
+    let result = holder_full_wait::run(
+        server.base_url(),
+        || async {
+            Ok(server
+                .conformance_platform()
+                .conformance_holder_frames(&service)
+                .await?)
+        },
+        || async {
+            Ok(server
+                .conformance_platform()
+                .conformance_holder_deadline(&service)
+                .await?)
+        },
+    )
     .await;
     let stopped = server.shutdown().await;
     let fixture = jwks.shutdown().await;
@@ -124,7 +133,7 @@ async fn lost_holder_answers_preserve_the_call_and_real_writer_receipts_across_r
     let directory = tempfile::tempdir()?;
     let central = directory.path().join("central");
     tokio::fs::create_dir_all(&central).await?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
@@ -152,7 +161,7 @@ async fn registry_holder_calls_reach_the_other_enrollment_and_accept_separate_so
 -> ConformanceResult<()> {
     let jwks = JwksFixtureServer::start().await?;
     let directory = tempfile::tempdir()?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
@@ -180,7 +189,7 @@ async fn renewal_is_correlated_through_the_real_registry_and_keeps_the_session_u
 -> ConformanceResult<()> {
     let jwks = JwksFixtureServer::start().await?;
     let directory = tempfile::tempdir()?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
@@ -207,7 +216,7 @@ async fn renewal_is_correlated_through_the_real_registry_and_keeps_the_session_u
 async fn enrollment_returns_a_stable_peer_and_expiry_over_native_http() -> ConformanceResult<()> {
     let jwks = JwksFixtureServer::start().await?;
     let directory = tempfile::tempdir()?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
@@ -235,7 +244,7 @@ async fn admitted_v4_service_completes_the_real_schema_publication_before_welcom
 -> ConformanceResult<()> {
     let jwks = JwksFixtureServer::start().await?;
     let directory = tempfile::tempdir()?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),

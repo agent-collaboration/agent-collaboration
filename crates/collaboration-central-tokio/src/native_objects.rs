@@ -45,6 +45,8 @@ pub struct TokioObjectIo {
     clock: SharedClock,
     wake: Arc<TokioWakeTimer<SharedClock>>,
     #[cfg(feature = "conformance")]
+    accepted_product_wake: Arc<Mutex<Option<SyncTime>>>,
+    #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
 }
 impl Clock for TokioObjectIo {
@@ -63,7 +65,19 @@ impl IdSource for TokioObjectIo {
 }
 impl WakeScheduler for TokioObjectIo {
     async fn wake_at(&self, at: SyncTime) -> Result<(), WakeFailure> {
-        self.wake.wake_at(at).await
+        #[cfg(not(feature = "conformance"))]
+        {
+            self.wake.wake_at(at).await
+        }
+        #[cfg(feature = "conformance")]
+        {
+            let mut accepted_product_wake = self.accepted_product_wake.lock().await;
+            let result = self.wake.wake_at(at).await;
+            if result.is_ok() {
+                *accepted_product_wake = Some(at);
+            }
+            result
+        }
     }
 }
 impl PlatformIo for TokioObjectIo {
@@ -304,6 +318,8 @@ impl NativeObjects {
                             clock: self.clock.clone(),
                             wake: Arc::new(TokioWakeTimer::new(self.clock.clone())),
                             #[cfg(feature = "conformance")]
+                            accepted_product_wake: Arc::new(Mutex::new(None)),
+                            #[cfg(feature = "conformance")]
                             faults: self.startup_controls.faults_for(&key),
                         },
                         host: OnceCell::new(),
@@ -543,13 +559,22 @@ impl NativeObjects {
             .lock()
             .await
             .get(&format!("connection-{}", service.as_str()))
-            .cloned();
-        match slot
-            .as_ref()
-            .and_then(|slot| slot.runtime.get())
-            .map(Arc::as_ref)
-        {
-            Some(RuntimeFace::Session(runtime)) => runtime.conformance_forward_state().await,
+            .cloned()
+            .ok_or_else(|| StoreError::Aborted {
+                reason: "connection runtime missing".into(),
+            })?;
+        match slot.runtime.get().map(Arc::as_ref) {
+            Some(RuntimeFace::Session(runtime)) => {
+                // SetTime writes the timer directly, outside TokioObjectIo's
+                // product-wake recorder. This read cannot echo that control.
+                let deadline = slot
+                    .io
+                    .accepted_product_wake
+                    .lock()
+                    .await
+                    .map(|at| collaboration_central_core::UnixMillis(at.unix_millis()));
+                runtime.conformance_forward_state(deadline).await
+            }
             _ => Err(StoreError::Aborted {
                 reason: "connection runtime missing".into(),
             }),
@@ -573,6 +598,29 @@ impl NativeObjects {
             .map(Arc::as_ref)
         {
             Some(RuntimeFace::Session(runtime)) => runtime.conformance_holder_frames(),
+            _ => Err(StoreError::Aborted {
+                reason: "connection runtime missing".into(),
+            }),
+        }
+    }
+
+    #[cfg(feature = "conformance")]
+    pub(crate) async fn holder_deadline(
+        &self,
+        service: &message_board::ServiceId,
+    ) -> Result<Option<collaboration_central_core::UnixMillis>, StoreError> {
+        let slot = self
+            .slots
+            .lock()
+            .await
+            .get(&format!("connection-{}", service.as_str()))
+            .cloned();
+        match slot
+            .as_ref()
+            .and_then(|slot| slot.runtime.get())
+            .map(Arc::as_ref)
+        {
+            Some(RuntimeFace::Session(runtime)) => runtime.conformance_holder_deadline(),
             _ => Err(StoreError::Aborted {
                 reason: "connection runtime missing".into(),
             }),

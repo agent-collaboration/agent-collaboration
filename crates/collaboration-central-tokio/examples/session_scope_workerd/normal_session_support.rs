@@ -4,7 +4,10 @@ use super::{holder_writer_retry::owner_post, normal_capability_cases::observe};
 use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, enroll_open_peer_with_label,
 };
+use collaboration_central_core::{ObjectAddress, RegistryTime};
+use fleet_sync_session::ConnectionRegistration;
 use futures_util::{SinkExt, StreamExt};
+use message_board::ServiceId;
 use reqwest_websocket::{Message, WebSocket};
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -223,4 +226,68 @@ pub(super) async fn physical_close(socket: &mut WebSocket) -> ConformanceResult<
         return Err("normal socket did not physically close".into());
     }
     Ok(())
+}
+
+/// A restored object clock can park Hello's publication on a future platform alarm.
+pub(super) async fn reconnect_forwarding_peer(
+    base: &str,
+    service: &str,
+    credential: &str,
+    now: RegistryTime,
+) -> ConformanceResult<WebSocket> {
+    let connecting = super::forwarded_post_wire::connect(base, credential);
+    tokio::pin!(connecting);
+    // Keep the wire's original Welcome bound active while observing admission.
+    tokio::select! {
+        result = &mut connecting => result,
+        signalled = signal_attaching_forwarding_peer(base, service, now) => {
+            signalled?;
+            connecting.await
+        }
+    }
+}
+
+async fn signal_attaching_forwarding_peer(
+    base: &str,
+    service: &str,
+    now: RegistryTime,
+) -> ConformanceResult<()> {
+    let installation = ServiceId::try_from(service.to_owned())?;
+    let client = ConformanceClient::new(base)?;
+    loop {
+        let connections = observe(
+            base,
+            json!({"kind":"sessionConnections","value":{"service":installation}}),
+        )
+        .await?;
+        let mut attaching = 0;
+        for connection in connections.as_array().ok_or("connections not an array")? {
+            let registration: ConnectionRegistration = serde_json::from_value(
+                connection
+                    .get("registration")
+                    .cloned()
+                    .ok_or("reconnect registration missing")?,
+            )?;
+            if matches!(registration, ConnectionRegistration::Attaching { .. }) {
+                attaching += 1;
+            }
+        }
+        match attaching {
+            0 => {}
+            1 => {
+                // Attaching follows the committed schema-publication admission.
+                // Signal that due work without advancing its logical timeline.
+                client
+                    .set_object_time(ObjectAddress::Connection(installation.clone()), now)
+                    .await?;
+                println!(
+                    "FORWARD_CLOCK_EVENT installation={} attaching_observed=true same_time_signal_millis={}",
+                    installation.as_str(),
+                    now.0.timestamp_millis()
+                );
+                return Ok(());
+            }
+            _ => return Err("reconnect has multiple attaching physical connections".into()),
+        }
+    }
 }

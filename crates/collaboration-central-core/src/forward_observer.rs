@@ -32,6 +32,8 @@ pub struct ForwardStoredRecord {
 pub struct ForwardStateObservation {
     pub pending: Vec<ForwardStoredRecord>,
     pub delivered: Vec<ForwardStoredRecord>,
+    /// Native: last accepted product wake; Worker: the real stored object alarm.
+    pub wake_deadline: Option<crate::UnixMillis>,
     /// In-memory witnesses only; this list has no persistence or restart guarantee.
     pub completed_routes: Vec<FrameId>,
 }
@@ -66,7 +68,10 @@ where
     for<'value> Option<String>: Type<Host::Database> + Decode<'value, Host::Database>,
     for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
 {
-    pub async fn conformance_forward_state(&self) -> Result<ForwardStateObservation, StoreError> {
+    pub async fn conformance_forward_state(
+        &self,
+        wake_deadline: Option<crate::UnixMillis>,
+    ) -> Result<ForwardStateObservation, StoreError> {
         let ObjectWork::Session {
             host, shared_host, ..
         } = &self.work
@@ -79,6 +84,7 @@ where
         Ok(ForwardStateObservation {
             pending,
             delivered,
+            wake_deadline,
             completed_routes: shared_host.forward_route_probe.frames()?,
         })
     }

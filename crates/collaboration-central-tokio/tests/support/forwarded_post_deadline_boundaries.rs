@@ -9,10 +9,7 @@ use collaboration_central_conformance::{
 use collaboration_central_core::RegistryTime;
 use fleet_sync_protocol::{DatabaseId, OperationAnswer, ServerFrame};
 use reqwest_websocket::WebSocket;
-use std::{
-    future::Future,
-    time::{Duration, SystemTime},
-};
+use std::{future::Future, time::Duration};
 
 pub(super) async fn exact_boundary<Control, ControlFuture>(
     sender: &mut WebSocket,
@@ -24,9 +21,9 @@ where
     Control: FnMut(RuntimeControl) -> ControlFuture,
     ControlFuture: Future<Output = ConformanceResult<RuntimeFaultObservation>>,
 {
-    let started = SystemTime::now();
+    let started = collaboration_central_conformance::fixture_time()?.0;
     control(RuntimeControl::SetTime {
-        now: RegistryTime(started.into()),
+        now: RegistryTime(started),
     })
     .await?;
     let mut outstanding = Vec::new();
@@ -34,7 +31,7 @@ where
         outstanding.push((post(sender, database).await?, holder_frame(holder).await?));
     }
     control(RuntimeControl::SetTime {
-        now: RegistryTime((started + Duration::from_millis(29_999)).into()),
+        now: RegistryTime(started + chrono::TimeDelta::milliseconds(29_999)),
     })
     .await?;
     let overflow = post(sender, database).await?;
@@ -60,7 +57,7 @@ where
         return Err("fresh forward reused an outstanding holder correlation identity".into());
     }
     control(RuntimeControl::SetTime {
-        now: RegistryTime((started + Duration::from_secs(30)).into()),
+        now: RegistryTime(started + chrono::TimeDelta::seconds(30)),
     })
     .await?;
     let old_holder_frame = outstanding
@@ -99,15 +96,38 @@ where
     Ok(())
 }
 
-pub(super) async fn real_timer(
+pub(super) async fn alarm_event<Control, ControlFuture>(
+    base: &str,
     sender: &mut WebSocket,
     holder: &mut WebSocket,
     database: DatabaseId,
-) -> ConformanceResult<()> {
-    // No SetTime: the production alarm must finish this real unanswered request.
-    let started = std::time::Instant::now();
+    mut control: Control,
+) -> ConformanceResult<()>
+where
+    Control: FnMut(RuntimeControl) -> ControlFuture,
+    ControlFuture: Future<Output = ConformanceResult<RuntimeFaultObservation>>,
+{
+    let started = collaboration_central_conformance::fixture_time()?.0;
     let original = post(sender, database).await?;
     let old_holder_frame = holder_frame(holder).await?;
+    let expected_deadline =
+        collaboration_central_core::UnixMillis(started.timestamp_millis() + 30_000);
+    let armed = super::forwarded_post_state_cases::wake_deadline(base).await?;
+    if armed != Some(expected_deadline) {
+        return Err(format!(
+            "forward alarm was not armed at the literal 30000ms deadline before clock advance: expected {expected_deadline:?}, observed {armed:?}"
+        ).into());
+    }
+    println!(
+        "FORWARD_ALARM_ARMED literal_deadline_millis={}",
+        expected_deadline.0
+    );
+    // Advancing the owning clock wakes the actual platform alarm. The socket
+    // answer remains the oracle; the unchanged bound only contains failure.
+    control(RuntimeControl::SetTime {
+        now: RegistryTime(started + chrono::TimeDelta::seconds(30)),
+    })
+    .await?;
     let frame = next_with_bound(sender, Duration::from_secs(35)).await?;
     if !matches!(frame, ServerFrame::Answer {
         frame,
@@ -118,17 +138,15 @@ pub(super) async fn real_timer(
             "the actual production alarm did not return the correlated Unanswered outcome".into(),
         );
     }
-    println!(
-        "FORWARD_REAL_TIMER_OBSERVATION elapsed_ms={}",
-        started.elapsed().as_millis()
-    );
     let mut replacement = None;
     // Filling all sixteen slots proves the expired request no longer consumes one.
     for _ in 0..16 {
         let request = post(sender, database).await?;
         let delivered = holder_frame(holder).await?;
         if delivered == old_holder_frame {
-            return Err("the real alarm allowed a stale holder correlation to be reused".into());
+            return Err(
+                "the controlled alarm allowed a stale holder correlation to be reused".into(),
+            );
         }
         replacement = Some((request, delivered));
     }
@@ -140,7 +158,7 @@ pub(super) async fn real_timer(
     let (request, delivered) = replacement.ok_or("post-alarm replacement missing")?;
     let reply = answer(holder, delivered).await?;
     if outcome(sender, request).await? != (ForwardOutcome::Answered { reply }) {
-        return Err("the real alarm did not preserve independent fresh correlation".into());
+        return Err("the controlled alarm did not preserve independent fresh correlation".into());
     }
     Ok(())
 }

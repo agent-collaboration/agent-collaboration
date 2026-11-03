@@ -217,7 +217,6 @@ async fn uncertain(
             }
             // This endpoint offers only reads. Backoff never establishes
             // readiness; the next authoritative journal read does.
-            tokio::time::sleep(Duration::from_millis(20)).await;
         }
     })
     .await??;
@@ -240,7 +239,6 @@ async fn completed(
             if status.get("kind").and_then(Value::as_str) != Some("pending") {
                 return Err(format!("writer answer did not complete its caller: {status}").into());
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
         }
     })
     .await??;

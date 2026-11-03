@@ -30,6 +30,8 @@ pub struct TokioCentralPlatform {
     client: reqwest::Client,
     key_source: reqwest::Url,
     clock: Arc<dyn Clock>,
+    #[cfg(feature = "conformance")]
+    access_clock: Option<Arc<collaboration_central_core::ConformanceAccessClock>>,
     observe: Arc<dyn Fn(CentralObservation) + Send + Sync>,
     objects: Arc<crate::native_objects::NativeObjects>,
     ids: runtime_primitives::UuidV7Ids,
@@ -83,6 +85,8 @@ impl TokioCentralPlatform {
             copy_ack_wait,
             #[cfg(feature = "conformance")]
             Vec::new(),
+            #[cfg(feature = "conformance")]
+            None,
         )
         .await
     }
@@ -113,6 +117,7 @@ impl TokioCentralPlatform {
             holder_answer_timeout,
             copy_ack_wait,
             controls,
+            Some(Arc::default()),
         )
         .await
     }
@@ -132,6 +137,9 @@ impl TokioCentralPlatform {
         copy_ack_wait: Duration,
         #[cfg(feature = "conformance")] controls: Vec<
             collaboration_central_conformance::RuntimeControlRequest,
+        >,
+        #[cfg(feature = "conformance")] access_clock: Option<
+            Arc<collaboration_central_core::ConformanceAccessClock>,
         >,
     ) -> Result<Self, TokioPlatformError> {
         let key_source =
@@ -170,6 +178,8 @@ impl TokioCentralPlatform {
             client,
             key_source,
             clock,
+            #[cfg(feature = "conformance")]
+            access_clock,
             observe: Arc::new(observe),
             objects,
             ids: runtime_primitives::UuidV7Ids,
@@ -212,6 +222,14 @@ impl TokioCentralPlatform {
         self.objects.holder_frames(service).await
     }
 
+    #[cfg(feature = "conformance")]
+    pub async fn conformance_holder_deadline(
+        &self,
+        service: &message_board::ServiceId,
+    ) -> Result<Option<collaboration_central_core::UnixMillis>, durable_steps::StoreError> {
+        self.objects.holder_deadline(service).await
+    }
+
     /// Read-only observation of attachments created by the real HTTP upgrade.
     #[cfg(feature = "conformance")]
     pub async fn conformance_socket_origins(
@@ -241,7 +259,23 @@ impl TokioCentralPlatform {
 impl CentralPlatform for TokioCentralPlatform {
     type Host = crate::TokioStorageHost<CoreHost<crate::TokioObjectIo>>;
     fn clock(&self) -> &dyn Clock {
-        self.clock.as_ref()
+        #[cfg(feature = "conformance")]
+        {
+            match self.access_clock.as_ref() {
+                Some(clock) => clock.as_ref(),
+                None => self.clock.as_ref(),
+            }
+        }
+        #[cfg(not(feature = "conformance"))]
+        {
+            self.clock.as_ref()
+        }
+    }
+    #[cfg(feature = "conformance")]
+    fn conformance_access_clock(
+        &self,
+    ) -> Option<&collaboration_central_core::ConformanceAccessClock> {
+        self.access_clock.as_deref()
     }
     fn ids(&self) -> &dyn runtime_primitives::IdSource {
         &self.ids

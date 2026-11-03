@@ -141,7 +141,7 @@ async fn owner_health_precedes_initialization_uses_target_bytes_and_refuses_mach
 -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
-    let server = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let server = TokioServer::start_conformance(settings(root.path(), &jwks.url)?).await?;
     let proof = async {
         let http = reqwest::Client::builder().no_proxy().build()?;
         let url = format!("{}/admin/v1/copies/{PROJECT}/health", server.base_url());
@@ -213,7 +213,7 @@ async fn owner_copy_operations_use_the_real_http_core_and_retirement_receipt()
 -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
-    let server = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let server = TokioServer::start_conformance(settings(root.path(), &jwks.url)?).await?;
     let proof = copy_owner_scenarios::run(server.base_url()).await;
     let stopped = server.shutdown().await;
     let keys = jwks.shutdown().await;

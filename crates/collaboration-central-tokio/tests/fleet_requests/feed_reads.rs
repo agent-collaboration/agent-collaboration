@@ -79,7 +79,7 @@ async fn normal_feed_starts_after_the_committed_cursor_and_refuses_a_cursor_beyo
 -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
-    let server = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let server = TokioServer::start_conformance(settings(root.path(), &jwks.url)?).await?;
     let proof=async {
         let client=ConformanceClient::new(server.base_url())?;
         let mut peer=enroll_admitted_peer(&client,SERVICE,"019f0000-0000-7000-8000-00000000100e","feed-origin","019f0000-0000-7000-8000-000000000f44").await?;
@@ -125,7 +125,7 @@ async fn normal_expired_feed_cursor_returns_its_floor_after_real_retention_then_
 -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
-    let first = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let first = TokioServer::start_conformance(settings(root.path(), &jwks.url)?).await?;
     let proof = async {
         let client = ConformanceClient::new(first.base_url())?;
         let mut peer = enroll_admitted_peer(
@@ -161,7 +161,7 @@ async fn normal_expired_feed_cursor_returns_its_floor_after_real_retention_then_
         .execute(&mut connection)
         .await?;
     connection.close().await?;
-    let second = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let second = TokioServer::start_conformance(settings(root.path(), &jwks.url)?).await?;
     let proof=async {
         let client=ConformanceClient::new(second.base_url())?;
         let mut peer=enroll_admitted_peer(&client,SERVICE,"019f0000-0000-7000-8000-00000000100e","expired-feed-origin","019f0000-0000-7000-8000-000000000f46").await?;

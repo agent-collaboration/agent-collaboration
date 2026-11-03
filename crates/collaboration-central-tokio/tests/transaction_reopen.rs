@@ -28,13 +28,13 @@ async fn sql_full_fence_and_concurrent_complete_snapshots_survive_whole_server_r
             copy_ack_wait: std::time::Duration::from_secs(2),
         })
     };
-    let first = TokioServer::start(settings()?).await?;
+    let first = TokioServer::start_conformance(settings()?).await?;
     let prepared =
         ComposedTransactionScenario::prepare(&ConformanceClient::new(first.base_url())?).await;
     first.shutdown().await?;
     let proof = async {
         let prepared = prepared?;
-        let second = TokioServer::start(settings()?).await?;
+        let second = TokioServer::start_conformance(settings()?).await?;
         let proof = prepared
             .verify(&ConformanceClient::new(second.base_url())?)
             .await;

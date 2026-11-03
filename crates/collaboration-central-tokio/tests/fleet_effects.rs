@@ -35,7 +35,7 @@ async fn unknown_effects_read_is_correlated_and_keeps_the_same_session_usable()
 -> ConformanceResult<()> {
     let jwks = JwksFixtureServer::start().await?;
     let root = tempfile::tempdir()?;
-    let server = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let server = TokioServer::start_conformance(settings(root.path(), &jwks.url)?).await?;
     let result = async {
         let client = ConformanceClient::new(server.base_url())?;
         let mut peer = enroll_admitted_peer(
@@ -94,7 +94,7 @@ async fn effects_pages_are_request_scoped_and_survive_a_whole_server_reopen()
 -> ConformanceResult<()> {
     let jwks = JwksFixtureServer::start().await?;
     let root = tempfile::tempdir()?;
-    let server = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let server = TokioServer::start_conformance(settings(root.path(), &jwks.url)?).await?;
     let result = async {
         scenarios::seed(server.base_url()).await?;
         scenarios::pages_and_refusals(server.base_url(), false).await
@@ -106,7 +106,7 @@ async fn effects_pages_are_request_scoped_and_survive_a_whole_server_reopen()
         jwks.shutdown().await?;
         return Err(error);
     }
-    let server = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let server = TokioServer::start_conformance(settings(root.path(), &jwks.url)?).await?;
     let result = scenarios::pages_and_refusals(server.base_url(), true).await;
     let stopped = server.shutdown().await;
     let fixture = jwks.shutdown().await;

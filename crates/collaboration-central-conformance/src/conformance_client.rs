@@ -49,6 +49,27 @@ impl ConformanceClient {
             AccessCredentials::Staging(access) => Some(access),
         }
     }
+
+    pub async fn set_object_time(
+        &self,
+        address: collaboration_central_core::ObjectAddress,
+        now: collaboration_central_core::RegistryTime,
+    ) -> ConformanceResult<()> {
+        self.with_owner_access(
+            self.client
+                .post(format!("{}/admin/v1/conformance/runtime", self.base_url)),
+        )?
+        .json(&crate::RuntimeControlRequest {
+            address,
+            command: crate::RuntimeControl::SetTime { now },
+        })
+        .send()
+        .await?
+        .error_for_status()?
+        .bytes()
+        .await?;
+        Ok(())
+    }
     fn as_owner(
         &self,
         request: reqwest::RequestBuilder,
@@ -129,6 +150,26 @@ impl ConformanceClient {
                     .post(format!("{}/admin/v1/conformance/access", self.base_url)),
             )?
             .json(&serde_json::json!({"assertion":assertion,"path":path}))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?)
+    }
+
+    /// Advance the conformance Access clock before checking these exact bytes.
+    pub async fn verify_access_assertion_at(
+        &self,
+        assertion: String,
+        path: &str,
+        now: collaboration_central_core::RegistryTime,
+    ) -> ConformanceResult<crate::AccessVerificationOutcome> {
+        Ok(self
+            .with_owner_access(
+                self.client
+                    .post(format!("{}/admin/v1/conformance/access", self.base_url)),
+            )?
+            .json(&serde_json::json!({"assertion":assertion,"path":path,"now":now}))
             .send()
             .await?
             .error_for_status()?

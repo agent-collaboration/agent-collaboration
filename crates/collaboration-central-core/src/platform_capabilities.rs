@@ -45,6 +45,10 @@ pub enum UpgradeFailure {
 pub trait CentralPlatform: Clone + Send + Sync + 'static {
     type Host: ObjectHost;
     fn clock(&self) -> &dyn runtime_primitives::Clock;
+    #[cfg(feature = "conformance")]
+    fn conformance_access_clock(&self) -> Option<&crate::ConformanceAccessClock> {
+        None
+    }
     fn ids(&self) -> &dyn runtime_primitives::IdSource;
     fn transport_object(
         &self,

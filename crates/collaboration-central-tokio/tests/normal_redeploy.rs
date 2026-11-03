@@ -78,7 +78,7 @@ async fn surviving_normal_socket_is_read_before_the_honest_reconnect() -> Confor
     let root = tempfile::tempdir()?;
     let databases = imported_board_fixture::arrange_normal_redeploy_boards(root.path()).await?;
     let keys = JwksFixtureServer::start().await?;
-    let server = TokioServer::start(settings(root.path(), &keys)?).await?;
+    let server = TokioServer::start_conformance(settings(root.path(), &keys)?).await?;
     let proof = async {
         let mut prepared =
             state::NormalRedeployState::prepare(server.base_url(), databases).await?;
@@ -114,7 +114,7 @@ async fn staging_normal_rows_pass_across_local_server_reopen() -> ConformanceRes
     ] = imported_board_fixture::arrange_normal_redeploy_corpus(root.path()).await?;
     let keys = JwksFixtureServer::start().await?;
     let proof = async {
-        let first = TokioServer::start(settings(root.path(), &keys)?).await?;
+        let first = TokioServer::start_conformance(settings(root.path(), &keys)?).await?;
         let prepared = async {
             state::run_preludes(
                 first.base_url(),
@@ -129,7 +129,7 @@ async fn staging_normal_rows_pass_across_local_server_reopen() -> ConformanceRes
         let prepared = prepared?;
         stopped?;
         let closed = prepared.observe_server_close().await?;
-        let second = TokioServer::start(settings(root.path(), &keys)?).await?;
+        let second = TokioServer::start_conformance(settings(root.path(), &keys)?).await?;
         println!(
             "NORMAL_REDEPLOY_STAGE second_server_started_on_same_root_before_reconnect passed"
         );

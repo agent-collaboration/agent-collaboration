@@ -77,11 +77,12 @@ where
         else {
             return Err(CallFailure::AnswerLost);
         };
-        let deadline = io.now().after(*copy_ack_wait);
+        let armed_at = io.now();
+        let deadline = armed_at.after(*copy_ack_wait);
         #[cfg(feature = "conformance")]
         if let ObjectWork::Copy { wait_probe, .. } = &self.work {
             wait_probe
-                .enter_attempt()
+                .enter_attempt(armed_at, deadline)
                 .map_err(|_| CallFailure::AnswerLost)?;
         }
         loop {

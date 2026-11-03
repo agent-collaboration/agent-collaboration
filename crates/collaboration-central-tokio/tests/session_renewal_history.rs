@@ -443,7 +443,7 @@ async fn run_normal_case(base: &str, case: RenewalCase) -> ConformanceResult<()>
 async fn run_native_case(case: RenewalCase) -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
-    let server = TokioServer::start(TokioSettings {
+    let server = TokioServer::start_conformance(TokioSettings {
         root: root.path().into(),
         access_policy: fixture_policy(),
         jwks_url: jwks.url.clone(),

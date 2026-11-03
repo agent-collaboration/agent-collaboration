@@ -163,7 +163,7 @@ async fn retired_health_repair_and_migrate_keep_the_minimal_receipt_across_two_r
             return Err("native retired fixture arranged a different project".into());
         }
         // Act through real owner Retire; no private receiver receipt is written.
-        let first = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+        let first = TokioServer::start_conformance(settings(root.path(), &jwks.url)?).await?;
         let retired = retire_at_literal_copy_time(first.base_url()).await;
         let stopped = first.shutdown().await;
         retired?;
@@ -172,7 +172,7 @@ async fn retired_health_repair_and_migrate_keep_the_minimal_receipt_across_two_r
         println!("OWNER_RETIRED_REOPEN_STAGE history999_arranged passed");
         // Act and assert twice on fresh owning servers, inspecting history only at rest.
         for reopen in 1..=2 {
-            let server = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+            let server = TokioServer::start_conformance(settings(root.path(), &jwks.url)?).await?;
             let observed = retired_owner_operations(server.base_url()).await;
             let stopped = server.shutdown().await;
             observed?;

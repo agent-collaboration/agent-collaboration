@@ -34,7 +34,7 @@ async fn shared_copy_assertions_use_real_storage_sessions_and_physical_restarts(
             })
         }
     };
-    let first = TokioServer::start(settings()?).await?;
+    let first = TokioServer::start_conformance(settings()?).await?;
     let client = ConformanceClient::new(first.base_url())?;
     let server = Arc::new(tokio::sync::Mutex::new(Some(first)));
     let proof = run_composed_copy_suite(client, {
@@ -48,7 +48,7 @@ async fn shared_copy_assertions_use_real_storage_sessions_and_physical_restarts(
                     .ok_or("native restart without server")?
                     .shutdown()
                     .await?;
-                let next = TokioServer::start(settings()?).await?;
+                let next = TokioServer::start_conformance(settings()?).await?;
                 let client = ConformanceClient::new(next.base_url())?;
                 *slot = Some(next);
                 Ok(client)
