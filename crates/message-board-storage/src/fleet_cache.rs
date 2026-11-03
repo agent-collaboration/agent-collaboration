@@ -259,3 +259,7 @@ mod login_storage_tests;
 #[cfg(test)]
 #[path = "fleet_registration_storage_test.rs"]
 mod registration_storage_tests;
+
+#[cfg(test)]
+#[path = "fleet_cache_files_test.rs"]
+mod file_privacy_tests;

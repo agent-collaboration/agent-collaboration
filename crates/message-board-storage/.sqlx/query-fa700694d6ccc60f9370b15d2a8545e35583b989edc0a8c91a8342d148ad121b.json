@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "DELETE FROM fleet_login",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "fa700694d6ccc60f9370b15d2a8545e35583b989edc0a8c91a8342d148ad121b"
+}

@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO fleet_session_registrations(registration_id,operation_id,installation_id,binding_address,endpoint_service_id,endpoint_id,project_id,checked_workspace_id,started_by_kind,started_by_service_id,started_by_endpoint_id,started_by_session_id,remote_start_id,isolation_kind,isolation_instance_id,working_directory,repository,commit_id,model,machine_environment,lifecycle_state,creation_state,session_service_id,session_endpoint_id,session_id,organization_id,abandonment_cause,refused_setting,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "75f1e46334d5cd05e30f462b5495032a0bd55169be3d1108f0aa85c7fd5d6d95"
+}

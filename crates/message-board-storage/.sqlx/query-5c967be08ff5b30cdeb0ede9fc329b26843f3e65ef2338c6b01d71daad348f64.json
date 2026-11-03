@@ -1,0 +1,252 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT registration_id AS \"registration_id!: String\",operation_id AS \"operation_id!: String\",installation_id AS \"installation_id!: String\",binding_address AS \"binding_address!: String\",endpoint_service_id AS \"endpoint_service_id!: String\",endpoint_id AS \"endpoint_id!: String\",project_id AS \"project_id!: String\",checked_workspace_id AS \"checked_workspace_id!: String\",started_by_kind AS \"started_by_kind!: String\",started_by_service_id AS \"started_by_service_id?: String\",started_by_endpoint_id AS \"started_by_endpoint_id?: String\",started_by_session_id AS \"started_by_session_id?: String\",remote_start_id AS \"remote_start_id?: String\",isolation_kind AS \"isolation_kind!: String\",isolation_instance_id AS \"isolation_instance_id!: String\",working_directory AS \"working_directory!: String\",repository AS \"repository?: String\",commit_id AS \"commit_id?: String\",model AS \"model?: String\",machine_environment AS \"machine_environment!: String\",lifecycle_state AS \"lifecycle_state!: String\",creation_state AS \"creation_state?: String\",session_service_id AS \"session_service_id?: String\",session_endpoint_id AS \"session_endpoint_id?: String\",session_id AS \"session_id?: String\",organization_id AS \"organization_id?: String\",abandonment_cause AS \"abandonment_cause?: String\",refused_setting AS \"refused_setting?: String\",created_at AS \"created_at!: i64\",updated_at AS \"updated_at!: i64\" FROM fleet_session_registrations WHERE session_service_id=? AND session_endpoint_id=? AND session_id=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "registration_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "operation_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "installation_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "binding_address!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "endpoint_service_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "endpoint_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "project_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "checked_workspace_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "started_by_kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "started_by_service_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "started_by_endpoint_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "started_by_session_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "remote_start_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "isolation_kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "isolation_instance_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "working_directory!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "repository?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "commit_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "model?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "machine_environment!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "lifecycle_state!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "creation_state?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 22,
+        "name": "session_service_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 23,
+        "name": "session_endpoint_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 24,
+        "name": "session_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 25,
+        "name": "organization_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 26,
+        "name": "abandonment_cause?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 27,
+        "name": "refused_setting?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 28,
+        "name": "created_at!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 29,
+        "name": "updated_at!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "5c967be08ff5b30cdeb0ede9fc329b26843f3e65ef2338c6b01d71daad348f64"
+}
