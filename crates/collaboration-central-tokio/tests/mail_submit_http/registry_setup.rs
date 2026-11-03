@@ -283,52 +283,103 @@ impl GrantFixture {
     }
 }
 
-/// Create genuine public Unheld state, without any central publication bookkeeping.
-// This shared arranger is used by the ordinary-publication target.
+/// Admit public ImportTask input; the actual native Fleet owns execution and its lease hook.
 pub(super) async fn import_unheld(
     root: &Path,
     config: RegistryConfig,
     database: DatabaseId,
 ) -> ConformanceResult<()> {
-    let GrantFixture {
-        objects,
-        registry,
-        host,
-    } = GrantFixture::open(root, config, database).await?;
-    let mut engine = Engine::new(registry, host.clone());
-    engine.register(fleet_sync_lease::ImportTask::<
-        Store,
-        sqlx_turso::Turso,
-        fleet_sync_lease::NoLeaseChangeHook,
-    >::new(
-        config,
-        host.clone(),
-        Arc::new(fleet_sync_lease::NoLeaseChangeHook),
-    ))?;
-    let proof = async {
-        let request = Import {
-            attempt: RequestId::new(Uuid::now_v7())?,
-            database,
-            digest: ImportDigest::new("d".repeat(64))?,
-        };
-        let id = engine
-            .start::<fleet_sync_lease::ImportTask<
-                Store,
-                sqlx_turso::Turso,
-                fleet_sync_lease::NoLeaseChangeHook,
-            >>(&lifecycle_request_key(request.attempt)?, request)
-            .await?;
-        let OperationState::Completed { result } = engine.status(&id).await?.state else {
-            return Err("public Unheld import did not complete".into());
-        };
-        if serde_json::from_slice::<ImportAnswer>(&result)? != ImportAnswer::Imported {
-            return Err("public Unheld import was not newly committed".into());
-        }
-        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
-    }
-    .await;
+    use durable_steps::{JournalScope, StoreError};
+    use sqlx_core::{
+        connection::{ConnectOptions, Connection},
+        query::query,
+        row::Row,
+    };
+    let objects = ObjectStore::open(root).await?;
+    let registry = objects
+        .object(
+            ObjectKey::new("fleet")?,
+            Default::default(),
+            Arc::new(CoreHost::for_store(SetupIo, config.authoritative_receiver)),
+        )
+        .await?;
+    let request = Import {
+        attempt: RequestId::new(Uuid::now_v7())?,
+        database,
+        digest: ImportDigest::new("d".repeat(64))?,
+    };
+    let key = lifecycle_request_key(request.attempt)?;
+    let operation = registry
+        .transaction(move |scope| {
+            Box::pin(async move {
+                // Only kind/version/input are supplied here. No NoHook engine runs.
+                scope
+                    .admit::<fleet_sync_lease::ImportTask<
+                        Store,
+                        sqlx_turso::Turso,
+                        fleet_sync_lease::NoLeaseChangeHook,
+                    >>(&key, &request)
+                    .await
+                    .map(|admitted| admitted.id())
+                    .map_err(StoreError::backend)
+            })
+        })
+        .await?;
     objects.close().await?;
-    proof
+    let platform = collaboration_central_tokio::TokioCentralPlatform::new(
+        "http://127.0.0.1:1/unused-fixture-jwks",
+        Arc::new(SetupIo),
+        |_| {},
+        root,
+        config,
+        collaboration_central_tokio::DeliveryConfig {
+            relay_peer: "019f0000-0000-7000-8000-000000005240"
+                .to_owned()
+                .try_into()?,
+        },
+        Duration::from_secs(2),
+        Duration::from_secs(2),
+    )
+    .await?;
+    // Opening the native owner discovers the committed task and drives its real
+    // Copy creation and same-transaction Fleet hook. This is component setup,
+    // not proof of the admin HTTP import workflow.
+    let proof = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let mut observer = sqlx_turso::TursoConnectOptions::new()
+                .filename(root.join("fleet.db"))
+                .read_only(true)
+                .connect()
+                .await?;
+            let row = query::<sqlx_turso::Turso>(
+                "SELECT state,result FROM _fleet_sync_operations WHERE operation_id=?",
+            )
+            .bind(operation.as_uuid().to_string())
+            .fetch_one(&mut observer)
+            .await?;
+            let state = row.try_get::<String, _>("state")?;
+            let result = row.try_get::<Option<Vec<u8>>, _>("result")?;
+            observer.close().await?;
+            match state.as_str() {
+                "running" => tokio::task::yield_now().await,
+                "completed" => {
+                    if serde_json::from_slice::<ImportAnswer>(
+                        &result.ok_or("real import lost its result")?,
+                    )? != ImportAnswer::Imported
+                    {
+                        return Err("real native import did not newly commit Unheld".into());
+                    }
+                    return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
+                }
+                _ => return Err(format!("real native import stopped as {state}").into()),
+            }
+        }
+    })
+    .await;
+    let closed = platform.shutdown().await;
+    proof??;
+    closed?;
+    Ok(())
 }
 
 /// Arrange genuine imported state and publish its physical seed before the server owns it.
