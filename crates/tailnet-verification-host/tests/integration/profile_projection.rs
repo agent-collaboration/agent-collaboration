@@ -28,7 +28,7 @@ struct ProfileCase {
     reason = "Assert the contract; propagate fixture errors."
 )]
 fn matches_ten_original_disposable_profile_scenarios() -> Result<(), Box<dyn std::error::Error>> {
-    let cases: Vec<ProfileCase> = serde_json::from_str(include_str!("profile-cases.json"))?;
+    let cases: Vec<ProfileCase> = serde_json::from_str(include_str!("../profile-cases.json"))?;
     for case in cases {
         let root = tempfile::tempdir()?;
         let path = root.path().join("profile");
