@@ -46,20 +46,20 @@ Today the **project's writer machine** scans its local project store and sends n
 
 A wake has no edit today (`WakeAction` is pause, resume, cancel: `wakeup_mutations.rs:11–15`, `:77–121`), and D4a adds none: changing a wake means cancelling it and setting a new one.
 
-`fleet_wake_state` (Fleet store, not an `automation_` table): `id` UUIDv7 PK (= the wake id), `first_fired_at` (nullable), `first_fire_item_id` (nullable), `created_at`, `updated_at`. One row per wake, holding only the first-fire receipt U15 asks for; it is removed with the wake's definition. There is **no per-occurrence row in central**: an occurrence's id is computed from the wake id and its due time, so the latest and the previous occurrence ids are always known, and D1's outbox already answers whether an id exists, was pushed, or reached the inbox.
+`fleet_wake_state` (Fleet store, not an `automation_` table): `id` UUIDv7 PK (= the wake id), `pending_occurrence_id` (nullable: the latest admitted occurrence not yet pushed), `first_fired_at` (nullable), `first_fire_item_id` (nullable), `created_at`, `updated_at`. One row per wake, holding only the pending pointer and the first-fire receipt U15 asks for; it is removed with the wake's definition. There is **no per-occurrence row in central**: an occurrence's id is computed from the wake id and its due time, and D1's outbox answers whether an id exists, was pushed, or reached the inbox. Computed ids alone cannot say which earlier occurrence is still queued after downtime, so `pending_occurrence_id` names it: it is set in the transaction that admits an occurrence and cleared when the status observer sees that item pushed.
 
 **Sent** means admitted to the Fleet outbox; **fired** means accepted into the target's inbox. These words are the same on every surface.
 
 | Event | What happens, in one Fleet transaction |
 | --- | --- |
 | Alarm | Compute the latest due time ≤ now, ≥ `resumed_at`, < `expires_at`. Admit its message under the computed id. If the outbox already holds that id, admission answers `replayed` and nothing else happens: another alarm in the same period already sent it, and nothing is cancelled. A crash before commit replays to the same id |
-| Older occurrence still queued (decision 1 (a) only) | Before admitting the new one, cancel the older one **only if it has never been pushed** (D1's definitely-unsent cancellation, `outbox_admission.rs:129`). One already pushed stays as it is. So “latest only” is best effort: a target that was briefly reachable can receive two |
-| Pause, cancel | set `paused_at` or `cancelled_at`; cancel a queued occurrence only if it has never been pushed, as above |
+| Older occurrence still queued (decision 1 (a) only) | Before admitting the new one, cancel the item named by `pending_occurrence_id` **only if it has never been pushed** (D1's definitely-unsent cancellation, `outbox_admission.rs:129`). One already pushed stays as it is. So “latest only” is best effort: a target that was briefly reachable can receive two |
+| Pause, cancel | set `paused_at` or `cancelled_at`; cancel the item named by `pending_occurrence_id` if it has never been pushed, and clear the pointer |
 | Resume | set `resumed_at`; ticks due before it are never admitted, as today (`wakeup_mutations.rs:87–112`); a wake with no due time left finishes |
 | Expiry | nothing is admitted at or after `expires_at`; a never-pushed occurrence is cancelled |
 | Target inbox accepts an occurrence | the Fleet's status observer (the same observer as D2's) sets `first_fired_at` and `first_fire_item_id` if they are empty |
 
-**Proof cases:** two alarms in the same period (one message, nothing cancelled); pause in one period and resume two periods later (no paused tick is sent); the target's receipt lost while a newer occurrence supersedes (no state goes backwards; the pushed one is not cancelled). For notifications: a second pass in the same slot after a new membership appears (no second listing under the id); a pass whose activity exceeds the root cap (the rest arrives next slot, nothing skipped); a superseded epoch cursor (resumes from the project's position).
+**Proof cases:** two alarms in the same period (one message, nothing cancelled); occurrence t0 admitted and never pushed, the Fleet down across t1–t4, restart at t5 (t0 cancelled, only t5 delivered); pause after the same downtime (t0 cancelled); pause in one period and resume two periods later (no paused tick is sent); the target's receipt lost while a newer occurrence supersedes (no state goes backwards; the pushed one is not cancelled). For notifications: a second pass in the same slot after a new membership appears (no second listing under the id); a pass whose activity exceeds the root cap (the rest arrives next slot, nothing skipped); a superseded epoch cursor (resumes from the project's position).
 
 ## Notification passes
 
