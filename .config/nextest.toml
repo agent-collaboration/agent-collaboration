@@ -41,7 +41,7 @@ threads-required = "num-test-threads"
 # U66 / MS-10 requires a five-minute minimum repeat gap. This retained real-timer
 # protocol proof observes both firings; its own receive deadlines remain bounded.
 [[profile.ci.overrides]]
-filter = "binary(wakeup_repeating_delivery) & test(=recurring_wake_stores_and_dispatches_two_distinct_pushes)"
+filter = "(package(=collaboration-service) & binary(=integration) & test(=wakeup_repeating_delivery::recurring_wake_stores_and_dispatches_two_distinct_pushes))"
 slow-timeout = { period = "60s", terminate-after = 6 }
 
 # The real ACP child emits FIFO receipts over a Unix socket within two seconds.
@@ -56,7 +56,7 @@ threads-required = "num-test-threads"
 # deadlines intact, but allow only one heavy case while ordinary tests retain
 # the remaining scheduler slots. Process-runtime cases still require every slot.
 [[profile.ci.overrides]]
-filter = "binary(=held_queue_depth) | binary(=project_description_encoded_sizes) | (package(=message-board-storage) & test(=project_record_size_tests::history_growing_records_are_measured_without_capping_or_truncating))"
+filter = "(package(=collaboration-service) & binary(=integration) & test(/^held_queue_depth::/)) | (package(=collaboration-service) & binary(=integration) & test(/^project_description_encoded_sizes::/)) | (package(=message-board-storage) & test(=project_record_size_tests::history_growing_records_are_measured_without_capping_or_truncating))"
 test-group = "heavy-tests"
 threads-required = 1
 slow-timeout = { period = "60s", terminate-after = 15 }
@@ -64,12 +64,12 @@ slow-timeout = { period = "60s", terminate-after = 15 }
 # These branch-added fixture workloads were also slow in the retained Linux CI
 # run. Bound concurrent heavy work instead of adding another timing exception.
 [[profile.ci.overrides]]
-filter = "(package(=collaboration-service) & (test(=subscription_delivery::subscription_service::intent_progress_tests::deferred_history_does_not_grow_the_next_intent_pass) | (binary(=board_control_path) & test(=control_thread_list_pages_escape_heavy_holders_without_skips_or_repeats)) | (binary(=board_metadata_records) & test(=large_metadata_lists_continue_before_the_control_frame_limit)) | binary(=board_write_scale) | binary(=bounded_fleet_reads) | (binary(=bounded_post_lookup) & test(=post_lookup_costs_ignore_unopened_project_files))))"
+filter = "(package(=collaboration-service) & (test(=subscription_delivery::subscription_service::intent_progress_tests::deferred_history_does_not_grow_the_next_intent_pass) | (package(=collaboration-service) & binary(=integration) & test(=board_control_path::control_thread_list_pages_escape_heavy_holders_without_skips_or_repeats)) | (package(=collaboration-service) & binary(=integration) & test(=board_metadata_records::large_metadata_lists_continue_before_the_control_frame_limit)) | (package(=collaboration-service) & binary(=integration) & test(/^board_write_scale::/)) | (package(=collaboration-service) & binary(=integration) & test(/^bounded_fleet_reads::/)) | (package(=collaboration-service) & binary(=integration) & test(=bounded_post_lookup::post_lookup_costs_ignore_unopened_project_files))))"
 test-group = "heavy-tests"
 threads-required = 1
 
 [[profile.ci.overrides]]
-filter = "binary(=request_effects_public) & test(=a_large_fleet_write_returns_a_signed_public_continuation)"
+filter = "(package(=collaboration-service) & binary(=integration) & test(=request_effects_public::a_large_fleet_write_returns_a_signed_public_continuation))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
