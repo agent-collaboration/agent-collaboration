@@ -38,12 +38,6 @@ filter = "(package(=codex-router-cli) & binary(=integration) & test(/^proxy_over
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
-# U66 / MS-10 requires a five-minute minimum repeat gap. This retained real-timer
-# protocol proof observes both firings; its own receive deadlines remain bounded.
-[[profile.ci.overrides]]
-filter = "(package(=collaboration-service) & binary(=integration) & test(=wakeup_repeating_delivery::recurring_wake_stores_and_dispatches_two_distinct_pushes))"
-slow-timeout = { period = "60s", terminate-after = 6 }
-
 # The real ACP child emits FIFO receipts over a Unix socket within two seconds.
 # Give it the existing process reservation while keeping that deadline intact.
 [[profile.ci.overrides]]

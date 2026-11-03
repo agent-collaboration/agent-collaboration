@@ -36,6 +36,7 @@ pub struct WakeDeliverySender {
     pub(crate) delivery: Arc<dyn SessionMessageDelivery>,
     pub(crate) configuration: crate::AutomationConfigurationHandle,
     pub(crate) machine_identity: collaboration_contracts::MachineIdentity,
+    pub(crate) clock: Arc<dyn runtime_primitives::Clock>,
 }
 
 impl WakeDeliverySender {
@@ -57,6 +58,7 @@ impl WakeDeliverySender {
             delivery,
             configuration,
             machine_identity,
+            clock: Arc::new(runtime_primitives::SystemClock),
         }
     }
 }
@@ -132,7 +134,7 @@ impl WakeDeliverySender {
             .await
             .claim_delivery::<SessionRef, MessageContent, CodexGeneration>(
                 &delivery_id,
-                chrono::Utc::now().timestamp_millis(),
+                self.clock.now().unix_millis(),
             )
             .await?;
         drop(configuration_lease);
@@ -221,7 +223,12 @@ impl WakeDeliverySender {
                 .map_err(crate::map_interaction_storage_error)?;
         } else {
             self.interactions
-                .settle_wake_push(&push_id, receipt.clone(), chrono::Utc::now())
+                .settle_wake_push(
+                    &push_id,
+                    receipt.clone(),
+                    chrono::DateTime::from_timestamp_millis(self.clock.now().unix_millis())
+                        .ok_or(StorageError::InvalidRecord)?,
+                )
                 .await
                 .map_err(crate::map_interaction_storage_error)?;
         }
@@ -266,7 +273,7 @@ impl WakeDeliverySender {
                 attempt_id: claim.attempt_id,
                 effects: sink.latest.lock().await.clone(),
                 result,
-                now_ms: chrono::Utc::now().timestamp_millis(),
+                now_ms: self.clock.now().unix_millis(),
             })
             .await?;
         Ok(())
