@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Next work: D2, D3, D4a, D4b</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content"></ex-nav>
+<ex-document id="content">
+<h1>Next work after D1: D2, D3, D4a, D4b</h1>
+<p>The designs for the deliverables after D1. D2 is written in full (obligations, program design, proof). D3, D4a and D4b are program designs with their tables; their obligations and proofs are written when each starts. Decisions so far: <a href="decisions.html">decisions.html</a>. D1: <a href="d1.html">d1.html</a>.</p>
+<ex-callout title="Tables for your review (D2)" tone="note" icon="database">
+<p>D2 adds two small tables, shown in its program design below: <code>fleet_remote_creates</code> in the Fleet (keeps the requester after the command's content is dropped, refuses a reused id with different content, fixes the result message's id up front) and <code>mail_create_commands</code> on each machine (binds a command to its one create and one first-input prompt). Strike either if you see a better home.</p>
+</ex-callout>
+<ex-callout title="One choice for you (D3)" tone="decision" icon="users">
+<p>Moving each machine to its UUIDv7 id means rewriting stored session addresses that carry the old UUIDv4 service id. Local stores are rewritten at upgrade. But <strong>project content also stores session addresses</strong> (thread participants, watches, actors), it replicates between machines, and project tables are out of scope.</p>
+<ul>
+<li><strong>A (recommended):</strong> the Fleet records each machine's former service id on its enrollment (<code>former_service_id</code>), and reading old project records resolves the old id to the machine through it. Project content stays untouched. Cost: one recorded column and a lookup when reading old records.</li>
+<li><strong>B:</strong> rewrite the session addresses inside project content too. Cost: brings project tables into scope for this one change, rewritten on every machine and in central.</li>
+</ul>
+</ex-callout>
+<h2 id="d2">D2: Fleet sends and remote create</h2>
+<ex-markdown id="d2-spec" label="D2 obligations" src="./specification/remote-sessions.md"></ex-markdown>
+<ex-markdown id="d2-pd" label="D2 program design" src="./program-design/d2-fleet-sends-and-remote-create.md"></ex-markdown>
+<ex-markdown id="d2-vd" label="D2 proof" src="./verification-design/d2-fleet-sends-and-remote-create.md"></ex-markdown>
+<h2 id="d3">D3: local cleanup</h2>
+<ex-markdown id="d3-pd" label="D3 program design" src="./program-design/d3-local-cleanup.md"></ex-markdown>
+<h2 id="d4a">D4a: wakes and notifications</h2>
+<ex-markdown id="d4a-pd" label="D4a program design" src="./program-design/d4a-wakes-and-notifications.md"></ex-markdown>
+<h2 id="d4b">D4b: schedules</h2>
+<ex-markdown id="d4b-pd" label="D4b program design" src="./program-design/d4b-schedules.md"></ex-markdown>
+</ex-document>
+</body>
+</html>
