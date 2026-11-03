@@ -51,11 +51,14 @@ async fn registration_replays_the_committed_answer_after_the_server_process_dies
         origin: Origin::Empty,
     };
     let frame = FrameId::new(Uuid::now_v7())?;
-    let address = ObjectAddress::Connection(SERVICE.to_owned().try_into()?);
+    let connection = ConformanceClient::new(&first.base)?
+        .active_connection(SERVICE, PeerId::new(peer.peer)?)
+        .await?;
+    let address = ObjectAddress::Fleet;
     control(
         &first.base,
         address.clone(),
-        RuntimeControl::DropNextAnswer { frame },
+        RuntimeControl::DropNextAnswer { connection, frame },
     )
     .await?;
     peer.socket
@@ -70,13 +73,13 @@ async fn registration_replays_the_committed_answer_after_the_server_process_dies
     let observed = control(
         &first.base,
         address,
-        RuntimeControl::AwaitDroppedAnswer { frame },
+        RuntimeControl::AwaitDroppedAnswer { connection, frame },
     )
     .await?;
     assert!(
-        matches!(observed.answer,collaboration_central_conformance::AnswerFaultObservation::Dropped {frame:actual} if actual==frame)
+        matches!(observed.answer,collaboration_central_conformance::AnswerFaultObservation::Dropped {connection:actual_connection,frame:actual} if actual_connection==connection && actual==frame)
     );
-    let path = root.path().join("registry.db");
+    let path = root.path().join("fleet.db");
     let (id, result) = journal_result(&path, "fleet-sync.register").await?;
     let expected: RegistrationAnswer = serde_json::from_slice(&result)?;
     creation_scenarios::registered(&expected, request.writer)?;

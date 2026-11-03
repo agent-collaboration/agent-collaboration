@@ -14,6 +14,14 @@ const SELECTED_KINDS: [&str; 4] = [
     "central.copy-session-write",
 ];
 
+fn other_object() -> Result<ObjectAddress, Box<dyn std::error::Error + Send + Sync>> {
+    Ok(ObjectAddress::Copy(
+        "019f0000-0000-7000-8000-000000000899"
+            .to_owned()
+            .try_into()?,
+    ))
+}
+
 fn invocation(kind: &str) -> serde_json::Result<Vec<u8>> {
     serde_json::to_vec(&json!({
         "kind": kind,
@@ -53,11 +61,7 @@ async fn selected_hold(
         DispatchFaultObservation::Armed { .. }
     ));
     let expected = invocation(kind)?;
-    tokio::time::timeout(
-        BOUND,
-        faults.before_dispatch(&ObjectAddress::Fleet, &expected),
-    )
-    .await??;
+    tokio::time::timeout(BOUND, faults.before_dispatch(&other_object()?, &expected)).await??;
 
     let caller = faults.clone();
     let request = expected.clone();
@@ -176,7 +180,7 @@ async fn selected_drop(call: DispatchCallSelector, kind: &str) -> TestResult {
         ObjectReplyFaultObservation::Armed { .. }
     ));
     let expected = invocation(kind)?;
-    assert!(!faults.drop_successful_object_reply(&ObjectAddress::Fleet, &expected)?);
+    assert!(!faults.drop_successful_object_reply(&other_object()?, &expected)?);
     assert!(faults.drop_successful_object_reply(&destination, &expected)?);
     let observed = tokio::time::timeout(
         BOUND,
@@ -379,7 +383,7 @@ async fn held_reply_binding_rejects_unheld_states_and_preserves_an_armed_fault()
     assert!(futures_util::poll!(&mut forwarding).is_pending());
     faults
         .control(RuntimeControl::DropNextObjectReply {
-            destination: ObjectAddress::Fleet,
+            destination: other_object()?,
         })
         .await?;
     assert!(matches!(
@@ -387,7 +391,7 @@ async fn held_reply_binding_rejects_unheld_states_and_preserves_an_armed_fault()
         Err(RuntimeControlFailure::AlreadyArmed)
     ));
     assert!(!faults.drop_successful_object_reply(&destination, b"held request")?);
-    assert!(faults.drop_successful_object_reply(&ObjectAddress::Fleet, b"original fault")?);
+    assert!(faults.drop_successful_object_reply(&other_object()?, b"original fault")?);
     // As with the existing reply controls, Dropped can be replaced by a new arm.
     faults
         .control(RuntimeControl::DropHeldDispatchReply)
@@ -437,7 +441,7 @@ async fn held_reply_binding_ignores_a_bypassing_submit_and_same_item_with_new_ca
             ObjectReplyFaultObservation::Armed { .. }
         ));
     }
-    assert!(!faults.drop_successful_object_reply(&ObjectAddress::Fleet, &expected)?);
+    assert!(!faults.drop_successful_object_reply(&other_object()?, &expected)?);
     faults.control(RuntimeControl::ResumeDispatch).await?;
     tokio::time::timeout(BOUND, forwarding).await??;
     assert!(faults.drop_successful_object_reply(&destination, &expected)?);

@@ -1741,6 +1741,7 @@ dependencies = [
  "durable-steps",
  "fleet-admission",
  "fleet-sync-protocol",
+ "fleet-sync-session",
  "futures-util",
  "message-board",
  "reqwest 0.12.28",

@@ -73,7 +73,7 @@ async fn forward_command(command: Command, env: Env) -> Result<Response> {
         Command::FleetSchema => (ObjectAddress::Fleet, "/test/fleet-schema", None),
         #[cfg(feature = "conformance-faults")]
         Command::SessionBarrier {
-            service,
+            service: _service,
             connection,
         } => (
             ObjectAddress::Fleet,
@@ -81,32 +81,38 @@ async fn forward_command(command: Command, env: Env) -> Result<Response> {
             Some(serde_json::to_string(&connection)?),
         ),
         #[cfg(feature = "conformance-faults")]
-        Command::SessionJournal { service, operation } => (
+        Command::SessionJournal {
+            service: _service,
+            operation,
+        } => (
             ObjectAddress::Fleet,
             "/test/session-finalize-journal",
             Some(serde_json::to_string(&operation)?),
         ),
-        Command::HolderObservation { service } => {
+        Command::HolderObservation { service: _service } => {
             (ObjectAddress::Fleet, "/test/holder-observation", None)
         }
         Command::HolderSessionIdentity {
-            service,
+            service: _service,
             connection,
         } => (
             ObjectAddress::Fleet,
             "/test/holder-session-identity",
             Some(serde_json::to_string(&connection)?),
         ),
-        Command::SessionFault { service, command } => (
+        Command::SessionFault {
+            service: _service,
+            command,
+        } => (
             ObjectAddress::Fleet,
             "/test/session-faults",
             Some(serde_json::to_string(&command)?),
         ),
-        Command::SessionConnections { service } => {
+        Command::SessionConnections { service: _service } => {
             (ObjectAddress::Fleet, "/test/session-connections", None)
         }
         Command::AttachmentCodec {
-            service,
+            service: _service,
             connection,
         } => (
             ObjectAddress::Fleet,
@@ -114,16 +120,22 @@ async fn forward_command(command: Command, env: Env) -> Result<Response> {
             Some(serde_json::to_string(&connection)?),
         ),
         Command::SessionAlarm {
-            service,
+            service: _service,
             connection,
         } => (
             ObjectAddress::Fleet,
             "/test/session-alarm",
             Some(serde_json::to_string(&connection)?),
         ),
-        Command::ForwardState { service } => (ObjectAddress::Fleet, "/test/forward-state", None),
-        Command::HolderFrames { service } => (ObjectAddress::Fleet, "/test/holder-frames", None),
-        Command::Origins { service } => (ObjectAddress::Fleet, "/test/admission-origins", None),
+        Command::ForwardState { service: _service } => {
+            (ObjectAddress::Fleet, "/test/forward-state", None)
+        }
+        Command::HolderFrames { service: _service } => {
+            (ObjectAddress::Fleet, "/test/holder-frames", None)
+        }
+        Command::Origins { service: _service } => {
+            (ObjectAddress::Fleet, "/test/admission-origins", None)
+        }
         Command::SchemaReport { peer } => (
             ObjectAddress::Fleet,
             "/test/schema-report",

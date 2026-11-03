@@ -3,7 +3,7 @@
 use crate::conformance_core_store::{ControlIo, ReceiptStoreHost, new_host};
 use collaboration_central_core::{
     AccessCaller, AccessClientId, BootstrapCommand, EnrollMachine, ObjectBootstrap, ObjectHost,
-    ObjectRuntime, OwnerIdentity, RegistryKind,
+    ObjectRuntime, OwnerIdentity,
 };
 use fleet_sync_lease::{LeasePolicy, RegistryConfig};
 use fleet_sync_protocol::ReceiverId;

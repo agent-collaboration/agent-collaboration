@@ -152,7 +152,7 @@ impl<SharedHost: Host> ObjectHost for TokioStorageHost<SharedHost> {
             && let Some(frame) = identity.answer_frame()
             && self
                 .faults
-                .drop_answer(frame)
+                .drop_answer(to, frame)
                 .map_err(|_| collaboration_central_core::SocketFailure::Closed)?
         {
             return Ok(());

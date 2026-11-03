@@ -15,6 +15,46 @@ pub struct ConformanceClient {
     access: AccessCredentials,
 }
 impl ConformanceClient {
+    /// Select the actual live socket for a normally admitted peer.
+    pub async fn active_connection(
+        &self,
+        service: &str,
+        peer: fleet_sync_protocol::PeerId,
+    ) -> ConformanceResult<fleet_sync_protocol::ConnectionId> {
+        #[derive(serde::Deserialize)]
+        struct AdmittedConnectionObservation {
+            connection: fleet_sync_protocol::ConnectionId,
+            peer: fleet_sync_protocol::PeerId,
+            registration: fleet_sync_session::ConnectionRegistration,
+        }
+        let connections: Vec<AdmittedConnectionObservation> = self
+            .with_owner_access(
+                self.client
+                    .post(format!("{}/__conformance/admission", self.base_url)),
+            )?
+            .json(&serde_json::json!({"kind":"sessionConnections","value":{"service":service}}))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        let mut live = connections.into_iter().filter(|connection| {
+            connection.peer == peer
+                && !matches!(
+                    connection.registration,
+                    fleet_sync_session::ConnectionRegistration::Closed
+                )
+        });
+        let connection = live
+            .next()
+            .ok_or("peer has no live normal socket")?
+            .connection;
+        if live.next().is_some() {
+            return Err("peer has multiple live normal sockets".into());
+        }
+        Ok(connection)
+    }
+
     pub fn new(base_url: &str) -> ConformanceResult<Self> {
         Ok(Self {
             client: reqwest::Client::builder()

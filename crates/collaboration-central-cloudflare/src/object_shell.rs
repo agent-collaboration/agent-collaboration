@@ -3,7 +3,7 @@
 use crate::{CloudflareStorageHost, binding_attachment::BindingAttachment, cloudflare_transport};
 use collaboration_central_core::{
     CopyKind, CoreHost, FleetKind, MailboxKind, ObjectAddress, ObjectHost, ObjectRuntime,
-    PlatformIo, RegistryKind, SessionKind,
+    PlatformIo,
 };
 use durable_steps::{CallFailure, NotSentReason};
 use fleet_sync_lease::RegistryConfig;

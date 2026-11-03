@@ -6,7 +6,7 @@ use crate::runtime_controls::{
     StorageFaultObservation,
 };
 use collaboration_central_core::{ObjectAddress, RegistryTime};
-use fleet_sync_protocol::FrameId;
+use fleet_sync_protocol::{ConnectionId, FrameId};
 use std::{
     future::poll_fn,
     sync::{Arc, Mutex, MutexGuard},
@@ -18,6 +18,8 @@ mod session_faults;
 pub use session_faults::{SessionFaultControl, SessionFaultObservation};
 mod selected_calls;
 use selected_calls::DispatchSelection;
+#[cfg(all(test, feature = "client"))]
+mod connection_drop_test;
 #[cfg(all(test, feature = "client"))]
 mod selected_call_tests;
 
@@ -66,10 +68,12 @@ enum AnswerFault {
     #[default]
     Idle,
     Armed {
+        connection: ConnectionId,
         frame: FrameId,
         observed: Arc<Signal>,
     },
     Dropped {
+        connection: ConnectionId,
         frame: FrameId,
         observed: Arc<Signal>,
     },
@@ -187,16 +191,22 @@ impl RuntimeFaults {
             | StorageFaultObservation::Triggered { .. } => Ok(false),
         }
     }
-    pub fn drop_answer(&self, frame: FrameId) -> Result<bool, RuntimeControlFailure> {
+    pub fn drop_answer(
+        &self,
+        connection: ConnectionId,
+        frame: FrameId,
+    ) -> Result<bool, RuntimeControlFailure> {
         let observed = {
             let mut state = self.state()?;
             match &state.answer {
                 AnswerFault::Armed {
+                    connection: expected_connection,
                     frame: expected,
                     observed,
-                } if *expected == frame => {
+                } if *expected_connection == connection && *expected == frame => {
                     let observed = observed.clone();
                     state.answer = AnswerFault::Dropped {
+                        connection,
                         frame,
                         observed: observed.clone(),
                     };
@@ -294,10 +304,18 @@ impl RuntimeFaults {
             storage: state.storage.clone(),
             answer: match &state.answer {
                 AnswerFault::Idle => AnswerFaultObservation::Idle,
-                AnswerFault::Armed { frame, .. } => AnswerFaultObservation::Armed { frame: *frame },
-                AnswerFault::Dropped { frame, .. } => {
-                    AnswerFaultObservation::Dropped { frame: *frame }
-                }
+                AnswerFault::Armed {
+                    connection, frame, ..
+                } => AnswerFaultObservation::Armed {
+                    connection: *connection,
+                    frame: *frame,
+                },
+                AnswerFault::Dropped {
+                    connection, frame, ..
+                } => AnswerFaultObservation::Dropped {
+                    connection: *connection,
+                    frame: *frame,
+                },
             },
             dispatch: match &state.dispatch {
                 DispatchFault::Idle => DispatchFaultObservation::Idle,
@@ -350,26 +368,31 @@ impl RuntimeFaults {
                 }
                 state.storage = StorageFaultObservation::Armed { after_writes };
             }
-            RuntimeControl::DropNextAnswer { frame } => {
+            RuntimeControl::DropNextAnswer { connection, frame } => {
                 let mut state = self.state()?;
                 if matches!(state.answer, AnswerFault::Armed { .. }) {
                     return Err(RuntimeControlFailure::AlreadyArmed);
                 }
                 state.answer = AnswerFault::Armed {
+                    connection,
                     frame,
                     observed: Arc::default(),
                 };
             }
-            RuntimeControl::AwaitDroppedAnswer { frame } => {
+            RuntimeControl::AwaitDroppedAnswer { connection, frame } => {
                 let observed = match &self.state()?.answer {
                     AnswerFault::Armed {
+                        connection: expected_connection,
                         frame: expected,
                         observed,
                     }
                     | AnswerFault::Dropped {
+                        connection: expected_connection,
                         frame: expected,
                         observed,
-                    } if *expected == frame => observed.clone(),
+                    } if *expected_connection == connection && *expected == frame => {
+                        observed.clone()
+                    }
                     AnswerFault::Idle => return Err(RuntimeControlFailure::NotArmed),
                     AnswerFault::Armed { .. } | AnswerFault::Dropped { .. } => {
                         return Err(RuntimeControlFailure::DifferentFrame);

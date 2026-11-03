@@ -31,6 +31,7 @@ async fn startup_refuses_non_arming_controls_before_discovery() -> ConformanceRe
         RuntimeControl::AwaitDroppedObjectReply,
         RuntimeControl::DropHeldDispatchReply,
         RuntimeControl::AwaitDroppedAnswer {
+            connection: fleet_sync_protocol::ConnectionId::new(durable_steps::Uuid::now_v7())?,
             frame: fleet_sync_protocol::FrameId::new(durable_steps::Uuid::now_v7())?,
         },
     ] {
@@ -53,7 +54,7 @@ async fn startup_refuses_non_arming_controls_before_discovery() -> ConformanceRe
                     copy_ack_wait: Duration::from_secs(2),
                 },
                 vec![RuntimeControlRequest {
-                    address: ObjectAddress::Registry,
+                    address: ObjectAddress::Fleet,
                     command,
                 }],
             ),

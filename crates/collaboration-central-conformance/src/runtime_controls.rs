@@ -1,7 +1,7 @@
 //! Conformance-only commands address the same physical object as normal traffic.
 
 use collaboration_central_core::{ObjectAddress, RegistryTime};
-use fleet_sync_protocol::{FrameId, ItemId, PeerId};
+use fleet_sync_protocol::{ConnectionId, FrameId, ItemId, PeerId};
 use serde::{Deserialize, Serialize};
 use std::num::NonZeroU64;
 
@@ -64,9 +64,11 @@ pub enum RuntimeControl {
         after_writes: NonZeroU64,
     },
     DropNextAnswer {
+        connection: ConnectionId,
         frame: FrameId,
     },
     AwaitDroppedAnswer {
+        connection: ConnectionId,
         frame: FrameId,
     },
     HoldNextDispatch {
@@ -152,8 +154,14 @@ pub enum StorageFaultObservation {
 )]
 pub enum AnswerFaultObservation {
     Idle,
-    Armed { frame: FrameId },
-    Dropped { frame: FrameId },
+    Armed {
+        connection: ConnectionId,
+        frame: FrameId,
+    },
+    Dropped {
+        connection: ConnectionId,
+        frame: FrameId,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

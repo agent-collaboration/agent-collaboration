@@ -10,6 +10,14 @@ pub struct SocketOwnerSnapshot {
     pub admissions: Vec<collaboration_central_core::AdmissionOrigin>,
 }
 
+#[cfg(feature = "conformance")]
+#[derive(serde::Serialize)]
+pub(crate) struct SessionConnectionSnapshot {
+    connection: fleet_sync_protocol::ConnectionId,
+    peer: fleet_sync_protocol::PeerId,
+    registration: fleet_sync_session::ConnectionRegistration,
+}
+
 use crate::object_keys::{address_from_key, address_key};
 
 use crate::{SocketCommand, TokioStorageHost};
@@ -551,6 +559,32 @@ impl NativeObjects {
                 reason: "connection runtime missing".into(),
             }),
         }
+    }
+
+    #[cfg(feature = "conformance")]
+    pub(crate) async fn session_connections(
+        &self,
+        service: &message_board::ServiceId,
+    ) -> Result<Vec<SessionConnectionSnapshot>, collaboration_central_core::SocketFailure> {
+        use collaboration_central_core::ObjectHost;
+        let slot = self.slots.lock().await.get("fleet").cloned();
+        let host = slot
+            .as_ref()
+            .and_then(|slot| slot.host.get())
+            .ok_or(collaboration_central_core::SocketFailure::NotConnected)?;
+        let mut connections = Vec::new();
+        for (connection, registration) in host.registrations().await? {
+            let origin = host.admission_origin(connection).await?;
+            if &origin.installation == service {
+                let binding = host.admission_binding(connection).await?;
+                connections.push(SessionConnectionSnapshot {
+                    connection,
+                    peer: binding.peer,
+                    registration,
+                });
+            }
+        }
+        Ok(connections)
     }
 
     #[cfg(feature = "conformance")]

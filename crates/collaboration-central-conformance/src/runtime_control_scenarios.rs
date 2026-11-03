@@ -37,10 +37,6 @@ pub async fn run_runtime_control_conformance(client: &ConformanceClient) -> Conf
     let session = ObjectAddress::Fleet;
     let proof = async {
         refused_controls(client, session.clone()).await?;
-        pin_fleet_clock(client, &mut peer.socket).await?;
-        if !matches!(control(client, copy.clone(), RuntimeControl::Observe).await?.clock, crate::ClockObservation::Wall) {
-            return Err("Fleet SetTime leaked to a different object's clock".into());
-        }
         control(client, copy.clone(), RuntimeControl::CopyFull { after_writes: NonZeroU64::new(2).ok_or("positive write threshold")? }).await?;
         independent_copy_progress(client, &mut peer.socket, fixture.peer).await?;
         if !matches!(control(client, copy.clone(), RuntimeControl::Observe).await?.storage, StorageFaultObservation::Armed { .. }) {
@@ -64,11 +60,12 @@ pub async fn run_runtime_control_conformance(client: &ConformanceClient) -> Conf
 
         let third = row_piece(fixture.database, 2, 3)?;
         let lost_frame = FrameId::new(durable_steps::Uuid::now_v7())?;
-        control(client, session.clone(), RuntimeControl::DropNextAnswer { frame: lost_frame }).await?;
+        let connection = client.active_connection(&fixture.service.to_string(), fixture.peer).await?;
+        control(client, session.clone(), RuntimeControl::DropNextAnswer { connection, frame: lost_frame }).await?;
         independent_read(client, fixture.database, 2, Some(lost_frame)).await?;
         send(&mut peer.socket, lost_frame, OperationRequest::Replication(ReplicationRequest::Piece(third.clone()))).await?;
-        let observed = control(client, session.clone(), RuntimeControl::AwaitDroppedAnswer { frame: lost_frame }).await?;
-        if !matches!(observed.answer, AnswerFaultObservation::Dropped { frame } if frame == lost_frame) {
+        let observed = control(client, session.clone(), RuntimeControl::AwaitDroppedAnswer { connection, frame: lost_frame }).await?;
+        if !matches!(observed.answer, AnswerFaultObservation::Dropped { connection: actual, frame } if actual == connection && frame == lost_frame) {
             return Err("the selected physical answer was not dropped".into());
         }
         require_status(&mut peer.socket, fixture.database, 3).await?;
@@ -77,7 +74,7 @@ pub async fn run_runtime_control_conformance(client: &ConformanceClient) -> Conf
             return Err("the lost answer did not retain its real copy receipt".into());
         }
 
-        control(client, session.clone(), RuntimeControl::HoldNextDispatch { destination: copy.clone() }).await?;
+        control(client, session.clone(), RuntimeControl::HoldNextSelectedDispatch { destination: copy.clone(), call: crate::DispatchCallSelector::CopyWrite }).await?;
         independent_read(client, fixture.database, 3, None).await?;
         let held_frame = FrameId::new(durable_steps::Uuid::now_v7())?;
         let fourth = row_piece(fixture.database, 3, 4)?;
@@ -101,6 +98,11 @@ pub async fn run_runtime_control_conformance(client: &ConformanceClient) -> Conf
             return Err("resuming the real dispatch did not apply its exact piece".into());
         }
         require_status(&mut peer.socket, fixture.database, 4).await?;
+        // Advance the shared Fleet clock after the session admissions it also owns.
+        pin_fleet_clock(client, &mut peer.socket).await?;
+        if !matches!(control(client, copy.clone(), RuntimeControl::Observe).await?.clock, crate::ClockObservation::Wall) {
+            return Err("Fleet SetTime leaked to a different object's clock".into());
+        }
         println!("RUNTIME_CONTROLS_CASE real_object_clock_late_storage_rollback_exact_answer_drop_and_owned_dispatch_hold passed");
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }.await;

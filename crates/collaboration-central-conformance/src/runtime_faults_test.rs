@@ -1,5 +1,9 @@
 use super::*;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions must fail the test while fixture errors propagate."
+)]
 #[tokio::test]
 async fn a_project_outage_stays_active_for_repeated_reads_and_writes_until_cleared()
 -> Result<(), RuntimeControlFailure> {
@@ -26,6 +30,10 @@ async fn a_project_outage_stays_active_for_repeated_reads_and_writes_until_clear
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions must fail the test while fixture errors propagate."
+)]
 #[tokio::test]
 async fn the_one_shot_storage_fault_keeps_its_existing_trigger_semantics()
 -> Result<(), RuntimeControlFailure> {
