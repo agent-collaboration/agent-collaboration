@@ -14,6 +14,10 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 use std::convert::Infallible;
+
+#[cfg(test)]
+#[path = "mail_sender_calls_test.rs"]
+mod tests;
 #[derive(Serialize, Deserialize)]
 pub(crate) struct SenderFleetMail;
 #[derive(Serialize, Deserialize)]
@@ -106,16 +110,21 @@ where
                     Vec::new(),
                 ));
             }
-            if let DeliveryRequest::Settle { item, digest, .. } = self.input.request.as_ref() {
-                let Some(submitter) = crate::mail_sender_authority::authorized_submitter(
+            if let DeliveryRequest::Settle {
+                submitter,
+                item,
+                digest,
+                ..
+            } = self.input.request.as_ref()
+            {
+                if !crate::mail_sender_authority::claim_is_authorized(
                     scope,
                     self.input.session.peer,
-                    *item,
-                    self.limits,
+                    *submitter,
                     self.now,
                 )
                 .await?
-                else {
+                {
                     return Ok((
                         SenderRoute::Answered(DeliveryAnswer::MailboxUnavailable {
                             reason: fleet_sync_protocol::DeliveryRefusal::NotSubmitter,
@@ -129,7 +138,7 @@ where
                     &crate::fleet_sender_binding::FleetSenderBinding,
                 )
                 .relay_settle::<crate::fleet_mail_tasks::FleetMailRemoval<Store, Driver>>(
-                    submitter,
+                    *submitter,
                     *item,
                     digest.clone(),
                     self.now,

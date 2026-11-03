@@ -1,4 +1,4 @@
-//! Reconciliation authorizes a recorded project against its current Fleet holder.
+//! Query derives recorded ownership; Settle authorizes the caller's independent claim.
 use board_sync_protocol::BoardDeliveryTypes;
 use durable_steps::{StoreError, storage::TransactionScope};
 use fleet_sync_delivery::{DeliveryLimits, Outbox};
@@ -32,20 +32,40 @@ where
     .await
     .map_err(fleet_sync_delivery::delivery_rollback)?;
     match owner {
-        Some(Submitter::Project(database)) => {
+        Some(submitter) => Ok(claim_is_authorized(scope, peer, submitter, now)
+            .await?
+            .then_some(submitter)),
+        // Query is source-free for an unknown item; no negative custody is
+        // created and this does not guess an unknown settlement's owner.
+        None => Ok(Some(Submitter::Machine(peer))),
+    }
+}
+
+pub(crate) async fn claim_is_authorized<S: TransactionScope>(
+    scope: &mut S,
+    peer: PeerId,
+    claim: Submitter,
+    now: runtime_primitives::SyncTime,
+) -> Result<bool, StoreError>
+where
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String:
+        Type<S::Database> + Encode<'value, S::Database> + Decode<'value, S::Database>,
+    for<'value> Option<String>:
+        Type<S::Database> + Encode<'value, S::Database> + Decode<'value, S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    match claim {
+        Submitter::Project(database) => {
             let lease = match fleet_sync_lease::lease_status(scope, database, now).await {
                 Ok(lease) => lease,
                 Err(fleet_sync_lease::LeaseError::Retired) => None,
                 Err(error) => return Err(StoreError::backend(error)),
             };
-            Ok(lease
-                .filter(|lease| {
-                    lease.state == fleet_sync_protocol::LeaseState::Held && lease.holder == peer
-                })
-                .map(|_| Submitter::Project(database)))
+            Ok(lease.is_some_and(|lease| {
+                lease.state == fleet_sync_protocol::LeaseState::Held && lease.holder == peer
+            }))
         }
-        // The SDK compares a known machine owner to this independently
-        // authenticated peer; unknown settlements bind the same machine claim.
-        None | Some(Submitter::Machine(_)) => Ok(Some(Submitter::Machine(peer))),
+        Submitter::Machine(owner) => Ok(owner == peer),
     }
 }
