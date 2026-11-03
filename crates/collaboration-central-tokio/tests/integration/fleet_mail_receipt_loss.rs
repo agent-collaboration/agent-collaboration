@@ -18,7 +18,7 @@ async fn committed_inbox_replays_one_item_after_its_receipt_is_lost_and_the_owne
     let inbox = RecipientInbox::open(&inbox_path, fixture.io.clone()).await?;
     let mut recipient = Socket::open(&fixture, B, SERVICE_B).await?;
     let item = envelope(B, SERVICE_B)?;
-    let limits = collaboration_central_core::central_mailbox_limits()?;
+    let limits = collaboration_central_core::fleet_outbox_limits()?;
     submit(&fixture, &item).await?;
     let (drive, ()) = tokio::time::timeout(CAP, async {
         tokio::try_join!(fixture.runtime.on_alarm(), async {

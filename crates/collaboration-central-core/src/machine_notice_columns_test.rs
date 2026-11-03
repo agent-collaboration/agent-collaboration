@@ -1,6 +1,6 @@
 use super::{NoticeColumns, decode_notice};
 use board_sync_protocol::BoardNotice;
-use fleet_sync_protocol::{DeliveryStream, Epoch};
+use fleet_sync_protocol::Epoch;
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
@@ -10,7 +10,7 @@ type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 )]
 #[test]
 fn every_control_variant_roundtrips_through_its_columns() -> TestResult {
-    // Arrange: literals follow the D1 control-notice variants, including C4's interim mail chain.
+    // Arrange: literals follow the four D1 control-notice variants.
     let project = "019f0000-0000-7000-8000-000000000901"
         .to_owned()
         .try_into()?;
@@ -33,12 +33,6 @@ fn every_control_variant_roundtrips_through_its_columns() -> TestResult {
                 .try_into()?,
             epoch: Epoch::new(2)?,
         },
-        BoardNotice::MailWaiting {
-            stream: DeliveryStream::Items,
-        },
-        BoardNotice::MailWaiting {
-            stream: DeliveryStream::Controls,
-        },
     ];
     for expected in notices {
         // Act: the real storage codec is the boundary under test.
@@ -54,6 +48,17 @@ fn every_control_variant_roundtrips_through_its_columns() -> TestResult {
         assert_eq!(actual, expected);
     }
     Ok(())
+}
+
+#[test]
+fn retired_mail_waiting_rows_are_refused_instead_of_coerced() {
+    for kind in ["mail_waiting_items", "mail_waiting_controls"] {
+        assert!(
+            matches!(decode_notice(Some(kind.into()),None,None,None,None),
+            Err(durable_steps::StoreError::Corrupt {field,..}) if field=="fleet.machine_control_notices.kind")
+        );
+        assert!(serde_json::from_value::<BoardNotice>(serde_json::json!({"kind":"mailWaiting","value":{"stream":if kind=="mail_waiting_items" {"items"} else {"controls"}}})).is_err());
+    }
 }
 
 #[test]

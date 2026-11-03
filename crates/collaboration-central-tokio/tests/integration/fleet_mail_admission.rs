@@ -90,7 +90,7 @@ async fn replay_and_conflict_preserve_one_fleet_custody_row_and_a_restart_still_
             let answer = inbox
                 .accept(
                     pushed,
-                    collaboration_central_core::central_mailbox_limits()
+                    collaboration_central_core::fleet_outbox_limits()
                         .map_err(StoreError::backend)?,
                 )
                 .await

@@ -66,7 +66,7 @@ where
     ) -> Result<Self, StoreError> {
         let io = Arc::new(io);
         let replies = Arc::new(crate::holder_reply_hub::HolderReplyHub::default());
-        let mail_limits = crate::central_mailbox_limits().map_err(StoreError::backend)?;
+        let mail_limits = crate::fleet_outbox_limits().map_err(StoreError::backend)?;
         let publication = crate::mail_status_dispatch::bind(
             Arc::downgrade(&host),
             io.clone(),
@@ -305,7 +305,7 @@ where
             .run(AdmitMailSubmit {
                 source,
                 request,
-                limits: crate::central_mailbox_limits().map_err(|_| CallFailure::AnswerLost)?,
+                limits: crate::fleet_outbox_limits().map_err(|_| CallFailure::AnswerLost)?,
                 relay: delivery.relay_peer,
                 now: io.now(),
             })
@@ -343,7 +343,7 @@ where
             .run(AdmitSenderMail {
                 source,
                 input: request,
-                limits: crate::central_mailbox_limits().map_err(|_| CallFailure::AnswerLost)?,
+                limits: crate::fleet_outbox_limits().map_err(|_| CallFailure::AnswerLost)?,
                 now: io.now(),
             })
             .await

@@ -3,7 +3,7 @@
 use board_sync_protocol::BoardDeliveryTypes;
 use fleet_sync_delivery::{DeliveryConfigError, DeliveryLimits, minimum_settlement_allowance};
 
-pub fn central_mailbox_limits() -> Result<DeliveryLimits, DeliveryConfigError> {
+pub fn fleet_outbox_limits() -> Result<DeliveryLimits, DeliveryConfigError> {
     DeliveryLimits::new::<BoardDeliveryTypes>(
         1024 * 1024 * 1024,
         200_000,
@@ -13,3 +13,7 @@ pub fn central_mailbox_limits() -> Result<DeliveryLimits, DeliveryConfigError> {
         minimum_settlement_allowance::<BoardDeliveryTypes>()?,
     )
 }
+
+#[cfg(test)]
+#[path = "fleet_outbox_limits_test.rs"]
+mod tests;

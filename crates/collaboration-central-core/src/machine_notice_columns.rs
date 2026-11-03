@@ -2,7 +2,7 @@
 use crate::fleet_record_codec::{check_private_id, corrupt, required};
 use board_sync_protocol::BoardNotice;
 use durable_steps::StoreError;
-use fleet_sync_protocol::{DeliveryStream, Epoch};
+use fleet_sync_protocol::Epoch;
 
 pub(super) struct NoticeColumns {
     pub notice: BoardNotice,
@@ -44,13 +44,6 @@ impl NoticeColumns {
                 Some(epoch.value().to_string()),
                 None,
             ),
-            // The intermediate C1–C3 batch retains the old mail chain until C4.
-            BoardNotice::MailWaiting {
-                stream: DeliveryStream::Items,
-            } => ("mail_waiting_items", None, None, None, None),
-            BoardNotice::MailWaiting {
-                stream: DeliveryStream::Controls,
-            } => ("mail_waiting_controls", None, None, None, None),
         };
         Self {
             notice,
@@ -104,12 +97,6 @@ pub(super) fn decode_notice(
                 BoardNotice::LeaseSuperseded { project, epoch }
             })
         }
-        ("mail_waiting_items", None, None, None, None) => Ok(BoardNotice::MailWaiting {
-            stream: DeliveryStream::Items,
-        }),
-        ("mail_waiting_controls", None, None, None, None) => Ok(BoardNotice::MailWaiting {
-            stream: DeliveryStream::Controls,
-        }),
         _ => Err(corrupt(
             "machine_control_notices.kind",
             "unknown kind or mismatched variant columns",

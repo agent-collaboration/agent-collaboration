@@ -19,7 +19,7 @@ async fn status(fixture: &Fixture, item: ItemId) -> TestResult<ItemStatus<Accept
             Box::pin(async move {
                 fleet_sync_delivery::Outbox::<_, board_sync_protocol::BoardDeliveryTypes>::new(
                     scope,
-                    collaboration_central_core::central_mailbox_limits()
+                    collaboration_central_core::fleet_outbox_limits()
                         .map_err(StoreError::backend)?,
                 )
                 .relay_query(A.to_owned().try_into().map_err(StoreError::backend)?, item)

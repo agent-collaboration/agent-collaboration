@@ -278,7 +278,7 @@ async fn no_capacity_keeps_content_and_retries_the_same_item_after_capacity_retu
     let fixture = Fixture::open(root.path(), NOW).await?;
     let mut recipient = Socket::open(&fixture, B, SERVICE_B).await?;
     let inbox = RecipientInbox::open(&root.path().join("recipient"), fixture.io.clone()).await?;
-    let full_limits = collaboration_central_core::central_mailbox_limits()?;
+    let full_limits = collaboration_central_core::fleet_outbox_limits()?;
     let no_room = fleet_sync_delivery::DeliveryLimits::new::<BoardDeliveryTypes>(
         full_limits.mailbox_payload_bytes(),
         full_limits.mailbox_items(),
