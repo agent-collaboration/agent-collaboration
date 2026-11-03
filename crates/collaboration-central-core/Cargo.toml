@@ -46,3 +46,4 @@ fleet-sync-query-gen.workspace = true
 
 [dev-dependencies]
 jsonschema.workspace = true
+proptest.workspace = true
