@@ -108,6 +108,7 @@ mod mail_sender_calls;
 mod mail_status_dispatch;
 mod mail_submit_admission;
 mod mail_submit_calls;
+mod migration_bookkeeping;
 pub use fleet_outbox_limits::fleet_outbox_limits;
 #[cfg(feature = "conformance")]
 pub use machine_enrollment::conformance_revocation::{

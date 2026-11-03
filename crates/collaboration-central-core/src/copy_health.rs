@@ -170,6 +170,7 @@ where
         Vec::new()
     };
     for row in rows {
+        crate::migration_bookkeeping::validate_history_times(&row)?;
         crate::fleet_record_codec::check_private_id(
             &crate::fleet_record_codec::required(row.row_id, "migration row identity")?,
             "migration row identity",
@@ -204,6 +205,7 @@ where
         .await
         .map_err(StoreError::backend)?
     {
+        let failed_at = crate::migration_bookkeeping::failure_time(&row)?;
         crate::fleet_record_codec::check_private_id(
             &required(row.row_id, "failure row identity")?,
             "failure row identity",
@@ -217,16 +219,11 @@ where
         if version == 0 || version.to_string() != encoded {
             return Err(StoreError::backend("noncanonical failure version"));
         }
-        let encoded = required(row.at, "failure time")?;
-        let at = encoded.parse::<i64>().map_err(StoreError::backend)?;
-        if at.to_string() != encoded {
-            return Err(StoreError::backend("noncanonical failure time"));
-        }
         failures.push(CopyMigrationFailureRecord {
             corpus,
             version,
             reason: required(row.reason, "failure reason")?,
-            at: time(runtime_primitives::SyncTime::from_unix_millis(at))?,
+            at: time(failed_at)?,
         });
     }
     Ok(failures)

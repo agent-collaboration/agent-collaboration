@@ -28,6 +28,12 @@ pub(crate) struct StoredMigrationHistory {
     pub row_id: Option<String>,
     pub version: Option<String>,
     pub checksum: Option<String>,
+    pub created_at: Option<String>,
+    pub created_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_class: Option<String>,
+    pub applied_at: Option<String>,
+    pub applied_class: Option<String>,
 }
 pub(crate) fn read_migration_history<S>(
     scope: &mut S,
@@ -53,6 +59,12 @@ where
                     row_id: row.try_get("row_id")?,
                     version: row.try_get("version")?,
                     checksum: row.try_get("checksum")?,
+                    created_at: row.try_get("created_at")?,
+                    created_class: row.try_get("created_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_class: row.try_get("updated_class")?,
+                    applied_at: row.try_get("applied_at")?,
+                    applied_class: row.try_get("applied_class")?,
                 })
             })
             .collect()
@@ -64,6 +76,7 @@ pub(crate) fn insert_migration_history<S>(
     corpus: String,
     version: String,
     checksum: String,
+    now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -78,7 +91,8 @@ where
         .bind(row_id)
         .bind(corpus)
         .bind(version)
-        .bind(checksum);
+        .bind(checksum)
+        .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -105,7 +119,7 @@ pub(crate) fn record_migration_failure<S>(
     corpus: String,
     version: String,
     reason: String,
-    at: String,
+    now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -121,7 +135,7 @@ where
         .bind(corpus)
         .bind(version)
         .bind(reason)
-        .bind(at);
+        .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -133,7 +147,12 @@ pub(crate) struct StoredMigrationFailure {
     pub corpus: Option<String>,
     pub version: Option<String>,
     pub reason: Option<String>,
-    pub at: Option<String>,
+    pub created_at: Option<String>,
+    pub created_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_class: Option<String>,
+    pub failed_at: Option<String>,
+    pub failed_class: Option<String>,
 }
 pub(crate) fn read_migration_failures<S>(
     scope: &mut S,
@@ -157,7 +176,12 @@ where
                     corpus: row.try_get("corpus")?,
                     version: row.try_get("version")?,
                     reason: row.try_get("reason")?,
-                    at: row.try_get("at")?,
+                    created_at: row.try_get("created_at")?,
+                    created_class: row.try_get("created_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_class: row.try_get("updated_class")?,
+                    failed_at: row.try_get("failed_at")?,
+                    failed_class: row.try_get("failed_class")?,
                 })
             })
             .collect()
