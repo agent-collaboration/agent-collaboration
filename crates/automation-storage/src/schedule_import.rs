@@ -14,12 +14,11 @@ impl AutomationStore {
     pub async fn import_schedule<
         TTarget: Serialize + DeserializeOwned,
         TEndpoint: Serialize + DeserializeOwned,
-        TProject: Serialize + DeserializeOwned,
     >(
         &mut self,
         request: &ScheduleImport<'_>,
-    ) -> Result<ScheduleInspection<TTarget, TEndpoint, TProject>, StorageError> {
-        let package = agent_automation::decode_schedule_package::<TTarget, TEndpoint, TProject>(
+    ) -> Result<ScheduleInspection<TTarget, TEndpoint>, StorageError> {
+        let package = agent_automation::decode_schedule_package::<TTarget, TEndpoint>(
             request.package_utf8,
             1_048_576,
         )?;
@@ -53,7 +52,7 @@ impl AutomationStore {
             return Err(StorageError::ScheduleImportExists);
         }
         if let Some(existing) = &existing {
-            let definition: agent_automation::ScheduleDefinition<TTarget, TEndpoint, TProject> =
+            let definition: agent_automation::ScheduleDefinition<TTarget, TEndpoint> =
                 serde_json::from_str(&existing.try_get::<String, _>("definition_json")?)
                     .map_err(|_| StorageError::InvalidRecord)?;
             crate::schedule_repository::validate_unchanged_execution_mode(

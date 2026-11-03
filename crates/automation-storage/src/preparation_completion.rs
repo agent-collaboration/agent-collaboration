@@ -34,12 +34,11 @@ impl AutomationStore {
     pub async fn complete_thread_preparation<
         TTarget: Serialize + DeserializeOwned,
         TEndpoint: Serialize + DeserializeOwned,
-        TProject: Serialize + DeserializeOwned,
         TState: Serialize,
     >(
         &mut self,
         request: PreparedThread<TTarget, TState>,
-    ) -> Result<ScheduleInspection<TTarget, TEndpoint, TProject>, StorageError> {
+    ) -> Result<ScheduleInspection<TTarget, TEndpoint>, StorageError> {
         if request.now_ms < 0 || !std::path::Path::new(&request.cwd).is_absolute() {
             return Err(StorageError::InvalidRecord);
         }
@@ -50,7 +49,7 @@ impl AutomationStore {
         {
             return Err(StorageError::OperationConflict);
         }
-        let mut record: ScheduleRecord<TTarget, TEndpoint, TProject> =
+        let mut record: ScheduleRecord<TTarget, TEndpoint> =
             crate::schedule_inspection::read_current(&mut transaction, &request.schedule_id)
                 .await?;
         if record.change_id != request.expected_change_id {
@@ -58,7 +57,7 @@ impl AutomationStore {
         }
         crate::schedule_repository::validate_unchanged_execution_mode(
             &record.definition.destination,
-            &ExecutionDestination::Unprepared { project_id: None },
+            &ExecutionDestination::Unprepared,
         )?;
         crate::thread_binding_repository::claim_in_transaction(
             &mut transaction,

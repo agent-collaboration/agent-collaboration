@@ -6,30 +6,29 @@ use serde::{Serialize, de::DeserializeOwned};
 use sqlx::Connection;
 #[derive(Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
-pub enum ScheduleEdit<TTarget, TEndpoint, TProject> {
+pub enum ScheduleEdit<TTarget, TEndpoint> {
     Replace {
         expected_change_id: ChangeId,
-        definition: ScheduleDefinition<TTarget, TEndpoint, TProject>,
+        definition: ScheduleDefinition<TTarget, TEndpoint>,
     },
     SetEnabled {
         enabled: bool,
     },
 }
-pub struct ScheduleMutation<TTarget, TEndpoint, TProject> {
+pub struct ScheduleMutation<TTarget, TEndpoint> {
     pub operation_id: OperationId,
     pub schedule_id: ScheduleId,
-    pub edit: ScheduleEdit<TTarget, TEndpoint, TProject>,
+    pub edit: ScheduleEdit<TTarget, TEndpoint>,
     pub now_ms: i64,
 }
 impl AutomationStore {
     pub async fn mutate_schedule<
         TTarget: Clone + Serialize + DeserializeOwned,
         TEndpoint: Clone + Serialize + DeserializeOwned,
-        TProject: Clone + Serialize + DeserializeOwned,
     >(
         &mut self,
-        request: &ScheduleMutation<TTarget, TEndpoint, TProject>,
-    ) -> Result<crate::ScheduleInspection<TTarget, TEndpoint, TProject>, StorageError> {
+        request: &ScheduleMutation<TTarget, TEndpoint>,
+    ) -> Result<crate::ScheduleInspection<TTarget, TEndpoint>, StorageError> {
         if request.now_ms < 0 {
             return Err(StorageError::InvalidRecord);
         }
@@ -54,7 +53,7 @@ impl AutomationStore {
             transaction.commit().await?;
             return Ok(record);
         }
-        let mut current: ScheduleRecord<TTarget, TEndpoint, TProject> =
+        let mut current: ScheduleRecord<TTarget, TEndpoint> =
             crate::schedule_inspection::read_current(&mut transaction, &request.schedule_id)
                 .await?;
         let before = current.definition.clone();

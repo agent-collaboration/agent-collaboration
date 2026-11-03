@@ -18,11 +18,11 @@ async fn exact_thread_address_has_one_schedule_owner_even_when_disabled()
             0,
         )
         .await?;
-    let definition = ScheduleDefinition::<String, String, String> {
+    let definition = ScheduleDefinition::<String, String> {
         instruction_id: instruction.instruction_id,
         timing: TimingRule::Interval { seconds: 60 },
         enabled: false,
-        destination: ExecutionDestination::Unprepared { project_id: None },
+        destination: ExecutionDestination::Unprepared,
         execution_timeout_seconds: None,
         model: Some("gpt-5.6-sol".into()),
         effort: Some("medium".into()),
