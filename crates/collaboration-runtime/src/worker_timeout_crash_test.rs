@@ -73,7 +73,13 @@ async fn worker_timeout_crash_preserves_occupancy_until_exact_cessation() -> Tes
         }
         Box::pin(recover(&root)).await?;
         for entry in std::fs::read_dir(&root)? {
-            std::fs::remove_file(entry?.path())?;
+            let path = entry?.path();
+            // SQLite teardown can already have removed a listed sidecar.
+            match std::fs::remove_file(&path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
         }
         std::fs::remove_dir(root)?;
     }

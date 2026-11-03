@@ -33,7 +33,7 @@ mod push_handoff_tests;
 #[path = "scheduled_run_retry_tests.rs"]
 mod retry_tests;
 #[cfg(test)]
-#[path = "worker_timeout_crash_tests.rs"]
+#[path = "worker_timeout_crash_test.rs"]
 mod timeout_crash_tests;
 
 #[cfg(test)]
