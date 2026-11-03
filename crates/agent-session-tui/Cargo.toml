@@ -9,21 +9,27 @@ publish.workspace = true
 workspace = true
 
 [features]
-quota-reset-test-harness = []
+quota-reset-test-harness = ["agent-collaboration-tui/test-support", "dep:serde", "dep:rustix"]
 
 [dependencies]
 agent-session-inventory = { version = "0.1.105", path = "../agent-session-inventory" }
 futures-util.workspace = true
+chrono.workspace = true
+collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.118" }
+ui-preference-store = { path = "../ui-preference-store", version = "0.1.118" }
 collaboration-client = { path = "../collaboration-client", version = "0.1.14" }
 codex-native-integration.workspace = true
 crossterm = { workspace = true, features = ["osc52"] }
 iocraft.workspace = true
 agent-collaboration-tui.workspace = true
 serde_json.workspace = true
+serde = { workspace = true, optional = true }
+rustix = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["io-std", "fs"] }
 unicode-width.workspace = true
 
 [dev-dependencies]
+chrono-tz.workspace = true
 tempfile = "3.27.0"
 node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
 agent-session-inventory = { version = "0.1.105", path = "../agent-session-inventory", features = ["test-support"] }

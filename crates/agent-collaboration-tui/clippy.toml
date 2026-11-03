@@ -1,0 +1,11 @@
+allow-expect-in-tests = true
+allow-indexing-slicing-in-tests = true
+allow-panic-in-tests = true
+allow-unwrap-in-tests = true
+future-size-threshold = 16384
+
+disallowed-methods = [
+  { path = "iocraft::hooks::UseTerminalEvents::use_terminal_events", reason = "InputOwner is the only terminal subscriber (R5)" },
+  { path = "iocraft::hooks::UseTerminalEvents::use_local_terminal_events", reason = "Route pointer and keyboard input through InputOwner (R5)" },
+  { path = "iocraft::hooks::UseTerminalSize::use_terminal_size", reason = "InputOwner owns terminal size and resize events (R5)" },
+]

@@ -91,12 +91,17 @@ async fn account_options_page_keys_use_rendered_capacity_and_ack_and_reinspectio
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::PageUp)),
             Some("4-4 of 5"),
         ),
+        (crate::quota_test_support::shift_tab_event(), None),
         (
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
-            Some("Credit usage"),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
+            Some("Options · Credits"),
         ),
         (
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Left)),
+            None,
+        ),
+        (
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
             Some("1-1 of 5"),
         ),
         (
@@ -109,7 +114,7 @@ async fn account_options_page_keys_use_rendered_capacity_and_ack_and_reinspectio
         ),
         (
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
-            Some("Filters"),
+            Some("Quota ·"),
         ),
         (TerminalEvent::Key(control_key('r')), Some("1-1 of 5")),
         (
@@ -118,7 +123,7 @@ async fn account_options_page_keys_use_rendered_capacity_and_ack_and_reinspectio
         ),
         (
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
-            Some("Filters"),
+            Some("Quota ·"),
         ),
         (
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'))),
@@ -135,29 +140,41 @@ async fn account_options_page_keys_use_rendered_capacity_and_ack_and_reinspectio
             reset_snapshot_receiver: Some(ports.snapshot_receiver),
         )
     };
+    let last_frame = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let observed_frame = last_frame.clone();
     let component = terminal
         .mock_terminal_render_loop(MockTerminalConfig::with_events(acknowledged_events))
         .map(|canvas| canvas.to_string())
         .inspect(move |frame| {
+            *observed_frame.lock().unwrap() = frame.clone();
             for marker in [
                 "1-1 of 5",
                 "2-2 of 5",
                 "3-3 of 5",
                 "4-4 of 5",
                 "5-5 of 5",
-                "Credit usage",
+                "Options · Credits",
                 "Close",
-                "Filters",
+                "Quota ·",
             ] {
-                if frame.contains(marker) {
-                    let _ = acknowledgement_sender.send(marker);
+                if frame.contains(marker)
+                    && (marker != "Quota ·"
+                        || frame.chars().filter(|character| *character == '╮').count() == 1)
+                {
+                    let _ = acknowledgement_sender
+                        .send(super::CreditFrameAcknowledgement::Text(marker));
                 }
             }
         })
         .collect::<Vec<_>>();
     let frames = tokio::time::timeout(std::time::Duration::from_secs(3), component)
         .await
-        .expect("component should render every requested inventory page");
+        .unwrap_or_else(|error| {
+            panic!(
+                "component should render every requested inventory page: {error}; last={}",
+                last_frame.lock().unwrap()
+            )
+        });
 
     session_driver
         .await
@@ -178,7 +195,7 @@ async fn account_options_page_keys_use_rendered_capacity_and_ack_and_reinspectio
     );
     assert_ordered_frame_markers(
         &frames,
-        &["Credit usage", "Close", "Filters", "Close", "Filters"],
+        &["Options · Credits", "Close", "Quota ·", "Close", "Quota ·"],
     );
 }
 
@@ -201,7 +218,9 @@ async fn beginning_a_new_reset_inspection_resets_a_nonzero_inventory_page_start(
         .map(|canvas| canvas.to_string())
         .inspect(move |frame| {
             if frame.contains("inventory page start: 0") {
-                let _ = acknowledgement_sender.send("inventory page start: 0");
+                let _ = acknowledgement_sender.send(super::CreditFrameAcknowledgement::Text(
+                    "inventory page start: 0",
+                ));
             }
         })
         .collect::<Vec<_>>();
@@ -245,50 +264,66 @@ fn NewInspectionPageResetProbe(
         .use_state(|| None::<super::super::super::quota_reset_presentation_model::ResetPaneTarget>);
     let command_port = hooks.use_memo(AccountOptionsCommandPort::new, ());
     let inventory_page_start = hooks.use_state(|| 4usize);
-    let mut should_exit = hooks.use_state(|| false);
-    hooks.use_terminal_events({
-        let mut account_options = account_options;
-        let mut reset_target = reset_target;
-        let mut inventory_page_start = inventory_page_start;
-        let reset_intent_sender = props.reset_intent_sender.clone();
-        move |event| {
-            let TerminalEvent::Key(KeyEvent {
-                code,
-                kind,
-                modifiers,
-                ..
-            }) = event
-            else {
-                return;
-            };
-            if kind == KeyEventKind::Release {
-                return;
-            }
-            if code == KeyCode::Char('c') && modifiers.contains(KeyModifiers::CONTROL) {
-                should_exit.set(true);
-                return;
-            }
-            let _ = handle_account_options_key_event(
-                &mut account_options,
-                &mut reset_target,
-                AccountOptionsKeyEventContext {
-                    phase: WorkflowPhase::Browse,
-                    code,
-                    modifiers,
-                    command_port: &command_port,
-                    reset_snapshot: None,
-                    reset_intent_sender: reset_intent_sender.as_ref(),
-                    inventory_page_start: &mut inventory_page_start,
-                    now_unix_seconds: 1_000,
+    let should_exit = hooks.use_state(|| false);
+    let intents = props.reset_intent_sender.clone();
+    let stack = agent_collaboration_tui::surfaces::surface_handle::use_surface_stack(
+        &mut hooks,
+        move |_| {
+            let start = crate::quota_control_context::quota_action(
+                "probe-inspect",
+                "Inspect",
+                &["Enter"],
+                agent_collaboration_tui::actions::Placement::Hidden,
+                move |()| {
+                    let mut options = account_options;
+                    let mut target = reset_target;
+                    let mut page = inventory_page_start;
+                    handle_account_options_key_event(
+                        &mut options,
+                        &mut target,
+                        AccountOptionsKeyEventContext {
+                            phase: WorkflowPhase::Browse,
+                            code: KeyCode::Enter,
+                            modifiers: KeyModifiers::NONE,
+                            command_port: &command_port,
+                            reset_snapshot: None,
+                            reset_intent_sender: intents.as_ref(),
+                            inventory_page_start: &mut page,
+                            now_unix_seconds: 1_000,
+                        },
+                    );
                 },
-            );
-        }
-    });
+            )
+            .unwrap();
+            let quit = crate::quota_control_context::quota_action(
+                "probe-quit",
+                "Quit",
+                &["Ctrl+C"],
+                agent_collaboration_tui::actions::Placement::Hidden,
+                move |()| {
+                    let mut exit = should_exit;
+                    exit.set(true);
+                },
+            )
+            .unwrap();
+            let targets = vec![agent_collaboration_tui::controls::fields::button_target(
+                agent_collaboration_tui::surfaces::focus_model::TargetId::for_action(&start.id),
+                &start,
+            )];
+            crate::quota_control_context::control_model(
+                "inspection-page-probe",
+                vec![start, quit],
+                targets,
+                None,
+            )
+            .unwrap()
+        },
+    );
     if *should_exit.read() {
         system.exit();
     }
     element! {
-        Text(content: format!("inventory page start: {}", inventory_page_start.get()))
+        agent_collaboration_tui::input::input_owner::InputOwner(stack,width:60u16,height:4u16,quit_action:crate::quota_control_context::action_id("probe-quit").unwrap()) {Text(content: format!("inventory page start: {}", inventory_page_start.get()))}
     }
 }
 
@@ -476,7 +511,7 @@ async fn cancellation_body_text_precedes_acknowledged_options_close_action() {
                     );
                     assert!(!frame.contains("Close"), "premature Browse action: {frame}");
                     assert!(
-                        !frame.contains("Filters"),
+                        !crate::quota_browse_presentation_test::quota_ux_clarity_test::actual_dialog_text(&frame,"Options · Resets").contains("Filters"),
                         "options already closed: {frame}"
                     );
                     event_sender

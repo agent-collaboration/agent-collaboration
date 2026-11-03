@@ -34,8 +34,9 @@ pub use codex_conversation_operation_recorder::{
 mod provider_session_event_hub;
 mod provider_session_record;
 pub use provider_operation_store::{
-    ProviderOperationAdmission, ProviderOperationAdmissionResult, ProviderOperationRecord,
-    ProviderOperationStore, ProviderOperationStoreError,
+    PROVIDER_OPERATION_RETENTION_MONTHS, ProviderOperationAdmission,
+    ProviderOperationAdmissionResult, ProviderOperationRecord, ProviderOperationStore,
+    ProviderOperationStoreError, provider_operation_retention_cutoff_ms,
 };
 mod delivery_acceptance_effect;
 pub mod delivery_route_projection;

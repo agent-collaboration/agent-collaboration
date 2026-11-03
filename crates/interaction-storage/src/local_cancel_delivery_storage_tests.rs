@@ -60,9 +60,15 @@ async fn private_sdk_failure_roundtrips_without_changing_first_attribution_or_cl
                     .map_err(StoreError::backend)?,
                     LocalCancelPreparation::Kept
                 );
-                record_local_cancel_outcome_in_scope(scope, &cancel_id, &target_id, &failure)
-                    .await
-                    .map_err(StoreError::backend)
+                record_local_cancel_outcome_in_scope(
+                    scope,
+                    &cancel_id,
+                    &target_id,
+                    &failure,
+                    first_clock().timestamp_millis(),
+                )
+                .await
+                .map_err(StoreError::backend)
             })
         })
         .await
@@ -81,6 +87,22 @@ async fn private_sdk_failure_roundtrips_without_changing_first_attribution_or_cl
     assert_eq!(stored.attribution, expected_attribution);
     assert_eq!(stored.outcome, Some(expected_outcome));
     assert_eq!(stored.recorded_at, first_clock());
+    let settled_at_ms = stored.settled_at.unwrap().timestamp_millis();
+    sqlx::query("UPDATE local_cancel_deliveries SET settled_at_ms=NULL WHERE item_id=?")
+        .bind(item.as_str())
+        .execute(&mut *owner.writer.lock().await)
+        .await
+        .unwrap();
+    assert!(matches!(
+        owner.local_cancel_delivery(&item).await,
+        Err(StorageError::InvalidStoredRecord)
+    ));
+    sqlx::query("UPDATE local_cancel_deliveries SET settled_at_ms=? WHERE item_id=?")
+        .bind(settled_at_ms)
+        .bind(item.as_str())
+        .execute(&mut *owner.writer.lock().await)
+        .await
+        .unwrap();
     owner.close().await.unwrap();
 }
 
@@ -97,6 +119,7 @@ async fn invalid_private_cancel_rows_refuse_on_cold_read() {
         ("outcome_json", "{\"kind\":\"refused\",\"value\":{\"reason\":{\"kind\":\"processingFailed\",\"value\":{\"kind\":\"futureFailure\"}}}}".to_owned()),
         ("outcome_json", format!("{{\"kind\":\"prevented\",\"value\":{{\"cancel\":\"{}\"}}}}", other_cancel.as_str())),
         ("recorded_at", "not-a-clock".to_owned()),
+        ("settled_at_ms", "1".to_owned()),
     ];
     for (column, bad_value) in invalid {
         // Arrange: a structurally owned schema with one malformed row, not a foreign file.
@@ -104,7 +127,7 @@ async fn invalid_private_cancel_rows_refuse_on_cold_read() {
         let path = directory.path().join("interaction.sqlite");
         let owner = InteractionStore::open(&path).await.unwrap();
         let target = MailItemId::generate();
-        sqlx::query("INSERT INTO local_cancel_deliveries VALUES (?,?,'{\"kind\":\"bySender\"}',NULL,'2026-10-20T12:00:00.000000000Z')")
+        sqlx::query("INSERT INTO local_cancel_deliveries(item_id,target_item,attribution_json,outcome_json,recorded_at) VALUES (?,?,'{\"kind\":\"bySender\"}',NULL,'2026-10-20T12:00:00.000000000Z')")
             .bind(item.as_str()).bind(target.as_str())
             .execute(&mut *owner.writer.lock().await).await.unwrap();
         let corrupt_row = match column {
@@ -114,6 +137,9 @@ async fn invalid_private_cancel_rows_refuse_on_cold_read() {
             }
             "outcome_json" => "UPDATE local_cancel_deliveries SET outcome_json=? WHERE item_id=?",
             "recorded_at" => "UPDATE local_cancel_deliveries SET recorded_at=? WHERE item_id=?",
+            "settled_at_ms" => {
+                "UPDATE local_cancel_deliveries SET settled_at_ms=CAST(? AS INTEGER) WHERE item_id=?"
+            }
             _ => panic!("unlisted corruption column"),
         };
         sqlx::query(corrupt_row)

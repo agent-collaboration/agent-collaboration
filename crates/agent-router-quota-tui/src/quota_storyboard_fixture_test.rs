@@ -35,6 +35,7 @@ pub(crate) enum FixtureScenario {
     RefusedResult,
     RefreshPending,
     SavePending,
+    LargeList,
 }
 impl FixtureScenario {
     fn from_environment() -> std::io::Result<Self> {
@@ -50,6 +51,7 @@ impl FixtureScenario {
             Ok("refused-result") => Ok(Self::RefusedResult),
             Ok("refresh-pending") => Ok(Self::RefreshPending),
             Ok("save-pending") => Ok(Self::SavePending),
+            Ok("large-list") => Ok(Self::LargeList),
             _ => Err(std::io::Error::other(
                 "explicit QUOTA_COMPONENT_FIXTURE scenario is required",
             )),
@@ -82,6 +84,9 @@ pub(crate) fn fixture_model() -> QuotaStatusViewModel {
 
 pub(crate) fn fixture_scenario_model(scenario: FixtureScenario) -> QuotaStatusViewModel {
     let mut model = fixture_model();
+    if scenario == FixtureScenario::LargeList {
+        return large_list::with_large_list_accounts(model);
+    }
     if scenario != FixtureScenario::VisualHardCases {
         return model;
     }
@@ -370,10 +375,18 @@ async fn compiled_quota_component_storyboard_fixture() -> std::io::Result<()> {
     if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
         return Err(std::io::Error::other("fixture requires its owned real PTY"));
     }
+    let (terminal_width, terminal_height) = crossterm::terminal::size()?;
     let model = Arc::new(Mutex::new(fixture_scenario_model(scenario)));
     let release_path = fixture_release_path(scenario)?;
     let receipt_path =
         fixture_receipt_path(std::env::var_os("QUOTA_COMPONENT_FIXTURE_RECEIPT_FILE"))?;
+    let dispatch_receipt_path = fixture_receipt_path(std::env::var_os(
+        "QUOTA_COMPONENT_FIXTURE_DISPATCH_RECEIPT_FILE",
+    ))?;
+    let dispatch_sink = dispatch_receipt_path
+        .as_ref()
+        .map(agent_collaboration_tui::input::input_dispatch_receipt::InputDispatchReceiptSink::create)
+        .transpose()?;
     let (release_sender, release_receiver) = tokio::sync::watch::channel(false);
     let (floor, policy, refresh) = fixture_ports(model.clone(), scenario, release_receiver);
     let loader: QuotaStatusViewModelLoader = {
@@ -507,8 +520,15 @@ async fn compiled_quota_component_storyboard_fixture() -> std::io::Result<()> {
     let viewport_trace = receipt_path
         .as_ref()
         .map(|_| super::super::quota_viewport_trace::QuotaViewportTrace::default());
-    let result=element!(QuotaStatusComponent(view_model,viewport_trace:viewport_trace.clone(),width:0usize,height:0usize,reload_view_model:Some(loader),weekly_floor_saver:Some(floor),credit_policy_saver:Some(policy),credit_usage_refresher:Some(refresh),reset_intent_sender:Some(ports.intent_sender),reset_snapshot_receiver:Some(ports.snapshot_receiver)))
-        .render_loop().fullscreen().ignore_ctrl_c().await;
+    let outcome = Arc::new(Mutex::new(None));
+    let allow_effects = scenario != FixtureScenario::LargeList;
+    let mut component = element!(QuotaStatusComponent(view_model,dispatch_receipt:dispatch_sink.clone(),outcome_sink:Some(outcome.clone()),viewport_trace:viewport_trace.clone(),width:usize::from(terminal_width),height:usize::from(terminal_height),reload_view_model:allow_effects.then_some(loader),weekly_floor_saver:allow_effects.then_some(floor),credit_policy_saver:allow_effects.then_some(policy),credit_usage_refresher:allow_effects.then_some(refresh),reset_intent_sender:allow_effects.then_some(ports.intent_sender),reset_snapshot_receiver:allow_effects.then_some(ports.snapshot_receiver)));
+    let render = component.render_loop().fullscreen().ignore_ctrl_c();
+    let render = match &dispatch_sink {
+        Some(sink) => render.stdout(sink.frame_writer(std::io::stdout())?),
+        None => render,
+    };
+    let result = render.await;
     driver.abort();
     if let Err(error) = driver.await
         && !error.is_cancelled()
@@ -536,6 +556,14 @@ async fn compiled_quota_component_storyboard_fixture() -> std::io::Result<()> {
         ));
     }
     result?;
+    if let Some(sink) = dispatch_sink {
+        sink.flush_and_check()?;
+    }
+    if *outcome.lock().unwrap() != Some(crate::QuotaOutcome::Quit) {
+        return Err(std::io::Error::other(
+            "fixture exited without its Quit outcome",
+        ));
+    }
     let receipt = format!(
         "QUOTA_COMPONENT_FIXTURE_FINISHED scenario={scenario:?} released={released} external_requests=0 persisted_writes=0\n"
     );
@@ -685,3 +713,6 @@ fn visual_hard_case_fixture_has_attributable_unknown_stale_and_credential_facts(
         Some("Credentials locked")
     );
 }
+
+#[path = "quota_large_list_fixture_test.rs"]
+mod large_list;

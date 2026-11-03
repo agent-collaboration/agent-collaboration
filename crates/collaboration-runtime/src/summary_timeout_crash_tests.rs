@@ -58,7 +58,12 @@ async fn summary_timeout_crash_recovery_never_replays_uncertain_interrupt() -> T
         }
         recover_and_observe(&root).await?;
         for entry in std::fs::read_dir(&root)? {
-            std::fs::remove_file(entry?.path())?;
+            let path = entry?.path();
+            match std::fs::remove_file(&path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
         }
         std::fs::remove_dir(root)?;
     }

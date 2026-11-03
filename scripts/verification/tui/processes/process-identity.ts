@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { readlinkSync } from 'node:fs';
+import { readlinkSync, realpathSync } from 'node:fs';
 
 import { processIdentitySchema } from '../evidence/evidence-schema.ts';
 import type { ProcessIdentity } from '../evidence/evidence-schema.ts';
@@ -36,4 +36,33 @@ export function sameIdentity(current: ProcessIdentity | null, recorded: ProcessI
 		current.birth === recorded.birth &&
 		current.executable === recorded.executable
 	);
+}
+
+/** Portable PTY children have no wrapper PID file; bind the one exact direct product child. */
+export function requireOwnedProductChild(parentPid: number, productPath: string): ProcessIdentity {
+	const inventory = spawnSync('/bin/ps', ['-axo', 'pid=,ppid='], {
+		encoding: 'utf8',
+		timeout: 5000,
+	});
+	if (inventory.error || inventory.status !== 0)
+		throw new Error(
+			'product child inventory unavailable: ' + (inventory.error?.message ?? inventory.stderr),
+		);
+	const children = inventory.stdout
+		.trim()
+		.split('\n')
+		.flatMap((line) => {
+			const [pid, parent] = line.trim().split(/\s+/u).map(Number);
+			if (parent !== parentPid || pid === undefined) return [];
+			const identity = lookupProcessIdentity(pid);
+			return identity !== null &&
+				identity.realUid === process.getuid?.() &&
+				realpathSync(identity.executable) === productPath
+				? [identity]
+				: [];
+		});
+	const child = children[0];
+	if (children.length !== 1 || child === undefined)
+		throw new Error('one exact owned driver product child required');
+	return child;
 }

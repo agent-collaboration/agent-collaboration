@@ -28,6 +28,7 @@ macro_rules! ensure_ne {
 async fn same_schedule_delivers_a_fresh_occurrence_after_its_old_push_is_age_pruned()
 -> TestResult<()> {
     let now = chrono::Utc::now();
+    let retention_cutoff = now.checked_sub_months(chrono::Months::new(2)).unwrap();
     let interval = chrono::Duration::days(31);
     let timing = FixtureTiming {
         anchor_ms: (now - chrono::Duration::days(62)).timestamp_millis(),
@@ -78,8 +79,7 @@ async fn same_schedule_delivers_a_fresh_occurrence_after_its_old_push_is_age_pru
             activity: None,
             mode: None,
             guard: None,
-            created_at: chrono::DateTime::from_timestamp_millis(first.due_at_ms)
-                .ok_or("first due")?,
+            created_at: retention_cutoff - chrono::Duration::milliseconds(1),
         })
         .await?;
     for _ in 0..4 {
@@ -93,7 +93,7 @@ async fn same_schedule_delivers_a_fresh_occurrence_after_its_old_push_is_age_pru
         .await?
         .ok_or("first push")?;
     ensure_eq!(old.delivery_state, PushDeliveryState::Delivered);
-    ensure!(old.created_at < now - chrono::Duration::days(30));
+    ensure!(old.created_at < retention_cutoff);
     ensure_eq!(
         interactions.prune_push_records(now, 500).await?,
         1,

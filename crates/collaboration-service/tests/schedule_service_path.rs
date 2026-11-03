@@ -61,7 +61,11 @@ async fn sdk_creates_disabled_schedule_without_native_backend()
         return Err("unprepared schedule enabled or failed without typed feedback".into());
     }
     served.stop().await?;
-    drop(store);
+    Arc::try_unwrap(store)
+        .map_err(|_| std::io::Error::other("fixture automation store remained shared"))?
+        .into_inner()
+        .close()
+        .await?;
     std::fs::remove_file(path)?;
     Ok(())
 }
@@ -145,7 +149,11 @@ async fn sdk_rejects_mode_change_and_thread_preparation_with_actionable_feedback
         return Err("rejected mode request changed schedule or started work".into());
     }
     drop(identity);
-    drop(store);
+    Arc::try_unwrap(store)
+        .map_err(|_| std::io::Error::other("fixture automation store remained shared"))?
+        .into_inner()
+        .close()
+        .await?;
     std::fs::remove_file(path)?;
     Ok(())
 }

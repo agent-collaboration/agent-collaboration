@@ -147,7 +147,10 @@ async fn route_reopen_replays_frozen_bytes_and_combined_pages_keep_membership()
     assert!(second.next.is_none());
     let unbound = request(&newer);
     store.prepare_remote_wake(unbound.clone()).await?;
-    assert_eq!(store.prune_operation_receipts(31 * 86_400_000, 1).await?, 1);
+    assert_eq!(
+        store.prune_operation_receipts(100 * 86_400_000, 1).await?,
+        1
+    );
     let automation_storage::RemoteWakePreparation::Replayed {
         request: retained,
         snapshot: None,

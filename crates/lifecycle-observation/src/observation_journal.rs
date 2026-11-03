@@ -2,6 +2,7 @@
 use collaboration_protocol::AddressEntry;
 use collaboration_protocol::JournalPosition;
 use collaboration_protocol::{LifecycleObservation, LifecycleSubject, ThreadAddress, UuidIdentity};
+use sqlite_storage_maintenance::{configure_new_database_options, prepare_existing_database};
 use sqlx::{
     Connection, Row, SqliteConnection,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqliteSynchronous},
@@ -20,10 +21,14 @@ pub enum JournalError {
     Storage(#[from] sqlx::Error),
     #[error("invalid lifecycle record")]
     InvalidRecord,
+    #[error("invalid checkpoint address row: {address_key}")]
+    InvalidCheckpointAddress { address_key: String },
     #[error("unsupported or inconsistent lifecycle storage")]
     InvalidStorage,
     #[error("lifecycle storage capacity exceeded")]
     Capacity,
+    #[error("lifecycle storage maintenance failed")]
+    StorageMaintenance(#[from] sqlite_storage_maintenance::SqliteStorageMaintenanceError),
 }
 pub struct JournalRow {
     pub sequence: u64,
@@ -36,13 +41,17 @@ pub struct ObservationJournal {
 }
 impl ObservationJournal {
     pub async fn open(path: &Path, new_identity: UuidIdentity) -> Result<Self, JournalError> {
-        let options = SqliteConnectOptions::new()
-            .filename(path)
-            .create_if_missing(true)
-            .journal_mode(SqliteJournalMode::Delete)
-            .synchronous(SqliteSynchronous::Full)
-            .busy_timeout(Duration::from_secs(1));
+        let options = configure_new_database_options(
+            SqliteConnectOptions::new()
+                .filename(path)
+                .create_if_missing(true)
+                .journal_mode(SqliteJournalMode::Wal)
+                .synchronous(SqliteSynchronous::Full)
+                .busy_timeout(Duration::from_secs(1)),
+            path,
+        )?;
         let mut connection = SqliteConnection::connect_with(&options).await?;
+        prepare_existing_database(&mut connection, path).await?;
         let journal_id =
             crate::journal_migrations::initialize(&mut connection, new_identity).await?;
         Ok(Self {
@@ -53,6 +62,10 @@ impl ObservationJournal {
     #[must_use]
     pub fn journal_id(&self) -> &UuidIdentity {
         &self.journal_id
+    }
+    pub(crate) async fn incremental_vacuum_step(&mut self) -> Result<(), JournalError> {
+        sqlite_storage_maintenance::incremental_vacuum_step(&mut self.connection).await?;
+        Ok(())
     }
     pub async fn append(
         &mut self,
@@ -90,17 +103,10 @@ impl ObservationJournal {
         sqlx::query("UPDATE journal_metadata SET last_sequence=?,retention_clock=?,payload_bytes=? WHERE singleton=1").bind(sequence).bind(retention_at).bind(total).execute(&mut *transaction).await?;
         if let LifecycleSubject::Thread { address } = &observation.subject {
             let key = serde_json::to_string(address).map_err(|_| JournalError::InvalidRecord)?;
-            let prior = sqlx::query(
-                "SELECT entry_json,payload_bytes FROM thread_addresses WHERE address_key=?",
-            )
-            .bind(&key)
-            .fetch_optional(&mut *transaction)
-            .await?;
-            let prior_size = prior
-                .as_ref()
-                .map(|row| row.try_get::<i64, _>("payload_bytes"))
-                .transpose()?
-                .unwrap_or(0);
+            let prior = sqlx::query("SELECT entry_json FROM thread_addresses WHERE address_key=?")
+                .bind(&key)
+                .fetch_optional(&mut *transaction)
+                .await?;
             let previous = prior
                 .map(|row| row.try_get::<String, _>("entry_json"))
                 .transpose()?
@@ -117,13 +123,6 @@ impl ObservationJournal {
             let serialized =
                 serde_json::to_string(&entry).map_err(|_| JournalError::InvalidRecord)?;
             let entry_size = i64::try_from(serialized.len()).map_err(|_| JournalError::Capacity)?;
-            let used: i64 =
-                sqlx::query_scalar("SELECT COALESCE(SUM(payload_bytes),0) FROM thread_addresses")
-                    .fetch_one(&mut *transaction)
-                    .await?;
-            if used - prior_size + entry_size > 64 * 1024 * 1024 {
-                return Err(JournalError::Capacity);
-            }
             sqlx::query("INSERT INTO thread_addresses VALUES (?,?,?) ON CONFLICT(address_key) DO UPDATE SET entry_json=excluded.entry_json,payload_bytes=excluded.payload_bytes").bind(key).bind(serialized).bind(entry_size).execute(&mut *transaction).await?;
         }
         transaction.commit().await?;

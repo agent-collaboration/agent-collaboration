@@ -18,7 +18,7 @@ async fn phone_quota_component_honors_actual_physical_width() {
             "rendering a wider UI and clipping is not phone support at {width}: {frame}"
         );
         assert!(
-            frame.contains("Quota status") && frame.contains("Help"),
+            frame.contains("Quota ·") && frame.contains("Menu F10"),
             "{frame}"
         );
     }
@@ -35,14 +35,15 @@ async fn quota_header_keeps_named_total_and_usable_counts_at_every_width() {
             vec![provider_filter_key(KeyCode::Esc)],
         )
         .await;
-        let title = frame
-            .lines()
-            .find(|line| line.contains("Quota status"))
-            .unwrap();
+        let title = frame.lines().find(|line| line.contains("Quota ·")).unwrap();
         assert!(
-            title.contains("Pool details") && title.contains("Help"),
+            !title.contains("Help") && frame.contains("Menu F10"),
             "{frame}"
         );
+        let menu = super::quota_menu_canvas(quota_two_account_view_model(), width, 24)
+            .await
+            .to_string();
+        assert!(menu.contains("Pool") && menu.contains("Help"), "{menu}");
         assert!(
             !frame.contains("Usable 2") && !frame.contains("Fresh 2"),
             "{frame}"
@@ -72,18 +73,18 @@ async fn contextual_help_uses_current_census_including_zero_and_distinct_unknown
         120,
         36,
         vec![
-            ("Quota status", vec![provider_filter_key(KeyCode::F(1))]),
-            ("Quota Help", vec![provider_filter_key(KeyCode::Esc)]),
-            ("Filters", vec![provider_filter_key(KeyCode::Esc)]),
+            ("Quota ·", vec![provider_filter_key(KeyCode::F(1))]),
+            ("Help", vec![provider_filter_key(KeyCode::Esc)]),
+            ("Quota ·", vec![provider_filter_key(KeyCode::Esc)]),
         ],
         None,
     )
     .await;
     let help = frames
         .iter()
-        .find(|frame| frame.contains("Quota Help"))
+        .find(|frame| crate::quota_browse_presentation_test::quota_help_visible(frame))
         .expect("real contextual Help opened");
-    let help = actual_dialog_text(help, "Quota Help")
+    let help = actual_dialog_text(help, "Help")
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
@@ -108,36 +109,42 @@ async fn contextual_help_uses_current_census_including_zero_and_distinct_unknown
 
 #[test]
 fn actual_dialog_crop_rejects_missing_modal_bottom_with_background_facts() {
-    let frame = "╭──────────────────────────────────╮\n│ Use credits Disallow              │\n│   ╭──────────────────────╮       │\n│   │ Quota Help           │       │\n│   │ Close                │       │\n╰──────────────────────────────────╯";
+    let frame = "╭──────────────────────────────────╮\n│ Use credits Disallow              │\n│   ╭──────────────────────╮       │\n│   │ Help                 │       │\n│   │ Close                │       │\n╰──────────────────────────────────╯";
     assert!(
-        std::panic::catch_unwind(|| actual_dialog_text(frame, "Quota Help")).is_err(),
+        std::panic::catch_unwind(|| actual_dialog_text(frame, "Help")).is_err(),
         "a modal without its bottom must not borrow Use credits/Disallow from the outer frame"
     );
 }
 
 #[test]
 fn actual_dialog_crop_rejects_mismatched_modal_bottom_with_background_facts() {
-    let frame = "╭──────────────────────────────────╮\n│ Use credits Disallow              │\n│   ╭──────────────────────╮       │\n│   │ Quota Help           │       │\n│   │ Close                │       │\n│  ╰───────────────────────╯       │\n╰──────────────────────────────────╯";
+    let frame = "╭──────────────────────────────────╮\n│ Use credits Disallow              │\n│   ╭──────────────────────╮       │\n│   │ Help                 │       │\n│   │ Close                │       │\n│  ╰───────────────────────╯       │\n╰──────────────────────────────────╯";
     assert!(
-        std::panic::catch_unwind(|| actual_dialog_text(frame, "Quota Help")).is_err(),
+        std::panic::catch_unwind(|| actual_dialog_text(frame, "Help")).is_err(),
         "a displaced bottom is not the modal's boundary"
     );
 }
 
 #[test]
 fn actual_dialog_crop_keeps_modal_content_without_background_facts() {
-    let frame = "╭──────────────────────────────────╮\n│ Use credits Disallow              │\n│   ╭──────────────────────╮       │\n│   │ Quota Help           │       │\n│   │ Close                │       │\n│   ╰──────────────────────╯       │\n╰──────────────────────────────────╯";
-    let dialog = actual_dialog_text(frame, "Quota Help");
-    assert!(dialog.contains("Quota Help") && dialog.contains("Close"));
+    let frame = "╭──────────────────────────────────╮\n│ Use credits Disallow              │\n│   ╭──────────────────────╮       │\n│   │ Help                 │       │\n│   │ Close                │       │\n│   ╰──────────────────────╯       │\n╰──────────────────────────────────╯";
+    let dialog = actual_dialog_text(frame, "Help");
+    assert!(
+        crate::quota_browse_presentation_test::quota_help_visible(&dialog)
+            && dialog.contains("Close")
+    );
     assert!(!dialog.contains("Use credits") && !dialog.contains("Disallow"));
 }
 
 #[test]
 fn actual_dialog_crop_preserves_cjk_overwritten_top_left_corner() {
     // The second wide glyph covers the modal's left corner at column four.
-    let frame = "╭──────────────────────────────────╮\n│ Use credits Disallow              │\n│東京──────────────────────╮       │\n│   │ Quota Help           │       │\n│   │ Close                │       │\n│   ╰──────────────────────╯       │\n╰──────────────────────────────────╯";
-    let dialog = actual_dialog_text(frame, "Quota Help");
-    assert!(dialog.contains("Quota Help") && dialog.contains("Close"));
+    let frame = "╭──────────────────────────────────╮\n│ Use credits Disallow              │\n│東京──────────────────────╮       │\n│   │ Help                 │       │\n│   │ Close                │       │\n│   ╰──────────────────────╯       │\n╰──────────────────────────────────╯";
+    let dialog = actual_dialog_text(frame, "Help");
+    assert!(
+        crate::quota_browse_presentation_test::quota_help_visible(&dialog)
+            && dialog.contains("Close")
+    );
     assert!(!dialog.contains("Use credits") && !dialog.contains("Disallow"));
 }
 
@@ -172,10 +179,12 @@ fn modal_geometry_keeps_only_its_own_scroll_thumb_before_text_normalization() {
 
 fn actual_dialog_geometry(frame: &str, title: &str) -> String {
     let lines = frame.lines().collect::<Vec<_>>();
-    let title_row = lines
-        .iter()
-        .position(|line| line.contains(title))
-        .expect("dialog title is visible");
+    let title_row = if title == "Help" {
+        crate::quota_browse_presentation_test::quota_help_title_row(frame)
+    } else {
+        lines.iter().position(|line| line.contains(title))
+    }
+    .expect("dialog title is visible");
     let column_of = |line: &str, marker: char| {
         line.find(marker).map(|offset| {
             unicode_width::UnicodeWidthStr::width(
@@ -231,12 +240,112 @@ fn actual_dialog_geometry(frame: &str, title: &str) -> String {
         .join("\n")
 }
 
+#[test]
+fn semantic_dialog_crop_preserves_interior_blocks_and_does_not_borrow_background_thumb() {
+    for padding in [0usize, 1] {
+        let inner = 18usize;
+        let mut modal = vec![
+            format!("╭{}╮", "─".repeat(inner)),
+            format!("│{:<18}│", "Help"),
+        ];
+        let content = format!(
+            "Meter █{}█{}",
+            " ".repeat(10 - padding),
+            " ".repeat(padding)
+        );
+        modal.push(format!("│{content}│"));
+        modal.extend(
+            (0..if padding == 0 { 1 } else { 14 }).map(|_| format!("│{}│", " ".repeat(inner))),
+        );
+        modal.push(format!("│{:<18}│", "Close"));
+        modal.push(format!("╰{}╯", "─".repeat(inner)));
+        let make_frame = |rows: &[String]| {
+            format!(
+                "╭{}╮\n│{:<30}│\n{}\n╰{}╯",
+                "─".repeat(30),
+                "Background █",
+                rows.iter()
+                    .map(|row| format!("│ {row}        │"))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+                "─".repeat(30)
+            )
+        };
+        let scrolling = make_frame(&modal);
+        let raw = actual_dialog_geometry(&scrolling, "Help");
+        assert_eq!(
+            raw.matches('█').count(),
+            2,
+            "raw geometry retains both real modal cells"
+        );
+        let text = actual_dialog_text(&scrolling, "Help");
+        assert_eq!(
+            text.matches('█').count(),
+            1,
+            "only the one measured scrollbar column is masked: {text}"
+        );
+        assert!(
+            text.contains("Meter █"),
+            "interior quota meter is never normalized"
+        );
+        assert!(actual_dialog_has_scroll_thumb(&scrolling, "Help"));
+        modal[2] = format!("│{:<18}│", "Meter █");
+        let fits = make_frame(&modal);
+        assert!(
+            !actual_dialog_has_scroll_thumb(&fits, "Help"),
+            "interior meter and background thumb cannot create a modal scrollbar"
+        );
+        assert_eq!(actual_dialog_text(&fits, "Help").matches('█').count(), 1);
+    }
+}
+
+fn dialog_scrollbar_column(geometry: &str) -> usize {
+    let inner_width = geometry
+        .lines()
+        .map(unicode_width::UnicodeWidthStr::width)
+        .max()
+        .unwrap_or(0);
+    let padding = usize::from(geometry.lines().count() + 2 >= 16);
+    inner_width.saturating_sub(padding + 1)
+}
+
 pub(crate) fn actual_dialog_text(frame: &str, title: &str) -> String {
-    actual_dialog_geometry(frame, title).replace('┃', " ")
+    let geometry = actual_dialog_geometry(frame, title);
+    let scrollbar = dialog_scrollbar_column(&geometry);
+    geometry
+        .lines()
+        .map(|line| {
+            let mut column = 0;
+            line.chars()
+                .map(|character| {
+                    let start = column;
+                    column += unicode_width::UnicodeWidthChar::width(character).unwrap_or(0);
+                    if character == '┃'
+                        || (start == scrollbar && matches!(character, '█' | '│' | '❯'))
+                    {
+                        ' '
+                    } else {
+                        character
+                    }
+                })
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn actual_dialog_has_scroll_thumb(frame: &str, title: &str) -> bool {
-    actual_dialog_geometry(frame, title).contains('┃')
+    let geometry = actual_dialog_geometry(frame, title);
+    let scrollbar = dialog_scrollbar_column(&geometry);
+    geometry.contains('┃')
+        || geometry.lines().any(|line| {
+            let mut column = 0;
+            line.chars().any(|character| {
+                let start = column;
+                column += unicode_width::UnicodeWidthChar::width(character).unwrap_or(0);
+                start == scrollbar && character == '█'
+            })
+        })
 }
 
 fn clarity_control_key(character: char) -> KeyEvent {
@@ -246,7 +355,7 @@ fn clarity_control_key(character: char) -> KeyEvent {
 }
 
 #[path = "quota_ux_reset_test.rs"]
-mod quota_ux_reset_test;
+pub(crate) mod quota_ux_reset_test;
 
 #[path = "quota_reset_result_pose_test.rs"]
 mod quota_reset_result_pose_test;
@@ -300,7 +409,7 @@ async fn approved_visual_browse_has_four_groups_and_quiet_header() {
         !frame.contains("Pool-wide:") && !frame.contains("Fresh 2"),
         "C6 routine census belongs to Pool details: {frame}"
     );
-    assert!(frame.contains("Pool details"), "{frame}");
+    assert!(frame.contains("Pool F5"), "{frame}");
 }
 
 #[path = "quota_compact_layout_test.rs"]

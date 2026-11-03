@@ -32,15 +32,171 @@ async fn replicated_head(
 fn reader_registry(
     runtime: &Runtime,
     root: &Path,
-    source: CentralReadCopies,
+    source: Arc<CentralReadCopies>,
 ) -> Result<Arc<ProjectStoreRegistry>, Box<dyn std::error::Error + Send + Sync>> {
     let registry = Arc::new(ProjectStoreRegistry::new(
         root,
         Some(runtime.central.peer),
         Arc::new(SystemClock),
     ));
-    registry.attach_central_reads(Arc::new(source))?;
+    registry.attach_central_reads(source)?;
     Ok(registry)
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
+async fn machine_session_startup_removes_stale_board_read_cache_roots() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let router_root = directory.path().join("router");
+    let stale_root = router_root
+        .join("board-read-cache")
+        .join("550e8400-e29b-41d4-a716-446655440001");
+    tokio::fs::create_dir_all(&stale_root).await?;
+    tokio::fs::write(stale_root.join("stale.marker"), b"old session").await?;
+    let mut central =
+        TestFleet::start(&directory.path().join("central"), GateAnswer::Admitted).await?;
+
+    let board = open_board_admission(&router_root, identity()?, Some(central.inputs()?)).await?;
+    let stale_root_survived_startup = stale_root.exists();
+    let admission = board.admission.clone();
+    drop(board);
+    Arc::try_unwrap(admission)
+        .map_err(|_| "prepared admission still owned")?
+        .close()
+        .await?;
+    central.stop().await?;
+
+    assert!(
+        !stale_root_survived_startup,
+        "machine-session startup retained a stale board-read-cache root"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
+async fn registry_close_removes_a_released_central_read_generation() -> TestResult {
+    use futures_util::FutureExt as _;
+
+    let runtime = Box::pin(Runtime::new()).await?;
+    let (state, _) = replicated_head(&runtime).await?;
+    *runtime.central.read_copy_entries.lock().await = vec![directory_entry(&state, 9)?];
+    let root = runtime.directory.path().join("reader-close");
+    tokio::fs::create_dir_all(&root).await?;
+    let source = CentralReadCopies::new(
+        &root,
+        runtime.requests.clone(),
+        runtime.central.receiver,
+        runtime.readiness.clone(),
+    );
+    let registry = reader_registry(&runtime, &root, Arc::new(source))?;
+    let handle = registry
+        .read_project(&runtime.project)
+        .await?
+        .ok_or("central reader")?;
+    let snapshot = handle.snapshot().await?;
+    let copy = copy_files(&root.join("board-read-cache"))?
+        .into_iter()
+        .next()
+        .ok_or("installed central copy")?;
+    let generation_root = copy
+        .parent()
+        .and_then(Path::parent)
+        .ok_or("central generation root")?
+        .to_owned();
+    assert!(generation_root.is_dir());
+
+    let registry = Arc::try_unwrap(registry).map_err(|_| "reader registry still owned")?;
+    let mut close = Box::pin(registry.close());
+    assert!(
+        close.as_mut().now_or_never().is_none(),
+        "registry close completed while a reader still owned the generation"
+    );
+    assert!(
+        generation_root.is_dir(),
+        "registry close removed a generation while its reader was open"
+    );
+
+    snapshot.finish().await?;
+    drop(handle);
+    close.await?;
+
+    assert!(
+        !generation_root.exists(),
+        "registry close retained a released central generation directory"
+    );
+    runtime.close().await?;
+    Ok(())
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
+async fn startup_sweep_removes_stale_root_and_keeps_an_open_reader_generation() -> TestResult {
+    let runtime = Box::pin(Runtime::new()).await?;
+    let (state, head) = replicated_head(&runtime).await?;
+    *runtime.central.read_copy_entries.lock().await = vec![directory_entry(&state, 9)?];
+    let root = runtime.directory.path().join("reader-sweep");
+    let stale_root = root
+        .join("board-read-cache")
+        .join("550e8400-e29b-41d4-a716-446655440001");
+    tokio::fs::create_dir_all(&stale_root).await?;
+    tokio::fs::write(stale_root.join("stale.marker"), b"old session").await?;
+    let source = Arc::new(CentralReadCopies::new(
+        &root,
+        runtime.requests.clone(),
+        runtime.central.receiver,
+        runtime.readiness.clone(),
+    ));
+    let registry = reader_registry(&runtime, &root, source.clone())?;
+    let handle = registry
+        .read_project(&runtime.project)
+        .await?
+        .ok_or("central reader")?;
+    let snapshot = handle.snapshot().await?;
+    let copy = copy_files(&root.join("board-read-cache"))?
+        .into_iter()
+        .next()
+        .ok_or("installed central copy")?;
+    let generation_root = copy
+        .parent()
+        .and_then(Path::parent)
+        .ok_or("central generation root")?
+        .to_owned();
+    let session_root = generation_root
+        .parent()
+        .and_then(Path::parent)
+        .ok_or("current session root")?
+        .to_owned();
+
+    source.sweep_stale_session_roots().await;
+
+    assert!(!stale_root.exists(), "stale session root survived sweep");
+    assert!(
+        session_root.is_dir() && generation_root.is_dir(),
+        "startup sweep removed the live session root with an open reader"
+    );
+    assert_eq!(snapshot.high_water(), head);
+    snapshot.finish().await?;
+    drop(handle);
+    Arc::try_unwrap(registry)
+        .map_err(|_| "reader registry still owned")?
+        .close()
+        .await?;
+    assert!(
+        !generation_root.exists(),
+        "closed generation directory remained"
+    );
+    runtime.close().await?;
+    Ok(())
 }
 
 async fn assert_partial_pull(move_between_pages: bool) -> TestResult {
@@ -57,7 +213,7 @@ async fn assert_partial_pull(move_between_pages: bool) -> TestResult {
         runtime.readiness.clone(),
     );
     let (source, pause) = source.pause_after_staged_page_for_test();
-    let registry = reader_registry(&runtime, &root, source)?;
+    let registry = reader_registry(&runtime, &root, Arc::new(source))?;
     let reader = registry.clone();
     let project = runtime.project.clone();
     let pulling = tokio::spawn(async move { reader.read_project(&project).await });
@@ -153,7 +309,7 @@ async fn assert_partial_pull(move_between_pages: bool) -> TestResult {
         runtime.central.receiver,
         runtime.readiness.clone(),
     );
-    let registry = reader_registry(&runtime, &root, source)?;
+    let registry = reader_registry(&runtime, &root, Arc::new(source))?;
     let handle = timeout(BOUND, registry.read_project(&runtime.project))
         .await??
         .ok_or("fresh verified copy")?;

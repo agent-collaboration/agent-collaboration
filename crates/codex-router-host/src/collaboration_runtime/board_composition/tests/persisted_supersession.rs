@@ -14,13 +14,7 @@ async fn cold_welcome_and_notice_recovery_skip_superseded_project_and_initialize
     // between directory settlement and native file creation.
     let runtime = Box::pin(Runtime::new()).await?;
     let context = runtime.admission.runtime_test_context();
-    let mut creation = runtime
-        .fleet
-        .accepted_creation_page("", 100)
-        .await?
-        .into_iter()
-        .find(|request| request.project_id == runtime.project)
-        .ok_or("P creation")?;
+    let mut creation = runtime.creation_request.clone();
     creation.project_id = ProjectId::generate();
     creation.request_id = RequestId::generate();
     creation.title = "Q after superseded P".to_owned().try_into()?;

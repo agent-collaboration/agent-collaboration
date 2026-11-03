@@ -62,7 +62,7 @@ export const codexAcpRunPlanSchema = z
 	.strictObject({
 		repository: absolutePathSchema,
 		source_head: z.string().regex(/^[a-f0-9]{40}$/u),
-		// The signed quota_storyboard_capture_test binary that owns the PTY.
+		// The signed e2e libtest with the namespaced ACP PTY entry.
 		driver: artifactBindingSchema,
 		node: artifactBindingSchema,
 		chrome: artifactBindingSchema,
@@ -278,13 +278,13 @@ export async function checkCodexAcp(plan: CodexAcpRunPlan): Promise<CodexJourney
 	execFileSync('/usr/bin/codesign', ['--verify', '--strict', plan.driver.path]);
 	const listing = execFileSync(
 		plan.driver.path,
-		['compiled_codex_acp_grid_observation', '--exact', '--list', '--ignored'],
+		['quota_storyboard::compiled_codex_acp_grid_observation', '--exact', '--list', '--ignored'],
 		{ encoding: 'utf8' },
 	);
-	if (!listing.split('\n').includes('compiled_codex_acp_grid_observation: test'))
+	if (!listing.split('\n').includes('quota_storyboard::compiled_codex_acp_grid_observation: test'))
 		throw new Error('declared Codex ACP test entry absent');
-	if (realpathSync(process.execPath) !== plan.node.path || process.version !== 'v26.12.1')
-		throw new Error('the run must use the declared Node v26.12.1');
+	if (realpathSync(process.execPath) !== plan.node.path || process.version !== 'v26.13.0')
+		throw new Error('the run must use the declared Node v26.13.0');
 	await qualifyTerminal();
 	qualifyCodexAcpTarget(plan.target);
 	const binding = claudeRouteBinding(plan);

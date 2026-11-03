@@ -1,4 +1,5 @@
 //! Manual viewport navigation across inspected-layout arrival and remeasurement.
+use super::super::CreditFrameAcknowledgement;
 use super::*;
 
 #[tokio::test(flavor = "current_thread")]
@@ -119,15 +120,16 @@ async fn options_body_top_after_navigation(order: InspectionNavigationOrder) -> 
                 if order == InspectionNavigationOrder::AfterRenderedInspection
                     && post_navigation_frames.len() >= 2
                 {
-                    let _ = acknowledgements.send("settled-navigation-frame");
+                    let _ = acknowledgements
+                        .send(CreditFrameAcknowledgement::Text("settled-navigation-frame"));
                 }
             }
             if frame.contains("voucher-1") && !frame.contains("Live eligibility") {
                 saw_inspected = true;
-                let _ = acknowledgements.send("voucher-1");
+                let _ = acknowledgements.send(CreditFrameAcknowledgement::Text("voucher-1"));
             }
             if frame.contains("[alpha-tag]") && !saw_inspected {
-                let _ = acknowledgements.send("[alpha-tag]");
+                let _ = acknowledgements.send(CreditFrameAcknowledgement::Text("[alpha-tag]"));
             }
             if frame.contains("Live eligibility") && saw_inspected && navigation_complete {
                 assert!(

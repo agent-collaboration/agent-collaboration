@@ -54,10 +54,10 @@ async fn pending_fleet_requests_keep_their_ids_and_decisions_across_reopen() -> 
         reasons: vec![Refusal::Archived],
     };
     reopened
-        .mark_decided(&original.request_id, &rejected)
+        .mark_decided(&original.request_id, &rejected, 1_000)
         .await?;
     reopened
-        .mark_decided(&original.request_id, &rejected)
+        .mark_decided(&original.request_id, &rejected, 1_000)
         .await?;
     assert!(reopened.pending().await?.is_empty());
     assert!(matches!(
@@ -68,7 +68,8 @@ async fn pending_fleet_requests_keep_their_ids_and_decisions_across_reopen() -> 
                     reasons: vec![Refusal::InvalidShape {
                         field: "fixture".into()
                     }]
-                }
+                },
+                2_000,
             )
             .await,
         Err(RouterLocalStorageError::ConflictingRequest)

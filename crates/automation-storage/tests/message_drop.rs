@@ -31,7 +31,7 @@ async fn connect(path: &Path) -> Result<SqliteConnection, sqlx::Error> {
             .filename(path)
             .create_if_missing(true)
             .foreign_keys(true)
-            .journal_mode(SqliteJournalMode::Delete)
+            .journal_mode(SqliteJournalMode::Wal)
             .synchronous(SqliteSynchronous::Full),
     )
     .await

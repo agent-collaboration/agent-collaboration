@@ -19,10 +19,11 @@ async fn question_list_and_answer_cross_the_real_api() {
         "serviceId":service_id,"endpointId":"claude-local"
     }))
     .expect("endpoint");
-    let original = b"obsolete JSON must be ignored, including malformed content";
-    tokio::fs::write(root.path().join("interaction-history.json"), original)
-        .await
-        .expect("ignored JSON before broker load");
+    let interaction_store = std::sync::Arc::new(
+        interaction_storage::InteractionStore::open(root.path().join("interaction.sqlite"))
+            .await
+            .expect("interaction store"),
+    );
     let broker = ServiceInteractionBroker::load(
         service_id.to_owned().try_into().expect("service ID"),
         NativeControlBackend {
@@ -30,7 +31,7 @@ async fn question_list_and_answer_cross_the_real_api() {
             gate: NativeGenerationGate::default(),
             codex_home: root.path().to_path_buf(),
         },
-        root.path().join("approval-routes.json"),
+        interaction_store,
     )
     .await
     .expect("broker");
@@ -173,12 +174,6 @@ async fn question_list_and_answer_cross_the_real_api() {
         .await
         .expect("real route mutation only");
     assert_eq!(count, 1);
-    assert_eq!(
-        tokio::fs::read(root.path().join("interaction-history.json"))
-            .await
-            .expect("ignored JSON bytes"),
-        original
-    );
     sqlx::Connection::close(observer)
         .await
         .expect("close durable observer");

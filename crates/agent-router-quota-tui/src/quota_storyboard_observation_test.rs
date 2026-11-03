@@ -99,7 +99,12 @@ async fn normal_fixture_refresh_reloads_distinct_balance_and_keeps_help_target_a
             }
             sender.send(provider_filter_key(KeyCode::Right)).unwrap();
             canvas = observation_canvas(frames.as_mut()).await;
-            while yes_choice_color(&canvas) != Some(Color::Yellow) {
+            while yes_choice_color(&canvas) != Some(Color::Yellow)
+                || !canvas
+                    .to_string()
+                    .lines()
+                    .any(|line| line.contains("● Yes"))
+            {
                 canvas = observation_canvas(frames.as_mut()).await;
             }
             let before_help = canvas.to_string();
@@ -107,7 +112,7 @@ async fn normal_fixture_refresh_reloads_distinct_balance_and_keeps_help_target_a
             let requests_before_help = requests.load(Ordering::SeqCst);
             sender.send(provider_filter_key(KeyCode::F(1))).unwrap();
             canvas = observation_canvas(frames.as_mut()).await;
-            while !canvas.to_string().contains("Quota Help") {
+            while !crate::quota_browse_presentation_test::quota_help_visible(&canvas.to_string()) {
                 canvas = observation_canvas(frames.as_mut()).await;
             }
             let mut captured = Vec::new();
@@ -162,13 +167,19 @@ async fn normal_fixture_refresh_reloads_distinct_balance_and_keeps_help_target_a
                 canvas = observation_canvas(frames.as_mut()).await;
                 evidence.push(("after-reset-cancel", 0, canvas.to_string()));
             }
-            sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
+            sender
+                .send(crate::quota_test_support::shift_tab_event())
+                .unwrap();
+            sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
             canvas = observation_canvas(frames.as_mut()).await;
             evidence.push(("after-credit-tab", 0, canvas.to_string()));
-            while !canvas.to_string().contains("Options · Credits") {
+            while !canvas.to_string().contains("Options · Credits")
+                || canvas.to_string().contains("Tab change pending")
+            {
                 canvas = observation_canvas(frames.as_mut()).await;
                 evidence.push(("after-credit-tab", 0, canvas.to_string()));
             }
+            sender.send(provider_filter_key(KeyCode::Tab)).unwrap();
             if !dialog_words(&canvas.to_string(), "Options · Credits").contains("Status") {
                 for _ in 0..256 {
                     sender.send(provider_filter_key(KeyCode::Up)).unwrap();
@@ -309,7 +320,7 @@ fn yes_choice_color(canvas: &Canvas) -> Option<Color> {
     let (row, line) = frame
         .lines()
         .enumerate()
-        .find(|(_, line)| line.contains("Reset quota?") && line.contains("Yes"))?;
+        .find(|(_, line)| line.contains("No") && line.contains("Yes"))?;
     let column = unicode_width::UnicodeWidthStr::width(line.get(..line.find("Yes")?)?);
     canvas.cell(column, row)?.text_style()?.color
 }

@@ -56,6 +56,15 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
     });
     let adapter = NativeStore::new(preceding.clone(), Arc::new(NoDispatchHost));
     let (item, draft) = native_item_and_push();
+    let migration_item: collaboration_mail_protocol::MailItemId =
+        item.id().as_uuid().to_string().try_into().unwrap();
+    let migration_target = draft.target.clone();
+    let completed_cancel: collaboration_mail_protocol::MailItemId =
+        uuid::Uuid::now_v7().to_string().try_into().unwrap();
+    let pending_answer: collaboration_mail_protocol::MailItemId =
+        uuid::Uuid::now_v7().to_string().try_into().unwrap();
+    let pending_cancel: collaboration_mail_protocol::MailItemId =
+        uuid::Uuid::now_v7().to_string().try_into().unwrap();
     let reference = fleet_sync_protocol::DeliveryItemRef {
         item: item.id(),
         digest: item.digest().clone(),
@@ -66,6 +75,55 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
     let history_json = serde_json::to_string(&history).unwrap();
     let stamp = "2026-10-21T12:00:00.000000000Z";
     enqueue_and_project(&adapter, item, draft).await.unwrap();
+    let queued_answer: collaboration_protocol::MessageSendResult =
+        collaboration_protocol::MessageSendResult::Queued {
+            queued: collaboration_protocol::QueuedMessageSend {
+                item: migration_item.clone(),
+                target: migration_target,
+                target_identity: "🤖 frozen recipient".to_owned(),
+            },
+        };
+    let completed_cancel_outcome = fleet_sync_protocol::RecipientOutcome::<
+        collaboration_mail_protocol::CarrierAcceptance,
+    >::Refused {
+        reason: fleet_sync_protocol::DeliveryRefusal::ProcessingFailed {
+            kind: fleet_sync_protocol::DeliveryFailureKind::ExecutionFailed,
+        },
+    };
+    let before_migration_ms = chrono::Utc::now().timestamp_millis();
+    {
+        let mut writer = preceding.writer.lock().await;
+        sqlx::query("UPDATE message_send_answers SET result=? WHERE item_id=?")
+            .bind(serde_json::to_string(&queued_answer).unwrap())
+            .bind(migration_item.as_str())
+            .execute(&mut *writer)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO message_send_answers(item_id,target_identity,result,recorded_at) VALUES (?,?,NULL,?)")
+            .bind(pending_answer.as_str())
+            .bind("migration pending")
+            .bind(stamp)
+            .execute(&mut *writer)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO local_cancel_deliveries(item_id,target_item,attribution_json,outcome_json,recorded_at) VALUES (?,?,?, ?,?)")
+            .bind(completed_cancel.as_str())
+            .bind(migration_item.as_str())
+            .bind(serde_json::to_string(&collaboration_mail_protocol::CancelCause::BoardDerived {}).unwrap())
+            .bind(serde_json::to_string(&completed_cancel_outcome).unwrap())
+            .bind(stamp)
+            .execute(&mut *writer)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO local_cancel_deliveries(item_id,target_item,attribution_json,outcome_json,recorded_at) VALUES (?,?,?,NULL,?)")
+            .bind(pending_cancel.as_str())
+            .bind(migration_item.as_str())
+            .bind(serde_json::to_string(&collaboration_mail_protocol::CancelCause::BoardDerived {}).unwrap())
+            .bind(stamp)
+            .execute(&mut *writer)
+            .await
+            .unwrap();
+    }
     let expected_push =
         serde_json::to_value(preceding.get_push_record(&push).await.unwrap().unwrap()).unwrap();
     {
@@ -99,7 +157,7 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
         .await
         .unwrap();
 
-    // Act: today's public opener must admit that exact file and run migration13.
+    // Act: today's public opener admits this exact file and runs the three newer migrations.
     for _ in 0..2 {
         let owner = Arc::new(
             InteractionStore::open(&path)
@@ -124,7 +182,46 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
                 .fetch_one(&mut *writer)
                 .await
                 .unwrap();
-            assert_eq!(migrations, 13);
+            assert_eq!(migrations, 15);
+            let completed_answer: Option<i64> = sqlx::query_scalar(
+                "SELECT settled_at_ms FROM message_send_answers WHERE item_id=?",
+            )
+            .bind(migration_item.as_str())
+            .fetch_one(&mut *writer)
+            .await
+            .unwrap();
+            let pending_answer_settlement: Option<i64> = sqlx::query_scalar(
+                "SELECT settled_at_ms FROM message_send_answers WHERE item_id=?",
+            )
+            .bind(pending_answer.as_str())
+            .fetch_one(&mut *writer)
+            .await
+            .unwrap();
+            let completed_cancel_settlement: Option<i64> = sqlx::query_scalar(
+                "SELECT settled_at_ms FROM local_cancel_deliveries WHERE item_id=?",
+            )
+            .bind(completed_cancel.as_str())
+            .fetch_one(&mut *writer)
+            .await
+            .unwrap();
+            let pending_cancel_settlement: Option<i64> = sqlx::query_scalar(
+                "SELECT settled_at_ms FROM local_cancel_deliveries WHERE item_id=?",
+            )
+            .bind(pending_cancel.as_str())
+            .fetch_one(&mut *writer)
+            .await
+            .unwrap();
+            let after_migration_ms = chrono::Utc::now().timestamp_millis();
+            for settlement in [completed_answer, completed_cancel_settlement] {
+                let migration_time = settlement.expect("finished row gets migration timestamp");
+                assert!(
+                    migration_time >= before_migration_ms - 1000
+                        && migration_time <= after_migration_ms,
+                    "backfill must use migration time in milliseconds"
+                );
+            }
+            assert_eq!(pending_answer_settlement, None);
+            assert_eq!(pending_cancel_settlement, None);
             let contexts: i64 = sqlx::query_scalar("SELECT count(*) FROM mail_read_contexts")
                 .fetch_one(&mut *writer)
                 .await
@@ -133,6 +230,13 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
                 contexts, 0,
                 "upgrade invented admission metadata for historical mail"
             );
+            let route_tables: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM sqlite_schema WHERE type='table' AND name='approval_routes'",
+            )
+            .fetch_one(&mut *writer)
+            .await
+            .unwrap();
+            assert_eq!(route_tables, 1, "approval route migration is present");
         }
         let adapter = NativeStore::new(owner.clone(), Arc::new(NoDispatchHost));
         let reference = reference.clone();
@@ -185,13 +289,15 @@ async fn partial_unknown_newer_or_malformed_read_context_schema_is_refused_witho
         "DROP TABLE mail_read_contexts",
         "DELETE FROM _sqlx_migrations WHERE version=202610220001",
         "DROP INDEX mail_read_context_conversation",
+        "DROP INDEX message_send_answers_settled",
+        "ALTER TABLE message_send_answers ADD COLUMN unexpected TEXT",
         "ALTER TABLE mail_read_contexts ADD COLUMN unexpected TEXT",
         "UPDATE _sqlx_migrations SET checksum=x'00' WHERE version=202610220001",
         "UPDATE _sqlx_migrations SET version=202610220002 WHERE version=202610220001",
     ] {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("interaction.sqlite");
-        crate::schema_prefix_fixture::create_native_prefix(&path, 202610220001).await;
+        crate::schema_prefix_fixture::create_native_prefix(&path, 202610310001).await;
         let mut writer = sqlx_turso::TursoConnection::connect_with(
             &sqlx_turso::TursoConnectOptions::new().filename(&path),
         )

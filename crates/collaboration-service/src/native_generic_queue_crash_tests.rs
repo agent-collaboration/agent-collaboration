@@ -151,8 +151,19 @@ async fn generic_queue_host_stop_reconciles_exact_item_causal() {
         collaboration_protocol::AcceptedResumeEffect::NotRequested
     );
     assert_eq!(String::from(client.client_user_message_id), push.as_str());
+    let interactions = identity.interaction_store.clone().unwrap();
     drop(identity);
-    drop(store);
+    Arc::try_unwrap(store)
+        .unwrap_or_else(|_| panic!("fixture automation store remained shared"))
+        .into_inner()
+        .close()
+        .await
+        .expect("close fixture automation store");
+    Arc::try_unwrap(interactions)
+        .unwrap_or_else(|_| panic!("fixture interaction store remained shared"))
+        .close()
+        .await
+        .expect("close fixture interaction store");
     for entry in std::fs::read_dir(&root).unwrap() {
         std::fs::remove_file(entry.unwrap().path()).unwrap();
     }

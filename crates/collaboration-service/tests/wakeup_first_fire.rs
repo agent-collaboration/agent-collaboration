@@ -94,7 +94,11 @@ async fn dedicated_wait_observes_pause_after_immediate_resume()
         return Err("missing wake was confused with unavailable observation".into());
     }
     served.stop().await?;
-    drop(store);
+    Arc::try_unwrap(store)
+        .map_err(|_| std::io::Error::other("fixture automation store remained shared"))?
+        .into_inner()
+        .close()
+        .await?;
     std::fs::remove_file(path)?;
     Ok(())
 }

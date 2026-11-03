@@ -26,7 +26,7 @@ pub struct SourceInventoryRequest {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum SourceInventoryRejection {
-    #[error("session source is unavailable")]
+    #[error("not reachable")]
     SourceUnavailable,
     #[error("source connection needs qualification")]
     EndpointUnqualified,

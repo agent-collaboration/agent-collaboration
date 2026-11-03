@@ -1,9 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/controls/combo_state.rs b/crates/agent-collaboration-tui/src/controls/combo_state.rs
---- a/crates/agent-collaboration-tui/src/controls/combo_state.rs
-+++ b/crates/agent-collaboration-tui/src/controls/combo_state.rs
-@@ -83,3 +83,5 @@ impl ComboBoxState {
-         validate_options(&options)?;
-+        let previous_index=self.options.iter().position(|option|Some(&option.key)==self.highlight.key());
-         self.options = options;
-+        self.highlight=OptionHighlight::from_key(previous_index.and_then(|index|self.options.get(index)).map(|option|option.key.clone()));
-         if self.highlight.key().is_some()

@@ -102,7 +102,11 @@ async fn settings_recover_after_each_interrupted_persistence_boundary() -> TestR
             return Err(format!("{stage}: replay changed recovered settings").into());
         }
         drop(backend);
-        drop(store);
+        std::sync::Arc::try_unwrap(store)
+            .map_err(|_| std::io::Error::other("settings fixture store remained shared"))?
+            .into_inner()
+            .close()
+            .await?;
         for entry in std::fs::read_dir(&root)? {
             let entry = entry?;
             if !entry.file_type()?.is_file() {

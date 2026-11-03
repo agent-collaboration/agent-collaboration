@@ -92,7 +92,7 @@ qualified existing read owner and correlate them after actual resume. Keep any
 new job handle distinct from that native conversation UUID. A B returned-action
 receipt proves only the captured effect target; it cannot establish vendor
 settings preservation or attachment. The offline checks in
-`scripts/verification/tui/s9-claude-background-checks.ts` qualify only the
+`scripts/verification/tui/journeys/scenes/claude-background-checks.ts` qualify only the
 observation oracle, never the vendor interaction.
 
 ## Runtime prerequisites and retained evidence

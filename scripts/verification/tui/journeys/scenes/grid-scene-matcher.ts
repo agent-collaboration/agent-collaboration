@@ -107,7 +107,9 @@ function fieldPair(lines: readonly string[], label: string, value: string): bool
 			continue;
 		}
 		if (normalized === expectedLabel || normalized === `${expectedLabel}:`)
-			values.push(normalizeGridText((lines[row + 1] ?? '').replace(/[│┃]/gu, ' ')));
+			values.push(
+				normalizeGridText((lines[row + 1] ?? '').replace(/[│┃]/gu, ' ')).replace(/^[›❯]\s*/u, ''),
+			);
 	}
 	return values.length === 1 && (values[0] === expectedValue || values[0] === `${expectedValue} ▾`);
 }

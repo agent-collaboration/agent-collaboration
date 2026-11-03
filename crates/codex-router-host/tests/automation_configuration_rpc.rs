@@ -43,13 +43,6 @@ async fn host_persists_configured_budgets_and_loads_them_on_restart()
         }
         runtime.shutdown().await?;
     }
-    for entry in std::fs::read_dir(&root)? {
-        let entry = entry?;
-        if !entry.file_type()?.is_file() {
-            return Err("unexpected fixture entry".into());
-        }
-        std::fs::remove_file(entry.path())?;
-    }
-    std::fs::remove_dir(root)?;
+    std::fs::remove_dir_all(&root)?;
     Ok(())
 }

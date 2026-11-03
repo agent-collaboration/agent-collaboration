@@ -73,13 +73,6 @@ async fn cli_creates_and_reads_instruction_through_host() -> Result<(), Box<dyn 
         return Err("CLI text was not persisted".into());
     }
     runtime.shutdown().await?;
-    for entry in std::fs::read_dir(&root)? {
-        let entry = entry?;
-        if !entry.file_type()?.is_file() {
-            return Err("unexpected cleanup entry".into());
-        }
-        std::fs::remove_file(entry.path())?;
-    }
-    std::fs::remove_dir(root)?;
+    std::fs::remove_dir_all(&root)?;
     Ok(())
 }

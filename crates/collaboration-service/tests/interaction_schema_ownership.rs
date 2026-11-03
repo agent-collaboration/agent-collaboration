@@ -9,6 +9,9 @@ async fn load_broker(root: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let endpoint: EndpointRef = serde_json::from_value(serde_json::json!({
         "serviceId":"00000000-0000-4000-8000-000000000001", "endpointId":"claude-local"
     }))?;
+    let interaction_store = std::sync::Arc::new(
+        interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
+    );
     ServiceInteractionBroker::load(
         endpoint.service_id.clone(),
         NativeControlBackend {
@@ -16,7 +19,7 @@ async fn load_broker(root: &Path) -> Result<(), Box<dyn std::error::Error>> {
             gate: NativeGenerationGate::default(),
             codex_home: root.to_owned(),
         },
-        root.join("approval-routes.json"),
+        interaction_store,
     )
     .await
     .map(drop)

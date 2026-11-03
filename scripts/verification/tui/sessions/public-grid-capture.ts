@@ -169,7 +169,7 @@ export async function runPublicGridCapture(
 				fileDigest(
 					join(
 						plan.repository,
-						'crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/public_sessions_capture.rs',
+						'crates/codex-router-quota-reset-test-harness/tests/e2e/quota_storyboard/quota_storyboard_capture_test/public_sessions_capture.rs',
 					),
 				) ||
 			parsed.fixed_child_sha256 !==

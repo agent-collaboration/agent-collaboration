@@ -85,7 +85,7 @@ If the top surface has nothing for the event, the event is ignored: it never fal
 
 - Tab and Shift+Tab move focus through every enabled focus target in a fixed order and wrap around.
 - The arrow keys move focus within a group of targets (rows of a list, items of a menu, segments of a switch, fields of a dialog), except inside a text field (R9).
-- A click on an enabled target focuses it and activates it, the same as pressing Enter on it.
+- A click on an enabled target focuses it and activates it, the same as pressing Enter on it. Exception, kept from the shipped picker (`picker_list_view.rs:89`, `activates_on_click: false`): a click on a row of a scrolling list selects that row and focuses the list; Enter activates it. Rows of a choice list inside a dialog or dropdown still activate on click.
 - The wheel scrolls the scrollable area under the pointer.
 - Whenever the top surface has an enabled target, exactly one target is focused, and it is drawn visibly distinct from the rest.
 - On a screen's first draw, the first item of its main list is focused and selected when the list isn't empty.
@@ -97,7 +97,7 @@ If the top surface has nothing for the event, the event is ignored: it never fal
 - Enter acts on whatever has focus. With focus on the list, or in the filter field, Enter opens the selected item's Details, so typing a filter then pressing Enter shows the match's Details. With focus on a toolbar button or switch, Enter activates that button or switch, so Tab to [+ New] then Enter opens New session.
 - With focus on the list or in the filter field, Ctrl+Enter opens the selected session directly and Ctrl+Shift+Enter forks it, as the 2026-10-17 design already requires (10-17 R9). Where the terminal can't report these keys, Details offers the same actions.
 - Esc clears the search when it isn't empty, otherwise resets the filters when they aren't at their defaults, otherwise does nothing. Esc never quits.
-- Ctrl+C quits the application from any surface, including while an overlay is open, provided the application has opted in to receiving Ctrl+C. Opting in is a requirement on every application built with the crate (constraint C3).
+- Ctrl+C quits the application from any surface, including while an overlay is open, provided the application has opted in to receiving Ctrl+C. A screen may declare additional quit keys that its shipped version already treated the same way; the session picker keeps Ctrl+D ("Ctrl+C / Ctrl+D  Exit picker" in its 0.1.118 Help). Such aliases are declared by the screen, not built into the crate, so the quota screen's own Ctrl+D meaning is unaffected. Opting in is a requirement on every application built with the crate (constraint C3).
 - Every quit path keeps the screen's existing quit behaviour. On the quota screen, Ctrl+C does nothing while a reset is being committed, and before the commit it exits without committing, as `reset_key_action` does today.
 - This applies to the quota screen too: Esc there no longer exits (owner, 2026-10-29: "esc doesn't quit, ctrl c does"). Q still quits the quota screen.
 
@@ -107,7 +107,7 @@ If the top surface has nothing for the event, the event is ignored: it never fal
 
 ### commands
 
-**R6 — one definition per action** (U6). Each action is defined once, with its name, its keys and when it is available. Every place it is presented — toolbar button, ≡ menu item with the key on the right, keyboard shortcut, Help line, dialog key hint — shows that same name and key. When an action becomes unavailable, it becomes unavailable everywhere at once:
+**R6 — one definition per action** (U6). Each action is defined once, with its name, its keys and when it is available. Every place it is presented — toolbar button, ≡ menu item with the key on the right, keyboard shortcut, Help line, dialog key hint — shows that same name and key. The one definition may carry a short label that only a toolbar button shows, such as "+ New" for "New session…" (owner-approved toolbar, 2026-10-29); the key, availability and action are identical. When an action becomes unavailable, it becomes unavailable everywhere at once:
 
 - it is drawn disabled in the menu and toolbar, with its reason shown;
 - its key and click do nothing;
@@ -164,7 +164,7 @@ A form, such as New session, is as tall as its content, capped by the space avai
 
 Every glyph the crate itself draws (menu icon, ▾, markers, checkmarks) is one cell wide both in the pinned renderer's width table and under current Unicode, so rows line up in the terminal exactly as the crate measured them. The menu icon is ≡, not ☰: U+2630 is wide under Unicode 16, while the pinned renderer counts it as one cell (probe worker, 2026-10-30).
 
-`/` focuses the filter field from anywhere on the screen. Typing in it filters the list as each character is entered. Esc in it clears it, per R4. The ≡ menu opens on F10 or a click. It contains every other screen action, Help and Quit included, each with its key on the right. Its settings show as checked items (R8). It offers "New session…" (Ctrl+N) and, for clients that can run in the background, "New background session…", which opens the same dialog with Run set to Background. The New session dialog shows a Run choice, Foreground or Background, only when the chosen client supports both. A stopped Claude session's Details offers Open (foreground, same session, saved settings) and Resume in background.
+`/` focuses the filter field from anywhere on the screen. Typing in it filters the list as each character is entered. Esc in it clears it, per R4. The ≡ menu opens on F10 or a click. It contains every other screen action, Help and Quit included, each with its key on the right. Its settings show as checked items (R8): folder scope (This folder, All; Ctrl+S), runtime view (Ctrl+T) and sort (Ctrl+O), each value a checked item with the setting's key. The menu lists the screen's actions (R6), not input conventions: moving in the list (arrows, PgUp/PgDn, Home/End), typing and Backspace in the filter, the search syntax (id:, b:, repo:) and the Esc ladder (R4) belong to the controls and show in Help under their own heading, not as menu items. The menu does not list itself; Help shows "Menu F10". It offers "New session…" (Ctrl+N) and, for clients that can run in the background, "New background session…", which opens the same dialog with Run set to Background. The New session dialog shows a Run choice, Foreground or Background, only when the chosen client supports both. A stopped Claude session's Details offers Open: the same session, resumed with its saved settings, and you land inside it. There is no separate "Resume in background" action. Owner, 2026-10-30: "yes just open or resume then" (Resume in background removed; Open on a stopped session resumes it and attaches).
 
 The quota screen's top row shows, left to right: ≡ Menu with its key (F10); [Details]; [Filters: <current> ▾]; [Pool]; [Options]; [Floor] when the weekly floor is available; and, right-aligned, the account count and active clients. Its ≡ menu lists every quota action with its key (Details F4, Filters… F3, Pool details F5, Options… Ctrl+R, Weekly floor… Ctrl+E), then Help F1 and Quit Ctrl+C. The quota screen has no bottom row of actions.
 
@@ -250,7 +250,7 @@ Field columns stay aligned with a reserved selector gutter, and dialogs keep the
 
 | ID | Constraint | Basis |
 | --- | --- | --- |
-| C1 | The crate contains no codex-router code and depends only on iocraft and libraries at its level, so it can move to its own repository. | Requirements goal boundary ("What may change") |
+| C1 | The crate contains no codex-router code and depends only on iocraft and libraries at its level, so it can move to its own repository. A test-support feature may add serde and serde_json for test receipts; normal and release builds keep the same dependency closure (2026-10-30). | Requirements goal boundary ("What may change") |
 | C2 | No new fork, pin or engine change to iocraft; the existing pinned fork stays as it is. | Requirements goal boundary ("Out", "Learn from") |
 | C3 | Every application built with the crate opts in to receiving Ctrl+C, so that R4's quit works. The crate states this as a requirement on its users; it does not own the application's render loop. | R4; the pinned iocraft quits on Ctrl+C before the application sees it unless the application opts in |
 | C4 | Target terminals: Ghostty, including inside Agent Studio panes; the keys must also work where the terminal only sends legacy key codes, except Ctrl+Enter (R9 fallback). macOS and Linux. | Requirements, who this is for; owner platform rule |

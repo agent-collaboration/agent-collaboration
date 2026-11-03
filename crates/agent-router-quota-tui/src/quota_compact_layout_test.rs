@@ -57,14 +57,14 @@ async fn floor_editor_fits_content_and_separates_sections_at_mock_sizes() {
             height,
             vec![
                 (
-                    "Quota status",
+                    "Quota ·",
                     vec![TerminalEvent::Key(clarity_control_key('e'))],
                 ),
                 (
                     "0% disables protection",
                     vec![provider_filter_key(KeyCode::Esc)],
                 ),
-                ("Filters", vec![provider_filter_key(KeyCode::Esc)]),
+                ("Quota ·", vec![provider_filter_key(KeyCode::Esc)]),
             ],
             Some(std::sync::Arc::new(|_, _| Box::pin(async { Ok(()) }))),
         )
@@ -77,54 +77,75 @@ async fn floor_editor_fits_content_and_separates_sections_at_mock_sizes() {
             })
             .unwrap();
         let dialog = actual_dialog_text(frame, "Weekly floor");
-        if width == 120 {
-            let (row, line) = frame
-                .lines()
-                .enumerate()
-                .find(|(_, line)| line.contains('▶'))
-                .unwrap();
-            let (prefix, _) = line.split_once('▶').unwrap();
-            let column = unicode_width::UnicodeWidthStr::width(prefix);
-            eprintln!("Native floor increment coordinate {width}x{height}: ({column}, {row})");
-            assert_eq!(
-                (column, row),
-                (46, 18),
-                "Native PTY click must target the rendered increment control"
-            );
-        }
+        let (arrow_row, arrow_line) = frame
+            .lines()
+            .enumerate()
+            .find(|(_, line)| line.contains('▶'))
+            .expect("rendered increment control");
+        let arrow_column =
+            unicode_width::UnicodeWidthStr::width(arrow_line.split_once('▶').unwrap().0);
+        assert!(
+            arrow_line.contains("Floor") && arrow_column < width && arrow_row < height,
+            "native click is bound to the real control; its cell is observed separately through the PTY grid: {frame}"
+        );
         let lines = dialog.lines().collect::<Vec<_>>();
         let row = |label: &str| {
             lines
                 .iter()
                 .position(|line| line.contains(label))
-                .unwrap_or_else(|| panic!("Missing {label} at {width}×{height}: {dialog}"))
+                .unwrap_or_else(|| panic!("Missing {label} at {width}x{height}: {dialog}"))
         };
+        for fact in [
+            "Current",
+            "disabled (0%)",
+            "Floor",
+            "0%",
+            "◀",
+            "▶",
+            "maximum 15%",
+            "alpha-tag",
+            "Save",
+            "Cancel",
+        ] {
+            assert!(
+                dialog.contains(fact),
+                "every floor fact and control remains present: {fact}: {dialog}"
+            );
+        }
+        let actual_width = unicode_width::UnicodeWidthStr::width(lines[0]) + 2;
+        assert!(
+            actual_width <= if width >= 100 { 68 } else { 44 },
+            "content-sized floor frame respects its maximum: {dialog}"
+        );
+        let context_end = lines[..row("Current")]
+            .iter()
+            .rposition(|line| !line.trim().is_empty())
+            .unwrap();
+        assert_eq!(
+            row("Current"),
+            context_end + 2,
+            "exactly one blank row after pinned context: {dialog}"
+        );
+        assert_eq!(
+            row("Floor"),
+            row("Current") + 2,
+            "exactly one row between Current and Floor sections: {dialog}"
+        );
+        assert_eq!(
+            row("0% disables"),
+            row("Floor") + 2,
+            "exactly one row before guidance: {dialog}"
+        );
+        assert_eq!(
+            row("Cancel"),
+            row("maximum 15%") + 2,
+            "exactly one row before actions: {dialog}"
+        );
+        let padding = usize::from(lines.len() + 2 >= 16);
         assert_eq!(
             lines.len(),
-            12,
-            "Small editor must fit its content at {width}×{height}: {dialog}"
-        );
-        assert_eq!(
-            unicode_width::UnicodeWidthStr::width(lines[0]) + 2,
-            if width >= 100 { 68 } else { 44 },
-            "Reference frame width: {dialog}"
-        );
-        assert!(
-            row("Current") >= row("alpha-tag") + 2,
-            "Context needs breathing room: {dialog}"
-        );
-        assert!(
-            row("Floor") >= row("Current") + 2,
-            "Fields need breathing room: {dialog}"
-        );
-        assert!(
-            row("0% disables") >= row("Floor") + 2,
-            "Guidance needs breathing room: {dialog}"
-        );
-        let guidance_end = row("maximum 15%");
-        assert!(
-            row("Cancel") >= guidance_end + 2,
-            "Actions need breathing room: {dialog}"
+            row("Cancel") + 1 + padding,
+            "inner height contains sections and frame padding, without a dead tail: {dialog}"
         );
     }
 }
@@ -134,35 +155,58 @@ async fn quota_command_bar_wraps_between_complete_shortcuts() {
     for (width, height) in [(132usize, 34usize), (100, 34), (48, 32), (40, 24), (32, 24)] {
         let saver: super::super::super::quota_floor_editor::WeeklyQuotaFloorSaver =
             std::sync::Arc::new(|_, _| Box::pin(async { Ok(()) }));
-        let mut component = element!(QuotaStatusComponent(
-            view_model:quota_two_account_view_model(),width,height,
-            weekly_floor_saver:Some(saver)
-        ));
-        let canvases = component
-            .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
-                [provider_filter_key(KeyCode::Esc)],
-            )))
-            .collect::<Vec<_>>()
-            .await;
-        let frame = canvases.last().unwrap().to_string();
-        for shortcut in [
-            "F4 Details",
-            "F3 Filters",
-            "F5 Pool",
-            "F1 Help",
-            "Ctrl+R Options",
-            "Ctrl+E Floor",
+        let frames = render_quota_filter_phases(
+            quota_two_account_view_model(),
+            width,
+            height,
+            vec![
+                ("Quota ·", vec![provider_filter_key(KeyCode::F(10))]),
+                ("Log in again", vec![provider_filter_key(KeyCode::Esc)]),
+                ("Quota ·", vec![provider_filter_key(KeyCode::F(3))]),
+                ("Account provider", vec![provider_filter_key(KeyCode::Esc)]),
+                ("Quota ·", vec![provider_filter_key(KeyCode::Char('q'))]),
+            ],
+            Some(saver),
+        )
+        .await;
+        let menu_frame = frames
+            .iter()
+            .find(|frame| frame.contains("Log in again"))
+            .unwrap();
+        let menu = actual_dialog_text(menu_frame, "Log in again");
+        for (label, key) in [
+            ("Details", "F4"),
+            ("Pool", "F5"),
+            ("Help", "F1"),
+            ("Options", "Ctrl+R"),
+            ("Floor", "Ctrl+E"),
         ] {
             assert!(
-                frame.lines().any(|line| line.contains(shortcut)),
-                "Shortcut must stay together at {width}×{height}: {shortcut}\n{frame}"
+                menu.lines()
+                    .any(|line| line.contains(label) && line.contains(key)),
+                "complete action and key remain on one menu row at {width}×{height}: {label} {key}\n{menu}"
             );
         }
+        // At the narrowest width the dynamic filter title takes priority over
+        // its key column. Its real F3 route must still expose the editable fields.
+        assert!(menu.contains("Filters…"), "{menu}");
+        let filters = frames
+            .iter()
+            .find(|frame| frame.contains("Account provider"))
+            .unwrap();
         assert!(
-            !frame
-                .lines()
-                .any(|line| line.trim_matches(['│', '┃', ' ']) == "Floor"),
-            "Never orphan a command label on its own line: {frame}"
+            filters.contains("All ▾")
+                && filters.contains("Shown ▾")
+                && filters.contains("Apply")
+                && filters.contains("Cancel"),
+            "F3 retains the full filter task: {filters}"
+        );
+        assert!(
+            menu.lines().count() < height
+                && menu
+                    .lines()
+                    .all(|line| unicode_width::UnicodeWidthStr::width(line) <= width),
+            "menu remains inside its viewport: {menu}"
         );
     }
 }
@@ -203,7 +247,11 @@ async fn floor_status_phases_keep_fields_and_guidance_visible_at_mock_sizes() {
             tokio::pin!(frames);
             let mut phase = 0;
             let journey = async {
-                while let Some(canvas) = frames.next().await {
+                while let Some(canvas) =
+                    crate::quota_frame_observation::next_current_frame(frames.as_mut())
+                        .await
+                        .unwrap()
+                {
                     let frame = canvas.to_string();
                     if phase == 0 {
                         sender
@@ -213,15 +261,19 @@ async fn floor_status_phases_keep_fields_and_guidance_visible_at_mock_sizes() {
                     } else if phase == 1 && frame.contains("Weekly floor") {
                         sender.send(provider_filter_key(KeyCode::Enter)).unwrap();
                         phase = 2;
-                    } else if (phase == 2 && frame.contains("saving…"))
+                    } else if (phase == 2 && frame.contains("Saving preference…"))
                         || (phase == 3 && frame.contains(status))
                     {
                         let dialog = actual_dialog_text(&frame, "Weekly floor");
-                        let observed_status = if phase == 2 { "saving…" } else { status };
+                        let observed_status = if phase == 2 {
+                            "Saving preference…"
+                        } else {
+                            status
+                        };
                         let lines = dialog.lines().collect::<Vec<_>>();
-                        let identity_row = lines
+                        let guidance_row = lines
                             .iter()
-                            .position(|line| line.contains("alpha-tag"))
+                            .position(|line| line.contains("maximum 15%"))
                             .unwrap();
                         let status_row = lines
                             .iter()
@@ -229,12 +281,16 @@ async fn floor_status_phases_keep_fields_and_guidance_visible_at_mock_sizes() {
                             .unwrap();
                         assert_eq!(
                             status_row,
-                            identity_row + 2,
+                            guidance_row + 2,
                             "One blank row before {observed_status} at {width}×{height}: {dialog}"
                         );
                         assert!(
+                            dialog.contains("alpha-tag"),
+                            "captured identity stays pinned during {observed_status}: {dialog}"
+                        );
+                        assert!(
                             !actual_dialog_has_scroll_thumb(&frame, "Weekly floor"),
-                            "Status and guidance must fit together at {width}×{height}: {dialog}"
+                            "Status and guidance must fit together at {width}×{height}: {dialog}; raw: {frame}"
                         );
                         for fact in ["Current", "Floor", "0% disables protection", "maximum 15%"] {
                             assert!(

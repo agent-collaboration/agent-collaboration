@@ -31,38 +31,23 @@ import {
 	writeSync,
 } from 'node:fs';
 import { constants as osConstants } from 'node:os';
-import { dirname, isAbsolute, join } from 'node:path';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 
 import { z } from 'zod';
 
+import {
+	SESSIONS_RECEIPT_DIRECTORY,
+	sessionsReceiptEnvironment,
+} from '../sessions/sessions-receipt-directory.ts';
 import { codexChildLaunch } from './codex-child-launch.ts';
-
-export const COMPONENT_TEST =
-	'quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture';
-
-export const COMPONENT_SCENARIOS = {
-	normal: 'Normal',
-	'inspection-pending': 'InspectionPending',
-	'commit-pending': 'CommitPending',
-	'unknown-result': 'UnknownResult',
-	'save-failed': 'SaveFailed',
-	'disabled-yes': 'DisabledYes',
-	'revalidation-pending': 'RevalidationPending',
-	'refused-result': 'RefusedResult',
-	'refresh-pending': 'RefreshPending',
-	'save-pending': 'SavePending',
-	'visual-hard-cases': 'VisualHardCases',
-} as const satisfies Readonly<Record<string, string>>;
-
-type ComponentScenario = keyof typeof COMPONENT_SCENARIOS;
-
-const PENDING_SCENARIOS: ReadonlySet<ComponentScenario> = new Set<ComponentScenario>([
-	'inspection-pending',
-	'commit-pending',
-	'revalidation-pending',
-	'refresh-pending',
-	'save-pending',
-]);
+import {
+	COMPONENT_SCENARIOS,
+	COMPONENT_TEST,
+	PENDING_SCENARIOS,
+	isComponentScenario,
+} from './component-fixture-contract.ts';
+import { holdFixtureHandshake } from './fixture-handshake.ts';
+import { quotaEffectLaunch } from './quota-effect-launch.ts';
 
 const PUBLIC_SESSIONS_FIELDS: ReadonlySet<string> = new Set([
 	'surface',
@@ -82,6 +67,8 @@ const capturedTuiSurfaceSchema = z.enum([
 	'sessions',
 	'quota-component',
 	'public-sessions',
+	'showcase',
+	'quota-effects',
 	'codex-acp',
 ]);
 type CapturedTuiSurface = z.infer<typeof capturedTuiSurfaceSchema>;
@@ -138,10 +125,6 @@ function ownedFuturePath(configuration: FixtureCommand, key: string): string {
 		throw new FixtureLaunchRejected(`${key} must be absent inside the owned output directory`);
 	}
 	return path;
-}
-
-function isComponentScenario(value: string): value is ComponentScenario {
-	return Object.hasOwn(COMPONENT_SCENARIOS, value);
 }
 
 function fileSha256(path: string): string {
@@ -240,8 +223,50 @@ function publicSessionsLaunch(configuration: FixtureCommand, binary: string): Ch
 	};
 }
 
+/** Local sample only. Public Sessions retains its separate Host/effect contract. */
+function showcaseLaunch(configuration: FixtureCommand, binary: string): ChildLaunch {
+	const fields = new Set([
+		'surface',
+		'binary',
+		'binary_sha256',
+		'approved_cwd',
+		'output',
+		'temporary_directory',
+		'receipt_directory',
+	]);
+	if (
+		Object.keys(configuration).length !== fields.size ||
+		Object.keys(configuration).some((field) => !fields.has(field))
+	)
+		throw new FixtureLaunchRejected('showcase launch fields differ from the fixed contract');
+	const digest = requiredText(configuration, 'binary_sha256');
+	if (
+		!isAbsolute(binary) ||
+		!realpathStable(binary) ||
+		basename(binary) !== 'component_showcase' ||
+		!statSync(binary).isFile() ||
+		!/^[a-f0-9]{64}$/u.test(digest) ||
+		fileSha256(binary) !== digest
+	)
+		throw new FixtureLaunchRejected('showcase binary path or hash changed');
+	const cwd = requiredText(configuration, 'approved_cwd');
+	if (!isAbsolute(cwd) || !realpathStable(cwd) || !statSync(cwd).isDirectory())
+		throw new FixtureLaunchRejected('showcase cwd must be the exact declared directory');
+	const receipts = requiredText(configuration, 'receipt_directory');
+	sessionsReceiptEnvironment(receipts, requiredText(configuration, 'output'));
+	const environment: Record<string, string> = { TERM: 'xterm-256color', LANG: 'C.UTF-8' };
+	for (const name of ['HOME', 'PATH', 'LC_ALL', 'TMPDIR', 'DYLD_LIBRARY_PATH', 'LD_LIBRARY_PATH']) {
+		const value = process.env[name];
+		if (value !== undefined) environment[name] = value;
+	}
+	return { executable: binary, arguments: ['--receipt-directory', receipts], environment, cwd };
+}
+
 /** The exact child argv, environment and working directory for one surface. */
-export function childLaunchConfiguration(configuration: FixtureCommand): ChildLaunch {
+export function childLaunchConfiguration(
+	configuration: FixtureCommand,
+	launchEnvironment: NodeJS.ProcessEnv = {},
+): ChildLaunch {
 	const surfaceResult = capturedTuiSurfaceSchema.safeParse(requiredText(configuration, 'surface'));
 	if (!surfaceResult.success) {
 		throw new FixtureLaunchRejected('unknown captured TUI surface');
@@ -258,6 +283,8 @@ export function childLaunchConfiguration(configuration: FixtureCommand): ChildLa
 			throw new FixtureLaunchRejected(error instanceof Error ? error.message : String(error));
 		}
 	}
+	if (surface === 'showcase') return showcaseLaunch(configuration, binary);
+	if (surface === 'quota-effects') return quotaEffectLaunch(configuration);
 	const temporary = requiredText(configuration, 'temporary_directory');
 	const environment: Record<string, string> = {
 		HOME: temporary,
@@ -303,6 +330,13 @@ export function childLaunchConfiguration(configuration: FixtureCommand): ChildLa
 				cwd: undefined,
 			};
 		case 'sessions':
+			Object.assign(
+				environment,
+				sessionsReceiptEnvironment(
+					launchEnvironment[SESSIONS_RECEIPT_DIRECTORY],
+					requiredText(configuration, 'output'),
+				),
+			);
 			return {
 				executable: binary,
 				arguments: [
@@ -445,15 +479,35 @@ function waitForChild(child: ChildProcess): Promise<number> {
 }
 
 async function main(): Promise<number> {
+	const commandArguments = process.argv.slice(2);
+	const checkOnly = commandArguments.at(-1) === '--check-only';
 	const configuration = readFixtureCommand(
-		fixtureCommandPath(process.argv.slice(2), process.env['QUOTA_STORYBOARD_FIXTURE_COMMAND']),
+		fixtureCommandPath(
+			checkOnly ? commandArguments.slice(0, -1) : commandArguments,
+			process.env['QUOTA_STORYBOARD_FIXTURE_COMMAND'],
+		),
 	);
-	const launch = childLaunchConfiguration(configuration);
+	const launch = childLaunchConfiguration(configuration, process.env);
+	if (checkOnly) {
+		process.stdout.write('FIXTURE_LAUNCH_ADMITTED\n');
+		return 0;
+	}
 	const output = requiredText(configuration, 'output');
 	const surface = requiredText(configuration, 'surface');
 	writeFileSync(join(output, 'quota-wrapper.pid'), String(process.pid));
-	if (surface === 'public-sessions' || surface === 'quota-component' || surface === 'codex-acp') {
+	if (
+		surface === 'public-sessions' ||
+		surface === 'quota-component' ||
+		surface === 'showcase' ||
+		surface === 'quota-effects' ||
+		surface === 'codex-acp'
+	) {
 		writeFileSync(join(output, 'quota-wrapper.identity'), processIdentityLine(process.pid));
+	}
+	if (process.env['TUI_GRID_HANDSHAKE_ONLY'] === '1') {
+		if (surface !== 'showcase') throw new FixtureLaunchRejected('handshake requires showcase');
+		await holdFixtureHandshake(output);
+		return 0;
 	}
 	const child = spawn(launch.executable, [...launch.arguments], {
 		env: launch.environment,

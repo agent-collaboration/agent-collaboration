@@ -16,7 +16,7 @@ export const sessionsCaptureTest = 'compiled_compact_current_sessions_storyboard
 export const normalComponentCaptureTest = 'compiled_normal_quota_component_dialogs_export_real_tui';
 export const hardComponentCaptureTest = 'compiled_hard_case_quota_component_exports_real_tui';
 export const supportDirectory =
-	'crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test';
+	'crates/codex-router-quota-reset-test-harness/tests/e2e/quota_storyboard/quota_storyboard_capture_test';
 export const sessionStates = [
 	'all',
 	'codex-details',
@@ -308,7 +308,7 @@ export function coverageGaps(): string[] {
 		'quota/reset-result',
 		'quota/paging',
 		'48x12 usable header/actions and scrolled body (static capture wired, unobserved)',
-		'40x24 and 32x24 physical cell bounds and original visibility (wired, unobserved)',
+		'32x24 physical cell bounds and original visibility (wired, unobserved)',
 		'actual iPhone terminal operation (separate device target, unobserved)',
 		'C7 named header and current Help census associations',
 		'C7 active field/query/no-match and unavailable Select',

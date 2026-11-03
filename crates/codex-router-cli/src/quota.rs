@@ -38,9 +38,14 @@ use agent_router_quota_tui::WeeklyQuotaFloorSaveError;
 use agent_router_quota_tui::WeeklyQuotaFloorSaver;
 use agent_router_quota_tui::run_quota_status_view;
 
+pub(crate) mod quota_account_adapter;
+pub(crate) mod quota_account_run_session;
 pub(crate) mod quota_command_dispatch;
 mod quota_command_options;
 mod quota_credential_resources;
+mod quota_group_preferences;
+mod quota_login_child;
+mod quota_refresh_adapter;
 mod quota_refresh_command;
 mod quota_status_command;
 mod quota_status_rendering;

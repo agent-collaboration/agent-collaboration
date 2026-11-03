@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import { createTerminalCore, snapshotGrid } from '../../terminal/terminal-grid.ts';
 import type { TerminalGrid } from '../../terminal/terminal-grid.ts';
 import { sceneMarkerContracts } from './grid-scene-contract.ts';
-import { findDialog, observeGridScene } from './grid-scene-matcher.ts';
+import { findDialog, gridFieldPair, observeGridScene } from './grid-scene-matcher.ts';
 
 async function screen(bytes: string): Promise<TerminalGrid> {
 	const core = await createTerminalCore(120, 36);
@@ -58,4 +58,32 @@ test('duplicate conflicting values for one dialog field are rejected', async () 
 			.replace('\x1b[7;10H', '\x1b[9;10H'),
 	);
 	expect(observeGridScene(grid, 'compact-sessions-chooser').passed).toBe(false);
+});
+
+const stackedMachineFrame = (value: string): string =>
+	[
+		'╭──────────────────────────╮',
+		'│New session               │',
+		'│Machine                   │',
+		`│❯ ${value.padEnd(23)} │`,
+		'╰──────────────────────────╯',
+	].join('\r\n');
+
+test('a stacked committed Machine accepts its focus arrow and rejects an uncommitted value', async () => {
+	expect(
+		gridFieldPair(
+			await screen(stackedMachineFrame('Fixture remote ▾')),
+			'New session',
+			'Machine',
+			'Fixture remote',
+		),
+	).toBe(true);
+	expect(
+		gridFieldPair(
+			await screen(stackedMachineFrame('This machine ▾')),
+			'New session',
+			'Machine',
+			'Fixture remote',
+		),
+	).toBe(false);
 });

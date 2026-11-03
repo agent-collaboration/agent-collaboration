@@ -7,8 +7,37 @@ use codex_router_quota_service::quota_reset::reset_session_supervisor::Operation
 use codex_router_quota_service::quota_reset::reset_session_supervisor::ResetCreditDisplayStatusDto;
 use codex_router_quota_service::quota_reset::reset_session_supervisor::ResetEligibilityDisabledReason;
 
-use super::quota_reset_detail_rendering::ResetDetailRow;
-use super::quota_reset_detail_rendering::StyledText;
+pub(crate) enum ResetDetailRow {
+    Text(StyledText),
+    Field {
+        label: String,
+        value: String,
+        value_color: Color,
+    },
+    Credit {
+        marker: String,
+        id_hint: String,
+        description: String,
+        marker_color: Color,
+    },
+    Choices {
+        no_label: StyledText,
+        yes_label: StyledText,
+    },
+    Spacer,
+}
+
+pub(crate) struct StyledText {
+    pub(crate) content: String,
+    pub(crate) color: Color,
+    pub(crate) weight: Weight,
+}
+
+impl From<StyledText> for ResetDetailRow {
+    fn from(value: StyledText) -> Self {
+        Self::Text(value)
+    }
+}
 
 pub(crate) fn activity_field(
     label: &str,

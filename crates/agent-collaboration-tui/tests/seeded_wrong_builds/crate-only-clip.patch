@@ -1,8 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/hit_regions.rs b/crates/agent-collaboration-tui/src/hit_regions.rs
---- a/crates/agent-collaboration-tui/src/hit_regions.rs
-+++ b/crates/agent-collaboration-tui/src/hit_regions.rs
-@@ -21,3 +21,3 @@ pub(crate) fn visible_cells(drawer: &mut ComponentDrawer<'_>) -> Vec<(u16, u16)>
-             };
--            if canvas.cell(local_column, local_row).is_none() {
-+            if column >= size.width || row >= size.height {
-                 continue;

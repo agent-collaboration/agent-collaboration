@@ -26,10 +26,10 @@ fn natural_reset_result_has_grammatical_summary_and_secondary_return_guidance() 
             Vec::new(),
             None,
         );
-        let canvas = super::super::super::quota_reset_detail_rendering::render_reset_panel_content(
+        let content = super::super::super::quota_reset_detail_rendering::render_reset_panel_content(
             &snapshot, &target, 100, 0, 4, 0, None,
-        )
-        .render(None);
+        );
+        let canvas = element!(View(width:100) {#(content)}).render(None);
         let frame = canvas.to_string();
         let expected = if windows == 1 {
             "Provider confirmed 1 quota window reset."
@@ -72,78 +72,60 @@ fn result_words(frame: &str) -> String {
         .join(" ")
 }
 
-async fn full_result_reference(width: usize) -> String {
+fn full_result_reference(width: usize) -> String {
     use codex_router_quota_service::quota_reset::reset_session_supervisor::*;
-    let (ports, mut intents, snapshots) =
-        ResetSessionPorts::test_channels(clarity_reset_snapshot(WorkflowPhase::Browse));
-    let driver = tokio::spawn(async move {
-        assert!(matches!(
-            intents.recv().await,
-            Some(ResetSessionIntent::BeginInspection { .. })
-        ));
-        snapshots
-            .send(ResetWorkflowSnapshot::test_snapshot(
-                WorkflowPhase::Result,
-                ConfirmationSelection::No,
-                Default::default(),
-                Some(WorkflowResult::Known(KnownConsumeOutcome::Reset {
-                    windows_reset: 1,
-                })),
-                None,
-                Vec::new(),
-                None,
-            ))
+    let model = super::super::quota_storyboard_fixture_test::fixture_model();
+    let target =
+        crate::quota_account_options::events::reset_pane_target_for_account(&model.rows[0])
             .unwrap();
-        futures_util::future::pending::<()>().await;
-    });
-    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
-        receiver.recv().await.map(|event| (event, receiver))
-    });
-    let mut component = element!(QuotaStatusComponent(
-        view_model:super::super::quota_storyboard_fixture_test::fixture_model(),width,height:120usize,
-        reset_intent_sender:Some(ports.intent_sender),reset_snapshot_receiver:Some(ports.snapshot_receiver)
-    ));
-    let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
-    tokio::pin!(frames);
-    super::super::super::quota_frame_observation::next_current_frame(frames.as_mut())
-        .await
-        .unwrap();
-    sender
-        .send(TerminalEvent::Key(clarity_control_key('r')))
-        .unwrap();
-    let frame = super::super::super::quota_frame_observation::next_matching_frame(
-        frames.as_mut(),
-        Duration::from_secs(2),
-        |frame| {
-            let painted = frame.to_string();
-            if !painted.contains("Reset result") {
-                return false;
-            }
-            let text = result_words(&painted);
-            text.contains("Success — reset completed")
-                && text.contains("Provider confirmed 1 quota window reset.")
-                && text.contains("One reset credit was consumed.")
-                && text.contains("Return to quota status.")
-        },
-    )
-    .await
-    .unwrap()
-    .to_string();
-    driver.abort();
-    assert!(driver.await.unwrap_err().is_cancelled());
-    frame
+    let snapshot = ResetWorkflowSnapshot::test_snapshot(
+        WorkflowPhase::Result,
+        ConfirmationSelection::No,
+        Default::default(),
+        Some(WorkflowResult::Known(KnownConsumeOutcome::Reset {
+            windows_reset: 1,
+        })),
+        None,
+        Vec::new(),
+        None,
+    );
+    // Measure the exact natural child. A taller terminal still retains the
+    // content-sized dialog's 24-row maximum and cannot make it unclipped.
+    let content_width = width.saturating_sub(8).min(84);
+    let content = crate::quota_reset_detail_rendering::render_reset_panel_content(
+        &snapshot,
+        &target,
+        content_width,
+        0,
+        4,
+        0,
+        None,
+    );
+    let natural = element!(View(width:u32::try_from(content_width).unwrap()) {#(content)})
+        .render(None)
+        .to_string();
+    let words = natural.split_whitespace().collect::<Vec<_>>().join(" ");
+    for fact in [
+        "Success — reset completed",
+        "Provider confirmed 1 quota window reset.",
+        "One reset credit was consumed.",
+        "Return to quota status.",
+    ] {
+        assert!(
+            words.contains(fact),
+            "unclipped real result child retains {fact}: {natural}"
+        );
+    }
+    natural
 }
 
 #[tokio::test]
 async fn mounted_reset_result_keeps_full_outcome_and_reachable_return_guidance_on_every_grid() {
     use codex_router_quota_service::quota_reset::reset_session_supervisor::*;
     for (width, height) in [(32, 24), (48, 12), (40, 24), (48, 24), (76, 30), (120, 36)] {
-        // A separately mounted, unclipped same-width result bounds the input search.
-        let reference = full_result_reference(width).await;
-        let maximum_scroll_steps = actual_dialog_text(&reference, "Reset result")
-            .lines()
-            .count();
+        // The actual renderer's natural rows bound the mounted scroll search.
+        let reference = full_result_reference(width);
+        let maximum_scroll_steps = reference.lines().count();
         let (ports, mut intents, snapshots) =
             ResetSessionPorts::test_channels(clarity_reset_snapshot(WorkflowPhase::Browse));
         let driver = tokio::spawn(async move {
@@ -192,6 +174,7 @@ async fn mounted_reset_result_keeps_full_outcome_and_reachable_return_guidance_o
                     .unwrap()
                     .to_string();
             }
+            println!("RESULT_TOP {width}x{height}\n{top}");
             let mut middle = top.clone();
             let mut middle_steps = 0;
             while !result_words(&middle).contains("One reset credit was consumed.")
@@ -235,7 +218,9 @@ async fn mounted_reset_result_keeps_full_outcome_and_reachable_return_guidance_o
                 },
             )
             .await
-            .unwrap()
+            .unwrap_or_else(|error| {
+                panic!("bottom result pose at {width}x{height}: {error}; previous: {middle}")
+            })
             .to_string();
             (top, middle, bottom, middle_steps)
         };

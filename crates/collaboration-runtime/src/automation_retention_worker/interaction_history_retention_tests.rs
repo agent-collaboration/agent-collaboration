@@ -21,7 +21,6 @@ use tokio::sync::Mutex;
 
 type TestResult<TValue = ()> = Result<TValue, Box<dyn std::error::Error + Send + Sync>>;
 const SERVICE_ID: &str = "018f47d2-24d5-7a68-b9ec-6f759c39458f";
-const RETENTION_MILLIS: i64 = 30 * 24 * 60 * 60 * 1000;
 const INITIAL_REQUEST: &str = "initial-interaction";
 
 fn ensure(condition: bool, detail: &'static str) -> TestResult {
@@ -113,6 +112,9 @@ async fn load_broker(
         gate.acquire().is_err(),
         "retention fixture native gate must stay inactive",
     )?;
+    let interaction_store = Arc::new(
+        interaction_storage::InteractionStore::open(directory.join("interaction.sqlite")).await?,
+    );
     Ok(ServiceInteractionBroker::load(
         UuidIdentity::try_from(SERVICE_ID.to_owned())?,
         NativeControlBackend {
@@ -120,7 +122,7 @@ async fn load_broker(
             gate: gate.clone(),
             codex_home: directory.join("unused-codex-home"),
         },
-        directory.join("approval-routes.json"),
+        interaction_store,
     )
     .await?)
 }
@@ -134,6 +136,7 @@ struct StoredContent {
 
 async fn insert_content(
     store: &interaction_storage::InteractionStore,
+    interaction_path: &Path,
     observer: &mut SqliteConnection,
     label: &str,
     created_at_ms: i64,
@@ -161,6 +164,16 @@ async fn insert_content(
             created_at,
         })
         .await?;
+    let mut native_writer =
+        TursoConnection::connect_with(&TursoConnectOptions::new().filename(interaction_path))
+            .await?;
+    sqlx::query::<sqlx_turso::Turso>(
+        "UPDATE router_pushes SET delivery_state='delivered' WHERE push_id=?",
+    )
+    .bind(push_id.as_str())
+    .execute(&mut native_writer)
+    .await?;
+    native_writer.close().await?;
     let wakeup_id = WakeupId::generate();
     let change_id = ChangeId::generate();
     let mailbox_id = DeliveryId::generate();
@@ -281,11 +294,6 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
 -> TestResult {
     let directory = tempfile::tempdir()?;
     let history_path = directory.path().join("interaction.sqlite");
-    let json_path = directory.path().join("interaction-history.json");
-    let original_source = b"ignored old typed JSON";
-    tokio::fs::write(&json_path, original_source).await?;
-    tokio::fs::write(directory.path().join("approval-routes.json"), b"[]").await?;
-    tokio::fs::write(directory.path().join("approval-history.json"), b"[]").await?;
     let gate = NativeGenerationGate::default();
     let first_broker = load_broker(directory.path(), &gate).await?;
     drop(first_broker);
@@ -375,9 +383,24 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
             .foreign_keys(true),
     )
     .await?;
-    let expired_content = insert_content(&native, &mut observer, "expired", cutoff_ms - 1).await?;
-    let cutoff_content = insert_content(&native, &mut observer, "cutoff", cutoff_ms).await?;
-    let recent_content = insert_content(&native, &mut observer, "recent", cutoff_ms + 1).await?;
+    let expired_content = insert_content(
+        &native,
+        &history_path,
+        &mut observer,
+        "expired",
+        cutoff_ms - 1,
+    )
+    .await?;
+    let cutoff_content =
+        insert_content(&native, &history_path, &mut observer, "cutoff", cutoff_ms).await?;
+    let recent_content = insert_content(
+        &native,
+        &history_path,
+        &mut observer,
+        "recent",
+        cutoff_ms + 1,
+    )
+    .await?;
     ensure_physical_contents(
         &mut native_observer,
         &mut observer,
@@ -388,7 +411,11 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
     let worker = AutomationRetentionWorker::new(shared_store.clone())
         .with_interaction_broker(broker.clone())
         .with_native_push_store(native.clone());
-    let first_maintenance_ms = cutoff_ms + RETENTION_MILLIS;
+    let first_maintenance_ms = DateTime::<Utc>::from_timestamp_millis(cutoff_ms)
+        .ok_or("valid retained cutoff")?
+        .checked_add_months(chrono::Months::new(2))
+        .ok_or("valid two-month deadline")?
+        .timestamp_millis();
 
     ensure(
         worker.prune_batch(first_maintenance_ms).await? == 3,
@@ -418,7 +445,7 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
 
     ensure(
         worker.prune_batch(first_maintenance_ms + 1).await? == 4,
-        "creation stamp must age normally after thirty days, without reload restamping",
+        "creation stamp must age after two calendar months, without reload restamping",
     )?;
     ensure_physical_contents(&mut native_observer, &mut observer, &[&recent_content]).await?;
     ensure_history_contents(&broker, &history_path, &["recent-interaction"]).await?;
@@ -430,10 +457,6 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
     ensure(
         gate.acquire().is_err(),
         "retention must not activate a native generation",
-    )?;
-    ensure(
-        tokio::fs::read(&json_path).await? == original_source,
-        "retention must preserve the ignored old JSON bytes",
     )?;
     let retained_definitions: i64 = sqlx::query_scalar("SELECT count(*) FROM wakeup_definitions")
         .fetch_one(&mut observer)

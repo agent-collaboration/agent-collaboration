@@ -1,7 +1,0 @@
-diff --git a/crates/agent-collaboration-tui/src/input_owner.rs b/crates/agent-collaboration-tui/src/input_owner.rs
---- a/crates/agent-collaboration-tui/src/input_owner.rs
-+++ b/crates/agent-collaboration-tui/src/input_owner.rs
-@@ -196,2 +196,3 @@ fn route_key(handle: SurfaceStackHandle, stack: &SurfaceStack, key: KeyEvent) ->
-             && let Some(action) = &target.activation
-+            && stack.top().primary_action.as_ref()!=Some(action)
-         {

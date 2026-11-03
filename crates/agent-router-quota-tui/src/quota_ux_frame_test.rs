@@ -1,3 +1,4 @@
+// Owner 71efc57bb/873f62923, clarified by a12f9c2db: interactive weekly-only rows.
 //! Physical screen bounds and caller-owned identity in composed dialogs.
 use super::*;
 
@@ -26,7 +27,7 @@ async fn normal_storyboard_phone_start_keeps_selected_label_in_physical_bounds()
             "{frame}"
         );
         assert!(
-            frame.contains("Quota status") && frame.contains("Help") && frame.contains("❯ 東京"),
+            frame.contains("Quota ·") && frame.contains("Menu F10") && frame.contains("❯ 東京"),
             "{frame}"
         );
         let region = phone_account_region(&frame, "東京", Some("Claude"));
@@ -68,7 +69,7 @@ async fn phone_account_rows_keep_full_content_and_selection_under_aligned_header
                     "東京 OpenAI Research Account Alpha Long Name",
                     "◎ OpenAI",
                     "1 client",
-                    "99%",
+                    "83%",
                 ),
                 (
                     "Claude",
@@ -76,7 +77,7 @@ async fn phone_account_rows_keep_full_content_and_selection_under_aligned_header
                     "Claude Research Account Beta Full Name",
                     "◆ Claude",
                     "0 clients",
-                    "70%",
+                    "75%",
                 ),
             ] {
                 let region = phone_account_region(&frame, name, next_name);
@@ -113,9 +114,9 @@ async fn phone_account_rows_keep_full_content_and_selection_under_aligned_header
                     "status belongs to Account: {region}"
                 );
                 for fact in if name == "東京" {
-                    ["83% · week · 7d 0h", "99% · 5h · 5h 0m"]
+                    ["83%", "Weekly · 7d 0h"]
                 } else {
-                    ["75% · week · 6d 0h", "70% · 5h · 4h 0m"]
+                    ["75%", "Weekly · 6d 0h"]
                 } {
                     assert!(
                         quota_words.contains(fact),
@@ -254,7 +255,7 @@ async fn phone_accounts_scroll_lower_quota_facts_and_keep_geometry_after_resize(
                         .split_once("Weekly pace")
                         .map(|(_, tail)| tail.split("Extra").next().unwrap().replace(' ', ""))
                         .unwrap_or_default();
-                    if quota.contains("70%") && pace.contains(expected_pace) {
+                    if quota.contains("75%") && pace.contains(expected_pace) {
                         reached = true;
                         break;
                     }
@@ -273,7 +274,7 @@ async fn phone_accounts_scroll_lower_quota_facts_and_keep_geometry_after_resize(
                 }
                 assert!(
                     reached,
-                    "lower5h and pace facts remain reachable through actual body scroll: {frame}"
+                    "weekly quota and pace facts remain reachable through actual body scroll: {frame}"
                 );
             }
             sender.send(provider_filter_key(KeyCode::Up)).unwrap();
@@ -299,11 +300,11 @@ async fn interactive_floor_shows_the_captured_account_once_outside_task_fields()
         36,
         vec![
             (
-                "Quota status",
+                "Quota ·",
                 vec![TerminalEvent::Key(clarity_control_key('e'))],
             ),
             ("Weekly floor", vec![provider_filter_key(KeyCode::Esc)]),
-            ("Filters", vec![provider_filter_key(KeyCode::Esc)]),
+            ("Quota ·", vec![provider_filter_key(KeyCode::Esc)]),
         ],
         Some(std::sync::Arc::new(|_, _| Box::pin(async { Ok(()) }))),
     )
@@ -372,9 +373,9 @@ async fn interactive_details_attributes_status_and_reason_without_repeating_iden
         120,
         36,
         vec![
-            ("Quota status", vec![provider_filter_key(KeyCode::F(4))]),
+            ("Quota ·", vec![provider_filter_key(KeyCode::F(4))]),
             ("Account details", vec![provider_filter_key(KeyCode::Esc)]),
-            ("Filters", vec![provider_filter_key(KeyCode::Esc)]),
+            ("Quota ·", vec![provider_filter_key(KeyCode::Esc)]),
         ],
         None,
     )
@@ -385,10 +386,27 @@ async fn interactive_details_attributes_status_and_reason_without_repeating_iden
         .expect("real Details opens");
     let dialog = actual_dialog_text(frame, "Account details");
     let words = dialog.split_whitespace().collect::<Vec<_>>().join(" ");
+    // Lead 01a18f52-a5a7: identity decoration stays once; R17's command is
+    // a separate fact that must independently include the captured identity.
+    let header = dialog
+        .lines()
+        .take_while(|line| !line.trim_start().starts_with("Status "))
+        .collect::<Vec<_>>()
+        .join(" ");
     assert_eq!(
-        words.matches("Aurora Research").count(),
+        header.matches("Aurora Research").count(),
         1,
         "fixed identity appears once: {dialog}"
+    );
+    assert_eq!(header.matches("[alpha-tag]").count(), 1, "{dialog}");
+    assert_eq!(
+        words.matches("codex-router account login").count(),
+        1,
+        "{dialog}"
+    );
+    assert!(
+        words.contains("codex-router account login --provider openai --label 'Aurora Research'"),
+        "{dialog}"
     );
     assert!(
         !words.contains("Selected account")
@@ -521,13 +539,13 @@ async fn short_sidecar_keeps_complete_activity_reachable_through_actual_details(
         160,
         24,
         vec![
-            ("Quota status", vec![provider_filter_key(KeyCode::F(4))]),
+            ("Quota ·", vec![provider_filter_key(KeyCode::F(4))]),
             ("Account details", vec![provider_filter_key(KeyCode::End)]),
             (
                 "complete-sidecar-note",
                 vec![provider_filter_key(KeyCode::Esc)],
             ),
-            ("Filters", vec![provider_filter_key(KeyCode::Esc)]),
+            ("Quota ·", vec![provider_filter_key(KeyCode::Esc)]),
         ],
         None,
     )
@@ -551,15 +569,15 @@ async fn short_sidecar_keeps_complete_activity_reachable_through_actual_details(
 }
 
 #[tokio::test(start_paused = true)]
-async fn nominated_width_reader_controls_initial_and_periodic_component_width() {
+async fn nominated_width_reader_seeds_initial_width_and_resize_owns_subsequent_width() {
     let read_123_columns: fn() -> Option<usize> = || Some(123);
-    assert_component_width_reader(Some(read_123_columns), 123, 123).await;
+    assert_component_width_reader(Some(read_123_columns), 123, 96).await;
     let read_137_columns: fn() -> Option<usize> = || Some(137);
-    assert_component_width_reader(Some(read_137_columns), 137, 137).await;
+    assert_component_width_reader(Some(read_137_columns), 137, 96).await;
 }
 
 #[tokio::test(start_paused = true)]
-async fn no_physical_reader_preserves_synthetic_component_resize_past_sampler_tick() {
+async fn no_physical_reader_preserves_event_owned_component_resize_through_help() {
     assert_component_width_reader(Some(|| None), 32, 96).await;
 }
 
@@ -594,19 +612,23 @@ async fn assert_component_width_reader(
         .await
         .unwrap();
         assert_eq!((resized.width(), resized.height()), (96, 24));
-        tokio::time::advance(Duration::from_millis(81)).await;
         sender.send(provider_filter_key(KeyCode::F(1))).unwrap();
         let after = crate::quota_frame_observation::next_matching_frame(
             frames.as_mut(),
             Duration::from_millis(250),
-            |canvas| canvas.width() == after_tick && canvas.to_string().contains("Quota Help"),
+            |canvas| {
+                canvas.width() == after_tick
+                    && crate::quota_browse_presentation_test::quota_help_visible(
+                        &canvas.to_string(),
+                    )
+            },
         )
         .await
         .unwrap();
         assert_eq!(
             after.width(),
             after_tick,
-            "actual component sampler must use the same nominated reader"
+            "real Resize remains authoritative after unrelated Help input"
         );
     };
     tokio::time::timeout(Duration::from_secs(2), journey)
