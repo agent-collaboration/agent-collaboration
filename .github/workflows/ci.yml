@@ -15,13 +15,14 @@ permissions:
   contents: read
   actions: read
 
-# Four workspace shards compile the same selection independently and execute
-# one hash partition each. Quota terminal integration and E2E keep separate
-# runners and their existing package/feature selections.
+# Four independent Linux jobs feed the existing validation gate. Light static
+# checks overlap serial Cargo work; feature-specific E2E binaries keep their
+# own target and runner instead of competing with workspace tests.
 #
-#   test (1..4) ─────────┐
-#   quota ───────────────┤
-#   static / wasm / e2e ─┴─► validated
+#   static ─┐
+#   wasm ───┤
+#   test ───┼─► validated
+#   e2e ────┘
 #
 # Every job installs all rust-toolchain.toml components up front: otherwise
 # parallel background cargo steps race rustup's on-demand component download.
@@ -188,13 +189,9 @@ jobs:
           key: ${{ steps.sqlx_tools.outputs.cache-primary-key }}
 
   test:
-    name: Test Rust workspace (shard ${{ matrix.shard }}/4)
+    name: Test Rust workspace
     runs-on: ubuntu-latest
     timeout-minutes: 360
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
     # Keep Linux test profiles out of the macOS release cache environment.
     env:
       CARGO_TERM_COLOR: always
@@ -203,8 +200,9 @@ jobs:
       CARGO_PROFILE_TEST_DEBUG: "0"
       CARGO_INCREMENTAL: "0"
     steps:
-      # The full workspace test build outgrows the runner's initial free disk.
-      # Remove preinstalled SDKs this job never uses.
+      # The steps below build the workspace under several package selections and
+      # feature sets, which together outgrow the runner's free disk. Remove
+      # preinstalled SDKs this job never uses.
       - name: Free runner disk space
         background: true
         shell: bash
@@ -224,97 +222,9 @@ jobs:
           package_json_file: verification/package.json
       - name: Install TypeScript fixture dependencies
         run: pnpm --dir verification install --frozen-lockfile
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          components: clippy,rustfmt,rust-src
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: test
-          # One main-run writer avoids four racing saves of the same cache key.
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.shard == 1 }}
-      # The dependency-structure tests use offline Cargo metadata for all
-      # targets, so fetch target-specific packages even on this Linux runner.
-      - name: Fetch dependencies for all targets
-        run: cargo fetch --locked
-      - name: Restore pinned Rust tools
-        id: rust_tools
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            tmp/rust-tools/bin/cargo-nextest
-            tmp/rust-tools/bin/cargo-deny
-            tmp/rust-tools/bin/cargo-audit
-          key: ${{ runner.os }}-${{ runner.arch }}-rust-tools-${{ hashFiles('scripts/tooling/tool-versions.tsv', 'scripts/tooling/bootstrap-tools.sh', '.github/actions/install-ci-tools/action.yml', 'rust-toolchain.toml') }}
-      - name: Verify and install pinned Rust tools
-        uses: ./.github/actions/install-ci-tools
-        with:
-          cache-hit: ${{ steps.rust_tools.outputs.cache-hit }}
-      - name: Wait for runner disk cleanup
-        wait-all:
-      # Build the same workspace selection and features on each runner, then
-      # reuse those binaries for its hash partition without relinking them.
-      # Real Host, importer and forwarding-timer roots run in e2e below.
-      # Keep the build/run exclusions and slower-job inventory identical.
-      - name: Build test binaries
-        run: |
-          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))' --no-run
-          df -h /
-      - name: Test Rust workspace
-        id: workspace_tests
-        run: |
-          # Exercise private fixture setup under the ordinary Unix mask.
-          umask 022
-          cargo nextest run --profile ci --status-level all --final-status-level all --partition hash:${{ matrix.shard }}/4 --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))'
-      - name: Test isolated default Router port cutover
-        if: matrix.shard == 1
-        # Keep the same opt-in case, with a per-test elapsed status as well as
-        # its uncaptured CLI proof. The default profile adds no CI deadline.
-        run: cargo nextest run --locked --profile default --status-level all --final-status-level all -p codex-router-cli --features keychain-test-support --test default_router_port_cutover --run-ignored only --no-capture
-      - name: Save pinned Rust tools
-        if: matrix.shard == 1 && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.rust_tools.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            tmp/rust-tools/bin/cargo-nextest
-            tmp/rust-tools/bin/cargo-deny
-            tmp/rust-tools/bin/cargo-audit
-          key: ${{ steps.rust_tools.outputs.cache-primary-key }}
-
-  quota:
-    name: Test quota terminal integration
-    runs-on: ubuntu-latest
-    timeout-minutes: 360
-    # Keep Linux test profiles out of the macOS release cache environment.
-    env:
-      CARGO_TERM_COLOR: always
-      RUST_TOOLCHAIN: 1.98.1
-      CARGO_PROFILE_DEV_DEBUG: "0"
-      CARGO_PROFILE_TEST_DEBUG: "0"
-      CARGO_INCREMENTAL: "0"
-    steps:
-      # Keep disk available for the harness and its native test binaries.
-      - name: Free runner disk space
-        shell: bash
-        run: |
-          df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/microsoft /opt/google
-          sudo docker image prune --all --force > /dev/null
-          df -h /
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: verification/package.json
-      - uses: pnpm/action-setup@v4
-        with:
-          package_json_file: verification/package.json
-      - name: Install TypeScript fixture dependencies
-        run: pnpm --dir verification install --frozen-lockfile
       - uses: actions/setup-node@v5
         with:
-          node-version: "26.13.0"
+          node-version: '26.13.0'
           package-manager-cache: false
       - name: Install native adapter test dependencies
         run: |
@@ -327,7 +237,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: test
-          save-if: false
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      # The dependency-structure tests use offline Cargo metadata for all
+      # targets, so fetch target-specific packages even on this Linux runner.
       - name: Fetch dependencies for all targets
         run: cargo fetch --locked
       - name: Select quota-reset stage
@@ -355,15 +267,54 @@ jobs:
         uses: ./.github/actions/install-ci-tools
         with:
           cache-hit: ${{ steps.rust_tools.outputs.cache-hit }}
-      # This package keeps its own feature graph and process-runtime rules.
-      # It runs on a separate runner, with no background workspace contender.
+      - name: Wait for runner disk cleanup
+        wait-all:
+      # Build each selection once, then run both workspace partitions and quota
+      # tests from the built artifacts on this runner. Keep each build
+      # selection and feature set identical to its run so binaries are reused.
+      # Real Host, importer and forwarding-timer roots run in e2e below.
+      # Keep the build/run exclusions and slower-job inventory identical.
+      - name: Build test binaries
+        run: |
+          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))' --no-run
+          df -h /
       - name: Build quota-reset test binaries
         if: github.event_name != 'pull_request' || steps.quota_scope.outputs.changed == 'true'
         run: cargo nextest run --profile ci --status-level all --final-status-level all -p codex-router-quota-reset-test-harness --no-run
+      - name: Test Rust workspace (partition 1/2)
+        id: workspace_partition_1
+        background: true
+        run: |
+          # Exercise private fixture setup under the ordinary Unix mask.
+          umask 022
+          cargo nextest run --profile ci --status-level all --final-status-level all --partition hash:1/2 --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))'
+      - name: Test Rust workspace (partition 2/2)
+        id: workspace_partition_2
+        background: true
+        run: |
+          # Exercise private fixture setup under the ordinary Unix mask.
+          umask 022
+          cargo nextest run --profile ci --status-level all --final-status-level all --partition hash:2/2 --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))'
       - name: Test quota-reset terminal integration
         id: quota_reset_terminal_integration
         if: github.event_name != 'pull_request' || steps.quota_scope.outputs.changed == 'true'
+        background: true
         run: cargo nextest run --profile ci --status-level all --final-status-level all -p codex-router-quota-reset-test-harness
+      - name: Wait for tests
+        wait-all:
+      - name: Test isolated default Router port cutover
+        # Keep the same opt-in case, with a per-test elapsed status as well as
+        # its uncaptured CLI proof. The default profile adds no CI deadline.
+        run: cargo nextest run --locked --profile default --status-level all --final-status-level all -p codex-router-cli --features keychain-test-support --test default_router_port_cutover --run-ignored only --no-capture
+      - name: Save pinned Rust tools
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.rust_tools.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            tmp/rust-tools/bin/cargo-nextest
+            tmp/rust-tools/bin/cargo-deny
+            tmp/rust-tools/bin/cargo-audit
+          key: ${{ steps.rust_tools.outputs.cache-primary-key }}
 
   e2e:
     name: Rust local end-to-end
@@ -597,7 +548,7 @@ jobs:
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     # needs waits for rust-cache post saves, including successful jobs when
     # another validation job failed. The workflow serializes main producers.
-    needs: [static, wasm, test, quota, e2e, release-cache]
+    needs: [static, wasm, test, e2e, release-cache]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -613,7 +564,7 @@ jobs:
   validated:
     name: Validate Rust workspace
     if: always()
-    needs: [static, wasm, test, quota, e2e]
+    needs: [static, wasm, test, e2e]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -633,6 +584,6 @@ jobs:
             ${{ runner.temp }}/workflow-report/summary.md
       - name: Require every validation job
         run: |
-          for result in "${{ needs.static.result }}" "${{ needs.wasm.result }}" "${{ needs.test.result }}" "${{ needs.quota.result }}" "${{ needs.e2e.result }}"; do
+          for result in "${{ needs.static.result }}" "${{ needs.wasm.result }}" "${{ needs.test.result }}" "${{ needs.e2e.result }}"; do
             test "${result}" = "success"
           done
