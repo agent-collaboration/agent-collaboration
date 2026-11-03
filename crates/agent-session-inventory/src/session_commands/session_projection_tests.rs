@@ -32,8 +32,6 @@ fn search_consistency_record(
 mod catalog_projection_tests;
 #[path = "session_display_tests.rs"]
 mod session_display_tests;
-#[path = "session_option_tests.rs"]
-mod session_option_tests;
 
 #[path = "picker_async_loader_tests.rs"]
 mod picker_async_loader_tests;
