@@ -10,7 +10,7 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
                 }
             }
         }
-        "OwnerRefusal" => invalid.push(json!({"kind":"secondFactorRequired","withinSeconds":900})),
+        "LookupRefusal" => invalid.push(json!({"kind":"secondFactorRequired","withinSeconds":900})),
         "IdentityLookupResult" | "WorkspaceLookupResult" | "MachineLookupResult" | "CommandStatusResult" | "WhoIsLoggedInResult" => invalid.push(json!({"result":"refused","reason":{"kind":"secondFactorRequired","withinSeconds":900}})),
         "IdentityLookup" => invalid.push(json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","subject":{"kind":"person","personId":"019a3dce-2000-7000-8000-000000000001"}})),
         "AbsolutePath" => invalid.extend([
@@ -33,7 +33,7 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
             invalid.extend([json!("A".repeat(40)), json!("z".repeat(64))]);
         }
         "OrganizationId" | "EnrollmentId" | "RemoteStartId" | "IsolationInstanceId" | "PeerId" |
-        "PersonId" | "ClientId" | "DeviceLoginRequestId" | "AdmissionId" | "CommandId" => invalid.extend([
+        "PersonId" | "ClientId" | "DeviceLoginRequestId" | "CommandId" => invalid.extend([
             json!("00000000-0000-4000-8000-000000000001"),
             json!("019A3DCE-2000-7000-8000-000000000001"),
             json!("019a3dce-2000-7000-0000-000000000001"),
@@ -42,7 +42,7 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
         "TokenLifetimeSeconds" => invalid.extend([json!(0),json!(59),json!(3601)]),
         "IsolationKind" => invalid.extend([json!("Host"),json!("process-sandbox"),json!("unknown")]),
         "MachineEnvironment" => invalid.extend([json!("Physical"),json!("cloud-vm"),json!("unknown")]),
-        "Activity" | "SessionEndCause" | "HarnessKind" | "RemoteLaunchAccess" | "StandingRole" | "SessionStateView" | "AllowanceState" => {
+        "Activity" | "SessionEndCause" | "HarnessKind" | "RemoteLaunchAccess" | "SessionStateView" | "AllowanceState" => {
             invalid.push(json!("unrecognizedVariant"));
             for literal in literals { if let Some(value) = literal.as_str() { invalid.push(json!(value.to_uppercase())); } }
         }
@@ -79,6 +79,87 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
             }
         }
         _ => {}
+    }
+    if name == "FleetPermission" {
+        invalid.extend([
+            json!("workspace:delete"),
+            json!("machine:Enroll"),
+            json!("Machine:enroll"),
+            json!(" machine:enroll"),
+            json!("machine:enroll "),
+            json!("machine_enroll"),
+            json!("machineEnroll"),
+            json!("machine"),
+            json!(":enroll"),
+            json!("machine:"),
+            json!(""),
+            json!("machine:*"),
+            json!("organization:update"),
+            json!("organization:delete"),
+            json!("member:create"),
+            json!("invitation:create"),
+            json!({"kind":"machine:enroll"}),
+            json!({"permission":"machine:enroll"}),
+            json!({"machine:enroll":null}),
+            json!({"machine:enroll":{}}),
+            json!("owner"),
+            json!("member"),
+        ]);
+    }
+    if matches!(
+        name,
+        "CommandRefusal" | "DeviceLoginRefusal" | "LookupRefusal"
+    ) {
+        invalid.push(json!({"kind":"notOwner"}));
+    }
+    if matches!(
+        name,
+        "OrganizationCommandResult"
+            | "DeviceLoginDecision"
+            | "IdentityLookupResult"
+            | "WorkspaceLookupResult"
+            | "MachineLookupResult"
+            | "CommandStatusResult"
+            | "WhoIsLoggedInResult"
+    ) {
+        invalid.push(json!({"result":"refused","reason":{"kind":"notOwner"}}));
+    }
+    if name == "DecideDeviceLogin"
+        && let Some(first) = literals.first()
+    {
+        let mut missing = first.clone();
+        missing.as_object_mut().unwrap().remove("permissionChecked");
+        invalid.push(missing);
+        for permission in [
+            Value::Null,
+            json!("workspace:delete"),
+            json!("owner"),
+            json!({"kind":"machine:enroll"}),
+            json!({"machine:enroll":null}),
+            json!({"machine:enroll":{}}),
+        ] {
+            let mut value = first.clone();
+            value["permissionChecked"] = permission;
+            invalid.push(value);
+        }
+    }
+    let retired: Value = serde_json::from_str(include_str!(
+        "../fixtures/retired_authorization_contracts.json"
+    ))
+    .unwrap();
+    let retired_group = match name {
+        "IdentityLookup" => Some("personLookups"),
+        "IdentityLookupResult" => Some("personLookupResults"),
+        "WhoIsLoggedInResult" => Some("peopleSnapshots"),
+        "ProvisionOrganization" => Some("personRequests"),
+        "ProvisionOrganizationResult" => Some("standingResults"),
+        _ => None,
+    };
+    if let Some(group) = retired_group {
+        invalid.extend(retired[group].as_array().unwrap().iter().cloned());
+    }
+    if name == "ProvisionOrganizationResult" {
+        invalid.push(json!({"result":"refused","reason":{"kind":"notPermitted"}}));
     }
     invalid.extend(composed_byte_overflows(name, literals));
     invalid.extend(scalar_rule_negatives(literals));

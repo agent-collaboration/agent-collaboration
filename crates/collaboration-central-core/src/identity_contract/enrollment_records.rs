@@ -1,19 +1,8 @@
 //! Observable enrollment states always retain the machine client they authorized.
-use super::{AdmissionId, ClientId, DeviceLoginRequestId, PersonId};
+use super::{ClientId, DeviceLoginRequestId, PersonId};
 use fleet_identity_protocol::{EnrollmentId, InstallationId, UnixSeconds};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(
-    tag = "kind",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum AdmissionRef {
-    Admission { admission_id: AdmissionId },
-    Machine { installation: InstallationId },
-}
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(
     tag = "kind",

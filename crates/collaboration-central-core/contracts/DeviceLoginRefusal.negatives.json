@@ -1,7 +1,8 @@
 [
 null,
 {"kind":"machineInAnotherOrganization","unexpectedField":true},
-{"kind":"notOwner","unexpectedField":true},
+{"kind":"notOwner"},
+{"kind":"notPermitted","unexpectedField":true},
 {"kind":"secondFactorRequired","unexpectedField":true,"withinSeconds":900},
 {"kind":"secondFactorRequired","within_seconds":900},
 {"kind":"unknownWorkspace","unexpectedField":true},

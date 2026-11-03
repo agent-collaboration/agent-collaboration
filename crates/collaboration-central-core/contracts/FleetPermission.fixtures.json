@@ -1,0 +1,11 @@
+[
+"workspace:create",
+"workspaceAdmin:allowMachine",
+"workspaceAdmin:withdrawMachine",
+"workspaceAdmin:removeSession",
+"machine:enroll",
+"machine:revoke",
+"machine:setTokenLifetime",
+"organization:view",
+"organization:readAudit"
+]

@@ -101,74 +101,13 @@
       ],
       "type": "object"
     },
-    "MachineEnvironment": {
-      "enum": [
-        "physical",
-        "cloudVm"
-      ],
-      "type": "string"
-    },
-    "ModelName": {
-      "maxLength": 256,
-      "minLength": 1,
-      "pattern": "^[^\\u0000]+$",
-      "type": "string",
-      "x-maxUtf8Bytes": 256
-    },
-    "OrganizationStanding": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "result": {
-              "const": "admitted",
-              "type": "string"
-            },
-            "role": {
-              "$ref": "#/$defs/StandingRole"
-            }
-          },
-          "required": [
-            "result",
-            "role"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "result": {
-              "const": "awaitingOwner",
-              "type": "string"
-            }
-          },
-          "required": [
-            "result"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "result": {
-              "const": "notAdmitted",
-              "type": "string"
-            }
-          },
-          "required": [
-            "result"
-          ],
-          "type": "object"
-        }
-      ]
-    },
-    "OwnerRefusal": {
+    "LookupRefusal": {
       "oneOf": [
         {
           "additionalProperties": false,
           "properties": {
             "kind": {
-              "const": "notOwner",
+              "const": "notPermitted",
               "type": "string"
             }
           },
@@ -218,11 +157,19 @@
         }
       ]
     },
-    "PersonId": {
-      "maxLength": 36,
-      "minLength": 36,
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    "MachineEnvironment": {
+      "enum": [
+        "physical",
+        "cloudVm"
+      ],
       "type": "string"
+    },
+    "ModelName": {
+      "maxLength": 256,
+      "minLength": 1,
+      "pattern": "^[^\\u0000]+$",
+      "type": "string",
+      "x-maxUtf8Bytes": 256
     },
     "ProjectId": {
       "maxLength": 36,
@@ -312,13 +259,6 @@
       ],
       "type": "object"
     },
-    "StandingRole": {
-      "enum": [
-        "member",
-        "owner"
-      ],
-      "type": "string"
-    },
     "StartedBy": {
       "oneOf": [
         {
@@ -406,27 +346,6 @@
     {
       "additionalProperties": false,
       "properties": {
-        "personId": {
-          "$ref": "#/$defs/PersonId"
-        },
-        "result": {
-          "const": "person",
-          "type": "string"
-        },
-        "standing": {
-          "$ref": "#/$defs/OrganizationStanding"
-        }
-      },
-      "required": [
-        "result",
-        "personId",
-        "standing"
-      ],
-      "type": "object"
-    },
-    {
-      "additionalProperties": false,
-      "properties": {
         "isolation": {
           "$ref": "#/$defs/AgentIsolation"
         },
@@ -490,7 +409,7 @@
       "additionalProperties": false,
       "properties": {
         "reason": {
-          "$ref": "#/$defs/OwnerRefusal"
+          "$ref": "#/$defs/LookupRefusal"
         },
         "result": {
           "const": "refused",

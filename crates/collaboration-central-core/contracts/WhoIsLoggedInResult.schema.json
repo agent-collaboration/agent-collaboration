@@ -1,17 +1,5 @@
 {
   "$defs": {
-    "AdmittedPersonRow": {
-      "additionalProperties": false,
-      "properties": {
-        "personId": {
-          "$ref": "#/$defs/PersonId"
-        }
-      },
-      "required": [
-        "personId"
-      ],
-      "type": "object"
-    },
     "ConnectionView": {
       "oneOf": [
         {
@@ -150,6 +138,62 @@
       ],
       "type": "string"
     },
+    "LookupRefusal": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "notPermitted",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "notFound",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "conflict",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "recordUnwritable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "MachineLabel": {
       "allOf": [
         {
@@ -199,62 +243,6 @@
         "sessions"
       ],
       "type": "object"
-    },
-    "OwnerRefusal": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "notOwner",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "notFound",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "conflict",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "recordUnwritable",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
-        }
-      ]
     },
     "PersonId": {
       "maxLength": 36,
@@ -418,12 +406,6 @@
           },
           "type": "array"
         },
-        "people": {
-          "items": {
-            "$ref": "#/$defs/AdmittedPersonRow"
-          },
-          "type": "array"
-        },
         "result": {
           "const": "snapshot",
           "type": "string"
@@ -432,8 +414,7 @@
       "required": [
         "result",
         "asOf",
-        "machines",
-        "people"
+        "machines"
       ],
       "type": "object"
     },
@@ -441,7 +422,7 @@
       "additionalProperties": false,
       "properties": {
         "reason": {
-          "$ref": "#/$defs/OwnerRefusal"
+          "$ref": "#/$defs/LookupRefusal"
         },
         "result": {
           "const": "refused",

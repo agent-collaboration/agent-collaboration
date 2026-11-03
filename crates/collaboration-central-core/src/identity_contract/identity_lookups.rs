@@ -1,5 +1,5 @@
-//! Read-only presence answers and owner snapshots retain their distinct time units.
-use super::{CommandId, MachineEnrollment, OrganizationStanding, PersonId};
+//! Read-only machine and session snapshots retain their distinct time units.
+use super::{CommandId, MachineEnrollment, PersonId};
 use fleet_identity_protocol::{
     AgentIsolation, InstallationId, IsolationKind, LaunchContext, MachineEnvironment,
     OrganizationId, SequenceNumber, StartedBy, UnixMillis,
@@ -50,10 +50,9 @@ pub enum WhoIsLoggedInResult {
     Snapshot {
         as_of: UnixMillis,
         machines: Vec<MachineRow>,
-        people: Vec<AdmittedPersonRow>,
     },
     Refused {
-        reason: OwnerRefusal,
+        reason: LookupRefusal,
     },
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -63,8 +62,8 @@ pub enum WhoIsLoggedInResult {
     rename_all_fields = "camelCase",
     deny_unknown_fields
 )]
-pub enum OwnerRefusal {
-    NotOwner {},
+pub enum LookupRefusal {
+    NotPermitted {},
     NotFound {},
     Conflict {},
     RecordUnwritable {},
@@ -147,11 +146,6 @@ pub struct ProjectRef {
     pub name: ResourceName,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AdmittedPersonRow {
-    pub person_id: PersonId,
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(
     tag = "subject",
     rename_all = "camelCase",
@@ -159,10 +153,6 @@ pub struct AdmittedPersonRow {
     deny_unknown_fields
 )]
 pub enum IdentityLookup {
-    Person {
-        organization_id: OrganizationId,
-        person_id: PersonId,
-    },
     Session {
         organization_id: OrganizationId,
         session: SessionRef,
@@ -194,10 +184,6 @@ pub struct CommandStatus {
     deny_unknown_fields
 )]
 pub enum IdentityLookupResult {
-    Person {
-        person_id: PersonId,
-        standing: OrganizationStanding,
-    },
     Session {
         session: Box<SessionRef>,
         machine: InstallationId,
@@ -211,7 +197,7 @@ pub enum IdentityLookupResult {
     },
     Unknown {},
     Refused {
-        reason: OwnerRefusal,
+        reason: LookupRefusal,
     },
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -228,7 +214,7 @@ pub enum WorkspaceLookupResult {
     },
     Unknown {},
     Refused {
-        reason: OwnerRefusal,
+        reason: LookupRefusal,
     },
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -256,7 +242,7 @@ pub enum MachineLookupResult {
     },
     Unknown {},
     Refused {
-        reason: OwnerRefusal,
+        reason: LookupRefusal,
     },
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -270,7 +256,7 @@ pub enum CommandStatusResult {
     Pending {},
     Applied {},
     Unknown {},
-    Refused { reason: OwnerRefusal },
+    Refused { reason: LookupRefusal },
 }
 
 fn connection_id_schema(_: &mut SchemaGenerator) -> Schema {

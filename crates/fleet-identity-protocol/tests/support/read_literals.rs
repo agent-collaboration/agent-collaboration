@@ -6,7 +6,6 @@ pub fn accepted_reads(name: &str, literals: &[Value]) -> Vec<Value> {
         let fields: &[&str] = match name {
             "LaunchContext" => &["repository", "commit", "model"],
             "DecideDeviceLogin" => &["approverSecondFactorAt"],
-            "PersonAdmissionRequest" if literal["operation"] == "admitSignIn" => &["verifiedEmail"],
             "MachinePresenceAnswer" if literal["state"] == "notConnected" => &["closedAgoMs"],
             "ConnectionView" if literal["state"] == "notConnected" => &["lastSeenAt"],
             "MachineEnrollment" => &["endsAt"],

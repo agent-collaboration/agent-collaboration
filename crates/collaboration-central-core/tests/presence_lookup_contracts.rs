@@ -1,8 +1,8 @@
 //! Literal wire oracles and serializer-generated artifact freshness.
 use collaboration_central_core::identity_contract::{
-    AdmittedPersonRow, ConnectionView, EnrollmentView, MachinePresenceAnswer, MachineRow,
-    OwnerRefusal, ProjectRef, ReadMachinePresence, SessionRow, SessionStateView, WhoIsLoggedIn,
-    WhoIsLoggedInResult, WorkspaceRef,
+    ConnectionView, EnrollmentView, LookupRefusal, MachinePresenceAnswer, MachineRow, ProjectRef,
+    ReadMachinePresence, SessionRow, SessionStateView, WhoIsLoggedIn, WhoIsLoggedInResult,
+    WorkspaceRef,
 };
 use serde_json::json;
 #[cfg(test)]
@@ -41,11 +41,11 @@ fn who_is_logged_in_wire_contract() {
 }
 
 #[test]
-fn owner_refusal_wire_contract() {
-    contract_artifacts::assert_contract::<OwnerRefusal>(
-        "OwnerRefusal",
+fn lookup_refusal_wire_contract() {
+    contract_artifacts::assert_contract::<LookupRefusal>(
+        "LookupRefusal",
         vec![
-            json!({"kind":"notOwner"}),
+            json!({"kind":"notPermitted"}),
             json!({"kind":"notFound"}),
             json!({"kind":"conflict"}),
             json!({"kind":"recordUnwritable"}),
@@ -136,22 +136,13 @@ fn machine_row_wire_contract() {
 }
 
 #[test]
-fn admitted_person_row_wire_contract() {
-    contract_artifacts::assert_contract::<AdmittedPersonRow>(
-        "AdmittedPersonRow",
-        vec![json!({"personId":"019a3dce-2000-7000-8000-000000000001"})],
-        false,
-    );
-}
-
-#[test]
 fn who_is_logged_in_result_wire_contract() {
     contract_artifacts::assert_contract::<WhoIsLoggedInResult>(
         "WhoIsLoggedInResult",
         vec![
-            json!({"result":"snapshot","asOf":1793448005000_i64,"machines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine","enrollment":{"state":"enrolled","approvedBy":"019a3dce-2000-7000-8000-000000000001","approvedAt":1793448000000_i64},"mayServe":[{"workspaceId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture workspace"}],"connection":{"state":"connected","since":1793448000000_i64,"lastHeardAt":1793448005000_i64},"sessions":[{"session":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"native/provider:conversation"},"project":{"projectId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture project"},"workspace":{"workspaceId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture workspace"},"isolationKind":"host","startedAt":1793448000000_i64,"state":"working"},{"session":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"native/provider:conversation"},"project":{"projectId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture project"},"workspace":{"workspaceId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture workspace"},"isolationKind":"host","startedAt":1793448000000_i64,"state":"idle"},{"session":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"native/provider:conversation"},"project":{"projectId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture project"},"workspace":{"workspaceId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture workspace"},"isolationKind":"host","startedAt":1793448000000_i64,"state":"unknown"}]}],"people":[]}),
-            json!({"result":"snapshot","asOf":1793448005000_i64,"machines":[],"people":[{"personId":"019a3dce-2000-7000-8000-000000000001"}]}),
-            json!({"result":"refused","reason":{"kind":"notOwner"}}),
+            json!({"result":"snapshot","asOf":1793448005000_i64,"machines":[{"installation":"019a3dce-2000-7000-8000-000000000001","label":"fixture machine","enrollment":{"state":"enrolled","approvedBy":"019a3dce-2000-7000-8000-000000000001","approvedAt":1793448000000_i64},"mayServe":[{"workspaceId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture workspace"}],"connection":{"state":"connected","since":1793448000000_i64,"lastHeardAt":1793448005000_i64},"sessions":[{"session":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"native/provider:conversation"},"project":{"projectId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture project"},"workspace":{"workspaceId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture workspace"},"isolationKind":"host","startedAt":1793448000000_i64,"state":"working"},{"session":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"native/provider:conversation"},"project":{"projectId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture project"},"workspace":{"workspaceId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture workspace"},"isolationKind":"host","startedAt":1793448000000_i64,"state":"idle"},{"session":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"native/provider:conversation"},"project":{"projectId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture project"},"workspace":{"workspaceId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture workspace"},"isolationKind":"host","startedAt":1793448000000_i64,"state":"unknown"}]}]}),
+            json!({"result":"snapshot","asOf":1793448005000_i64,"machines":[]}),
+            json!({"result":"refused","reason":{"kind":"notPermitted"}}),
         ],
         false,
     );

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "enum": [
+    "workspace:create",
+    "workspaceAdmin:allowMachine",
+    "workspaceAdmin:withdrawMachine",
+    "workspaceAdmin:removeSession",
+    "machine:enroll",
+    "machine:revoke",
+    "machine:setTokenLifetime",
+    "organization:view",
+    "organization:readAudit"
+  ],
+  "title": "FleetPermission",
+  "type": "string"
+}

@@ -15,7 +15,6 @@ fn identity_lookup_wire_contract() {
     contract_artifacts::assert_contract::<IdentityLookup>(
         "IdentityLookup",
         vec![
-            json!({"subject":"person","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000001"}),
             json!({"subject":"session","organizationId":"019a3dce-2000-7000-8000-000000000001","session":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"native/provider:conversation"}}),
         ],
         false,
@@ -171,7 +170,7 @@ fn command_refusal_wire_contract() {
     contract_artifacts::assert_contract::<CommandRefusal>(
         "CommandRefusal",
         vec![
-            json!({"kind":"notOwner"}),
+            json!({"kind":"notPermitted"}),
             json!({"kind":"notFound"}),
             json!({"kind":"conflict"}),
             json!({"kind":"recordUnwritable"}),
@@ -188,7 +187,7 @@ fn organization_command_result_wire_contract() {
         vec![
             json!({"result":"applied"}),
             json!({"result":"admitted","commandId":"019a3dce-2000-7000-8000-000000000002"}),
-            json!({"result":"refused","reason":{"kind":"notOwner"}}),
+            json!({"result":"refused","reason":{"kind":"notPermitted"}}),
             json!({"result":"refused","reason":{"kind":"notFound"}}),
             json!({"result":"refused","reason":{"kind":"conflict"}}),
             json!({"result":"refused","reason":{"kind":"recordUnwritable"}}),

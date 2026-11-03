@@ -34,3 +34,15 @@ while its trimmed value is within Rust's bound; full read equivalence is not cla
 Reserved and approved enrollments remain internal to the authority. F1
 defines no Rust `Principal` union. The Switchboard actor-union parsing and
 cross-repository real-output checks remain with their consuming tickets.
+
+Authorization contracts use the nine plain-string `FleetPermission` values.
+`DecideDeviceLogin` requires `permissionChecked`; the authority decides whether
+that permission authorizes enrollment. `LookupRefusal` and command/device
+refusals use `notPermitted` without accepting the retired `notOwner` spelling.
+`ProvisionOrganization` carries only the organization ID and answers only
+`Provisioned`; transport failure remains unknown to its caller.
+
+Central publishes no person admission, standing, person lookup or people view
+row. Their old valid payloads remain in
+`tests/fixtures/retired_authorization_contracts.json` as rejected inputs to
+the retained receiving contracts.
