@@ -1,5 +1,5 @@
 //! RFC8414 metadata locates OAuth endpoints; the closed Fleet document names only its public client.
-use codex_router_fleet_state::fleet_login::SignInAddress;
+use message_board_storage::fleet_login::SignInAddress;
 use serde::{Deserialize, Serialize};
 
 use super::device_code_flow::IssuerFailure;

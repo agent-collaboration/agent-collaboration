@@ -214,9 +214,9 @@ async fn held_login(
 
 async fn saved_login(
     router: &Path,
-) -> TestResult<Option<codex_router_fleet_state::fleet_login::SavedFleetLogin>> {
-    use codex_router_fleet_state::fleet_login_repository::FleetLoginRepository;
-    let store = codex_router_fleet_state::FleetStateStore::open_read_only(router).await?;
+) -> TestResult<Option<message_board_storage::fleet_login::SavedFleetLogin>> {
+    use message_board_storage::fleet_login_repository::FleetLoginRepository;
+    let store = fleet_host::open_fleet_cache(router).await?;
     let saved = store.load_fleet_login().await;
     store.close().await;
     Ok(saved?)
@@ -244,13 +244,23 @@ fn assert_no_secrets(root: &Path) -> TestResult {
 }
 
 fn assert_live_database_privacy(root: &Path) -> TestResult {
-    for name in ["fleet.sqlite", "fleet.sqlite-wal", "fleet.sqlite-shm"] {
-        let path = root.join("router").join(name);
-        if !path.is_file() {
-            return Err(format!("live SQLite privacy scan missing {name}").into());
+    let directory = codex_router_host::router_collaboration_directory(&root.join("router"));
+    for name in ["fleet-cache.sqlite", "fleet-cache.sqlite-wal"] {
+        if !directory.join(name).is_file() {
+            return Err(format!("live Turso privacy scan missing {name}").into());
         }
-        if std::fs::metadata(path)?.permissions().mode() & 0o777 != 0o600 {
-            return Err(format!("live SQLite file is not owner-private: {name}").into());
+    }
+    for entry in std::fs::read_dir(directory)? {
+        let entry = entry?;
+        if entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with("fleet-cache.sqlite")
+        {
+            let metadata = std::fs::symlink_metadata(entry.path())?;
+            if !metadata.is_file() || metadata.permissions().mode() & 0o777 != 0o600 {
+                return Err("live Turso file is not an owner-private regular file".into());
+            }
         }
     }
     assert_no_secrets(root)

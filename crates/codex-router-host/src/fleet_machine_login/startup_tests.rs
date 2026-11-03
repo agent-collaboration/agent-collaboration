@@ -3,8 +3,8 @@ use super::super::{
     issuer_http::tls_fixture, login_clock::LoginFuture, login_owner::MachineLoginIdentity,
 };
 use super::*;
-use codex_router_fleet_state::test_support::MemoryFleetLoginRepository;
 use collaboration_contracts::{MachineLoginGate, MachineLoginState};
+use message_board_storage::fleet_test_support::MemoryFleetLoginRepository;
 use runtime_primitives::SyncTime;
 
 struct FixedClock;

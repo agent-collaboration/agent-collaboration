@@ -6,9 +6,9 @@ use codex_router_secret_store::{
 
 use super::super::login_publication::MachineLoginPublication;
 use super::*;
-use codex_router_fleet_state::fleet_login::{SavedFleetCentral, SavedFleetLogin};
-use codex_router_fleet_state::{
-    fleet_login_repository::FleetLoginRepository, test_support::MemoryFleetLoginRepository,
+use message_board_storage::fleet_login::{SavedFleetCentral, SavedFleetLogin};
+use message_board_storage::{
+    fleet_login_repository::FleetLoginRepository, fleet_test_support::MemoryFleetLoginRepository,
 };
 
 const INSTALLATION: &str = "019f0000-0000-7000-8000-000000000001";
@@ -56,9 +56,9 @@ fn saved(enrollment: &str) -> SavedFleetLogin {
         },
     }
 }
-fn login_candidate(enrollment: &str) -> codex_router_fleet_state::fleet_login::FleetLoginCandidate {
+fn login_candidate(enrollment: &str) -> message_board_storage::fleet_login::FleetLoginCandidate {
     let saved = saved(enrollment);
-    codex_router_fleet_state::fleet_login::FleetLoginCandidate {
+    message_board_storage::fleet_login::FleetLoginCandidate {
         sign_in: saved.sign_in,
         organization_id: saved.organization_id,
         enrollment_id: saved.enrollment_id,

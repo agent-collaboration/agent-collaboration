@@ -2,9 +2,6 @@
 use std::{io, path::Path, sync::Arc, time::Duration};
 
 use board_fleet_sync::{AccessServiceToken, BoardSessionInputs};
-use codex_router_fleet_state::fleet_login_repository::{
-    FleetLoginRepository, FleetLoginStorageFailure,
-};
 use codex_router_secret_store::{
     SecretStore,
     classified_store_open::ClassifiedCredentialStore,
@@ -14,6 +11,9 @@ use codex_router_secret_store::{
 };
 use fleet_sync_protocol::PeerId;
 use fleet_sync_session::{Endpoint, PeerCredential};
+use message_board_storage::fleet_login_repository::{
+    FleetLoginRepository, FleetLoginStorageFailure,
+};
 
 use super::{
     issuer_connection::HttpMachineIssuerConnection,

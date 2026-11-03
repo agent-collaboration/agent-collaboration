@@ -47,6 +47,33 @@ impl codex_router_host::fleet_machine_login::FleetLoginClock for PollingClock {
     }
 }
 
+impl runtime_primitives::Clock for PollingClock {
+    fn now(&self) -> runtime_primitives::SyncTime {
+        runtime_primitives::SyncTime::from_unix_millis(self.0.load(Ordering::SeqCst))
+    }
+}
+struct FixedStorageIds;
+impl runtime_primitives::IdSource for FixedStorageIds {
+    fn new_id(&self) -> uuid::Uuid {
+        uuid::Uuid::from_u128(0x019f0000_0000_7000_8000_000000000199)
+    }
+}
+async fn open_fleet_cache_with_clock(
+    router_root: &Path,
+    clock: Arc<PollingClock>,
+) -> TestResult<message_board_storage::FleetCache> {
+    let directory = codex_router_host::router_collaboration_directory(router_root);
+    Ok(message_board_storage::FleetCache::open_with_sources(
+        &directory.join("fleet-cache.sqlite"),
+        clock,
+        Arc::new(FixedStorageIds),
+    )
+    .await?)
+}
+pub async fn open_fleet_cache(router_root: &Path) -> TestResult<message_board_storage::FleetCache> {
+    open_fleet_cache_with_clock(router_root, Arc::new(PollingClock(AtomicI64::new(0)))).await
+}
+
 pub fn fixture_root() -> TestResult<tempfile::TempDir> {
     let root = tempfile::Builder::new()
         .prefix("f11-machine-login-")
@@ -281,9 +308,9 @@ async fn host_child() -> TestResult {
     .with_collaboration_peer_registry_directory(root.join("no-peer-registry"))
     .with_owner_human_id("f11-test-owner".to_owned().try_into()?);
     let instance = HostInstance::acquire(config.coordination_paths().clone())?;
-    let repository = Arc::new(
-        codex_router_fleet_state::FleetStateStore::open_and_migrate(&root.join("router")).await?,
-    );
+    let clock = Arc::new(PollingClock(AtomicI64::new(0)));
+    let repository =
+        Arc::new(open_fleet_cache_with_clock(&root.join("router"), clock.clone()).await?);
     let mut ready = UnixStream::connect(root.join("fixture-bound.sock")).await?;
     ready.write_all(BOUND_EVENT).await?;
     ready.shutdown().await?;
@@ -297,7 +324,7 @@ async fn host_child() -> TestResult {
         instance,
         repository.clone(),
         codex_router_host::fleet_machine_login::FleetLoginDependencies {
-            clock: Arc::new(PollingClock(AtomicI64::new(0))),
+            clock,
             keychain: Arc::new(
                 codex_router_secret_store::test_support::DeterministicTestKeychainAccess,
             ),

@@ -3,7 +3,7 @@ use super::{
     device_code_flow::{MachineTokenIssuer, RefreshCredentialBundle},
     login_contract::FleetLoginEvent,
 };
-use codex_router_fleet_state::fleet_login::SavedFleetLogin;
+use message_board_storage::fleet_login::SavedFleetLogin;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 

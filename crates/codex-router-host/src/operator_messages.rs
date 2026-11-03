@@ -27,7 +27,7 @@ pub enum OperatorRequest {
     /// Ask this running Host to approve and keep its own machine login.
     FleetLogin {
         #[serde(rename = "signIn", default, skip_serializing_if = "Option::is_none")]
-        sign_in: Option<codex_router_fleet_state::fleet_login::SignInAddress>,
+        sign_in: Option<message_board_storage::fleet_login::SignInAddress>,
         #[serde(rename = "organizationId")]
         organization_id: fleet_identity_protocol::OrganizationId,
         label: message_board::MachineLabel,

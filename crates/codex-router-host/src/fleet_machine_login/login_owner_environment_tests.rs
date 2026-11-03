@@ -1,7 +1,7 @@
 //! The Host forwards the assertion and adopts the repository's confirmed environment.
 use super::*;
-use codex_router_fleet_state::fleet_login::FleetLoginCandidate;
 use fleet_identity_protocol::MachineEnvironment::{CloudVm, Physical};
+use message_board_storage::fleet_login::FleetLoginCandidate;
 
 // Oracle: PD bb4c7145 and the approved repository boundary. Wrong behavior:
 // the Host substitutes physical for omission, or drops an explicit assertion.

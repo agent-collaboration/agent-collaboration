@@ -12,10 +12,10 @@ use super::super::{
 };
 use super::*;
 use codex_router_core::redaction::SecretString;
-use codex_router_fleet_state::{
-    fleet_login_repository::FleetLoginRepository, test_support::MemoryFleetLoginRepository,
-};
 use collaboration_contracts::{MachineLoginGate, MachineLoginState};
+use message_board_storage::{
+    fleet_login_repository::FleetLoginRepository, fleet_test_support::MemoryFleetLoginRepository,
+};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::Mutex;
 

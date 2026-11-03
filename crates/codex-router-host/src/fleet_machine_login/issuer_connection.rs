@@ -1,7 +1,7 @@
 //! Each saved or requested sign-in address is discovered before this Host uses its OAuth endpoints.
 use std::sync::Arc;
 
-use codex_router_fleet_state::fleet_login::SignInAddress;
+use message_board_storage::fleet_login::SignInAddress;
 
 use super::{
     device_code_flow::{IssuerFailure, MachineTokenIssuer},

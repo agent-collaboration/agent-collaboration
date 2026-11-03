@@ -1,6 +1,6 @@
 //! The C8 first-token routing extension belongs to this Host's OAuth response boundary.
-use codex_router_fleet_state::fleet_login::SavedFleetCentral;
 use fleet_sync_protocol::{PeerId, ReceiverId};
+use message_board_storage::fleet_login::SavedFleetCentral;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -200,7 +200,7 @@ async fn exercise(
     };
     let publication = Arc::new(MachineLoginPublication {
         repository: Arc::new(
-            codex_router_fleet_state::test_support::MemoryFleetLoginRepository::new(),
+            message_board_storage::fleet_test_support::MemoryFleetLoginRepository::new(),
         ),
         credentials: Arc::new(RefreshCredentialStore::MemoryOnly),
         after_commit: None,

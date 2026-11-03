@@ -1,8 +1,8 @@
 //! Confirms credential bytes, the public repository row, and retirement in that order.
 use std::sync::Arc;
 
-use codex_router_fleet_state::fleet_login::{FleetLoginCandidate, SavedFleetLogin};
-use codex_router_fleet_state::fleet_login_repository::FleetLoginRepository;
+use message_board_storage::fleet_login::{FleetLoginCandidate, SavedFleetLogin};
+use message_board_storage::fleet_login_repository::FleetLoginRepository;
 
 use super::{
     device_code_flow::RefreshCredentialBundle,

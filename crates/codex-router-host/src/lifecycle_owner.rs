@@ -276,7 +276,7 @@ impl HostRuntime {
         update_inputs: ManagedUpdateInputs,
         instance: HostInstance,
         repository: std::sync::Arc<
-            dyn codex_router_fleet_state::fleet_login_repository::FleetLoginRepository,
+            dyn message_board_storage::fleet_login_repository::FleetLoginRepository,
         >,
         dependencies: crate::fleet_machine_login::FleetLoginDependencies,
     ) -> Result<HostExit, HostError> {

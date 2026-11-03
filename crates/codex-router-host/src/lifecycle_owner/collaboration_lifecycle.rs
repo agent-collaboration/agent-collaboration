@@ -24,7 +24,7 @@ pub(super) struct CollaborationLifecycle {
     published_child: Option<u32>,
     schema_digest: Option<[u8; 32]>,
     machine_login: Option<Box<crate::fleet_machine_login::HostMachineLogin>>,
-    assembled_login: Option<codex_router_fleet_state::fleet_login::SavedFleetLogin>,
+    assembled_login: Option<message_board_storage::fleet_login::SavedFleetLogin>,
 }
 impl CollaborationLifecycle {
     pub(super) async fn start(
@@ -375,7 +375,7 @@ fn timestamp() -> io::Result<collaboration_protocol::ObservationTimestamp> {
 #[cfg(test)]
 mod tests {
     use super::load_board_session_inputs;
-    use codex_router_fleet_state::test_support::MemoryFleetLoginRepository;
+    use message_board_storage::fleet_test_support::MemoryFleetLoginRepository;
     use std::{os::unix::fs::PermissionsExt, sync::Arc};
 
     // Oracle: explicit modes, Lead01a197a4. A row-based fallback would read

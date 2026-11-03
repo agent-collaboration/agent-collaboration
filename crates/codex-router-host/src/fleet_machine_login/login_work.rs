@@ -10,8 +10,8 @@ use super::{
     login_publication::MachineLoginPublication,
     token_renewal::{MachineRenewalConnection, renew_machine_token},
 };
-use codex_router_fleet_state::fleet_login::{FleetLoginCandidate, SavedFleetLogin, SignInAddress};
 use fleet_identity_protocol::MachineEnvironment;
+use message_board_storage::fleet_login::{FleetLoginCandidate, SavedFleetLogin, SignInAddress};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 

@@ -1,10 +1,10 @@
 //! One Host lifetime owns pending login, adoption and the active refresh family.
 use std::{future::pending, sync::Arc};
 
-use codex_router_fleet_state::fleet_login::{SavedFleetLogin, SignInAddress};
 use fleet_identity_protocol::{InstallationId, MachineEnvironment, OrganizationId};
 use fleet_sync_protocol::PeerId;
 use message_board::MachineLabel;
+use message_board_storage::fleet_login::{SavedFleetLogin, SignInAddress};
 use runtime_primitives::SyncTime;
 use tokio::{
     sync::{mpsc, watch},
