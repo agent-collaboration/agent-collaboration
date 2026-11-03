@@ -47,6 +47,7 @@ where
     ) -> Result<Self, StoreError> {
         let io = Arc::new(io);
         let replies = Arc::new(crate::holder_reply_hub::HolderReplyHub::default());
+        let mail_limits = crate::central_mailbox_limits().map_err(StoreError::backend)?;
         let publication = crate::mail_status_dispatch::bind(
             Arc::downgrade(&host),
             io.clone(),
@@ -60,7 +61,14 @@ where
                 crate::registry_peer_lookup::bind(Arc::downgrade(&host)),
                 Some(crate::registry_lease_store::bind(Arc::downgrade(&host))),
             )
-            .with_publication(publication),
+            .with_publication(publication)
+            .with_push(crate::mail_push_dispatch::bind(
+                Arc::downgrade(&host),
+                io.clone(),
+                replies.clone(),
+                mail_limits,
+                holder_answer_timeout,
+            )),
         );
         let store = Arc::new(crate::session_store::CoreSessionStore::new(
             host.clone(),
@@ -95,6 +103,20 @@ where
             crate::session_store::CoreSessionStore<Host, Io>,
             Host::Database,
             board_sync_protocol::BoardDeliveryTypes,
+        >::new())?;
+        engine.register(fleet_sync_delivery::PushItem::<
+            crate::session_store::CoreSessionStore<Host, Io>,
+            Host::Database,
+            board_sync_protocol::BoardDeliveryTypes,
+            fleet_sync_delivery::PublishStatus<
+                crate::session_store::CoreSessionStore<Host, Io>,
+                Host::Database,
+                board_sync_protocol::BoardDeliveryTypes,
+            >,
+        >::new(mail_limits, shared_host.clone()))?;
+        engine.register(fleet_sync_delivery::RemoveDeliveryRecord::<
+            crate::session_store::CoreSessionStore<Host, Io>,
+            Host::Database,
         >::new())?;
         let engine =
             crate::fleet_task_engine::own_engine::<_, _, Host::Database, LeaseHook<Host, Io>>(

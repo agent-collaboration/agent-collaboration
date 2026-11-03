@@ -37,6 +37,13 @@ impl WakeScheduler for ProbeIo {
     }
 }
 impl PlatformIo for ProbeIo {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     async fn object_call(
         &self,
         _to: ObjectAddress,
@@ -96,10 +103,10 @@ impl Fixture {
 async fn exported_engine_corpora_initialize_once_and_reopen_without_reapplying_the_alter()
 -> Result<(), TestError> {
     for (schema, expected) in [
-        (EngineSchema::Registry, 8),
+        (EngineSchema::Registry, 6),
         (EngineSchema::Copy, 3),
         (EngineSchema::Session, 4),
-        (EngineSchema::Mailbox, 3),
+        (EngineSchema::Mailbox, 5),
         (EngineSchema::Fleet, 10),
     ] {
         let directory = tempfile::tempdir()?;

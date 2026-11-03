@@ -1,7 +1,7 @@
 //! Frozen project controls share the original's atomic SDK custody and epoch boundary.
 use super::{
     AtomicStore, CarrierAcceptance, Clock, DeliveryItemRef, MailDeliveryRuntime, MailSender,
-    RouterDeliveryTypes, StoreError, SubmitMailTask, WakeScheduler,
+    RemoveMailRecord, RouterDeliveryTypes, StoreError, SubmitMailTask, WakeScheduler,
 };
 use fleet_sync_delivery::{
     DeliveryTransactionFailure, Outbox, OutboxAdmission, classify_delivery_store_error,
@@ -76,7 +76,7 @@ impl MailDeliveryRuntime {
                 Box::pin(async move {
                     let (admission, operation) =
                         Outbox::<_, RouterDeliveryTypes>::new(scope, config.limits)
-                            .enqueue_cancel_and_admit::<SubmitMailTask, _>(
+                            .enqueue_cancel_and_admit::<SubmitMailTask, RemoveMailRecord, _>(
                                 cancel,
                                 relay,
                                 config.owner,

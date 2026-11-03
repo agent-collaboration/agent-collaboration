@@ -12,7 +12,7 @@ pub(super) async fn run(
     wake: Arc<TokioWakeTimer<SharedClock>>,
     clock: SharedClock,
     stop: CancellationToken,
-    #[cfg(test)] ready: tokio::sync::watch::Sender<bool>,
+    #[cfg(test)] generation: tokio::sync::watch::Sender<u64>,
 ) {
     let mut retry_delay = INITIAL_RETRY_DELAY;
     // Existing Copies are explicitly woken by startup discovery. Opening a
@@ -21,11 +21,15 @@ pub(super) async fn run(
         drive(&runtime, &wake, &clock, &mut retry_delay).await;
     }
     #[cfg(test)]
-    ready.send_replace(true);
+    generation.send_replace(1);
     loop {
         tokio::select! {
             _ = stop.cancelled() => break,
-            _ = wake.wait() => drive(&runtime, &wake, &clock, &mut retry_delay).await,
+            _ = wake.wait() => {
+                drive(&runtime, &wake, &clock, &mut retry_delay).await;
+                #[cfg(test)]
+                generation.send_modify(|value| *value = value.saturating_add(1));
+            },
         }
     }
 }

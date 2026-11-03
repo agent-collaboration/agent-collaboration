@@ -16,7 +16,7 @@ async fn retirement_resumes_its_stored_step_after_the_server_process_dies() -> C
     let first = ServerProcess::start(root.path(), &jwks.url).await?;
     control(
         &first.base,
-        ObjectAddress::Registry,
+        ObjectAddress::Fleet,
         RuntimeControl::HoldNextDispatch {
             destination: ObjectAddress::Copy(database),
         },
@@ -31,7 +31,7 @@ async fn retirement_resumes_its_stored_step_after_the_server_process_dies() -> C
     let pending = tokio::spawn(async move { post(&base, &pending_route, &pending_request).await });
     let held = control(
         &first.base,
-        ObjectAddress::Registry,
+        ObjectAddress::Fleet,
         RuntimeControl::AwaitHeldDispatch,
     )
     .await?;
@@ -45,10 +45,29 @@ async fn retirement_resumes_its_stored_step_after_the_server_process_dies() -> C
         .pointer("/identity/operation")
         .ok_or("retirement omitted its durable operation")?
         .clone();
-    let registry_path = root.path().join("registry.db");
+    let registry_path = root.path().join("fleet.db");
     let copy_path = root.path().join(format!("copy-{database}.db"));
     let before = operation(&registry_path, &identity).await?;
     assert_eq!(before.0, "running");
+    let http = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(10))
+        .build()?;
+    let before_wipe = directory(&http, &first.base).await?;
+    let projected = before_wipe
+        .get("projects")
+        .and_then(Value::as_array)
+        .and_then(|projects| {
+            projects
+                .iter()
+                .find(|project| project.get("project") == Some(&json!(database)))
+        })
+        .ok_or("sealed retirement lost its owning directory entry")?;
+    assert_eq!(
+        projected.pointer("/leaseSide/value/lease/kind"),
+        Some(&json!("unheld")),
+        "the committed retirement seal must already remove the directory grant before the Copy wipe"
+    );
     assert_eq!(
         before.2, 4,
         "check, admission, seal and pending wipe must be durable"
@@ -61,10 +80,6 @@ async fn retirement_resumes_its_stored_step_after_the_server_process_dies() -> C
     let _ = pending.await?;
 
     let second = ServerProcess::start(root.path(), &jwks.url).await?;
-    let http = reqwest::Client::builder()
-        .no_proxy()
-        .timeout(Duration::from_secs(10))
-        .build()?;
     // Reading Fleet's owner directory never drives the Registry journal.
     // Observe convergence before replaying the interrupted retirement request.
     tokio::time::timeout(RECOVERY_BOUND, async {

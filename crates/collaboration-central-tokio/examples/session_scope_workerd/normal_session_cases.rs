@@ -23,7 +23,7 @@ pub(super) async fn hold_schema(session: &NormalSession, base: &str) -> Conforma
     session
         .control(
             base,
-            json!({"kind":"holdNextDispatch","value":{"destination":{"kind":"registry"}}}),
+            json!({"kind":"holdNextDispatch","value":{"destination":{"kind":"fleet"}}}),
         )
         .await?;
     Ok(())

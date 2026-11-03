@@ -3,9 +3,7 @@
 //! Fleet admission and an idle holder's release answer are setup stand-ins.
 //! They do not prove the unfinished normal Register/Move request composition.
 use collaboration_central_conformance::ConformanceResult;
-use collaboration_central_core::{
-    CopyKind, CoreHost, ObjectAddress, ObjectRuntime, PlatformIo, RegistryKind,
-};
+use collaboration_central_core::{CopyKind, CoreHost, ObjectAddress, ObjectRuntime, PlatformIo};
 use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{
     AtomicStore, CallFailure, CallId, CallTarget, Engine, Host, OperationState, Uuid,
@@ -58,6 +56,13 @@ impl WakeScheduler for SetupIo {
     }
 }
 impl PlatformIo for SetupIo {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     async fn object_call(&self, _: ObjectAddress, _: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
         Err(CallFailure::AnswerLost)
     }
@@ -89,20 +94,31 @@ impl Host for GrantHost {
         call: CallId,
     ) -> Result<C::Answer, CallFailure> {
         let answer = match C::KIND {
-            "fleet-sync.registration-admission" | "fleet-sync.retirement-admission" => serde_json::to_vec(&GateAnswer::Admitted),
+            "fleet-sync.registration-admission" | "fleet-sync.retirement-admission" => {
+                serde_json::to_vec(&GateAnswer::Admitted)
+            }
             "fleet-sync.holder-release" => serde_json::to_vec(&ReleaseAnswer::Released {
-                final_position: ReplicationPosition::new(Epoch::new(1).map_err(lost)?, CommitSequence::new(0)),
+                final_position: ReplicationPosition::new(
+                    Epoch::new(1).map_err(lost)?,
+                    CommitSequence::new(0),
+                ),
             }),
-            "fleet-sync.copy-create" | "fleet-sync.copy-acknowledged" | "fleet-sync.copy-fence" | "fleet-sync.copy-status" | "fleet-sync.copy-retire" => {
+            "fleet-sync.copy-create"
+            | "fleet-sync.copy-acknowledged"
+            | "fleet-sync.copy-fence"
+            | "fleet-sync.copy-status"
+            | "fleet-sync.copy-retire" => {
                 let bytes = serde_json::to_vec(&json!({
-                    "source":{"kind":"registry"},"sourceFace":"registry","authority":{"kind":"object"},
+                    "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
                     "destination":{"kind":"copy","value":self.database},"destinationFace":"copy",
                     "identity":call,"kind":C::KIND,"target":target,"request":request
-                })).map_err(lost)?;
+                }))
+                .map_err(lost)?;
                 return serde_json::from_slice(&self.copy.on_call(bytes).await?).map_err(lost);
             }
             _ => return Err(CallFailure::AnswerLost),
-        }.map_err(lost)?;
+        }
+        .map_err(lost)?;
         serde_json::from_slice(&answer).map_err(lost)
     }
 }
@@ -126,14 +142,25 @@ pub(super) async fn register_grant_history(
         host,
     } = GrantFixture::open(root, config, database).await?;
     let mut engine = Engine::new(registry.clone(), host.clone());
-    engine.register(RegistrationTask::<Store, sqlx_turso::Turso>::new(config))?;
-    engine.register(HolderChangeTask::<Store, sqlx_turso::Turso>::new(
+    engine.register(RegistrationTask::<
+        Store,
+        sqlx_turso::Turso,
+        fleet_sync_lease::NoLeaseChangeHook,
+    >::new(
+        config, Arc::new(fleet_sync_lease::NoLeaseChangeHook)
+    ))?;
+    engine.register(HolderChangeTask::<
+        Store,
+        sqlx_turso::Turso,
+        fleet_sync_lease::NoLeaseChangeHook,
+    >::new(
         config,
         host.clone(),
+        Arc::new(fleet_sync_lease::NoLeaseChangeHook),
     ))?;
     let proof = async {
         let registration = Registration { attempt: RequestId::new(Uuid::now_v7())?, database, writer: first, origin: Origin::Empty };
-        let id = engine.start::<RegistrationTask<Store, sqlx_turso::Turso>>(
+        let id = engine.start::<RegistrationTask<Store, sqlx_turso::Turso, fleet_sync_lease::NoLeaseChangeHook>>(
             &lifecycle_request_key(registration.attempt)?, registration).await?;
         let OperationState::Completed { result } = engine.status(&id).await?.state else {
             return Err("real registration task did not complete".into());
@@ -211,12 +238,12 @@ impl GrantFixture {
         let objects = ObjectStore::open(root).await?;
         let registry = objects
             .object(
-                ObjectKey::new("registry")?,
+                ObjectKey::new("fleet")?,
                 Default::default(),
                 Arc::new(CoreHost::for_store(SetupIo, config.authoritative_receiver)),
             )
             .await?;
-        let runtime = ObjectRuntime::<RegistryKind, _, _>::registry(
+        let runtime = ObjectRuntime::<collaboration_central_core::FleetKind, _, _>::fleet(
             Arc::new(TokioStorageHost::new(registry.clone())),
             SetupIo,
             config,
@@ -225,6 +252,7 @@ impl GrantFixture {
                     "019f0000-0000-7000-8000-000000005240".to_owned(),
                 )?,
             },
+            std::time::Duration::from_secs(2),
         )?;
         runtime.initialize().await?;
         let copy_store = objects
@@ -266,7 +294,13 @@ pub(super) async fn import_unheld(
         host,
     } = GrantFixture::open(root, config, database).await?;
     let mut engine = Engine::new(registry, host);
-    engine.register(fleet_sync_lease::ImportTask::<Store, sqlx_turso::Turso>::new(config))?;
+    engine.register(fleet_sync_lease::ImportTask::<
+        Store,
+        sqlx_turso::Turso,
+        fleet_sync_lease::NoLeaseChangeHook,
+    >::new(
+        config, Arc::new(fleet_sync_lease::NoLeaseChangeHook)
+    ))?;
     let proof = async {
         let request = Import {
             attempt: RequestId::new(Uuid::now_v7())?,
@@ -274,10 +308,11 @@ pub(super) async fn import_unheld(
             digest: ImportDigest::new("d".repeat(64))?,
         };
         let id = engine
-            .start::<fleet_sync_lease::ImportTask<Store, sqlx_turso::Turso>>(
-                &lifecycle_request_key(request.attempt)?,
-                request,
-            )
+            .start::<fleet_sync_lease::ImportTask<
+                Store,
+                sqlx_turso::Turso,
+                fleet_sync_lease::NoLeaseChangeHook,
+            >>(&lifecycle_request_key(request.attempt)?, request)
             .await?;
         let OperationState::Completed { result } = engine.status(&id).await?.state else {
             return Err("public Unheld import did not complete".into());
@@ -308,10 +343,21 @@ pub(super) async fn retire_unheld(
         host,
     } = GrantFixture::open(root, config, database).await?;
     let mut engine = Engine::new(registry.clone(), host.clone());
-    engine.register(fleet_sync_lease::RetirementTask::<Store, sqlx_turso::Turso>::new(config))?;
-    engine.register(HolderChangeTask::<Store, sqlx_turso::Turso>::new(
+    engine.register(fleet_sync_lease::RetirementTask::<
+        Store,
+        sqlx_turso::Turso,
+        fleet_sync_lease::NoLeaseChangeHook,
+    >::new(
+        config, Arc::new(fleet_sync_lease::NoLeaseChangeHook)
+    ))?;
+    engine.register(HolderChangeTask::<
+        Store,
+        sqlx_turso::Turso,
+        fleet_sync_lease::NoLeaseChangeHook,
+    >::new(
         config,
         host.clone(),
+        Arc::new(fleet_sync_lease::NoLeaseChangeHook),
     ))?;
     let proof = async {
         let epoch = Epoch::new(1)?;
@@ -323,10 +369,11 @@ pub(super) async fn retire_unheld(
             expect_acked: ReplicationPosition::new(epoch, CommitSequence::new(0)),
         };
         let id = engine
-            .start::<fleet_sync_lease::RetirementTask<Store, sqlx_turso::Turso>>(
-                &lifecycle_request_key(retirement.attempt)?,
-                retirement,
-            )
+            .start::<fleet_sync_lease::RetirementTask<
+                Store,
+                sqlx_turso::Turso,
+                fleet_sync_lease::NoLeaseChangeHook,
+            >>(&lifecycle_request_key(retirement.attempt)?, retirement)
             .await?;
         let OperationState::Completed { result } = engine.status(&id).await?.state else {
             return Err("public retirement did not complete".into());
@@ -419,7 +466,13 @@ pub(super) async fn retire_imported_copy(
         host,
     } = GrantFixture::open(root, config, database).await?;
     let mut engine = Engine::new(registry.clone(), host);
-    engine.register(fleet_sync_lease::RetirementTask::<Store, sqlx_turso::Turso>::new(config))?;
+    engine.register(fleet_sync_lease::RetirementTask::<
+        Store,
+        sqlx_turso::Turso,
+        fleet_sync_lease::NoLeaseChangeHook,
+    >::new(
+        config, Arc::new(fleet_sync_lease::NoLeaseChangeHook)
+    ))?;
     let attempt = RequestId::new(Uuid::now_v7())?;
     let proof = async {
         let request = Retirement {
@@ -429,10 +482,11 @@ pub(super) async fn retire_imported_copy(
             expect_acked: ReplicationPosition::new(Epoch::new(1)?, CommitSequence::new(0)),
         };
         let operation = engine
-            .start::<fleet_sync_lease::RetirementTask<Store, sqlx_turso::Turso>>(
-                &lifecycle_request_key(attempt)?,
-                request,
-            )
+            .start::<fleet_sync_lease::RetirementTask<
+                Store,
+                sqlx_turso::Turso,
+                fleet_sync_lease::NoLeaseChangeHook,
+            >>(&lifecycle_request_key(attempt)?, request)
             .await?;
         let OperationState::Completed { result } = engine.status(&operation).await?.state else {
             return Err("public retirement arrangement did not complete".into());

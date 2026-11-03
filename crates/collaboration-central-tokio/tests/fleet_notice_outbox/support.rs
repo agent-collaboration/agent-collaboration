@@ -94,14 +94,20 @@ impl WakeScheduler for Io {
     }
 }
 impl PlatformIo for Io {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     async fn object_call(
         &self,
         destination: ObjectAddress,
         bytes: Vec<u8>,
     ) -> Result<Vec<u8>, CallFailure> {
         let call: Value = serde_json::from_slice(&bytes).map_err(|_| CallFailure::AnswerLost)?;
-        if destination
-            != ObjectAddress::Connection(installation().map_err(|_| CallFailure::AnswerLost)?)
+        if destination != ObjectAddress::Fleet
             || call.get("kind").and_then(Value::as_str) != Some("central.machine-notice")
             || call.get("source") != Some(&json!({"kind":"fleet"}))
         {
@@ -118,13 +124,14 @@ impl PlatformIo for Io {
                 reason: NotSentReason::Unreachable { last_seen: None },
             });
         }
-        let answer = self
-            .delivery
-            .runtime
-            .delivery()
-            .map_err(|_| CallFailure::AnswerLost)?
-            .on_call(bytes)
-            .await;
+        let answer = Box::pin(
+            self.delivery
+                .runtime
+                .delivery()
+                .map_err(|_| CallFailure::AnswerLost)?
+                .on_call(bytes),
+        )
+        .await;
         if answer.is_ok()
             && self
                 .lose_after_acknowledgement
@@ -161,7 +168,25 @@ impl Fixture {
                 injected: Arc::default(),
             }),
         });
-        let runtime = ObjectRuntime::fleet(host.clone(), io.clone(), receiver)?;
+        let runtime = ObjectRuntime::fleet(
+            host.clone(),
+            io.clone(),
+            fleet_sync_lease::RegistryConfig {
+                authoritative_receiver: receiver,
+                lease: fleet_sync_lease::LeasePolicy {
+                    lease_duration: std::time::Duration::from_secs(60),
+                    renew_interval: std::time::Duration::from_secs(20),
+                },
+                release_unsent_for: std::time::Duration::from_secs(10),
+                move_needs_renewal_within: None,
+            },
+            collaboration_central_tokio::DeliveryConfig {
+                relay_peer: "019f0000-0000-7000-8000-000000005240"
+                    .to_owned()
+                    .try_into()?,
+            },
+            std::time::Duration::from_secs(2),
+        )?;
         runtime.initialize().await?;
         Ok(Self {
             objects,
@@ -176,7 +201,7 @@ impl Fixture {
     }
     pub async fn feed_from(&self, installation: &str, after: u64) -> TestResult<BoardReadPage> {
         let bytes=self.runtime.on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"connection","value":installation},"sourceFace":"session","authority":{"kind":"object"},
+            "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":installation}},
             "destination":{"kind":"fleet"},"destinationFace":"fleet", "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"read_feed"},
             "kind":"central.fleet-read","target":null,"request":{"kind":"feed","value":{"after":after}}
         }))?).await.map_err(|error|format!("feed read failed: {error:?}"))?;
@@ -236,7 +261,7 @@ pub fn workspace_update() -> TestResult<FleetRequest> {
 }
 pub fn mutation(request: &FleetRequest) -> TestResult<Vec<u8>> {
     Ok(serde_json::to_vec(&json!({
-        "source":{"kind":"connection","value":SERVICE},"sourceFace":"session","authority":{"kind":"object"},
+        "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":SERVICE}},
         "destination":{"kind":"fleet"},"destinationFace":"fleet","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"mutate"},
         "kind":"central.fleet-metadata","target":null,"request":{"request":request,"origin":{"installation":SERVICE,"machine":"notice owner"}}
     }))?)

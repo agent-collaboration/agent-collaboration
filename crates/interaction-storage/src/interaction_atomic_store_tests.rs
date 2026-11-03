@@ -80,6 +80,7 @@ impl<TScope: TransactionScope> DeliveryConsumer<TScope> for NoDeliveryConsumer {
 }
 
 type NativeStore = InteractionAtomicStore<NoDispatchHost>;
+type NativeRetention = fleet_sync_delivery::RemoveDeliveryRecord<NativeStore, sqlx_turso::Turso>;
 #[path = "carrier_push_storage_tests.rs"]
 mod carrier_recovery;
 #[path = "held_mail_readiness_tests.rs"]
@@ -172,7 +173,7 @@ async fn enqueue_and_project(
                 )
                 .map_err(StoreError::backend)?;
                 let (answer, admitted) = Outbox::<_, BoardDeliveryTypes>::new(scope, limits)
-                    .enqueue_and_admit::<NativeSubmit>(
+                    .enqueue_and_admit::<NativeSubmit, NativeRetention>(
                         item,
                         PeerId::new(uuid::Uuid::now_v7()).expect("relay"),
                         PeerId::try_from("019f0000-0000-7000-8000-000000008131".to_owned())

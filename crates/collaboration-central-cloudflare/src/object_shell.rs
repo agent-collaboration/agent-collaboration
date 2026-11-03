@@ -49,6 +49,13 @@ impl WakeScheduler for CloudflareObjectIo {
     }
 }
 impl PlatformIo for CloudflareObjectIo {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        worker::send::SendFuture::new(worker::Delay::from(remaining))
+    }
+
     #[cfg(feature = "conformance")]
     async fn before_local_call(&self, request: &[u8]) -> std::result::Result<(), CallFailure> {
         self.faults

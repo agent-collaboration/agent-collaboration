@@ -2,7 +2,8 @@
 use super::{
     Arc, AtomicStore, CarrierAcceptance, Clock, DeliveryError, DeliveryItem, DeliveryReceipt,
     InstallationPeerResolutionError, ItemId, LocalDelivery, MailConsumer, MailDeliveryRuntime,
-    MailSender, RouterDeliveryTypes, StoreError, SubmitMailTask, SyncTime, WakeScheduler,
+    MailSender, RemoveMailRecord, RouterDeliveryTypes, StoreError, SubmitMailTask, SyncTime,
+    WakeScheduler,
 };
 use collaboration_mail_protocol::{
     RemoteWakeCreator, RemoteWakeMutationState, RemoteWakeRefusal, RemoteWakeResult, WakeBody,
@@ -158,7 +159,7 @@ impl MailDeliveryRuntime {
                             .map_err(delivery_rollback);
                     }
                     let (answer, _) = Outbox::<_, RouterDeliveryTypes>::new(scope, limits)
-                        .enqueue_and_admit::<SubmitMailTask>(
+                        .enqueue_and_admit::<SubmitMailTask, RemoveMailRecord>(
                             item,
                             relay,
                             submitter,

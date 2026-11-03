@@ -67,6 +67,13 @@ where
         store
             .transaction(move |scope| {
                 Box::pin(async move {
+                    if crate::registry_peer_lookup::service_for_peer(scope, sender)
+                        .await?
+                        .as_ref()
+                        != Some(&route)
+                    {
+                        return Ok(crate::mail_status_dispatch::invalid_route());
+                    }
                     match StatusStream::<_, BoardDeliveryTypes>::new(scope, sender, route)
                         .append_and_admit::<PublishStatus<
                             CoreSessionStore<Host, Io>,

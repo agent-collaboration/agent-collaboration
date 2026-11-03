@@ -2,20 +2,22 @@
 #![cfg(feature = "conformance")]
 
 use board_sync_protocol::BoardDeliveryTypes;
-use collaboration_central_core::{CoreHost, ObjectAddress, ObjectRuntime, PlatformIo, SessionKind};
+use collaboration_central_core::{CoreHost, ObjectAddress, ObjectRuntime, PlatformIo};
 use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{
     AtomicStore, CallFailure, CallId, CallTarget, OperationId, StepName, StoreError, Uuid,
+    storage::TransactionScope,
 };
 use fleet_sync_delivery::{PublicationTarget, PublishCall, StatusStream};
 use fleet_sync_protocol::{
-    DeliveryFailureKind, DeliveryRefusal, DeliverySeq, DeliveryStatus, ItemId, PeerId, ReceiverId,
-    StatusCursor, StatusFetchResult, StatusPublication, StatusPublicationResult, StatusVersion,
+    DeliveryFailureKind, DeliveryRefusal, DeliveryStatus, ItemId, PeerId, ReceiverId, StatusCursor,
+    StatusFetchResult, StatusPublication, StatusPublicationResult, StatusVersion,
 };
 use fleet_sync_tokio_runner::{ObjectKey, ObjectStore, TokioObject};
 use message_board::ServiceId;
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use serde_json::json;
+use sqlx_core::query::query;
 use std::{
     path::Path,
     sync::{
@@ -27,7 +29,11 @@ use std::{
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 type Acceptance = <BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Acceptance;
-type Runtime = ObjectRuntime<SessionKind, TokioStorageHost<CoreHost<NoObjectCalls>>, NoObjectCalls>;
+type Runtime = ObjectRuntime<
+    collaboration_central_core::FleetKind,
+    TokioStorageHost<CoreHost<NoObjectCalls>>,
+    NoObjectCalls,
+>;
 
 #[expect(
     dead_code,
@@ -54,6 +60,13 @@ impl WakeScheduler for NoObjectCalls {
     }
 }
 impl PlatformIo for NoObjectCalls {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     async fn object_call(&self, _: ObjectAddress, _: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
         self.0.fetch_add(1, Ordering::SeqCst);
         Err(CallFailure::AnswerLost)
@@ -79,11 +92,23 @@ impl Fixture {
                 Arc::new(CoreHost::for_store(io.clone(), receiver)),
             )
             .await?;
-        let runtime = ObjectRuntime::session(
+        let runtime = ObjectRuntime::fleet(
             Arc::new(TokioStorageHost::new(object.clone())),
             io.clone(),
-            receiver,
-            installation.clone(),
+            fleet_sync_lease::RegistryConfig {
+                authoritative_receiver: receiver,
+                lease: fleet_sync_lease::LeasePolicy {
+                    lease_duration: std::time::Duration::from_secs(60),
+                    renew_interval: std::time::Duration::from_secs(20),
+                },
+                release_unsent_for: std::time::Duration::from_secs(10),
+                move_needs_renewal_within: None,
+            },
+            collaboration_central_tokio::DeliveryConfig {
+                relay_peer: "019f0000-0000-7000-8000-000000005240"
+                    .to_owned()
+                    .try_into()?,
+            },
             Duration::from_secs(2),
         )?;
         runtime.initialize().await?;
@@ -103,22 +128,28 @@ impl Fixture {
         item: ItemId,
         call: &CallId,
     ) -> TestResult<StatusPublicationResult> {
+        let installation = self.installation.clone();
+        self.object.transaction(move |scope| Box::pin(async move {
+            // Supply the enrollment that normal authenticated session setup owns.
+            query::<sqlx_turso::Turso>("INSERT INTO machine_enrollments(machine_id,service_id,machine_label,access_client_id,credential_hash,state,expires_at,created_at,updated_at) VALUES(?,?,'status fixture',?,?,'enrolled','2033-05-18T03:33:20+00:00','2026-10-18T00:00:00+00:00','2026-10-18T00:00:00+00:00') ON CONFLICT(machine_id) DO NOTHING")
+                .bind(peer.to_string()).bind(installation.as_str()).bind(format!("status-client-{peer}")).bind(format!("status-credential-{peer}"))
+                .execute(scope.executor()).await.map_err(durable_steps::StoreError::backend)?;
+            Ok(())
+        })).await?;
         let target = PublishCall::<BoardDeliveryTypes>::new(PublicationTarget::StatusStream {
             sender: peer,
             route,
         });
         let publication = StatusPublication::<Acceptance> {
             item,
-            status: DeliveryStatus::Sent {
-                seq: DeliverySeq::new(1),
-            },
+            status: DeliveryStatus::Sent,
             version: StatusVersion::new(1),
             cancel: None,
         };
         let bytes = serde_json::to_vec(&json!({
             "source":{"kind":"mailbox","value":"550e8400-e29b-41d4-a716-4466554400e5"},
             "sourceFace":"mailbox","authority":{"kind":"object"},
-            "destination":{"kind":"connection","value":self.installation},
+            "destination":{"kind":"fleet"},
             "destinationFace":"delivery","identity":call,
             "kind":PublishCall::<BoardDeliveryTypes>::KIND,"target":target,"request":publication
         }))?;
@@ -180,12 +211,7 @@ async fn a_disconnected_leaf_completes_publication_and_fetches_one_revision_afte
     assert_eq!(stored.through, StatusCursor::new(1));
     assert_eq!(stored.events[0].item, item);
     assert_eq!(stored.events[0].version, StatusVersion::new(1));
-    assert_eq!(
-        stored.events[0].status,
-        DeliveryStatus::Sent {
-            seq: DeliverySeq::new(1)
-        }
-    );
+    assert_eq!(stored.events[0].status, DeliveryStatus::Sent);
 
     // A disconnected peer publication finishes, rather than backing off forever.
     assert_eq!(first.runtime.on_alarm().await?.completed.len(), 1);
@@ -322,7 +348,7 @@ async fn a_live_status_attempt_never_waits_for_the_router_and_session_fetch_keep
     let answer = fixture.runtime.delivery()?.on_call(serde_json::to_vec(&json!({
         "source":{"kind":"mailbox","value":"550e8400-e29b-41d4-a716-4466554400e5"},
         "sourceFace":"mailbox","authority":{"kind":"object"},
-        "destination":{"kind":"connection","value":route},"destinationFace":"delivery",
+        "destination":{"kind":"fleet"},"destinationFace":"delivery",
         "identity":call()?,"kind":PublishCall::<BoardDeliveryTypes>::KIND,"target":target,"request":publication
     }))?).await?;
     assert_eq!(

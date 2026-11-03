@@ -257,7 +257,7 @@ pub(super) async fn pin_registry_clock(base_url: &str, now: RegistryTime) -> Con
         .post(format!("{base_url}/admin/v1/conformance/runtime"))
         .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
         .json(&RuntimeControlRequest {
-            address: ObjectAddress::Registry,
+            address: ObjectAddress::Fleet,
             command: RuntimeControl::SetTime { now },
         })
         .send()

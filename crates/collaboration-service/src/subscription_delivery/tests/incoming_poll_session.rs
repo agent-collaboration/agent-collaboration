@@ -51,15 +51,13 @@ impl IncomingPollSession {
                     ClientFrame::Request{frame,body:OperationRequest::Delivery(DeliveryRequest::Received{stream,through,..})}=>
                         ServerFrame::Answer{frame,body:OperationAnswer::Delivery(DeliveryAnswer::Received(ReceivedResult{stream,released_through:through}))},
                     ClientFrame::Request{frame,body:OperationRequest::Delivery(DeliveryRequest::Report{report,..})}=>{
-                        let status=match &report.outcome {
+                        let _status=match &report.outcome {
                             RecipientOutcome::Held=>DeliveryStatus::Held,
                             RecipientOutcome::Delivered{acceptance}=>DeliveryStatus::Delivered{acceptance:acceptance.clone()},
                             outcome=>panic!("unexpected Poll report: {outcome:?}"),
                         };
                         recorded.lock().unwrap().push((report.item,report.outcome.clone()));
-                        ServerFrame::Answer{frame,body:OperationAnswer::Delivery(DeliveryAnswer::Report(ReportResult::Applied{
-                            item:report.item,acknowledged:report.report_seq,status,version:StatusVersion::new(report.report_seq.value()),
-                        }))}
+                        ServerFrame::Answer{frame,body:OperationAnswer::Delivery(DeliveryAnswer::Report(ReportResult::Ack{report_seq:report.report_seq}))}
                     },
                     ClientFrame::Request{frame,..}=>ServerFrame::Answer{frame,body:OperationAnswer::InvalidShape{field:"only incoming Poll mailbox operations are scripted".into()}},
                     ClientFrame::Answer{..}=>continue,

@@ -79,7 +79,7 @@ async fn cold_mail_owner_recovers_the_original_submission_without_a_new_receive_
         .await?;
     let canonical = resumed.query(vec![item]).await?;
     assert!(
-        matches!(canonical.statuses.as_slice(), [status] if status.item == item && matches!(&status.state, ItemStatusState::Known { digest: actual, status: fleet_sync_protocol::DeliveryStatus::Sent { .. }, .. } if actual == &digest))
+        matches!(canonical.statuses.as_slice(), [status] if status.item == item && matches!(&status.state, ItemStatusState::Known { digest: actual, status: fleet_sync_protocol::DeliveryStatus::Sent, .. } if actual == &digest))
     );
     // KEEP_RESULT=false removes this original operation and its steps only on
     // successful completion; absence alone would not prove a remote submission.

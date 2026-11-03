@@ -124,9 +124,7 @@ pub(crate) enum ClaimAnswerCodec {
 )]
 pub(crate) enum DeliveryStatusCodec<A> {
     Queued,
-    Sent {
-        seq: wire::DeliverySeq,
-    },
+    Sent,
     #[serde(rename = "atMachine")]
     AtRecipient,
     Held,
@@ -135,6 +133,7 @@ pub(crate) enum DeliveryStatusCodec<A> {
     },
     Uncertain,
     Expired,
+    ExpiredAtUpgrade,
     Cancelled,
     Refused {
         reason: wire::DeliveryRefusal,

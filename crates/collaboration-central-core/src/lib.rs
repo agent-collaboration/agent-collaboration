@@ -99,6 +99,7 @@ mod holder_reply_hub;
 mod installation_peer_reads;
 mod machine_enrollment;
 mod machine_enrollment_record;
+mod mail_push_dispatch;
 mod mail_sender_calls;
 mod mail_status_dispatch;
 mod mail_status_receiver;

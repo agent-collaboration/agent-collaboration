@@ -16,7 +16,7 @@ const PROJECTS: [&str; 2] = [
 ];
 async fn registry(fixture: &Fixture, kind: &str, request: Value) -> TestResult<Value> {
     let bytes=fixture.runtime.on_call(serde_json::to_vec(&json!({
-        "source":{"kind":"registry"},"sourceFace":"registry","authority":{"kind":"object"},
+        "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
         "destination":{"kind":"fleet"},"destinationFace":"fleet","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"archive_projection"},
         "kind":kind,"target":null,"request":request
     }))?).await.map_err(|error|format!("Registry projection call failed: {error:?}"))?;
@@ -87,7 +87,7 @@ async fn board_archiving_notifies_a_known_holder_once_and_final_unheld_publicati
         json!({"kind":"directory","project":PROJECTS[1],"board":BOARD,"title":"Second held project","time":{"kind":"legacyUnknown"}}),
     ];
     fixture.runtime.on_call(serde_json::to_vec(&json!({
-        "source":{"kind":"registry"},"sourceFace":"edge","authority":{"kind":"owner","value":owner},
+        "source":{"kind":"fleet"},"sourceFace":"edge","authority":{"kind":"owner","value":owner},
         "destination":{"kind":"fleet"},"destinationFace":"fleet","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"import_archive_fixture"},
         "kind":"central.object","target":null,"request":{"kind":"fleet","value":{"kind":"import","value":{"bundle":{"provenance":{"installation":SERVICE,"machine":"archive owner"},"declaredOwner":"owner","records":records}}}}
     }))?).await.map_err(|error|format!("archive import failed: {error:?}"))?;

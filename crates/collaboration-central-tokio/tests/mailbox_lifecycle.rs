@@ -51,6 +51,13 @@ impl WakeScheduler for LocalIo {
     }
 }
 impl PlatformIo for LocalIo {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     async fn object_call(&self, _: ObjectAddress, _: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
         Err(CallFailure::AnswerLost)
     }
@@ -145,7 +152,7 @@ impl Fixture {
 }
 fn close_call(service: &ServiceId, peer: PeerId, call: &CallId) -> TestResult<Vec<u8>> {
     Ok(serde_json::to_vec(&json!({
-        "source":{"kind":"registry"},"sourceFace":"registry","authority":{"kind":"object"},
+        "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
         "destination":{"kind":"mailbox","value":service},"destinationFace":"mailbox",
         "identity":call,"kind":"central.close-peer-mailbox","target":{"peer":peer},"request":null
     }))?)

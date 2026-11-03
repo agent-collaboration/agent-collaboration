@@ -214,6 +214,13 @@ impl WakeScheduler for PublicationIo {
     }
 }
 impl PlatformIo for PublicationIo {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     async fn object_call(
         &self,
         destination: ObjectAddress,
@@ -235,7 +242,7 @@ pub(super) async fn publish(
     let objects = ObjectStore::open(root).await?;
     let registry = objects
         .object(
-            ObjectKey::new("registry")?,
+            ObjectKey::new("fleet")?,
             Default::default(),
             Arc::new(CoreHost::for_store(
                 io.clone(),
@@ -243,7 +250,7 @@ pub(super) async fn publish(
             )),
         )
         .await?;
-    let runtime = ObjectRuntime::registry(
+    let runtime = ObjectRuntime::fleet(
         Arc::new(TokioStorageHost::new(registry.clone())),
         io.clone(),
         config,
@@ -252,6 +259,7 @@ pub(super) async fn publish(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },
+        std::time::Duration::from_secs(2),
     )?;
     runtime.initialize().await?;
     runtime.on_alarm().await?;

@@ -186,10 +186,11 @@ async fn granted_settlement_reads_the_public_snapshot_and_replays_its_original_c
 
         // A fresh runtime must acquire above the last persisted run, even at one revision.
         drop(runtime);
-        let restarted = ObjectRuntime::registry(
-            Arc::new(TokioStorageHost::new(registry.clone())),io.clone(),config,
+        let restarted = ObjectRuntime::fleet(Arc::new(TokioStorageHost::new(registry.clone())),
+io.clone(),
+config,
 collaboration_central_tokio::DeliveryConfig { relay_peer: fleet_sync_protocol::PeerId::try_from("019f0000-0000-7000-8000-000000005240".to_owned())? },
-)?;
+std::time::Duration::from_secs(2))?;
         assert_eq!(restarted.initialize().await?,0);
         let resumed = registry.transaction(move |scope|Box::pin(async move {
             scope.admit::<SettleReservationTask<RegistryStore>>(

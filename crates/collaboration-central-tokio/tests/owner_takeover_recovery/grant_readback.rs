@@ -23,7 +23,7 @@ pub(super) async fn assert_history(
     recovered: bool,
 ) -> ConformanceResult<()> {
     let mut connection = sqlx_turso::TursoConnectOptions::new()
-        .filename(root.join("registry.db"))
+        .filename(root.join("fleet.db"))
         .read_only(true)
         .connect()
         .await?;

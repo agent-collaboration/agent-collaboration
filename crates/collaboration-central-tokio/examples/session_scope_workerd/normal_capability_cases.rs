@@ -138,7 +138,7 @@ async fn alarm_owner(base: &str) -> ConformanceResult<()> {
         let time = chrono::DateTime::from_timestamp_millis(1_900_000_000_000)
             .ok_or("invalid fixed alarm time")?;
         let pin = RuntimeControlRequest {
-            address: ObjectAddress::Connection(message_board::ServiceId::try_from(service.to_owned())?),
+            address: ObjectAddress::Fleet,
             command: RuntimeControl::SetTime { now: RegistryTime(time) },
         };
         http.post(format!("{base}/admin/v1/conformance/runtime")).header("Cf-Access-Jwt-Assertion", owner_assertion()?).json(&pin).send().await?.error_for_status()?.bytes().await?;

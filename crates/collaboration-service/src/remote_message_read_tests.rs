@@ -80,9 +80,7 @@ async fn remote_show_and_history_check_immutable_sender_context_before_canonical
         fleet_sync_protocol::ItemId::new(uuid::Uuid::parse_str(item.as_str()).unwrap()).unwrap();
     mail.publish_status(fleet_sync_protocol::StatusPublication {
         item: sdk_item,
-        status: fleet_sync_protocol::DeliveryStatus::Sent {
-            seq: fleet_sync_protocol::DeliverySeq::new(7),
-        },
+        status: fleet_sync_protocol::DeliveryStatus::Sent,
         version: fleet_sync_protocol::StatusVersion::new(1),
         cancel: None,
     })
@@ -111,7 +109,7 @@ async fn remote_show_and_history_check_immutable_sender_context_before_canonical
     );
     let shown = app.messages().message_show(request).await.unwrap();
     assert!(
-        matches!(shown, collaboration_protocol::MessageShowResult::Remote { mail } if mail.status==(collaboration_protocol::RemoteDeliveryStatus::Sent { seq: 7 }))
+        matches!(shown, collaboration_protocol::MessageShowResult::Remote { mail } if mail.status==(collaboration_protocol::RemoteDeliveryStatus::Sent))
     );
     let history = app
         .messages()

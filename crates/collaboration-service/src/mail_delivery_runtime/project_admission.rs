@@ -1,8 +1,8 @@
 //! The project's chosen submission epoch commits with its outgoing SDK custody.
 use super::{
     Arc, AtomicStore, CarrierAcceptance, Clock, DeliveryError, DeliveryItem, MailDeliveryRuntime,
-    MailHost, MailSender, RouterDeliveryTypes, StoreError, SubmitMailTask, TursoScope,
-    WakeScheduler,
+    MailHost, MailSender, RemoveMailRecord, RouterDeliveryTypes, StoreError, SubmitMailTask,
+    TursoScope, WakeScheduler,
 };
 use fleet_sync_delivery::{
     DeliveryTransactionFailure, Outbox, OutboxAdmission, classify_delivery_store_error,
@@ -95,7 +95,7 @@ impl MailDeliveryRuntime {
                     let original_id = item.id();
                     let mut outbox = Outbox::<_, RouterDeliveryTypes>::new(scope, limits);
                     let (admission, operation) = outbox
-                        .enqueue_and_admit::<SubmitMailTask>(
+                        .enqueue_and_admit::<SubmitMailTask, RemoveMailRecord>(
                             item,
                             relay,
                             submitter,

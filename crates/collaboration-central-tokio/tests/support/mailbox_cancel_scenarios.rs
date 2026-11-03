@@ -20,13 +20,14 @@ pub(super) async fn run(base: &str) -> ConformanceResult<()> {
     let proof = async {
         let original = pair.item(ORIGINAL, "literal original mailbox body")?;
         let frame = "019f0000-0000-7000-8000-000000031081";
-        let connection = json!({"kind":"connection","value":ORIGIN});
-        control(base, connection.clone(), json!({"kind":"dropNextAnswer","value":{"frame":frame}})).await?;
+        let connection = json!({"kind":"fleet"});
+        let connection_id = collaboration_central_conformance::ConformanceClient::new(base)?.active_connection(ORIGIN, fleet_sync_protocol::PeerId::new(pair.sender.peer)?).await?;
+        control(base, connection.clone(), json!({"kind":"dropNextAnswer","value":{"connection":connection_id,"frame":frame}})).await?;
         pair.sender.socket.send(reqwest_websocket::Message::Text(json!({"kind":"request","value":{
             "frame":frame,"body":{"kind":"consumer","value":{"kind":"mailSubmit","value":{"item":original,"originEpoch":null}}}
         }}).to_string())).await?;
-        let observed = control(base, connection, json!({"kind":"awaitDroppedAnswer","value":{"frame":frame}})).await?;
-        assert_eq!(observed.get("answer"), Some(&json!({"kind":"dropped","value":{"frame":frame}})));
+        let observed = control(base, connection, json!({"kind":"awaitDroppedAnswer","value":{"connection":connection_id,"frame":frame}})).await?;
+        assert_eq!(observed.get("answer"), Some(&json!({"kind":"dropped","value":{"connection":connection_id,"frame":frame}})));
         let cancel_id = "019f0000-0000-7000-8000-000000011084";
         let cancel = pair.cancel(cancel_id)?;
         assert_eq!(pair.submit(&cancel).await?.pointer("/value/value/value/value/cancel"), Some(&json!({"kind":"pending"})));

@@ -162,7 +162,7 @@ async fn control(
         .post(format!("{base_url}/admin/v1/conformance/runtime"))
         .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
         .json(&RuntimeControlRequest {
-            address: ObjectAddress::Registry,
+            address: ObjectAddress::Fleet,
             command,
         })
         .send()

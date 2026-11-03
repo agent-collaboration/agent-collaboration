@@ -30,6 +30,13 @@ impl WakeScheduler for TracedIds {
     }
 }
 impl PlatformIo for TracedIds {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     async fn object_call(
         &self,
         address: ObjectAddress,
@@ -51,7 +58,21 @@ async fn injected_id_source_owns_the_repository_feed_state_and_feed_entry_ids() 
     let runtime = ObjectRuntime::<FleetKind, _, _>::fleet(
         Arc::new(TokioStorageHost::new(fixture.object.clone())),
         TracedIds(next.clone()),
-        fixture.receiver,
+        fleet_sync_lease::RegistryConfig {
+            authoritative_receiver: fixture.receiver,
+            lease: fleet_sync_lease::LeasePolicy {
+                lease_duration: std::time::Duration::from_secs(60),
+                renew_interval: std::time::Duration::from_secs(20),
+            },
+            release_unsent_for: std::time::Duration::from_secs(10),
+            move_needs_renewal_within: None,
+        },
+        collaboration_central_tokio::DeliveryConfig {
+            relay_peer: "019f0000-0000-7000-8000-000000005240"
+                .to_owned()
+                .try_into()?,
+        },
+        std::time::Duration::from_secs(2),
     )?;
     let proof=async {
         runtime.on_call(import_bytes(&bundle()?)?).await.map_err(|error|format!("import did not answer: {error:?}"))?;

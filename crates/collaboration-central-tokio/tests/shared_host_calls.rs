@@ -32,6 +32,13 @@ impl WakeScheduler for RecordingIo {
     }
 }
 impl PlatformIo for RecordingIo {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     async fn object_call(
         &self,
         destination: ObjectAddress,
@@ -97,7 +104,7 @@ async fn registry_call_carries_its_bound_face_target_and_original_call_identity(
     assert_eq!(
         envelope,
         serde_json::json!({
-        "source": {"kind": "registry"}, "sourceFace": "registry",
+        "source": {"kind":"fleet"}, "sourceFace": "registry",
         "authority": {"kind":"object"},
         "destination": {"kind": "copy", "value": "019f0000-0000-7000-8000-000000000012"},
             "destinationFace": "copy",

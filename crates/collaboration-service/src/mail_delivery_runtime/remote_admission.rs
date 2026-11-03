@@ -1,8 +1,8 @@
 //! Remote direct sends commit SDK custody and their replay answer together.
 use super::{
     AtomicStore, Clock, DeliveryError, InstallationPeerResolutionError, MailDeliveryRuntime,
-    PushRecordDraft, RouterDeliveryTypes, StoreError, SubmitMailTask, WakeScheduler,
-    outgoing_mail_message,
+    PushRecordDraft, RemoveMailRecord, RouterDeliveryTypes, StoreError, SubmitMailTask,
+    WakeScheduler, outgoing_mail_message,
 };
 use crate::push_record_delivery::PushDeliveryFailure;
 use collaboration_protocol::{MailItemId, MessageSendResult, QueuedMessageSend};
@@ -87,7 +87,7 @@ impl MailDeliveryRuntime {
             .transaction(move |scope| {
                 Box::pin(async move {
                     let (admission, _) = Outbox::<_, RouterDeliveryTypes>::new(scope, limits)
-                        .enqueue_and_admit::<SubmitMailTask>(
+                        .enqueue_and_admit::<SubmitMailTask, RemoveMailRecord>(
                             item,
                             relay,
                             submitter,

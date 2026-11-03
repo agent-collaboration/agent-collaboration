@@ -136,9 +136,9 @@ async fn invoke(
     database: DatabaseId,
     request: Value,
 ) -> ConformanceResult<ReplicationAnswer> {
-    // This is the existing verified-edge Copy call seam, not HTTP import orchestration.
+    // This is the existing Fleet-to-project Copy call seam, not HTTP import orchestration.
     let answer = copy.on_call(serde_json::to_vec(&json!({
-        "source":{"kind":"registry"},"sourceFace":"edge",
+        "source":{"kind":"fleet"},"sourceFace":"fleet",
         "authority":{"kind":"owner","value":"fixture@example.test"},
         "destination":{"kind":"copy","value":database},"destinationFace":"copy",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"imported_claim_seed"},

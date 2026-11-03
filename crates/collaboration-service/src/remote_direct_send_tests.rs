@@ -102,9 +102,7 @@ async fn configured_application_send_queues_offline_replays_and_rejects_conflict
         fleet_sync_protocol::ItemId::new(uuid::Uuid::parse_str(id.as_str()).unwrap()).unwrap();
     mail.publish_status(fleet_sync_protocol::StatusPublication {
         item: sdk_item,
-        status: fleet_sync_protocol::DeliveryStatus::Sent {
-            seq: fleet_sync_protocol::DeliverySeq::new(7),
-        },
+        status: fleet_sync_protocol::DeliveryStatus::Sent,
         version: fleet_sync_protocol::StatusVersion::new(1),
         cancel: None,
     })
@@ -119,7 +117,7 @@ async fn configured_application_send_queues_offline_replays_and_rejects_conflict
         .await
         .unwrap();
     assert!(
-        matches!(shown, collaboration_protocol::MessageShowResult::Remote { mail } if mail.item == id && mail.status == (collaboration_protocol::RemoteDeliveryStatus::Sent { seq: 7 }))
+        matches!(shown, collaboration_protocol::MessageShowResult::Remote { mail } if mail.item == id && mail.status == (collaboration_protocol::RemoteDeliveryStatus::Sent))
     );
     let replay = app.messages().message_send(input.clone()).await.unwrap();
     assert_eq!(
@@ -163,9 +161,12 @@ async fn configured_application_send_queues_offline_replays_and_rejects_conflict
         .store
         .transaction(|scope| {
             Box::pin(async move {
-                fleet_sync_delivery::test_support::snapshot(scope)
-                    .await
-                    .map_err(StoreError::backend)
+                fleet_sync_delivery::test_support::snapshot::<
+                    _,
+                    collaboration_contracts::RouterDeliveryTypes,
+                >(scope)
+                .await
+                .map_err(StoreError::backend)
             })
         })
         .await
@@ -218,9 +219,12 @@ async fn unconfigured_remote_application_send_has_no_custody_answer_or_epoch() {
         .store
         .transaction(|scope| {
             Box::pin(async move {
-                fleet_sync_delivery::test_support::snapshot(scope)
-                    .await
-                    .map_err(StoreError::backend)
+                fleet_sync_delivery::test_support::snapshot::<
+                    _,
+                    collaboration_contracts::RouterDeliveryTypes,
+                >(scope)
+                .await
+                .map_err(StoreError::backend)
             })
         })
         .await

@@ -17,7 +17,7 @@ fn runtime(fixture: &Fixture) -> Result<ObjectRuntime<CopyKind, NativeHost, Prob
 async fn migrate(fixture: &Fixture) -> Result<Value, TestError> {
     let bytes = runtime(fixture)?
         .on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"registry"},"sourceFace":"edge",
+            "source":{"kind":"fleet"},"sourceFace":"fleet",
             "authority":{"kind":"owner","value":"fixture@example.test"},
             "destination":{"kind":"copy","value":DATABASE},"destinationFace":"copy",
             "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"migrate"},

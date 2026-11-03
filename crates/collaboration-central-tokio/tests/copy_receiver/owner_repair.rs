@@ -66,7 +66,7 @@ async fn owner_repair_discharges_real_directory_debt_and_expired_staged_parts() 
         }
         fixture.io.time.fetch_add(2*86_400_000,Ordering::SeqCst);
         let request=json!({
-            "source":{"kind":"registry"},"sourceFace":"edge","authority":{"kind":"owner","value":"fixture@example.test"},
+            "source":{"kind":"fleet"},"sourceFace":"fleet","authority":{"kind":"owner","value":"fixture@example.test"},
             "destination":{"kind":"copy","value":fixture.database},"destinationFace":"copy",
             "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"owner_repair_owed_duties"},
             "kind":"central.copy-operations","target":{"database":fixture.database},"request":{"kind":"repair"}

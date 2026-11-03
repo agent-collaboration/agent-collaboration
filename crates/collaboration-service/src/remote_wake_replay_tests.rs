@@ -98,6 +98,8 @@ async fn publish_recorded_status(
     let id = item.id();
     let relay = PeerId::new(uuid::Uuid::now_v7()).unwrap();
     let limits = source.fixture.host.config.local.limits;
+    let submitter = source.fixture.host.config.local.owner;
+    let observed_at = runtime_primitives::Clock::now(source.fixture.host.as_ref());
     source
         .fixture
         .store
@@ -105,21 +107,24 @@ async fn publish_recorded_status(
             Box::pin(async move {
                 let mut outbox = Outbox::<_, RouterDeliveryTypes>::new(scope, limits);
                 outbox
-                    .enqueue(item, relay)
+                    .enqueue(item, relay, submitter, observed_at)
                     .await
                     .map_err(delivery_rollback)?;
                 outbox
-                    .publish_status(StatusPublication {
-                        item: id,
-                        version: StatusVersion::new(1),
-                        cancel: None,
-                        status: match result {
-                            Some(result) => DeliveryStatus::Delivered {
-                                acceptance: CarrierAcceptance::Wake(Box::new(result)),
+                    .publish_status(
+                        StatusPublication {
+                            item: id,
+                            version: StatusVersion::new(1),
+                            cancel: None,
+                            status: match result {
+                                Some(result) => DeliveryStatus::Delivered {
+                                    acceptance: CarrierAcceptance::Wake(Box::new(result)),
+                                },
+                                None => DeliveryStatus::Uncertain,
                             },
-                            None => DeliveryStatus::Uncertain,
                         },
-                    })
+                        observed_at,
+                    )
                     .await
                     .map_err(delivery_rollback)?;
                 Ok::<_, StoreError>(())

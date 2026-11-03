@@ -41,9 +41,11 @@ impl EngineSchema {
     }
     fn migrations(self) -> Vec<&'static sqlx_core::migrate::Migration> {
         match self {
-            Self::Registry => fleet_sync_lease::LEASE_MIGRATOR.iter().collect(),
+            Self::Registry => fleet_sync_lease::LEASE_MIGRATOR.sql_migrations().collect(),
             Self::Copy => fleet_sync_receiver::RECEIVER_MIGRATOR.iter().collect(),
-            Self::Session => fleet_sync_session::SESSION_MIGRATOR.iter().collect(),
+            Self::Session => fleet_sync_session::SESSION_MIGRATOR
+                .sql_migrations()
+                .collect(),
             Self::Mailbox => fleet_sync_delivery::DELIVERY_MIGRATOR.iter().collect(),
             Self::Fleet => FLEET_MIGRATIONS.iter().collect(),
         }
@@ -415,6 +417,27 @@ where
         if highest.is_some_and(|version| migration.version <= version) {
             return Err(corrupt("migration inserted below an applied version"));
         }
+        // Validate legacy domain rows after their old corpus prefix, before typed DDL consumes them.
+        let validated = match (corpus, migration.version) {
+            ("fleet-sync-lease", 5 | 6) => fleet_sync_lease::validate_legacy_rows(scope)
+                .await
+                .map_err(|error| error.to_string()),
+            ("fleet-sync-session", 202611030001) => fleet_sync_session::validate_legacy_rows(scope)
+                .await
+                .map_err(|error| error.to_string()),
+            _ => Ok(()),
+        };
+        validated.map_err(|message| {
+            crate::migration_failure::MigrationFailure::rollback(
+                corpus,
+                migration.version,
+                now,
+                StoreError::Corrupt {
+                    field: format!("{corpus}.legacy_rows"),
+                    message,
+                },
+            )
+        })?;
         scope
             .executor()
             .execute(migration.sql.as_ref())
