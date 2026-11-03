@@ -412,3 +412,7 @@ impl StoredRegistrationRow {
         Ok(record)
     }
 }
+
+#[cfg(test)]
+#[path = "fleet_registration_row_test.rs"]
+mod tests;

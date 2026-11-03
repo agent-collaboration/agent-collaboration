@@ -56,3 +56,23 @@ async fn fleet_cache_permissions_tighten_a_populated_0644_cache_without_rewritin
     assert_eq!(position, 73);
     reopened.close().await;
 }
+
+#[tokio::test]
+async fn fleet_cache_permissions_refuse_a_symlink_without_tightening_its_target() {
+    let directory = tempfile::tempdir().unwrap();
+    let target = directory.path().join("unrelated");
+    std::fs::write(&target, b"unrelated bytes").unwrap();
+    std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let path = directory.path().join("fleet-cache.sqlite");
+    std::os::unix::fs::symlink(&target, &path).unwrap();
+    let result = FleetCache::open(&path).await;
+    assert!(matches!(
+        result,
+        Err(crate::RouterLocalStorageError::PrivateFleetCache)
+    ));
+    assert_eq!(std::fs::read(&target).unwrap(), b"unrelated bytes");
+    assert_eq!(
+        std::fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+        0o644
+    );
+}

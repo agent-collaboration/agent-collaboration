@@ -35,6 +35,8 @@ pub struct FleetCache {
 
 #[path = "fleet_login_storage.rs"]
 mod login_storage;
+#[path = "fleet_cache_files.rs"]
+mod private_files;
 #[path = "fleet_registration_row.rs"]
 mod registration_row;
 #[path = "fleet_registration_storage.rs"]
@@ -90,8 +92,14 @@ impl FleetCache {
         clock: Arc<dyn Clock>,
         ids: Arc<dyn IdSource>,
     ) -> Result<Self, RouterLocalStorageError> {
+        let files = private_files::PrivateFleetCacheFiles::prepare(path)?;
+        let database = RouterLocalDatabase::open(path, &CACHE_MIGRATOR).await?;
+        if let Err(error) = files.verify_after_native_open() {
+            database.close().await;
+            return Err(error);
+        }
         Ok(Self {
-            database: RouterLocalDatabase::open(path, &CACHE_MIGRATOR).await?,
+            database,
             clock,
             ids,
         })

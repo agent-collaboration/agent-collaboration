@@ -15,6 +15,7 @@ fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.14" }
 url.workspace = true
 schemars.workspace = true
+rustix.workspace = true
 base64.workspace = true
 chrono.workspace = true
 hmac.workspace = true

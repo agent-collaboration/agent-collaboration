@@ -25,7 +25,18 @@ async fn fleet_registration_typed_columns_keep_all_lifecycles_and_timestamps_aft
     let cache = FleetCache::open_with_sources(&path, clock.clone(), Arc::new(FixedIds))
         .await
         .unwrap();
-    let preparation = preparation();
+    let mut preparation = preparation();
+    preparation.launch.launch_context.repository = Some(
+        "https://repository.invalid/fixture"
+            .to_owned()
+            .try_into()
+            .unwrap(),
+    );
+    preparation.launch.launch_context.commit =
+        Some("abcdef1234567890".to_owned().try_into().unwrap());
+    preparation.launch.launch_context.model = Some("fixture-model".to_owned().try_into().unwrap());
+    preparation.launch.machine_environment = fleet_identity_protocol::MachineEnvironment::CloudVm;
+    preparation.launch.isolation.kind = fleet_identity_protocol::IsolationKind::Vm;
     let registration = registration(&preparation);
     let session = registration.session.clone();
     let mut current = FleetSessionRegistrationRecord::new(
