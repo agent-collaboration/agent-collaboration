@@ -13,6 +13,11 @@
 <ex-callout title="Read this first" tone="decision" icon="database">
 <p><strong>D1 and D1b ship as one PR.</strong> Every Fleet store table follows the full rule (prefix, UUIDv7, timestamps, typed columns, JSON only with a stated reason); the shared journal tables get timestamps too. Each moved table's exact column list is posted here for you before its queries are rewritten. Project tables are out of scope. Decisions behind this page: <a href="decisions.html">decisions.html</a>.</p>
 </ex-callout>
+<ex-callout title="Decision for you: projects after the staging wipe" tone="decision" icon="users">
+<p>My D1 design assumed a project file could restart at lease epoch 1 on a wiped central. It can't: the file's epoch anchors its history, and lowering it would rewrite that history. The corrected design (section “Lease numbers and the staging wipe” below) has each project <strong>rejoin</strong> the empty central at its own epoch N, keeping its id, history and content. On an unchanged central nothing changes. Until rejoin exists, a project central doesn't know shows “waiting for rejoin” and stays readable but read-only; the rest of the machine works.</p>
+<p><strong>1. Build rejoin inside D1?</strong> A (recommended): yes. Staging keeps every project writable after the wipe and D1 stays one PR, at the cost of a later D1 (library, central and Router work plus proof cases). C: no. D1 ships sooner, proven on new projects, and existing projects stay read-only on staging until a follow-up.</p>
+<p><strong>2. If yes, who is the source for each project?</strong> A machine whose lease expired while it was offline still looks current to itself, even after another machine took over, so this can't be decided automatically. (a) recommended: <strong>controlled cutover</strong>. Each project waits, status lists every machine's claim (epoch and position), and you run one rejoin command per project from the machine you pick. (b) highest claimed epoch, after every enrolled machine has reported. (c) first claimant wins (the stale copy can win).</p>
+</ex-callout>
 <ex-markdown id="d1" label="D1 program design" src="./program-design/d1-central-layout-and-mail.md"></ex-markdown>
 </ex-document>
 </body>
