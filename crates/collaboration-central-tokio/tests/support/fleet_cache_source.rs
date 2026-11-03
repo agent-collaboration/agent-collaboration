@@ -1,5 +1,5 @@
 //! Cache component inputs come from the actual async Fleet owner, never a Router authority.
-use super::native_source::Fixture;
+use super::native_fleet::Fixture;
 use board_sync_protocol::{BoardReadPage, FleetFeedRead};
 use fleet_admission::{FleetFeedEntry, FleetRequest, FleetRequestResult};
 use message_board::{FleetPosition, Record, RecordRef, RequestDecision};

@@ -1,6 +1,6 @@
 //! A missing central migration stamp keeps owner diagnostics available until recovery.
 use super::{ConformanceResult, JwksFixtureServer, PROJECT, TokioServer, measured_files, settings};
-use crate::{
+use crate::copy_owner_health::{
     copy_owner_scenarios::{OwnerClient, bookkeeping, no_failures},
     creation_scenarios as creation,
 };
@@ -481,9 +481,9 @@ async fn pending_session_refusals(base: &str) -> ConformanceResult<()> {
         let frame:ServerFrame<BoardConsumerProtocol> = serde_json::from_value(welcome)?;
         assert!(matches!(frame,ServerFrame::Welcome {session_id,databases} if session_id==session && databases.iter().any(|database|matches!(database,DatabaseStatus::Unavailable {database,lease:Some(_),reason:CopyUnavailableReason::MigrationPending {version:3}} if database.to_string()==PROJECT))),"Welcome lost pending Copy reason");
         let control = DatabaseId::new(Uuid::now_v7())?;
-        let copies=crate::copy_wait_scenarios::CopyClient::new(base)?;
+        let copies=crate::copy_owner_health::copy_wait_scenarios::CopyClient::new(base)?;
         let created=copies.invoke(json!({"kind":"create","value":{"database":control,"epoch":1,"holder":PEER,"origin":{"kind":"empty"}}})).await?;
-        copies.completed(created,crate::copy_wait_scenarios::expected("created",fleet_sync_protocol::CreateCopyAnswer::CopyCreated)).await?;
+        copies.completed(created,crate::copy_owner_health::copy_wait_scenarios::expected("created",fleet_sync_protocol::CreateCopyAnswer::CopyCreated)).await?;
         let control_piece = |sequence,statement: &str| -> ConformanceResult<Piece<BoardAnnotation>> {
             Ok(Piece::new(PieceContents {database:control,epoch:Epoch::new(1)?,continues_from:ReplicationPosition::new(Epoch::new(1)?,CommitSequence::new(sequence-1)),through:ReplicationPosition::new(Epoch::new(1)?,CommitSequence::new(sequence)),transactions:vec![ReplicatedTransaction::SchemaStep {commit_id:CommitSequence::new(sequence),migration_version:sequence,statements:vec![statement.into()]}],part:None,annotation:None})?)
         };

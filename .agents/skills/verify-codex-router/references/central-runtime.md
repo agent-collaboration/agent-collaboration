@@ -5,7 +5,7 @@
 The wrapper retired in 0.1.102. Current native conformance belongs to `crates/collaboration-central-tokio/tests/`; the retained local-process CI selection is:
 
 ```sh
-cargo test --locked -p collaboration-central-tokio --features conformance --test forwarded_posts --test forwarding_real_timer --test mailbox_rules -- --test-threads=1
+cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test e2e -E 'test(/^(forwarded_posts|forwarding_real_timer|mailbox_rules)::/)' --test-threads 1
 ```
 
 Current local workerd entries are the crate’s `composed_scope_workerd` and `session_scope_workerd` examples, using the pinned tools and scenario selections in the CI Worker job. `verification/run.ts` also selects explicit Tokio/workerd targets from `verification/declaration.ts`. Select actual retained targets and cases; a historical target name below is not an executable current selection.

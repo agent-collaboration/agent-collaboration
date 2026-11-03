@@ -1,6 +1,6 @@
 //! The bounded sweep visits a real canonical Fleet page and real Copy stores.
 use super::{ConformanceResult, JwksFixtureServer, TokioServer, settings};
-use crate::fleet_setup::{Fixture, bundle};
+use crate::copy_owner_health::fleet_setup::{Fixture, bundle};
 use collaboration_central_conformance::{machine_assertion, owner_assertion};
 use serde_json::{Value, json};
 use sqlx_core::{
