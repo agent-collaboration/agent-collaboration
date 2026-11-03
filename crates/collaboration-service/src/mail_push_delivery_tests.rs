@@ -69,6 +69,8 @@ async fn poll_has_no_push_or_native_call_at_the_delivery_entry() {
 }
 use native::*;
 
+#[path = "mail_delivery_runtime_retention_test.rs"]
+mod custody_retention;
 #[path = "mail_push_direct_delivery_tests.rs"]
 mod direct;
 #[path = "local_mail_runtime_tests.rs"]
@@ -77,6 +79,10 @@ mod local_runtime;
 mod remote_assembly;
 #[path = "remote_wake_replay_tests.rs"]
 mod remote_wakes;
+#[path = "mail_removal_backfill_test.rs"]
+mod removal_backfill;
+#[path = "mail_submitter_backfill_test.rs"]
+mod submitter_backfill;
 
 #[tokio::test]
 async fn remote_follow_retries_use_item_counts_and_library_deadlines_across_cold_reopen() {
@@ -194,15 +200,17 @@ async fn remote_follow_retries_use_item_counts_and_library_deadlines_across_cold
         "an indefinite hold must not acquire a deadline from the other item"
     );
     let config = runtime.fixture.host.config;
+    let binding = runtime.fixture.host.binding.clone();
     runtime
         .fixture
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                Inbox::<_, RouterDeliveryTypes>::new(
+                Inbox::<_, RouterDeliveryTypes, _>::new(
                     scope,
                     config.local.owner,
                     config.local.limits,
+                    binding.as_ref(),
                 )
                 .release_held::<ProjectionTask>(
                     second_id,

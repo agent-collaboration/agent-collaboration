@@ -12,6 +12,10 @@ mod cancel_cases;
 #[path = "messaging_local_cancel_case.rs"]
 mod local_cancel_case;
 #[path = "../../../../../collaboration-central-tokio/tests/support/mail_relay_transport.rs"]
+#[expect(
+    dead_code,
+    reason = "Only the shared CallId request constructor is used; recipient transport is the actual Router pump."
+)]
 mod relay_transport;
 #[path = "messaging_rule_fixture.rs"]
 mod rule_fixture;
@@ -44,7 +48,6 @@ async fn prove_takeover(case: PrefixCase) -> TestResult {
             Some(owner) => Some(owner.hold_progress_writer().await?),
             None => None,
         };
-        let copy = ObjectAddress::Copy(DatabaseId::try_from(fixture.project.as_str().to_owned())?);
         let connection = ObjectAddress::Fleet;
         if matches!(case, PrefixCase::Neither) {
             fixture
@@ -53,7 +56,7 @@ async fn prove_takeover(case: PrefixCase) -> TestResult {
                 .runtime_control(
                     connection.clone(),
                     RuntimeControl::HoldNextDispatch {
-                        destination: copy.clone(),
+                        key: fixture.copy_write_key()?,
                     },
                 )
                 .await?;
@@ -69,7 +72,9 @@ async fn prove_takeover(case: PrefixCase) -> TestResult {
                 .central
                 .runtime_control(
                     connection.clone(),
-                    RuntimeControl::HoldNextDispatch { destination: copy },
+                    RuntimeControl::HoldNextDispatch {
+                        key: fixture.copy_write_key()?,
+                    },
                 )
                 .await?;
         }
@@ -81,10 +86,15 @@ async fn prove_takeover(case: PrefixCase) -> TestResult {
             let held = fixture
                 .holder
                 .central
-                .runtime_control(connection.clone(), RuntimeControl::AwaitHeldDispatch)
+                .runtime_control(
+                    connection.clone(),
+                    RuntimeControl::AwaitHeldDispatch {
+                        key: fixture.copy_write_key()?,
+                    },
+                )
                 .await?;
             assert!(matches!(
-                held.dispatch,
+                held.dispatch(&fixture.copy_write_key()?),
                 board_central_test_support::DispatchFaultObservation::Held { .. }
             ));
             assert!(
@@ -131,7 +141,12 @@ async fn take_over_and_confirm(
         fixture
             .holder
             .central
-            .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
+            .runtime_control(
+                ObjectAddress::Fleet,
+                RuntimeControl::ResumeDispatch {
+                    key: fixture.copy_write_key()?,
+                },
+            )
             .await?;
     }
     let store =

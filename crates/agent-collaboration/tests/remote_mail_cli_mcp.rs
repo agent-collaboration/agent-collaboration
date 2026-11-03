@@ -205,7 +205,7 @@ async fn closed_session_remote_send_replays_across_cli_and_mcp_without_sender_pu
     // must reflect that transition without creating a local carrier injection.
     let mail = surfaces.mail_runtime();
     mail.publish_status(serde_json::from_value(json!({
-        "item":item,"status":{"kind":"sent","value":{"seq":7}},"version":1,"cancel":null,
+        "item":item,"status":{"kind":"sent"},"version":1,"cancel":null,
     }))?)
     .await?;
     drop(mail);
@@ -213,7 +213,7 @@ async fn closed_session_remote_send_replays_across_cli_and_mcp_without_sender_pu
     assert_eq!(code, 0);
     assert_eq!(
         shown.pointer("/result/record/mail/status"),
-        Some(&json!({"kind":"sent","seq":7}))
+        Some(&json!({"kind":"sent"}))
     );
     assert_eq!(surfaces.carrier.injections.load(Ordering::SeqCst), 0);
     surfaces.stop().await
@@ -259,10 +259,7 @@ async fn sender_show_reads_canonical_sdk_statuses_and_refusal_payloads_through_t
     // Literal public expectations come from MS-3. Publications enter the real
     // SDK owner; only the external central's status input is supplied here.
     let mut cases = vec![
-        (
-            json!({"kind":"sent","value":{"seq":7}}),
-            json!({"kind":"sent","seq":7}),
-        ),
+        (json!({"kind":"sent"}), json!({"kind":"sent"})),
         (json!({"kind":"atRecipient"}), json!({"kind":"atMachine"})),
         (json!({"kind":"held"}), json!({"kind":"held"})),
         (
@@ -426,9 +423,12 @@ async fn cli_reply_to_a_remote_origin_keeps_the_original_link_in_native_outbox_a
             // The SDK's supported read-only inspection exposes the persisted
             // header reference. Resolve the body through its public Outbox API;
             // no query reaches into the SDK's private tables.
-            let rows = fleet_sync_delivery::test_support::snapshot(scope)
-                .await
-                .map_err(fleet_sync_delivery::delivery_rollback)?;
+            let rows = fleet_sync_delivery::test_support::snapshot::<
+                _,
+                collaboration_contracts::RouterDeliveryTypes,
+            >(scope)
+            .await
+            .map_err(fleet_sync_delivery::delivery_rollback)?;
             let content = rows
                 .iter()
                 .find(|row| row.category == "outbox" && row.identity == sdk.as_uuid().to_string())

@@ -21,6 +21,7 @@ pub use piece_integrity_refusal::PieceIntegrityObservation;
 mod claim_grant_drop;
 mod mail_wire_observer;
 pub use mail_wire_observer::{MailWireEvent, MailWireObservation};
+mod dispatch_cleanup;
 mod lease_notice_gate;
 mod registration_answer_gate;
 pub use claim_grant_drop::{ClaimGrantDropObservation, DroppedClaimGrant};
@@ -36,7 +37,8 @@ pub use machine_enrollment::EnrolledTestMachine;
 #[cfg(feature = "conformance")]
 mod payload_input_observer;
 pub use collaboration_central_conformance::{
-    DispatchCallSelector, DispatchFaultObservation, RuntimeControl, RuntimeControlRequest,
+    DispatchCallSelector, DispatchFaultObservation, DispatchKey, RuntimeControl,
+    RuntimeControlRequest,
 };
 pub use collaboration_central_core::{ConformanceBoardState, ObjectAddress};
 pub use machine_session::FleetTestRuntime;

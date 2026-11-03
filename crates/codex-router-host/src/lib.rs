@@ -43,6 +43,10 @@ mod external_provider_supervisor;
 pub use external_provider_supervisor::{
     ExternalProviderBinding, ExternalProviderSupervisor, ProviderPromptContentsRequest,
 };
+#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+mod debug_inbox_limit;
+#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+mod debug_runtime_barrier;
 mod enrollment_reset;
 mod enrollment_session_transport;
 mod fleet_enrollment_file;

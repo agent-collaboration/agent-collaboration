@@ -294,8 +294,11 @@ impl Runtime {
                 ProjectionStore,
                 Database,
                 RouterDeliveryTypes,
+                crate::MachineSenderBinding,
             >::new(
-                self.fixture.host.config, self.fixture.host.clone()
+                self.fixture.host.config,
+                self.fixture.host.clone(),
+                self.fixture.host.binding.clone(),
             ))
             .unwrap();
         engine

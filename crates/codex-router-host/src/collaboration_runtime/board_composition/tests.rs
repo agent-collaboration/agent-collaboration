@@ -55,6 +55,8 @@ pub(super) mod project_claim;
 mod project_integrity_refusal;
 #[path = "tests/received_grants.rs"]
 mod received_grants;
+#[path = "reenrollment_project_test.rs"]
+mod reenrollment_projects;
 #[cfg(feature = "runtime-test-support")]
 #[path = "tests/returning_holder_expiry.rs"]
 mod returning_holder_expiry;

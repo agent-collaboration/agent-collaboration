@@ -4,30 +4,6 @@ use tokio::sync::oneshot;
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
-#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-#[test]
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract asserts; fixture errors propagate."
-)]
-fn debug_reset_barrier_refuses_relative_public_and_aliased_socket_paths() -> TestResult {
-    use std::os::unix::fs::PermissionsExt;
-    let root = tempfile::tempdir()?;
-    std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))?;
-    let socket = root.path().join("barrier.sock");
-    let listener = std::os::unix::net::UnixListener::bind(&socket)?;
-    validate_barrier_socket(&socket)?;
-    assert!(validate_barrier_socket(Path::new("barrier.sock")).is_err());
-    std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o755))?;
-    assert!(validate_barrier_socket(&socket).is_err());
-    std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))?;
-    let alias = root.path().join("alias.sock");
-    std::os::unix::fs::symlink(&socket, &alias)?;
-    assert!(validate_barrier_socket(&alias).is_err());
-    drop(listener);
-    Ok(())
-}
-
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
@@ -95,7 +71,6 @@ async fn interrupted_reset_resumes_before_activation_and_preserves_router_owned_
     for name in [
         "machine-session/state.json",
         "machine-session/machine-notice-progress.json",
-        "fleet-cache.sqlite",
         "board-read-cache",
     ] {
         assert!(
@@ -113,11 +88,22 @@ async fn interrupted_reset_resumes_before_activation_and_preserves_router_owned_
         assert_eq!(tokio::fs::read(storage.join(name)).await?, name.as_bytes());
     }
     // Replaying completion cannot clear state learned after the reset.
-    tokio::fs::write(storage.join("fleet-cache.sqlite"), b"new central cache").await?;
+    let cache =
+        message_board_storage::FleetCache::open(&storage.join("fleet-cache.sqlite")).await?;
+    cache
+        .replace_snapshot(&message_board_storage::FleetRecordSnapshot {
+            through: message_board::FleetPosition::try_from(7)?,
+            records: Vec::new(),
+        })
+        .await?;
+    cache.close().await;
     resume_enrollment_reset(&journal, &storage).await?;
+    let cache =
+        message_board_storage::FleetCache::open(&storage.join("fleet-cache.sqlite")).await?;
     assert_eq!(
-        tokio::fs::read(storage.join("fleet-cache.sqlite")).await?,
-        b"new central cache"
+        cache.checkpoint().await?,
+        message_board::FleetPosition::try_from(7)?
     );
+    cache.close().await;
     Ok(())
 }

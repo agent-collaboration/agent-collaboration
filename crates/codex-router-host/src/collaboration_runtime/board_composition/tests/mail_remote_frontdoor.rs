@@ -234,7 +234,7 @@ async fn serve(
     clippy::panic_in_result_fn,
     reason = "Contract asserts; setup may fail."
 )]
-async fn public_remote_send_queued_before_welcome_reaches_distinct_recipient_through_real_relay_and_canonical_status()
+async fn public_remote_send_and_pushed_recipient_report_canonical_status_across_distinct_sessions()
 -> Result<(), TestError> {
     let mut source = MailHarness::open(false).await?;
     let recipient_inputs = source.central.recipient_inputs()?;
@@ -292,13 +292,7 @@ async fn public_remote_send_queued_before_welcome_reaches_distinct_recipient_thr
             .await?
             .is_none()
     );
-    source.release_welcome()?;
-    source
-        .wait_state(
-            |state| state["items"]["active"]["cycle"] == 1,
-            "actual source Welcome did not admit receive obligations",
-        )
-        .await?;
+    pushed_mail::welcome(&mut source).await?;
     source.start_mail();
     source
         .transport
@@ -312,12 +306,12 @@ async fn public_remote_send_queued_before_welcome_reaches_distinct_recipient_thr
             "public producer never reached actual generic relay",
         )
         .await?;
-    // The consumer's notification publication policy is the existing fixture
-    // seam. SDK-generated mail hint crosses the recipient's real pump/Host loop.
-    recipient
-        .transport
-        .publish(1, DeliveryStream::Items)
-        .await?;
+    // Board policy and Fleet Push initiation are fixture inputs here. Preserve the
+    // real producer's frozen envelope; recipient pump/Host/inbox/report stay real.
+    let frozen = source.central.notifications.submitted_envelopes(sdk).await;
+    let envelope = serde_json::from_slice(frozen.first().ok_or("producer envelope missing")?)?;
+    let (_, frame) = pushed_mail::push_frame(source.peer(), envelope)?;
+    recipient.transport.replay(vec![frame.into()]).await?;
     source.transport.observer.wait_for(|events| events.iter().any(|event|
         matches!(event, WireEvent::Publication { item: id, status: DeliveryStatus::Delivered { .. }, .. } if *id==sdk)),
         "real recipient report did not publish canonical Delivered to sender").await?;
@@ -380,6 +374,21 @@ async fn public_remote_send_queued_before_welcome_reaches_distinct_recipient_thr
             .contains(&format!("router://{RECIPIENT}/push/{}", item.as_str()))
     );
     let events = source.transport.observer.events();
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, WireEvent::Report(item) if *item == sdk)),
+        "sender machine reported a recipient outcome"
+    );
+    assert!(
+        recipient
+            .transport
+            .observer
+            .events()
+            .iter()
+            .any(|event| matches!(event, WireEvent::Report(item) if *item == sdk)),
+        "recipient machine did not report its own outcome"
+    );
     assert!(events.iter().any(
         |event| matches!(event, WireEvent::SubmissionEpoch { item:id, epoch:None } if *id==sdk)
     ));

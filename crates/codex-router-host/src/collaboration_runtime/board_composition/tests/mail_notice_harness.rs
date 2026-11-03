@@ -1,6 +1,8 @@
 //! Start and drain the real Host event loop around one actual library pump.
 use super::*;
 use std::path::PathBuf;
+#[path = "cold_sender_binding_test.rs"]
+mod cold_sender_binding;
 #[path = "installation_directory_refresh.rs"]
 mod installation_directory_refresh;
 #[path = "notification_directory.rs"]
@@ -63,7 +65,7 @@ impl MailHarness {
     ) -> Result<Self, TestError> {
         Self::open_configured(base, None, false, true, peer, None).await
     }
-    async fn open_configured(
+    pub(super) async fn open_configured(
         base: &Path,
         directory: Option<tempfile::TempDir>,
         initial_notice: bool,
@@ -373,28 +375,6 @@ impl MailHarness {
             .await?
             .ok_or("resume missing")?
             .notice_cursor)
-    }
-    pub async fn wait_state(
-        &self,
-        ready: impl Fn(&serde_json::Value) -> bool,
-        failure: &'static str,
-    ) -> Result<serde_json::Value, TestError> {
-        let started = std::time::Instant::now();
-        tokio::time::timeout(BOUND, async {
-            loop {
-                if let Some(state) = self.mail.state().await?
-                    && ready(&state)
-                {
-                    return Ok(state);
-                }
-                if started.elapsed() >= BOUND {
-                    return Err(io::Error::other(failure).into());
-                }
-                tokio::task::yield_now().await;
-            }
-        })
-        .await
-        .map_err(|_| io::Error::other(failure))?
     }
     pub async fn wait_ack(&self, position: NoticePosition) -> Result<(), TestError> {
         tokio::time::timeout(BOUND, async {

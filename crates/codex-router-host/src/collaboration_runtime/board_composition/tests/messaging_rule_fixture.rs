@@ -2,9 +2,6 @@
 use super::super::forwarded_notification_fixture::MailWorkerStart;
 use super::*;
 use board_sync_protocol::BoardDeliveryTypes;
-use collaboration_central_conformance::{
-    AdmittedPeerSocket, ConformanceClient, enroll_admitted_peer,
-};
 use collaboration_service::{IntentHandoffInput, IntentRecipientEnrollment};
 use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, PeerId};
 use message_board_storage::MailHandoffItem;
@@ -22,11 +19,28 @@ pub(super) const RECIPIENT: &str = "550e8400-e29b-41d4-a716-446655445183";
 pub(super) struct RuleFixture {
     pub holder: claim_fixture::ClaimFixture,
     pub successor: RuleMachine,
-    pub recipient: AdmittedPeerSocket,
+    pub recipient: RuleMachine,
     pub project: ProjectId,
     pub successor_origin: ActorOrigin,
 }
 impl RuleFixture {
+    pub fn copy_write_key(
+        &self,
+    ) -> Result<board_central_test_support::DispatchKey, Box<dyn std::error::Error + Send + Sync>>
+    {
+        Ok(board_central_test_support::DispatchKey::new(
+            ObjectAddress::Copy(self.project.as_str().to_owned().try_into()?),
+            board_central_test_support::DispatchCallSelector::CopyWrite,
+        ))
+    }
+
+    pub fn submit_key(peer: PeerId, item: ItemId) -> board_central_test_support::DispatchKey {
+        board_central_test_support::DispatchKey::new(
+            ObjectAddress::Fleet,
+            board_central_test_support::DispatchCallSelector::FleetMailSubmitFor { peer, item },
+        )
+    }
+
     pub async fn open(
         holder_notifications: bool,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
@@ -42,6 +56,10 @@ impl RuleFixture {
         holder_notifications: bool,
         worker_start: MailWorkerStart,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let _ = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::WARN)
+            .with_test_writer()
+            .try_init();
         let holder = if holder_notifications {
             Box::pin(claim_fixture::ClaimFixture::start_with_notifications()).await?
         } else {
@@ -65,15 +83,7 @@ impl RuleFixture {
         };
         let successor =
             Box::pin(RuleMachine::open(&holder, &successor_origin, worker_start)).await?;
-        let client = ConformanceClient::new(holder.central.base_url())?;
-        let recipient = enroll_admitted_peer(
-            &client,
-            RECIPIENT,
-            "019f0000-0000-7000-8000-000000051083",
-            "rule-mailbox-recipient",
-            "019f0000-0000-7000-8000-000000061083",
-        )
-        .await?;
+        let recipient = Box::pin(RuleMachine::open_recipient(&holder)).await?;
         let fixture = Self {
             holder,
             successor,
@@ -182,7 +192,7 @@ impl RuleFixture {
             })
             .ok_or("cause intent")?;
         read.finish().await?;
-        let item = ItemId::try_from("019f0000-0000-7000-8000-000000071081".to_owned())?;
+        let item = ItemId::new(durable_steps::Uuid::now_v7())?;
         self.holder
             .admission
             .claim_intent(
@@ -216,12 +226,9 @@ impl RuleFixture {
         let _ = self
             .holder
             .central
-            .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
+            .release_held_dispatches(ObjectAddress::Fleet)
             .await;
-        self.recipient
-            .socket
-            .close(reqwest_websocket::CloseCode::Normal, None)
-            .await?;
+        self.recipient.close().await?;
         self.successor.close().await?;
         self.holder.shutdown().await
     }

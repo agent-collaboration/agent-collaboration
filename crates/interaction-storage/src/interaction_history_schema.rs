@@ -47,6 +47,8 @@ const SCHEDULED_RETRY_READINESS_VERSION: i64 = 202610210003;
 const MAIL_ROUTE_EVIDENCE_VERSION: i64 = 202610210004;
 const SETTLED_ANSWER_RETENTION_VERSION: i64 = 202610310001;
 const APPROVAL_ROUTES_VERSION: i64 = 202610310002;
+const MAIL_REMOVAL_BACKFILL_VERSION: i64 = 202611030001;
+const SDK_BACKFILL_OWNERSHIP_VERSION: i64 = 202611030002;
 
 fn expected_table_sql(
     table_name: &str,
@@ -159,6 +161,12 @@ pub(super) async fn inspect_schema(
     let has_approval_routes = migrations
         .iter()
         .any(|row| row.version == APPROVAL_ROUTES_VERSION);
+    let has_mail_removal_backfill = migrations
+        .iter()
+        .any(|row| row.version == MAIL_REMOVAL_BACKFILL_VERSION);
+    let has_sdk_backfill_ownership = migrations
+        .iter()
+        .any(|row| row.version == SDK_BACKFILL_OWNERSHIP_VERSION);
     let history_tables = BTreeSet::from([
         "_sqlx_migrations",
         "interaction_history_revision",
@@ -201,6 +209,12 @@ pub(super) async fn inspect_schema(
         .filter(|object| object.object_type == "table")
         .map(|object| object.name.as_str())
         .collect();
+    let (library_indexes, has_library_backfills) =
+        if tables.contains("_fleet_sync_delivery_migrations") {
+            delivery_schema_lineage(connection).await?
+        } else {
+            (BTreeMap::new(), false)
+        };
     let has_delivery_retries = tables.contains("local_delivery_retries");
     let has_installation_directory = tables.contains("installation_peer_directory");
     let has_submission_epochs = tables.contains("mail_submission_epochs");
@@ -222,6 +236,9 @@ pub(super) async fn inspect_schema(
     let mut composed_tables = history_tables.clone();
     composed_tables.extend(message_tables);
     composed_tables.extend(library_tables);
+    if has_library_backfills {
+        composed_tables.insert("_fleet_sync_delivery_backfills");
+    }
     if has_delivery_retries {
         composed_tables.insert("local_delivery_retries");
     }
@@ -242,6 +259,9 @@ pub(super) async fn inspect_schema(
     }
     if has_approval_routes {
         composed_tables.insert("approval_routes");
+    }
+    if has_mail_removal_backfill && !has_sdk_backfill_ownership {
+        composed_tables.insert("mail_removal_backfill");
     }
     let composed = tables == composed_tables;
     if tables != history_tables && !composed {
@@ -323,7 +343,7 @@ pub(super) async fn inspect_schema(
         }
     }
     if composed {
-        for (name, expected) in delivery_index_lineage(connection).await? {
+        for (name, expected) in library_indexes {
             let actual = objects
                 .iter()
                 .find(|object| object.object_type == "index" && object.name == name)
@@ -425,6 +445,7 @@ pub(super) async fn inspect_schema(
                         | "pending_poll_mail"
                         | "mail_read_contexts"
                         | "approval_routes"
+                        | "mail_removal_backfill"
                 ))
     }) {
         let actual = object.sql.as_deref().ok_or(StorageError::InvalidSchema)?;
@@ -478,6 +499,8 @@ pub(super) async fn inspect_schema(
             - usize::from(!has_read_contexts)
             - usize::from(!has_settled_answer_retention)
             - usize::from(!has_approval_routes)
+            - usize::from(!has_mail_removal_backfill)
+            - usize::from(!has_sdk_backfill_ownership)
     } else {
         1
     };
@@ -489,11 +512,11 @@ pub(super) async fn inspect_schema(
     Ok(SchemaAdmission::Owned)
 }
 
-// Index definitions belong to the applied public library prefix. A later migration
-// can rebuild an index without invalidating genuine stores from the earlier prefix.
-async fn delivery_index_lineage(
+// SDK indexes and its startup-marker table belong to the exact applied prefix.
+// Later migrations must not invalidate genuine stores from an earlier prefix.
+async fn delivery_schema_lineage(
     connection: &mut TursoConnection,
-) -> Result<BTreeMap<String, String>, StorageError> {
+) -> Result<(BTreeMap<String, String>, bool), StorageError> {
     let applied = sqlx::query_as::<_, MigrationProofRow>(
         "SELECT version, CAST(success AS INTEGER) AS success, checksum, typeof(version) AS version_storage, typeof(success) AS success_storage, typeof(checksum) AS checksum_storage FROM _fleet_sync_delivery_migrations ORDER BY version"
     ).fetch_all(connection).await.map_err(|_| StorageError::InvalidSchema)?;
@@ -539,5 +562,6 @@ async fn delivery_index_lineage(
             }
         }
     }
-    Ok(indexes)
+    let has_backfills = applied.iter().any(|migration| migration.version == 11);
+    Ok((indexes, has_backfills))
 }

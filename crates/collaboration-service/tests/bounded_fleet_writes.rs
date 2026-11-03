@@ -11,6 +11,8 @@ pub mod board_fixture;
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
 mod board_read_setup;
+#[path = "support/fleet_maintenance_probe.rs"]
+mod fleet_maintenance_probe;
 #[path = "support/read_cost_counter.rs"]
 #[expect(
     dead_code,
@@ -59,8 +61,9 @@ async fn update_cost(
         shown.pointer("/result/workspace/name"),
         Some(&json!("updated workspace"))
     );
+    let maintenance = fleet_maintenance_probe::probe_fixed_maintenance(&fixture).await?;
     fixture.stop().await?;
-    Ok((cost, payload_inputs, alarms))
+    Ok((cost, payload_inputs, maintenance))
 }
 
 async fn corruption_isolation() -> Result<(), TestError> {
@@ -119,12 +122,16 @@ async fn fleet_write_reads_only_its_operands_and_survives_an_unrelated_corrupt_c
         (large.0, large.1),
         "fleet write decoded unrelated cached directory bodies"
     );
+    // C1 (fea23186b) removed remember_machine_notice_peer's unconditional
+    // UPDATE machine_notice_state SET peer_id=... once per incoming frame.
+    // FleetClient::write sends one write frame, then refresh_cache sends one
+    // FleetRecords frame: those two no-op updates made the former budget 40.
     assert_eq!(
-        small.0.statements, 40,
+        small.0.statements, 38,
         "exact foreground board/cache SQL budget"
     );
     assert_eq!(
-        large.0.statements, 40,
+        large.0.statements, 38,
         "exact foreground board/cache SQL budget"
     );
     assert!(
@@ -132,9 +139,9 @@ async fn fleet_write_reads_only_its_operands_and_survives_an_unrelated_corrupt_c
         "real alarm work must be observed"
     );
     assert_eq!(
-        small.2.distinct_costs(),
-        large.2.distinct_costs(),
-        "complete alarm-run SQL cost grew with unrelated records"
+        read_cost_counter::alarm_read_costs::fixed_fleet_maintenance_profiles(&small.2),
+        read_cost_counter::alarm_read_costs::fixed_fleet_maintenance_profiles(&large.2),
+        "fixed per-owner maintenance SQL grew with unrelated records"
     );
     assert_eq!(
         large.0.core_canonical_input_bodies, 2,

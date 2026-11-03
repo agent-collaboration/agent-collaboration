@@ -49,7 +49,7 @@ async fn prove_transfer(
     settled_view(fixture.host()?, &fixture.project).await?;
     controls::hold_selected(
         fixture,
-        controls::connection(fixture)?,
+        board_central_test_support::ObjectAddress::Fleet,
         ObjectAddress::Fleet,
         DispatchCallSelector::InstallationPeer,
     )
@@ -62,7 +62,8 @@ async fn prove_transfer(
     )?;
     let lookup = controls::held_call(
         fixture,
-        controls::connection(fixture)?,
+        board_central_test_support::ObjectAddress::Fleet,
+        controls::peer_lookup_key(),
         "central.installation-peer",
     )
     .await?;
@@ -130,11 +131,21 @@ async fn transfer_unallocated_range(
             assert_unallocated(&stopped, fixture, range, copied).await?;
             drop(stopped);
             transfer_to_second(fixture, second, kind).await?;
-            controls::resume(fixture, controls::connection(fixture)?).await?;
+            controls::resume(
+                fixture,
+                board_central_test_support::ObjectAddress::Fleet,
+                controls::peer_lookup_key(),
+            )
+            .await?;
         }
         TransferKind::Move => {
             transfer_to_second(fixture, second, kind).await?;
-            controls::resume(fixture, controls::connection(fixture)?).await?;
+            controls::resume(
+                fixture,
+                board_central_test_support::ObjectAddress::Fleet,
+                controls::peer_lookup_key(),
+            )
+            .await?;
             let stopped = fixture
                 .host
                 .take()

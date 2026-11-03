@@ -33,121 +33,18 @@ async fn wait_known(
     clippy::panic_in_result_fn,
     reason = "Contract asserts; setup may fail."
 )]
-async fn hints_during_a_real_running_receive_cycle_coalesce_into_one_further_fetch_pass()
--> Result<(), TestError> {
-    let mut harness = MailHarness::open(false).await?;
-    harness.release_welcome()?;
-    harness
-        .wait_state(
-            |state| {
-                state["items"]["active"]["cycle"] == 1 && state["controls"]["active"]["cycle"] == 1
-            },
-            "Welcome did not admit both initial cycles",
-        )
-        .await?;
-    harness.start_mail();
-    harness
-        .wait_state(
-            |state| {
-                state["items"]["active"].is_null()
-                    && state["controls"]["active"].is_null()
-                    && state["items"]["nextCycle"] == 2
-                    && state["controls"]["nextCycle"] == 2
-            },
-            "initial empty relay fetches did not settle",
-        )
-        .await?;
-    let (entered, release) = harness
-        .transport
-        .observer
-        .hold_next_fetch(DeliveryStream::Items);
-    harness.transport.publish(1, DeliveryStream::Items).await?;
-    tokio::time::timeout(BOUND, entered).await??;
-    // The actual generic relay's answer exists, while the real SDK task is
-    // still waiting for it. Both hints cross the actual SDK pump and Host loop.
-    harness.transport.publish(2, DeliveryStream::Items).await?;
-    harness.transport.publish(3, DeliveryStream::Items).await?;
-    harness.wait_ack(NoticePosition::new(3)).await?;
-    let running = harness
-        .mail
-        .state()
-        .await?
-        .ok_or("running receive state missing")?;
-    assert_eq!(running["items"]["active"]["cycle"], 2);
-    assert_eq!(running["items"]["rerunRequested"], true);
-    assert_eq!(running["items"]["nextCycle"], 3);
-    release
-        .send(())
-        .map_err(|_| io::Error::other("real fetch reply gate closed"))?;
-    let final_state = harness
-        .wait_state(
-            |state| state["items"]["active"].is_null() && state["items"]["nextCycle"] == 4,
-            "coalesced hint did not complete exactly one further SDK cycle",
-        )
-        .await?;
-    assert_eq!(final_state["items"]["rerunRequested"], false);
-    let events = harness.transport.observer.events();
-    assert_eq!(
-        events
-            .iter()
-            .filter(|event| matches!(
-                event,
-                WireEvent::Fetch {
-                    stream: DeliveryStream::Items,
-                    ..
-                }
-            ))
-            .count(),
-        3,
-        "initial, running and one coalesced pass must be the only item fetches"
-    );
-    assert_eq!(
-        events
-            .iter()
-            .filter(|event| matches!(event, WireEvent::Received(DeliveryStream::Items)))
-            .count(),
-        3
-    );
-    assert_eq!(
-        events
-            .iter()
-            .filter(|event| matches!(
-                event,
-                WireEvent::Fetch {
-                    stream: DeliveryStream::Controls,
-                    ..
-                }
-            ))
-            .count(),
-        1
-    );
-    assert_eq!(harness.connections(), 1);
-    harness.close().await
-}
-
-#[tokio::test]
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract asserts; setup may fail."
-)]
-async fn submit_fetch_received_report_and_committed_status_use_one_actual_session()
--> Result<(), TestError> {
+async fn submit_push_report_and_committed_status_use_one_actual_session() -> Result<(), TestError> {
     let mut harness = MailHarness::open(false).await?;
     let item = relay_items::ordinary_message(harness.peer());
     let id = item.id();
     let digest = item.digest().clone();
+    let envelope = DeliveryEnvelope::<board_sync_protocol::BoardDeliveryTypes>::Item(
+        serde_json::from_value(serde_json::to_value(&item)?)?,
+    );
     // Only setup admits this outbox task. The actual runtime must register and
     // execute the SDK SubmitItem kind, then retain its relay's canonical status.
     harness.mail.enqueue(item, harness.relay).await?;
-    harness.release_welcome()?;
-    harness
-        .wait_state(
-            |state| {
-                state["items"]["active"]["cycle"] == 1 && state["controls"]["active"]["cycle"] == 1
-            },
-            "Welcome did not admit real receive work",
-        )
-        .await?;
+    pushed_mail::welcome(&mut harness).await?;
     harness.start_mail();
     harness
         .transport
@@ -162,18 +59,42 @@ async fn submit_fetch_received_report_and_committed_status_use_one_actual_sessio
         )
         .await?;
     wait_known(&harness, id).await?;
-    harness.transport.publish(1, DeliveryStream::Items).await?;
-    let observed = harness.transport.observer.wait_for(|events| {
-        let held_frame = events.iter().find_map(|event| match event {
-            WireEvent::Publication { frame, item, status: fleet_sync_protocol::DeliveryStatus::Held } if *item == id => Some(frame),
-            _ => None,
-        });
-        events.iter().any(|event| matches!(event, WireEvent::Fetched { items, .. } if items.contains(&id)))
-            && events.iter().any(|event| matches!(event, WireEvent::Received(DeliveryStream::Items)))
-            && events.iter().any(|event| matches!(event, WireEvent::Report(item) if *item == id))
-            && held_frame.is_some_and(|held| events.iter().any(|event|
-                matches!(event, WireEvent::Published { frame, applied: true } if frame == held)))
-    }, "real relay round trip did not finish fetch/receipt/report/canonical publication").await;
+    assert!(matches!(
+        pushed_mail::push(&harness, envelope).await?,
+        fleet_sync_protocol::PushResult::Accepted { .. }
+    ));
+    let observed = harness
+        .transport
+        .observer
+        .wait_for(
+            |events| {
+                let held_frame = events.iter().find_map(|event| match event {
+                    WireEvent::Publication {
+                        frame,
+                        item,
+                        status: fleet_sync_protocol::DeliveryStatus::Held,
+                    } if *item == id => Some(frame),
+                    _ => None,
+                });
+                events.iter().any(|event| {
+                    matches!(
+                        event,
+                        WireEvent::Pushed {
+                            result: fleet_sync_protocol::PushResult::Accepted { .. },
+                            ..
+                        }
+                    )
+                }) && events
+                    .iter()
+                    .any(|event| matches!(event, WireEvent::Report(item) if *item == id))
+                    && held_frame.is_some_and(|held| {
+                        events.iter().any(|event|
+                matches!(event, WireEvent::Published { frame, applied: true } if frame == held))
+                    })
+            },
+            "real session did not finish Push/report/canonical publication",
+        )
+        .await;
     if observed.is_err() {
         println!(
             "actual relay wire events: {:?}",
@@ -190,12 +111,10 @@ async fn submit_fetch_received_report_and_committed_status_use_one_actual_sessio
     }
     let events = observed?;
     assert!(
-        events.iter().any(|event| matches!(
-            event,
-            WireEvent::Fetch { stream: DeliveryStream::Items, inbox_room_bytes: Some(room), .. }
-                if *room > 0
-        )),
-        "the real Router session lost the SDK receiving-room budget"
+        !events
+            .iter()
+            .any(|event| matches!(event, WireEvent::Fetch { .. } | WireEvent::Received(_))),
+        "Push intake emitted obsolete Fetch/Received"
     );
     assert!(
         events
@@ -242,11 +161,13 @@ async fn submit_fetch_received_report_and_committed_status_use_one_actual_sessio
     clippy::panic_in_result_fn,
     reason = "Contract asserts; setup may fail."
 )]
-async fn largest_accepted_items_are_returned_by_the_relay_under_the_actual_runtime_budget()
--> Result<(), TestError> {
-    // Each item gets a fresh physical mailbox/owner. A malformed native projection
-    // cannot hide the other item's independent Fetch observation.
+async fn largest_pushed_items_commit_through_the_actual_machine_session() -> Result<(), TestError> {
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::WARN)
+        .with_test_writer()
+        .try_init();
     for notification in [false, true] {
+        // Arrange independent real physical inboxes for each maximum legal envelope.
         let mut harness = MailHarness::open(false).await?;
         let item = if notification {
             relay_items::largest_notification(harness.peer())
@@ -254,69 +175,32 @@ async fn largest_accepted_items_are_returned_by_the_relay_under_the_actual_runti
             relay_items::largest_message(harness.peer())
         };
         let id = item.id();
-        let envelope: DeliveryEnvelope<board_sync_protocol::BoardDeliveryTypes> =
-            serde_json::from_value(serde_json::to_value(DeliveryEnvelope::Item(item))?)?;
+        let envelope = serde_json::from_value(serde_json::to_value(DeliveryEnvelope::Item(item))?)?;
+        pushed_mail::welcome(&mut harness).await?;
+        // Act through a correlated typed frame, real pump, Host and Inbox.
         assert!(matches!(
-            harness.submit_generic(envelope).await?,
-            fleet_sync_protocol::SubmitResult::Accepted { .. }
+            pushed_mail::push(&harness, envelope).await?,
+            fleet_sync_protocol::PushResult::Accepted { .. }
         ));
-        harness.release_welcome()?;
-        harness
-            .wait_state(
-                |state| state["items"]["active"]["cycle"] == 1,
-                "Welcome did not admit the maximal item fetch",
-            )
-            .await?;
-        harness.start_mail();
-        let observed = harness.transport.observer.wait_for(|events| events.iter().any(|event|
-            matches!(event, WireEvent::Fetched { stream: DeliveryStream::Items, items, .. } if items.contains(&id))),
-            "maximal accepted item was stranded by the runtime fetch byte budget").await;
-        if observed.is_err() {
-            println!(
-                "maximal item actual wire events: {:?}",
-                harness.transport.observer.events()
-            );
-            println!(
-                "maximal item retained central custody: {:?}",
-                harness.query(vec![id]).await?
-            );
-        }
-        let events = observed?;
-        let budgets = events
-            .iter()
-            .filter_map(|event| match event {
-                WireEvent::Fetch {
-                    stream: DeliveryStream::Items,
-                    max_bytes,
-                    ..
-                } => Some(*max_bytes),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        assert!(!budgets.is_empty());
-        assert!(budgets.iter().all(|budget| *budget == fleet_sync_protocol::unit_budget::TARGET_UNIT_BYTES as u64));
-        let sizes = events
-            .iter()
-            .filter_map(|event| match event {
-                WireEvent::Fetched {
-                    items, entry_bytes, ..
-                } if items.contains(&id) => Some(entry_bytes),
-                _ => None,
-            })
-            .flatten()
-            .copied()
-            .collect::<Vec<_>>();
-        println!(
-            "real relay maximal notification={notification}; returned entry bytes={sizes:?}; runtime budgets={budgets:?}"
-        );
-        assert!(
-            !sizes.is_empty(),
-            "maximal Fetch observation had no measured entries"
-        );
-        assert!(
-            sizes
+        // Assert maximum inputs commit once without admitting a recipient Fetch.
+        assert_eq!(
+            harness
+                .mail
+                .rows()
+                .await?
                 .iter()
-                .all(|size| *size <= fleet_sync_protocol::unit_budget::TARGET_UNIT_BYTES)
+                .filter(|row| row.category == "inbox" && row.identity == id.as_uuid().to_string())
+                .count(),
+            1
+        );
+        assert!(harness.mail.state().await?.is_none());
+        assert!(
+            !harness
+                .transport
+                .observer
+                .events()
+                .iter()
+                .any(|event| matches!(event, WireEvent::Fetch { .. } | WireEvent::Received(_)))
         );
         assert_eq!(harness.connections(), 1);
         harness.close().await?;
@@ -340,13 +224,7 @@ async fn wrong_relay_is_never_sent_while_a_correct_submission_on_the_same_sessio
     let correct = relay_items::ordinary_message(harness.peer());
     let correct_id = correct.id();
     harness.mail.enqueue(correct, harness.relay).await?;
-    harness.release_welcome()?;
-    harness
-        .wait_state(
-            |state| state["items"]["active"]["cycle"] == 1,
-            "Welcome did not admit receive work",
-        )
-        .await?;
+    pushed_mail::welcome(&mut harness).await?;
     harness.start_mail();
     wait_known(&harness, correct_id).await?;
     tokio::time::timeout(BOUND, async {

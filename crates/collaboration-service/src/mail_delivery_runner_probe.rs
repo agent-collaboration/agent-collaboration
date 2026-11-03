@@ -32,7 +32,13 @@ use tokio::sync::watch;
 type RunnerHost = TokioHost<RunnerRouter, RunnerClock>;
 type RunnerStore = InteractionAtomicStore<RunnerHost>;
 type RunnerDatabase = <TursoScope<'static, RunnerHost> as TransactionScope>::Database;
-type RunnerTask = DeliverLocally<RunnerStore, RunnerDatabase, RouterDeliveryTypes, RunnerConsumer>;
+type RunnerTask = DeliverLocally<
+    RunnerStore,
+    RunnerDatabase,
+    RouterDeliveryTypes,
+    RunnerConsumer,
+    crate::MachineSenderBinding,
+>;
 
 const BOUNDARY_DEADLINE: Duration = Duration::from_secs(10);
 
@@ -101,6 +107,7 @@ impl DeliveryConsumer<TursoScope<'_, RunnerHost>> for RunnerConsumer {
 }
 
 struct RunnerRouter {
+    binding: Arc<crate::MachineSenderBinding>,
     store: OnceLock<Weak<RunnerStore>>,
     consumer: Arc<RunnerConsumer>,
     config: DeliveryTaskConfig,
@@ -122,13 +129,15 @@ impl CallRouter for RunnerRouter {
             .and_then(Weak::upgrade)
             .ok_or(CallFailure::AnswerLost)?;
         let config = self.config;
+        let binding = self.binding.clone();
         let resolved = store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    let resolved = Inbox::<_, RouterDeliveryTypes>::new(
+                    let resolved = Inbox::<_, RouterDeliveryTypes, _>::new(
                         scope,
                         config.local.owner,
                         config.local.limits,
+                        binding.as_ref(),
                     )
                     .resolve_local_delivery(&reference)
                     .await
@@ -189,6 +198,7 @@ async fn a_blocked_native_reader_does_not_block_another_due_mail_item() {
         clock: runtime.fixture.host.clock.clone(),
     });
     let router = Arc::new(RunnerRouter {
+        binding: runtime.fixture.host.binding.clone(),
         store: OnceLock::new(),
         consumer: consumer.clone(),
         config: runtime.fixture.host.config,
@@ -208,6 +218,7 @@ async fn a_blocked_native_reader_does_not_block_another_due_mail_item() {
             router.config.local,
             consumer.clone(),
             host.clone(),
+            router.binding.clone(),
         ))
         .unwrap();
     let runner = TokioRunner::new(Arc::new(engine), host.clone());

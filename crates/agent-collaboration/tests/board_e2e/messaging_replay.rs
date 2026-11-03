@@ -7,7 +7,8 @@ use serde_json::{Value, json};
 const DELIVERED: &str = "peerMessageWritten";
 
 pub async fn changed_content_conflicts(scope: &mut MessagingCase<'_>) -> FixtureResult {
-    let item = "019f0000-0000-7000-8000-000000092011";
+    let item_identity = super::fixture::identity();
+    let item = item_identity.as_str();
     let text = "B+ original remote content survives a conflicting caller";
     let first = scope.send_cli(item, text).await?;
     scope
@@ -56,7 +57,8 @@ pub async fn changed_content_conflicts(scope: &mut MessagingCase<'_>) -> Fixture
 }
 
 pub async fn mailbox_retry_keeps_one_effect(scope: &mut MessagingCase<'_>) -> FixtureResult {
-    let item = "019f0000-0000-7000-8000-000000092012";
+    let item_identity = super::fixture::identity();
+    let item = item_identity.as_str();
     let text = "B+ one remote effect despite lost mailbox custody answer";
     scope
         .control(

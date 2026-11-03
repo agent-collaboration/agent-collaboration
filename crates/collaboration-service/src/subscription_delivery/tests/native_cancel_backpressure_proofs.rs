@@ -125,18 +125,36 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
         .unwrap();
         let filler_id = filler.id();
         let relay = query.session.relay;
+        let binding = Arc::new(crate::MachineSenderBinding::new(
+            crate::subscription_delivery::tests::owner_fixture::SERVICE_ID
+                .to_owned()
+                .try_into()
+                .unwrap(),
+            peer,
+        ));
+        let scope_binding = binding.clone();
+        let fixture_project = fixture.project.clone();
         let queued = observer
             .transaction(move |scope| {
                 Box::pin(async move {
-                    Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(scope, limits)
-                        .enqueue(
-                            filler,
-                            relay,
-                            peer,
-                            runtime_primitives::Clock::now(&runtime_primitives::SystemClock),
-                        )
-                        .await
-                        .map_err(delivery_rollback)
+                    Outbox::<_, collaboration_contracts::RouterDeliveryTypes, _>::new(
+                        scope,
+                        limits,
+                        scope_binding.as_ref(),
+                    )
+                    .enqueue(
+                        filler,
+                        relay,
+                        fleet_sync_protocol::Submitter::Project(
+                            fleet_sync_protocol::DatabaseId::try_from(
+                                fixture_project.as_str().to_owned(),
+                            )
+                            .unwrap(),
+                        ),
+                        runtime_primitives::Clock::now(&runtime_primitives::SystemClock),
+                    )
+                    .await
+                    .map_err(delivery_rollback)
                 })
             })
             .await
@@ -230,17 +248,22 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
         assert!(super::native_frontier_proofs::frontier(&fixture).await < original_sequence);
 
         // Free the real SDK quota; no SQL accounting changes or fake MailboxFull answers.
+        let scope_binding = binding.clone();
         observer
             .transaction(move |scope| {
                 Box::pin(async move {
-                    Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(scope, limits)
-                        .record_failure(
-                            filler_id,
-                            DeliveryFailureKind::ExecutionFailed,
-                            runtime_primitives::Clock::now(&runtime_primitives::SystemClock),
-                        )
-                        .await
-                        .map_err(delivery_rollback)
+                    Outbox::<_, collaboration_contracts::RouterDeliveryTypes, _>::new(
+                        scope,
+                        limits,
+                        scope_binding.as_ref(),
+                    )
+                    .record_failure(
+                        filler_id,
+                        DeliveryFailureKind::ExecutionFailed,
+                        runtime_primitives::Clock::now(&runtime_primitives::SystemClock),
+                    )
+                    .await
+                    .map_err(delivery_rollback)
                 })
             })
             .await
@@ -306,11 +329,14 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
             assert_eq!(facts[0].target(), &target);
             assert_eq!(facts[0].cancel(), &child);
             let item = child.item;
+            let scope_binding = binding.clone();
             observer
                 .transaction(move |scope| {
                     Box::pin(async move {
-                        Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(
-                            scope, limits,
+                        Outbox::<_, collaboration_contracts::RouterDeliveryTypes, _>::new(
+                            scope,
+                            limits,
+                            scope_binding.as_ref(),
                         )
                         .publish_status(
                             fleet_sync_protocol::StatusPublication {

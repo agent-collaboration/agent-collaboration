@@ -22,16 +22,16 @@ async fn enqueue_with_answer(
                         .map_err(StoreError::backend)?,
                 )
                 .map_err(StoreError::backend)?;
-                let (admission, operation) = Outbox::<_, BoardDeliveryTypes>::new(scope, limits)
-                    .enqueue_and_admit::<NativeSubmit, NativeRetention>(
-                        item,
-                        PeerId::new(uuid::Uuid::now_v7()).unwrap(),
-                        PeerId::try_from("019f0000-0000-7000-8000-000000008131".to_owned())
-                            .unwrap(),
-                        NoDispatchHost.now(),
-                    )
-                    .await
-                    .map_err(StoreError::backend)?;
+                let (admission, operation) =
+                    Outbox::<_, BoardDeliveryTypes, _>::new(scope, limits, &NoDeliveryConsumer)
+                        .enqueue_and_admit::<NativeSubmit, NativeRetention>(
+                            item,
+                            PeerId::new(uuid::Uuid::now_v7()).unwrap(),
+                            fleet_sync_protocol::Submitter::Machine(native_sender_peer()),
+                            NoDispatchHost.now(),
+                        )
+                        .await
+                        .map_err(StoreError::backend)?;
                 assert!(matches!(admission, OutboxAdmission::Queued { .. }));
                 assert!(operation.is_some());
                 crate::record_message_send_admission(
@@ -124,7 +124,8 @@ async fn queued_answer_reopens_with_custody_and_failure_rolls_back_without_a_pus
     );
     let counts: (i64,i64,i64,i64) = sqlx::query_as("SELECT (SELECT count(*) FROM router_pushes),(SELECT count(*) FROM _fleet_sync_outbox_items),(SELECT count(*) FROM _fleet_sync_operations),(SELECT count(*) FROM message_send_answers)")
         .fetch_one(&mut *owner.writer.lock().await).await.unwrap();
-    assert_eq!(counts, (0, 1, 1, 1));
+    assert_eq!(counts, (0, 1, 2, 1));
+    assert_mail_admission_tasks(&mut *owner.writer.lock().await).await;
 
     sqlx::query("UPDATE message_send_answers SET settled_at_ms=NULL WHERE item_id=?")
         .bind(id.as_str())

@@ -118,7 +118,7 @@ async fn non_holder_sender_publishes_local_notifications_before_copy_ack_and_ded
             references: serde_json::from_value(serde_json::json!([]))?, role: participation, watch,
             addressees: vec![recipient(local_service.clone())?, recipient(sender.origin.installation.clone())?],
         };
-        holder.central.runtime_control(session.clone(), RuntimeControl::HoldNextDispatch { destination: copy.clone() }).await?;
+        holder.central.runtime_control(session.clone(), RuntimeControl::HoldNextDispatch { key: board_central_test_support::DispatchKey::new(copy.clone(), board_central_test_support::DispatchCallSelector::CopyWrite) }).await?;
         // Hold only progress storage until the cause piece is captured. This
         // forces a distinct later handoff ACK without replacing native Copy.
         let (release_progress, progress_task) = notifications.hold_progress_writer().await?;
@@ -127,10 +127,10 @@ async fn non_holder_sender_publishes_local_notifications_before_copy_ack_and_ded
             let create = create.clone();
             tokio::spawn(async move { application.board().thread_create(create).await })
         };
-        let entered = holder.central.runtime_control(session.clone(), RuntimeControl::AwaitHeldDispatch).await;
+        let entered = holder.central.runtime_control(session.clone(), RuntimeControl::AwaitHeldDispatch { key: board_central_test_support::DispatchKey::new(copy.clone(), board_central_test_support::DispatchCallSelector::CopyWrite) }).await;
         let _ = release_progress.send(());
         timeout(BOUND, progress_task).await???;
-        assert!(matches!(entered?.dispatch, DispatchFaultObservation::Held { destination, .. } if destination == copy));
+        assert!(matches!(entered?.dispatch(&board_central_test_support::DispatchKey::new(copy.clone(), board_central_test_support::DispatchCallSelector::CopyWrite)), DispatchFaultObservation::Held { destination, .. } if destination == copy));
         let accepted = timeout(BOUND, posting).await???;
         assert!(matches!(accepted.result, message_board::public_replies::RequestResult::Decided(
             message_board::public_replies::RequestDecision::Accepted { .. }
@@ -181,13 +181,13 @@ async fn non_holder_sender_publishes_local_notifications_before_copy_ack_and_ded
             let expected = if actor_service(intent).as_ref() == Some(&local_service) { local_item } else { remote_item };
             assert_eq!(item_id(intent)?, expected, "keyed retry changed frozen mail identity");
         }
-        holder.central.runtime_control(session.clone(), RuntimeControl::ResumeDispatchAndHoldNext { destination: copy.clone() }).await?;
-        assert!(matches!(holder.central.runtime_control(session.clone(), RuntimeControl::AwaitHeldDispatch).await?.dispatch,
+        holder.central.runtime_control(session.clone(), RuntimeControl::ResumeDispatchAndHoldNext { key: board_central_test_support::DispatchKey::new(copy.clone(), board_central_test_support::DispatchCallSelector::CopyWrite), next: board_central_test_support::DispatchKey::new(copy.clone(), board_central_test_support::DispatchCallSelector::CopyWrite) }).await?;
+        assert!(matches!(holder.central.runtime_control(session.clone(), RuntimeControl::AwaitHeldDispatch { key: board_central_test_support::DispatchKey::new(copy.clone(), board_central_test_support::DispatchCallSelector::CopyWrite) }).await?.dispatch(&board_central_test_support::DispatchKey::new(copy.clone(), board_central_test_support::DispatchCallSelector::CopyWrite)),
             DispatchFaultObservation::Held { destination, .. } if destination == copy));
         assert!(holder.projects.replicated_through(&project, cause_position.epoch).await?.position >= cause_position.position);
         assert!(holder.projects.acknowledged_mail_changes(&project).await?.max_handoff_seq.is_none());
         assert!(!notifications.rows().await?.iter().any(|row| row.category == "outbox" && row.identity == remote_item.as_uuid().to_string()), "remote custody bypassed the frozen handoff ACK");
-        holder.central.runtime_control(session.clone(), RuntimeControl::ResumeDispatch).await?;
+        holder.central.runtime_control(session.clone(), RuntimeControl::ResumeDispatch { key: board_central_test_support::DispatchKey::new(copy.clone(), board_central_test_support::DispatchCallSelector::CopyWrite) }).await?;
         timeout(BOUND, async {
             loop {
                 let marks = holder.projects.acknowledged_mail_changes(&project).await?;
@@ -216,10 +216,7 @@ async fn non_holder_sender_publishes_local_notifications_before_copy_ack_and_ded
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }).await;
     // Release the real dispatcher even when the missing-prompt baseline fails.
-    let _ = holder
-        .central
-        .runtime_control(session, RuntimeControl::ResumeDispatch)
-        .await;
+    let _ = holder.central.release_held_dispatches(session).await;
     let sender_closed = sender.shutdown().await;
     let holder_closed = holder.shutdown().await;
     proof?;

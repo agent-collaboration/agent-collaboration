@@ -7,9 +7,8 @@ use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerRequest, BoardDeliveryTypes, MailSubmitAnswer,
 };
 use fleet_sync_delivery::{
-    DeliveryTransactionFailure, FetchCall, FetchInput, Outbox, ReceiptInput, ReceivedCall,
-    ReportCall, SubmitCall, classify_delivery_store_error, delivery_rollback,
-    submit_settlement_outcome,
+    DeliveryTransactionFailure, Outbox, ReportCall, SubmitCall, classify_delivery_store_error,
+    delivery_rollback, submit_settlement_outcome,
 };
 use fleet_sync_protocol::{
     DeliveryAnswer, DeliveryEnvelope, DeliveryRequest, OperationAnswer, OperationRequest,
@@ -66,9 +65,6 @@ impl MailCallRouter {
         &self,
         envelope: CallEnvelope,
     ) -> Result<Value, CallFailure> {
-        if envelope.kind == super::terminal_retirement::RetireMailCall::KIND {
-            return self.dispatch_retirement(envelope).await;
-        }
         let session = self.session.as_ref().ok_or_else(unavailable)?;
         let CallEnvelope {
             kind,
@@ -91,17 +87,23 @@ impl MailCallRouter {
                     .and_then(Weak::upgrade)
                     .ok_or_else(unavailable)?;
                 let resolved = store
-                    .transaction(move |scope| {
-                        Box::pin(async move {
-                            let resolved =
-                                Outbox::<_, RouterDeliveryTypes>::new(scope, config.limits)
-                                    .resolve_submit(&lookup)
-                                    .await
-                                    .map_err(delivery_rollback)?;
-                            let origin_epoch =
-                                recorded_submission_epoch(scope, &resolved.item).await?;
-                            Ok((resolved, origin_epoch))
-                        })
+                    .transaction({
+                        let binding = self.binding.clone();
+                        move |scope| {
+                            Box::pin(async move {
+                                let resolved = Outbox::<_, RouterDeliveryTypes, _>::new(
+                                    scope,
+                                    config.limits,
+                                    binding.as_ref(),
+                                )
+                                .resolve_submit(&lookup)
+                                .await
+                                .map_err(delivery_rollback)?;
+                                let origin_epoch =
+                                    recorded_submission_epoch(scope, &resolved.item).await?;
+                                Ok((resolved, origin_epoch))
+                            })
+                        }
                     })
                     .await;
                 match resolved {
@@ -141,9 +143,11 @@ impl MailCallRouter {
                         {
                             OperationAnswer::Consumer(BoardConsumerAnswer::MailSubmit(
                                 MailSubmitAnswer::Submitted(answer),
-                            )) => encode_answer(fleet_sync_delivery::DispatchOutcome::Answered(
-                                answer,
-                            )),
+                            )) => {
+                                encode_answer(SubmitCall::<RouterDeliveryTypes>::validated_answer(
+                                    fleet_sync_delivery::DispatchOutcome::Answered(answer),
+                                )?)
+                            }
                             OperationAnswer::Consumer(BoardConsumerAnswer::MailSubmit(
                                 MailSubmitAnswer::NotWriter,
                             )) => {
@@ -171,9 +175,12 @@ impl MailCallRouter {
                         }
                     }
                     Err(error) => {
-                        match classify_delivery_store_error(error) {
+                        match classify_delivery_store_error(error.clone()) {
                             DeliveryTransactionFailure::OutcomeUnknown(_) => {
                                 return Err(CallFailure::AnswerLost);
+                            }
+                            DeliveryTransactionFailure::BindingUnavailable { .. } => {
+                                return Err(self.binding_call_failure(error).await);
                             }
                             DeliveryTransactionFailure::Refused(_)
                             | DeliveryTransactionFailure::Corrupt { .. } => {}
@@ -194,51 +201,6 @@ impl MailCallRouter {
                             _ => Err(CallFailure::AnswerLost),
                         }
                     }
-                }
-            }
-            FetchCall::<RouterDeliveryTypes>::KIND => {
-                let target: FetchCall<RouterDeliveryTypes> = decode_call(target)?;
-                if target.relay != session.relay || target.mailbox != self.config.owner {
-                    return Err(unavailable());
-                }
-                let request: FetchInput = decode_call(request)?;
-                match session
-                    .requests
-                    .request(OperationRequest::Delivery(DeliveryRequest::Fetch {
-                        call,
-                        stream: request.stream,
-                        after: request.after,
-                        max_items: request.max_items,
-                        max_bytes: request.max_bytes,
-                        inbox_room_bytes: request.inbox_room_bytes,
-                    }))
-                    .await?
-                {
-                    OperationAnswer::Delivery(DeliveryAnswer::Fetch(answer)) => {
-                        encode_answer(answer)
-                    }
-                    _ => Err(CallFailure::AnswerLost),
-                }
-            }
-            ReceivedCall::KIND => {
-                let target: ReceivedCall = decode_call(target)?;
-                if target.relay != session.relay || target.mailbox != self.config.owner {
-                    return Err(unavailable());
-                }
-                let request: ReceiptInput = decode_call(request)?;
-                match session
-                    .requests
-                    .request(OperationRequest::Delivery(DeliveryRequest::Received {
-                        call,
-                        stream: request.stream,
-                        through: request.through,
-                    }))
-                    .await?
-                {
-                    OperationAnswer::Delivery(DeliveryAnswer::Received(answer)) => {
-                        encode_answer(answer)
-                    }
-                    _ => Err(CallFailure::AnswerLost),
                 }
             }
             ReportCall::<RouterDeliveryTypes>::KIND => {

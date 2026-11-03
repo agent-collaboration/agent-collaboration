@@ -123,6 +123,7 @@ async fn an_unknown_installation_lookup_refuses_the_actual_intent_without_freezi
         })
         .await;
     let reads = fixture.harness.central.directory.read_count(&service).await;
+    let observed_state = fixture.intent_for(&post).await?.state().clone();
     let cached = fixture
         .harness
         .mail
@@ -150,7 +151,7 @@ async fn an_unknown_installation_lookup_refuses_the_actual_intent_without_freezi
     fixture.close().await?;
     assert!(
         result.is_ok(),
-        "Unknown did not become the typed recipientUnknown refusal"
+        "Unknown did not become the typed recipientUnknown refusal: result={result:?}, state={observed_state:?}, directory_reads={reads}"
     );
     assert_eq!(reads, 1);
     assert!(cached.is_none());

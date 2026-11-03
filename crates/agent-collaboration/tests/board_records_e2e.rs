@@ -67,6 +67,18 @@ mod stopped_faults;
     dead_code,
     reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
+#[path = "board_e2e/messaging_stopped_owner.rs"]
+mod messaging_stopped_owner;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
+#[path = "support/local_mail_native_sql.rs"]
+mod native_sql;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "board_e2e/takeover_readbacks.rs"]
 mod takeover_readbacks;
 use codex_router_test_support::FixtureResult;

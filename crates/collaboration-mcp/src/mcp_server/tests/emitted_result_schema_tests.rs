@@ -305,6 +305,11 @@ fn work_view_schema_accepts_typed_writer_observations_and_refuses_removed_shapes
             CurrentWriter::Unknown {},
             serde_json::json!({"kind":"unknown"}),
         ),
+        (
+            CopySource::Writer {},
+            CurrentWriter::NotInCentral {},
+            serde_json::json!({"kind":"notInCentral"}),
+        ),
     ] {
         let view = WorkView {
             project: project.clone(),
@@ -507,14 +512,19 @@ fn remote_status_and_history_keep_closed_advertised_shapes() {
     };
     for status in [
         serde_json::json!({"kind":"queued"}),
-        serde_json::json!({"kind":"sent","seq":7}),
+        serde_json::json!({"kind":"sent"}),
         serde_json::json!({"kind":"atMachine"}),
         serde_json::json!({"kind":"held"}),
         serde_json::json!({"kind":"delivered","acceptance":"peerMessageWritten"}),
         serde_json::json!({"kind":"uncertain"}),
         serde_json::json!({"kind":"expired"}),
+        serde_json::json!({"kind":"expiredAtUpgrade"}),
         serde_json::json!({"kind":"cancelled"}),
         serde_json::json!({"kind":"refused","reason":{"kind":"recipientRevoked"}}),
+        serde_json::json!({"kind":"refused","reason":{"kind":"notThisMachine"}}),
+        serde_json::json!({"kind":"refused","reason":{"kind":"notRecipient"}}),
+        serde_json::json!({"kind":"refused","reason":{"kind":"notSubmitter"}}),
+        serde_json::json!({"kind":"refused","reason":{"kind":"tooOld"}}),
     ] {
         let mail = RemoteMessageStatus {
             item: item.clone(),
@@ -534,6 +544,14 @@ fn remote_status_and_history_keep_closed_advertised_shapes() {
             shown.get("record").is_none(),
             "sender custody invented a push"
         );
+        if status["kind"] == "sent" {
+            let mut legacy_sent = shown.clone();
+            legacy_sent["mail"]["status"]["seq"] = serde_json::json!(7);
+            assert!(
+                !show.is_valid(&legacy_sent),
+                "Sent accepted the removed mailbox sequence"
+            );
+        }
         shown["mail"]["status"] = serde_json::json!({"kind":"provisional"});
         assert!(
             !show.is_valid(&shown),

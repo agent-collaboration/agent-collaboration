@@ -21,6 +21,18 @@ mod fixture;
 mod fixture_inputs;
 #[path = "board_e2e/follow_fixture.rs"]
 mod follow_fixture;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
+#[path = "board_e2e/messaging_stopped_owner.rs"]
+mod messaging_stopped_owner;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
+#[path = "support/local_mail_native_sql.rs"]
+mod native_sql;
 #[path = "board_e2e/owned_host.rs"]
 mod owned_host;
 #[path = "board_e2e/owned_host_startup_proofs.rs"]

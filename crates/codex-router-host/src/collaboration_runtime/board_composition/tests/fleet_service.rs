@@ -53,7 +53,11 @@ use notification_directory_probe::DirectoryProbe;
 mod fleet_read_probe;
 use fleet_read_probe::FleetReadProbe;
 
+#[path = "fixture_sender_binding.rs"]
+mod fixture_sender_binding;
+
 struct Consumer {
+    peer: PeerId,
     directory: Arc<DirectoryProbe>,
     fleet_reads: Arc<FleetReadProbe>,
     read_copy_entries: Arc<Mutex<Vec<fleet_admission::DirectoryEntry>>>,
@@ -442,6 +446,7 @@ impl TestFleet {
                 socket_timeout: BOUND,
             },
             Arc::new(Consumer {
+                peer,
                 directory: directory_probe.clone(),
                 fleet_reads: fleet_reads.clone(),
                 read_copy_entries: read_copy_entries.clone(),

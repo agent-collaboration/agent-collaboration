@@ -5,7 +5,7 @@ use fleet_sync_delivery::{
     DeliveryLimits, Outbox, delivery_rollback, minimum_settlement_allowance,
 };
 
-async fn native_status_cursor(root: &Path) -> Result<u64, TestError> {
+async fn native_status_cursor(root: &Path, peer: PeerId) -> Result<u64, TestError> {
     let owner = Arc::new(InteractionStore::open(root.join("interaction.sqlite")).await?);
     let store = InteractionAtomicStore::new(owner.clone(), readback_host());
     let limits = DeliveryLimits::new::<RouterDeliveryTypes>(
@@ -16,10 +16,16 @@ async fn native_status_cursor(root: &Path) -> Result<u64, TestError> {
         64 * 1024 * 1024,
         minimum_settlement_allowance::<RouterDeliveryTypes>()?,
     )?;
+    let binding = collaboration_service::MachineSenderBinding::new(
+        "00000000-0000-4000-8000-000000000001"
+            .to_owned()
+            .try_into()?,
+        peer,
+    );
     let cursor = store
         .transaction(move |scope| {
             Box::pin(async move {
-                Outbox::<_, RouterDeliveryTypes>::new(scope, limits)
+                Outbox::<_, RouterDeliveryTypes, _>::new(scope, limits, &binding)
                     .status_cursor()
                     .await
                     .map(|cursor| cursor.value())
@@ -45,8 +51,8 @@ async fn status_prefix_ack_never_precedes_batch_and_cursor_commit_at_sigkill()
     let (directory, state) = kill_child(CrashKind::StatusBatch).await?;
     let item = state.item.ok_or("status batch crash item missing")?;
     let root = directory.path().join("router");
-    let rows = native_rows(&root).await?;
-    let cursor = native_status_cursor(&root).await?;
+    let rows = native_rows(&root, state.peer).await?;
+    let cursor = native_status_cursor(&root, state.peer).await?;
     assert_eq!(header(&rows, item)?["value"]["status"]["kind"], "queued");
     assert_eq!(cursor, 0, "native batch escaped the held writer");
     let origin = origin_rows(directory.path(), state.peer).await?;

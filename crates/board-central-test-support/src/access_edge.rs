@@ -12,7 +12,7 @@ use futures_util::{SinkExt, StreamExt};
 use reqwest_websocket::{Message as UpstreamMessage, RequestBuilderExt};
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, AtomicUsize, Ordering},
+    atomic::{AtomicUsize, Ordering},
 };
 use tokio::task::JoinSet;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
@@ -21,8 +21,6 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 struct EdgeState {
     upstream: String,
     accepted_sessions: Arc<AtomicUsize>,
-    duplicate_mail: Arc<AtomicBool>,
-    duplicated_mail: Arc<AtomicUsize>,
     authorization: String,
     assertion: String,
     stop: CancellationToken,
@@ -39,8 +37,6 @@ struct EdgeState {
 pub(crate) struct SignedAccessEdge {
     pub endpoint: String,
     accepted_sessions: Arc<AtomicUsize>,
-    duplicate_mail: Arc<AtomicBool>,
-    duplicated_mail: Arc<AtomicUsize>,
     stop: CancellationToken,
     listener: JoinSet<Result<(), std::io::Error>>,
     connections: TaskTracker,
@@ -57,8 +53,6 @@ impl SignedAccessEdge {
     pub async fn start(upstream: &str, credential: &str) -> FixtureResult<Self> {
         let stop = CancellationToken::new();
         let accepted_sessions = Arc::new(AtomicUsize::new(0));
-        let duplicate_mail = Arc::new(AtomicBool::new(false));
-        let duplicated_mail = Arc::new(AtomicUsize::new(0));
         let connections = TaskTracker::new();
         let claim_grants = crate::claim_grant_drop::ClaimGrantDrop::default();
         let mail_wire = crate::mail_wire_observer::MailWireObserver::default();
@@ -72,8 +66,6 @@ impl SignedAccessEdge {
         let state = EdgeState {
             upstream: format!("{upstream}/v1/session"),
             accepted_sessions: accepted_sessions.clone(),
-            duplicate_mail: duplicate_mail.clone(),
-            duplicated_mail: duplicated_mail.clone(),
             authorization: format!("Bearer {credential}"),
             assertion: collaboration_central_conformance::machine_assertion(credential)?,
             stop: stop.clone(),
@@ -102,8 +94,6 @@ impl SignedAccessEdge {
         Ok(Self {
             endpoint,
             accepted_sessions,
-            duplicate_mail,
-            duplicated_mail,
             stop,
             listener,
             connections,
@@ -163,12 +153,6 @@ impl SignedAccessEdge {
         &self,
     ) -> FixtureResult<crate::PayloadInputObservation> {
         self.payload_inputs.begin()
-    }
-    pub(crate) fn duplicate_next_mail_notice(&self) {
-        self.duplicate_mail.store(true, Ordering::SeqCst);
-    }
-    pub(crate) fn duplicated_mail_notices(&self) -> usize {
-        self.duplicated_mail.load(Ordering::SeqCst)
     }
     pub(crate) fn session_connections(&self) -> usize {
         self.accepted_sessions.load(Ordering::SeqCst)
@@ -294,7 +278,6 @@ async fn bridge(mut downstream: WebSocket, state: EdgeState) -> FixtureResult {
                     }
                     #[cfg(feature = "conformance")]
                     state.payload_inputs.observe(&bytes)?;
-                    if duplicate_mail_notice(&state,&bytes)? { downstream.send(Message::Binary(bytes.clone())).await?; }
                     downstream.send(Message::Binary(bytes)).await?;
                 },
                 Some(Ok(UpstreamMessage::Text(text))) => {
@@ -312,7 +295,6 @@ async fn bridge(mut downstream: WebSocket, state: EdgeState) -> FixtureResult {
                     }
                     #[cfg(feature = "conformance")]
                     state.payload_inputs.observe(text.as_bytes())?;
-                    if duplicate_mail_notice(&state,text.as_bytes())? { downstream.send(Message::Text(text.clone().into())).await?; }
                     downstream.send(Message::Text(text.into())).await?;
                 },
                 Some(Ok(UpstreamMessage::Ping(_) | UpstreamMessage::Pong(_))) => {},
@@ -357,29 +339,4 @@ async fn flush_released_notices(
         }
     }
     Ok(())
-}
-
-fn duplicate_mail_notice(state: &EdgeState, bytes: &[u8]) -> FixtureResult<bool> {
-    if !state.duplicate_mail.load(Ordering::SeqCst) {
-        return Ok(false);
-    }
-    let frame: fleet_sync_protocol::ServerFrame<board_sync_protocol::BoardConsumerProtocol> =
-        serde_json::from_slice(bytes)?;
-    if matches!(
-        frame,
-        fleet_sync_protocol::ServerFrame::Notice {
-            body: fleet_sync_protocol::Notice::Consumer(
-                board_sync_protocol::PositionedBoardNotice {
-                    kind: board_sync_protocol::BoardNotice::MailWaiting { .. },
-                    ..
-                }
-            ),
-            ..
-        }
-    ) && state.duplicate_mail.swap(false, Ordering::SeqCst)
-    {
-        state.duplicated_mail.fetch_add(1, Ordering::SeqCst);
-        return Ok(true);
-    }
-    Ok(false)
 }

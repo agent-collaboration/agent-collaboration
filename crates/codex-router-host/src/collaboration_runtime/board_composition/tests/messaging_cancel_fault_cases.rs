@@ -2,6 +2,21 @@
 use super::*;
 use fleet_sync_protocol::{CancelBody, DeliveryCancel};
 
+pub(super) async fn drop_held_reply(
+    fixture: &RuleFixture,
+    key: board_central_test_support::DispatchKey,
+) -> TestResult {
+    fixture
+        .holder
+        .central
+        .runtime_control(
+            ObjectAddress::Fleet,
+            RuntimeControl::DropHeldDispatchReply { key },
+        )
+        .await?;
+    Ok(())
+}
+
 type NativeAnswer = OperationAnswer<board_sync_protocol::BoardConsumerProtocol>;
 type ProofResult<Value> = Result<Value, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -15,6 +30,7 @@ async fn lost_receipt_hold_targets_submit_while_sender_query_completes() -> Test
     let mut competing_calls = tokio::task::JoinSet::new();
     let proof = async {
         let seed = arrange_sent_follow(&mut fixture).await?;
+        let dispatch_key = RuleFixture::submit_key(fixture.holder.projects.peer, seed.item.id());
         let fleet = ObjectAddress::Fleet;
         hold_lost_receipt_submit(
             &fixture,
@@ -36,7 +52,7 @@ async fn lost_receipt_hold_targets_submit_while_sender_query_completes() -> Test
         timeout(BOUND, async {
             tokio::select! {
                 held = fixture.holder.central.runtime_control(
-                    ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch,
+                    ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch { key: dispatch_key.clone() },
                 ) => { held?; }
                 completed = query_ready.wait_for(|ready| *ready) => { completed?; }
             }
@@ -62,10 +78,10 @@ async fn lost_receipt_hold_targets_submit_while_sender_query_completes() -> Test
         let held = fixture
             .holder
             .central
-            .runtime_control(ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch)
+            .runtime_control(ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch { key: dispatch_key.clone() })
             .await?;
         let board_central_test_support::DispatchFaultObservation::Held { request, .. } =
-            held.dispatch
+            held.dispatch(&dispatch_key)
         else {
             return Err("lost-receipt fixture did not hold a dispatch".into());
         };
@@ -85,7 +101,7 @@ async fn lost_receipt_hold_targets_submit_while_sender_query_completes() -> Test
     let _ = fixture
         .holder
         .central
-        .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
+        .release_held_dispatches(ObjectAddress::Fleet)
         .await;
     if proof.is_err() {
         competing_calls.shutdown().await;
@@ -123,14 +139,10 @@ async fn lost_receipt_reply_stays_bound_when_a_cancel_submit_finishes_first() ->
     let mut fixture = RuleFixture::open(true).await?;
     let mut held_calls = tokio::task::JoinSet::new();
     let proof = async {
-        let (cancel, fleet, held_request) =
+        let (cancel, fleet, held_request, dispatch_key) =
             hold_original_with_cancel(&mut fixture, &mut held_calls).await?;
         let recipient = cancel.recipient().clone();
-        fixture
-            .holder
-            .central
-            .runtime_control(ObjectAddress::Fleet, RuntimeControl::DropHeldDispatchReply)
-            .await?;
+        drop_held_reply(&fixture, dispatch_key.clone()).await?;
 
         // This is a real second local Fleet submit on the same native
         // connection. It must finish while the original remains held.
@@ -174,7 +186,12 @@ async fn lost_receipt_reply_stays_bound_when_a_cancel_submit_finishes_first() ->
         fixture
             .holder
             .central
-            .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
+            .runtime_control(
+                ObjectAddress::Fleet,
+                RuntimeControl::ResumeDispatch {
+                    key: dispatch_key.clone(),
+                },
+            )
             .await?;
         let lost = fixture
             .holder
@@ -209,7 +226,7 @@ async fn lost_receipt_reply_stays_bound_when_a_cancel_submit_finishes_first() ->
     let _ = fixture
         .holder
         .central
-        .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
+        .release_held_dispatches(ObjectAddress::Fleet)
         .await;
     held_calls.shutdown().await;
     let closed = fixture.close().await;
@@ -247,9 +264,15 @@ fn assert_competing_answers(answers: Vec<(&str, NativeAnswer)>) -> TestResult {
 async fn hold_original_with_cancel(
     fixture: &mut RuleFixture,
     held_calls: &mut tokio::task::JoinSet<Result<NativeAnswer, durable_steps::CallFailure>>,
-) -> ProofResult<(DeliveryEnvelope<BoardDeliveryTypes>, ObjectAddress, Vec<u8>)> {
+) -> ProofResult<(
+    DeliveryEnvelope<BoardDeliveryTypes>,
+    ObjectAddress,
+    Vec<u8>,
+    board_central_test_support::DispatchKey,
+)> {
     let seed = arrange_sent_follow(fixture).await?;
     let item = seed.item.id();
+    let dispatch_key = RuleFixture::submit_key(fixture.holder.projects.peer, item);
     let recipient = seed.item.recipient().clone();
     let cancel = DeliveryEnvelope::Cancel(DeliveryCancel::<BoardDeliveryTypes>::new(
         ItemId::new(durable_steps::Uuid::now_v7())?,
@@ -276,12 +299,17 @@ async fn hold_original_with_cancel(
     let held = fixture
         .holder
         .central
-        .runtime_control(ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch)
+        .runtime_control(
+            ObjectAddress::Fleet,
+            RuntimeControl::AwaitHeldDispatch {
+                key: dispatch_key.clone(),
+            },
+        )
         .await?;
     let board_central_test_support::DispatchFaultObservation::Held {
         destination,
         request: held_request,
-    } = held.dispatch
+    } = held.dispatch(&dispatch_key)
     else {
         return Err("original submit was not held".into());
     };
@@ -296,7 +324,7 @@ async fn hold_original_with_cancel(
         request.pointer("/request/item/value/id"),
         Some(&json!(item))
     );
-    Ok((cancel, fleet, held_request))
+    Ok((cancel, fleet, held_request, dispatch_key))
 }
 
 fn sender_query_for_item(

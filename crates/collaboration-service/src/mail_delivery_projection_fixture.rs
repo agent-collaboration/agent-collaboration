@@ -41,8 +41,13 @@ pub type ProjectionStore = InteractionAtomicStore<ProjectionHost>;
 type ProjectionRetention =
     fleet_sync_delivery::RemoveDeliveryRecord<ProjectionStore, ProjectionDatabase>;
 type ProjectionDatabase = <TursoScope<'static, ProjectionHost> as TransactionScope>::Database;
-pub type ProjectionTask =
-    DeliverLocally<ProjectionStore, ProjectionDatabase, RouterDeliveryTypes, ProjectionConsumer>;
+pub type ProjectionTask = DeliverLocally<
+    ProjectionStore,
+    ProjectionDatabase,
+    RouterDeliveryTypes,
+    ProjectionConsumer,
+    crate::MachineSenderBinding,
+>;
 
 pub struct ProjectionConsumer {
     pub answers: Mutex<VecDeque<LocalDelivery<RouterDeliveryTypes>>>,
@@ -116,6 +121,7 @@ impl DeliveryConsumer<TursoScope<'_, ProjectionHost>> for ProjectionConsumer {
 }
 
 pub struct ProjectionHost {
+    pub binding: Arc<crate::MachineSenderBinding>,
     pub clock: Arc<AtomicI64>,
     pub calls: AtomicUsize,
     pub consumer: Arc<ProjectionConsumer>,
@@ -167,13 +173,15 @@ impl Host for ProjectionHost {
             .and_then(Weak::upgrade)
             .ok_or(CallFailure::AnswerLost)?;
         let config = self.config;
+        let binding = self.binding.clone();
         let resolved = store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    let resolved = Inbox::<_, RouterDeliveryTypes>::new(
+                    let resolved = Inbox::<_, RouterDeliveryTypes, _>::new(
                         scope,
                         config.local.owner,
                         config.local.limits,
+                        binding.as_ref(),
                     )
                     .resolve_local_delivery(&reference)
                     .await
@@ -249,6 +257,13 @@ impl Fixture {
         .unwrap();
         let clock = Arc::new(AtomicI64::new(recorded_at().timestamp_millis()));
         let host = Arc::new(ProjectionHost {
+            binding: Arc::new(crate::MachineSenderBinding::new(
+                "00000000-0000-4000-8000-000000000001"
+                    .to_owned()
+                    .try_into()
+                    .unwrap(),
+                peer,
+            )),
             clock: clock.clone(),
             calls: AtomicUsize::new(0),
             consumer: Arc::new(ProjectionConsumer {
@@ -285,6 +300,7 @@ impl Fixture {
                 self.host.config.local,
                 self.host.consumer.clone(),
                 self.host.clone(),
+                self.host.binding.clone(),
             ))
             .unwrap();
         engine
@@ -330,6 +346,7 @@ impl Fixture {
     pub async fn admit_local(&self, draft: PushRecordDraft) -> Result<bool, StoreError> {
         let item = self.item(&draft);
         let config = self.host.config;
+        let binding = self.host.binding.clone();
         let consumer = self.host.consumer.clone();
         self.store
             .transaction(move |scope| {
@@ -340,10 +357,11 @@ impl Fixture {
                         .to_string()
                         .try_into()
                         .map_err(StoreError::backend)?;
-                    let admitted = Inbox::<_, RouterDeliveryTypes>::new(
+                    let admitted = Inbox::<_, RouterDeliveryTypes, _>::new(
                         scope,
                         config.local.owner,
                         config.local.limits,
+                        binding.as_ref(),
                     )
                     .enqueue_local_and_admit::<ProjectionTask, ProjectionRetention, _>(
                         item,
@@ -381,17 +399,20 @@ impl Fixture {
         items: Vec<DeliveryItem<RouterDeliveryTypes>>,
     ) -> Result<(), StoreError> {
         let config = self.host.config;
+        let binding = self.host.binding.clone();
+        let now = self.host.now();
         let consumer = self.host.consumer.clone();
         self.store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    let mut inbox = Inbox::<_, RouterDeliveryTypes>::new(
+                    let mut inbox = Inbox::<_, RouterDeliveryTypes, _>::new(
                         scope,
                         config.local.owner,
                         config.local.limits,
+                        binding.as_ref(),
                     );
                     let input = inbox
-                        .begin_receive(DeliveryStream::Items)
+                        .begin_receive(DeliveryStream::Items, now)
                         .await
                         .map_err(StoreError::backend)?
                         .ok_or_else(|| StoreError::backend("receive fixture cycle absent"))?;
@@ -419,7 +440,7 @@ impl Fixture {
                                     .collect::<Result<Vec<_>, StoreError>>()?,
                             },
                             consumer.as_ref(),
-                            SyncTime::from_unix_millis(recorded_at().timestamp_millis()),
+                            now,
                         )
                         .await
                         .map_err(StoreError::backend)?;
@@ -453,17 +474,20 @@ impl Fixture {
         )
         .unwrap();
         let config = self.host.config;
+        let binding = self.host.binding.clone();
+        let now = self.host.now();
         let consumer = self.host.consumer.clone();
         self.store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    let mut inbox = Inbox::<_, RouterDeliveryTypes>::new(
+                    let mut inbox = Inbox::<_, RouterDeliveryTypes, _>::new(
                         scope,
                         config.local.owner,
                         config.local.limits,
+                        binding.as_ref(),
                     );
                     let input = inbox
-                        .begin_receive(DeliveryStream::Controls)
+                        .begin_receive(DeliveryStream::Controls, now)
                         .await
                         .map_err(StoreError::backend)?
                         .ok_or_else(|| StoreError::backend("control fixture cycle absent"))?;
@@ -479,7 +503,7 @@ impl Fixture {
                                 }],
                             },
                             consumer.as_ref(),
-                            SyncTime::from_unix_millis(recorded_at().timestamp_millis()),
+                            now,
                         )
                         .await
                         .map_err(StoreError::backend)?;
@@ -492,13 +516,15 @@ impl Fixture {
     }
     pub async fn report(&self, item: ItemId) -> Option<RecipientOutcome<CarrierAcceptance>> {
         let config = self.host.config;
+        let binding = self.host.binding.clone();
         self.store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    let mut inbox = Inbox::<_, RouterDeliveryTypes>::new(
+                    let mut inbox = Inbox::<_, RouterDeliveryTypes, _>::new(
                         scope,
                         config.local.owner,
                         config.local.limits,
+                        binding.as_ref(),
                     );
                     let Some(reference) = inbox
                         .pending_report(item)
@@ -556,13 +582,15 @@ impl Fixture {
     }
     pub async fn local_outcome(&self, item: ItemId) -> Option<RecipientOutcome<CarrierAcceptance>> {
         let config = self.host.config;
+        let binding = self.host.binding.clone();
         self.store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    Inbox::<_, RouterDeliveryTypes>::new(
+                    Inbox::<_, RouterDeliveryTypes, _>::new(
                         scope,
                         config.local.owner,
                         config.local.limits,
+                        binding.as_ref(),
                     )
                     .local_outcome(item)
                     .await

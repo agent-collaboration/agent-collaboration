@@ -59,6 +59,22 @@ async fn remember_binding(
     Ok(())
 }
 
+/// Read immutable enrollment truth without opening a second transaction.
+pub async fn installation_peer_in_scope<
+    S: durable_steps::storage::TransactionScope<Database = sqlx_turso::Turso>,
+>(
+    scope: &mut S,
+    service: &ServiceId,
+) -> Result<Option<InstallationPeerId>, StorageError> {
+    let row = sqlx_turso::query_as!(InstallationPeerRow,
+        "SELECT service_id AS \"service_id!: String\",peer_id AS \"peer_id!: String\" FROM installation_peer_directory WHERE service_id=?",
+        service.as_str()
+    ).fetch_optional(scope.executor()).await?;
+    row.map(InstallationPeerBinding::try_from)
+        .transpose()
+        .map(|binding| binding.map(|binding| binding.peer_id))
+}
+
 impl InteractionStore {
     /// Read before any live lookup. Malformed matching rows refuse instead of becoming misses.
     pub async fn installation_peer(

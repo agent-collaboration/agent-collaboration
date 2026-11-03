@@ -119,7 +119,12 @@ async fn isolated_host_native_catalogue_probe() {
         .list_provider_sessions(request.clone())
         .await
         .unwrap();
-    assert_eq!(loaded.sessions.len(), 1);
+    assert_eq!(
+        loaded.sessions.len(),
+        1,
+        "native coverage: {:?}",
+        loaded.native_coverage
+    );
     assert!(
         matches!(loaded.sessions.first().unwrap(),ProviderSessionSummary::ClaudeCodeBackground {target,job_handle,state:NativeClaudeBackgroundState::Blocked,peer:None,..} if String::from(target.session_id.clone())==SESSION&&String::from(job_handle.clone())=="separate-host-job-handle")
     );

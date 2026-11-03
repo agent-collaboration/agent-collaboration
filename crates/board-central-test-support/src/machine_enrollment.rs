@@ -24,13 +24,6 @@ impl EnrolledTestMachine {
         self.edge.observe_mail_wire(drop_terminal)
     }
     /// Count actual established upstream sessions; no inferred reconnect evidence.
-    /// Repeat one real incoming hint on the wire, preserving its actual position.
-    pub fn duplicate_next_mail_notice(&self) {
-        self.edge.duplicate_next_mail_notice();
-    }
-    pub fn duplicated_mail_notices(&self) -> usize {
-        self.edge.duplicated_mail_notices()
-    }
     pub fn session_connections(&self) -> usize {
         self.edge.session_connections()
     }

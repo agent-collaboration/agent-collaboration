@@ -170,7 +170,9 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
         .runtime_control(
             connection.clone(),
             RuntimeControl::HoldNextDispatch {
-                destination: ObjectAddress::Fleet,
+                key: board_central_test_support::DispatchKey::any(
+                    board_central_test_support::ObjectAddress::Fleet,
+                ),
             },
         )
         .await?;
@@ -178,9 +180,20 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
     // dispatches and persists it, exactly like its periodic operation.
     install.runtime.prompt_renewal().await?;
     let observed = central
-        .runtime_control(connection.clone(), RuntimeControl::AwaitHeldDispatch)
+        .runtime_control(
+            connection.clone(),
+            RuntimeControl::AwaitHeldDispatch {
+                key: board_central_test_support::DispatchKey::any(
+                    board_central_test_support::ObjectAddress::Fleet,
+                ),
+            },
+        )
         .await?;
-    let runner_renewal = held_renewal(observed.dispatch)?;
+    let runner_renewal = held_renewal(observed.dispatch(
+        &board_central_test_support::DispatchKey::any(
+            board_central_test_support::ObjectAddress::Fleet,
+        ),
+    ))?;
     assert_eq!(
         (runner_renewal.database, runner_renewal.epoch),
         (database_id, epoch)
@@ -211,9 +224,9 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
         }).await??;
         assert!(matches!(registry.existing_project(&project).await, Err(collaboration_runtime::ProjectRegistryError::Installing { .. })));
         println!("CLAIM_ORDER held-runner-renewal drain-entered registry-unpublished");
-        central.runtime_control(connection.clone(), RuntimeControl::ResumeDispatchAndHoldNext { destination: ObjectAddress::Fleet }).await?;
-        let observed = central.runtime_control(connection.clone(), RuntimeControl::AwaitHeldDispatch).await?;
-        let bootstrap = held_renewal(observed.dispatch)?;
+        central.runtime_control(connection.clone(), RuntimeControl::ResumeDispatchAndHoldNext { key: board_central_test_support::DispatchKey::any(board_central_test_support::ObjectAddress::Fleet), next: board_central_test_support::DispatchKey::any(board_central_test_support::ObjectAddress::Fleet) }).await?;
+        let observed = central.runtime_control(connection.clone(), RuntimeControl::AwaitHeldDispatch { key: board_central_test_support::DispatchKey::any(board_central_test_support::ObjectAddress::Fleet) }).await?;
+        let bootstrap = held_renewal(observed.dispatch(&board_central_test_support::DispatchKey::any(board_central_test_support::ObjectAddress::Fleet)))?;
         assert_eq!((bootstrap.database, bootstrap.epoch), (database_id, epoch));
         assert_ne!(bootstrap.attempt, runner_renewal.attempt);
         let drained = install.tasks.lock().await;
@@ -224,7 +237,7 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
         assert!(!claimed.is_finished());
         assert!(matches!(registry.existing_project(&project).await, Err(collaboration_runtime::ProjectRegistryError::Installing { .. })));
         println!("CLAIM_ORDER fresh-bootstrap-renewal held install-tasks-drained registry-unpublished");
-        central.runtime_control(connection.clone(), RuntimeControl::ResumeDispatch).await?;
+        central.runtime_control(connection.clone(), RuntimeControl::ResumeDispatch { key: board_central_test_support::DispatchKey::any(board_central_test_support::ObjectAddress::Fleet) }).await?;
         assert!(matches!(timeout(BOUND, &mut claimed).await???, ProjectClaimReply::Claimed { epoch: actual, start: actual_start, .. } if actual == epoch && actual_start == start));
         assert!(registry.existing_project(&project).await?.is_some());
         assert!(matches!(database.writer_state().await?, fleet_sync_lease::WriterState::Writing { epoch: actual } if actual == epoch));
@@ -258,7 +271,14 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
     .await;
     drop(grant_notice);
     let _ = central
-        .runtime_control(connection, RuntimeControl::ResumeDispatch)
+        .runtime_control(
+            connection,
+            RuntimeControl::ResumeDispatch {
+                key: board_central_test_support::DispatchKey::any(
+                    board_central_test_support::ObjectAddress::Fleet,
+                ),
+            },
+        )
         .await;
     if !claimed.is_finished() {
         claimed.abort();

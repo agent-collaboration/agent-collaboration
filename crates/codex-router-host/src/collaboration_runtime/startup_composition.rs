@@ -368,7 +368,7 @@ impl CollaborationRuntime {
         let mail_delivery = subscription_delivery
             .as_ref()
             .map(|actors| {
-                collaboration_service::MailDeliveryRuntime::new(
+                super::mail_delivery_composition::construct(
                     installation_peer,
                     collaboration_service::MailPushDeliveryProps {
                         interactions: interactions.clone(),
@@ -378,9 +378,9 @@ impl CollaborationRuntime {
                         clock: subscription_clock.clone(),
                     },
                     mail_session,
+                    &inputs.directory,
                 )
                 .map(std::sync::Arc::new)
-                .map_err(io::Error::other)
             })
             .transpose()?;
         if let (Some(board), Some(mail)) = (&mut prepared_board, &mail_delivery) {

@@ -26,6 +26,9 @@ use frontier_cut::{EndCutConsequence, RemoteEndCut};
 pub use frontier_cut::{FrontierCut, RemoteEndPrefix};
 #[path = "takeover_cancel_successor.rs"]
 mod cancel_successor;
+#[path = "takeover_local_prevention.rs"]
+mod local_prevention;
+pub use local_prevention::held_local;
 
 struct HeldFollow {
     follow: FollowMembership,
@@ -53,7 +56,7 @@ async fn held_remote(fixture: &mut BoardFixture, second: &SecondHost) -> Fixture
     follow.assert_frozen(&item, &range)?;
     copy_project(fixture).await?;
     settled_view(fixture.host()?, &fixture.project).await?;
-    controls::resume(fixture, ObjectAddress::Fleet).await?;
+    controls::resume(fixture, ObjectAddress::Fleet, controls::submit_key()).await?;
     sender_status(fixture.host()?, &item.id().as_uuid().to_string(), "held").await?;
     native_state(
         second.host()?,
@@ -183,19 +186,7 @@ async fn prove_remote(
     transfer_to_second(fixture, second, TransferKind::Takeover)
         .await
         .map_err(|error| format!("CI6 successor writer activation: {error}"))?;
-    if matches!(prefix, EndPrefix::Discarded | EndPrefix::Retained) {
-        // The held frontier belongs to the dead predecessor; release its
-        // conformance dispatch only after the successor seed is installed.
-        let observed = super::central_pair::central(fixture)?
-            .runtime_control(controls::connection(fixture)?, RuntimeControl::Observe)
-            .await?;
-        if matches!(
-            observed.dispatch,
-            board_central_test_support::DispatchFaultObservation::Held { .. }
-        ) {
-            controls::resume(fixture, controls::connection(fixture)?).await?;
-        }
-    }
+    release_predecessor_frontier(fixture, prefix).await?;
     cancel_successor::assert_remote_successor(
         fixture,
         second,
@@ -205,6 +196,31 @@ async fn prove_remote(
         expansions,
     )
     .await
+}
+
+async fn release_predecessor_frontier(fixture: &BoardFixture, prefix: EndPrefix) -> FixtureResult {
+    if matches!(prefix, EndPrefix::Discarded | EndPrefix::Retained) {
+        // The held frontier belongs to the dead predecessor; release its
+        // conformance dispatch only after the successor seed is installed.
+        let observed = super::central_pair::central(fixture)?
+            .runtime_control(
+                board_central_test_support::ObjectAddress::Fleet,
+                RuntimeControl::Observe,
+            )
+            .await?;
+        if matches!(
+            observed.dispatch(&controls::copy_write_key(fixture)?),
+            board_central_test_support::DispatchFaultObservation::Held { .. }
+        ) {
+            controls::resume(
+                fixture,
+                board_central_test_support::ObjectAddress::Fleet,
+                controls::copy_write_key(fixture)?,
+            )
+            .await?;
+        }
+    }
+    Ok(())
 }
 
 async fn arrange_remote_end(
@@ -219,7 +235,7 @@ async fn arrange_remote_end(
         EndPrefix::Discarded => {
             controls::hold_selected(
                 fixture,
-                controls::connection(fixture)?,
+                board_central_test_support::ObjectAddress::Fleet,
                 controls::copy(fixture)?,
                 DispatchCallSelector::CopyWrite,
             )
@@ -237,7 +253,7 @@ async fn arrange_remote_end(
         EndPrefix::Retained => {
             controls::hold_selected(
                 fixture,
-                controls::connection(fixture)?,
+                board_central_test_support::ObjectAddress::Fleet,
                 controls::copy(fixture)?,
                 DispatchCallSelector::CopyWrite,
             )
@@ -248,7 +264,12 @@ async fn arrange_remote_end(
     let end = seed.follow.unsubscribe(fixture).await?;
     let consequence = match prefix {
         EndPrefix::Discarded => {
-            let held = controls::held(fixture, controls::connection(fixture)?).await?;
+            let held = controls::held(
+                fixture,
+                board_central_test_support::ObjectAddress::Fleet,
+                controls::copy_write_key(fixture)?,
+            )
+            .await?;
             assert_eq!(held.get("kind"), Some(&json!("central.copy-session-write")));
             native_state(
                 second.host()?,
@@ -292,7 +313,8 @@ async fn lose_cancel_answer(
 ) -> FixtureResult<Value> {
     tokio::time::timeout(BOUND, async {
         loop {
-            let request = controls::held(fixture, ObjectAddress::Fleet).await?;
+            let request =
+                controls::held(fixture, ObjectAddress::Fleet, controls::submit_key()).await?;
             if request.get("kind") == Some(&json!("central.mail-submit")) {
                 let item: DeliveryEnvelope<BoardDeliveryTypes> =
                     serde_json::from_value(at(&request, "/request/item")?.clone())?;
@@ -312,9 +334,9 @@ async fn lose_cancel_answer(
             super::central_pair::central(fixture)?
                 .runtime_control(
                     ObjectAddress::Fleet,
-                    RuntimeControl::ResumeDispatchAndHoldNextSelected {
-                        destination: fleet.clone(),
-                        call: DispatchCallSelector::FleetMailSubmit,
+                    RuntimeControl::ResumeDispatchAndHoldNext {
+                        key: controls::submit_key(),
+                        next: controls::submit_key(),
                     },
                 )
                 .await?;
@@ -349,215 +371,6 @@ async fn recipient_before_transfer(
     drop(stopped);
     second.reopen_host().await?;
     Ok(())
-}
-
-pub async fn held_local(fixture: &mut BoardFixture, second: &mut SecondHost) -> FixtureResult {
-    recipients::scenario(fixture, second, async |fixture, second, peers| {
-        Box::pin(controls::scenario(
-            fixture,
-            second,
-            async |fixture, second| prove_local(fixture, second, peers).await,
-        ))
-        .await
-    })
-    .await
-}
-
-async fn prove_local(
-    fixture: &mut BoardFixture,
-    second: &mut SecondHost,
-    peers: &mut Recipients,
-) -> FixtureResult {
-    let mut wire = super::central_pair::central(fixture)?.observe_mail_wire(None)?;
-    let mut status_wire = second.enrolled_machine()?.observe_mail_wire(None)?;
-    // Arrange the existing test-only connected-status cadence before any transfer.
-    second.stop_host().await?;
-    std::fs::write(
-        second.directory.join("fixture-mail-status-interval-ms"),
-        "2000",
-    )?;
-    second.reopen_host().await?;
-    let HeldFollow { follow, item, .. } = held_local_follow(fixture).await?;
-    controls::hold(
-        fixture,
-        controls::connection(fixture)?,
-        controls::copy(fixture)?,
-    )
-    .await?;
-    let pre_end_ack = controls::copy_ack(fixture).await?;
-    let end = follow.unsubscribe(fixture).await?;
-    controls::held(fixture, controls::connection(fixture)?).await?;
-    let rejected = native_state(
-        fixture.host()?,
-        &follow.target,
-        &item.id().as_uuid().to_string(),
-        PushDeliveryState::Rejected,
-    )
-    .await?;
-    let stopped = fixture
-        .host
-        .take()
-        .ok_or("predecessor Host absent")?
-        .crash_for_readback()
-        .await?;
-    let old = readbacks::handoffs(&stopped, &fixture.project, 1).await?;
-    assert_end_groups(&old, &follow, true)?;
-    controls::assert_end_cut(
-        fixture,
-        &stopped,
-        item.id(),
-        end,
-        EndPrefix::Discarded,
-        &[],
-        pre_end_ack,
-    )
-    .await?;
-    drop(stopped);
-    transfer_to_second(fixture, second, TransferKind::Takeover).await?;
-    controls::resume(fixture, controls::connection(fixture)?).await?;
-    fixture.reopen_host().await?;
-    peers.start_first(fixture, 0).await?;
-    sender_status(
-        second.host()?,
-        &item.id().as_uuid().to_string(),
-        "atMachine",
-    )
-    .await?;
-    let cancel = assert_local_prevention(
-        fixture,
-        &follow,
-        &item,
-        &rejected,
-        &mut wire,
-        &mut status_wire,
-    )
-    .await?;
-    sender_status(
-        second.host()?,
-        &item.id().as_uuid().to_string(),
-        "atMachine",
-    )
-    .await?;
-    let stopped = second.stop_for_readback().await?;
-    let inherited = readbacks::handoffs(&stopped, &fixture.project, 2).await?;
-    readbacks::assert_ongoing_membership(&stopped, &fixture.project, 2, &follow.membership).await?;
-    assert_end_groups(&inherited, &follow, false)?;
-    let actual = only_item(readbacks::deliveries(inherited))?;
-    assert_eq!(serde_json::to_value(actual)?, serde_json::to_value(&item)?);
-    readbacks::assert_no_wake(&stopped).await?;
-    let stopped = fixture
-        .host
-        .take()
-        .ok_or("recipient Host absent")?
-        .stop_for_readback()
-        .await?;
-    readbacks::assert_no_wake(&stopped).await?;
-    readbacks::assert_prevented_report_stopped(&stopped, item.id(), cancel).await?;
-    assert_eq!(peers.first()?.count_after_barrier().await?, 0);
-    assert_eq!(controls::report_count(&wire, item.id()), 1);
-    eprintln!(
-        "T held-local containment evidence: {}",
-        json!({"item":item.id(),"reportSeq":3,"cancel":cancel,"typedTerminalRefusal":true,"reportSends":1,"minimumFutureStatusScans":6,"recipientReopened":true,"nativeFinal":"prevented","runningReport":false,"senderStatus":"atMachine","namedLimit":"SDK0.3.1 sender/central terminal projection"})
-    );
-    Ok(())
-}
-
-async fn assert_local_prevention(
-    fixture: &mut BoardFixture,
-    follow: &FollowMembership,
-    item: &DeliveryItem<BoardDeliveryTypes>,
-    rejected: &collaboration_protocol::PushRecordShowResult,
-    wire: &mut board_central_test_support::MailWireObservation,
-    status_wire: &mut board_central_test_support::MailWireObservation,
-) -> FixtureResult<fleet_sync_protocol::ItemId> {
-    let cancel = controls::assert_prevented_report_refused(wire, item.id()).await?;
-    controls::assert_report_quiet(wire, status_wire, item.id())
-        .await
-        .map_err(|error| format!("before recipient reopen: {error}"))?;
-    let stopped = fixture
-        .host
-        .take()
-        .ok_or("recipient Host absent")?
-        .stop_for_readback()
-        .await?;
-    readbacks::assert_prevented_report_stopped(&stopped, item.id(), cancel).await?;
-    drop(stopped);
-    fixture.reopen_host().await?;
-    let retained = native_state(
-        fixture.host()?,
-        &follow.target,
-        &item.id().as_uuid().to_string(),
-        PushDeliveryState::Rejected,
-    )
-    .await
-    .map_err(|error| format!("recipient prevention after reopen: {error}"))?;
-    assert_eq!(retained.record.push_id, rejected.record.push_id);
-    assert_eq!(
-        serde_json::to_value(retained.record.last_outcome)?,
-        serde_json::to_value(&rejected.record.last_outcome)?
-    );
-    controls::assert_report_quiet(wire, status_wire, item.id())
-        .await
-        .map_err(|error| format!("after recipient reopen: {error}"))?;
-    Ok(cancel)
-}
-
-async fn held_local_follow(fixture: &mut BoardFixture) -> FixtureResult<HeldFollow> {
-    fixture.create().await?;
-    let follow =
-        FollowMembership::arrange(fixture, recipients::session(fixture.host()?).await?).await?;
-    let range = follow
-        .post(fixture, "held local item survives discarded end")
-        .await?;
-    await_pending(fixture, &follow).await?;
-    settled_view(fixture.host()?, &fixture.project).await?;
-    let stopped = fixture
-        .host
-        .take()
-        .ok_or("predecessor Host absent")?
-        .stop_for_readback()
-        .await?;
-    let item = only_item(readbacks::deliveries(
-        readbacks::handoffs(&stopped, &fixture.project, 1).await?,
-    ))?;
-    follow.assert_frozen(&item, &range)?;
-    drop(stopped);
-    fixture.reopen_host().await?;
-    let captured = controls::replicate_local_handoff(fixture, &item).await?;
-    controls::confirm_copy_ack(fixture, captured).await?;
-    native_state(
-        fixture.host()?,
-        &follow.target,
-        &item.id().as_uuid().to_string(),
-        PushDeliveryState::Held,
-    )
-    .await?;
-    Ok(HeldFollow {
-        follow,
-        item,
-        range,
-    })
-}
-
-async fn await_pending(fixture: &BoardFixture, follow: &FollowMembership) -> FixtureResult {
-    tokio::time::timeout(BOUND, async {
-        loop {
-            let view = fixture
-                .host()?
-                .mcp(
-                    "thread_subscriptions",
-                    json!({"actor":{
-                "kind":"session","session":follow.target}}),
-                )
-                .await?;
-            if view.pointer("/subscriptions/0/pendingCount") == Some(&json!(1)) {
-                assert!(view.pointer("/subscriptions/0/heldSince").is_some());
-                return Ok(());
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await?
 }
 
 #[expect(

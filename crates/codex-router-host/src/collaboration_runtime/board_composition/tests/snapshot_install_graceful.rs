@@ -356,12 +356,21 @@ pub(super) async fn observe_restart_renewal(
     timeout(BOUND, async {
         loop {
             let observed = central
-                .runtime_control(ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch)
+                .runtime_control(
+                    ObjectAddress::Fleet,
+                    RuntimeControl::AwaitHeldDispatch {
+                        key: board_central_test_support::DispatchKey::any(
+                            board_central_test_support::ObjectAddress::Fleet,
+                        ),
+                    },
+                )
                 .await?;
             let DispatchFaultObservation::Held {
                 destination: ObjectAddress::Fleet,
                 request,
-            } = observed.dispatch
+            } = observed.dispatch(&board_central_test_support::DispatchKey::any(
+                board_central_test_support::ObjectAddress::Fleet,
+            ))
             else {
                 return Err("restart Registry dispatch was not held".into());
             };
@@ -391,7 +400,14 @@ pub(super) async fn observe_restart_renewal(
                     "{renewal:?}"
                 );
                 central
-                    .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
+                    .runtime_control(
+                        ObjectAddress::Fleet,
+                        RuntimeControl::ResumeDispatch {
+                            key: board_central_test_support::DispatchKey::any(
+                                board_central_test_support::ObjectAddress::Fleet,
+                            ),
+                        },
+                    )
                     .await?;
                 println!("RECEIVING_RESTART_FRESH_RENEW same_database_epoch_no_claim");
                 return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
@@ -400,7 +416,12 @@ pub(super) async fn observe_restart_renewal(
                 .runtime_control(
                     ObjectAddress::Fleet,
                     RuntimeControl::ResumeDispatchAndHoldNext {
-                        destination: ObjectAddress::Fleet,
+                        key: board_central_test_support::DispatchKey::any(
+                            board_central_test_support::ObjectAddress::Fleet,
+                        ),
+                        next: board_central_test_support::DispatchKey::any(
+                            board_central_test_support::ObjectAddress::Fleet,
+                        ),
                     },
                 )
                 .await?;

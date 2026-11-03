@@ -68,6 +68,10 @@ fn request(creator: &SessionRef, recipient: &SessionRef) -> TestResult<WakeSendR
     reason = "Behavior assertions stay distinct from propagated fixture failures."
 )]
 async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestResult {
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::WARN)
+        .with_test_writer()
+        .try_init();
     let root = tempfile::Builder::new().prefix("rw-").tempdir_in("/tmp")?;
     let a = root.path().join("a");
     let b = root.path().join("b");
@@ -130,15 +134,14 @@ async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestR
         let id=sent.definition.wakeup_id.clone();
         known_remote_wake=Some(id.clone());
         eprintln!("REMOTE_WAKE_STAGE connected-message");
-        enrolled.duplicate_next_mail_notice();
         let message=collaboration_client::MessageSendRequest {
             item_id:Some(collaboration_protocol::MailItemId::generate()),target:to.clone(),
-            message:collaboration_client::PublicMessageContent::HumanUser{text:"mail after initial fetch".to_owned().try_into()?},
+            message:collaboration_client::PublicMessageContent::HumanUser{text:"mail after session welcome".to_owned().try_into()?},
             delivery:collaboration_protocol::MessageDelivery::Auto,generation_guard:None,
         };
         sender.send_message(message.clone()).await?;
-        let (_,direct)=tokio::time::timeout(BOUND,peer_received.recv()).await.map_err(|_|"connected recipient did not receive a new direct message after its initial fetch")?.ok_or("peer stopped")?;
-        assert!(direct.ok_or("missing direct message")?.contains("mail after initial fetch"));
+        let (_,direct)=tokio::time::timeout(BOUND,peer_received.recv()).await.map_err(|_|"connected recipient did not receive a new direct message after its session welcome")?.ok_or("peer stopped")?;
+        assert!(direct.ok_or("missing direct message")?.contains("mail after session welcome"));
         sender.send_message(message.clone()).await?;
         eprintln!("REMOTE_WAKE_STAGE connected-notification");
         let project=registered_route_project::route_project_requests();
@@ -166,7 +169,6 @@ async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestR
         }).await.map_err(|_|"connected recipient did not receive a project notification")??;
         let notification=peer_record(&receiving,&to,&notification.ok_or("missing notification")?).await?;
         assert_eq!(notification.kind,collaboration_protocol::PushKind::BoardNotification);
-        assert_eq!(enrolled.duplicated_mail_notices(),1,"actual incoming hint was not duplicated");
         eprintln!("REMOTE_WAKE_STAGE remote-show");
         let remote_shown=sender.read_wakeup(WakeShowRequest{wakeup_id:id.clone()}).await?;
         assert_eq!(remote_shown.definition.message.target,to);
@@ -274,10 +276,6 @@ async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestR
         let mut in_transit=request(&offline_creator,&expired_target)?;
         in_transit.expiry=serde_json::from_value(json!({"kind":"after","seconds":1}))?;
         assert!(matches!(source_client.send_wakeup(in_transit).await,Err(collaboration_client::WakeClientError::Rejected(error)) if matches!(error.reason,WakeFailureReason::DeadlineExpired)));
-        let service:message_board::ServiceId=String::from(offline_target.endpoint.service_id.clone()).try_into()?;
-        let mailbox=board_central_test_support::ObjectAddress::Mailbox(service.clone());
-        let connection=board_central_test_support::ObjectAddress::Fleet;
-        central.runtime_control(mailbox.clone(),board_central_test_support::RuntimeControl::DropNextObjectReply{destination:connection}).await?;
         let item=collaboration_protocol::MailItemId::generate();
         let queued=collaboration_client::MessageSendRequest {
             item_id:Some(item.clone()),target:offline_target.clone(),message:collaboration_client::PublicMessageContent::HumanUser{text:"mail retained while recipient offline".to_owned().try_into()?},
@@ -285,8 +283,7 @@ async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestR
         };
         source_client.send_message(queued.clone()).await?;
         source_client.send_message(queued).await?;
-        // The real Connection received the mailbox's hint while no Router was attached.
-        central.runtime_control(mailbox,board_central_test_support::RuntimeControl::AwaitDroppedObjectReply).await?;
+        // Sender custody survives the offline recipient; its fresh session enables Push.
         let restarted=start(&b,enrolled.session_inputs()?).await?;
         let proof=async {
             let (_,frame)=tokio::time::timeout(BOUND,peer_received.recv()).await?.ok_or("offline peer stopped")?;
@@ -301,7 +298,7 @@ async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestR
             let listed=reader.list_wakeups(collaboration_protocol::AutomationPageRequest{cursor:None,limit:50.try_into()?}).await?;
             assert!(!listed.records.iter().any(|wake|wake.definition.message.target==expired_target),"expired mail created a timer after recipient reconnect");
             assert_eq!(enrolled.session_connections(),2,"offline recovery did not reopen exactly once");
-            assert!(peer_received.try_recv().is_err(),"same-ID replay or duplicate hint reinjected a native push");
+            assert!(peer_received.try_recv().is_err(),"same-ID replay or Push replay reinjected a native push");
             Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
         }.await;
         restarted.shutdown().await?;

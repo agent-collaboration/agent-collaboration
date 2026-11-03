@@ -45,12 +45,6 @@ impl MessagingCase<'_> {
             .ok_or_else(|| "rule target absent".into())
     }
 
-    pub fn mailbox_address(&self) -> FixtureResult<ObjectAddress> {
-        Ok(ObjectAddress::Mailbox(
-            self.recipient.service_id()?.try_into()?,
-        ))
-    }
-
     pub async fn control(
         &self,
         source: ObjectAddress,

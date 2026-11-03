@@ -157,7 +157,7 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
         .await
         .unwrap();
 
-    // Act: today's public opener admits this exact file and runs the three newer migrations.
+    // Act: today's public opener admits this exact file and runs the four newer migrations.
     for _ in 0..2 {
         let owner = Arc::new(
             InteractionStore::open(&path)
@@ -182,7 +182,15 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
                 .fetch_one(&mut *writer)
                 .await
                 .unwrap();
-            assert_eq!(migrations, 15);
+            assert_eq!(migrations, 17);
+            let markers: i64 = sqlx::query_scalar("SELECT count(*) FROM sqlite_schema WHERE type='table' AND name='mail_removal_backfill'")
+                .fetch_one(&mut *writer)
+                .await
+                .unwrap();
+            assert_eq!(
+                markers, 0,
+                "the SDK owns custody backfill markers; the retired Router table must be absent"
+            );
             let completed_answer: Option<i64> = sqlx::query_scalar(
                 "SELECT settled_at_ms FROM message_send_answers WHERE item_id=?",
             )
@@ -243,7 +251,11 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
         let (status, envelope) = adapter
             .transaction(move |scope| {
                 Box::pin(async move {
-                    let mut outbox = Outbox::<_, BoardDeliveryTypes>::new(scope, limits());
+                    let mut outbox = Outbox::<_, BoardDeliveryTypes, _>::new(
+                        scope,
+                        limits(),
+                        &NoDeliveryConsumer,
+                    );
                     let status = outbox
                         .status(reference.item)
                         .await
@@ -318,5 +330,42 @@ async fn partial_unknown_newer_or_malformed_read_context_schema_is_refused_witho
             before,
             "refusal rewrote the file: {statement}"
         );
+    }
+}
+
+#[tokio::test]
+async fn router_backfill_marker_moves_to_sdk_ownership_after_upgrade_and_reopen() {
+    // Arrange the actual sixteen-migration predecessor, including its completed marker.
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("interaction.sqlite");
+    crate::schema_prefix_fixture::create_native_prefix(&path, 202611030001).await;
+    let mut connection = sqlx_turso::TursoConnection::connect_with(
+        &sqlx_turso::TursoConnectOptions::new().filename(&path),
+    )
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO mail_removal_backfill(id,migration_name,admitted_count,created_at,updated_at) VALUES(?,'mail-record-removals-v1',1,1,1)")
+        .bind(uuid::Uuid::now_v7().to_string()).execute(&mut connection).await.unwrap();
+    connection.close().await.unwrap();
+    // Act through the public opener twice; no prior migration is rewritten.
+    for _ in 0..2 {
+        let owner = InteractionStore::open(&path).await.unwrap();
+        let mut connection = owner.writer.lock().await;
+        // Assert only the historical Router marker was removed, with the SDK home retained.
+        let legacy: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM sqlite_schema WHERE name='mail_removal_backfill'",
+        )
+        .fetch_one(&mut *connection)
+        .await
+        .unwrap();
+        let sdk: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM sqlite_schema WHERE name='_fleet_sync_delivery_backfills'",
+        )
+        .fetch_one(&mut *connection)
+        .await
+        .unwrap();
+        assert_eq!((legacy, sdk), (0, 1));
+        drop(connection);
+        owner.close().await.unwrap();
     }
 }

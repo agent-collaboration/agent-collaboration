@@ -23,6 +23,10 @@ use provider_conversation_submission::{submit_provider_create, submit_provider_p
 
 #[tokio::test]
 async fn collaboration_api_reaches_host_owned_provider_and_reuses_target() {
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::WARN)
+        .with_test_writer()
+        .try_init();
     let root = tempfile::tempdir().expect("runtime root");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private runtime root");
@@ -79,7 +83,12 @@ async fn collaboration_api_reaches_host_owned_provider_and_reuses_target() {
             } => Some(*binding_generation),
             _ => None,
         })
-        .expect("provider generation");
+        .unwrap_or_else(|| {
+            panic!(
+                "provider generation missing; channels={:?}",
+                provider_endpoint.channels
+            )
+        });
     let generation = CodexGeneration {
         service_epoch: inventory.service_epoch,
         generation: generation_number,
@@ -186,6 +195,10 @@ async fn collaboration_api_reaches_host_owned_provider_and_reuses_target() {
 
 #[tokio::test]
 async fn provider_process_exit_retires_advertisement_and_rejects_new_admission() {
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::WARN)
+        .with_test_writer()
+        .try_init();
     let root = tempfile::tempdir().expect("runtime root");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private runtime root");
@@ -229,7 +242,7 @@ async fn provider_process_exit_retires_advertisement_and_rejects_new_admission()
     tokio::pin!(start);
     let (provider_barrier, _) = tokio::select! {
         accepted = barrier.accept() => accepted.expect("provider reached exit barrier"),
-        _result = &mut start => panic!("provider startup finished before barrier"),
+        result = &mut start => panic!("provider startup finished before barrier: {}", match result { Ok(_) => "Ok".to_owned(), Err(error) => error.to_string() }),
     };
     let mut provider_barrier = provider_barrier.into_std().expect("blocking exit barrier");
     provider_barrier

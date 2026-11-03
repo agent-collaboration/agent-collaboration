@@ -5,6 +5,8 @@
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
 pub mod board_fixture;
+#[path = "support/fleet_maintenance_probe.rs"]
+mod fleet_maintenance_probe;
 #[path = "support/read_cost_counter.rs"]
 #[expect(
     dead_code,
@@ -347,8 +349,9 @@ async fn context_cost(
         Some(&json!("invalidRecord")),
         "{direct}"
     );
+    let maintenance = fleet_maintenance_probe::probe_fixed_maintenance(&fixture).await?;
     fixture.stop().await?;
-    Ok((cost, alarms))
+    Ok((cost, maintenance))
 }
 
 #[tokio::test]
@@ -376,22 +379,10 @@ async fn covered_reads_and_session_context_have_operand_bounded_cost() -> Result
         large.0.statements, 12,
         "exact foreground context SQL budget"
     );
-    // A read may overlap no alarm at all. When a fresh Fleet retention run
-    // overlaps, it reads state and its expired prefix: exactly two statements.
-    // bounded_fleet_writes also exercises this component at both fixture sizes.
-    for alarm_costs in [&small.1, &large.1] {
-        for (object_kind, runs) in &alarm_costs.by_object {
-            assert_eq!(
-                object_kind, "fleet",
-                "unexpected context alarm: {alarm_costs:?}"
-            );
-            for run_statements in runs {
-                assert_eq!(
-                    *run_statements, 2,
-                    "fresh retention run grew with unrelated history: {alarm_costs:?}"
-                );
-            }
-        }
-    }
+    assert_eq!(
+        read_cost_counter::alarm_read_costs::fixed_fleet_maintenance_profiles(&small.1),
+        read_cost_counter::alarm_read_costs::fixed_fleet_maintenance_profiles(&large.1),
+        "per-owner alarm SQL grew with unrelated retained history"
+    );
     Ok(())
 }
