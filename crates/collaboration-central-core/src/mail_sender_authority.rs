@@ -33,9 +33,11 @@ where
     .map_err(fleet_sync_delivery::delivery_rollback)?;
     match owner {
         Some(Submitter::Project(database)) => {
-            let lease = fleet_sync_lease::lease_status(scope, database, now)
-                .await
-                .map_err(StoreError::backend)?;
+            let lease = match fleet_sync_lease::lease_status(scope, database, now).await {
+                Ok(lease) => lease,
+                Err(fleet_sync_lease::LeaseError::Retired) => None,
+                Err(error) => return Err(StoreError::backend(error)),
+            };
             Ok(lease
                 .filter(|lease| {
                     lease.state == fleet_sync_protocol::LeaseState::Held && lease.holder == peer
