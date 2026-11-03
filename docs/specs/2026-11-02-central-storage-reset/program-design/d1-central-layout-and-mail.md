@@ -94,7 +94,7 @@ Each table below moves into the Fleet store under its new name and its JSON `rec
 | Table | Change |
 | --- | --- |
 | `_fleet_sync_outbox_items` (machine) | same typed columns and timestamps as Fleet's; `relay` is the Fleet |
-| `_fleet_sync_inbox_items` | typed columns: `item_id` UUIDv7 PK, `digest`, `sender` (kind plus typed fields), `recipient_session` (service, endpoint, session id), `relay_machine_id` (the Fleet), `status_kind`, `report_seq`, `created_at` (from the id), `accepted_at`, `delivered_at`, `payload`, `payload_bytes`; accepts pushed items (see Mail protocol) |
+| `_fleet_sync_inbox_items` | typed columns: `item_id` UUIDv7 PK, `digest`, `sender` (kind plus typed fields), `recipient_session` (service, endpoint, session id), `relay_machine_id` (the Fleet), `progress` (`pending`, `attempting`, `held`, `delivered`, `refused`, `unknown`; validated in Rust), `attempt`, `report_seq`, `created_at` (from the id), `accepted_at`, `delivered_at`, `payload`, `payload_bytes`; accepts pushed items (see Mail protocol) |
 | all inbox and outbox rows | removed 60 days after `created_at`; ids older than 60 days refused (R14) |
 
 Router app tables (`router_pushes` and the rest) are renamed in D3, not D1.
@@ -174,9 +174,9 @@ New and changed calls, all over the machine's one WebSocket. Existing names are 
 | Call | From → to | Request | Answers | Commits before answering |
 | --- | --- | --- | --- | --- |
 | Submit (existing `mail_submit`, new sink) | A → Fleet | the frozen item: id, digest, sender, recipient machine and session address, body | `accepted {status, version}` · `replayed {current status, version}` (same id, same digest) · `refused {conflict \| sender not enrolled \| recipient not enrolled \| too old \| no capacity}` | Fleet: outbox item admitted (or nothing, if refused) |
-| **Push** (new server call) | Fleet → B | the item, as submitted | `accepted {accepted_at}` · `replayed {current inbox status}` (B already has it) · `conflict {existing digest}` · `refused {too old \| not this machine \| no capacity}` | B: inbox item stored |
+| **Push** (new server call) | Fleet → B | the item, as submitted. In the same inbox transaction B runs today's receive hook (push projection, `mail_delivery_runtime.rs:363`, as `inbox_receive.rs:161` does now) and admits the delivery attempt | `accepted {accepted_at}` · `replayed {current inbox status}` (B already has it) · `conflict {existing digest}` · `refused {too old \| not this machine \| no capacity}` | B: inbox item stored |
 | Push result | Fleet, on B's answer | n/a | n/a | Fleet: on `accepted`/`replayed`, drop the content, set status “in recipient's inbox”, owe that status to the submitter, all in one transaction |
-| **Report** (changed) | B → Fleet | item id, report sequence, outcome `delivered \| refused {reason} \| unknown` | `ack {report_seq}` · `replayed {report_seq}` (sequence already applied) · `refused {not the recipient}` | Fleet: status advanced and owed to the submitter, together |
+| **Report** (changed) | B → Fleet | item id, report sequence, and one outcome: `held` (not final: the session is not running; released when it runs, `held_readiness.rs:30`), `delivered`, `refused` with a reason, or `unknown` | `ack {report_seq}` · `replayed {report_seq}` (sequence already applied) · `refused {not the recipient}` | Fleet: status advanced and owed to the submitter, together. `held` can be followed by `delivered`, `refused` or `unknown`; nothing moves backwards |
 | Status (existing `PublishStatus`, plus catch-up on welcome) | Fleet → A | item id, status, version | `applied` | A: status stored |
 
 Fleet keeps what it needs after the content is dropped on the outbox item itself: `recipient_machine_id` for the report check, `submitter_machine_id` for status, `last_report_seq`, the status and its version (see the table above). The session address is only needed by B and travels in the content.
