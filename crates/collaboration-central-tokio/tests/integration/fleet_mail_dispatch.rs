@@ -133,18 +133,7 @@ pub(super) async fn submit(
     fixture: &Fixture,
     item: &DeliveryEnvelope<BoardDeliveryTypes>,
 ) -> TestResult {
-    let answer = fixture
-        .call(
-            "session",
-            "central.mail-submit-registry",
-            Value::Null,
-            json!({
-                "session":{"peer":A,"sessionId":durable_steps::Uuid::now_v7()},
-                "origin":{"installation":SERVICE_A,"machine":"Fleet mail fixture"},
-                "item":item,"originEpoch":null,
-            }),
-        )
-        .await?;
+    let answer = submit_answer(fixture, item).await?;
     assert_eq!(
         answer.pointer("/value/value/kind"),
         Some(&json!("accepted")),
@@ -156,6 +145,23 @@ pub(super) async fn submit(
         "{answer}"
     );
     Ok(())
+}
+pub(super) async fn submit_answer(
+    fixture: &Fixture,
+    item: &DeliveryEnvelope<BoardDeliveryTypes>,
+) -> TestResult<Value> {
+    fixture
+        .call(
+            "session",
+            "central.mail-submit-registry",
+            Value::Null,
+            json!({
+                "session":{"peer":A,"sessionId":durable_steps::Uuid::now_v7()},
+                "origin":{"installation":SERVICE_A,"machine":"Fleet mail fixture"},
+                "item":item,"originEpoch":null,
+            }),
+        )
+        .await
 }
 pub(super) async fn custody(fixture: &Fixture, item: ItemId) -> TestResult<(String, bool)> {
     Ok(fixture.store.transaction(move |scope| Box::pin(async move {
