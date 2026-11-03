@@ -164,8 +164,6 @@ async fn complete_limits_and_sparse_opaque_pages_preserve_every_row_and_request_
     }
 }
 
-#[path = "configured_inventory_continuation_tests.rs"]
-mod continuation_tests;
+mod page_token_test;
 
-#[path = "configured_inventory_native.rs"]
-mod native_partition_tests;
+mod native_partition_test;
