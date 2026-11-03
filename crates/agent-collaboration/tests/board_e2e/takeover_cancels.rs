@@ -41,9 +41,9 @@ async fn held_remote(fixture: &mut BoardFixture, second: &SecondHost) -> Fixture
     settled_view(fixture.host()?, &fixture.project).await?;
     controls::hold_selected(
         fixture,
-        ObjectAddress::Registry,
-        ObjectAddress::Mailbox(second.service_id()?.try_into()?),
-        DispatchCallSelector::MailboxSubmit,
+        ObjectAddress::Fleet,
+        ObjectAddress::Fleet,
+        DispatchCallSelector::FleetMailSubmit,
     )
     .await?;
     let range = follow
@@ -53,7 +53,7 @@ async fn held_remote(fixture: &mut BoardFixture, second: &SecondHost) -> Fixture
     follow.assert_frozen(&item, &range)?;
     copy_project(fixture).await?;
     settled_view(fixture.host()?, &fixture.project).await?;
-    controls::resume(fixture, ObjectAddress::Registry).await?;
+    controls::resume(fixture, ObjectAddress::Fleet).await?;
     sender_status(fixture.host()?, &item.id().as_uuid().to_string(), "held").await?;
     native_state(
         second.host()?,
@@ -214,7 +214,7 @@ async fn arrange_remote_end(
     remote_prefix: RemoteEndPrefix,
 ) -> FixtureResult<RemoteEndCut> {
     let prefix = remote_prefix.end_prefix();
-    let mailbox = ObjectAddress::Mailbox(second.service_id()?.try_into()?);
+    let fleet = ObjectAddress::Fleet;
     match prefix {
         EndPrefix::Discarded => {
             controls::hold_selected(
@@ -228,9 +228,9 @@ async fn arrange_remote_end(
         EndPrefix::LostReceipt => {
             controls::hold_selected(
                 fixture,
-                ObjectAddress::Registry,
-                mailbox.clone(),
-                DispatchCallSelector::MailboxSubmit,
+                ObjectAddress::Fleet,
+                fleet.clone(),
+                DispatchCallSelector::FleetMailSubmit,
             )
             .await?
         }
@@ -275,7 +275,7 @@ async fn arrange_remote_end(
             EndCutConsequence::Retained { cut, frontier }
         }
         EndPrefix::LostReceipt => EndCutConsequence::LostReceipt(
-            lose_cancel_answer(fixture, mailbox, seed.item.id().as_uuid().to_string()).await?,
+            lose_cancel_answer(fixture, fleet, seed.item.id().as_uuid().to_string()).await?,
         ),
     };
     Ok(RemoteEndCut {
@@ -287,22 +287,22 @@ async fn arrange_remote_end(
 
 async fn lose_cancel_answer(
     fixture: &BoardFixture,
-    mailbox: ObjectAddress,
+    fleet: ObjectAddress,
     original: String,
 ) -> FixtureResult<Value> {
     tokio::time::timeout(BOUND, async {
         loop {
-            let request = controls::held(fixture, ObjectAddress::Registry).await?;
-            if request.get("kind") == Some(&json!("central.mailbox-submit")) {
+            let request = controls::held(fixture, ObjectAddress::Fleet).await?;
+            if request.get("kind") == Some(&json!("central.mail-submit")) {
                 let item: DeliveryEnvelope<BoardDeliveryTypes> =
                     serde_json::from_value(at(&request, "/request/item")?.clone())?;
                 if let DeliveryEnvelope::Cancel(cancel) = item {
                     assert_eq!(cancel.target().as_uuid().to_string(), original);
                     let dropped = controls::release_and_drop_selected_reply(
                         fixture,
-                        ObjectAddress::Registry,
-                        mailbox.clone(),
-                        DispatchCallSelector::MailboxSubmit,
+                        ObjectAddress::Fleet,
+                        fleet.clone(),
+                        DispatchCallSelector::FleetMailSubmit,
                     )
                     .await?;
                     assert_eq!(dropped, request);
@@ -311,10 +311,10 @@ async fn lose_cancel_answer(
             }
             super::central_pair::central(fixture)?
                 .runtime_control(
-                    ObjectAddress::Registry,
+                    ObjectAddress::Fleet,
                     RuntimeControl::ResumeDispatchAndHoldNextSelected {
-                        destination: mailbox.clone(),
-                        call: DispatchCallSelector::MailboxSubmit,
+                        destination: fleet.clone(),
+                        call: DispatchCallSelector::FleetMailSubmit,
                     },
                 )
                 .await?;

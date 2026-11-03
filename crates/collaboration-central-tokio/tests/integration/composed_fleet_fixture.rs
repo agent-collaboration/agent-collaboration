@@ -41,6 +41,7 @@ pub struct Io {
     pub reject_next_notice: Arc<AtomicBool>,
     pub lose_next_notice_reply: Arc<AtomicBool>,
     pub notice_calls: Arc<Mutex<Vec<Value>>>,
+    pub local_call_faults: Arc<collaboration_central_conformance::RuntimeFaults>,
 }
 impl Io {
     pub fn advance(&self, millis: i64) {
@@ -78,6 +79,10 @@ impl WakeScheduler for Io {
 }
 impl PlatformIo for Io {
     async fn before_local_call(&self, request: &[u8]) -> Result<(), CallFailure> {
+        self.local_call_faults
+            .before_dispatch(&ObjectAddress::Fleet, request)
+            .await
+            .map_err(|_| CallFailure::AnswerLost)?;
         let call: Value = serde_json::from_slice(request).map_err(|_| CallFailure::AnswerLost)?;
         if call.get("kind").and_then(Value::as_str) == Some("central.machine-notice") {
             self.notice_calls
@@ -93,6 +98,13 @@ impl PlatformIo for Io {
         Ok(())
     }
     fn drop_local_reply(&self, request: &[u8]) -> Result<bool, CallFailure> {
+        if self
+            .local_call_faults
+            .drop_successful_object_reply(&ObjectAddress::Fleet, request)
+            .map_err(|_| CallFailure::AnswerLost)?
+        {
+            return Ok(true);
+        }
         let call: Value = serde_json::from_slice(request).map_err(|_| CallFailure::AnswerLost)?;
         Ok(
             call.get("kind").and_then(Value::as_str) == Some("central.machine-notice")
@@ -172,6 +184,7 @@ impl Fixture {
             reject_next_notice: Arc::default(),
             lose_next_notice_reply: Arc::default(),
             notice_calls: Arc::default(),
+            local_call_faults: Arc::default(),
         };
         let receiver = ReceiverId::try_from("019f0000-0000-7000-8000-000000000010".to_owned())?;
         let objects = ObjectStore::open(path).await?;

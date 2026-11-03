@@ -13,6 +13,19 @@ pub struct RuntimeControlRequest {
 }
 impl RuntimeControlRequest {
     pub fn validate(&self) -> Result<(), RuntimeControlFailure> {
+        if let RuntimeControl::HoldNextSelectedDispatch { destination, call }
+        | RuntimeControl::ResumeDispatchAndHoldNextSelected { destination, call }
+        | RuntimeControl::DropNextSelectedObjectReply { destination, call } = &self.command
+            && matches!(
+                call,
+                DispatchCallSelector::FleetMailSubmit
+                    | DispatchCallSelector::FleetMailSubmitFor { .. }
+            )
+            && (!matches!(self.address, ObjectAddress::Fleet)
+                || !matches!(destination, ObjectAddress::Fleet))
+        {
+            return Err(RuntimeControlFailure::WrongObjectKind);
+        }
         match (&self.command, &self.address) {
             (
                 RuntimeControl::CopyFull { .. }
@@ -100,12 +113,12 @@ pub enum RuntimeControl {
     Observe,
 }
 
-/// Select an invocation kind or one immutable mailbox item amid concurrent traffic.
+/// Select an invocation kind or one Fleet submit's authenticated peer and item.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum DispatchCallSelector {
-    MailboxSubmit,
-    MailboxSubmitFor { origin: PeerId, item: ItemId },
+    FleetMailSubmit,
+    FleetMailSubmitFor { peer: PeerId, item: ItemId },
     InstallationPeer,
     ForwardRoute,
     CopyWrite,

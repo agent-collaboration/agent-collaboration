@@ -66,3 +66,66 @@ fn project_fault_controls_refuse_the_fleet_owner() {
         ));
     }
 }
+
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while invalid fixture identities propagate."
+)]
+fn fleet_submit_controls_require_the_fleet_owner_and_destination()
+-> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use crate::{DispatchCallSelector, RuntimeControlRequest};
+    let peer = "019f0000-0000-7000-8000-000000000810"
+        .to_owned()
+        .try_into()?;
+    let item = "019f0000-0000-7000-8000-000000000811"
+        .to_owned()
+        .try_into()?;
+    let retired_mailbox = ObjectAddress::Mailbox(
+        "019f0000-0000-7000-8000-000000000812"
+            .to_owned()
+            .try_into()?,
+    );
+    for call in [
+        DispatchCallSelector::FleetMailSubmit,
+        DispatchCallSelector::FleetMailSubmitFor { peer, item },
+    ] {
+        for destination in [ObjectAddress::Fleet, retired_mailbox.clone()] {
+            for command in [
+                RuntimeControl::HoldNextSelectedDispatch {
+                    destination: destination.clone(),
+                    call,
+                },
+                RuntimeControl::ResumeDispatchAndHoldNextSelected {
+                    destination: destination.clone(),
+                    call,
+                },
+                RuntimeControl::DropNextSelectedObjectReply {
+                    destination: destination.clone(),
+                    call,
+                },
+            ] {
+                for address in [ObjectAddress::Fleet, retired_mailbox.clone()] {
+                    let request = RuntimeControlRequest {
+                        address: address.clone(),
+                        command: command.clone(),
+                    };
+                    assert_eq!(
+                        request.validate().is_ok(),
+                        matches!(
+                            (&address, &destination),
+                            (ObjectAddress::Fleet, ObjectAddress::Fleet)
+                        )
+                    );
+                }
+            }
+        }
+    }
+    for retired in [
+        serde_json::json!("mailboxSubmit"),
+        serde_json::json!({"mailboxSubmitFor":{"origin":peer,"item":item}}),
+    ] {
+        assert!(serde_json::from_value::<DispatchCallSelector>(retired).is_err());
+    }
+    Ok(())
+}

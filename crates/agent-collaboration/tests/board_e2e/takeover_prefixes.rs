@@ -100,7 +100,7 @@ async fn prove_prefix(
             controls::hold_selected(
                 fixture,
                 controls::connection(fixture)?,
-                ObjectAddress::Registry,
+                ObjectAddress::Fleet,
                 DispatchCallSelector::InstallationPeer,
             )
             .await?
@@ -108,9 +108,9 @@ async fn prove_prefix(
         ReplicatedPrefix::Both => {
             controls::hold_selected(
                 fixture,
-                ObjectAddress::Registry,
-                ObjectAddress::Mailbox(second.service_id()?.try_into()?),
-                DispatchCallSelector::MailboxSubmit,
+                ObjectAddress::Fleet,
+                ObjectAddress::Fleet,
+                DispatchCallSelector::FleetMailSubmit,
             )
             .await?
         }
@@ -254,8 +254,7 @@ async fn acknowledged_cut(
         }
         ReplicatedPrefix::Both => {
             let submitted =
-                controls::held_call(fixture, ObjectAddress::Registry, "central.mailbox-submit")
-                    .await?;
+                controls::held_call(fixture, ObjectAddress::Fleet, "central.mail-submit").await?;
             let original = submitted_item(&submitted)?;
             follow.assert_frozen(&original, range)?;
             let prefix = settled_view(fixture.host()?, &fixture.project).await?;
@@ -487,13 +486,13 @@ async fn assert_successor(
                 // Its dead caller need not receive a successful answer. The
                 // outer peer owner checks the count after central fully joins.
                 let stale =
-                    controls::held_call(fixture, ObjectAddress::Registry, "central.mailbox-submit")
+                    controls::held_call(fixture, ObjectAddress::Fleet, "central.mail-submit")
                         .await?;
                 assert_eq!(
                     serde_json::to_value(submitted_item(&stale)?)?,
                     serde_json::to_value(&item)?
                 );
-                controls::resume(fixture, ObjectAddress::Registry).await?;
+                controls::resume(fixture, ObjectAddress::Fleet).await?;
                 second.reopen_host().await?;
                 delivered(
                     second.host()?,

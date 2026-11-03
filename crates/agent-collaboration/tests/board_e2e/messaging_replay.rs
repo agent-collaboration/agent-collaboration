@@ -60,17 +60,17 @@ pub async fn mailbox_retry_keeps_one_effect(scope: &mut MessagingCase<'_>) -> Fi
     let text = "B+ one remote effect despite lost mailbox custody answer";
     scope
         .control(
-            ObjectAddress::Registry,
+            ObjectAddress::Fleet,
             RuntimeControl::DropNextSelectedObjectReply {
-                destination: scope.mailbox_address()?,
-                call: DispatchCallSelector::MailboxSubmit,
+                destination: ObjectAddress::Fleet,
+                call: DispatchCallSelector::FleetMailSubmit,
             },
         )
         .await?;
     scope.send_cli(item, text).await?;
     let lost = scope
         .control(
-            ObjectAddress::Registry,
+            ObjectAddress::Fleet,
             RuntimeControl::AwaitDroppedObjectReply,
         )
         .await?;
@@ -81,10 +81,7 @@ pub async fn mailbox_retry_keeps_one_effect(scope: &mut MessagingCase<'_>) -> Fi
             .clone(),
     )?;
     let submitted: Value = serde_json::from_slice(&bytes)?;
-    assert_eq!(
-        submitted.get("kind"),
-        Some(&json!("central.mailbox-submit"))
-    );
+    assert_eq!(submitted.get("kind"), Some(&json!("central.mail-submit")));
     assert_eq!(
         submitted.pointer("/request/item/value/id"),
         Some(&json!(item))

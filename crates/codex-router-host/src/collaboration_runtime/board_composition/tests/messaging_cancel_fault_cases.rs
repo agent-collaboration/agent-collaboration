@@ -1,4 +1,4 @@
-//! Competing real mailbox calls cannot consume the selected lost-receipt fault.
+//! Competing real Fleet calls cannot consume the selected lost-receipt fault.
 use super::*;
 use fleet_sync_protocol::{CancelBody, DeliveryCancel};
 
@@ -15,10 +15,10 @@ async fn lost_receipt_hold_targets_submit_while_sender_query_completes() -> Test
     let mut competing_calls = tokio::task::JoinSet::new();
     let proof = async {
         let seed = arrange_sent_follow(&mut fixture).await?;
-        let mailbox = ObjectAddress::Mailbox(rule_fixture::RECIPIENT.to_owned().try_into()?);
+        let fleet = ObjectAddress::Fleet;
         hold_lost_receipt_submit(
             &fixture,
-            mailbox,
+            fleet,
             fixture.holder.projects.peer,
             seed.item.id(),
         )
@@ -70,8 +70,9 @@ async fn lost_receipt_hold_targets_submit_while_sender_query_completes() -> Test
             return Err("lost-receipt fixture did not hold a dispatch".into());
         };
         let request: serde_json::Value = serde_json::from_slice(&request)?;
-        let selected_submit = request.get("kind") == Some(&json!("central.mailbox-submit"))
-            && request.pointer("/request/origin") == Some(&json!(fixture.holder.projects.peer))
+        let selected_submit = request.get("kind") == Some(&json!("central.mail-submit"))
+            && request.pointer("/request/session/peer")
+                == Some(&json!(fixture.holder.projects.peer))
             && request.pointer("/request/item/value/id") == Some(&json!(expected_item));
         if !selected_submit {
             // With the broad hold, the actual submit completes past the held
@@ -122,7 +123,7 @@ async fn lost_receipt_reply_stays_bound_when_a_cancel_submit_finishes_first() ->
     let mut fixture = RuleFixture::open(true).await?;
     let mut held_calls = tokio::task::JoinSet::new();
     let proof = async {
-        let (cancel, mailbox, held_request) =
+        let (cancel, fleet, held_request) =
             hold_original_with_cancel(&mut fixture, &mut held_calls).await?;
         let recipient = cancel.recipient().clone();
         fixture
@@ -131,7 +132,7 @@ async fn lost_receipt_reply_stays_bound_when_a_cancel_submit_finishes_first() ->
             .runtime_control(ObjectAddress::Fleet, RuntimeControl::DropHeldDispatchReply)
             .await?;
 
-        // This is a real second Registry -> Mailbox submit on the same native
+        // This is a real second local Fleet submit on the same native
         // connection. It must finish while the original remains held.
         let cancel = BoardConsumerRequest::mail_submit(
             cancel,
@@ -190,7 +191,7 @@ async fn lost_receipt_reply_stays_bound_when_a_cancel_submit_finishes_first() ->
         else {
             return Err("original reply was not dropped".into());
         };
-        assert_eq!(destination, mailbox);
+        assert_eq!(destination, fleet);
         assert_eq!(
             request, held_request,
             "drop must match the exact held original"
@@ -257,8 +258,8 @@ async fn hold_original_with_cancel(
         None,
         CancelBody { target: item },
     )?);
-    let mailbox = ObjectAddress::Mailbox(rule_fixture::RECIPIENT.to_owned().try_into()?);
-    hold_lost_receipt_submit(fixture, mailbox.clone(), fixture.holder.projects.peer, item).await?;
+    let fleet = ObjectAddress::Fleet;
+    hold_lost_receipt_submit(fixture, fleet.clone(), fixture.holder.projects.peer, item).await?;
     let submit = BoardConsumerRequest::mail_submit(
         DeliveryEnvelope::Item(seed.item),
         Some(Epoch::new(2)?),
@@ -284,18 +285,18 @@ async fn hold_original_with_cancel(
     else {
         return Err("original submit was not held".into());
     };
-    assert_eq!(destination, mailbox);
+    assert_eq!(destination, fleet);
     let request: serde_json::Value = serde_json::from_slice(&held_request)?;
-    assert_eq!(request.get("kind"), Some(&json!("central.mailbox-submit")));
+    assert_eq!(request.get("kind"), Some(&json!("central.mail-submit")));
     assert_eq!(
-        request.pointer("/request/origin"),
+        request.pointer("/request/session/peer"),
         Some(&json!(fixture.holder.projects.peer))
     );
     assert_eq!(
         request.pointer("/request/item/value/id"),
         Some(&json!(item))
     );
-    Ok((cancel, mailbox, held_request))
+    Ok((cancel, fleet, held_request))
 }
 
 fn sender_query_for_item(
