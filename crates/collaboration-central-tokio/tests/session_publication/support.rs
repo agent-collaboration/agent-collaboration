@@ -31,6 +31,7 @@ type NativeObject = TokioObject<CoreHost<Transport>>;
 #[derive(Clone, Default)]
 pub struct Transport {
     pub calls: Arc<Mutex<Vec<serde_json::Value>>>,
+    pub local_calls: Arc<Mutex<Vec<serde_json::Value>>>,
     pub wakes: Arc<Mutex<Vec<SyncTime>>>,
     pub gather: Arc<PublicationProbe>,
     pub schema: Arc<PublicationProbe>,
@@ -60,6 +61,20 @@ impl WakeScheduler for Transport {
     }
 }
 impl PlatformIo for Transport {
+    fn before_local_call(
+        &self,
+        bytes: &[u8],
+    ) -> impl Future<Output = Result<(), CallFailure>> + Send {
+        let recorded = (|| {
+            let call = serde_json::from_slice(bytes).map_err(|_| CallFailure::AnswerLost)?;
+            self.local_calls
+                .lock()
+                .map_err(|_| CallFailure::AnswerLost)?
+                .push(call);
+            Ok(())
+        })();
+        std::future::ready(recorded)
+    }
     async fn object_call(
         &self,
         _to: ObjectAddress,

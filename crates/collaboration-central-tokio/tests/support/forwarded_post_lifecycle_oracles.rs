@@ -88,7 +88,7 @@ where
         outstanding.push((post(sender, database).await?, holder_frame(holder).await?));
     }
     control(RuntimeControl::HoldNextDispatch {
-        destination: ObjectAddress::Registry,
+        destination: ObjectAddress::Fleet,
     })
     .await?;
     let sixteenth = post(sender, database).await?;

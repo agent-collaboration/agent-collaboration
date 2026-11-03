@@ -104,7 +104,7 @@ async fn prepare_notice_loss(
     let at = RegistryTime(chrono::Utc::now() - chrono::TimeDelta::seconds(1));
     control(
         base,
-        ObjectAddress::Registry,
+        ObjectAddress::Fleet,
         RuntimeControl::SetTime { now: at },
     )
     .await?;
@@ -158,7 +158,7 @@ async fn prepare_notice_loss(
         let (initial_feed, head) = read_complete_fleet_feed(&mut holder.socket).await?;
         assert_eq!(head, 3);
         assert_eq!(initial_feed.len(), 3);
-        let destination = ObjectAddress::Connection(SERVICE.to_owned().try_into()?);
+        let destination = ObjectAddress::Fleet;
         // Each released call arms the next hold atomically. A first receiver
         // call may only admit its async append; keep advancing until a real
         // successful reply is lost, then retain the next hold until SIGKILL.
@@ -389,7 +389,7 @@ async fn assert_original_receiver_receipt(
         .ok_or("saved call step is not text")?;
     let key = format!("central-machine-notice:{operation}:{step}");
     let mut connection = sqlx_turso::TursoConnectOptions::new()
-        .filename(root.join(format!("connection-{SERVICE}.db")))
+        .filename(root.join("fleet.db"))
         .read_only(true)
         .connect()
         .await?;
@@ -519,7 +519,7 @@ async fn observe_failed_preparation(base: &str, root: &std::path::Path) -> Confo
         row::Row,
     };
     for (address, file) in [
-        (ObjectAddress::Registry, "registry.db"),
+        (ObjectAddress::Fleet, "registry.db"),
         (ObjectAddress::Fleet, "fleet.db"),
     ] {
         let observed = control(base, address, RuntimeControl::Observe).await?;

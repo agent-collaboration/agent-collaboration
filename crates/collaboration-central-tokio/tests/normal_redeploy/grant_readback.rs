@@ -20,7 +20,7 @@ pub(super) async fn assert_no_granted_epoch_three(
     database: DatabaseId,
 ) -> ConformanceResult<()> {
     let mut connection = sqlx_turso::TursoConnectOptions::new()
-        .filename(root.join("registry.db"))
+        .filename(root.join("fleet.db"))
         .read_only(true)
         .connect()
         .await?;

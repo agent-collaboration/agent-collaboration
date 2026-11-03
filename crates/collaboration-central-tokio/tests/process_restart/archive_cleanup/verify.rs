@@ -21,7 +21,7 @@ pub(super) async fn verify_cleanup(
         }).await.map_err(|_|"startup did not apply the original refused settlement and exact archive finalization")??;
         // This is the existing durable-journal observation used by the physical
         // recovery cases. No Claim replay is allowed to drive this completion.
-        let path=root.join("registry.db");
+        let path=root.join("fleet.db");
         tokio::time::timeout(RECOVERY_BOUND,async {
             loop {
                 if operation(&path,&input.operation).await?.0=="completed" {return Ok::<_,Box<dyn std::error::Error+Send+Sync>>(());}
@@ -45,7 +45,7 @@ pub(super) async fn verify_cleanup(
         claim_proof?;claimant_closed?;
         let terminal=operation(&path,&input.operation).await?;
         let later=RegistryTime(chrono::Utc::now()+chrono::TimeDelta::seconds(60));
-        for address in [ObjectAddress::Registry,ObjectAddress::Fleet] {control(base,address,RuntimeControl::SetTime {now:later}).await?;}
+        for address in [ObjectAddress::Fleet,ObjectAddress::Fleet] {control(base,address,RuntimeControl::SetTime {now:later}).await?;}
         if read_fleet(&mut reader).await?!=expected || exact_ledger_decision(base,input.archive.request_id.clone()).await?!=before_ledger {
             return Err("later wake repeated archive records/feed or changed the stored request ledger".into());
         }
@@ -73,14 +73,14 @@ async fn observe_exact_recovered_call(base: &str, input: &CleanupInput) -> Confo
         loop {
             let observed=http.post(format!("{base}/admin/v1/conformance/runtime"))
                 .header("Cf-Access-Jwt-Assertion",owner_assertion()?)
-                .json(&RuntimeControlRequest {address:ObjectAddress::Registry,command:RuntimeControl::AwaitHeldDispatch})
+                .json(&RuntimeControlRequest {address:ObjectAddress::Fleet,command:RuntimeControl::AwaitHeldDispatch})
                 .send().await?.error_for_status()?.json::<collaboration_central_conformance::RuntimeFaultObservation>().await?;
             let DispatchFaultObservation::Held {destination,request}=observed.dispatch else {return Err("startup retry never reached its pre-armed real transport gate".into());};
             if destination!=ObjectAddress::Fleet {return Err("startup retry reached another destination".into());}
             let call:Value=serde_json::from_slice(&request)?;
             if call.get("kind")==Some(&json!(<fleet_sync_lease::ClaimSettlement as durable_steps::CallTarget>::KIND)) {
                 if call!=input.call {return Err(format!("recovered settlement changed its exact original call identity or payload: {call}").into());}
-                control(base,ObjectAddress::Registry,RuntimeControl::ResumeDispatch).await?;
+                control(base,ObjectAddress::Fleet,RuntimeControl::ResumeDispatch).await?;
                 println!("ARCHIVE_CLEANUP_RESTART_STAGE actual_retried_call_identity_and_payload_unchanged");
                 return Ok::<_,Box<dyn std::error::Error+Send+Sync>>(());
             }
@@ -89,7 +89,7 @@ async fn observe_exact_recovered_call(base: &str, input: &CleanupInput) -> Confo
             if !matches!(call.get("kind").and_then(Value::as_str),Some("central.lease-incarnation"|"central.lease-projection")) {
                 return Err(format!("startup recovery intercepted an unexpected Fleet call: {call}").into());
             }
-            control(base,ObjectAddress::Registry,RuntimeControl::ResumeDispatchAndHoldNext {destination:ObjectAddress::Fleet}).await?;
+            control(base,ObjectAddress::Fleet,RuntimeControl::ResumeDispatchAndHoldNext {destination:ObjectAddress::Fleet}).await?;
         }
     }).await.map_err(|_|"startup did not reconstruct the exact original refused-settlement call")?
 }
@@ -100,7 +100,7 @@ async fn verify_one_terminal_input(
     journal: &SavedJournal,
 ) -> ConformanceResult<()> {
     let mut connection = sqlx_turso::TursoConnectOptions::new()
-        .filename(root.join("registry.db"))
+        .filename(root.join("fleet.db"))
         .read_only(true)
         .connect()
         .await?;

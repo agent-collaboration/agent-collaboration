@@ -113,7 +113,7 @@ async fn control(
         .post(format!("{base}/admin/v1/conformance/runtime"))
         .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
         .json(&RuntimeControlRequest {
-            address: ObjectAddress::Registry,
+            address: ObjectAddress::Fleet,
             command,
         })
         .send()
@@ -159,7 +159,7 @@ fn validate_fence(
             .cloned()
             .ok_or("held Fence omitted target")?,
     )?;
-    if envelope.get("source") != Some(&json!(ObjectAddress::Registry))
+    if envelope.get("source") != Some(&json!(ObjectAddress::Fleet))
         || envelope.get("destination") != Some(&json!(ObjectAddress::Copy(database)))
         || envelope.get("kind") != Some(&json!(<fleet_sync_lease::CopyFence as CallTarget>::KIND))
         || target.copy != configuration::registry_config()?.authoritative_receiver
@@ -442,13 +442,13 @@ async fn takeover_replays_committed_lost_fence_after_owning_reopen_without_secon
             settings(root.path(), &keys)?,
             vec![
                 RuntimeControlRequest {
-                    address: ObjectAddress::Registry,
+                    address: ObjectAddress::Fleet,
                     command: RuntimeControl::SetTime {
                         now: RegistryTime("2030-03-17T17:46:41Z".parse()?),
                     },
                 },
                 RuntimeControlRequest {
-                    address: ObjectAddress::Registry,
+                    address: ObjectAddress::Fleet,
                     command: RuntimeControl::HoldNextDispatch {
                         destination: ObjectAddress::Copy(interrupted.database),
                     },

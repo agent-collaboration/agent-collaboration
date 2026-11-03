@@ -20,6 +20,13 @@ pub struct FaultStore {
     pub armed: Arc<AtomicBool>,
     pub injected: Arc<AtomicBool>,
 }
+impl durable_steps::ReborrowScope for FaultStore {
+    fn reborrow<'scope, 'transaction: 'scope>(
+        scope: &'scope mut Self::Scope<'transaction>,
+    ) -> Self::Scope<'scope> {
+        Native::reborrow(scope)
+    }
+}
 impl AtomicStore for FaultStore {
     type Scope<'transaction> = <Native as AtomicStore>::Scope<'transaction>;
     async fn transaction<Output, Callback>(&self, run: Callback) -> Result<Output, StoreError>

@@ -28,7 +28,7 @@ impl NativeFleetSource {
     }
     async fn read(&self, request: Value) -> TestResult<BoardReadPage> {
         let bytes = self.0.runtime.on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"connection","value":"550e8400-e29b-41d4-a716-4466554400a9"},"sourceFace":"session","authority":{"kind":"object"},
+            "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":"550e8400-e29b-41d4-a716-4466554400a9"}},
             "destination":{"kind":"fleet"},"destinationFace":"fleet",
             "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"cache_source_read"},
             "kind":"central.fleet-read","target":null,"request":request

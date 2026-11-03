@@ -195,10 +195,8 @@ pub(super) async fn fixture_seed<Io: PlatformIo>(
             })?,
     )
     .map_err(|failure| StoreError::backend(format!("fixture seed encoding: {failure:?}")))?;
-    let (address, bytes) = call.into_parts();
     let answer = host
-        .io
-        .object_call(address, bytes)
+        .transmit(call)
         .await
         .map_err(|failure| StoreError::backend(format!("fixture seed transport: {failure:?}")))?;
     serde_json::from_slice(&answer).map_err(StoreError::backend)
@@ -275,10 +273,8 @@ pub(super) async fn fixture_fleet<Io: PlatformIo>(
         },
     )
     .map_err(|failure| StoreError::backend(format!("fixture Fleet encoding: {failure:?}")))?;
-    let (address, bytes) = call.into_parts();
     let answer = host
-        .io
-        .object_call(address, bytes)
+        .transmit(call)
         .await
         .map_err(|failure| StoreError::backend(format!("fixture Fleet transport: {failure:?}")))?;
     let crate::FleetResult::Imported(FleetImportResult::Imported { .. }) =

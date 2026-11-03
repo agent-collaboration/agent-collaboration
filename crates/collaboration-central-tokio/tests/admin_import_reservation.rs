@@ -2,7 +2,7 @@
 #![cfg(feature = "conformance")]
 
 use collaboration_central_conformance::{
-    ConformanceResult, JwksFixtureServer, fixture_policy, owner_assertion,
+    ConformanceClient, ConformanceResult, JwksFixtureServer, fixture_policy, owner_assertion,
 };
 use collaboration_central_core::{
     AdminImportHeader, AdminImportPhase, AdminImportRefusal, AdminProjectImportAnswer,
@@ -131,6 +131,22 @@ async fn reservation_and_seed_identity_survive_reopen_without_reporting_completi
     let jwks = JwksFixtureServer::start().await?;
     let server = start(directory.path(), &jwks).await?;
     let offered = header()?;
+    // UpgradePublisher publishes the Fleet graph before importing its projects.
+    // The lease hook now commits that project's directory view with every lifecycle change.
+    let graph = serde_json::from_value(serde_json::json!({
+        "provenance":offered.provenance,"declaredOwner":offered.declared_owner,
+        "records":[
+            {"kind":"workspace","id":"019f0000-0000-7000-8000-000000000611","name":"reservation workspace","description":"real import parent","repositories":[],"time":{"kind":"legacyUnknown"}},
+            {"kind":"board","id":"019f0000-0000-7000-8000-000000000612","workspace":"019f0000-0000-7000-8000-000000000611","name":"reservation board","description":"real import parent","state":"active","time":{"kind":"legacyUnknown"}},
+            {"kind":"directory","project":PROJECT,"board":"019f0000-0000-7000-8000-000000000612","title":"reservation project","time":{"kind":"legacyUnknown"}}
+        ]
+    }))?;
+    assert!(matches!(
+        ConformanceClient::new(server.base_url())?
+            .import_fleet(&graph)
+            .await?,
+        fleet_admission::FleetImportResult::Imported { .. }
+    ));
     let first = async {
         let identity = begin(&server, &offered).await?;
         assert_eq!(begin(&server, &offered).await?, identity);

@@ -146,7 +146,7 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
         &first.base,
         ObjectAddress::Fleet,
         RuntimeControl::HoldNextDispatch {
-            destination: ObjectAddress::Connection(SERVICE.to_owned().try_into()?),
+            destination: ObjectAddress::Fleet,
         },
     )
     .await?;
@@ -186,7 +186,7 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
         .ok_or("notice call omitted its durable identity")?
         .clone();
     let fleet_path = root.path().join("fleet.db");
-    let connection_path = root.path().join(format!("connection-{SERVICE}.db"));
+    let connection_path = root.path().join("fleet.db");
     let before = operation(&fleet_path, &operation_id).await?;
     assert_eq!(before.0, "running");
     assert_eq!(before.2, 1);

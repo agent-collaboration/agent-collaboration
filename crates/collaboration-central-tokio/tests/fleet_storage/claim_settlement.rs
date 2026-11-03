@@ -72,7 +72,7 @@ pub(super) fn registry_call(
     operation: durable_steps::Uuid,
 ) -> TestResult<Vec<u8>> {
     Ok(serde_json::to_vec(&json!({
-        "source":{"kind":"registry"},"sourceFace":"registry","authority":{"kind":"object"},
+        "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
         "destination":{"kind":"fleet"},"destinationFace":"fleet",
         "identity":{"operation":operation,"step":"claim_settlement"},
         "kind":kind,"target":null,"request":request

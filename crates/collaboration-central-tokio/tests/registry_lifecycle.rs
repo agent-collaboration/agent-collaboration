@@ -87,7 +87,7 @@ async fn restart_drives_a_committed_registry_task_and_keeps_its_result() -> Test
     let objects = ObjectStore::open(directory.path()).await?;
     let object = objects
         .object(
-            ObjectKey::new("registry")?,
+            ObjectKey::new("fleet")?,
             ObjectOptions::default(),
             Arc::new(CoreHost::conformance_registry(
                 before_restart.clone(),
@@ -134,7 +134,7 @@ async fn restart_drives_a_committed_registry_task_and_keeps_its_result() -> Test
     let reopened = ObjectStore::open(directory.path()).await?;
     let object = reopened
         .object(
-            ObjectKey::new("registry")?,
+            ObjectKey::new("fleet")?,
             ObjectOptions::default(),
             Arc::new(CoreHost::conformance_registry(
                 after_restart.clone(),
@@ -142,7 +142,7 @@ async fn restart_drives_a_committed_registry_task_and_keeps_its_result() -> Test
             )),
         )
         .await?;
-    let runtime = ObjectRuntime::registry(
+    let runtime = ObjectRuntime::fleet(
         Arc::new(TokioStorageHost::new(object.clone())),
         after_restart.clone(),
         configuration,
@@ -151,6 +151,7 @@ async fn restart_drives_a_committed_registry_task_and_keeps_its_result() -> Test
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },
+        std::time::Duration::from_secs(2),
     )?;
 
     runtime.initialize().await?;

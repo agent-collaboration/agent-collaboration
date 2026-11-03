@@ -59,7 +59,7 @@ async fn a_new_registry_run_gates_publication_and_fences_delayed_grants() -> Con
         projection,
     };
     let controls = [RuntimeControlRequest {
-        address: ObjectAddress::Registry,
+        address: ObjectAddress::Fleet,
         command: RuntimeControl::HoldNextDispatch {
             destination: ObjectAddress::Fleet,
         },
@@ -69,7 +69,7 @@ async fn a_new_registry_run_gates_publication_and_fences_delayed_grants() -> Con
     // Release our exact hold even when a deliberately wrong build fails its oracle.
     let _ = control(
         &second.base,
-        ObjectAddress::Registry,
+        ObjectAddress::Fleet,
         RuntimeControl::ResumeDispatch,
     )
     .await;
@@ -98,7 +98,7 @@ async fn prepare_grant(
     );
     control(
         base,
-        ObjectAddress::Registry,
+        ObjectAddress::Fleet,
         RuntimeControl::SetTime { now: at },
     )
     .await?;
@@ -187,7 +187,7 @@ async fn verify_startup_gate(
 ) -> ConformanceResult<()> {
     let observed = control(
         base,
-        ObjectAddress::Registry,
+        ObjectAddress::Fleet,
         RuntimeControl::AwaitHeldDispatch,
     )
     .await?;
@@ -224,12 +224,7 @@ async fn verify_startup_gate(
             );
         }
         let now = RegistryTime(initial.at.0 + chrono::TimeDelta::seconds(1));
-        control(
-            base,
-            ObjectAddress::Registry,
-            RuntimeControl::SetTime { now },
-        )
-        .await?;
+        control(base, ObjectAddress::Fleet, RuntimeControl::SetTime { now }).await?;
         let renewal = RenewRequest {
             attempt: fleet_sync_protocol::RequestId::new(Uuid::now_v7())?,
             database: initial.database,
@@ -271,12 +266,7 @@ async fn verify_startup_gate(
         if read_directory(&mut holder, initial.database).await? != initial.entry {
             return Err("renewal bypassed the held incarnation gate and published early".into());
         }
-        control(
-            base,
-            ObjectAddress::Registry,
-            RuntimeControl::ResumeDispatch,
-        )
-        .await?;
+        control(base, ObjectAddress::Fleet, RuntimeControl::ResumeDispatch).await?;
         tokio::time::timeout(RECOVERY_BOUND, async {
             loop {
                 let projection = read_projection(root, initial.database).await?;
@@ -530,7 +520,7 @@ async fn fleet_call(
     request: Value,
 ) -> ConformanceResult<Value> {
     let bytes=fleet.runtime.on_call(serde_json::to_vec(&json!({
-        "source":{"kind":"registry"},"sourceFace":"registry","authority":{"kind":"object"},
+        "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
         "destination":{"kind":"fleet"},"destinationFace":"fleet", "identity":{"operation":Uuid::now_v7(),"step":"lease_order_witness"},
         "kind":kind,"target":null,"request":request,
     }))?).await.map_err(|error|format!("real stopped-Fleet {kind} call: {error:?}"))?;

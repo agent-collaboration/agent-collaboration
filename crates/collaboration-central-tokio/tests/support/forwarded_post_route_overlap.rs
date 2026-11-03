@@ -2,7 +2,6 @@
 #![deny(clippy::too_many_lines)]
 use super::{
     forwarded_post_lifecycle_oracles::{answer, holder_frame, outcome, post},
-    forwarded_post_scenarios::SENDER_SERVICE,
     forwarded_post_state_oracles::{
         live_records, no_retained_state, pending_record, records, sender_session,
     },
@@ -40,7 +39,7 @@ where
     })
     .await?;
     control(RuntimeControl::HoldNextSelectedDispatch {
-        destination: ObjectAddress::Registry,
+        destination: ObjectAddress::Fleet,
         call: DispatchCallSelector::ForwardRoute,
     })
     .await?;
@@ -93,7 +92,7 @@ where
     )?;
     let old_frame: FrameId = serde_json::from_value(
         pending
-            .get("forwardFrame")
+            .get("forwardFrameId")
             .ok_or("forward identity absent")?
             .clone(),
     )?;
@@ -141,12 +140,9 @@ fn require_route_hold(
     let envelope: Value = serde_json::from_slice(&request)?;
     for (field, expected) in [
         ("kind", json!("central.forward-route")),
-        (
-            "source",
-            json!({"kind":"connection","value":SENDER_SERVICE}),
-        ),
+        ("source", json!({"kind":"fleet"})),
         ("sourceFace", json!("session")),
-        ("destination", json!({"kind":"registry"})),
+        ("destination", json!({"kind":"fleet"})),
         ("destinationFace", json!("registry")),
         (
             "request",
@@ -167,7 +163,7 @@ fn require_route_hold(
         "FORWARD_ROUTE_HOLD call={}",
         serde_json::to_string(&identity)?
     );
-    if destination != ObjectAddress::Registry {
+    if destination != ObjectAddress::Fleet {
         return Err("held forwarding call lost destination or CallId".into());
     }
     Ok(())

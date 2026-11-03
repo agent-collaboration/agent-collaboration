@@ -372,7 +372,7 @@ async fn wait_publication(
     expected_change: u64,
 ) -> ConformanceResult<()> {
     let mut connection = sqlx_turso::TursoConnectOptions::new()
-        .filename(root.join("registry.db"))
+        .filename(root.join("fleet.db"))
         .read_only(true)
         .connect()
         .await?;

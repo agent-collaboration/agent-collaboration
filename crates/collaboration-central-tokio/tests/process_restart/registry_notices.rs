@@ -63,7 +63,7 @@ async fn prepare(
     let created = chrono::Utc::now().timestamp_millis() - RETENTION_MILLIS + 65_000;
     control(
         base,
-        ObjectAddress::Connection(SERVICE.to_owned().try_into()?),
+        ObjectAddress::Fleet,
         RuntimeControl::SetTime {
             now: RegistryTime(
                 chrono::DateTime::from_timestamp_millis(created)
@@ -75,7 +75,7 @@ async fn prepare(
     let registry_at = chrono::Utc::now().timestamp_millis();
     control(
         base,
-        ObjectAddress::Registry,
+        ObjectAddress::Fleet,
         RuntimeControl::SetTime {
             now: RegistryTime(
                 chrono::DateTime::from_timestamp_millis(registry_at)
@@ -191,7 +191,7 @@ async fn read(socket: &mut reqwest_websocket::WebSocket) -> ConformanceResult<No
 }
 async fn timestamps(root: &std::path::Path) -> ConformanceResult<Option<(i64, i64)>> {
     let mut connection = sqlx_turso::TursoConnectOptions::new()
-        .filename(root.join(format!("connection-{SERVICE}.db")))
+        .filename(root.join("fleet.db"))
         .read_only(true)
         .connect()
         .await?;

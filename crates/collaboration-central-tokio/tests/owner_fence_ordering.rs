@@ -22,7 +22,7 @@ use durable_steps::{CallTarget, Uuid};
 use fleet_admission::FleetOperation;
 use fleet_sync_protocol::*;
 use futures_util::StreamExt;
-use message_board::{BoardId, Description, ResourceName, ServiceId, WorkspaceId};
+use message_board::{BoardId, Description, ResourceName, WorkspaceId};
 use reqwest_websocket::{Message, WebSocket};
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -257,7 +257,7 @@ async fn normal_held_order(base: &str, order: ReleaseOrder) -> ConformanceResult
         .no_proxy()
         .timeout(Duration::from_secs(10))
         .build()?;
-    let session = ObjectAddress::Connection(ServiceId::try_from(OLD_SERVICE.to_owned())?);
+    let session = ObjectAddress::Fleet;
     let mut callers = tokio::task::JoinSet::new();
     let proof=async {
         // Arrange normal Fleet parents, creation, Register and a real empty schema1 Copy.
@@ -278,10 +278,10 @@ async fn normal_held_order(base: &str, order: ReleaseOrder) -> ConformanceResult
         let transfer=TransferId::new(Uuid::now_v7())?;
         let confirmation=json!({"transferId":transfer,"toInstallation":NEW_SERVICE,"reason":"forced real Fence/Piece ordering","preview":preview});
         // Act: hold the actual Registry Fence before creating the exact held Piece.
-        runtime_control(base,ObjectAddress::Registry,RuntimeControl::HoldNextDispatch {destination:copy.clone()}).await?;
+        runtime_control(base,ObjectAddress::Fleet,RuntimeControl::HoldNextDispatch {destination:copy.clone()}).await?;
         let send_http=http.clone();let send_route=route.clone();let send_body=confirmation.clone();
         callers.spawn(async move {owner_post(&send_http,&send_route,&send_body).await});
-        let fence_envelope=held_request(base,ObjectAddress::Registry,&copy).await?;
+        let fence_envelope=held_request(base,ObjectAddress::Fleet,&copy).await?;
         if fence_envelope.get("kind")!=Some(&json!(<fleet_sync_lease::CopyFence as CallTarget>::KIND)) {return Err("owner Takeover held another call instead of its real Fence".into());}
         let fence:FenceRequest=serde_json::from_value(fence_envelope.get("request").cloned().ok_or("held Fence omitted its native request")?)?;
         if fence.database!=database || fence.transfer_id!=transfer || fence.new_epoch!=Epoch::new(2)? || fence.expect!= (FenceExpectation {epoch:Epoch::new(1)?,acked:original_position(1)?}) || fence.holder!=PeerId::try_from(NEW_PEER.to_owned())? {return Err("held Fence belongs to another transfer, holder or preview prefix".into());}
@@ -292,7 +292,7 @@ async fn normal_held_order(base: &str, order: ReleaseOrder) -> ConformanceResult
         let held:Piece<BoardAnnotation>=serde_json::from_value(piece_envelope.pointer("/request/request/value").cloned().ok_or("held session request omitted its exact Piece")?)?;
         if piece_envelope.get("kind")!=Some(&json!("central.copy-session-write")) || piece_envelope.pointer("/request/sender")!=Some(&json!(OLD_PEER)) || held!=piece {return Err("the held session dispatch is not this exact old-holder Piece/digest/prefix".into());}
         // Both holds must still exist together; setup completion is not overlap proof.
-        if !matches!(runtime_control(base,ObjectAddress::Registry,RuntimeControl::Observe).await?.dispatch,DispatchFaultObservation::Held {..}) || !matches!(runtime_control(base,session.clone(),RuntimeControl::Observe).await?.dispatch,DispatchFaultObservation::Held {..}) {return Err("Fence and exact Piece were not simultaneously pending before release".into());}
+        if !matches!(runtime_control(base,ObjectAddress::Fleet,RuntimeControl::Observe).await?.dispatch,DispatchFaultObservation::Held {..}) || !matches!(runtime_control(base,session.clone(),RuntimeControl::Observe).await?.dispatch,DispatchFaultObservation::Held {..}) {return Err("Fence and exact Piece were not simultaneously pending before release".into());}
         println!("OWNER_FENCE_ORDERING_STAGE both_correlated_calls_held passed");
         let initial;
         let piece_result;
@@ -300,11 +300,11 @@ async fn normal_held_order(base: &str, order: ReleaseOrder) -> ConformanceResult
             ReleaseOrder::PieceFirst=>{
                 runtime_control(base,session.clone(),RuntimeControl::ResumeDispatch).await?;
                 piece_result=piece_answer(&mut old.socket,frame).await?;
-                runtime_control(base,ObjectAddress::Registry,RuntimeControl::ResumeDispatch).await?;
+                runtime_control(base,ObjectAddress::Fleet,RuntimeControl::ResumeDispatch).await?;
                 initial=tokio::time::timeout(Duration::from_secs(8),callers.join_next()).await?.ok_or("Takeover HTTP caller disappeared")???;
             },
             ReleaseOrder::FenceFirst=>{
-                runtime_control(base,ObjectAddress::Registry,RuntimeControl::ResumeDispatch).await?;
+                runtime_control(base,ObjectAddress::Fleet,RuntimeControl::ResumeDispatch).await?;
                 initial=tokio::time::timeout(Duration::from_secs(8),callers.join_next()).await?.ok_or("Takeover HTTP caller disappeared")???;
                 // Observe actual completion before releasing the other real call.
                 let completed=finish_takeover(&http,&route,&confirmation,initial.clone()).await?;
@@ -314,7 +314,7 @@ async fn normal_held_order(base: &str, order: ReleaseOrder) -> ConformanceResult
             },
             ReleaseOrder::Together=>{
                 let (resumed_fence,resumed_piece)=tokio::join!(
-                    runtime_control(base,ObjectAddress::Registry,RuntimeControl::ResumeDispatch),
+                    runtime_control(base,ObjectAddress::Fleet,RuntimeControl::ResumeDispatch),
                     runtime_control(base,session.clone(),RuntimeControl::ResumeDispatch),
                 );
                 resumed_fence?;resumed_piece?;
@@ -356,12 +356,7 @@ async fn normal_held_order(base: &str, order: ReleaseOrder) -> ConformanceResult
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
     }.await;
     // Release exact owned holds even when an incorrect build fails an assertion.
-    let _ = runtime_control(
-        base,
-        ObjectAddress::Registry,
-        RuntimeControl::ResumeDispatch,
-    )
-    .await;
+    let _ = runtime_control(base, ObjectAddress::Fleet, RuntimeControl::ResumeDispatch).await;
     let _ = runtime_control(base, session, RuntimeControl::ResumeDispatch).await;
     callers.abort_all();
     while callers.join_next().await.is_some() {}

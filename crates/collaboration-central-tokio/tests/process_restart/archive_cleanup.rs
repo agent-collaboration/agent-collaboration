@@ -95,7 +95,7 @@ async fn run_cleanup_restart(loss: CleanupLoss) -> ConformanceResult<()> {
     drop(prepared.claimant);
     drop(prepared.reader);
     let input = prepared.input;
-    let registry_path = root.path().join("registry.db");
+    let registry_path = root.path().join("fleet.db");
     if operation(&registry_path, &input.operation).await?.0 != "running" {
         jwks.shutdown().await?;
         return Err("original refused-settlement debt completed before process death".into());
@@ -114,7 +114,7 @@ async fn run_cleanup_restart(loss: CleanupLoss) -> ConformanceResult<()> {
             },
         },
         RuntimeControlRequest {
-            address: ObjectAddress::Registry,
+            address: ObjectAddress::Fleet,
             command: RuntimeControl::HoldNextDispatch {
                 destination: ObjectAddress::Fleet,
             },
@@ -124,7 +124,7 @@ async fn run_cleanup_restart(loss: CleanupLoss) -> ConformanceResult<()> {
     let proof = verify::verify_cleanup(&second.base, root.path(), &input, &journal, loss).await;
     let _ = control(
         &second.base,
-        ObjectAddress::Registry,
+        ObjectAddress::Fleet,
         RuntimeControl::ResumeDispatch,
     )
     .await;
@@ -276,7 +276,7 @@ async fn read_journal(
     operation: &Value,
 ) -> ConformanceResult<SavedJournal> {
     let mut connection = sqlx_turso::TursoConnectOptions::new()
-        .filename(root.join("registry.db"))
+        .filename(root.join("fleet.db"))
         .read_only(true)
         .connect()
         .await?;

@@ -206,7 +206,7 @@ pub(super) fn envelope(
 }
 async fn read(fixture: &Fixture, request: Value) -> TestResult<BoardReadPage> {
     let bytes = fixture.runtime.on_call(serde_json::to_vec(&json!({
-        "source":{"kind":"connection","value":SERVICE},"sourceFace":"session","authority":{"kind":"object"},
+        "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":SERVICE}},
         "destination":{"kind":"fleet"},"destinationFace":"fleet",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"maximum_row_read"},
         "kind":"central.fleet-read","target":null,"request":request

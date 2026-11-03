@@ -46,7 +46,7 @@ fn relay_envelope(
         .pointer("/value/call")
         .ok_or("relay fixture is missing its CallId")?;
     Ok(json!({
-        "source":{"kind":"registry"},"sourceFace":"registry","authority":{"kind":"object"},
+        "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
         "destination":{"kind":"mailbox","value":service},"destinationFace":"mailbox",
         "identity":call,"kind":"central.mailbox-request",
         "target":{"installation":service,"recipient":recipient},"request":{"actor":actor,"request":request}
@@ -174,14 +174,15 @@ async fn relay_rejects_foreign_session_identity_and_mailbox_before_touching_cust
         let before = physical_payload(&fixture).await?;
         let session = |actor, request| -> TestResult<Value> {
             let mut envelope = relay_envelope(&service, peer, actor, request)?;
-            envelope["source"] = json!({"kind":"connection","value":service});
+            envelope["source"] = json!({"kind":"fleet"});
+            envelope["authority"] = json!({"kind":"machine","value":{"installation":service}});
             envelope["sourceFace"] = json!("session");
             Ok(envelope)
         };
         let mut wrong_id = session(peer, fetch())?;
         wrong_id["identity"] = identity();
         let mut wrong_service = session(peer, fetch())?;
-        wrong_service["source"]["value"] = json!(foreign);
+        wrong_service["authority"]["value"]["installation"] = json!(foreign);
         let mut wrong_mailbox = relay_envelope(
             &service,
             peer,

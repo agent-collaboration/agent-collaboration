@@ -18,7 +18,7 @@ async fn binding(fixture: &Fixture, project: &ProjectId) -> TestResult<ProjectCr
     let bytes = fixture
         .runtime
         .on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"registry"},"sourceFace":"registry","authority":{"kind":"object"},
+            "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
             "destination":{"kind":"fleet"},"destinationFace":"fleet",
             "identity":{"operation":Uuid::now_v7(),"step":"creation_read"},
             "kind":"central.creation-decision","target":null,"request":project
@@ -99,7 +99,7 @@ async fn accepted_and_rejected_creation_bindings_survive_terminal_retries_feed_e
         let update=request(FleetOperation::WorkspaceUpdate {name:ResourceName::try_from("after real retention expiry".to_owned())?,description:Description::try_from("trigger production feed pruning".to_owned())?})?;
         reopened.fleet_request(&update).await?;
         let bytes=reopened.runtime.on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"connection","value":"550e8400-e29b-41d4-a716-4466554400a9"},"sourceFace":"session","authority":{"kind":"object"},
+            "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":"550e8400-e29b-41d4-a716-4466554400a9"}},
             "destination":{"kind":"fleet"},"destinationFace":"fleet",
             "identity":{"operation":Uuid::now_v7(),"step":"expired_feed"},
             "kind":"central.fleet-read","target":null,"request":{"kind":"feed","value":{"after":0}}

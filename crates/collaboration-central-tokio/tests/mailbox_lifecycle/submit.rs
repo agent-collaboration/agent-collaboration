@@ -48,7 +48,7 @@ pub(super) fn submit_bytes(
     item: &DeliveryEnvelope<BoardDeliveryTypes>,
 ) -> TestResult<Vec<u8>> {
     Ok(serde_json::to_vec(&json!({
-        "source":{"kind":"registry"},"sourceFace":"registry","authority":{"kind":"object"},
+        "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
         "destination":{"kind":"mailbox","value":service},"destinationFace":"mailbox",
         "identity":{"operation":Uuid::now_v7(),"step":"submit"},"kind":"central.mailbox-submit",
         "target":{"installation":service,"recipient":peer},"request":{"origin":sender,"route":origin,"rank":null,"item":item}

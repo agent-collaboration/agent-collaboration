@@ -166,8 +166,8 @@ async fn a_newer_real_publication_overtakes_the_claim_call_and_older_still_compl
         fixture.io.now.fetch_add(10_000,Ordering::SeqCst);
         let renewal = LeaseRequest::Renew(RenewRequest {attempt:RequestId::new(durable_steps::Uuid::now_v7())?,database,epoch:Epoch::new(1)?});
         let call = serde_json::to_vec(&json!({
-            "source":{"kind":"connection","value":SERVICE},"sourceFace":"session","authority":{"kind":"object"},
-            "destination":{"kind":"registry"},"destinationFace":"registry",
+            "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":SERVICE}},
+            "destination":{"kind":"fleet"},"destinationFace":"registry",
             "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"lease_dispatch"},
             "kind":"central.session-lease","target":null,"request":{
                 "session":fleet_sync_session::SessionKey {peer,session_id:SessionId::new(durable_steps::Uuid::now_v7())?},"request":renewal

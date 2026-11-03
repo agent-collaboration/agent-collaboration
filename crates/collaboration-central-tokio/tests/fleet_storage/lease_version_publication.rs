@@ -14,7 +14,7 @@ const PEER: &str = "019f0000-0000-7000-8000-000000000b03";
 
 async fn directory(fixture: &Fixture) -> TestResult<DirectoryEntry> {
     let answer = fixture.runtime.on_call(serde_json::to_vec(&json!({
-        "source":{"kind":"connection","value":SERVICE},"sourceFace":"session","authority":{"kind":"object"},
+        "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":SERVICE}},
         "destination":{"kind":"fleet"},"destinationFace":"fleet",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"directory_version"},
         "kind":"central.fleet-read","target":null,"request":{"kind":"directory","value":{"query":{}}}
