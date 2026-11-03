@@ -10,7 +10,7 @@ use std::{path::PathBuf, sync::Arc};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 
-#[path = "provider_turn_boundaries/failed_tool_plan.rs"]
+#[path = "../provider_turn_boundaries/failed_tool_plan.rs"]
 mod failed_tool_plan;
 
 const FAILED_PROMPT_ORDER_FIXTURE: &str = concat!(

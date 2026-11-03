@@ -725,5 +725,5 @@ async fn malformed_post_send_setting_response_gates_existing_session() {
     client.shutdown().await;
 }
 
-#[path = "create_settings_order/settings_tail_tests.rs"]
+#[path = "../create_settings_order/settings_tail_tests.rs"]
 mod settings_tail_tests;
