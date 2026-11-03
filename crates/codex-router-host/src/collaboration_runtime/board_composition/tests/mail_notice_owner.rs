@@ -70,6 +70,7 @@ impl DeliveryConsumer<TursoScope<'_, ObserverHost>> for AdmissionMarker {
 }
 
 pub(super) struct MailOwner {
+    peer: PeerId,
     pub mail: Arc<MailDeliveryRuntime>,
     pub(super) owner: Arc<InteractionStore>,
     store: ObserverStore,
@@ -154,6 +155,7 @@ impl MailOwner {
             Arc::new(TokioHost::new(Arc::new(NoObservationCalls), SystemClock)),
         );
         Ok(Self {
+            peer,
             mail,
             owner,
             store,
@@ -166,9 +168,12 @@ impl MailOwner {
             .store
             .transaction(|scope| {
                 Box::pin(async move {
-                    let rows = fleet_sync_delivery::test_support::snapshot(scope)
-                        .await
-                        .map_err(StoreError::backend)?;
+                    let rows = fleet_sync_delivery::test_support::snapshot::<
+                        _,
+                        collaboration_contracts::RouterDeliveryTypes,
+                    >(scope)
+                    .await
+                    .map_err(StoreError::backend)?;
                     rows.into_iter()
                         .find(|row| row.category == "inboxState")
                         .map(|row| {
@@ -251,9 +256,12 @@ impl MailOwner {
             .store
             .transaction(|scope| {
                 Box::pin(async move {
-                    fleet_sync_delivery::test_support::snapshot(scope)
-                        .await
-                        .map_err(StoreError::backend)
+                    fleet_sync_delivery::test_support::snapshot::<
+                        _,
+                        collaboration_contracts::RouterDeliveryTypes,
+                    >(scope)
+                    .await
+                    .map_err(StoreError::backend)
                 })
             })
             .await?)
@@ -264,6 +272,7 @@ impl MailOwner {
         relay: PeerId,
     ) -> Result<(ItemId, runtime_primitives::OperationId), TestError> {
         let id = item.id();
+        let submitter = self.peer;
         let limits = DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
             64 * 1024 * 1024,
             10_000,
@@ -280,7 +289,12 @@ impl MailOwner {
                         _,
                         collaboration_contracts::RouterDeliveryTypes,
                     >::new(scope, limits)
-                    .enqueue_and_admit::<ArrangedSubmit>(item, relay)
+                    .enqueue_and_admit::<ArrangedSubmit>(
+                        item,
+                        relay,
+                        submitter,
+                        runtime_primitives::Clock::now(&SystemClock),
+                    )
                     .await
                     .map_err(delivery_rollback)?;
                     if !matches!(answer, fleet_sync_delivery::OutboxAdmission::Queued { .. })
@@ -396,6 +410,7 @@ impl MailOwner {
     }
     pub async fn close(self) -> Result<(), TestError> {
         let Self {
+            peer: _,
             mail,
             owner,
             store,

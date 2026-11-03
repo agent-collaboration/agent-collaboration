@@ -41,7 +41,7 @@ async fn hold_lost_receipt_submit(
         .holder
         .central
         .runtime_control(
-            ObjectAddress::Registry,
+            ObjectAddress::Fleet,
             RuntimeControl::HoldNextSelectedDispatch {
                 destination: mailbox,
                 call: DispatchCallSelector::MailboxSubmitFor { origin, item },
@@ -61,7 +61,7 @@ async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
     let mut fixture = Box::pin(RuleFixture::open(true)).await?;
     let proof = Box::pin(async {
         let seed = Box::pin(arrange_sent_follow(&mut fixture)).await?;
-        let connection = ObjectAddress::Connection(origin()?.installation);
+        let connection = ObjectAddress::Fleet;
         let (group, cancel) = arrange_remote_end(&fixture, &seed, case).await?;
         let mailbox = ObjectAddress::Mailbox(rule_fixture::RECIPIENT.to_owned().try_into()?);
         if matches!(case, CancelPrefix::LostReceipt) {
@@ -100,7 +100,7 @@ async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
     let _ = fixture
         .holder
         .central
-        .runtime_control(ObjectAddress::Registry, RuntimeControl::ResumeDispatch)
+        .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
         .await;
     let closed = fixture.close().await;
     closed?;
@@ -168,7 +168,7 @@ async fn arrange_remote_end(
     (MailCancelGroup, DeliveryEnvelope<BoardDeliveryTypes>),
     Box<dyn std::error::Error + Send + Sync>,
 > {
-    let connection = ObjectAddress::Connection(origin()?.installation);
+    let connection = ObjectAddress::Fleet;
     if matches!(case, CancelPrefix::Discarded) {
         fixture
             .holder
@@ -332,7 +332,7 @@ async fn lose_actual_submit_answer(
         let held = fixture
             .holder
             .central
-            .runtime_control(ObjectAddress::Registry, RuntimeControl::AwaitHeldDispatch)
+            .runtime_control(ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch)
             .await;
         let held = match held {
             Ok(held) => held,
@@ -365,21 +365,18 @@ async fn lose_actual_submit_answer(
         fixture
             .holder
             .central
-            .runtime_control(
-                ObjectAddress::Registry,
-                RuntimeControl::DropHeldDispatchReply,
-            )
+            .runtime_control(ObjectAddress::Fleet, RuntimeControl::DropHeldDispatchReply)
             .await?;
         fixture
             .holder
             .central
-            .runtime_control(ObjectAddress::Registry, RuntimeControl::ResumeDispatch)
+            .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
             .await?;
         let lost = fixture
             .holder
             .central
             .runtime_control(
-                ObjectAddress::Registry,
+                ObjectAddress::Fleet,
                 RuntimeControl::AwaitDroppedObjectReply,
             )
             .await?;
@@ -406,7 +403,7 @@ async fn successor_publication_evidence(
     let fault = fixture
         .holder
         .central
-        .runtime_control(ObjectAddress::Registry, RuntimeControl::Observe)
+        .runtime_control(ObjectAddress::Fleet, RuntimeControl::Observe)
         .await?;
     let marks = fixture
         .successor

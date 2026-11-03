@@ -78,7 +78,7 @@ async fn non_holder_sender_publishes_local_notifications_before_copy_ack_and_ded
     let holder = Box::pin(claim_fixture::ClaimFixture::start_with_notifications()).await?;
     let project = claimed_project(&holder).await?;
     let sender = Box::pin(SenderFixture::start(&holder)).await?;
-    let session = ObjectAddress::Connection(origin()?.installation);
+    let session = ObjectAddress::Fleet;
     let copy = ObjectAddress::Copy(DatabaseId::try_from(project.as_str().to_owned())?);
     let proof = Box::pin(async {
         let notifications = holder.notifications.as_ref().ok_or("native holder notifications")?;

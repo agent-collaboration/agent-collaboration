@@ -32,6 +32,7 @@ struct EdgeState {
     #[cfg(feature = "conformance")]
     piece_integrity: crate::piece_integrity_refusal::PieceIntegrityRefusal,
     lease_notices: crate::lease_notice_gate::LeaseNoticeGate,
+    registration_answers: crate::registration_answer_gate::RegistrationAnswerGate,
     #[cfg(feature = "conformance")]
     payload_inputs: crate::payload_input_observer::PayloadInputObserver,
 }
@@ -48,6 +49,7 @@ pub(crate) struct SignedAccessEdge {
     #[cfg(feature = "conformance")]
     piece_integrity: crate::piece_integrity_refusal::PieceIntegrityRefusal,
     lease_notices: crate::lease_notice_gate::LeaseNoticeGate,
+    registration_answers: crate::registration_answer_gate::RegistrationAnswerGate,
     #[cfg(feature = "conformance")]
     payload_inputs: crate::payload_input_observer::PayloadInputObserver,
 }
@@ -61,6 +63,8 @@ impl SignedAccessEdge {
         let claim_grants = crate::claim_grant_drop::ClaimGrantDrop::default();
         let mail_wire = crate::mail_wire_observer::MailWireObserver::default();
         let lease_notices = crate::lease_notice_gate::LeaseNoticeGate::default();
+        let registration_answers =
+            crate::registration_answer_gate::RegistrationAnswerGate::default();
         #[cfg(feature = "conformance")]
         let piece_integrity = crate::piece_integrity_refusal::PieceIntegrityRefusal::default();
         #[cfg(feature = "conformance")]
@@ -79,6 +83,7 @@ impl SignedAccessEdge {
             #[cfg(feature = "conformance")]
             piece_integrity: piece_integrity.clone(),
             lease_notices: lease_notices.clone(),
+            registration_answers: registration_answers.clone(),
             #[cfg(feature = "conformance")]
             payload_inputs: payload_inputs.clone(),
         };
@@ -107,6 +112,7 @@ impl SignedAccessEdge {
             #[cfg(feature = "conformance")]
             piece_integrity,
             lease_notices,
+            registration_answers,
             #[cfg(feature = "conformance")]
             payload_inputs,
         })
@@ -138,6 +144,12 @@ impl SignedAccessEdge {
         epoch: fleet_sync_protocol::Epoch,
     ) -> FixtureResult<crate::LeaseNoticeObservation> {
         self.lease_notices.begin(project, epoch)
+    }
+    pub(crate) fn hold_registration_answer(
+        &self,
+        database: fleet_sync_protocol::DatabaseId,
+    ) -> FixtureResult<crate::RegistrationAnswerObservation> {
+        self.registration_answers.begin(database)
     }
     pub(crate) fn hold_superseded_notice(
         &self,
@@ -210,6 +222,8 @@ async fn upgrade(
 }
 async fn bridge(mut downstream: WebSocket, state: EdgeState) -> FixtureResult {
     let mut notice_changes = state.lease_notices.subscribe();
+    let mut registration_changes = state.registration_answers.subscribe();
+    let mut held_answers = std::collections::VecDeque::new();
     let mut held_notices: Option<(u64, std::collections::VecDeque<Message>)> = None;
     let mut upstream = reqwest::Client::builder()
         .http1_only()
@@ -228,6 +242,14 @@ async fn bridge(mut downstream: WebSocket, state: EdgeState) -> FixtureResult {
     loop {
         tokio::select! {
             _ = state.stop.cancelled() => break,
+            changed = registration_changes.changed() => {
+                changed?;
+                if !state.registration_answers.is_held()? {
+                    while let Some(answer) = held_answers.pop_front() {
+                        downstream.send(answer).await?;
+                    }
+                }
+            },
             changed = notice_changes.changed() => {
                 changed?;
                 flush_released_notices(&mut downstream, &state.lease_notices, &mut held_notices).await?;
@@ -258,6 +280,11 @@ async fn bridge(mut downstream: WebSocket, state: EdgeState) -> FixtureResult {
             },
             frame = upstream.next() => match frame {
                 Some(Ok(UpstreamMessage::Binary(bytes))) => {
+                    if state.registration_answers.defer(&bytes)? {
+                        if held_answers.len() >= 64 { return Err("registration answer hold exceeded its bound".into()); }
+                        held_answers.push_back(Message::Binary(bytes));
+                        continue;
+                    }
                     if state.mail_wire.server_frame(&bytes)? { continue; }
                     if state.claim_grants.drop_answer(&bytes)? { break; }
                     flush_released_notices(&mut downstream, &state.lease_notices, &mut held_notices).await?;
@@ -271,6 +298,11 @@ async fn bridge(mut downstream: WebSocket, state: EdgeState) -> FixtureResult {
                     downstream.send(Message::Binary(bytes)).await?;
                 },
                 Some(Ok(UpstreamMessage::Text(text))) => {
+                    if state.registration_answers.defer(text.as_bytes())? {
+                        if held_answers.len() >= 64 { return Err("registration answer hold exceeded its bound".into()); }
+                        held_answers.push_back(Message::Text(text.into()));
+                        continue;
+                    }
                     if state.mail_wire.server_frame(text.as_bytes())? { continue; }
                     if state.claim_grants.drop_answer(text.as_bytes())? { break; }
                     flush_released_notices(&mut downstream, &state.lease_notices, &mut held_notices).await?;

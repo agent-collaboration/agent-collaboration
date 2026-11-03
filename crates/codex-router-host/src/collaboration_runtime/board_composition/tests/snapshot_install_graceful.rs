@@ -356,13 +356,10 @@ pub(super) async fn observe_restart_renewal(
     timeout(BOUND, async {
         loop {
             let observed = central
-                .runtime_control(
-                    ObjectAddress::Connection(origin()?.installation),
-                    RuntimeControl::AwaitHeldDispatch,
-                )
+                .runtime_control(ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch)
                 .await?;
             let DispatchFaultObservation::Held {
-                destination: ObjectAddress::Registry,
+                destination: ObjectAddress::Fleet,
                 request,
             } = observed.dispatch
             else {
@@ -394,19 +391,16 @@ pub(super) async fn observe_restart_renewal(
                     "{renewal:?}"
                 );
                 central
-                    .runtime_control(
-                        ObjectAddress::Connection(origin()?.installation),
-                        RuntimeControl::ResumeDispatch,
-                    )
+                    .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
                     .await?;
                 println!("RECEIVING_RESTART_FRESH_RENEW same_database_epoch_no_claim");
                 return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
             }
             central
                 .runtime_control(
-                    ObjectAddress::Connection(origin()?.installation),
+                    ObjectAddress::Fleet,
                     RuntimeControl::ResumeDispatchAndHoldNext {
-                        destination: ObjectAddress::Registry,
+                        destination: ObjectAddress::Fleet,
                     },
                 )
                 .await?;

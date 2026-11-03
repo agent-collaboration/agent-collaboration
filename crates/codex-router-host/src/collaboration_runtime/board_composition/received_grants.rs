@@ -10,6 +10,10 @@ use message_board::ProjectId;
 use runtime_primitives::{Clock, IdSource, SystemClock, UuidV7Ids};
 use std::{io, sync::Arc};
 
+#[cfg(test)]
+#[path = "received_grants_test.rs"]
+mod tests;
+
 impl ProjectWriters {
     /// Success means stale, already present, or durably handed to the project owner.
     pub(super) async fn receive_grant(
