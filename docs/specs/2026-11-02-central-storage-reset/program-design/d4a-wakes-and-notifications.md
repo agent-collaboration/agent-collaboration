@@ -37,7 +37,15 @@ Today the **project's writer machine** scans its local project store and sends n
 
 `wake send | show | list | pause | resume | cancel` keep their names and talk to the Fleet. `--wait-until-first-fire` waits for the occurrence's inbox status. Limits are in the JSON schema, the CLI help and the MCP tool schemas, and a refusal names the limit (U16). Delivery-attempt commands that read `mailbox_deliveries` are deleted.
 
-## Lead decisions (strike any that is wrong)
+## Decisions for the owner
 
-1. **Offline catch-up:** a target offline across several occurrences gets the latest one only (the alternative is every missed one).
-2. **Notification coverage table:** `notification_coverage` is the one non-definition table D4a adds, because a listing must know what it already covered. Without it, a pass after a Fleet restart could miss or repeat activity.
+1. **A target that was offline across several firings:** (a) gets only the latest, and older unsent ones are superseded (needs explicit supersession of queued items, not just “compute the latest”); or (b) gets every one. Recommended: (a), because a wake is a reminder and repeats add nothing.
+2. **Notification coverage:** the Fleet keeps one coverage record per subscription (`notification_coverage`) so each listing knows what it already covered. It is delivery state, not an automation definition. Recommended: keep it; without it a restart can miss or repeat activity.
+
+## Design work remaining before D4a is planned (from the Advisor's second look)
+
+- **Occurrences and edits:** when an edit, pause, resume or cancel takes effect; an occurrence's message is frozen once admitted; resume skips paused ticks as today (`wakeup_mutations.rs:86–98`); alarm replay is atomic with admission; queued items are bounded by the wake's expiry; “sent” means admitted to the Fleet outbox, “fired” means accepted into the target inbox; first-fire evidence survives later occurrences.
+- **Listing and coverage commit together:** after reading the project objects, the Fleet freezes the listing under a stable id and, in one transaction, admits it and advances coverage; a refused listing does not consume its range; empty or filtered activity advances coverage deliberately.
+- **Coverage identity:** coverage records the project's feed cursor (epoch and position, `record_positions.rs:101–104`), the membership's generation and activation, and the selected ranges, as today's progress does (`subscription_delivery_progress.rs:14–66`); today's filters (own posts, thread overrides, Off and Poll modes) are kept.
+- **The pass is a wake:** `automation_wakes` gains an action kind (`message` or `notification pass for machine X`) so both share one scheduler; no second timer system.
+- **What stays on the Router:** only the notification timers go; native mail delivery, held and poll handling in `reader_delivery_owner` stay (`mail_delivery_runtime.rs:583`); listings carry structured ranges and read context, not plain text.
