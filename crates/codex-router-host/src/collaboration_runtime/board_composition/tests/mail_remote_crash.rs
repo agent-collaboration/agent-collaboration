@@ -49,6 +49,7 @@ fn readback_host() -> Arc<ReadbackHost> {
 
 async fn native_rows(
     root: &Path,
+    peer: PeerId,
 ) -> Result<Vec<fleet_sync_delivery::test_support::DeliveryObservation>, TestError> {
     let owner = Arc::new(
         InteractionStore::open(root.join("interaction.sqlite"))
@@ -56,13 +57,20 @@ async fn native_rows(
             .map_err(|error| io::Error::other(format!("native crash owning reopen: {error:?}")))?,
     );
     let store = InteractionAtomicStore::new(owner.clone(), readback_host());
+    let binding = collaboration_service::MachineSenderBinding::new(
+        "00000000-0000-4000-8000-000000000001"
+            .to_owned()
+            .try_into()?,
+        peer,
+    );
     let rows = store
-        .transaction(|scope| {
+        .transaction(move |scope| {
             Box::pin(async move {
                 fleet_sync_delivery::test_support::snapshot::<
                     _,
                     collaboration_contracts::RouterDeliveryTypes,
-                >(scope)
+                    _,
+                >(scope, &binding)
                 .await
                 .map_err(StoreError::backend)
             })
@@ -89,13 +97,20 @@ async fn origin_rows(
             readback_host(),
         )
         .await?;
+    let binding = collaboration_service::MachineSenderBinding::new(
+        "00000000-0000-4000-8000-000000000001"
+            .to_owned()
+            .try_into()?,
+        peer,
+    );
     let rows = object
-        .transaction(|scope| {
+        .transaction(move |scope| {
             Box::pin(async move {
                 fleet_sync_delivery::test_support::snapshot::<
                     _,
                     board_sync_protocol::BoardDeliveryTypes,
-                >(scope)
+                    _,
+                >(scope, &binding)
                 .await
                 .map_err(StoreError::backend)
             })
@@ -176,7 +191,7 @@ async fn canonical_publication_stays_owed_until_native_commit_at_sigkill_then_ca
 -> Result<(), TestError> {
     let (directory, state) = kill_child(CrashKind::Publication).await?;
     let item = state.item.ok_or("crash publication item missing")?;
-    let rows = native_rows(&directory.path().join("router")).await?;
+    let rows = native_rows(&directory.path().join("router"), state.peer).await?;
     assert_eq!(header(&rows, item)?["value"]["status"]["kind"], "queued");
     let origin = origin_rows(directory.path(), state.peer).await?;
     let owed_at_kill = origin.iter().any(|row| row.category == "publication" && row.identity == item.as_uuid().to_string()
@@ -264,7 +279,7 @@ async fn missing_native_publication_owner_never_answers_applied_or_retires_the_o
         .iter()
         .any(|event| matches!(event, WireEvent::Published { applied: true, .. }));
     harness.close().await?;
-    let rows = native_rows(&directory.path().join("router")).await?;
+    let rows = native_rows(&directory.path().join("router"), peer).await?;
     assert_eq!(header(&rows, item_id)?["value"]["status"]["kind"], "queued");
     let origin = origin_rows(directory.path(), peer).await?;
     assert!(

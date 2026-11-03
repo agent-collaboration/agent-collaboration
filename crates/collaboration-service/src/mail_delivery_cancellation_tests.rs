@@ -406,17 +406,22 @@ async fn admit_cancel(
     cancel: DeliveryCancel<RouterDeliveryTypes>,
 ) -> Result<LocalCancelAdmission, StoreError> {
     let config = fixture.host.config.local;
+    let binding = fixture.host.binding.clone();
     let consumer = fixture.host.consumer.clone();
     let now = SyncTime::from_unix_millis(fixture.host.clock.load(Ordering::SeqCst));
     fixture
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                let admitted =
-                    Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
-                        .enqueue_local_cancel(cancel, consumer.as_ref(), now)
-                        .await
-                        .map_err(delivery_rollback)?;
+                let admitted = Inbox::<_, RouterDeliveryTypes, _>::new(
+                    scope,
+                    config.owner,
+                    config.limits,
+                    binding.as_ref(),
+                )
+                .enqueue_local_cancel(cancel, consumer.as_ref(), now)
+                .await
+                .map_err(delivery_rollback)?;
                 for attempt in &admitted.effects.attempts {
                     let key =
                         fleet_sync_delivery::delivery_request_key(&(attempt.item, attempt.attempt))

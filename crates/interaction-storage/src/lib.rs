@@ -46,11 +46,7 @@ pub use mail_push_projection::{
     read_mail_push_in_scope,
 };
 mod installation_peer_directory;
-mod mail_removal_backfill;
 mod mail_retirement_progress;
-pub use mail_removal_backfill::{
-    complete_mail_removal_backfill_in_scope, mail_removal_backfill_completed_in_scope,
-};
 mod pending_poll_mail;
 pub use pending_poll_mail::{
     PendingPollMail, delete_pending_poll_in_scope, insert_pending_poll_in_scope,
@@ -60,7 +56,7 @@ mod mail_read_contexts;
 mod mail_submission_epochs;
 pub use mail_read_contexts::{StoredMailReadContext, record_mail_read_context_in_scope};
 mod message_send_answers;
-pub use installation_peer_directory::InstallationPeerBinding;
+pub use installation_peer_directory::{InstallationPeerBinding, installation_peer_in_scope};
 pub use mail_submission_epochs::{
     MailSubmissionEpoch, read_mail_submission_epoch_in_scope, record_mail_submission_epoch_in_scope,
 };

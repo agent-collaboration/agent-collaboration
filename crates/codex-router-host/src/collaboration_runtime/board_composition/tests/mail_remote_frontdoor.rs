@@ -310,7 +310,7 @@ async fn public_remote_send_and_pushed_recipient_report_canonical_status_across_
     // real producer's frozen envelope; recipient pump/Host/inbox/report stay real.
     let frozen = source.central.notifications.submitted_envelopes(sdk).await;
     let envelope = serde_json::from_slice(frozen.first().ok_or("producer envelope missing")?)?;
-    let (_, frame) = pushed_mail::push_frame(envelope)?;
+    let (_, frame) = pushed_mail::push_frame(source.peer(), envelope)?;
     recipient.transport.replay(vec![frame.into()]).await?;
     source.transport.observer.wait_for(|events| events.iter().any(|event|
         matches!(event, WireEvent::Publication { item: id, status: DeliveryStatus::Delivered { .. }, .. } if *id==sdk)),

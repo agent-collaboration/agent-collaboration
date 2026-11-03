@@ -43,6 +43,7 @@ fn message(
 }
 
 pub(super) fn push_frame(
+    submitter: PeerId,
     item: DeliveryEnvelope<BoardDeliveryTypes>,
 ) -> Result<(FrameId, Vec<u8>), TestError> {
     let frame = FrameId::new(durable_steps::Uuid::now_v7())?;
@@ -54,7 +55,11 @@ pub(super) fn push_frame(
         frame,
         serde_json::to_vec(&ServerFrame::<BoardConsumerProtocol>::Request {
             frame,
-            body: ServerRequest::Crate(ServerCall::Push { call, item }),
+            body: ServerRequest::Crate(ServerCall::Push {
+                call,
+                submitter: fleet_sync_protocol::Submitter::Machine(submitter),
+                item,
+            }),
         })?,
     ))
 }
@@ -63,7 +68,7 @@ pub(super) async fn push(
     harness: &MailHarness,
     item: DeliveryEnvelope<BoardDeliveryTypes>,
 ) -> Result<PushResult<CarrierAcceptance>, TestError> {
-    let (frame, bytes) = push_frame(item)?;
+    let (frame, bytes) = push_frame(harness.peer(), item)?;
     harness.transport.replay(vec![bytes.into()]).await?;
     let events = harness.transport.observer.wait_for(
         |events| events.iter().any(|event| matches!(event, WireEvent::Pushed { frame: actual, .. } if *actual == frame)),
@@ -213,7 +218,10 @@ async fn pushed_mail_crash_child() -> Result<(), TestError> {
         .transport
         .observer
         .record_push_receipts_to(root.join("receipt-sent"));
-    let (_, bytes) = push_frame(message(input.item, input.peer, "survives inbox crash")?)?;
+    let (_, bytes) = push_frame(
+        input.peer,
+        message(input.item, input.peer, "survives inbox crash")?,
+    )?;
     harness.transport.replay(vec![bytes.into()]).await?;
     // The parent kills this process only after the real post-commit barrier signal.
     std::future::pending::<Result<(), TestError>>().await

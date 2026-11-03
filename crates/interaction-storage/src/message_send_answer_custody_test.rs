@@ -22,16 +22,16 @@ async fn enqueue_with_answer(
                         .map_err(StoreError::backend)?,
                 )
                 .map_err(StoreError::backend)?;
-                let (admission, operation) = Outbox::<_, BoardDeliveryTypes>::new(scope, limits)
-                    .enqueue_and_admit::<NativeSubmit, NativeRetention>(
-                        item,
-                        PeerId::new(uuid::Uuid::now_v7()).unwrap(),
-                        PeerId::try_from("019f0000-0000-7000-8000-000000008131".to_owned())
-                            .unwrap(),
-                        NoDispatchHost.now(),
-                    )
-                    .await
-                    .map_err(StoreError::backend)?;
+                let (admission, operation) =
+                    Outbox::<_, BoardDeliveryTypes, _>::new(scope, limits, &NoDeliveryConsumer)
+                        .enqueue_and_admit::<NativeSubmit, NativeRetention>(
+                            item,
+                            PeerId::new(uuid::Uuid::now_v7()).unwrap(),
+                            fleet_sync_protocol::Submitter::Machine(native_sender_peer()),
+                            NoDispatchHost.now(),
+                        )
+                        .await
+                        .map_err(StoreError::backend)?;
                 assert!(matches!(admission, OutboxAdmission::Queued { .. }));
                 assert!(operation.is_some());
                 crate::record_message_send_admission(

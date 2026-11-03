@@ -163,3 +163,72 @@ fn directory_storage_error(error: StorageError) -> InstallationPeerResolutionErr
         _ => InstallationPeerResolutionError::Unavailable,
     }
 }
+
+/// Fulfil lookup hints after the custody scope has committed or rolled back.
+pub(super) async fn refresh_sender_bindings(
+    binding: &super::MachineSenderBinding,
+    owner: &interaction_storage::InteractionStore,
+    session: Option<&MailDeliverySession>,
+) -> Result<bool, StoreError> {
+    let missing = binding.take_missing_installations()?;
+    if missing.is_empty() {
+        return Ok(false);
+    }
+    let session =
+        session.ok_or_else(|| StoreError::backend("sender directory session unavailable"))?;
+    let mut welcomed = session.welcomed.clone();
+    while !*welcomed.borrow() {
+        welcomed.changed().await.map_err(StoreError::backend)?;
+    }
+    for service in missing {
+        if owner
+            .installation_peer(&service)
+            .await
+            .map_err(StoreError::backend)?
+            .is_some()
+        {
+            continue;
+        }
+        let InstallationPeerLookup::Enrolled { peer } = read_installation_peer(session, &service)
+            .await
+            .map_err(StoreError::backend)?
+        else {
+            return Err(StoreError::backend("sender installation is not enrolled"));
+        };
+        owner
+            .remember_installation_peer(&InstallationPeerBinding {
+                service_id: service,
+                peer_id: peer
+                    .as_uuid()
+                    .to_string()
+                    .try_into()
+                    .map_err(StoreError::backend)?,
+            })
+            .await
+            .map_err(StoreError::backend)?;
+    }
+    Ok(true)
+}
+
+impl MailDeliveryRuntime {
+    pub(super) async fn run_sender_binding_lookups(
+        &self,
+        mut stopped: tokio::sync::watch::Receiver<bool>,
+    ) -> Result<(), StoreError> {
+        loop {
+            if *stopped.borrow() {
+                return Ok(());
+            }
+            tokio::select! {
+                () = self.binding.lookup_requested() => {},
+                changed = stopped.changed() => { if changed.is_err() || *stopped.borrow() { return Ok(()); } continue; },
+            }
+            tokio::select! {
+                result = refresh_sender_bindings(self.binding.as_ref(), self.owner.as_ref(), self.session.as_ref()) => {
+                    if result.is_err() { tracing::debug!("sender binding lookup unavailable; custody retained for retry"); }
+                },
+                _ = stopped.changed() => return Ok(()),
+            }
+        }
+    }
+}

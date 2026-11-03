@@ -123,13 +123,15 @@ async fn assert_recovered_custody(
             runtime_primitives::SystemClock,
         )),
     );
+    let binding = native.runtime().binding.clone();
     let rows = observer
-        .transaction(|scope| {
+        .transaction(move |scope| {
             Box::pin(async move {
                 fleet_sync_delivery::test_support::snapshot::<
                     _,
                     collaboration_contracts::RouterDeliveryTypes,
-                >(scope)
+                    _,
+                >(scope, binding.as_ref())
                 .await
                 .map_err(StoreError::backend)
             })

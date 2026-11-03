@@ -10,10 +10,11 @@ use std::{
 };
 use tokio::io::AsyncReadExt;
 
-async fn seed_legacy_item(runtime: &Runtime) -> fleet_sync_protocol::ItemId {
+pub(super) async fn seed_legacy_item(runtime: &Runtime) -> fleet_sync_protocol::ItemId {
     let item = runtime.fixture.item(&runtime.fixture.draft());
     let id = item.id();
     let config = runtime.fixture.host.config.local;
+    let binding = runtime.fixture.host.binding.clone();
     let consumer = runtime.fixture.host.consumer.clone();
     runtime
         .fixture
@@ -21,10 +22,11 @@ async fn seed_legacy_item(runtime: &Runtime) -> fleet_sync_protocol::ItemId {
         .transaction(move |scope| {
             Box::pin(async move {
                 // The public pre-journal API deliberately leaves this row without removal work.
-                Inbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(
+                Inbox::<_, collaboration_contracts::RouterDeliveryTypes, _>::new(
                     scope,
                     config.owner,
                     config.limits,
+                    binding.as_ref(),
                 )
                 .enqueue_local(
                     item,
@@ -48,21 +50,19 @@ async fn startup_backfills_legacy_custody_once_and_retains_it_until_day60() {
     let item = seed_legacy_item(&runtime).await;
     let runtime = runtime.reopen().await;
     let mail = runtime.local_mail_runtime();
-    // Act through the owning runner's real startup, with cancellation already requested.
-    let shutdown = tokio_util::sync::CancellationToken::new();
-    shutdown.cancel();
-    mail.run(shutdown).await.unwrap();
+    // Act through the same library-owned startup operation called by the runner.
+    assert_eq!(mail.initialize_record_removals().await.unwrap(), 1);
     assert_eq!(
         runtime
-            .sql_count("SELECT count(*) AS count FROM mail_removal_backfill WHERE admitted_count=1")
+            .sql_count("SELECT count(*) AS count FROM _fleet_sync_delivery_backfills WHERE name='record-removals'")
             .await,
         1
     );
-    assert_eq!(mail.initialize_record_removals().await.unwrap(), None);
+    assert_eq!(mail.initialize_record_removals().await.unwrap(), 0);
     drop(mail);
     let runtime = runtime.reopen().await;
     let mail = runtime.local_mail_runtime();
-    assert_eq!(mail.initialize_record_removals().await.unwrap(), None);
+    assert_eq!(mail.initialize_record_removals().await.unwrap(), 0);
     // Assert using the independently specified UUIDv7 deadline, through the real engine.
     let created = item.as_uuid().as_bytes()[..6]
         .iter()
@@ -92,7 +92,7 @@ async fn completed_backfill_skips_the_sdk_custody_scan() {
     // Arrange a completed pass and a legacy key that would make any subsequent scan fail.
     let runtime = Runtime::new().await;
     let mail = runtime.local_mail_runtime();
-    assert_eq!(mail.initialize_record_removals().await.unwrap(), Some(0));
+    assert_eq!(mail.initialize_record_removals().await.unwrap(), 0);
     let item = seed_legacy_item(&runtime).await;
     runtime.fixture.store.transaction(move |scope| Box::pin(async move {
         sqlx::query("UPDATE _fleet_sync_inbox_items SET item_id='invalid-legacy-key' WHERE item_id=?")
@@ -100,7 +100,7 @@ async fn completed_backfill_skips_the_sdk_custody_scan() {
         Ok(())
     })).await.unwrap();
     // Act and assert: the durable marker must short-circuit before the SDK inspects keys.
-    assert_eq!(mail.initialize_record_removals().await.unwrap(), None);
+    assert_eq!(mail.initialize_record_removals().await.unwrap(), 0);
     drop(mail);
     runtime.close().await;
 }
@@ -110,20 +110,29 @@ async fn corrupt_completion_marker_refuses_startup_instead_of_skipping() {
     // Arrange the real completed marker, then corrupt each independently validated field.
     let runtime = Runtime::new().await;
     let mail = runtime.local_mail_runtime();
-    assert_eq!(mail.initialize_record_removals().await.unwrap(), Some(0));
+    assert_eq!(mail.initialize_record_removals().await.unwrap(), 0);
     for corrupt in [
-        "UPDATE mail_removal_backfill SET admitted_count=-1",
-        "UPDATE mail_removal_backfill SET id='00000000-0000-4000-8000-000000000001'",
-        "UPDATE mail_removal_backfill SET created_at=-1",
-        "UPDATE mail_removal_backfill SET updated_at=created_at+1",
+        "UPDATE _fleet_sync_delivery_backfills SET id='00000000-0000-4000-8000-000000000001'",
+        "UPDATE _fleet_sync_delivery_backfills SET id='invalid-marker'",
     ] {
-        runtime.fixture.store.transaction(move |scope| Box::pin(async move {
-            let valid_id = uuid::Uuid::now_v7().to_string();
-            sqlx::query("UPDATE mail_removal_backfill SET id=?,admitted_count=0,created_at=1,updated_at=1")
-                .bind(valid_id).execute(scope.executor()).await?;
-            sqlx::query(corrupt).execute(scope.executor()).await?;
-            Ok(())
-        })).await.unwrap();
+        runtime
+            .fixture
+            .store
+            .transaction(move |scope| {
+                Box::pin(async move {
+                    let valid_id = uuid::Uuid::now_v7().to_string();
+                    sqlx::query(
+                        "UPDATE _fleet_sync_delivery_backfills SET id=?,created_at=1,updated_at=1",
+                    )
+                    .bind(valid_id)
+                    .execute(scope.executor())
+                    .await?;
+                    sqlx::query(corrupt).execute(scope.executor()).await?;
+                    Ok(())
+                })
+            })
+            .await
+            .unwrap();
         // Act and assert: malformed persisted completion is never treated as completed.
         assert!(
             mail.initialize_record_removals().await.is_err(),
@@ -246,7 +255,11 @@ async fn sigkill_before_backfill_commit_retries_both_marker_and_admissions() {
     );
     // Assert WAL recovery kept legacy custody, but committed neither half of the upgrade.
     assert_eq!(
-        stored_count(&store, "SELECT count(*) FROM mail_removal_backfill").await,
+        stored_count(
+            &store,
+            "SELECT count(*) FROM _fleet_sync_delivery_backfills"
+        )
+        .await,
         0
     );
     assert_eq!(stored_count(&store, "SELECT count(*) FROM _fleet_sync_operations WHERE kind='fleet-sync.delivery.remove-record'").await, 0);
@@ -257,12 +270,12 @@ async fn sigkill_before_backfill_commit_retries_both_marker_and_admissions() {
     let mut props = runtime.local_mail_props();
     props.interactions = owner.clone();
     let mail = crate::MailDeliveryRuntime::new(peer, props, None).unwrap();
-    assert_eq!(mail.initialize_record_removals().await.unwrap(), Some(1));
-    assert_eq!(mail.initialize_record_removals().await.unwrap(), None);
+    assert_eq!(mail.initialize_record_removals().await.unwrap(), 1);
+    assert_eq!(mail.initialize_record_removals().await.unwrap(), 0);
     assert_eq!(
         stored_count(
             &store,
-            "SELECT count(*) FROM mail_removal_backfill WHERE admitted_count=1"
+            "SELECT count(*) FROM _fleet_sync_delivery_backfills WHERE name='record-removals'"
         )
         .await,
         1

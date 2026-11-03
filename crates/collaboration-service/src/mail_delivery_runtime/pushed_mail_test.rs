@@ -116,7 +116,9 @@ async fn full_push_inbox_returns_wire_capacity_refusal_without_admitting_custody
         serde_json::from_value(serde_json::to_value(DeliveryEnvelope::Item(item))?)?;
 
     // Act through the same typed intake used by the machine socket.
-    let answer = runtime.accept_pushed_mail(envelope).await?;
+    let answer = runtime
+        .accept_pushed_mail(fleet_sync_protocol::Submitter::Machine(peer), envelope)
+        .await?;
 
     // Assert the wire refusal is not an error/receipt, and both projections stay absent.
     assert!(matches!(
@@ -134,13 +136,17 @@ async fn full_push_inbox_returns_wire_capacity_refusal_without_admitting_custody
             reason: DeliveryRefusal::MailboxFull
         }))
     ));
+    let binding = runtime.binding.clone();
     let rows = runtime
         .store
-        .transaction(|scope| {
+        .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::test_support::snapshot::<_, RouterDeliveryTypes>(scope)
-                    .await
-                    .map_err(StoreError::backend)
+                fleet_sync_delivery::test_support::snapshot::<_, RouterDeliveryTypes, _>(
+                    scope,
+                    binding.as_ref(),
+                )
+                .await
+                .map_err(StoreError::backend)
             })
         })
         .await?;

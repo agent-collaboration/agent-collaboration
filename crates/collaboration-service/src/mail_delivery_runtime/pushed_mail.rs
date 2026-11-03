@@ -17,13 +17,21 @@ impl MailDeliveryRuntime {
         let config = self.config;
         let item = self
             .store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
+            .transaction({
+                let binding = self.binding.clone();
+                move |scope| {
+                    Box::pin(async move {
+                        Inbox::<_, RouterDeliveryTypes, _>::new(
+                            scope,
+                            config.owner,
+                            config.limits,
+                            binding.as_ref(),
+                        )
                         .resolve_delivery(&reference)
                         .await
                         .map_err(StoreError::backend)
-                })
+                    })
+                }
             })
             .await?;
         serde_json::from_value(serde_json::to_value(item).map_err(StoreError::backend)?)
@@ -32,6 +40,7 @@ impl MailDeliveryRuntime {
 
     pub async fn accept_pushed_mail(
         &self,
+        submitter: fleet_sync_protocol::Submitter,
         item: DeliveryEnvelope<BoardDeliveryTypes>,
     ) -> Result<PushResult<CarrierAcceptance>, StoreError> {
         let session = self.session.as_ref().ok_or_else(|| {
@@ -42,29 +51,61 @@ impl MailDeliveryRuntime {
         let item: DeliveryEnvelope<RouterDeliveryTypes> =
             serde_json::from_value(serde_json::to_value(item).map_err(StoreError::backend)?)
                 .map_err(StoreError::backend)?;
+        let sender_service = match item.sender() {
+            super::MailSender::Session(session) => Some(session.endpoint.service_id.clone()),
+            super::MailSender::HumanUser { installation } => Some(installation.clone()),
+            super::MailSender::Project { .. } => None,
+        };
+        let wire = serde_json::to_vec(&item).map_err(StoreError::backend)?;
         let config = self.config;
         let relay = session.relay;
-        let consumer = self.consumer.clone();
-        let now = self.host.now();
-        let answer = self
-            .store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
+        loop {
+            let consumer = self.consumer.clone();
+            let binding = self.binding.clone();
+            let pushed = serde_json::from_slice(&wire).map_err(StoreError::backend)?;
+            let now = self.host.now();
+            let answer = self
+                .store
+                .transaction(move |scope| {
+                    Box::pin(async move {
+                        Inbox::<_, RouterDeliveryTypes, _>::new(
+                            scope,
+                            config.owner,
+                            config.limits,
+                            binding.as_ref(),
+                        )
                         .accept_push::<LocalMailTask, ReportMailTask, RemoveMailRecord, _>(
-                            item, relay, &*consumer, now,
+                            submitter,
+                            pushed,
+                            relay,
+                            consumer.as_ref(),
+                            now,
                         )
                         .await
                         .map_err(fleet_sync_delivery::delivery_rollback)
+                    })
                 })
-            })
-            .await?;
-        // Custody has already committed. A failed wake leaves the journal's
-        // delivery obligation for recovery and cannot revoke this receipt.
-        if let Err(error) = self.host.wake_at(now).await {
-            tracing::warn!(%error, "pushed mail committed; runner wake failed");
+                .await?;
+            if matches!(
+                answer,
+                PushResult::BindingUnavailable {
+                    reason: fleet_sync_protocol::SenderBindingFailure::Unknown
+                }
+            ) && let Some(service) = &sender_service
+                && self.resolve_installation_peer(service).await.is_ok()
+            {
+                continue;
+            }
+            // Only committed custody admits work; the network receipt follows it.
+            if matches!(
+                answer,
+                PushResult::Accepted { .. } | PushResult::Replayed { .. }
+            ) && let Err(error) = self.host.wake_at(now).await
+            {
+                tracing::warn!(%error, "pushed mail committed; runner wake failed");
+            }
+            return Ok(answer);
         }
-        Ok(answer)
     }
 }
 

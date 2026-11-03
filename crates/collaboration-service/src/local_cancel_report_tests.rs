@@ -7,6 +7,7 @@ type ReportTask = ReportOutcome<
     ProjectionStore,
     <durable_steps::turso_store::TursoScope<'static, ProjectionHost> as durable_steps::storage::TransactionScope>::Database,
     RouterDeliveryTypes,
+    crate::MachineSenderBinding,
 >;
 
 #[tokio::test]
@@ -34,17 +35,22 @@ async fn local_cancel_journals_the_report_for_an_actual_relayed_inbox_original()
         Some(RecipientOutcome::Prevented { cancel })
     );
     let config = runtime.fixture.host.config.local;
+    let binding = runtime.fixture.host.binding.clone();
     runtime
         .fixture
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                let report =
-                    Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
-                        .pending_report(original)
-                        .await
-                        .map_err(StoreError::backend)?
-                        .ok_or_else(|| StoreError::backend("prevention report was not retained"))?;
+                let report = Inbox::<_, RouterDeliveryTypes, _>::new(
+                    scope,
+                    config.owner,
+                    config.limits,
+                    binding.as_ref(),
+                )
+                .pending_report(original)
+                .await
+                .map_err(StoreError::backend)?
+                .ok_or_else(|| StoreError::backend("prevention report was not retained"))?;
                 let requests = scope.running_request_keys(ReportTask::KIND).await?;
                 assert_eq!(
                     requests,

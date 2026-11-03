@@ -197,13 +197,14 @@ async fn a_fresh_successor_admission_records_its_own_epoch_without_waiting_for_w
 async fn outbox_is_unknown(runtime: &Runtime, item: ItemId) -> bool {
     use durable_steps::AtomicStore as _;
     let limits = runtime.fixture.host.config.local.limits;
+    let binding = runtime.fixture.host.binding.clone();
     let status = runtime
         .fixture
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(
-                    scope, limits,
+                fleet_sync_delivery::Outbox::<_, collaboration_contracts::RouterDeliveryTypes, _>::new(
+                    scope, limits, binding.as_ref(),
                 )
                 .status(item)
                 .await

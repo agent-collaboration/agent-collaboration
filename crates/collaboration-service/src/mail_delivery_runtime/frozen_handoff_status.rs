@@ -34,8 +34,9 @@ impl MailDeliveryRuntime {
             }
             let id = item.id();
             let config = self.config;
+            let binding = self.binding.clone();
             return self.store.transaction(move |scope| Box::pin(async move {
-                let outcome = Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
+                let outcome = Inbox::<_, RouterDeliveryTypes, _>::new(scope, config.owner, config.limits, binding.as_ref())
                     .local_outcome(id).await.map_err(StoreError::backend)?;
                 Ok(matches!(outcome, Some(outcome) if !matches!(outcome, RecipientOutcome::Held)))
             })).await;

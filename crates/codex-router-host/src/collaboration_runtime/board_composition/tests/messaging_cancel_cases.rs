@@ -60,11 +60,17 @@ enum CancelPrefix {
 }
 
 async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
-    let mut fixture = Box::pin(RuleFixture::open(true)).await?;
+    let mut fixture = Box::pin(RuleFixture::open(true))
+        .await
+        .map_err(|error| format!("open rule fixture: {error}"))?;
     let proof = Box::pin(async {
-        let seed = Box::pin(arrange_sent_follow(&mut fixture)).await?;
+        let seed = Box::pin(arrange_sent_follow(&mut fixture))
+            .await
+            .map_err(|error| format!("arrange sent follow: {error}"))?;
         let connection = ObjectAddress::Fleet;
-        let (group, cancel) = arrange_remote_end(&fixture, &seed, case).await?;
+        let (group, cancel) = arrange_remote_end(&fixture, &seed, case)
+            .await
+            .map_err(|error| format!("arrange remote end: {error}"))?;
         let fleet = ObjectAddress::Fleet;
         if matches!(case, CancelPrefix::LostReceipt) {
             hold_lost_receipt_submit(
@@ -103,11 +109,12 @@ async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
         if matches!(case, CancelPrefix::LostReceipt) {
             lose_actual_submit_answer(&fixture, fleet, seed.item.id()).await?;
         }
-        let items = wait_pushed(&fixture, DeliveryStream::Items).await?;
-        assert_eq!(
-            serde_json::to_value(items)?,
-            json!([{"kind":"item","value":seed.item}])
-        );
+        // Full bytes were observed before prevention. A final recipient record
+        // retains their digest and header after the SDK compacts its payload.
+        fixture
+            .recipient
+            .assert_retained_original(&seed.item)
+            .await?;
         if matches!(case, CancelPrefix::Discarded) {
             assert!(
                 fixture
@@ -119,7 +126,9 @@ async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
         } else {
             let controls = wait_pushed(&fixture, DeliveryStream::Controls).await?;
             assert_eq!(serde_json::to_value(controls)?, json!([cancel]));
-            decide_and_replay(&mut fixture, &seed, &cancel).await?;
+            decide_and_replay(&mut fixture, &seed, &cancel)
+                .await
+                .map_err(|error| format!("decide and replay: {error}"))?;
         }
         let store = fixture
             .successor
@@ -151,8 +160,12 @@ async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
         .release_held_dispatches(ObjectAddress::Fleet)
         .await;
     let closed = fixture.close().await;
-    closed?;
-    proof
+    match (proof, closed) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(error), Ok(())) => Err(error),
+        (Ok(()), Err(error)) => Err(format!("close rule fixture: {error}").into()),
+        (Err(error), Err(close)) => Err(format!("scenario: {error}; close: {close}").into()),
+    }
 }
 
 async fn arrange_sent_follow(
@@ -494,7 +507,7 @@ async fn decide_and_replay(
     cancel: &DeliveryEnvelope<BoardDeliveryTypes>,
 ) -> TestResult {
     for (item, report_seq) in [(seed.item.id(), 2), (cancel.id(), 1)] {
-        let answer = fixture.recipient.operation(relay_request("report", json!({"report":{"item":item,"reportSeq":report_seq,"outcome":{"kind":"prevented","value":{"cancel":cancel.id()}}}}))).await?;
+        let answer = fixture.recipient.operation(relay_request("report", json!({"report":{"item":item,"reportSeq":report_seq,"outcome":{"kind":"prevented","value":{"cancel":cancel.id()}}}}))).await.map_err(|error| format!("recipient prevention report item={} seq={report_seq}: {error}", item.as_uuid()))?;
         assert_eq!(
             answer,
             json!({"kind":"delivery","value":{"kind":"report","value":{"kind":"ack","value":{"reportSeq":report_seq}}}})
@@ -506,7 +519,9 @@ async fn decide_and_replay(
     ] {
         let replay_item =
             serde_json::from_value::<DeliveryEnvelope<BoardDeliveryTypes>>(value.clone())?.id();
-        let answer = replay_after_reconnect(fixture, value).await?;
+        let answer = replay_after_reconnect(fixture, value)
+            .await
+            .map_err(|error| format!("replay item={}: {error}", replay_item.as_uuid()))?;
         let answer_wire = serde_json::to_value(&answer)?;
         assert!(
             matches!(

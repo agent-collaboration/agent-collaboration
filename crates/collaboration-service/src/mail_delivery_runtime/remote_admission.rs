@@ -63,6 +63,7 @@ impl MailDeliveryRuntime {
             })?;
         let item = outgoing_mail_message(&draft, &self.service, peer)
             .map_err(|_| PushDeliveryFailure::StoreFailed)?;
+        let binding_item = item.id();
         let item_id: MailItemId = draft
             .push_id
             .clone()
@@ -74,13 +75,19 @@ impl MailDeliveryRuntime {
         };
         let target = draft.target;
         let limits = self.config.limits;
-        let submitter = self.config.owner;
+        let submitter = fleet_sync_protocol::Submitter::Machine(self.config.owner);
         let now = self.clock.now();
         let answer = self
             .store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    let (admission, _) = Outbox::<_, RouterDeliveryTypes>::new(scope, limits)
+            .transaction({
+                let binding = self.binding.clone();
+                move |scope| {
+                    Box::pin(async move {
+                        let (admission, _) = Outbox::<_, RouterDeliveryTypes, _>::new(
+                            scope,
+                            limits,
+                            binding.as_ref(),
+                        )
                         .enqueue_and_admit::<SubmitMailTask, RemoveMailRecord>(
                             item,
                             relay,
@@ -89,76 +96,83 @@ impl MailDeliveryRuntime {
                         )
                         .await
                         .map_err(delivery_rollback)?;
-                    match admission {
-                        OutboxAdmission::Queued { .. } => {
-                            interaction_storage::record_mail_read_context_in_scope(
-                                scope,
-                                &item_id,
-                                &read_context,
-                                now,
-                            )
-                            .await
-                            .map_err(StoreError::backend)?;
-                            let answer = MessageSendResult::Queued {
-                                queued: QueuedMessageSend {
-                                    item: item_id.clone(),
-                                    target,
-                                    target_identity,
-                                },
-                            };
-                            let MessageSendResult::Queued { queued } = &answer else {
-                                return Err(StoreError::backend(
-                                    "remote admission produced a local answer",
-                                ));
-                            };
-                            record_message_send_admission(
-                                scope,
-                                &item_id,
-                                &queued.target_identity,
-                                now,
-                            )
-                            .await
-                            .map_err(StoreError::backend)?;
-                            record_message_send_outcome(
-                                scope,
-                                &item_id,
-                                &answer,
-                                now.timestamp_millis(),
-                            )
-                            .await
-                            .map_err(StoreError::backend)?;
-                            Ok(answer)
-                        }
-                        OutboxAdmission::Replayed { .. } => {
-                            interaction_storage::record_mail_read_context_in_scope(
-                                scope,
-                                &item_id,
-                                &read_context,
-                                now,
-                            )
-                            .await
-                            .map_err(StoreError::backend)?;
-                            let answer = read_message_send_answer_in_scope(scope, &item_id)
+                        match admission {
+                            OutboxAdmission::BindingUnavailable { reason } => {
+                                Err(delivery_rollback(DeliveryError::SenderBindingUnavailable {
+                                    row: fleet_sync_delivery::CustodyRow::Outbox(binding_item),
+                                    reason,
+                                }))
+                            }
+                            OutboxAdmission::Queued { .. } => {
+                                interaction_storage::record_mail_read_context_in_scope(
+                                    scope,
+                                    &item_id,
+                                    &read_context,
+                                    now,
+                                )
                                 .await
-                                .map_err(StoreError::backend)?
-                                .and_then(|row| row.result);
-                            match answer {
-                                Some(answer @ MessageSendResult::Queued { .. }) => Ok(answer),
-                                _ => {
-                                    Err(StoreError::backend("remote custody has no queued answer"))
+                                .map_err(StoreError::backend)?;
+                                let answer = MessageSendResult::Queued {
+                                    queued: QueuedMessageSend {
+                                        item: item_id.clone(),
+                                        target,
+                                        target_identity,
+                                    },
+                                };
+                                let MessageSendResult::Queued { queued } = &answer else {
+                                    return Err(StoreError::backend(
+                                        "remote admission produced a local answer",
+                                    ));
+                                };
+                                record_message_send_admission(
+                                    scope,
+                                    &item_id,
+                                    &queued.target_identity,
+                                    now,
+                                )
+                                .await
+                                .map_err(StoreError::backend)?;
+                                record_message_send_outcome(
+                                    scope,
+                                    &item_id,
+                                    &answer,
+                                    now.timestamp_millis(),
+                                )
+                                .await
+                                .map_err(StoreError::backend)?;
+                                Ok(answer)
+                            }
+                            OutboxAdmission::Replayed { .. } => {
+                                interaction_storage::record_mail_read_context_in_scope(
+                                    scope,
+                                    &item_id,
+                                    &read_context,
+                                    now,
+                                )
+                                .await
+                                .map_err(StoreError::backend)?;
+                                let answer = read_message_send_answer_in_scope(scope, &item_id)
+                                    .await
+                                    .map_err(StoreError::backend)?
+                                    .and_then(|row| row.result);
+                                match answer {
+                                    Some(answer @ MessageSendResult::Queued { .. }) => Ok(answer),
+                                    _ => Err(StoreError::backend(
+                                        "remote custody has no queued answer",
+                                    )),
                                 }
                             }
+                            OutboxAdmission::Refused { reason } => {
+                                Err(delivery_rollback(DeliveryError::Refused { reason }))
+                            }
+                            OutboxAdmission::CancelAlreadyRequested { .. } => {
+                                Err(delivery_rollback(DeliveryError::Corrupt {
+                                    field: "direct original returned cancel admission",
+                                }))
+                            }
                         }
-                        OutboxAdmission::Refused { reason } => {
-                            Err(delivery_rollback(DeliveryError::Refused { reason }))
-                        }
-                        OutboxAdmission::CancelAlreadyRequested { .. } => {
-                            Err(delivery_rollback(DeliveryError::Corrupt {
-                                field: "direct original returned cancel admission",
-                            }))
-                        }
-                    }
-                })
+                    })
+                }
             })
             .await
             .map_err(super::local_admission::local_admission_failure)?;

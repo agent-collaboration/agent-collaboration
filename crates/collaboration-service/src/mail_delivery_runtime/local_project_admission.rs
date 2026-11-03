@@ -60,80 +60,91 @@ impl MailDeliveryRuntime {
         let consumer = self.consumer.clone();
         let admitted = self
             .store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    let previous =
-                        Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
-                            .local_outcome(item.id())
-                            .await
-                            .map_err(delivery_rollback)?;
-                    let mut inserted_projection = false;
-                    if collaboration_runtime::received_mail_push::is_poll_mail(&item)
-                        && interaction_storage::read_pending_poll_in_scope(scope, item.id())
-                            .await
-                            .map_err(StoreError::backend)?
-                            .is_none()
-                    {
-                        match previous {
-                            Some(RecipientOutcome::Held) => {
-                                return Err(delivery_rollback(DeliveryError::Corrupt {
-                                    field: "held Poll policy projection missing",
-                                }));
-                            }
-                            Some(_) => {}
-                            None => {
-                                // enqueue_local does not invoke on_received. Like
-                                // local native pushes below, its policy projection
-                                // must be prepared by this admission transaction.
-                                consumer
-                                    .on_received(scope, &item)
-                                    .await
-                                    .map_err(delivery_rollback)?;
-                                inserted_projection = true;
-                            }
-                        }
-                    }
-                    if let Some(draft) = draft {
-                        let current = read_mail_push_in_scope(scope, &draft.push_id)
-                            .await
-                            .map_err(StoreError::backend)?;
-                        if current.is_none() {
+            .transaction({
+                let binding = self.binding.clone();
+                move |scope| {
+                    Box::pin(async move {
+                        let previous = Inbox::<_, RouterDeliveryTypes, _>::new(
+                            scope,
+                            config.owner,
+                            config.limits,
+                            binding.as_ref(),
+                        )
+                        .local_outcome(item.id())
+                        .await
+                        .map_err(delivery_rollback)?;
+                        let mut inserted_projection = false;
+                        if collaboration_runtime::received_mail_push::is_poll_mail(&item)
+                            && interaction_storage::read_pending_poll_in_scope(scope, item.id())
+                                .await
+                                .map_err(StoreError::backend)?
+                                .is_none()
+                        {
                             match previous {
                                 Some(RecipientOutcome::Held) => {
                                     return Err(delivery_rollback(DeliveryError::Corrupt {
-                                        field: "held notification projection missing",
+                                        field: "held Poll policy projection missing",
                                     }));
                                 }
-                                Some(_) => {} // A terminal replay must not recreate a pruned push.
+                                Some(_) => {}
                                 None => {
-                                    insert_mail_push_in_scope(scope, draft)
+                                    // enqueue_local does not invoke on_received. Like
+                                    // local native pushes below, its policy projection
+                                    // must be prepared by this admission transaction.
+                                    consumer
+                                        .on_received(scope, &item)
                                         .await
-                                        .map_err(StoreError::backend)?;
+                                        .map_err(delivery_rollback)?;
                                     inserted_projection = true;
                                 }
                             }
                         }
-                    }
-                    match Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
+                        if let Some(draft) = draft {
+                            let current = read_mail_push_in_scope(scope, &draft.push_id)
+                                .await
+                                .map_err(StoreError::backend)?;
+                            if current.is_none() {
+                                match previous {
+                                    Some(RecipientOutcome::Held) => {
+                                        return Err(delivery_rollback(DeliveryError::Corrupt {
+                                            field: "held notification projection missing",
+                                        }));
+                                    }
+                                    Some(_) => {} // A terminal replay must not recreate a pruned push.
+                                    None => {
+                                        insert_mail_push_in_scope(scope, draft)
+                                            .await
+                                            .map_err(StoreError::backend)?;
+                                        inserted_projection = true;
+                                    }
+                                }
+                            }
+                        }
+                        match Inbox::<_, RouterDeliveryTypes, _>::new(
+                            scope,
+                            config.owner,
+                            config.limits,
+                            binding.as_ref(),
+                        )
                         .enqueue_local_and_admit::<LocalMailTask, RemoveMailRecord, _>(
                             item, &*consumer, now,
                         )
                         .await
                         .map_err(delivery_rollback)?
-                    {
-                        LocalItemAdmission::Attempt(attempt) => Ok(Some(attempt)),
-                        LocalItemAdmission::Replayed if inserted_projection => {
-                            // Replayed pending custody with no projection is corruption,
-                            // not a new receive. Roll the tentative insertion back.
-                            Err(delivery_rollback(DeliveryError::Corrupt {
-                                field: "pending notification projection missing",
-                            }))
+                        {
+                            LocalItemAdmission::Attempt(attempt) => Ok(Some(attempt)),
+                            LocalItemAdmission::Replayed if inserted_projection => {
+                                // Replayed pending custody with no projection is corruption,
+                                // not a new receive. Roll the tentative insertion back.
+                                Err(delivery_rollback(DeliveryError::Corrupt {
+                                    field: "pending notification projection missing",
+                                }))
+                            }
+                            LocalItemAdmission::Replayed
+                            | LocalItemAdmission::SettledOnAdmission => Ok(None),
                         }
-                        LocalItemAdmission::Replayed | LocalItemAdmission::SettledOnAdmission => {
-                            Ok(None)
-                        }
-                    }
-                })
+                    })
+                }
             })
             .await
             .map_err(classify_delivery_store_error)?;

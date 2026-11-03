@@ -10,9 +10,15 @@ async fn inherited_handoff_cancel_reaches_the_remote_hold_before_any_local_submi
 -> TestResult {
     let mut fixture = Box::pin(RuleFixture::open_with_deferred_successor()).await?;
     let proof = Box::pin(async {
-        let seed = Box::pin(arrange_sent_follow(&mut fixture)).await?;
-        let cancel = hold_old_cancel_submit(&fixture, &seed).await?;
-        publish_inherited_prefix_with_worker_deferred(&mut fixture).await?;
+        let seed = Box::pin(arrange_sent_follow(&mut fixture))
+            .await
+            .map_err(|error| format!("inherited arrange follow: {error}"))?;
+        let cancel = hold_old_cancel_submit(&fixture, &seed)
+            .await
+            .map_err(|error| format!("hold old cancel: {error}"))?;
+        publish_inherited_prefix_with_worker_deferred(&mut fixture)
+            .await
+            .map_err(|error| format!("publish inherited prefix: {error}"))?;
 
         // No successor mail worker has run. Cancellation admission must not
         // locally settle an original that the old holder already left Held.
@@ -46,13 +52,13 @@ async fn inherited_handoff_cancel_reaches_the_remote_hold_before_any_local_submi
         fixture.successor.notifications.start_mail_worker()?;
         let controls = wait_pushed(&fixture, DeliveryStream::Controls).await?;
         assert_eq!(serde_json::to_value(controls)?, json!([cancel]));
-        decide_and_replay(&mut fixture, &seed, &cancel).await?;
-        let originals = fixture
+        decide_and_replay(&mut fixture, &seed, &cancel)
+            .await
+            .map_err(|error| format!("inherited decide and replay: {error}"))?;
+        fixture
             .recipient
-            .pushed_envelopes(DeliveryStream::Items)
+            .assert_retained_original(&seed.item)
             .await?;
-        assert_eq!(originals.len(), 1);
-        assert_eq!(originals[0].id(), seed.item.id());
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     })
     .await;
@@ -62,8 +68,14 @@ async fn inherited_handoff_cancel_reaches_the_remote_hold_before_any_local_submi
         .release_held_dispatches(ObjectAddress::Fleet)
         .await;
     let closed = fixture.close().await;
-    closed?;
-    proof
+    match (proof, closed) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(error), Ok(())) => Err(error),
+        (Ok(()), Err(error)) => Err(format!("inherited fixture close: {error}").into()),
+        (Err(error), Err(close)) => {
+            Err(format!("inherited scenario: {error}; close: {close}").into())
+        }
+    }
 }
 
 async fn hold_old_cancel_submit(

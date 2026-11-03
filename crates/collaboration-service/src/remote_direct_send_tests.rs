@@ -156,15 +156,17 @@ async fn configured_application_send_queues_offline_replays_and_rejects_conflict
             .unwrap()
             .is_none()
     );
+    let binding = runtime.fixture.host.binding.clone();
     let rows = runtime
         .fixture
         .store
-        .transaction(|scope| {
+        .transaction(move |scope| {
             Box::pin(async move {
                 fleet_sync_delivery::test_support::snapshot::<
                     _,
                     collaboration_contracts::RouterDeliveryTypes,
-                >(scope)
+                    _,
+                >(scope, binding.as_ref())
                 .await
                 .map_err(StoreError::backend)
             })
@@ -214,15 +216,17 @@ async fn unconfigured_remote_application_send_has_no_custody_answer_or_epoch() {
             .unwrap()
             .is_none()
     );
+    let binding = runtime.fixture.host.binding.clone();
     let rows = runtime
         .fixture
         .store
-        .transaction(|scope| {
+        .transaction(move |scope| {
             Box::pin(async move {
                 fleet_sync_delivery::test_support::snapshot::<
                     _,
                     collaboration_contracts::RouterDeliveryTypes,
-                >(scope)
+                    _,
+                >(scope, binding.as_ref())
                 .await
                 .map_err(StoreError::backend)
             })

@@ -43,7 +43,10 @@ mod held_readiness;
 #[cfg(feature = "test-support")]
 mod inbound_wake_probe;
 mod installation_directory;
+mod sender_binding;
+pub use sender_binding::MachineSenderBinding;
 mod local_admission;
+mod local_calls;
 mod local_cancellation;
 mod local_project_admission;
 mod poll_handover;
@@ -62,10 +65,18 @@ pub use local_cancellation::LocalCancelReference;
 type MailHost = TokioHost<MailCallRouter, MailClock>;
 type MailStore = InteractionAtomicStore<MailHost>;
 type MailDatabase = <TursoScope<'static, MailHost> as TransactionScope>::Database;
-type LocalMailTask = DeliverLocally<MailStore, MailDatabase, RouterDeliveryTypes, MailConsumer>;
+type LocalMailTask = DeliverLocally<
+    MailStore,
+    MailDatabase,
+    RouterDeliveryTypes,
+    MailConsumer,
+    MachineSenderBinding,
+>;
 type RemoveMailRecord = fleet_sync_delivery::RemoveDeliveryRecord<MailStore, MailDatabase>;
-type SubmitMailTask = SubmitItem<MailStore, MailDatabase, RouterDeliveryTypes, MailConsumer>;
-type ReportMailTask = ReportOutcome<MailStore, MailDatabase, RouterDeliveryTypes>;
+type SubmitMailTask =
+    SubmitItem<MailStore, MailDatabase, RouterDeliveryTypes, MailConsumer, MachineSenderBinding>;
+type ReportMailTask =
+    ReportOutcome<MailStore, MailDatabase, RouterDeliveryTypes, MachineSenderBinding>;
 
 #[derive(Clone)]
 pub struct MailDeliveryRuntime {
@@ -84,6 +95,7 @@ pub struct MailDeliveryRuntime {
     engine: Arc<Engine<MailStore, MailHost>>,
     config: LocalDeliveryConfig,
     consumer: Arc<MailConsumer>,
+    pub(crate) binding: Arc<MachineSenderBinding>,
     reader_actors: crate::SubscriptionDeliveryService,
     service: message_board::ServiceId,
     clock: Arc<dyn SubscriptionClock>,
@@ -214,9 +226,10 @@ impl MailDeliveryRuntime {
         }
         let owner = props.interactions.clone();
         let clock = props.clock.clone();
-        let service = String::from(props.machine.service_id().clone())
+        let service: message_board::ServiceId = String::from(props.machine.service_id().clone())
             .try_into()
             .map_err(StoreError::backend)?;
+        let binding = Arc::new(MachineSenderBinding::new(service.clone(), peer));
         let config = LocalDeliveryConfig {
             owner: peer,
             limits,
@@ -233,6 +246,8 @@ impl MailDeliveryRuntime {
             project_replication: project_replication.clone(),
             store: OnceLock::new(),
             consumer: consumer.clone(),
+            binding: binding.clone(),
+            owner: owner.clone(),
             config,
             session: session.clone(),
         });
@@ -243,12 +258,22 @@ impl MailDeliveryRuntime {
             .set(Arc::downgrade(&store))
             .map_err(|_| StoreError::backend("mail store was already installed"))?;
         let mut engine = Engine::new(store.clone(), host.clone());
-        engine.register(LocalMailTask::new(config, consumer.clone(), host.clone()))?;
+        engine.register(LocalMailTask::new(
+            config,
+            consumer.clone(),
+            host.clone(),
+            binding.clone(),
+        ))?;
         engine.register(RemoveMailRecord::new())?;
         if let Some(session) = &session {
             let remote = session.task_config(config)?;
-            engine.register(SubmitMailTask::new(limits, consumer.clone(), host.clone()))?;
-            engine.register(ReportMailTask::new(remote, host.clone()))?;
+            engine.register(SubmitMailTask::new(
+                limits,
+                consumer.clone(),
+                host.clone(),
+                binding.clone(),
+            ))?;
+            engine.register(ReportMailTask::new(remote, host.clone(), binding.clone()))?;
         }
         Ok(Self {
             project_replication,
@@ -265,6 +290,7 @@ impl MailDeliveryRuntime {
             engine: Arc::new(engine),
             config,
             consumer,
+            binding,
             reader_actors,
             service,
             clock,
@@ -310,7 +336,8 @@ impl MailDeliveryRuntime {
 
     /// Host monitors this future and drains in-flight native work during shutdown.
     pub async fn run(&self, shutdown: CancellationToken) -> Result<(), StoreError> {
-        if let Some(admitted) = self.initialize_record_removals().await? {
+        let admitted = tokio::select! { result = async { let admitted = self.initialize_record_removals().await?; self.initialize_submitter_bindings().await?; Ok::<_, StoreError>(admitted) } => result?, () = shutdown.cancelled() => return Ok(()) };
+        if admitted > 0 {
             tracing::info!(admitted, "admitted existing mail custody removal records");
         }
         for target in self
@@ -323,7 +350,13 @@ impl MailDeliveryRuntime {
         }
         let (stop, stopped) = watch::channel(false);
         let runner = TokioRunner::new(self.engine.clone(), self.host.clone());
-        let running = runner.run(stopped);
+        let running = async {
+            tokio::try_join!(
+                runner.run(stopped.clone()),
+                self.run_sender_binding_lookups(stopped)
+            )
+            .map(|_| ())
+        };
         tokio::pin!(running);
         tokio::select! {
             result = &mut running => {
@@ -494,110 +527,10 @@ struct MailCallRouter {
         Arc<OnceLock<Arc<dyn collaboration_contracts::ProjectReplicationPosition>>>,
     store: OnceLock<Weak<MailStore>>,
     consumer: Arc<MailConsumer>,
+    binding: Arc<MachineSenderBinding>,
+    owner: Arc<InteractionStore>,
     config: LocalDeliveryConfig,
     session: Option<MailDeliverySession>,
-}
-impl CallRouter for MailCallRouter {
-    async fn dispatch(&self, envelope: CallEnvelope) -> Result<Value, CallFailure> {
-        if envelope.kind != DeliverCall::<RouterDeliveryTypes>::KIND {
-            return self.dispatch_remote(envelope).await;
-        }
-        let _: DeliverCall<RouterDeliveryTypes> =
-            serde_json::from_value(envelope.target).map_err(|_| CallFailure::AnswerLost)?;
-        let reference: DeliveryItemRef =
-            serde_json::from_value(envelope.request).map_err(|_| CallFailure::AnswerLost)?;
-        let store = self
-            .store
-            .get()
-            .and_then(Weak::upgrade)
-            .ok_or(CallFailure::AnswerLost)?;
-        let config = self.config;
-        let (resolved, direct_load_policy) = store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    let mut inbox =
-                        Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits);
-                    let resolved = inbox
-                        .resolve_local_delivery(&reference)
-                        .await
-                        .map_err(StoreError::backend)?;
-                    let item = resolved.item();
-                    // SDK custody retains Held for later attempt identities, even
-                    // after readiness makes the application projection Pending.
-                    let first_attempt = inbox
-                        .local_outcome(item.id())
-                        .await
-                        .map_err(StoreError::backend)?
-                        .is_none();
-                    let push_id = item
-                        .id()
-                        .as_uuid()
-                        .to_string()
-                        .try_into()
-                        .map_err(StoreError::backend)?;
-                    let mut direct_load_policy = LoadPolicy::LoadedOnly;
-                    if !collaboration_runtime::received_mail_push::is_poll_mail(item)
-                        && !matches!(item.body(), board_sync_protocol::BoardDeliveryBody::Wake(_))
-                    {
-                        let current = read_mail_push_in_scope(scope, &push_id)
-                            .await
-                            .map_err(StoreError::backend)?
-                            .ok_or_else(|| StoreError::backend("mail push is missing"))?;
-                        let draft = collaboration_runtime::received_mail_push(item, current.created_at)
-                            .map_err(StoreError::backend)?
-                            .ok_or_else(|| StoreError::backend("native mail has no push"))?;
-                        // The envelope freezes mode/guard. Only the pre-attempt state
-                        // authorizes this call to load; no value survives a replay.
-                        direct_load_policy = if first_attempt {
-                            collaboration_runtime::mail_push_preparation::direct_message_load_policy(
-                                draft.mode,
-                                draft.guard.as_ref(),
-                                current.delivery_state,
-                            )
-                        } else {
-                            LoadPolicy::LoadedOnly
-                        };
-                        mark_mail_push_attempted_in_scope(scope, &push_id)
-                            .await
-                            .map_err(StoreError::backend)?;
-                    }
-                    Ok((resolved, direct_load_policy))
-                })
-            })
-            .await
-            .map_err(|_| CallFailure::AnswerLost)?;
-        let item = resolved.item();
-        let delivery = if let board_sync_protocol::BoardDeliveryBody::Wake(body) = item.body() {
-            self.consumer.deliver_wake(item, body).await
-        } else if collaboration_runtime::received_mail_push::is_poll_mail(item) {
-            // The reader actor owns its input; retain the resolved custody value
-            // here so its stored receipt bound still validates the returned answer.
-            let poll_item = fleet_sync_protocol::DeliveryItem::new(
-                item.id(),
-                item.sender().clone(),
-                item.recipient().clone(),
-                item.valid_until(),
-                item.body().clone(),
-            )
-            .map_err(|_| CallFailure::AnswerLost)?;
-            let observed = self
-                .consumer
-                .reader_actors
-                .attempt_poll_mail_once(Box::new(poll_item))
-                .await;
-            crate::mail_push_outcome::local_follow_outcome(
-                observed.into_local_observation(),
-                0,
-                SyncTime::from_unix_millis(self.consumer.clock.now().timestamp_millis()),
-            )
-        } else {
-            self.consumer
-                .deliver_with_load_policy(item, envelope.call, direct_load_policy)
-                .await
-        };
-        serde_json::to_value(resolved.validated_answer(delivery))
-            .map_err(|_| CallFailure::AnswerLost)
-    }
 }
 
 #[cfg(test)]

@@ -30,15 +30,17 @@ impl MailDeliveryRuntime {
         &self,
         reference: DeliveryItemRef,
     ) -> Result<bool, StoreError> {
+        let binding = self.binding.clone();
         self.store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    let rows =
-                        fleet_sync_delivery::test_support::snapshot::<_, RouterDeliveryTypes>(
-                            scope,
-                        )
-                        .await
-                        .map_err(StoreError::backend)?;
+                    let rows = fleet_sync_delivery::test_support::snapshot::<
+                        _,
+                        RouterDeliveryTypes,
+                        _,
+                    >(scope, binding.as_ref())
+                    .await
+                    .map_err(StoreError::backend)?;
                     Ok(!rows.iter().any(|row| {
                         row.category == "inbox"
                             && row.identity == reference.item.as_uuid().to_string()
@@ -55,13 +57,21 @@ impl MailDeliveryRuntime {
     ) -> Result<Option<RecipientOutcome<CarrierAcceptance>>, StoreError> {
         let config = self.config;
         self.store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
+            .transaction({
+                let binding = self.binding.clone();
+                move |scope| {
+                    Box::pin(async move {
+                        Inbox::<_, RouterDeliveryTypes, _>::new(
+                            scope,
+                            config.owner,
+                            config.limits,
+                            binding.as_ref(),
+                        )
                         .local_outcome(item)
                         .await
                         .map_err(StoreError::backend)
-                })
+                    })
+                }
             })
             .await
     }
@@ -72,25 +82,32 @@ impl MailDeliveryRuntime {
     ) -> Result<bool, StoreError> {
         let config = self.config;
         self.store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    let mut inbox =
-                        Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits);
-                    if !matches!(
-                        inbox
-                            .local_outcome(reference.item)
-                            .await
-                            .map_err(StoreError::backend)?,
-                        Some(RecipientOutcome::Delivered { .. })
-                    ) {
-                        return Ok(false);
-                    }
-                    match inbox.resolve_delivery(&reference).await {
-                        Err(DeliveryError::CustodyMissing) => Ok(true),
-                        Ok(_) => Ok(false),
-                        Err(error) => Err(StoreError::backend(error)),
-                    }
-                })
+            .transaction({
+                let binding = self.binding.clone();
+                move |scope| {
+                    Box::pin(async move {
+                        let mut inbox = Inbox::<_, RouterDeliveryTypes, _>::new(
+                            scope,
+                            config.owner,
+                            config.limits,
+                            binding.as_ref(),
+                        );
+                        if !matches!(
+                            inbox
+                                .local_outcome(reference.item)
+                                .await
+                                .map_err(StoreError::backend)?,
+                            Some(RecipientOutcome::Delivered { .. })
+                        ) {
+                            return Ok(false);
+                        }
+                        match inbox.resolve_delivery(&reference).await {
+                            Err(DeliveryError::CustodyMissing) => Ok(true),
+                            Ok(_) => Ok(false),
+                            Err(error) => Err(StoreError::backend(error)),
+                        }
+                    })
+                }
             })
             .await
     }
@@ -139,42 +156,52 @@ impl MailDeliveryRuntime {
         let consumer = self.consumer.clone();
         let admission = self
             .store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    let item_id = draft
-                        .push_id
-                        .clone()
-                        .try_into()
-                        .map_err(StoreError::backend)?;
-                    // These writes are tentative until the library's identity/digest check
-                    // and the rest of this same owner transaction commit.
-                    prepare_send_projections(scope, &item_id, draft, &target_identity, now).await?;
-                    let admission =
-                        Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
-                            .enqueue_local_and_admit::<LocalMailTask, RemoveMailRecord, _>(
-                                item,
-                                &*consumer,
-                                SyncTime::from_unix_millis(now.timestamp_millis()),
-                            )
-                            .await
-                            .map_err(delivery_rollback)?;
-                    match admission {
-                        LocalItemAdmission::Attempt(input) => Ok(LocalAdmission::Attempt(input)),
-                        LocalItemAdmission::Replayed => Ok(LocalAdmission::Replayed(
-                            read_local_answer(scope, &item_id).await?,
-                        )),
-                        LocalItemAdmission::SettledOnAdmission => {
-                            // The one SDK hook already saw both projections. Never call it again.
-                            let answer =
-                                read_local_answer(scope, &item_id).await?.ok_or_else(|| {
-                                    StoreError::backend(
-                                        "settled local admission has no recorded answer",
-                                    )
-                                })?;
-                            Ok(LocalAdmission::Settled(answer))
+            .transaction({
+                let binding = self.binding.clone();
+                move |scope| {
+                    Box::pin(async move {
+                        let item_id = draft
+                            .push_id
+                            .clone()
+                            .try_into()
+                            .map_err(StoreError::backend)?;
+                        // These writes are tentative until the library's identity/digest check
+                        // and the rest of this same owner transaction commit.
+                        prepare_send_projections(scope, &item_id, draft, &target_identity, now)
+                            .await?;
+                        let admission = Inbox::<_, RouterDeliveryTypes, _>::new(
+                            scope,
+                            config.owner,
+                            config.limits,
+                            binding.as_ref(),
+                        )
+                        .enqueue_local_and_admit::<LocalMailTask, RemoveMailRecord, _>(
+                            item,
+                            &*consumer,
+                            SyncTime::from_unix_millis(now.timestamp_millis()),
+                        )
+                        .await
+                        .map_err(delivery_rollback)?;
+                        match admission {
+                            LocalItemAdmission::Attempt(input) => {
+                                Ok(LocalAdmission::Attempt(input))
+                            }
+                            LocalItemAdmission::Replayed => Ok(LocalAdmission::Replayed(
+                                read_local_answer(scope, &item_id).await?,
+                            )),
+                            LocalItemAdmission::SettledOnAdmission => {
+                                // The one SDK hook already saw both projections. Never call it again.
+                                let answer =
+                                    read_local_answer(scope, &item_id).await?.ok_or_else(|| {
+                                        StoreError::backend(
+                                            "settled local admission has no recorded answer",
+                                        )
+                                    })?;
+                                Ok(LocalAdmission::Settled(answer))
+                            }
                         }
-                    }
-                })
+                    })
+                }
             })
             .await
             .map_err(local_admission_failure)?;
@@ -270,7 +297,8 @@ async fn read_local_answer(
 pub(super) fn local_admission_failure(error: StoreError) -> PushDeliveryFailure {
     match classify_delivery_store_error(error) {
         DeliveryTransactionFailure::Refused(reason) => map_refusal(reason),
-        DeliveryTransactionFailure::Corrupt { .. }
+        DeliveryTransactionFailure::BindingUnavailable { .. }
+        | DeliveryTransactionFailure::Corrupt { .. }
         | DeliveryTransactionFailure::OutcomeUnknown(_) => PushDeliveryFailure::StoreFailed,
     }
 }

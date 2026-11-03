@@ -184,6 +184,7 @@ async fn a_full_real_inbox_refuses_new_projections_but_reserves_space_to_cancel_
     // Project the public snapshot's acceptanceBound/settlementBytes JSON fields;
     // the SDK owns reserve calculation and private storage queries.
     let first_identity = String::from(first_id);
+    let binding = runtime.fixture.host.binding.clone();
     let observed = runtime
         .fixture
         .store
@@ -192,7 +193,8 @@ async fn a_full_real_inbox_refuses_new_projections_but_reserves_space_to_cancel_
                 let row = fleet_sync_delivery::test_support::snapshot::<
                     _,
                     collaboration_contracts::RouterDeliveryTypes,
-                >(scope)
+                    _,
+                >(scope, binding.as_ref())
                 .await
                 .map_err(StoreError::backend)?
                 .into_iter()
@@ -257,14 +259,20 @@ async fn a_full_real_inbox_refuses_new_projections_but_reserves_space_to_cancel_
             .is_none()
     );
     let consumer_config = runtime.fixture.host.config.local;
+    let binding = runtime.fixture.host.binding.clone();
     let absent = runtime
         .fixture
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                match Inbox::<_, RouterDeliveryTypes>::new(scope, consumer_config.owner, limits)
-                    .resolve_delivery(&reference)
-                    .await
+                match Inbox::<_, RouterDeliveryTypes, _>::new(
+                    scope,
+                    consumer_config.owner,
+                    limits,
+                    binding.as_ref(),
+                )
+                .resolve_delivery(&reference)
+                .await
                 {
                     Err(DeliveryError::Corrupt {
                         field: "local delivery custody row missing",

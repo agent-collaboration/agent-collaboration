@@ -51,6 +51,7 @@ async fn a_relay_cancel_refusal_remains_another_canonical_control_on_same_id_rep
         mailbox: original.recipient().peer,
     };
     let limits = runtime.fixture.host.config.local.limits;
+    let binding = runtime.fixture.host.binding.clone();
     let observed_at = runtime_primitives::Clock::now(runtime.fixture.host.as_ref());
     // A typed SubmitResult stands in for relay policy; the public SDK transition,
     // replay classification and physical owner remain real. No canonical custody is claimed.
@@ -60,8 +61,8 @@ async fn a_relay_cancel_refusal_remains_another_canonical_control_on_same_id_rep
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(
-                    scope, limits,
+                fleet_sync_delivery::Outbox::<_, collaboration_contracts::RouterDeliveryTypes, _>::new(
+                    scope, limits, binding.as_ref(),
                 )
                 .mark_submitted(
                     &input,

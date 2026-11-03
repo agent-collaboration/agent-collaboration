@@ -69,3 +69,7 @@ collaboration-mcp = { path = "../collaboration-mcp", version = "0.1.30", feature
 tempfile = "3.27.0"
 collaboration-client = { path = "../collaboration-client", version = "0.1.14" }
 tokio = { workspace = true, features = ["test-util"] }
+
+[[test]]
+name = "machine_sender_binding"
+path = "tests/integration/machine_sender_binding.rs"

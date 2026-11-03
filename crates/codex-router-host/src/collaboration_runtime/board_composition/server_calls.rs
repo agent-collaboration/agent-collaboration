@@ -26,12 +26,14 @@ pub(super) async fn answer_server_call(
     body: ServerRequest<BoardConsumerProtocol>,
 ) -> io::Result<()> {
     match body {
-        ServerRequest::Crate(ServerCall::Push { item, .. }) => {
+        ServerRequest::Crate(ServerCall::Push {
+            submitter, item, ..
+        }) => {
             let mail = mail
                 .upgrade()
                 .ok_or_else(|| io::Error::other("pushed mail owner is not attached"))?;
             let receipt = mail
-                .accept_pushed_mail(item)
+                .accept_pushed_mail(submitter, item)
                 .await
                 .map_err(io::Error::other)?;
             #[cfg(all(debug_assertions, feature = "runtime-test-support"))]

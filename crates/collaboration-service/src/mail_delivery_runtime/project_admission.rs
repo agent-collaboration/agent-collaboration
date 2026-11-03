@@ -73,7 +73,13 @@ impl MailDeliveryRuntime {
                 DeliveryTransactionFailure::OutcomeUnknown(StoreError::backend(error))
             })?;
         let limits = self.config.limits;
-        let submitter = self.config.owner;
+        let submitter = fleet_sync_protocol::Submitter::Project(
+            fleet_sync_protocol::DatabaseId::try_from(project.as_str().to_owned()).map_err(
+                |_| DeliveryTransactionFailure::Corrupt {
+                    field: "project submitter".into(),
+                },
+            )?,
+        );
         let now = self.clock.now();
         let read_context = collaboration_protocol::MailReadContext::Project {
             project: project.clone(),
@@ -90,58 +96,67 @@ impl MailDeliveryRuntime {
         let probe = self.project_admission_probe.clone();
         let (admission, has_effects) = self
             .store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    let original_id = item.id();
-                    let mut outbox = Outbox::<_, RouterDeliveryTypes>::new(scope, limits);
-                    let (admission, operation) = outbox
-                        .enqueue_and_admit::<SubmitMailTask, RemoveMailRecord>(
-                            item,
-                            relay,
-                            submitter,
-                            runtime_primitives::SyncTime::from_unix_millis(now.timestamp_millis()),
-                        )
-                        .await
-                        .map_err(delivery_rollback)?;
-                    if matches!(
-                        &admission,
-                        OutboxAdmission::Queued { .. } | OutboxAdmission::Replayed { .. }
-                    ) {
-                        // A frozen project handoff may already be Held under an earlier holder.
-                        // Mark it in this transaction before any cancel can withdraw it locally.
-                        // All project cancels consequently go remote, even before our first submit.
-                        outbox
-                            .mark_submit_attempted(
-                                original_id,
+            .transaction({
+                let binding = self.binding.clone();
+                move |scope| {
+                    Box::pin(async move {
+                        let original_id = item.id();
+                        let mut outbox = Outbox::<_, RouterDeliveryTypes, _>::new(
+                            scope,
+                            limits,
+                            binding.as_ref(),
+                        );
+                        let (admission, operation) = outbox
+                            .enqueue_and_admit::<SubmitMailTask, RemoveMailRecord>(
+                                item,
+                                relay,
+                                submitter,
                                 runtime_primitives::SyncTime::from_unix_millis(
                                     now.timestamp_millis(),
                                 ),
                             )
                             .await
                             .map_err(delivery_rollback)?;
-                    }
-                    #[cfg(test)]
-                    if let Some(socket) = probe {
-                        pause_project_admission(&socket).await?;
-                    }
-                    if matches!(admission, OutboxAdmission::CancelAlreadyRequested { .. }) {
-                        // Originals cannot acquire another control's custody.
-                        return Err(delivery_rollback(DeliveryError::Corrupt {
-                            field: "project original returned a cancel admission",
-                        }));
-                    }
-                    record_project_custody_epoch(scope, &admission, &id, &project, epoch, now)
-                        .await?;
-                    interaction_storage::record_mail_read_context_in_scope(
-                        scope,
-                        &id,
-                        &read_context,
-                        now,
-                    )
-                    .await
-                    .map_err(StoreError::backend)?;
-                    Ok((admission, operation.is_some()))
-                })
+                        if matches!(
+                            &admission,
+                            OutboxAdmission::Queued { .. } | OutboxAdmission::Replayed { .. }
+                        ) {
+                            // A frozen project handoff may already be Held under an earlier holder.
+                            // Mark it in this transaction before any cancel can withdraw it locally.
+                            // All project cancels consequently go remote, even before our first submit.
+                            outbox
+                                .mark_submit_attempted(
+                                    original_id,
+                                    runtime_primitives::SyncTime::from_unix_millis(
+                                        now.timestamp_millis(),
+                                    ),
+                                )
+                                .await
+                                .map_err(delivery_rollback)?;
+                        }
+                        #[cfg(test)]
+                        if let Some(socket) = probe {
+                            pause_project_admission(&socket).await?;
+                        }
+                        if matches!(admission, OutboxAdmission::CancelAlreadyRequested { .. }) {
+                            // Originals cannot acquire another control's custody.
+                            return Err(delivery_rollback(DeliveryError::Corrupt {
+                                field: "project original returned a cancel admission",
+                            }));
+                        }
+                        record_project_custody_epoch(scope, &admission, &id, &project, epoch, now)
+                            .await?;
+                        interaction_storage::record_mail_read_context_in_scope(
+                            scope,
+                            &id,
+                            &read_context,
+                            now,
+                        )
+                        .await
+                        .map_err(StoreError::backend)?;
+                        Ok((admission, operation.is_some()))
+                    })
+                }
             })
             .await
             .map_err(classify_delivery_store_error)?;
@@ -186,6 +201,15 @@ pub(super) async fn record_project_custody_epoch(
         }
         // No custody of this proposed child exists under another canonical control.
         OutboxAdmission::CancelAlreadyRequested { .. } => {}
+        OutboxAdmission::BindingUnavailable { reason } => {
+            return Err(delivery_rollback(DeliveryError::SenderBindingUnavailable {
+                row: fleet_sync_delivery::CustodyRow::Outbox(
+                    fleet_sync_protocol::ItemId::try_from(item.as_str().to_owned())
+                        .map_err(StoreError::backend)?,
+                ),
+                reason: *reason,
+            }));
+        }
         OutboxAdmission::Refused { reason } => {
             return Err(delivery_rollback(DeliveryError::Refused {
                 reason: reason.clone(),

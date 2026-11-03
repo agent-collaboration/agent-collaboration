@@ -235,14 +235,15 @@ async fn a_relay_refused_proposed_child_keeps_its_epoch_but_waits_for_the_other_
     };
     let recorded = canonical.clone();
     let limits = runtime.fixture.host.config.local.limits;
+    let binding = runtime.fixture.host.binding.clone();
     let observed_at = runtime_primitives::Clock::now(runtime.fixture.host.as_ref());
     runtime
         .fixture
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(
-                    scope, limits,
+                fleet_sync_delivery::Outbox::<_, collaboration_contracts::RouterDeliveryTypes, _>::new(
+                    scope, limits, binding.as_ref(),
                 )
                 .mark_submitted(
                     &input,

@@ -81,6 +81,8 @@ mod remote_assembly;
 mod remote_wakes;
 #[path = "mail_removal_backfill_test.rs"]
 mod removal_backfill;
+#[path = "mail_submitter_backfill_test.rs"]
+mod submitter_backfill;
 
 #[tokio::test]
 async fn remote_follow_retries_use_item_counts_and_library_deadlines_across_cold_reopen() {
@@ -198,15 +200,17 @@ async fn remote_follow_retries_use_item_counts_and_library_deadlines_across_cold
         "an indefinite hold must not acquire a deadline from the other item"
     );
     let config = runtime.fixture.host.config;
+    let binding = runtime.fixture.host.binding.clone();
     runtime
         .fixture
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                Inbox::<_, RouterDeliveryTypes>::new(
+                Inbox::<_, RouterDeliveryTypes, _>::new(
                     scope,
                     config.local.owner,
                     config.local.limits,
+                    binding.as_ref(),
                 )
                 .release_held::<ProjectionTask>(
                     second_id,
