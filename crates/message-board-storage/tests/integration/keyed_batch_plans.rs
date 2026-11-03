@@ -11,7 +11,7 @@ macro_rules! batch {
             $name,
             concat!(
                 "EXPLAIN QUERY PLAN ",
-                include_str!(concat!("../src/project_", $name, "_batch.sql"))
+                include_str!(concat!("../../src/project_", $name, "_batch.sql"))
             ),
             $key,
         )
