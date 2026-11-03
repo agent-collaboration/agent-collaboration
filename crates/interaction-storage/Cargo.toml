@@ -23,7 +23,7 @@ serde.workspace = true
 serde_json.workspace = true
 session-event-model = { path = "../session-event-model", version = "0.1.96" }
 sqlx = { workspace = true, features = ["macros", "migrate"] }
-sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "c05b05da3b0e301cdaa9ba98fee5b63d636ab2e4" }
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "3cddc7ea4e5e0de734e4cb12ff70bb8b4e85f029" }
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
