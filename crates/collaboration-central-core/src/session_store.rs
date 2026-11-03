@@ -153,15 +153,25 @@ impl<Host: ObjectHost, Io: PlatformIo> CoreSessionStore<Host, Io> {
     }
 }
 
-struct SessionTransaction<Host: ObjectHost, Io: PlatformIo, Callback> {
+// Bound wasm monomorphization by erasing callbacks at the existing store boundary.
+type SessionTransactionCallback<Host, Io, Output> =
+    dyn for<'scope, 'transaction> FnOnce(
+            &'scope mut CoreSessionScope<'transaction, Host, Io>,
+        ) -> BoxFuture<'scope, Result<Output, StoreError>>
+        + Send;
+
+struct SessionTransaction<Host: ObjectHost, Io: PlatformIo, Output>
+where
+    Host::Store: ReborrowScope,
+{
     registrations: RegistrationSnapshot,
-    callback: Callback,
+    callback: Box<SessionTransactionCallback<Host, Io, Output>>,
     #[cfg(feature = "conformance")]
     finalize_fault: Option<crate::SessionFinalizeFault>,
     marker: PhantomData<fn() -> (Host, Io)>,
 }
-impl<Host: ObjectHost, Io: PlatformIo, Output, Callback> StepCallback<Host::Store, Host::Database>
-    for SessionTransaction<Host, Io, Callback>
+impl<Host: ObjectHost, Io: PlatformIo, Output> StepCallback<Host::Store, Host::Database>
+    for SessionTransaction<Host, Io, Output>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -173,11 +183,6 @@ where
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
     Output: Send + 'static,
-    Callback: for<'scope, 'transaction> FnOnce(
-            &'scope mut CoreSessionScope<'transaction, Host, Io>,
-        ) -> BoxFuture<'scope, Result<Output, StoreError>>
-        + Send
-        + 'static,
 {
     type Output = Output;
     type Effect = SessionCommit;
@@ -261,9 +266,9 @@ where
                 #[cfg(feature = "conformance")]
                 let observation_host = host.clone();
                 let result = StepDriver::new(host)
-                    .run(SessionTransaction::<Host, Io, _> {
+                    .run(SessionTransaction::<Host, Io, Output> {
                         registrations,
-                        callback: run,
+                        callback: Box::new(run),
                         #[cfg(feature = "conformance")]
                         finalize_fault,
                         marker: PhantomData,
