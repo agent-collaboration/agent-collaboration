@@ -23,7 +23,7 @@ const BOUND: Duration = Duration::from_secs(20);
 
 fn held_renewal(observation: DispatchFaultObservation) -> Result<RenewRequest, io::Error> {
     let DispatchFaultObservation::Held {
-        destination: ObjectAddress::Registry,
+        destination: ObjectAddress::Fleet,
         request,
     } = observation
     else {
@@ -139,7 +139,7 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
             },
         )
         .await?;
-    let connection = ObjectAddress::Connection(origin()?.installation);
+    let connection = ObjectAddress::Fleet;
     let install = Arc::new(
         SnapshotInstallation::start(
             &projects
@@ -170,7 +170,7 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
         .runtime_control(
             connection.clone(),
             RuntimeControl::HoldNextDispatch {
-                destination: ObjectAddress::Registry,
+                destination: ObjectAddress::Fleet,
             },
         )
         .await?;
@@ -211,7 +211,7 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
         }).await??;
         assert!(matches!(registry.existing_project(&project).await, Err(collaboration_runtime::ProjectRegistryError::Installing { .. })));
         println!("CLAIM_ORDER held-runner-renewal drain-entered registry-unpublished");
-        central.runtime_control(connection.clone(), RuntimeControl::ResumeDispatchAndHoldNext { destination: ObjectAddress::Registry }).await?;
+        central.runtime_control(connection.clone(), RuntimeControl::ResumeDispatchAndHoldNext { destination: ObjectAddress::Fleet }).await?;
         let observed = central.runtime_control(connection.clone(), RuntimeControl::AwaitHeldDispatch).await?;
         let bootstrap = held_renewal(observed.dispatch)?;
         assert_eq!((bootstrap.database, bootstrap.epoch), (database_id, epoch));

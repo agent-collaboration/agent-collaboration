@@ -216,10 +216,7 @@ impl RuleFixture {
         let _ = self
             .holder
             .central
-            .runtime_control(
-                ObjectAddress::Connection(origin()?.installation),
-                RuntimeControl::ResumeDispatch,
-            )
+            .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
             .await;
         self.recipient
             .socket

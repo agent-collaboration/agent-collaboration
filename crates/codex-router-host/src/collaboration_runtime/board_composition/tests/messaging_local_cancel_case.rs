@@ -27,7 +27,7 @@ async fn held_local_follow_keeps_prevention_when_takeover_discards_its_unreplica
             .queue_project(fixture.project.clone())
             .await?;
         wait_local_state(notifications, seed.item.id(), PushDeliveryState::Held).await?;
-        let connection = ObjectAddress::Connection(origin()?.installation);
+        let connection = ObjectAddress::Fleet;
         fixture
             .holder
             .central

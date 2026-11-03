@@ -61,7 +61,7 @@ async fn membership_expiry_during_a_returning_install_does_not_quarantine_the_pr
     let second_admission = second_board.admission.clone();
     let second_running = second_board.start().ok_or("second running session")?;
     wait_welcome(second_projects.welcomed.clone()).await?;
-    let connection = ObjectAddress::Connection(origin()?.installation);
+    let connection = ObjectAddress::Fleet;
     let proof = async {
         let database = DatabaseId::try_from(project.as_str().to_owned())?;
         let moved = fixture.central.move_project(database, &second_origin.installation, TransferId::new(durable_steps::Uuid::now_v7())?).await?;

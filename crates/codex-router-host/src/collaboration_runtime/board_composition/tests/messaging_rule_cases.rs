@@ -45,7 +45,7 @@ async fn prove_takeover(case: PrefixCase) -> TestResult {
             None => None,
         };
         let copy = ObjectAddress::Copy(DatabaseId::try_from(fixture.project.as_str().to_owned())?);
-        let connection = ObjectAddress::Connection(origin()?.installation);
+        let connection = ObjectAddress::Fleet;
         if matches!(case, PrefixCase::Neither) {
             fixture
                 .holder
@@ -131,10 +131,7 @@ async fn take_over_and_confirm(
         fixture
             .holder
             .central
-            .runtime_control(
-                ObjectAddress::Connection(origin()?.installation),
-                RuntimeControl::ResumeDispatch,
-            )
+            .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
             .await?;
     }
     let store =

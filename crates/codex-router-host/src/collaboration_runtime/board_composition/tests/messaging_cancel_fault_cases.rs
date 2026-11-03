@@ -36,7 +36,7 @@ async fn lost_receipt_hold_targets_submit_while_sender_query_completes() -> Test
         timeout(BOUND, async {
             tokio::select! {
                 held = fixture.holder.central.runtime_control(
-                    ObjectAddress::Registry, RuntimeControl::AwaitHeldDispatch,
+                    ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch,
                 ) => { held?; }
                 completed = query_ready.wait_for(|ready| *ready) => { completed?; }
             }
@@ -62,7 +62,7 @@ async fn lost_receipt_hold_targets_submit_while_sender_query_completes() -> Test
         let held = fixture
             .holder
             .central
-            .runtime_control(ObjectAddress::Registry, RuntimeControl::AwaitHeldDispatch)
+            .runtime_control(ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch)
             .await?;
         let board_central_test_support::DispatchFaultObservation::Held { request, .. } =
             held.dispatch
@@ -84,7 +84,7 @@ async fn lost_receipt_hold_targets_submit_while_sender_query_completes() -> Test
     let _ = fixture
         .holder
         .central
-        .runtime_control(ObjectAddress::Registry, RuntimeControl::ResumeDispatch)
+        .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
         .await;
     if proof.is_err() {
         competing_calls.shutdown().await;
@@ -128,10 +128,7 @@ async fn lost_receipt_reply_stays_bound_when_a_cancel_submit_finishes_first() ->
         fixture
             .holder
             .central
-            .runtime_control(
-                ObjectAddress::Registry,
-                RuntimeControl::DropHeldDispatchReply,
-            )
+            .runtime_control(ObjectAddress::Fleet, RuntimeControl::DropHeldDispatchReply)
             .await?;
 
         // This is a real second Registry -> Mailbox submit on the same native
@@ -164,7 +161,7 @@ async fn lost_receipt_reply_stays_bound_when_a_cancel_submit_finishes_first() ->
         let state = fixture
             .holder
             .central
-            .runtime_control(ObjectAddress::Registry, RuntimeControl::Observe)
+            .runtime_control(ObjectAddress::Fleet, RuntimeControl::Observe)
             .await?;
         assert!(
             matches!(
@@ -176,13 +173,13 @@ async fn lost_receipt_reply_stays_bound_when_a_cancel_submit_finishes_first() ->
         fixture
             .holder
             .central
-            .runtime_control(ObjectAddress::Registry, RuntimeControl::ResumeDispatch)
+            .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
             .await?;
         let lost = fixture
             .holder
             .central
             .runtime_control(
-                ObjectAddress::Registry,
+                ObjectAddress::Fleet,
                 RuntimeControl::AwaitDroppedObjectReply,
             )
             .await?;
@@ -211,7 +208,7 @@ async fn lost_receipt_reply_stays_bound_when_a_cancel_submit_finishes_first() ->
     let _ = fixture
         .holder
         .central
-        .runtime_control(ObjectAddress::Registry, RuntimeControl::ResumeDispatch)
+        .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
         .await;
     held_calls.shutdown().await;
     let closed = fixture.close().await;
@@ -278,7 +275,7 @@ async fn hold_original_with_cancel(
     let held = fixture
         .holder
         .central
-        .runtime_control(ObjectAddress::Registry, RuntimeControl::AwaitHeldDispatch)
+        .runtime_control(ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch)
         .await?;
     let board_central_test_support::DispatchFaultObservation::Held {
         destination,

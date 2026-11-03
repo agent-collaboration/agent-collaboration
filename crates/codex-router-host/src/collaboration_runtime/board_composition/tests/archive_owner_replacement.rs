@@ -140,7 +140,7 @@ impl ReplacementFixture {
     async fn close(mut self) -> TestResult {
         let mut failures = Vec::new();
         if let Some(central) = &self.central {
-            let address = ObjectAddress::Connection(origin()?.installation);
+            let address = ObjectAddress::Fleet;
             match central
                 .runtime_control(address.clone(), RuntimeControl::Observe)
                 .await
@@ -296,7 +296,7 @@ async fn record_unacknowledged(
     first.fleet.upgrade().ok_or("Fleet")?.synchronize().await?;
     central
         .runtime_control(
-            ObjectAddress::Connection(origin()?.installation),
+            ObjectAddress::Fleet,
             RuntimeControl::HoldNextDispatch {
                 destination: ObjectAddress::Copy(DatabaseId::try_from(
                     project.as_str().to_owned(),
@@ -310,10 +310,7 @@ async fn record_unacknowledged(
         .await?
         .ok_or("archive observation")?;
     central
-        .runtime_control(
-            ObjectAddress::Connection(origin()?.installation),
-            RuntimeControl::AwaitHeldDispatch,
-        )
+        .runtime_control(ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch)
         .await?;
     let copied = first
         .projects

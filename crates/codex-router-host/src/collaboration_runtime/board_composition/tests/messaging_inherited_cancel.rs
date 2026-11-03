@@ -66,7 +66,7 @@ async fn inherited_handoff_cancel_reaches_the_remote_hold_before_any_local_submi
     let _ = fixture
         .holder
         .central
-        .runtime_control(ObjectAddress::Registry, RuntimeControl::ResumeDispatch)
+        .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
         .await;
     let closed = fixture.close().await;
     closed?;
@@ -82,7 +82,7 @@ async fn hold_old_cancel_away_from_mailbox(
         .holder
         .central
         .runtime_control(
-            ObjectAddress::Registry,
+            ObjectAddress::Fleet,
             RuntimeControl::HoldNextSelectedDispatch {
                 destination: ObjectAddress::Mailbox(rule_fixture::RECIPIENT.to_owned().try_into()?),
                 call: DispatchCallSelector::MailboxSubmit,
@@ -93,7 +93,7 @@ async fn hold_old_cancel_away_from_mailbox(
     let held = fixture
         .holder
         .central
-        .runtime_control(ObjectAddress::Registry, RuntimeControl::AwaitHeldDispatch)
+        .runtime_control(ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch)
         .await?;
     let board_central_test_support::DispatchFaultObservation::Held { request, .. } = held.dispatch
     else {
