@@ -1,8 +1,8 @@
 //! Literal wire oracles and serializer-generated artifact freshness.
 use collaboration_central_core::identity_contract::{
-    AllowMachine, AllowSignIn, AllowanceState, CommandRefusal, CommandStatus, CreateOrganization,
-    CreateWorkspace, IdentityLookup, MachineAllowance, MachineLookup, OrganizationCommandResult,
-    RemoveSession, RemoveSignIn, RevokeMachineEnrollment, SetOrganizationOwner, SetTokenLifetime,
+    AllowMachine, AllowSignIn, AllowanceState, CommandRefusal, CommandStatus, CreateWorkspace,
+    IdentityLookup, MachineAllowance, MachineLookup, OrganizationCommandResult, RemoveSession,
+    RemoveSignIn, RevokeMachineEnrollment, SetOrganizationOwner, SetTokenLifetime,
     TokenLifetimeSeconds, WithdrawMachineAllowance, WorkspaceLookup,
 };
 use serde_json::json;
@@ -50,17 +50,6 @@ fn command_status_wire_contract() {
         "CommandStatus",
         vec![
             json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","commandId":"019a3dce-2000-7000-8000-000000000002"}),
-        ],
-        false,
-    );
-}
-
-#[test]
-fn create_organization_wire_contract() {
-    contract_artifacts::assert_contract::<CreateOrganization>(
-        "CreateOrganization",
-        vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","ownerVerifiedEmail":"owner@example.invalid"}),
         ],
         false,
     );

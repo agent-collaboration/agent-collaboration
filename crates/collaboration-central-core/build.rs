@@ -14,5 +14,6 @@ fn main() -> Result<(), fleet_sync_query_gen::GenerateError> {
     fleet_sync_query_gen::verify_manifest("fleet-archive-queries.json")?;
     fleet_sync_query_gen::verify_manifest("registry-lease-queries.json")?;
     fleet_sync_query_gen::verify_manifest("machine-notice-queries.json")?;
+    fleet_sync_query_gen::verify_manifest("machine-claim-queries.json")?;
     fleet_sync_query_gen::verify_manifest("session-conformance-queries.json")
 }

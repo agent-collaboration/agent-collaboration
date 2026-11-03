@@ -10,7 +10,7 @@ mod negative_literals;
 mod read_literals;
 #[cfg(test)]
 #[path = "schema_validation.rs"]
-mod schema_validation;
+pub(super) mod schema_validation;
 
 pub fn assert_contract<T: JsonSchema + Serialize + DeserializeOwned>(
     name: &str,
