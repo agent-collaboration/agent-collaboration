@@ -85,7 +85,7 @@ pub use mail_status_scenarios::run_empty_status_stream_conformance;
 pub use normal_access_scenarios::run_shared_access_conformance;
 #[cfg(feature = "client")]
 pub use readmission_scenarios::{
-    run_readmission_activation_conformance, run_readmission_open_conformance,
+    run_readmission_activation_conformance, run_readmission_reservation_conformance,
 };
 #[cfg(feature = "client")]
 pub use revocation_race_scenarios::run_revocation_race_conformance;

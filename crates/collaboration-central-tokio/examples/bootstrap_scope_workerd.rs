@@ -99,7 +99,7 @@ impl Client {
 }
 
 fn schemas() -> [(&'static str, EngineSchema, usize, Option<BootstrapProbe>); 4] {
-    let mailbox_migration_count = fleet_sync_delivery::DELIVERY_MIGRATOR
+    let delivery_migration_count = fleet_sync_delivery::DELIVERY_MIGRATOR
         .iter()
         .filter(|migration| migration.migration_type.is_up_migration())
         .count();
@@ -113,10 +113,10 @@ fn schemas() -> [(&'static str, EngineSchema, usize, Option<BootstrapProbe>); 4]
         ("copy", EngineSchema::Copy, 3, Some(BootstrapProbe::Copy)),
         ("session", EngineSchema::Session, 4, None),
         (
-            "mailbox",
-            EngineSchema::Mailbox,
-            mailbox_migration_count,
-            Some(BootstrapProbe::Mailbox),
+            "delivery",
+            EngineSchema::Delivery,
+            delivery_migration_count,
+            Some(BootstrapProbe::Delivery),
         ),
     ]
 }
@@ -411,7 +411,7 @@ fn require_probe(reply: BootstrapReply) -> ConformanceResult<()> {
         BootstrapProbeReply::Copy(answer) if matches!(&*answer, CopyStatusAnswer::Status(status) if status.database.to_string() == "019f0000-0000-7000-8000-000000000603" && status.fence.value() == 1 && status.acked.sequence.value() == 0) => {
             Ok(())
         }
-        BootstrapProbeReply::Mailbox(query)
+        BootstrapProbeReply::Delivery(query)
             if query.statuses.len() == 1
                 && query
                     .statuses

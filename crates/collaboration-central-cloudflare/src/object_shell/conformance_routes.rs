@@ -39,17 +39,6 @@ impl ShellActor {
                     )
                     .await?;
             }
-            if matches!(
-                command,
-                collaboration_central_conformance::RuntimeControl::SmallMailboxCapacity
-            ) {
-                let RuntimeFace::Mailbox(mailbox) = runtime else {
-                    return Err(error("small capacity requires a mailbox"));
-                };
-                mailbox
-                    .conformance_small_mailbox_capacity()
-                    .map_err(error)?;
-            }
             if let collaboration_central_conformance::RuntimeControl::SetTime { now } = &command {
                 self.state
                     .storage()

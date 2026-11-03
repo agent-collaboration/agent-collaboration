@@ -265,24 +265,6 @@ impl Task for SavedFleetNotice {
     }
 }
 
-struct SavedOpenMailbox;
-impl Task for SavedOpenMailbox {
-    const KIND: &'static str = "central.open-mailbox";
-    const VERSION: u32 = 1;
-    type Store = <NativeHost as ObjectHost>::Store;
-    type Input = Value;
-    type Output = ();
-    async fn run<Context: OperationContext<Store = Self::Store>>(
-        &self,
-        _: &mut Context,
-        _: &Value,
-    ) -> Result<(), OperationFailure> {
-        Err(OperationFailure::InvalidPayload {
-            message: "admission type must never execute".into(),
-        })
-    }
-}
-
 async fn completed(
     host: &NativeHost,
     operation: durable_steps::OperationId,
@@ -360,43 +342,6 @@ async fn fleet_consumed_wake_recovers_its_saved_notice_after_prune_begin_failure
         })).await?;
         assert_eq!(rows.len(), 1);
         assert_eq!(rows, vec![(1, "fleet_feed_advanced".to_owned(), 1)]);
-        Ok(())
-    }.await;
-    objects.shutdown().await?;
-    proof
-}
-
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions must fail this test while fixture errors propagate through Result."
-)]
-#[tokio::test]
-async fn mailbox_consumed_wake_recovers_its_saved_open_after_deadline_begin_failure() -> TestResult
-{
-    let root = tempfile::tempdir()?;
-    let objects = open(root.path()).await?;
-    let proof = async {
-        let installation = message_board::ServiceId::try_from(durable_steps::Uuid::now_v7().to_string())?;
-        let peer = fleet_sync_protocol::PeerId::new(durable_steps::Uuid::now_v7())?;
-        let slot = objects.slot(ObjectAddress::Mailbox(installation)).await?;
-        ready(&slot).await?;
-        let host = slot.host.get().ok_or("Mailbox host missing")?;
-        let key = RequestKey::new("retained-mailbox-open-alarm")?;
-        let saved_key = key.clone();
-        let input = json!({"peer":peer});
-        let operation = host.object.transaction(move |scope| Box::pin(async move {
-            Ok(scope.admit::<SavedOpenMailbox>(&saved_key, &input).await.map_err(StoreError::backend)?.id())
-        })).await?;
-        host.observed.inner().fail_next_begin();
-        slot.io.wake_at(slot.io.now().after(Duration::from_millis(50))).await?;
-        let completion = completed(host, operation, key).await;
-        assert_eq!(host.observed.inner().begin_failures(), 1);
-        println!("ALARM_FAILURES maintenance begin_failures=1");
-        completion?;
-        let recipient = host.object.transaction(|scope| Box::pin(async move {
-            fleet_sync_delivery::Mailbox::<_, board_sync_protocol::BoardDeliveryTypes>::stored_recipient(scope).await.map_err(StoreError::backend)
-        })).await?;
-        assert_eq!(recipient, Some(peer));
         Ok(())
     }.await;
     objects.shutdown().await?;

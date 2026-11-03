@@ -2,7 +2,7 @@
 
 use crate::registry_peer_lookup::PeerDirectory;
 use crate::{
-    CallerContext, CopyKind, DeliveryKind, FleetKind, MailboxKind, ObjectAddress, RegistryKind,
+    CallerContext, CopyKind, DeliveryKind, FleetKind, ObjectAddress, RegistryKind,
     SerializedObjectCall, SessionKind,
     object_call_envelope::{encode_refusal, encode_shared_call},
 };
@@ -75,7 +75,6 @@ enum SharedTaskCaller {
         database: DatabaseId,
     },
     StoreOnly,
-    Mailbox(CallerContext<MailboxKind>),
     Session(CallerContext<SessionKind>),
     Delivery,
 }
@@ -190,12 +189,6 @@ impl<Io: PlatformIo> CoreHost<Io> {
             durable_steps::StoreError::backend("Fleet local dispatcher already installed")
         })
     }
-    pub(crate) fn mailbox(io: Io, receiver: ReceiverId, installation: ServiceId) -> Self {
-        let mut host = Self::for_store(io, receiver);
-        host.caller = SharedTaskCaller::Mailbox(CallerContext::for_object(installation));
-        host
-    }
-
     pub(crate) async fn gather_welcome(
         &self,
         peer: PeerId,
@@ -271,7 +264,12 @@ impl<Io: PlatformIo> CoreHost<Io> {
             .revocation_probe
             .recorded(identity)
             .map_err(|_| no_route())?;
-        let answer = self.io.object_call(call.destination, call.bytes).await?;
+        let answer = self
+            .transmit(SerializedObjectCall {
+                destination: call.destination,
+                bytes: call.bytes,
+            })
+            .await?;
         serde_json::from_slice(&answer).map_err(|_| CallFailure::AnswerLost)
     }
 
@@ -284,38 +282,6 @@ impl<Io: PlatformIo> CoreHost<Io> {
         let target = serde_json::to_value(target).map_err(encode_refusal)?;
         let request = serde_json::to_value(request).map_err(encode_refusal)?;
         match &self.caller {
-            SharedTaskCaller::Mailbox(caller) => {
-                if Call::KIND == crate::machine_notice_delivery::DeliverMachineNotice::KIND {
-                    let target: crate::machine_notice_delivery::DeliverMachineNotice =
-                        decode(target)?;
-                    let notice: board_sync_protocol::BoardNotice = decode(request)?;
-                    if caller.address() != ObjectAddress::Mailbox(target.installation.clone())
-                        || !matches!(notice, board_sync_protocol::BoardNotice::MailWaiting { .. })
-                    {
-                        return Err(no_route());
-                    }
-                    return encode_shared_call::<
-                        MailboxKind,
-                        DeliveryKind,
-                        crate::machine_notice_delivery::DeliverMachineNotice,
-                    >(caller, (), target, notice, identity);
-                }
-                if Call::KIND != fleet_sync_delivery::PublishCall::<board_sync_protocol::BoardDeliveryTypes>::KIND {
-                    return Err(no_route());
-                }
-                let target: fleet_sync_delivery::PublishCall<
-                    board_sync_protocol::BoardDeliveryTypes,
-                > = decode(target)?;
-                let fleet_sync_delivery::PublicationTarget::StatusStream { .. } = &target.target
-                else {
-                    return Err(no_route());
-                };
-                encode_shared_call::<
-                    MailboxKind,
-                    DeliveryKind,
-                    fleet_sync_delivery::PublishCall<board_sync_protocol::BoardDeliveryTypes>,
-                >(caller, (), target, decode(request)?, identity)
-            }
             SharedTaskCaller::Session(caller) => session_routes::classify_session(
                 Call::KIND,
                 caller,
@@ -382,18 +348,6 @@ impl<Io: PlatformIo> CoreHost<Io> {
                             caller, (), target, decode(request)?, identity,
                         )
                     }
-                    crate::mail_submit_calls::MailboxSubmit::KIND => {
-                        let target: crate::mail_submit_calls::MailboxSubmit = decode(target)?;
-                        encode_shared_call::<RegistryKind, MailboxKind, crate::mail_submit_calls::MailboxSubmit>(
-                            caller, target.installation.clone(), target, decode(request)?, identity,
-                        )
-                    }
-                    crate::mailbox_requests::MailboxRequest::KIND => {
-                        let target: crate::mailbox_requests::MailboxRequest = decode(target)?;
-                        encode_shared_call::<RegistryKind, MailboxKind, crate::mailbox_requests::MailboxRequest>(
-                            caller, target.installation.clone(), target, decode(request)?, identity,
-                        )
-                    }
                     #[cfg(feature = "conformance")]
                     crate::conformance_copy_wait::CopyWaitTarget::KIND => to_copy!(
                         crate::conformance_copy_wait::CopyWaitTarget,
@@ -427,26 +381,6 @@ impl<Io: PlatformIo> CoreHost<Io> {
                         encode_shared_call::<RegistryKind, DeliveryKind, crate::machine_enrollment::EndPeerSessions>(
                             caller,
                             (),
-                            target,
-                            decode(request)?,
-                            identity,
-                        )
-                    }
-                    crate::mailbox_lifecycle::ClosePeerMailbox::KIND => {
-                        let target: crate::mailbox_lifecycle::ClosePeerMailbox = decode(target)?;
-                        encode_shared_call::<RegistryKind, MailboxKind, crate::mailbox_lifecycle::ClosePeerMailbox>(
-                            caller,
-                            peer_directory(target.peer).await?,
-                            target,
-                            decode(request)?,
-                            identity,
-                        )
-                    }
-                    crate::mailbox_lifecycle::OpenPeerMailbox::KIND => {
-                        let target: crate::mailbox_lifecycle::OpenPeerMailbox = decode(target)?;
-                        encode_shared_call::<RegistryKind, MailboxKind, crate::mailbox_lifecycle::OpenPeerMailbox>(
-                            caller,
-                            peer_directory(target.peer).await?,
                             target,
                             decode(request)?,
                             identity,
@@ -585,37 +519,12 @@ impl<Io: PlatformIo> Host for CoreHost<Io> {
             self.revocation_probe
                 .before_dispatch(
                     crate::machine_enrollment::conformance_revocation::RecordedLifecycleCall {
-                        identity: recorded_identity.clone(),
-                        destination: call.destination.clone(),
-                        bytes: call.bytes.clone(),
-                    },
-                )
-                .await
-                .map_err(|_| CallFailure::AnswerLost)?;
-        }
-        #[cfg(feature = "conformance")]
-        if Call::KIND == crate::mailbox_lifecycle::OpenPeerMailbox::KIND {
-            self.revocation_probe
-                .before_open_dispatch(
-                    crate::machine_enrollment::conformance_revocation::RecordedLifecycleCall {
-                        identity: recorded_identity.clone(),
-                        destination: call.destination.clone(),
-                        bytes: call.bytes.clone(),
-                    },
-                )
-                .await
-                .map_err(|_| CallFailure::AnswerLost)?;
-        }
-        #[cfg(feature = "conformance")]
-        if Call::KIND == crate::mailbox_lifecycle::ClosePeerMailbox::KIND {
-            self.revocation_probe
-                .record_close_dispatch(
-                    crate::machine_enrollment::conformance_revocation::RecordedLifecycleCall {
                         identity: recorded_identity,
                         destination: call.destination.clone(),
                         bytes: call.bytes.clone(),
                     },
                 )
+                .await
                 .map_err(|_| CallFailure::AnswerLost)?;
         }
         let answer = self.transmit(call).await?;

@@ -124,8 +124,8 @@ async fn an_existing_service_cannot_change_its_peer_while_active_revoked_or_read
     );
     assert_eq!(stored_bindings(&fixture).await?, active);
 
-    // The fixture cannot deliver mailbox Open; this seeds revoked state and then
-    // exercises actual readmission admission, preserving its pending operation.
+    // Seed revoked state, then use the existing activation checkpoint to keep
+    // the actual readmission operation pending while testing immutable identity.
     fixture
         .execute("UPDATE machine_enrollments SET state='revoked'")
         .await?;
@@ -138,6 +138,12 @@ async fn an_existing_service_cannot_change_its_peer_while_active_revoked_or_read
         EnrollmentDecision::Refused(EnrollmentRefusal::PeerMismatch)
     );
     assert_eq!(stored_bindings(&fixture).await?, revoked);
+    fixture
+        .revocation_control(
+            original.installation.clone(),
+            collaboration_central_core::RevocationControl::ArmBeforeActivation,
+        )
+        .await?;
     assert_eq!(
         fixture
             .runtime
@@ -155,6 +161,12 @@ async fn an_existing_service_cannot_change_its_peer_while_active_revoked_or_read
     fixture.objects.close().await?;
     drop(fixture);
     let fixture = Fixture::open(root.path()).await?;
+    fixture
+        .revocation_control(
+            original.installation.clone(),
+            collaboration_central_core::RevocationControl::ArmBeforeActivation,
+        )
+        .await?;
     assert_eq!(
         fixture.runtime.enroll_machine(&owner()?, changed).await?,
         EnrollmentDecision::Refused(EnrollmentRefusal::PeerMismatch)

@@ -1,4 +1,4 @@
-//! Readmission opens the mailbox before its reserved identities become active.
+//! Readmission activates its reserved enrollment after the earlier revoke finishes.
 
 use super::{
     AtomicStore, ColumnIndex, Database, Decode, Deserialize, Encode, IntoArguments, PeerId,
@@ -30,7 +30,7 @@ where
     for<'row> &'row str: ColumnIndex<Driver::Row>,
 {
     const KIND: &'static str = READMISSION_TASK_KIND;
-    const VERSION: u32 = 1;
+    const VERSION: u32 = 2;
     type Store = Store;
     type Input = ReadmissionInput;
     type Output = ();
@@ -40,13 +40,6 @@ where
         context: &mut Context,
         input: &ReadmissionInput,
     ) -> Result<(), OperationFailure> {
-        context
-            .call(
-                durable_steps::StepName::new("open_mailbox").map_err(invalid_step)?,
-                crate::mailbox_lifecycle::OpenPeerMailbox { peer: input.peer },
-                (),
-            )
-            .await?;
         #[cfg(feature = "conformance")]
         if self
             .probe
@@ -54,8 +47,8 @@ where
             .defer_completion()
             .map_err(|error| OperationFailure::Storage { error })?
         {
-            // The Open answer is saved, but no activation step has run. Yield
-            // the alarm so normal credential requests can observe this state.
+            // No activation step has run. Yield the alarm so normal credential
+            // requests can observe the reserved, inactive enrollment.
             return Err(OperationFailure::Retry { after_ms: 100 });
         }
         let peer = input.peer;

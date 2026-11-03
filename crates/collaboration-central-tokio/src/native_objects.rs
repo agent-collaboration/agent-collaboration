@@ -23,8 +23,7 @@ use crate::object_keys::{address_from_key, address_key};
 use crate::{SocketCommand, TokioStorageHost};
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
 use collaboration_central_core::{
-    AdmissionOrigin, CopyKind, CoreHost, FleetKind, MailboxKind, ObjectAddress, ObjectRuntime,
-    PlatformIo,
+    AdmissionOrigin, CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectRuntime, PlatformIo,
 };
 use durable_steps::{BoxFuture, CallFailure, NotSentReason, StoreError};
 use fleet_sync_lease::RegistryConfig;
@@ -42,7 +41,6 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 type NativeHost = TokioStorageHost<CoreHost<TokioObjectIo>>;
 type CopyRuntime = ObjectRuntime<CopyKind, NativeHost, TokioObjectIo>;
 type FleetRuntime = ObjectRuntime<FleetKind, NativeHost, TokioObjectIo>;
-type MailboxRuntime = ObjectRuntime<MailboxKind, NativeHost, TokioObjectIo>;
 
 #[derive(Clone)]
 struct SharedClock(Arc<dyn Clock>);
@@ -131,7 +129,6 @@ impl PlatformIo for TokioObjectIo {
 enum RuntimeFace {
     Fleet(FleetRuntime),
     Copy(CopyRuntime),
-    Mailbox(MailboxRuntime),
 }
 impl RuntimeFace {
     async fn initialize(&self) -> Result<(), StoreError> {
@@ -139,20 +136,18 @@ impl RuntimeFace {
             Self::Fleet(runtime) => runtime.initialize().await.map(|_| ()),
             // Copy's core call/alarm prelude runs after Health classification.
             Self::Copy(_) => Ok(()),
-            Self::Mailbox(runtime) => runtime.initialize().await.map(|_| ()),
         }
     }
     // Keep a scheduled drive's SQL and dispatched effects in one observable
     // scope, distinct from inbound requests and later redelivery attempts.
     #[tracing::instrument(level = "trace", name = "central_alarm", skip_all, fields(object_kind = match self {
         Self::Fleet(_) => "fleet",
-        Self::Copy(_) => "copy", Self::Mailbox(_) => "mailbox",
+        Self::Copy(_) => "copy",
     }))]
     async fn on_alarm(&self) -> Result<(), StoreError> {
         match self {
             Self::Fleet(runtime) => runtime.on_alarm().await.map(|_| ()),
             Self::Copy(runtime) => runtime.on_alarm().await,
-            Self::Mailbox(runtime) => runtime.on_alarm().await.map(|_| ()),
         }
     }
 }
@@ -193,20 +188,6 @@ impl NativeObjects {
             collaboration_central_conformance::RuntimeControl::SetTime { .. }
         );
         let slot = self.slot(request.address).await?;
-        if matches!(
-            request.command,
-            collaboration_central_conformance::RuntimeControl::SmallMailboxCapacity
-        ) {
-            let Some(runtime) = slot.runtime.get() else {
-                return Err(StoreError::backend("mailbox runtime not initialized"));
-            };
-            let RuntimeFace::Mailbox(mailbox) = runtime.as_ref() else {
-                return Err(StoreError::backend("small capacity requires a mailbox"));
-            };
-            mailbox
-                .conformance_small_mailbox_capacity()
-                .map_err(StoreError::backend)?;
-        }
         let observed = slot
             .io
             .faults
@@ -379,29 +360,6 @@ impl NativeObjects {
                         *project,
                         self.copy_ack_wait,
                     )),
-                    ObjectAddress::Mailbox(installation) => {
-                        let limits = collaboration_central_core::central_mailbox_limits()
-                            .map_err(StoreError::backend)?;
-                        let mailbox = ObjectRuntime::mailbox(
-                            host,
-                            slot.io.clone(),
-                            self.config.authoritative_receiver,
-                            installation.clone(),
-                            limits,
-                        )?;
-                        #[cfg(feature = "conformance")]
-                        if slot
-                            .io
-                            .faults
-                            .small_mailbox_capacity()
-                            .map_err(StoreError::backend)?
-                        {
-                            mailbox
-                                .conformance_small_mailbox_capacity()
-                                .map_err(StoreError::backend)?;
-                        }
-                        RuntimeFace::Mailbox(mailbox)
-                    }
                     ObjectAddress::Fleet => RuntimeFace::Fleet(ObjectRuntime::fleet(
                         host,
                         slot.io.clone(),
@@ -470,7 +428,6 @@ impl NativeObjects {
                         runtime.on_call(body).await
                     }
                 },
-                Some(RuntimeFace::Mailbox(runtime)) => runtime.on_call(body).await,
                 _ => Err(no_route()),
             }
         })
@@ -520,11 +477,11 @@ impl NativeObjects {
                     message = socket.recv() => match message {
                         Some(Ok(Message::Binary(bytes))) => {
                             let runtime = runtime_handle.clone();
-                            requests.spawn(async move { match runtime.as_ref() { RuntimeFace::Fleet(runtime) => runtime.on_frame(binding, bytes.to_vec()).await, _ => Err(StoreError::Aborted { reason: "session runtime missing".into() }) } });
+                            requests.spawn(async move { match runtime.as_ref() { RuntimeFace::Fleet(runtime) => runtime.on_frame(binding, bytes.to_vec()).await, RuntimeFace::Copy(_) => Err(StoreError::Aborted { reason: "session runtime missing".into() }) } });
                         },
                         Some(Ok(Message::Text(text))) => {
                             let runtime = runtime_handle.clone();
-                            requests.spawn(async move { match runtime.as_ref() { RuntimeFace::Fleet(runtime) => runtime.on_frame(binding, text.as_bytes().to_vec()).await, _ => Err(StoreError::Aborted { reason: "session runtime missing".into() }) } });
+                            requests.spawn(async move { match runtime.as_ref() { RuntimeFace::Fleet(runtime) => runtime.on_frame(binding, text.as_bytes().to_vec()).await, RuntimeFace::Copy(_) => Err(StoreError::Aborted { reason: "session runtime missing".into() }) } });
                         },
                         Some(Ok(Message::Ping(_) | Message::Pong(_))) => {},
                         Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,

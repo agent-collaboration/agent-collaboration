@@ -2,8 +2,7 @@
 
 use crate::{CloudflareStorageHost, binding_attachment::BindingAttachment, cloudflare_transport};
 use collaboration_central_core::{
-    CopyKind, CoreHost, FleetKind, MailboxKind, ObjectAddress, ObjectHost, ObjectRuntime,
-    PlatformIo,
+    CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
 };
 use durable_steps::{CallFailure, NotSentReason};
 use fleet_sync_lease::RegistryConfig;
@@ -101,7 +100,6 @@ type StoreHost = CloudflareStorageHost<CoreHost<CloudflareObjectIo>>;
 enum RuntimeFace {
     Fleet(ObjectRuntime<FleetKind, StoreHost, CloudflareObjectIo>),
     Copy(ObjectRuntime<CopyKind, StoreHost, CloudflareObjectIo>),
-    Mailbox(ObjectRuntime<MailboxKind, StoreHost, CloudflareObjectIo>),
 }
 impl RuntimeFace {
     async fn initialize(&self) -> Result<()> {
@@ -109,7 +107,6 @@ impl RuntimeFace {
             Self::Fleet(runtime) => runtime.initialize().await.map_err(error)?,
             // Copy's core classifies Health before its call/alarm prelude.
             Self::Copy(_) => 0,
-            Self::Mailbox(runtime) => runtime.initialize().await.map_err(error)?,
         };
         Ok(())
     }
@@ -119,9 +116,6 @@ impl RuntimeFace {
                 runtime.on_alarm().await.map_err(error)?;
             }
             Self::Copy(runtime) => runtime.on_alarm().await.map_err(error)?,
-            Self::Mailbox(runtime) => {
-                runtime.on_alarm().await.map_err(error)?;
-            }
         };
         Ok(())
     }
@@ -130,15 +124,12 @@ impl RuntimeFace {
 enum PhysicalKind {
     Copy,
     Fleet,
-    Mailbox,
 }
 impl PhysicalKind {
     fn matches(self, address: &ObjectAddress) -> bool {
         matches!(
             (self, address),
-            (Self::Copy, ObjectAddress::Copy(_))
-                | (Self::Fleet, ObjectAddress::Fleet)
-                | (Self::Mailbox, ObjectAddress::Mailbox(_))
+            (Self::Copy, ObjectAddress::Copy(_)) | (Self::Fleet, ObjectAddress::Fleet)
         )
     }
 }
@@ -255,16 +246,6 @@ impl ShellActor {
                 project,
                 serde_json::from_str(&self.env.var("CENTRAL_COPY_ACK_WAIT")?.to_string())?,
             )),
-            ObjectAddress::Mailbox(installation) => RuntimeFace::Mailbox(
-                ObjectRuntime::mailbox(
-                    host.clone(),
-                    io,
-                    config.authoritative_receiver,
-                    installation,
-                    collaboration_central_core::central_mailbox_limits().map_err(error)?,
-                )
-                .map_err(error)?,
-            ),
             ObjectAddress::Fleet => RuntimeFace::Fleet(
                 ObjectRuntime::fleet(
                     host.clone(),
@@ -389,15 +370,6 @@ impl ShellActor {
                     .with_status(409)),
                 }
             }
-            ("/call", RuntimeFace::Mailbox(runtime)) => {
-                match runtime.on_call(request.bytes().await?).await {
-                    Ok(bytes) => Response::from_bytes(bytes),
-                    Err(failure) => Ok(Response::from_json(
-                        &cloudflare_transport::WireCallFailure::from(failure),
-                    )?
-                    .with_status(409)),
-                }
-            }
             ("/session", RuntimeFace::Fleet(runtime)) => {
                 use base64::Engine;
                 let encoded = request
@@ -511,4 +483,3 @@ macro_rules! shell {
 }
 shell!(ProjectCopyObject, Copy);
 shell!(FleetObject, Fleet);
-shell!(MailboxObject, Mailbox);

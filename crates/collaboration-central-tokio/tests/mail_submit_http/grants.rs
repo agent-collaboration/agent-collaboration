@@ -4,8 +4,7 @@ use board_sync_protocol::{BoardConsumerAnswer, BoardConsumerProtocol, BoardConsu
 use collaboration_central_conformance::{
     ConformanceClient, enroll_admitted_peer, machine_assertion,
 };
-use collaboration_central_core::{CoreHost, ObjectRuntime};
-use collaboration_central_tokio::TokioStorageHost;
+use collaboration_central_core::CoreHost;
 use durable_steps::{AtomicStore, StoreError, Uuid, storage::TransactionScope};
 use fleet_sync_protocol::{
     ClientFrame, DatabaseId, DeliveryEnvelope, Epoch, FrameId, ItemId, OperationAnswer,
@@ -127,7 +126,7 @@ async fn custody(root: &Path) -> ConformanceResult<Vec<ItemId>> {
     let config = configuration::registry_config()?;
     let object = objects
         .object(
-            ObjectKey::new(format!("mailbox-{RECIPIENT}"))?,
+            ObjectKey::new("fleet")?,
             Default::default(),
             Arc::new(CoreHost::for_store(
                 registry_setup::SetupIo,
@@ -135,19 +134,11 @@ async fn custody(root: &Path) -> ConformanceResult<Vec<ItemId>> {
             )),
         )
         .await?;
-    let runtime = ObjectRuntime::mailbox(
-        Arc::new(TokioStorageHost::new(object.clone())),
-        registry_setup::SetupIo,
-        config.authoritative_receiver,
-        ServiceId::try_from(RECIPIENT.to_owned())?,
-        collaboration_central_core::central_mailbox_limits()?,
-    )?;
-    runtime.initialize().await?;
     let result = object
         .transaction(|scope| {
             Box::pin(async move {
                 let rows = query::<sqlx_turso::Turso>(
-                    "SELECT item_id FROM _fleet_sync_mail_items ORDER BY item_id",
+                    "SELECT item_id FROM _fleet_sync_outbox_items ORDER BY item_id",
                 )
                 .fetch_all(scope.executor())
                 .await
@@ -211,10 +202,10 @@ async fn genuine_other_peer_grant_refuses_without_custody_and_old_holder_can_sub
                 let item = scenarios::project_envelope(database.as_uuid(),recipient,false)?;
                 let id = item.id();
                 require_mail_answer(submit(&mut socket,&item,recipient).await?,json!({"kind":"submitted","value":{"kind":"accepted","value":{
-                    "seq":1,"status":{"kind":"sent","value":{"seq":1}},"version":1,"cancel":null
+                    "status":{"kind":"sent"},"version":1,"cancel":null
                 }}}))?;
                 require_mail_answer(submit(&mut socket,&item,recipient).await?,json!({"kind":"submitted","value":{"kind":"replayed","value":{
-                    "status":{"kind":"sent","value":{"seq":1}},"version":1,"cancel":null
+                    "status":{"kind":"sent"},"version":1,"cancel":null
                 }}}))?;
                 Ok::<_,Box<dyn std::error::Error+Send+Sync>>(id)
             }.await;

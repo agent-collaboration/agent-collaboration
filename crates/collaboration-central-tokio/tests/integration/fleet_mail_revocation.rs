@@ -168,6 +168,70 @@ async fn selected_push_held_by_native_backpressure_can_finish_after_revoke_witho
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "A revoked recipient cannot admit new custody; its earlier queued item and task must remain unchanged."
+)]
+#[tokio::test]
+async fn new_submit_to_revoked_recipient_is_refused_without_changing_existing_custody() -> TestResult
+{
+    use super::fleet_mail_admission::admitted_rows;
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path(), NOW).await?;
+    let earlier = envelope(B, SERVICE_B)?;
+    submit(&fixture, &earlier).await?;
+    assert_eq!(
+        fixture
+            .runtime
+            .revoke_machine(&owner()?, SERVICE_B.to_owned().try_into()?)
+            .await?,
+        RevocationDecision::MachineRevoked
+    );
+    let before = admitted_rows(&fixture).await?;
+    let replay = submit_answer(&fixture, &earlier).await?;
+    assert_eq!(
+        replay.pointer("/value/value/kind"),
+        Some(&json!("replayed")),
+        "{replay}"
+    );
+    assert_eq!(
+        replay.pointer("/value/value/value/status/kind"),
+        Some(&json!("sent")),
+        "{replay}"
+    );
+    assert_eq!(
+        admitted_rows(&fixture).await?,
+        before,
+        "replaying existing custody during revocation added work"
+    );
+    let candidate = envelope(B, SERVICE_B)?;
+    let refused = submit_answer(&fixture, &candidate).await?;
+    assert_eq!(
+        refused.pointer("/value/value/kind"),
+        Some(&json!("refused")),
+        "{refused}"
+    );
+    assert_eq!(
+        refused.pointer("/value/value/value/reason/kind"),
+        Some(&json!("recipientRevoked")),
+        "{refused}"
+    );
+    assert_eq!(
+        admitted_rows(&fixture).await?,
+        before,
+        "refused new mail changed outbox rows or Push tasks"
+    );
+    assert!(matches!(
+        status(&fixture, candidate.id()).await?.state,
+        ItemStatusState::Unknown
+    ));
+    assert_eq!(
+        custody(&fixture, earlier.id()).await?,
+        ("sent".into(), true)
+    );
+    fixture.close().await
+}
+
 fn owner() -> TestResult<OwnerIdentity> {
     Ok(OwnerIdentity::from_access(AccessCaller::Owner {
         email: "fixture@example.test".into(),

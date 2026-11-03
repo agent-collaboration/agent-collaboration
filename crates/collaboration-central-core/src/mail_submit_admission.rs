@@ -57,13 +57,32 @@ where
                 });
             }
             let recipient = item.recipient().peer;
-            let Some(installation) = service_for_peer(scope, recipient).await? else {
+            let mut recipients = crate::generated_enrollment::read_enrollments(
+                scope,
+                None,
+                None,
+                None,
+                Some(recipient.to_string()),
+            )
+            .await
+            .map_err(StoreError::backend)?;
+            if recipients.len() > 1 {
+                return Err(crate::machine_enrollment_record::corrupt("peer_id"));
+            }
+            let Some(row) = recipients.pop() else {
                 return reply(MailSubmitReply::Answer(MailSubmitAnswer::Submitted(
                     SubmitResult::Refused {
                         reason: DeliveryRefusal::RecipientUnknown,
                     },
                 )));
             };
+            let recipient_machine = crate::machine_enrollment_record::StoredMachine::decode(row)?;
+            if recipient_machine.peer != recipient {
+                return Err(crate::machine_enrollment_record::corrupt("peer_id"));
+            }
+            let recipient_revoked = recipient_machine.state
+                == crate::machine_enrollment_record::EnrollmentState::Revoked;
+            let installation = recipient_machine.origin.installation;
             // Both identities come from this one registry row. No ServiceId is
             // reinterpreted as a PeerId, including in a replay or cancel.
             let request = match BoardConsumerRequest::mail_submit(
@@ -111,7 +130,27 @@ where
                     });
                 }
             }
-            let answer = Outbox::<_, BoardDeliveryTypes>::new(scope, self.limits)
+            let mut outbox = Outbox::<_, BoardDeliveryTypes>::new(scope, self.limits);
+            if recipient_revoked
+                && !fleet_sync_delivery::item_is_too_old(item.id(), self.now)
+                && matches!(
+                    outbox
+                        .status(item.id())
+                        .await
+                        .map_err(fleet_sync_delivery::delivery_rollback)?
+                        .state,
+                    fleet_sync_delivery::OutboxStatusState::Unknown,
+                )
+            {
+                return reply(MailSubmitReply::Answer(MailSubmitAnswer::Submitted(
+                    SubmitResult::Refused {
+                        reason: DeliveryRefusal::RecipientRevoked,
+                    },
+                )));
+            }
+            // Existing immutable custody still goes through the SDK's replay
+            // and conflict rules, including while the recipient is revoked.
+            let answer = outbox
                 .submit_relay::<
                     crate::fleet_mail_tasks::FleetPushTask<Store, Driver>,
                     crate::fleet_mail_tasks::FleetMailRemoval<Store, Driver>,

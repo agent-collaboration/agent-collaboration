@@ -88,13 +88,13 @@ async fn three_machine_sockets_share_the_fleet_store() -> ConformanceResult<()> 
             return Err(format!("Fleet lost a machine attachment: {admitted_services:?}").into());
         }
 
-        // R1's physical stores, with C4's explicit intermediate Mailbox exception.
+        // R1's complete physical-store inventory has no per-machine exception.
         let stores = std::fs::read_dir(directory.path())?
             .map(|entry| Ok(entry?.file_name().to_string_lossy().into_owned()))
             .collect::<Result<BTreeSet<_>, std::io::Error>>()?;
         let central_stores: BTreeSet<_> = stores
             .into_iter()
-            .filter(|name| name.ends_with(".db") && !name.starts_with("mailbox-"))
+            .filter(|name| name.ends_with(".db"))
             .collect();
         if central_stores != BTreeSet::from(["fleet.db".to_owned()]) {
             return Err(format!(

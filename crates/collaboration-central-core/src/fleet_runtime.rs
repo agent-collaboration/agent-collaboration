@@ -220,7 +220,7 @@ where
             EngineSchema::Fleet,
             EngineSchema::Registry,
             EngineSchema::Session,
-            EngineSchema::Mailbox,
+            EngineSchema::Delivery,
         ] {
             applied += bootstrap.initialize(schema).await?;
         }

@@ -19,7 +19,7 @@ impl NativeObjects {
                     .conformance_import_board_snapshot(owner, state, pages, manifest)
                     .await
             }
-            _ => Err(StoreError::backend("not Registry")),
+            RuntimeFace::Copy(_) => Err(StoreError::backend("not Fleet")),
         }
     }
 }

@@ -39,6 +39,7 @@ pub struct Io {
     time_changed: tokio::sync::watch::Sender<i64>,
     pub reply_deadlines: tokio::sync::watch::Sender<usize>,
     pub reject_next_notice: Arc<AtomicBool>,
+    pub reject_next_wake: Arc<AtomicBool>,
     pub lose_next_notice_reply: Arc<AtomicBool>,
     pub notice_calls: Arc<Mutex<Vec<Value>>>,
     pub local_call_faults: Arc<collaboration_central_conformance::RuntimeFaults>,
@@ -52,6 +53,7 @@ impl Io {
             time_changed: tokio::sync::watch::channel(now).0,
             reply_deadlines: tokio::sync::watch::channel(0).0,
             reject_next_notice: Arc::default(),
+            reject_next_wake: Arc::default(),
             lose_next_notice_reply: Arc::default(),
             notice_calls: Arc::default(),
             local_call_faults: Arc::default(),
@@ -81,6 +83,11 @@ impl IdSource for Io {
 }
 impl WakeScheduler for Io {
     async fn wake_at(&self, at: SyncTime) -> Result<(), WakeFailure> {
+        if self.reject_next_wake.swap(false, Ordering::SeqCst) {
+            return Err(WakeFailure::Unavailable {
+                message: "injected post-commit wake loss".into(),
+            });
+        }
         self.wakes
             .lock()
             .map_err(|_| WakeFailure::Unavailable {
@@ -163,7 +170,7 @@ impl PlatformIo for Io {
             ObjectAddress::Copy(database) if database.to_string() == PROJECT => {
                 project(bytes).await
             }
-            _ => Err(no_route()),
+            ObjectAddress::Copy(_) => Err(no_route()),
         }
     }
 }

@@ -35,8 +35,6 @@ pub enum RevocationControl {
     ReleaseDelivery,
     ArmActivation,
     ReleaseActivation,
-    ArmOpen,
-    ReleaseOpen,
     ArmBeforeActivation,
     ReleaseBeforeActivation,
     Replay { call: CallId },
@@ -68,13 +66,9 @@ pub struct RevocationObservation {
     pub enrollment: Option<RevocationEnrollmentSnapshot>,
     pub operation: Option<OperationStatus>,
     pub activation_pause: LifecyclePauseObservation,
-    pub open_pause: LifecyclePauseObservation,
     pub before_activation_pause: LifecyclePauseObservation,
-    pub open_calls: Vec<CallId>,
-    pub close_calls: Vec<CallId>,
     pub readmission_operation: Option<OperationStatus>,
     pub activation_step: Option<durable_steps::storage::StepRecord>,
-    pub open_step: Option<durable_steps::storage::StepRecord>,
 }
 
 #[derive(Clone)]
@@ -88,15 +82,12 @@ struct ProbeState {
     armed: bool,
     reached: bool,
     calls: Vec<RecordedLifecycleCall>,
-    open_calls: Vec<RecordedLifecycleCall>,
-    close_calls: Vec<RecordedLifecycleCall>,
     release: Vec<oneshot::Sender<()>>,
 }
 #[derive(Default)]
 pub(crate) struct RevocationProbe {
     state: Mutex<ProbeState>,
     pub(crate) activation_pause: lifecycle_pause::LifecyclePause,
-    pub(crate) open_pause: lifecycle_pause::LifecyclePause,
     pub(crate) before_activation_pause: lifecycle_pause::LifecyclePause,
 }
 impl RevocationProbe {
@@ -121,34 +112,10 @@ impl RevocationProbe {
         }
         Ok(())
     }
-    pub(crate) async fn before_open_dispatch(
-        &self,
-        call: RecordedLifecycleCall,
-    ) -> Result<(), StoreError> {
-        self.state
-            .lock()
-            .map_err(StoreError::backend)?
-            .open_calls
-            .push(call);
-        self.open_pause.pause().await
-    }
-    pub(crate) fn record_close_dispatch(
-        &self,
-        call: RecordedLifecycleCall,
-    ) -> Result<(), StoreError> {
-        self.state
-            .lock()
-            .map_err(StoreError::backend)?
-            .close_calls
-            .push(call);
-        Ok(())
-    }
     fn apply(&self, control: &RevocationControl) -> Result<(), StoreError> {
         match control {
             RevocationControl::ArmActivation => return self.activation_pause.arm(),
             RevocationControl::ReleaseActivation => return self.activation_pause.release(),
-            RevocationControl::ArmOpen => return self.open_pause.arm(),
-            RevocationControl::ReleaseOpen => return self.open_pause.release(),
             RevocationControl::ArmBeforeActivation => return self.before_activation_pause.arm(),
             RevocationControl::ReleaseBeforeActivation => {
                 return self.before_activation_pause.release();
@@ -176,8 +143,6 @@ impl RevocationProbe {
                 | RevocationControl::Replay { .. }
                 | RevocationControl::ArmActivation
                 | RevocationControl::ReleaseActivation
-                | RevocationControl::ArmOpen
-                | RevocationControl::ReleaseOpen
                 | RevocationControl::ArmBeforeActivation
                 | RevocationControl::ReleaseBeforeActivation => Vec::new(),
             }
@@ -192,8 +157,6 @@ impl RevocationProbe {
         state
             .calls
             .iter()
-            .chain(&state.open_calls)
-            .chain(&state.close_calls)
             .find(|call| &call.identity == identity)
             .cloned()
             .ok_or_else(|| StoreError::Aborted {
@@ -270,7 +233,7 @@ where
         if let RevocationControl::Replay { call } = input.control {
             shared_host.replay_lifecycle_call(&call).await?;
         }
-        let ((enrollment, operation, readmission_operation, activation_step, open_step), _) =
+        let ((enrollment, operation, readmission_operation, activation_step), _) =
             StepDriver::new(host.clone())
                 .run(ReadRevocation {
                     service: input.service,
@@ -281,25 +244,6 @@ where
             .revocation_probe
             .observation()
             .map_err(|_| CallFailure::AnswerLost)?;
-        let (open_calls, close_calls) = {
-            let state = shared_host
-                .revocation_probe
-                .state
-                .lock()
-                .map_err(|_| CallFailure::AnswerLost)?;
-            (
-                state
-                    .open_calls
-                    .iter()
-                    .map(|call| call.identity.clone())
-                    .collect(),
-                state
-                    .close_calls
-                    .iter()
-                    .map(|call| call.identity.clone())
-                    .collect(),
-            )
-        };
         serde_json::to_vec(&RevocationObservation {
             gate_armed,
             gate_reached,
@@ -311,21 +255,13 @@ where
                 .activation_pause
                 .observation()
                 .map_err(|_| CallFailure::AnswerLost)?,
-            open_pause: shared_host
-                .revocation_probe
-                .open_pause
-                .observation()
-                .map_err(|_| CallFailure::AnswerLost)?,
             before_activation_pause: shared_host
                 .revocation_probe
                 .before_activation_pause
                 .observation()
                 .map_err(|_| CallFailure::AnswerLost)?,
-            open_calls,
-            close_calls,
             readmission_operation,
             activation_step,
-            open_step,
         })
         .map_err(|_| CallFailure::AnswerLost)
     }
@@ -347,7 +283,6 @@ where
         Option<OperationStatus>,
         Option<OperationStatus>,
         Option<durable_steps::storage::StepRecord>,
-        Option<durable_steps::storage::StepRecord>,
     );
     type Effect = Infallible;
     fn run<'scope, 'transaction>(
@@ -368,7 +303,7 @@ where
                 return Err(corrupt("service_id"));
             }
             let Some(machine) = rows.pop().map(StoredMachine::decode).transpose()? else {
-                return Ok(((None, None, None, None, None), Vec::new()));
+                return Ok(((None, None, None, None), Vec::new()));
             };
             let fingerprint = format!(
                 "{:x}",
@@ -384,21 +319,19 @@ where
                 ),
                 None => None,
             };
-            let (readmission_operation, activation_step, open_step) =
-                match machine.last_enrollment_operation {
-                    Some(id) => (
-                        Some(
-                            scope
-                                .operation(id)
-                                .await?
-                                .ok_or(StoreError::MissingOperation { id })?
-                                .status(),
-                        ),
-                        scope.step(id, 1).await?,
-                        scope.step(id, 0).await?,
+            let (readmission_operation, activation_step) = match machine.last_enrollment_operation {
+                Some(id) => (
+                    Some(
+                        scope
+                            .operation(id)
+                            .await?
+                            .ok_or(StoreError::MissingOperation { id })?
+                            .status(),
                     ),
-                    None => (None, None, None),
-                };
+                    scope.step(id, 0).await?,
+                ),
+                None => (None, None),
+            };
             Ok((
                 (
                     Some(RevocationEnrollmentSnapshot {
@@ -411,7 +344,6 @@ where
                     operation,
                     readmission_operation,
                     activation_step,
-                    open_step,
                 ),
                 Vec::new(),
             ))

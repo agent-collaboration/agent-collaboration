@@ -25,7 +25,7 @@ pub enum HistoryCorruption {
 pub enum BootstrapProbe {
     Registry,
     Copy,
-    Mailbox,
+    Delivery,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -72,7 +72,7 @@ type Acceptance = <BoardDeliveryTypes as DeliveryTypes>::Acceptance;
 pub enum BootstrapProbeReply {
     Registry(ReportSchemaSupport),
     Copy(Box<CopyStatusAnswer>),
-    Mailbox(QueryResult<Acceptance>),
+    Delivery(QueryResult<Acceptance>),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -270,7 +270,7 @@ where
                                     .map_err(fleet_sync_receiver::receiver_rollback)?,
                             ))
                         }
-                        BootstrapProbe::Mailbox => {
+                        BootstrapProbe::Delivery => {
                             let allowance = fleet_sync_delivery::minimum_settlement_allowance::<
                                 BoardDeliveryTypes,
                             >()
@@ -283,14 +283,16 @@ where
                             let item =
                                 ItemId::try_from("019f0000-0000-7000-8000-000000000604".to_owned())
                                     .map_err(StoreError::backend)?;
-                            let result =
-                                fleet_sync_delivery::Mailbox::<_, BoardDeliveryTypes>::new(
-                                    scope, peer, limits,
-                                )
-                                .query(&[item])
-                                .await
-                                .map_err(StoreError::backend)?;
-                            BootstrapProbeReply::Mailbox(result)
+                            let status = fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes>::new(
+                                scope, limits,
+                            )
+                            .relay_query(peer, item)
+                            .await
+                            .map_err(StoreError::backend)?;
+                            let result = QueryResult {
+                                statuses: vec![status],
+                            };
+                            BootstrapProbeReply::Delivery(result)
                         }
                     };
                     BootstrapReply::Probed(Box::new(probe))

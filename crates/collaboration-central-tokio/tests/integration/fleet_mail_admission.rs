@@ -7,7 +7,7 @@ use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, PushResult};
 use serde_json::json;
 use sqlx_core::{query::query, row::Row};
 
-async fn admitted_rows(fixture: &Fixture) -> TestResult<(i64, i64)> {
+pub(super) async fn admitted_rows(fixture: &Fixture) -> TestResult<(i64, i64)> {
     Ok(fixture.store.transaction(|scope| Box::pin(async move {
         let row = query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM _fleet_sync_outbox_items) AS items,(SELECT count(*) FROM _fleet_sync_operations WHERE kind='fleet-sync.delivery.push-item') AS pushes")
             .fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
@@ -119,5 +119,79 @@ async fn replay_and_conflict_preserve_one_fleet_custody_row_and_a_restart_still_
     // PushItem discards its completed journal row. Replaying the handoff must admit no new Push.
     assert_eq!(admitted_rows(&reopened).await?, (1, 0));
     inbox.close().await?;
+    reopened.close().await
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "A real Push-task admission failure must roll custody back; losing the subsequent physical wake must preserve one committed item for replay after reopen."
+)]
+#[tokio::test]
+async fn push_admission_rollback_and_post_commit_wake_loss_preserve_one_replayable_custody_item()
+-> TestResult {
+    use std::sync::atomic::Ordering;
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path(), NOW).await?;
+    let item = envelope(B, SERVICE_B)?;
+    let before_wakes = fixture.io.wakes()?;
+    fixture.sql("CREATE TRIGGER reject_fleet_push_admission BEFORE INSERT ON _fleet_sync_operations WHEN NEW.kind='fleet-sync.delivery.push-item' BEGIN SELECT RAISE(ABORT,'injected Push admission failure'); END").await?;
+    assert!(submit_answer(&fixture, &item).await.is_err());
+    assert_eq!(
+        admitted_rows(&fixture).await?,
+        (0, 0),
+        "failed Push admission left partial custody or work"
+    );
+    let jobs = fixture
+        .store
+        .transaction(|scope| {
+            Box::pin(async move {
+                let row = query::<sqlx_turso::Turso>(
+                    "SELECT count(*) AS jobs FROM _fleet_sync_operations",
+                )
+                .fetch_one(scope.executor())
+                .await
+                .map_err(StoreError::backend)?;
+                row.try_get::<i64, _>("jobs").map_err(StoreError::backend)
+            })
+        })
+        .await?;
+    assert_eq!(
+        jobs, 0,
+        "failed Push admission leaked retention or delivery work"
+    );
+    assert_eq!(
+        fixture.io.wakes()?,
+        before_wakes,
+        "rolled-back admission published a wake"
+    );
+    fixture
+        .sql("DROP TRIGGER reject_fleet_push_admission")
+        .await?;
+    fixture.io.reject_next_wake.store(true, Ordering::SeqCst);
+    assert!(
+        submit_answer(&fixture, &item).await.is_err(),
+        "post-commit wake loss must not acknowledge activation"
+    );
+    assert!(!fixture.io.reject_next_wake.load(Ordering::SeqCst));
+    assert_eq!(
+        admitted_rows(&fixture).await?,
+        (1, 1),
+        "wake loss discarded or duplicated committed custody"
+    );
+    fixture.close().await?;
+    let reopened = Fixture::open(root.path(), NOW + 10_000).await?;
+    let replay = submit_answer(&reopened, &item).await?;
+    assert_eq!(
+        replay.pointer("/value/value/kind"),
+        Some(&json!("replayed")),
+        "{replay}"
+    );
+    assert_eq!(
+        replay.pointer("/value/value/value/status/kind"),
+        Some(&json!("sent")),
+        "{replay}"
+    );
+    assert_eq!(admitted_rows(&reopened).await?, (1, 1));
+    assert_eq!(custody(&reopened, item.id()).await?, ("sent".into(), true));
     reopened.close().await
 }

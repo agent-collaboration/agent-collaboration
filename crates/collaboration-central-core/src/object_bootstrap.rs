@@ -26,7 +26,7 @@ pub enum EngineSchema {
     Registry,
     Copy,
     Session,
-    Mailbox,
+    Delivery,
     Fleet,
 }
 impl EngineSchema {
@@ -35,7 +35,7 @@ impl EngineSchema {
             Self::Registry => "fleet-sync-lease",
             Self::Copy => "fleet-sync-receiver",
             Self::Session => "fleet-sync-session",
-            Self::Mailbox => "fleet-sync-delivery",
+            Self::Delivery => "fleet-sync-delivery",
             Self::Fleet => "central-fleet",
         }
     }
@@ -46,7 +46,7 @@ impl EngineSchema {
             Self::Session => fleet_sync_session::SESSION_MIGRATOR
                 .sql_migrations()
                 .collect(),
-            Self::Mailbox => fleet_sync_delivery::DELIVERY_MIGRATOR.iter().collect(),
+            Self::Delivery => fleet_sync_delivery::DELIVERY_MIGRATOR.iter().collect(),
             Self::Fleet => FLEET_MIGRATIONS.iter().collect(),
         }
     }

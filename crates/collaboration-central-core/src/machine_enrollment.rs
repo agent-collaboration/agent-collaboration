@@ -60,7 +60,7 @@ pub enum EnrollmentDecision {
     Refused(EnrollmentRefusal),
     /// The caller may retry once the earlier revoke operation has completed.
     RevocationInProgress,
-    /// Reserved identities become active after the mailbox has opened.
+    /// Reserved identities become active after the enrollment workflow finishes.
     EnrollmentInProgress,
 }
 
