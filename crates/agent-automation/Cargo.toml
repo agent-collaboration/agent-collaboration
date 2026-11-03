@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "agent-automation"
 version.workspace = true
 edition.workspace = true
@@ -20,3 +21,7 @@ serde.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"
