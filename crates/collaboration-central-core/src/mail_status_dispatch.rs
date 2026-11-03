@@ -158,12 +158,8 @@ async fn bounded_project_answer(
         }
         Either::Left((Err(error), _)) => Err(error),
         Either::Left((Ok(_), _)) => Err(CallFailure::AnswerLost),
-        Either::Right(_) => Err(CallFailure::Retryable {
-            reason: CallRetryReason {
-                code: "projectStatusDeadline".into(),
-                detail: "project status answer deadline elapsed".into(),
-            },
-        }),
+        // The holder may have applied the publication before losing its ACK.
+        Either::Right(_) => Err(CallFailure::AnswerLost),
     }
 }
 

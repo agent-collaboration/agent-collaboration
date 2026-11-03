@@ -1,4 +1,4 @@
-//! The Push protocol boundary validates replies and makes deadline expiry retryable.
+//! Validate Push replies and preserve possible reach when a sent call's answer is lost.
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use durable_steps::{BoxFuture, CallFailure, CallId, CallRetryReason, StoreError};
 use fleet_sync_delivery::PushCall;
@@ -7,6 +7,10 @@ use fleet_sync_protocol::{
 };
 use futures_util::future::{Either, select};
 use std::{future::Future, sync::Arc};
+
+#[cfg(test)]
+#[path = "mail_push_dispatch_test.rs"]
+mod tests;
 
 type PushAnswer = PushResult<<BoardDeliveryTypes as DeliveryTypes>::Acceptance>;
 pub(crate) type PushDispatcher = Arc<
@@ -43,11 +47,8 @@ pub(crate) async fn bounded_answer(
         }
         Either::Left((Err(error), _)) => Err(error),
         Either::Left((Ok(_), _)) => Err(CallFailure::AnswerLost),
-        Either::Right(_) => Err(CallFailure::Retryable {
-            reason: CallRetryReason {
-                code: "pushDeadline".into(),
-                detail: "recipient Push answer deadline elapsed".into(),
-            },
-        }),
+        // Enqueue already succeeded; silence cannot prove that B took no
+        // custody. Deduplicated calls retry AnswerLost without erasing reach.
+        Either::Right(_) => Err(CallFailure::AnswerLost),
     }
 }
