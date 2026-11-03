@@ -27,7 +27,19 @@ async fn pending_request_replays_through_the_session_and_keeps_central_provenanc
         pending.first().ok_or("missing pending request")?.request,
         offered
     );
-    assert!(!router_root.join("fleet.sqlite").exists());
+    assert!(
+        std::fs::read_dir(&router_root)?
+            .collect::<Result<Vec<_>, _>>()?
+            .iter()
+            .all(|entry| entry
+                .path()
+                .extension()
+                .is_none_or(|extension| extension != "sqlite")
+                || matches!(
+                    entry.file_name().to_str(),
+                    Some("fleet-cache.sqlite" | "fleet-outbox.sqlite")
+                ))
+    );
     offline.close().await;
 
     let jwks = JwksFixtureServer::start().await?;
@@ -78,7 +90,19 @@ async fn pending_request_replays_through_the_session_and_keeps_central_provenanc
         reader.fleet.request_effects(&effects_request).await?,
         receipt
     );
-    assert!(!router_root.join("fleet.sqlite").exists());
+    assert!(
+        std::fs::read_dir(&router_root)?
+            .collect::<Result<Vec<_>, _>>()?
+            .iter()
+            .all(|entry| entry
+                .path()
+                .extension()
+                .is_none_or(|extension| extension != "sqlite")
+                || matches!(
+                    entry.file_name().to_str(),
+                    Some("fleet-cache.sqlite" | "fleet-outbox.sqlite")
+                ))
+    );
     reader.shutdown().await?;
     live.shutdown().await?;
     jwks.shutdown().await?;

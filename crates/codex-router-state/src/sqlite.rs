@@ -282,7 +282,7 @@ impl AsyncSqliteStateStore {
     ///
     /// The Router's `state.sqlite` holds accounts, credential metadata, quota and
     /// credit, routing policy, session-account affinity, and client leases.
-    /// Fleet records belong in `codex-router-fleet-state` and its `fleet.sqlite`.
+    /// Fleet login, registrations and caches belong to `message-board-storage` in the existing `fleet-cache.sqlite`.
     pub async fn open(database_path: &Path) -> Result<Self, StateStoreError> {
         let options = SqliteConnectOptions::new()
             .filename(database_path)

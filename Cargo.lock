@@ -1372,24 +1372,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "codex-router-fleet-state"
-version = "0.1.119"
-dependencies = [
- "collaboration-protocol",
- "fleet-identity-protocol",
- "fleet-sync-protocol",
- "message-board",
- "schemars 1.2.2",
- "serde",
- "serde_json",
- "sqlx",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "url",
-]
-
-[[package]]
 name = "codex-router-host"
 version = "0.1.119"
 dependencies = [
@@ -4280,8 +4262,10 @@ dependencies = [
  "board-sync-protocol",
  "chrono",
  "collaboration-mail-protocol",
+ "collaboration-protocol",
  "durable-steps",
  "fleet-admission",
+ "fleet-identity-protocol",
  "fleet-sync-lease",
  "fleet-sync-protocol",
  "fleet-sync-receiver",
@@ -4289,6 +4273,8 @@ dependencies = [
  "hmac 0.12.1",
  "message-board",
  "runtime-primitives",
+ "rustix 1.1.4",
+ "schemars 1.2.2",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -4299,6 +4285,7 @@ dependencies = [
  "tokio",
  "tracing",
  "turso_parser",
+ "url",
  "uuid",
 ]
 

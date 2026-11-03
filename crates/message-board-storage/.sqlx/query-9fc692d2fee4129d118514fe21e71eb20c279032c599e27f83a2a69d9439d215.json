@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO fleet_login(row_id,enrollment_id,sign_in,organization_id,machine_environment,receiver_id,relay_peer_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "9fc692d2fee4129d118514fe21e71eb20c279032c599e27f83a2a69d9439d215"
+}

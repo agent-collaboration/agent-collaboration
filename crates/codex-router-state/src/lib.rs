@@ -1,8 +1,8 @@
 //! Proxy account and routing state, stored in `state.sqlite`.
 //!
 //! Owns accounts, credential metadata, quota and credit, routing policy,
-//! session-account affinity, and client leases. Fleet records belong in
-//! `codex-router-fleet-state` and its separate `fleet.sqlite` database.
+//! session-account affinity, and client leases. Fleet login, registrations and
+//! caches belong to message-board-storage in the existing fleet-cache.sqlite.
 
 pub mod account;
 mod account_migrations;

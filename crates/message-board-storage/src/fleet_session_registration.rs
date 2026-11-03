@@ -182,8 +182,8 @@ pub struct FleetSessionRegistrationRecord {
     lifecycle: FleetSessionBindingLifecycle,
 }
 
-// The existing lifecycle_json column owns this whole value. This representation
-// is private storage, not a Fleet protocol contract or public JSON Schema.
+// Serde preserves the validated whole domain value for callers and fixtures.
+// Persistence uses typed FleetCache columns, not this representation.
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "version", deny_unknown_fields)]
 enum StoredRegistrationEnvelope {
@@ -273,12 +273,8 @@ impl FleetSessionRegistrationRecord {
 
 #[cfg(test)]
 #[path = "fleet_session_registration_tests.rs"]
-mod tests;
+pub(crate) mod tests;
 
 #[cfg(test)]
 #[path = "stored_registration_envelope_tests.rs"]
 mod storage_tests;
-
-#[cfg(test)]
-#[path = "sqlite_registration_tests.rs"]
-mod sqlite_tests;

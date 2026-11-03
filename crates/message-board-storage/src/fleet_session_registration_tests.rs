@@ -81,7 +81,7 @@ fn fleet_session_setup_known_id_must_belong_to_the_prepared_endpoint() {
     }
 }
 
-pub(super) fn preparation() -> FleetSessionPreparation {
+pub(crate) fn preparation() -> FleetSessionPreparation {
     FleetSessionPreparation {
         registration_id: "019f0000-0000-7000-8000-000000000001".to_owned().try_into().unwrap(),
         operation_id: serde_json::from_value(json!("019f0000-0000-7000-8000-000000000002")).unwrap(),
@@ -96,12 +96,12 @@ pub(super) fn preparation() -> FleetSessionPreparation {
         })).unwrap(),
     }
 }
-pub(super) fn registration(preparation: &FleetSessionPreparation) -> RegisterFleetSession {
+pub(crate) fn registration(preparation: &FleetSessionPreparation) -> RegisterFleetSession {
     preparation.launch.registration(serde_json::from_value(json!({
         "endpoint":{"serviceId":"019f0000-0000-7000-8000-000000000003","endpointId":"codex-local"},"sessionId":"provider-returned-conversation"
     })).unwrap())
 }
-pub(super) fn confirmed(preparation: &FleetSessionPreparation) -> RegisteredFleetSession {
+pub(crate) fn confirmed(preparation: &FleetSessionPreparation) -> RegisteredFleetSession {
     RegisteredFleetSession {
         registration: registration(preparation),
         organization_id: "019f0000-0000-7000-8000-000000000007"

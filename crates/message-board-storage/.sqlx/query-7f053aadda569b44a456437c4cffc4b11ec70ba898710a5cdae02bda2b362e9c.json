@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE fleet_session_registrations SET operation_id=?,installation_id=?,binding_address=?,endpoint_service_id=?,endpoint_id=?,project_id=?,checked_workspace_id=?,started_by_kind=?,started_by_service_id=?,started_by_endpoint_id=?,started_by_session_id=?,remote_start_id=?,isolation_kind=?,isolation_instance_id=?,working_directory=?,repository=?,commit_id=?,model=?,machine_environment=?,lifecycle_state=?,creation_state=?,session_service_id=?,session_endpoint_id=?,session_id=?,organization_id=?,abandonment_cause=?,refused_setting=?,created_at=?,updated_at=? WHERE registration_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "7f053aadda569b44a456437c4cffc4b11ec70ba898710a5cdae02bda2b362e9c"
+}

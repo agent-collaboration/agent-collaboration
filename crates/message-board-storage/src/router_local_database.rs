@@ -6,6 +6,8 @@ use tokio::sync::Mutex;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RouterLocalStorageError {
+    #[error("Fleet cache files are not owner-private")]
+    PrivateFleetCache,
     #[error("Router-local storage is unavailable: {0}")]
     Database(#[from] sqlx::Error),
     #[error("Router-local migration failed: {0}")]
@@ -81,7 +83,7 @@ impl RouterLocalDatabase {
             writer: Mutex::new(()),
         })
     }
-    pub(crate) async fn close(self) {
+    pub(crate) async fn close(&self) {
         self.pool.close().await;
     }
 }
