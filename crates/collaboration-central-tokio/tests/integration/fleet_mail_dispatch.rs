@@ -177,7 +177,7 @@ pub(super) async fn submit_answer(
     fixture
         .call(
             "session",
-            "central.mail-submit-registry",
+            "central.mail-submit",
             Value::Null,
             json!({
                 "session":{"peer":A,"sessionId":durable_steps::Uuid::now_v7()},

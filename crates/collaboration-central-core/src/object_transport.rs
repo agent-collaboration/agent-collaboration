@@ -178,12 +178,6 @@ where
         ) {
             return self.registry_machine_read(invocation).await;
         }
-        if invocation.kind == crate::mail_submit_calls::MailSubmitRegistry::KIND {
-            return self.mail_submit_call(invocation).await;
-        }
-        if invocation.kind == crate::mail_sender_calls::SenderMailboxRegistry::KIND {
-            return self.sender_mailbox_call(invocation).await;
-        }
         if invocation.kind != "central.object" {
             return self.session_call(invocation).await;
         }

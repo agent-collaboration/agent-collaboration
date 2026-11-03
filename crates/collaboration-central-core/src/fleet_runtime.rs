@@ -7,9 +7,14 @@ use crate::{
     fleet_effects_read::ReadFleetEffects,
     holder_reply_hub::HolderReplyHub,
     mail_push_dispatch::PushDispatcher,
-    object_call_envelope::ObjectCallEnvelope,
+    object_call_envelope::{ObjectCallEnvelope, encode_refusal},
     object_runtime::ObjectWork,
     step_driver::{StepCallback, StepDriver, StepResult},
+};
+use crate::{
+    mail_sender_calls::{AdmitSenderMail, SenderFleetMail, SenderMailRequest, SenderRoute},
+    mail_submit_admission::AdmitMailSubmit,
+    mail_submit_calls::{FleetMailSubmit, MailSubmitRequest},
 };
 use board_sync_protocol::BoardDeliveryTypes;
 use durable_steps::{
@@ -271,8 +276,93 @@ where
         answer
     }
 
+    pub(crate) async fn mail_submit_call(
+        &self,
+        invocation: ObjectCallEnvelope,
+    ) -> Result<Vec<u8>, CallFailure> {
+        if invocation.source_face != CallerKind::Session
+            || !matches!(invocation.authority, CallAuthority::Machine { .. })
+        {
+            return Err(refused());
+        }
+        let CallAuthority::Machine {
+            installation: source,
+        } = invocation.authority
+        else {
+            return Err(refused());
+        };
+        let _: FleetMailSubmit =
+            serde_json::from_value(invocation.target).map_err(|_| refused())?;
+        let request: MailSubmitRequest =
+            serde_json::from_value(invocation.request).map_err(|_| refused())?;
+        let ObjectWork::Fleet {
+            host, io, delivery, ..
+        } = &self.work
+        else {
+            return Err(refused());
+        };
+        let (answer, _) = StepDriver::new(host.clone())
+            .run(AdmitMailSubmit {
+                source,
+                request,
+                limits: crate::central_mailbox_limits().map_err(|_| CallFailure::AnswerLost)?,
+                relay: delivery.relay_peer,
+                now: io.now(),
+            })
+            .await
+            .map_err(|_| CallFailure::AnswerLost)?;
+        serde_json::to_vec(&answer).map_err(|_| CallFailure::AnswerLost)
+    }
+
+    pub(crate) async fn sender_mail_call(
+        &self,
+        invocation: ObjectCallEnvelope,
+    ) -> Result<Vec<u8>, CallFailure> {
+        if invocation.source_face != CallerKind::Session
+            || !matches!(invocation.authority, CallAuthority::Machine { .. })
+        {
+            return Err(refused());
+        }
+        let CallAuthority::Machine {
+            installation: source,
+        } = invocation.authority
+        else {
+            return Err(refused());
+        };
+        let _: SenderFleetMail =
+            serde_json::from_value(invocation.target).map_err(encode_refusal)?;
+        let request: SenderMailRequest =
+            serde_json::from_value(invocation.request).map_err(encode_refusal)?;
+        if request.request.call() != &invocation.identity {
+            return Err(refused());
+        }
+        let ObjectWork::Fleet { host, io, .. } = &self.work else {
+            return Err(refused());
+        };
+        let (route, _) = StepDriver::new(host.clone())
+            .run(AdmitSenderMail {
+                source,
+                input: request,
+                limits: crate::central_mailbox_limits().map_err(|_| CallFailure::AnswerLost)?,
+                now: io.now(),
+            })
+            .await
+            .map_err(|_| CallFailure::AnswerLost)?;
+        let answer = match route {
+            SenderRoute::Refused => return Err(refused()),
+            SenderRoute::Answered(answer) => answer,
+        };
+        serde_json::to_vec(&answer).map_err(|_| CallFailure::AnswerLost)
+    }
+
     async fn dispatch_call(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
         let call = ObjectCallEnvelope::decode(&bytes, ObjectAddress::Fleet, CallerKind::Fleet)?;
+        if call.kind == crate::mail_submit_calls::FleetMailSubmit::KIND {
+            return self.mail_submit_call(call).await;
+        }
+        if call.kind == crate::mail_sender_calls::SenderFleetMail::KIND {
+            return self.sender_mail_call(call).await;
+        }
         if matches!(
             call.kind.as_str(),
             crate::owner_operation_calls::FleetProjectOperations::KIND
