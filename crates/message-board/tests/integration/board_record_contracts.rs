@@ -1,7 +1,7 @@
+use crate::support;
 use message_board::*;
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::json;
-mod support;
 
 #[expect(
     clippy::expect_used,

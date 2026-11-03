@@ -1,3 +1,4 @@
+use crate::support;
 use message_board::{
     AbridgedEvidence, Assignment, BoardOperation, ChangeOutcome, HumanId, Identity, LinkChange,
     ProjectId, ProjectRequest, ProtocolVersion, RequestId, SubjectRevision, Task, TaskId, TaskLink,
@@ -5,7 +6,6 @@ use message_board::{
     WorkstreamId, request_canonical, work_rules,
 };
 use proptest::prelude::*;
-mod support;
 
 fn identity(sequence: u32) -> String {
     format!("01890f2e-7b4c-7cc0-98c4-{sequence:012x}")

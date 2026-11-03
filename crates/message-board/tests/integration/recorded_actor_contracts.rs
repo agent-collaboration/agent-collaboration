@@ -1,7 +1,7 @@
 use message_board::*;
 use serde_json::{Value, json};
 
-mod support;
+use crate::support;
 
 #[test]
 fn human_actor_identity_has_no_recording_installation() {

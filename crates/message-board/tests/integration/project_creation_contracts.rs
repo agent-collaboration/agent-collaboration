@@ -1,6 +1,6 @@
+use crate::support;
 use message_board::*;
 use serde_json::json;
-mod support;
 
 #[test]
 fn project_creation_fact_retains_domain_input_for_the_original_directory_request() {

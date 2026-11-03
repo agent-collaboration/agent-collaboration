@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 
 use message_board::{ProjectId, RecordEnvelope, RecordId, RecordTime};
 use serde_json::json;

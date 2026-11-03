@@ -1,5 +1,5 @@
+use crate::support;
 use message_board::*;
-mod support;
 
 #[test]
 fn project_state_round_trip_contains_only_project_lifecycle_fields() {

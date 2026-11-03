@@ -1,6 +1,6 @@
+use crate::support;
 use message_board::{public_replies as public, *};
 use serde_json::{Value, json};
-mod support;
 
 #[expect(
     clippy::unwrap_used,

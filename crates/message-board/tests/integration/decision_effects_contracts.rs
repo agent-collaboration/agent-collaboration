@@ -1,6 +1,6 @@
+use crate::support;
 use message_board::*;
 use sha2::{Digest, Sha256};
-mod support;
 
 #[test]
 fn fleet_effect_validation_refuses_a_post_even_when_its_placement_and_digest_match() {

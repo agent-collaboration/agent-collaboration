@@ -1,6 +1,6 @@
+use crate::support;
 use message_board::*;
 use serde_json::json;
-mod support;
 
 fn membership_value() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     let reader = Identity::Human {
