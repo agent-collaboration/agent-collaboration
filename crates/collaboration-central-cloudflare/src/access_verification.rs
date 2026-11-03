@@ -42,6 +42,14 @@ pub(crate) struct InvocationLabels {
 }
 
 impl InvocationLabels {
+    #[cfg(feature = "conformance")]
+    pub(crate) fn for_signature_probe() -> Self {
+        Self {
+            invocation: "issuer-signature-probe".into(),
+            ray: String::new(),
+        }
+    }
+
     pub(crate) fn for_request(request: &worker::Request) -> worker::Result<Self> {
         Ok(Self {
             invocation: uuid::Uuid::now_v7().to_string(),

@@ -1,0 +1,41 @@
+{
+  "$defs": {
+    "CommandId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "OrganizationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "VerifiedEmail": {
+      "pattern": "(?=[\\x00-\\x7F]*$(?![\\s\\S]))(?:^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$)$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 254
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "commandId": {
+      "$ref": "#/$defs/CommandId"
+    },
+    "organizationId": {
+      "$ref": "#/$defs/OrganizationId"
+    },
+    "ownerEmail": {
+      "$ref": "#/$defs/VerifiedEmail"
+    }
+  },
+  "required": [
+    "organizationId",
+    "ownerEmail",
+    "commandId"
+  ],
+  "title": "InitializeOrganization",
+  "type": "object"
+}

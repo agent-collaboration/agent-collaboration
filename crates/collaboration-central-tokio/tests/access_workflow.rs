@@ -1,7 +1,7 @@
 use collaboration_central_core::{
     AccessCaller, AccessCheckOutcome, AccessKeyCache, AccessKeySource, AccessPolicy, AccessRefusal,
-    AccessRouteClass, CentralApplication, CentralObservation, CentralPlatform, KeyFetchFailure,
-    RawJwks, SignatureValidity, VerifyFailure,
+    AccessRouteClass, CentralApplication, CentralObservation, CentralPlatform, Ed25519Verification,
+    KeyFetchFailure, RawJwks, SignatureValidity, VerifyFailure,
 };
 use runtime_primitives::{Clock, SyncTime};
 use std::{
@@ -75,6 +75,17 @@ impl FixturePlatform {
 impl Clock for FixturePlatform {
     fn now(&self) -> SyncTime {
         SyncTime::from_unix_millis(self.0.now.load(Ordering::SeqCst))
+    }
+}
+impl Ed25519Verification for FixturePlatform {
+    // These legacy Access policy fixtures never exercise issuer cryptography.
+    async fn verify_ed25519(
+        &self,
+        _: &[u8],
+        _: &[u8],
+        _: &[u8],
+    ) -> Result<SignatureValidity, VerifyFailure> {
+        Err(VerifyFailure::Crypto)
     }
 }
 impl CentralPlatform for FixturePlatform {

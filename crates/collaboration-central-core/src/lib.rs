@@ -1,7 +1,9 @@
 //! One asynchronous application core shared by every runtime.
 #![forbid(unsafe_code)]
 
+pub mod fleet_directory;
 pub mod identity_contract;
+pub mod organization_authority;
 
 mod admin_import_contract;
 mod admin_import_copy;
@@ -23,6 +25,33 @@ pub use admin_import_store::AdminImportRefusal;
 #[cfg(feature = "conformance")]
 mod conformance_access;
 #[cfg(feature = "conformance")]
+mod conformance_client_authentication;
+#[cfg(feature = "conformance")]
+mod conformance_directory_client;
+#[cfg(feature = "conformance")]
+pub use conformance_directory_client::{
+    DIRECTORY_CLIENT_PROBE_PATH, DirectoryClientObservation, DirectoryClientProbe,
+    observe_directory_client,
+};
+#[cfg(feature = "conformance")]
+mod conformance_issuer_signature;
+#[cfg(feature = "conformance")]
+mod conformance_person_proof;
+#[cfg(feature = "conformance")]
+pub use conformance_client_authentication::{
+    CLIENT_AUTH_PROBE_PATH, ClientAuthenticationObservation, ClientAuthenticationProbe,
+    observe_client_authentication,
+};
+#[cfg(feature = "conformance")]
+pub use conformance_issuer_signature::{
+    ISSUER_SIGNATURE_PROBE_PATH, IssuerSignatureObservation, IssuerSignatureProbe,
+    observe_issuer_signature,
+};
+#[cfg(feature = "conformance")]
+pub use conformance_person_proof::{
+    PERSON_PROOF_PROBE_PATH, PersonProofObservation, PersonProofProbe, observe_person_proof,
+};
+#[cfg(feature = "conformance")]
 mod conformance_fleet;
 #[cfg(feature = "conformance")]
 mod conformance_fleet_entity;
@@ -30,10 +59,54 @@ mod conformance_fleet_entity;
 pub use conformance_access::{AccessCallerClass, AccessVerificationOutcome};
 mod connection_admission;
 pub use connection_admission::AdmissionOrigin;
+mod issuer_key_cache;
+mod issuer_key_resolution;
+mod issuer_signature_verifier;
+pub use issuer_signature_verifier::{IssuerSignatureRefusal, IssuerSignatureVerifier};
+mod issuer_person_client;
+pub use issuer_key_resolution::{IssuerKeyResolutionRefusal, IssuerKeySource, resolve_issuer_key};
+pub use issuer_person_client::{IssuerPersonSignInClient, PersonSessionConfirmer};
+mod directory_service_client;
+mod key_source_contract;
 mod platform_capabilities;
+mod signature_verification;
+pub use key_source_contract::{KeyFetchFailure, RawJwks};
+pub use signature_verification::{Ed25519Verification, VerifyFailure};
+mod private_key_client_assertion;
+mod remote_call_outcome;
+mod service_receiver_policy;
+mod service_request_bodies;
+pub use directory_service_client::{
+    DirectoryServiceClient, ServiceBearerCredential, ServiceJsonTransport,
+};
+pub use private_key_client_assertion::{
+    ClientAssertionAuthentication, ClientAssertionLifetime, ClientAssertionRefusal,
+    Ed25519ClientSigner, PrivateKeyJwtClient, ServiceForm,
+};
+pub use service_request_bodies::{
+    AdmitSignInBody, AuthorizedServiceRequest, PersonStandingBody, ServiceRequestBody,
+};
+mod person_introspection_client;
+pub use person_introspection_client::{
+    PersonIntrospectionClient, ServiceFormTransport, ServiceHttpFailure, service_reply_is_json,
+};
+mod service_token_time;
+pub use issuer_key_cache::{
+    IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeySet, IssuerVerificationKey,
+};
 pub use platform_capabilities::{
-    CallOutcome, CentralPlatform, KeyFetchFailure, LocalSectionFailure, ObjectHost, RawJwks,
-    RegistrationEdits, RegistrationSnapshot, SocketFailure, UpgradeFailure, VerifyFailure,
+    CentralPlatform, LocalSectionFailure, ObjectHost, RegistrationEdits, RegistrationSnapshot,
+    SocketFailure, UpgradeFailure,
+};
+pub use remote_call_outcome::CallOutcome;
+pub use service_receiver_policy::{
+    AuthorizedServiceOperation, PinnedServiceCaller, RegisteredServiceClientKind,
+    ServiceCallerIdentity, ServiceClientId, ServiceOperation, ServiceOperationTrust,
+    ServiceReceiverHome, ServiceReceiverPolicy, ServiceReceiverRefusal, ServiceTokenFacts,
+};
+pub use service_token_time::{
+    ServiceTokenTimeRefusal, ServiceTokenTimeRule, grant_deadline_is_current,
+    validate_service_token_times,
 };
 mod caller_context;
 pub use caller_context::CallerContext;

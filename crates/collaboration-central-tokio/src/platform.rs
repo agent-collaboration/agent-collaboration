@@ -5,8 +5,9 @@ use axum::{
     response::IntoResponse,
 };
 use collaboration_central_core::{
-    AccessJwk, AdmissionOrigin, CentralObservation, CentralPlatform, CoreHost, KeyFetchFailure,
-    RawJwks, SerializedObjectCall, SignatureValidity, UpgradeFailure, VerifyFailure,
+    AccessJwk, AdmissionOrigin, CentralObservation, CentralPlatform, CoreHost, Ed25519Verification,
+    KeyFetchFailure, RawJwks, SerializedObjectCall, SignatureValidity, UpgradeFailure,
+    VerifyFailure,
 };
 use runtime_primitives::Clock;
 use std::{
@@ -36,6 +37,19 @@ pub struct TokioCentralPlatform {
 }
 
 impl TokioCentralPlatform {
+    #[must_use]
+    pub fn service_http_transport(&self) -> crate::TokioServiceHttpTransport {
+        crate::TokioServiceHttpTransport::new(self.client.clone())
+    }
+    /// Bind only the issuer key address from the deployment's trust settings.
+    #[must_use]
+    pub fn issuer_key_source(
+        &self,
+        configured_source: collaboration_central_core::identity_contract::ResourceUri,
+    ) -> crate::TokioIssuerKeySource {
+        crate::TokioIssuerKeySource::new(self.client.clone(), configured_source)
+    }
+
     /// Conformance-only real import/seed; no production or HTTP route.
     #[cfg(feature = "conformance")]
     pub async fn conformance_import_board_snapshot(
@@ -321,5 +335,18 @@ impl CentralPlatform for TokioCentralPlatform {
 
     fn observe(&self, observation: CentralObservation) {
         (self.observe)(observation);
+    }
+}
+
+impl Ed25519Verification for TokioCentralPlatform {
+    fn verify_ed25519(
+        &self,
+        public_key: &[u8],
+        signed: &[u8],
+        signature: &[u8],
+    ) -> impl Future<Output = Result<SignatureValidity, VerifyFailure>> + Send {
+        ready(Ok(crate::issuer_crypto::verify_ed25519_signature(
+            public_key, signed, signature,
+        )))
     }
 }

@@ -2,8 +2,8 @@
 
 use crate::access_verification::{InvocationLabels, VerificationLayer};
 use collaboration_central_core::{
-    AccessJwk, CentralObservation, CentralPlatform, KeyFetchFailure, RawJwks, SignatureValidity,
-    VerifyFailure,
+    AccessJwk, CentralObservation, CentralPlatform, Ed25519Verification, KeyFetchFailure, RawJwks,
+    SignatureValidity, VerifyFailure,
 };
 use runtime_primitives::{Clock, SyncTime};
 use std::future::Future;
@@ -182,5 +182,18 @@ impl CentralPlatform for CloudflareCentralPlatform {
 
     fn observe(&self, observation: CentralObservation) {
         self.labels.observe(self.layer, observation);
+    }
+}
+
+impl Ed25519Verification for CloudflareCentralPlatform {
+    fn verify_ed25519(
+        &self,
+        public_key: &[u8],
+        signed: &[u8],
+        signature: &[u8],
+    ) -> impl Future<Output = Result<SignatureValidity, VerifyFailure>> + Send {
+        SendFuture::new(crate::issuer_crypto::verify_ed25519_signature(
+            public_key, signed, signature,
+        ))
     }
 }
