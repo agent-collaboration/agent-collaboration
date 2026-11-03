@@ -250,3 +250,11 @@ Second batch (directory). Every row below also carries the **record envelope col
 | `fleet_repository_attachments` | `attachment_id` UUIDv7 PK; `workspace_id` FK; `reference_kind` (`origin`, `local`); `normalized_origin`; `service_id`; `common_directory`; `router_time`; `time_basis`; `origin_installation`; `origin_machine`; `import_digest`; `created_at`; `updated_at`; UNIQUE(`workspace_id`, `normalized_origin`) for origins, UNIQUE(`workspace_id`, `service_id`, `common_directory`) for local |
 
 Feed, decision and import tables follow in the next batch.
+
+Library batch (L4, session tables in `fleet-sync-session`). Counters stay as today's canonical decimal text (`position TEXT` in `202610160001_sessions.sql:10`), compared in Rust after decode (`session_storage.rs:177`), so full `u64` values survive.
+
+| Table | Columns |
+| --- | --- |
+| `_fleet_sync_sessions` | `id` UUIDv7 PK; `peer` UUIDv7; `session_id` UUIDv7; `state_kind`; `connection_id` UUIDv7 (nullable); `detached_since` (nullable); `end_reason` (nullable); `notice_head` (decimal u64); `created_at`; `updated_at`; UNIQUE(`peer`, `session_id`) |
+| `_fleet_sync_notices` | `id` UUIDv7 PK; `peer`; `session_id`; `position` (decimal u64); `notice_kind`; `database_id` UUIDv7 (nullable, for lease-changed notices); `consumer_body` (nullable; serialized, because the consumer owns the notice schema, the same reason as delivery values); `created_at`; `updated_at`; UNIQUE(`peer`, `session_id`, `position`) |
+| `_fleet_sync_attach_sequences` | `peer` UUIDv7 PK (an existing UUIDv7 key stays the key); `sequence` (decimal u64); `created_at`; `updated_at` |

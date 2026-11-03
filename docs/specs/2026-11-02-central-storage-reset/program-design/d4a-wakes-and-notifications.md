@@ -42,10 +42,46 @@ Today the **project's writer machine** scans its local project store and sends n
 1. **A target that was offline across several firings:** (a) gets only the latest, and older unsent ones are superseded (needs explicit supersession of queued items, not just “compute the latest”); or (b) gets every one. Recommended: (a), because a wake is a reminder and repeats add nothing.
 2. **Notification coverage:** the Fleet keeps one coverage record per subscription (`notification_coverage`) so each listing knows what it already covered. It is delivery state, not an automation definition. Recommended: keep it; without it a restart can miss or repeat activity.
 
-## Design work remaining before D4a is planned (from the Advisor's second look)
+## Occurrences, pause, cancel and first fire
 
-- **Occurrences and edits:** when an edit, pause, resume or cancel takes effect; an occurrence's message is frozen once admitted; resume skips paused ticks as today (`wakeup_mutations.rs:86–98`); alarm replay is atomic with admission; queued items are bounded by the wake's expiry; “sent” means admitted to the Fleet outbox, “fired” means accepted into the target inbox; first-fire evidence survives later occurrences.
-- **Listing and coverage commit together:** after reading the project objects, the Fleet freezes the listing under a stable id and, in one transaction, admits it and advances coverage; a refused listing does not consume its range; empty or filtered activity advances coverage deliberately.
-- **Coverage identity:** coverage records the project's feed cursor (epoch and position, `record_positions.rs:101–104`), the membership's generation and activation, and the selected ranges, as today's progress does (`subscription_delivery_progress.rs:14–66`); today's filters (own posts, thread overrides, Off and Poll modes) are kept.
-- **The pass is a wake:** `automation_wakes` gains an action kind (`message` or `notification pass for machine X`) so both share one scheduler; no second timer system.
-- **What stays on the Router:** only the notification timers go; native mail delivery, held and poll handling in `reader_delivery_owner` stay (`mail_delivery_runtime.rs:583`); listings carry structured ranges and read context, not plain text.
+A wake has no edit today (`WakeAction` is pause, resume, cancel: `wakeup_mutations.rs:11–15`, `:77–121`), and D4a adds none: changing a wake means cancelling it and setting a new one.
+
+`automation_wakes` gains four columns that record the wake's own state, not a history: `last_occurrence_due_at`, `last_occurrence_item_id` (the Fleet outbox item of the latest admitted occurrence), `first_fired_at`, `first_fire_item_id` (set once, never cleared).
+
+| Event | What happens, in one Fleet transaction |
+| --- | --- |
+| Alarm, an occurrence is due | Compute the latest due time not later than now and before `expires_at`. Admit its message to the Fleet outbox under the occurrence id (UUIDv7: time part = due time, random part derived from wake id and due time). If the previous occurrence is still before “in recipient's inbox”, cancel it through D1's cancel (prevented if not yet pushed; too late otherwise): this is decision 1 (a). Record `last_occurrence_*`. A crash before commit replays to the same id; D1's outbox stores it once |
+| Pause | `paused = true`; cancel the queued occurrence if it has not reached the recipient's inbox, as today pause discards pending deliveries (`wakeup_mutations.rs:123–130`) |
+| Resume | next due is computed from the resume time; paused ticks are skipped, as today (`wakeup_mutations.rs:87–112`); a wake with no due time left finishes |
+| Cancel | `cancelled_at` set; queued occurrence cancelled as for pause |
+| Expiry | no occurrence is admitted at or after `expires_at`; a queued one still undelivered at expiry is cancelled |
+| Recipient's inbox accepts an occurrence | the Fleet's status observer (D2's completion observer, the same code) sets `first_fired_at` and `first_fire_item_id` if empty; later occurrences never overwrite them |
+
+An admitted occurrence's message is frozen (its digest is in the outbox item). Words used on every surface: **sent** = admitted to the Fleet outbox; **fired** = accepted into the target's inbox. `--wait-until-first-fire` reads `first_fired_at`.
+
+## Notification passes
+
+**Decision (Lead, reversible; owner words “it should be done with wakes”):** a notification pass is a wake occurrence of a second kind, run by the same Fleet alarm, with the same occurrence-id rule and the same Fleet-message path. Its schedule is derived, not stored: every subscriber machine enrolled in the Fleet gets one pass every 10 minutes, offset by 0–60 s from its machine id, so there is no system row in `automation_wakes` for the owner to see or pause. The Advisor's alternative (an `action_kind` column on `automation_wakes`) would put Fleet-owned rows beside owner-defined ones with different limits; deriving the schedule from enrollment avoids that.
+
+`notification_coverage` (Fleet store), one row per subscription membership:
+
+| Column | Meaning |
+| --- | --- |
+| `id` UUIDv7 PK, `created_at`, `updated_at` | |
+| `project_id`, `membership_id` (UNIQUE) | which subscription |
+| `membership_generation`, `activated_epoch`, `activated_position` | which life of the subscription this coverage belongs to (today's `generation`, `activated_at`: `subscription_delivery_progress.rs:42–49`) |
+| `covered_epoch`, `covered_position` | everything in the project feed up to here has been listed or deliberately skipped (`FeedCursor`: `record_positions.rs:101–104`) |
+| `last_listing_item_id` | the Fleet message of the latest listing, if any |
+
+Today's progress keeps a cursor per thread because each thread has its own quiet and cap timers (`subscription_delivery_progress.rs:34–38`). One pass lists every eligible thread at once, so one cursor per membership is enough.
+
+**One pass for machine M:**
+
+1. Read M's memberships and, per membership, the project feed after `covered` from the project objects (D1's Fleet → project read; no Fleet transaction is open during the read).
+2. Apply today's filters (own posts, thread Off and Poll overrides, Off memberships: `subscription_window_scan.rs:175–214`). Build one listing per subscribing session: per thread, the range (from, through), post count and read context, as structured fields, not prose.
+3. One Fleet transaction: check each coverage row still equals the cursor the read started from (otherwise drop this pass; the next one re-reads); admit the listing under its id (UUIDv7: pass due time + membership); advance `covered` to the scan head. If admission is refused, the transaction rolls back and the range is not consumed. With no new activity, or only filtered activity, coverage advances without a listing.
+4. Generation change (unsubscribe and subscribe again): coverage restarts at the new activation. Epoch change (project reset): coverage restarts at the new epoch's head; old-epoch activity is not listed.
+
+## What stays on the Router
+
+Only notification production and its timers go: `subscription_windows`, `subscription_window_scan`, the `reader_delivery_owner` quiet/cap timers, the `notification_*` progress tables and the board intent publisher. Native mail delivery, held and poll handling in `reader_delivery_owner` stay (`mail_delivery_runtime.rs:583`): a listing arrives as an ordinary Fleet message in the inbox.

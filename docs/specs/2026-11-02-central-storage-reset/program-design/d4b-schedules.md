@@ -20,12 +20,27 @@ Same rule as wakes: the occurrence id is a UUIDv7 from the due time and the sche
 
 ## Decisions for the owner
 
-1. **Overlapping runs:** today a schedule does not start a run while its previous one is still running, and folds waiting runs (`run_admission.rs:42–90`). (a) Keep that, tracking the running occurrence through its mail or create command (no history table); or (b) drop it, so each due time sends regardless. Recommended: (a); (b) can queue repeated work or start many fresh sessions while one is still busy.
+1. **Overlapping runs:** today a schedule does not start a run while its previous one is still running, and folds waiting runs (`run_admission.rs:39–46`). (a) Keep that, tracking the running occurrence through its mail or create command (no history table); or (b) drop it, so each due time sends regardless. Recommended: (a); (b) can queue repeated work or start many fresh sessions while one is still busy.
 2. **Schedule lifetime:** schedules do not expire today (`schedule_definition.rs:38–47`); the 24-hour and 7-day limits are wake rules. Recommended: schedules keep no forced expiry; an optional `expires_at` only.
-3. **Continuity between runs:** fresh-session runs today carry the previous run's summary into the next (`run_admission.rs:56–79`). (a) Keep the latest continuity as part of the definition; or (b) every fresh run starts with no context. Recommended: (a), because dropping it drops working context.
+3. **Continuity between runs:** fresh-session runs today carry the previous run's summary into the next (`run_admission.rs:56–68`). (a) Keep the latest continuity as part of the definition; or (b) every fresh run starts with no context. Recommended: (a), because dropping it drops working context.
 
-## Design work remaining before D4b is planned
+## How a run starts, ends and is recorded
 
-- **Internal create path:** a schedule fires while its creator may be offline, so the Fleet needs an internal producer path into D2's request ledger (`fleet_remote_creates`) with the schedule as provenance; no impersonation of a connected machine and no unrequested messages to the creator.
-- **Timeout:** define what `timeout_seconds` bounds on the mail and D2 path (an accepted message is not a finished turn).
-- **Run outcome:** D2's “first input accepted” is not model-turn completion; say what a schedule records as a run's end, if anything.
+**The Fleet cannot see a model turn.** D1's report says a message reached the session (`delivered`), and D2's result says a first input was `accepted`; neither says the turn finished. Today the run's end is seen locally, because the run and the session are on the same Router (`run_admission.rs:39–46` blocks on an occupying run). In the Fleet, only the target machine can see it, so the target Router tells the Fleet.
+
+**Run ended (new machine socket call, recipient only):** `schedule run ended { occurrence_id, outcome: completed | failed | interrupted, summary? }`. Only the machine that received the occurrence may send it (the same rule as D1 reports); a repeat with the same content answers from the stored outcome; different content is refused. The target Router sends it when the turn that the occurrence started ends. It is a call, not mail, because it updates the Fleet's own schedule row and nobody else reads it.
+
+**Fresh-session runs use D2 from inside the Fleet:** the Fleet admits a `fleet_remote_creates` row itself, with `requester_kind = schedule` and `schedule_id` (two new columns; `requester_*` session columns become nullable for this kind only). No machine is impersonated, and the result is written to the schedule row, not sent as a message to the schedule's creator, who did not ask for one.
+
+`automation_schedules` gains the schedule's own run state (one row, no history):
+
+| Column | Meaning |
+| --- | --- |
+| `last_occurrence_due_at`, `last_occurrence_item_id` | the latest run's message or create command |
+| `last_run_status` | `sent`, `at_recipient`, `started`, `completed`, `failed`, `interrupted`, `timed_out`, `refused`, `expired` (Rust enum, decoded and rejected if unknown) |
+| `last_run_session_*` | the session the run used (the bound one, or the fresh one from D2's result) |
+| `continuity_text` | the latest run's summary, carried into the next fresh run (decision 3 (a)) |
+
+**Timeout:** `timeout_seconds` bounds the time from the occurrence being sent to “run ended”. When it passes, the Fleet records `timed_out` and the schedule may run again; it does not interrupt the turn, because the Fleet has no interrupt path (a remote interrupt would be a new command like D2's, outside D4b).
+
+**Overlap (decision 1 (a)):** an occurrence is not sent while `last_run_status` is `sent`, `at_recipient` or `started`; due times that pass meanwhile fold into one, which runs when the slot frees (today's folding, `run_admission.rs:39–46`). With (b), the run-ended call is still useful for `last_run_status` and continuity, but nothing waits on it.
