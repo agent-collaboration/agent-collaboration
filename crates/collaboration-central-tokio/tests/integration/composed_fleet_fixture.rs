@@ -44,6 +44,19 @@ pub struct Io {
     pub local_call_faults: Arc<collaboration_central_conformance::RuntimeFaults>,
 }
 impl Io {
+    pub fn new(now: i64) -> Self {
+        Self {
+            now: Arc::new(AtomicI64::new(now)),
+            routes: Arc::default(),
+            wakes: Arc::default(),
+            time_changed: tokio::sync::watch::channel(now).0,
+            reply_deadlines: tokio::sync::watch::channel(0).0,
+            reject_next_notice: Arc::default(),
+            lose_next_notice_reply: Arc::default(),
+            notice_calls: Arc::default(),
+            local_call_faults: Arc::default(),
+        }
+    }
     pub fn advance(&self, millis: i64) {
         let now = self.now.fetch_add(millis, Ordering::SeqCst) + millis;
         self.time_changed.send_replace(now);
@@ -175,17 +188,7 @@ pub struct Fixture {
 }
 impl Fixture {
     pub async fn open(path: &Path, now: i64) -> TestResult<Self> {
-        let io = Io {
-            now: Arc::new(AtomicI64::new(now)),
-            routes: Arc::default(),
-            wakes: Arc::default(),
-            time_changed: tokio::sync::watch::channel(now).0,
-            reply_deadlines: tokio::sync::watch::channel(0).0,
-            reject_next_notice: Arc::default(),
-            lose_next_notice_reply: Arc::default(),
-            notice_calls: Arc::default(),
-            local_call_faults: Arc::default(),
-        };
+        let io = Io::new(now);
         let receiver = ReceiverId::try_from("019f0000-0000-7000-8000-000000000010".to_owned())?;
         let objects = ObjectStore::open(path).await?;
         let store = objects
