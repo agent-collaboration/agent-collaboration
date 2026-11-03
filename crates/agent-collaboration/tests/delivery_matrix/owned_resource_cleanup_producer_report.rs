@@ -1,6 +1,6 @@
 //! Pure two-root producer report classification and validation.
 use super::runtime_fixture::{ActorRootExpectation, ExpectedResources, ensure};
-use crate::{
+use crate::push_delivery_matrix::{
     owned_resource_cleanup::{
         CleanupAction, CleanupObservation, CleanupOutcome, MatrixCleanupReport,
     },

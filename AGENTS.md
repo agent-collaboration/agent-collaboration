@@ -21,8 +21,9 @@ After reducing cycles or their edges, update `architecture/module-cycle-baseline
 - Run integration tests under nextest, with one process per test.
 - Declare shared helpers once per aggregate; give each former test root its
   own module namespace.
-- Derive self-reexec child selectors from `module_path!`. A selector that
-  matches no tests must fail loudly using the child's actual success signal.
+- Derive self-reexec child selectors from `module_path!`.
+- A relaunched child test must fail loudly when its selector matches nothing,
+  using the child's actual success signal.
 
 ## Verification Tooling
 

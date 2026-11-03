@@ -27,7 +27,7 @@ The wrappers retired in 0.1.102 have these retained entries:
 
 | Surface                                              | Current source and entry                                                                                             |
 | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Local board records and reopen                       | `crates/agent-collaboration/tests/board_records_e2e.rs` and `board_e2e/`                                             |
+| Local board records and reopen                       | `crates/agent-collaboration/tests/e2e/board_records_e2e.rs` and `tests/board_e2e/`                                   |
 | Local central replication, holders and forwarding    | `crates/agent-collaboration/tests/board_central_e2e.rs`                                                              |
 | Upgrade preparation, publication, replay and restart | `cargo test --locked -p board-legacy-upgrade --test upgrade_binary_e2e -- --test-threads=1`                          |
 | Native central conformance                           | `crates/collaboration-central-tokio/tests/`, with explicit targets and `conformance` where required                  |
