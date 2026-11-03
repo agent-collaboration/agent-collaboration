@@ -223,3 +223,18 @@ Fleet sending its own messages and remote create (D2); renaming Router app table
 | R13 | library tables | UUIDv7 ids, timestamps | row readback; v4 refusal |
 | R14 | Fleet and Router removal work | 60-day removal, too-old refusal | injected clock |
 | R15 | Fleet admission | Submit `refused {sender not enrolled}` | unenrolled submit |
+
+## Column lists for moved tables (D1b), posted for the owner
+
+Times are Unix milliseconds unless noted; enum and variant fields are validated in Rust; CHECK only for booleans. First batch, from the Central Implementer (2026-11-03):
+
+| Table | Columns |
+| --- | --- |
+| `fleet_feed_state` | `state_id` UUIDv7 PK; `name` UNIQUE; `last_position`; `retained_through`; `created_at`; `updated_at` |
+| `fleet_feed_readers` | `reader_id` UUIDv7 PK; `installation` UNIQUE (today's session-address id until D3); `last_read_position`; `created_at`; `updated_at` |
+| `fleet_creation_decisions` | `project_id` UUIDv7 PK, FK `fleet_project_directory`; `creating_request` UUIDv7 UNIQUE, FK `fleet_request_decisions`; `carrier_installation`; `created_at`; `updated_at` |
+| `lease_claim_reservations` | `attempt_id` UUIDv7 PK; `project_id` FK `fleet_project_directory`; `state_kind` (`active`, `settled`); `outcome` (`granted`, `refused`; only when settled); `created_at`; `updated_at` |
+| `lease_claim_settlement_receipts` | `receipt_id` UUIDv7 PK; `operation_id` UUIDv7; `step_name`; `attempt_id` FK reservations; `project_id` FK directory; `result_kind` (`applied`, `duplicate`, `older`, `conflict`); `stored_epoch`, `stored_incarnation`, `stored_change` (only for `older`/`conflict`); `created_at`; `updated_at`; UNIQUE(`operation_id`, `step_name`). The old `fenced` variant goes with the removed handshake |
+| `fleet_archive_reports` | `report_id` UUIDv7 PK; `board_id` FK `fleet_boards`; `project_id` FK directory; `epoch`; `commit_sequence`; `installation`; `reported_at` (RFC3339, the domain time); `created_at`; `updated_at`; UNIQUE(`board_id`, `project_id`) |
+
+Directory, feed, decision and import tables follow in the next batch.
