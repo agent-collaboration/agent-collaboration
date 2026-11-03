@@ -94,10 +94,12 @@ Each table below moves into the Fleet store under its new name and its JSON `rec
 | Table | Change |
 | --- | --- |
 | `_fleet_sync_outbox_items` (machine) | same typed columns and timestamps as Fleet's; `relay` is the Fleet |
-| `_fleet_sync_inbox_items` | typed columns: `item_id` UUIDv7 PK, `digest`, `sender` (kind plus typed fields), `recipient_session` (service, endpoint, session id), `relay_machine_id` (the Fleet), `progress` (`pending`, `attempting`, `held`, `delivered`, `refused`, `unknown`; validated in Rust), `attempt`, `report_seq`, `created_at` (from the id), `accepted_at`, `delivered_at`, `payload`, `payload_bytes`; accepts pushed items (see Mail protocol) |
+| `_fleet_sync_inbox_items` | typed columns: `item_id` UUIDv7 PK, `digest`, `sender` and `recipient_address` (the consumer's own values, serialized: see the JSON reason below), `relay_machine_id` (the Fleet), `progress` (`pending`, `attempting`, `held`, `delivered`, `refused`, `unknown`; validated in Rust), `attempt`, `report_seq`, `created_at` (from the id), `accepted_at`, `delivered_at`, `payload`, `payload_bytes`; accepts pushed items (see Mail protocol) |
 | all inbox and outbox rows | removed 60 days after `created_at`; ids older than 60 days refused (R14) |
 
 Router app tables (`router_pushes` and the rest) are renamed in D3, not D1.
+
+**JSON with a stated reason: consumer-defined delivery values.** The delivery library is generic over the consumer's sender, address, acceptance and status-route types (`DeliveryTypes`, `fleet-sync-protocol/src/delivery_item.rs:4–26`); codex-router binds them to `MailSender` and `SessionRef` (`board-sync-protocol/src/board_delivery.rs:25–29`). The library cannot know their fields, so it stores those values in the consumer's own serialized form and never queries them by field. Everything the library itself owns (ids, digest, status kind and version, report sequence, machine ids, progress, attempt, deadline, cancel state, settlement bytes, timestamps) is a typed column. The typed session target the Router queries lives in codex-router's own push table (`router_pushes`, renamed in D3).
 
 ## Flows
 
