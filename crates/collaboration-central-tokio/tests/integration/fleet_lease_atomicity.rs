@@ -35,6 +35,26 @@ async fn seed_existing_grant(fixture: &Fixture) -> TestResult {
     })).await?;
     Ok(())
 }
+async fn seed_hook_incarnation(fixture: &Fixture, previous: i64) -> TestResult {
+    fixture.object.transaction(move |scope| Box::pin(async move {
+        let at = chrono::DateTime::from_timestamp_millis(NOW)
+            .ok_or_else(|| StoreError::backend("injected hook clock outside UTC range"))?.to_rfc3339();
+        query::<sqlx_turso::Turso>("INSERT INTO lease_incarnation(row_id,name,incarnation,created_at,updated_at) VALUES(?,'fleet',?,?,?)")
+            .bind(durable_steps::Uuid::now_v7().to_string()).bind(previous)
+            .bind(at.clone()).bind(at).execute(scope.executor()).await.map_err(StoreError::backend)?;
+        Ok(())
+    })).await?;
+    Ok(())
+}
+
+async fn read_hook_incarnation(fixture: &Fixture) -> TestResult<String> {
+    Ok(fixture.object.transaction(|scope| Box::pin(async move {
+        let row=query::<sqlx_turso::Turso>("SELECT CAST(incarnation AS TEXT) AS value FROM lease_incarnation WHERE name='fleet'")
+            .fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
+        row.try_get("value").map_err(StoreError::backend)
+    })).await?)
+}
+
 fn renew_call(attempt: RequestId) -> TestResult<Vec<u8>> {
     Ok(serde_json::to_vec(&json!({
         "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":SERVICE}},
@@ -162,6 +182,81 @@ async fn a_directory_write_failure_rolls_back_the_real_library_renewal_and_retry
     let after = observe(&fixture).await?;
     assert_eq!((after.2, after.3), (1, 0));
     assert_ne!(after.0, before.0);
+    fixture.objects.close().await?;
+    Ok(())
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "A hook revision above f64's exact range must advance once and survive replay and owning-store reopen exactly."
+)]
+async fn hook_incarnation_above_two_to_the_fifty_third_advances_once_without_rounding() -> TestResult
+{
+    const PREVIOUS_INCARNATION: i64 = 9_007_199_254_740_993;
+    const NEXT_INCARNATION: u64 = 9_007_199_254_740_994;
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path()).await?;
+    seed_existing_grant(&fixture).await?;
+    seed_hook_incarnation(&fixture, PREVIOUS_INCARNATION).await?;
+    let call = renew_call(RequestId::new(durable_steps::Uuid::now_v7())?)?;
+    fixture
+        .runtime
+        .on_call(call.clone())
+        .await
+        .map_err(|failure| format!("large hook revision: {failure:?}"))?;
+    let committed = observe(&fixture).await?;
+    let projection: Value =
+        serde_json::from_str(committed.1.as_deref().ok_or("hook projection absent")?)?;
+    assert_eq!(
+        projection.get("incarnation"),
+        Some(&json!(NEXT_INCARNATION))
+    );
+    assert_eq!(
+        read_hook_incarnation(&fixture).await?,
+        NEXT_INCARNATION.to_string()
+    );
+    assert_eq!(projection.get("snapshot"), Some(&committed.0));
+    assert_eq!(committed.2, 1);
+    fixture
+        .runtime
+        .on_call(call)
+        .await
+        .map_err(|failure| format!("large hook replay: {failure:?}"))?;
+    assert_eq!(observe(&fixture).await?, committed);
+    fixture.objects.close().await?;
+    drop(fixture);
+    let reopened = Fixture::open(root.path()).await?;
+    assert_eq!(observe(&reopened).await?, committed);
+    assert_eq!(
+        read_hook_incarnation(&reopened).await?,
+        NEXT_INCARNATION.to_string()
+    );
+    reopened.objects.close().await?;
+    Ok(())
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Counter exhaustion must roll back the genuine renewal and preserve the exact native counter and directory view."
+)]
+async fn hook_incarnation_exhaustion_rolls_back_the_real_renewal_and_preserves_the_counter()
+-> TestResult {
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path()).await?;
+    seed_existing_grant(&fixture).await?;
+    // The current counter column is SQLite INTEGER; its Rust guard must refuse
+    // a next value that this store cannot retain losslessly.
+    seed_hook_incarnation(&fixture, i64::MAX).await?;
+    let before = observe(&fixture).await?;
+    let call = renew_call(RequestId::new(durable_steps::Uuid::now_v7())?)?;
+    assert!(matches!(
+        fixture.runtime.on_call(call).await,
+        Err(durable_steps::CallFailure::AnswerLost)
+    ));
+    assert_eq!(observe(&fixture).await?, before);
+    assert_eq!(read_hook_incarnation(&fixture).await?, i64::MAX.to_string());
     fixture.objects.close().await?;
     Ok(())
 }

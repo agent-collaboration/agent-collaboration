@@ -163,34 +163,6 @@ async fn reservation_state(fixture: &Fixture) -> TestResult<Value> {
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn incarnation_allocation_preserves_large_integers_and_skips_a_repeated_call() -> TestResult {
-    let root = tempfile::tempdir()?;
-    let fixture = Fixture::open(root.path()).await?;
-    let proof=async {
-        let call=registry_call("central.lease-incarnation",json!({"atLeast":9_007_199_254_740_993_u64}),durable_steps::Uuid::now_v7())?;
-        let first=fixture.runtime.on_call(call.clone()).await.map_err(|error|format!("large incarnation: {error:?}"))?;
-        let repeated=fixture.runtime.on_call(call).await.map_err(|error|format!("repeated allocation: {error:?}"))?;
-        assert_eq!(serde_json::from_slice::<RegistryIncarnation>(&first)?.value(),9_007_199_254_740_994);
-        assert_eq!(serde_json::from_slice::<RegistryIncarnation>(&repeated)?.value(),9_007_199_254_740_995);
-        let exhausted=registry_call("central.lease-incarnation",json!({"atLeast":u64::MAX}),durable_steps::Uuid::now_v7())?;
-        assert!(matches!(fixture.runtime.on_call(exhausted).await,Err(durable_steps::CallFailure::AnswerLost)));
-        let stored=fixture.object.transaction(|scope|Box::pin(async move {
-            let row=query::<sqlx_turso::Turso>("SELECT incarnation,(SELECT count(*) FROM lease_incarnation_fence) AS rows FROM lease_incarnation_fence WHERE name='registry'")
-                .fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
-            Ok((row.try_get::<String,_>("incarnation").map_err(StoreError::backend)?,row.try_get::<i64,_>("rows").map_err(StoreError::backend)?))
-        })).await?;
-        assert_eq!(stored,("9007199254740995".to_owned(),1));
-        Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
-    }.await;
-    fixture.objects.close().await?;
-    proof
-}
-
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions must fail this test while fixture errors propagate through Result."
-)]
-#[tokio::test]
 async fn receipt_write_failure_rolls_back_the_projection_and_keeps_the_reservation_active()
 -> TestResult {
     let root = tempfile::tempdir()?;
