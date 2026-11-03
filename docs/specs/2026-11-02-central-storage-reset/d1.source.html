@@ -13,6 +13,9 @@
 <ex-callout title="Read this first" tone="decision" icon="database">
 <p><strong>D1 and D1b ship as one PR.</strong> Every Fleet store table follows the full rule (prefix, UUIDv7, timestamps, typed columns, JSON only with a stated reason); the shared journal tables get timestamps too. Each moved table's exact column list is posted here for you before its queries are rewritten. Project tables are out of scope. Decisions behind this page: <a href="decisions.html">decisions.html</a>.</p>
 </ex-callout>
+<ex-callout title="Decided: projects after the staging wipe" tone="note" icon="users">
+<p>Your decision (2026-11-03): existing projects keep working after the wipe, through a <strong>one-time cutover tool outside the core</strong>, a TypeScript script with a small Rust helper. Per machine: stop the Router; export each project it writes; import it into the new central; keep the old file as a backup; restart; the Router claims the project and gets a fresh copy. Project ids and content are kept. It is fully tested on an isolated test central first, then on staging. Details: section “Lease numbers and the staging wipe” below.</p>
+</ex-callout>
 <ex-markdown id="d1" label="D1 program design" src="./program-design/d1-central-layout-and-mail.md"></ex-markdown>
 </ex-document>
 </body>
