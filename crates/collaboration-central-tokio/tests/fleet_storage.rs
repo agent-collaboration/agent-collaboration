@@ -1,6 +1,10 @@
 //! Canonical Fleet metadata and its feed commit in one owned store transaction.
 #![cfg(feature = "conformance")]
 #[path = "integration/typed_claim_observer.rs"]
+#[expect(
+    dead_code,
+    reason = "This target uses the shared typed reservation observer; receipt checks run in the composed integration target."
+)]
 mod typed_claim_observer;
 
 #[path = "fleet_storage/archive_inputs.rs"]

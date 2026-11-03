@@ -10,13 +10,25 @@ pub(super) async fn settle(
     attempt: durable_steps::Uuid,
     projection: Value,
 ) -> TestResult<Value> {
-    let reply = fixture.runtime.on_call(serde_json::to_vec(&json!({
+    let reply = fixture
+        .runtime
+        .on_call(settlement_call(operation, attempt, projection)?)
+        .await
+        .map_err(|error| format!("real claim settlement: {error:?}"))?;
+    Ok(serde_json::from_slice(&reply)?)
+}
+
+pub(super) fn settlement_call(
+    operation: durable_steps::Uuid,
+    attempt: durable_steps::Uuid,
+    projection: Value,
+) -> TestResult<Vec<u8>> {
+    Ok(serde_json::to_vec(&json!({
         "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
         "destination":{"kind":"fleet"},"destinationFace":"fleet",
         "identity":{"operation":operation,"step":"settle_claim"},
         "kind":"central.claim-granted","target":null,"request":{"attempt":attempt,"projection":projection}
-    }))?).await.map_err(|error|format!("real claim settlement: {error:?}"))?;
-    Ok(serde_json::from_slice(&reply)?)
+    }))?)
 }
 
 pub(super) async fn receipts(fixture: &Fixture) -> TestResult<i64> {
