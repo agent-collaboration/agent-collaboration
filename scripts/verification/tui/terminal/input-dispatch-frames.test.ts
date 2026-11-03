@@ -166,3 +166,27 @@ test('full-replay equivalence rejects a dropped content byte in the incremental 
 		await replay.close();
 	}
 });
+
+for (const [description, bytes, expectedGeneration] of [
+	['one mode pair', frame('one'), 1],
+	['repeated set and reset', '\x1b[?2026h' + frame('one') + '\x1b[?2026l', 1],
+	['two distinct frames', frame('one') + frame('two'), 2],
+] as const) {
+	test(`synchronized output counts real transitions: ${description}`, async () => {
+		const stream = Buffer.from(bytes + marker(1));
+		const index = new DispatchFrameIndex();
+		for (const byte of stream) index.append(Buffer.from([byte]));
+		const binding = index.get(1);
+		if (binding === null) throw new Error('expected marked frame absent');
+		expect(binding.frameGeneration).toBe(expectedGeneration);
+		expect(gridLines(await dispatchFrameGrid(stream, [], binding))[0]?.trim()).toBe(
+			expectedGeneration === 2 ? 'two' : 'one',
+		);
+	});
+}
+
+test('a redundant reset alone cannot manufacture a completed frame for a dispatch', () => {
+	const index = new DispatchFrameIndex();
+	expect(() => index.append(Buffer.from('\x1b[?2026l'))).not.toThrow();
+	expect(() => index.append(Buffer.from(marker(1)))).toThrow('lacks its own complete frame');
+});
