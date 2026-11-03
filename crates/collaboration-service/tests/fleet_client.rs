@@ -121,7 +121,19 @@ async fn offline_project_creation_waits_for_the_central_decision_before_registra
             .join(project.as_str())
             .exists()
     );
-    assert!(!directory.path().join("fleet.sqlite").exists());
+    assert!(
+        std::fs::read_dir(directory.path())?
+            .collect::<Result<Vec<_>, _>>()?
+            .iter()
+            .all(|entry| entry
+                .path()
+                .extension()
+                .is_none_or(|extension| extension != "sqlite")
+                || matches!(
+                    entry.file_name().to_str(),
+                    Some("fleet-cache.sqlite" | "fleet-outbox.sqlite")
+                ))
+    );
     offline.close().await;
 
     let (reconnected, runtime) =
@@ -143,7 +155,19 @@ async fn offline_project_creation_waits_for_the_central_decision_before_registra
         .clone();
     assert!(!registrations.is_empty());
     assert!(registrations.iter().all(|actual| actual == &project));
-    assert!(!directory.path().join("fleet.sqlite").exists());
+    assert!(
+        std::fs::read_dir(directory.path())?
+            .collect::<Result<Vec<_>, _>>()?
+            .iter()
+            .all(|entry| entry
+                .path()
+                .extension()
+                .is_none_or(|extension| extension != "sqlite")
+                || matches!(
+                    entry.file_name().to_str(),
+                    Some("fleet-cache.sqlite" | "fleet-outbox.sqlite")
+                ))
+    );
     reconnected.close().await;
     runtime.shutdown().await?;
     Ok(())
@@ -265,7 +289,19 @@ async fn central_reply_cache_and_original_outbox_input_survive_restart()
         reopened.submit(&conflict, &origin).await?.result,
         RequestResult::ConflictingRequest
     );
-    assert!(!directory.path().join("fleet.sqlite").exists());
+    assert!(
+        std::fs::read_dir(directory.path())?
+            .collect::<Result<Vec<_>, _>>()?
+            .iter()
+            .all(|entry| entry
+                .path()
+                .extension()
+                .is_none_or(|extension| extension != "sqlite")
+                || matches!(
+                    entry.file_name().to_str(),
+                    Some("fleet-cache.sqlite" | "fleet-outbox.sqlite")
+                ))
+    );
     reopened.close().await;
     runtime.shutdown().await?;
     Ok(())

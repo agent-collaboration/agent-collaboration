@@ -1,4 +1,4 @@
-//! Only fleet replies, snapshots and feed pages update this read projection.
+//! Central-derived projections and this machine's durable login and registrations.
 use crate::{
     RouterLocalStorageError,
     fleet_record_codec::{decode_fleet_record, decode_fleet_reference, validate_fleet_record},
@@ -7,7 +7,8 @@ use crate::{
 };
 use fleet_admission::FleetFeedEntry;
 use message_board::{FleetPosition, Record, RecordRef};
-use std::path::Path;
+use runtime_primitives::{Clock, IdSource, SystemClock, UuidV7Ids};
+use std::{path::Path, sync::Arc};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FleetRecordSnapshot {
@@ -28,7 +29,16 @@ pub use rebuild::FleetCacheRebuild;
 static CACHE_MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./fleet_cache_migrations");
 pub struct FleetCache {
     database: RouterLocalDatabase,
+    clock: Arc<dyn Clock>,
+    ids: Arc<dyn IdSource>,
 }
+
+#[path = "fleet_login_storage.rs"]
+mod login_storage;
+#[path = "fleet_registration_row.rs"]
+mod registration_row;
+#[path = "fleet_registration_storage.rs"]
+mod registration_storage;
 
 impl FleetCache {
     /// Scope selection reads keys only; bodies are validated when a consumer needs them.
@@ -72,8 +82,18 @@ impl FleetCache {
         cache_checkpoint(&mut *self.database.pool.acquire().await?).await
     }
     pub async fn open(path: &Path) -> Result<Self, RouterLocalStorageError> {
+        Self::open_with_sources(path, Arc::new(SystemClock), Arc::new(UuidV7Ids)).await
+    }
+    /// Shares the owning pool and migrations; tests supply deterministic time and identities.
+    pub async fn open_with_sources(
+        path: &Path,
+        clock: Arc<dyn Clock>,
+        ids: Arc<dyn IdSource>,
+    ) -> Result<Self, RouterLocalStorageError> {
         Ok(Self {
             database: RouterLocalDatabase::open(path, &CACHE_MIGRATOR).await?,
+            clock,
+            ids,
         })
     }
     pub async fn replace_snapshot(
@@ -190,7 +210,7 @@ impl FleetCache {
         transaction.commit().await?;
         Ok(FleetRecordSnapshot { through, records })
     }
-    pub async fn close(self) {
+    pub async fn close(&self) {
         self.database.close().await;
     }
 }
@@ -235,3 +255,7 @@ async fn cache_checkpoint(
 #[cfg(test)]
 #[path = "fleet_login_storage_test.rs"]
 mod login_storage_tests;
+
+#[cfg(test)]
+#[path = "fleet_registration_storage_test.rs"]
+mod registration_storage_tests;

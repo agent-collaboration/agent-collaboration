@@ -171,3 +171,10 @@ pub use project_view_trail_metadata::{
 pub use project_card_operands::CardWorkOperands;
 
 pub use project_trail_pages::TrailPageFilter;
+
+pub mod fleet_login;
+pub mod fleet_login_repository;
+pub mod fleet_session_registration;
+#[cfg(any(test, feature = "test-support"))]
+pub mod fleet_test_support;
+pub mod session_registration_repository;

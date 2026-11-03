@@ -81,7 +81,7 @@ impl RouterLocalDatabase {
             writer: Mutex::new(()),
         })
     }
-    pub(crate) async fn close(self) {
+    pub(crate) async fn close(&self) {
         self.pool.close().await;
     }
 }

@@ -1,5 +1,5 @@
-use codex_router_fleet_state::fleet_login::SignInAddress;
 use fleet_identity_protocol::HttpsUrl;
+use message_board_storage::fleet_login::SignInAddress;
 use schemars::{JsonSchema, SchemaGenerator};
 use serde_json::json;
 
