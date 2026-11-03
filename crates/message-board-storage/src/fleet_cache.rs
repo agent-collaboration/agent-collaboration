@@ -231,3 +231,7 @@ async fn cache_checkpoint(
     )
     .map_err(|_| RouterLocalStorageError::InvalidRecord)
 }
+
+#[cfg(test)]
+#[path = "fleet_login_storage_test.rs"]
+mod login_storage_tests;
