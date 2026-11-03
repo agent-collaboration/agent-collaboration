@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "codex-acp-adapter"
 version.workspace = true
 edition.workspace = true
@@ -28,3 +29,7 @@ thiserror.workspace = true
 tokio.workspace = true
 tokio-tungstenite.workspace = true
 futures-util.workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

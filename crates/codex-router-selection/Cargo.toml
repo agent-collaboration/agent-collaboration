@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "codex-router-selection"
 version.workspace = true
 edition.workspace = true
@@ -20,3 +21,7 @@ thiserror.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

@@ -24,16 +24,15 @@ pub(super) fn picker_command(
     session_id: &str,
 ) -> std::io::Result<Command> {
     let template = attach_command(fixture);
+    let namespace = module_path!()
+        .split_once("::")
+        .map_or(module_path!(), |(_, namespace)| namespace);
+    let child_selector = format!("{namespace}::picker_terminal_preparation_child");
     let mut command = Command::new(std::env::current_exe()?);
     command
         .kill_on_drop(true)
         .current_dir(&fixture.working_directory)
-        .args([
-            "--exact",
-            "attach_flow_tests::resume_read_safety_tests::picker_terminal_preparation_child",
-            "--ignored",
-            "--nocapture",
-        ])
+        .args(["--exact", &child_selector, "--ignored", "--nocapture"])
         .env(
             "CLAUDE_PICKER_REQUEST",
             resume_request(fixture, session_id).to_string(),
@@ -116,7 +115,14 @@ async fn unrelated_live_conflict_does_not_block_stopped_cli_or_picker_open() {
         picker_command(&fixture, SESSION).unwrap(),
     ] {
         let before = invocations(&fixture).unwrap().len();
+        let is_picker_child = command
+            .as_std()
+            .get_envs()
+            .any(|(name, _)| name == "CLAUDE_PICKER_REQUEST");
         let output = command.output().await.unwrap();
+        if is_picker_child {
+            super::child_execution::assert_one_test_executed(&output);
+        }
         assert!(
             output.status.success(),
             "healthy stopped A must open despite B's conflict: {} {}",
@@ -137,7 +143,14 @@ async fn unrelated_live_conflict_does_not_block_stopped_cli_or_picker_open() {
         picker_command(&fixture, CONFLICTED_SESSION).unwrap(),
     ] {
         let before = invocations(&fixture).unwrap().len();
+        let is_picker_child = command
+            .as_std()
+            .get_envs()
+            .any(|(name, _)| name == "CLAUDE_PICKER_REQUEST");
         let output = command.output().await.unwrap();
+        if is_picker_child {
+            super::child_execution::assert_one_test_executed(&output);
+        }
         assert!(!output.status.success(), "conflicted B must not open");
         assert_eq!(
             invocations(&fixture).unwrap().len(),
@@ -176,7 +189,14 @@ async fn unavailable_peers_cannot_resume_a_known_stopped_job() {
         direct,
         picker_command(&fixture, SESSION).unwrap(),
     ] {
+        let is_picker_child = command
+            .as_std()
+            .get_envs()
+            .any(|(name, _)| name == "CLAUDE_PICKER_REQUEST");
         let output = command.output().await.unwrap();
+        if is_picker_child {
+            super::child_execution::assert_one_test_executed(&output);
+        }
         assert!(
             !output.status.success(),
             "missing peers cannot prove the stopped job is safe to resume"

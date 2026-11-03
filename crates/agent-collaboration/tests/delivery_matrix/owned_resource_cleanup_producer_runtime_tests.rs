@@ -36,7 +36,7 @@ async fn actual_two_root_producer_uses_distinct_boards_and_preserves_participant
             .ok_or("actual producer client missing")?;
         // Same actual client and authoritative pre-dispatch owner; no second accumulator.
         produced = Some(
-            crate::held_subscription_producer::board_two_thread_subscription_push(
+            crate::push_delivery_matrix::held_subscription_producer::board_two_thread_subscription_push(
                 &owned.client,
                 &sender,
                 &reader,

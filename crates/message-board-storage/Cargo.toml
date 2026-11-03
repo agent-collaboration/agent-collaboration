@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "message-board-storage"
 version.workspace = true
 edition.workspace = true
@@ -39,3 +40,7 @@ fleet-admission = { path = "../fleet-admission", version = "0.1.93", features = 
 [build-dependencies]
 thiserror.workspace = true
 turso_parser.workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

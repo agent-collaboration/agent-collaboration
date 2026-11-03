@@ -1,7 +1,6 @@
-use std::sync::Arc;
-#[path = "support.rs"]
-mod configuration;
+use crate::configuration;
 use configuration::{TestError, registry_config};
+use std::sync::Arc;
 
 pub async fn native_platform(
     key_source: &str,
