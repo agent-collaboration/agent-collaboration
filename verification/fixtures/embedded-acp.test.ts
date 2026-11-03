@@ -33,7 +33,8 @@ const baselineSchema = z.object({
 });
 // original/originalSHA256 retain historical port provenance; expected is the
 // reviewed current wire contract, including explicitly adopted protocol changes.
-const packedRows = readFileSync(new URL("./baselines/embedded-acp.jsonl", import.meta.url), "utf8")
+const packedRows = new TextDecoder("utf-8", { fatal: true })
+  .decode(readFileSync(new URL("./baselines/embedded-acp.jsonl", import.meta.url)))
   .trimEnd()
   .split("\n")
   .map((line, index) =>

@@ -5,7 +5,8 @@ import { z } from "zod";
 import { decodeEvidenceJson } from "../evidence-json.ts";
 import { runOrderedTurnFixture } from "./ordered-turn-fixture.ts";
 
-const packedRows = readFileSync(new URL("./baselines/ordered-turn.jsonl", import.meta.url), "utf8")
+const packedRows = new TextDecoder("utf-8", { fatal: true })
+  .decode(readFileSync(new URL("./baselines/ordered-turn.jsonl", import.meta.url)))
   .trimEnd()
   .split("\n")
   .map((line, index) =>
