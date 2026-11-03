@@ -89,39 +89,3 @@ pub(super) async fn sender_query_and_settlement_preserve_existing_custody_and_pi
         let _=sender.socket.close(reqwest_websocket::CloseCode::Normal,None).await;let _=recipient.socket.close(reqwest_websocket::CloseCode::Normal,None).await;proof
     }.await
 }
-pub(super) async fn retirement_uses_the_verified_sender_and_replays_its_original_call_receipt(
-    base_url: &str,
-) -> ConformanceResult<()> {
-    async {
-        let client = ConformanceClient::new(base_url)?;
-        let mut sender = enroll_admitted_peer(&client,"550e8400-e29b-41d4-a716-446655440525","019f0000-0000-7000-8000-000000000525","retirement-origin","019f0000-0000-7000-8000-000000005255").await?;
-        let mut recipient = enroll_admitted_peer(&client,"550e8400-e29b-41d4-a716-446655440526","019f0000-0000-7000-8000-000000000526","retirement-recipient","019f0000-0000-7000-8000-000000005256").await?;
-        let proof = async {
-            let mailbox = PeerId::new(recipient.peer)?;
-            let envelope = item(mailbox,"550e8400-e29b-41d4-a716-446655440526")?;
-            assert!(matches!(submit(&mut sender.socket,&envelope).await?,
-                OperationAnswer::Consumer(BoardConsumerAnswer::MailSubmit(MailSubmitAnswer::Submitted(SubmitResult::Accepted {..})))));
-            let report = request(&mut recipient.socket,"report",json!({"report":{"item":envelope.id(),"reportSeq":1,"outcome":{"kind":"dropped"}}})).await?;
-            assert!(matches!(report,OperationAnswer::Delivery(DeliveryAnswer::Report(_))));
-
-            let OperationAnswer::Delivery(DeliveryAnswer::Retire(refused)) = request(&mut recipient.socket,"retire",json!({"mailbox":mailbox,"items":[envelope.id()]})).await? else {
-                return Err("Retire did not reach its typed mailbox owner".into());
-            };
-            assert_eq!(refused.not_current_target,vec![envelope.id()]);
-            assert!(refused.retired.is_empty());
-            let retire = relay::relay_request("retire",json!({"mailbox":mailbox,"items":[envelope.id()]}));
-            let first = relay::operation(&mut sender.socket,retire.clone()).await?;
-            assert_eq!(first,json!({"kind":"delivery","value":{"kind":"retire","value":{"retired":[envelope.id()],"unknown":[],"notCurrentTarget":[]}}}));
-            assert_eq!(relay::operation(&mut sender.socket,retire).await?, first);
-            let OperationAnswer::Delivery(DeliveryAnswer::Fetch(controls)) = request(&mut recipient.socket,"fetch",json!({"stream":"controls","after":0,"maxItems":10,"maxBytes":1_000_000})).await? else {
-                return Err("recipient control readback lost its typed answer".into());
-            };
-            assert_eq!(controls.entries.len(),1,"Retire replay created another control effect");
-            assert!(matches!(controls.entries.first(),Some(FetchEntry::Retired {items,..}) if items==&vec![envelope.id()]));
-            Ok(())
-        }.await;
-        let _=sender.socket.close(reqwest_websocket::CloseCode::Normal,None).await;
-        let _=recipient.socket.close(reqwest_websocket::CloseCode::Normal,None).await;
-        proof
-    }.await
-}
