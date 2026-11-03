@@ -2,6 +2,7 @@
 use super::composed_fleet_fixture::{
     A, B, C, Fixture, NOW, SERVICE_A, SERVICE_B, SERVICE_C, TestResult,
 };
+use super::fleet_mail_inbox_fixture::RecipientInbox;
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use collaboration_central_core::AdmissionOrigin;
 use collaboration_central_tokio::SocketCommand;
@@ -73,6 +74,12 @@ impl Socket {
         }
     }
     pub(super) async fn push(&mut self, expected: ItemId) -> TestResult<FrameId> {
+        Ok(self.push_envelope(expected).await?.0)
+    }
+    pub(super) async fn push_envelope(
+        &mut self,
+        expected: ItemId,
+    ) -> TestResult<(FrameId, DeliveryEnvelope<BoardDeliveryTypes>)> {
         loop {
             if let ServerFrame::Request {
                 frame,
@@ -80,7 +87,7 @@ impl Socket {
             } = self.next().await?
             {
                 assert_eq!(item.id(), expected);
-                return Ok(frame);
+                return Ok((frame, item));
             }
         }
     }
@@ -174,7 +181,16 @@ async fn silent_recipient_retries_at_injected_deadline_while_another_recipient_c
     submit(&fixture, &first).await?;
     submit(&fixture, &second).await?;
     let proof = async {
-        silent.push(first.id()).await?;
+        let silent_frame = silent.push(first.id()).await?;
+        responsive
+            .answer(
+                &fixture,
+                silent_frame,
+                PushResult::Accepted {
+                    accepted_at: fixture.io.now(),
+                },
+            )
+            .await?;
         let frame = responsive.push(second.id()).await?;
         responsive
             .answer(
@@ -226,22 +242,36 @@ async fn no_capacity_keeps_content_and_retries_the_same_item_after_capacity_retu
     let root = tempfile::tempdir()?;
     let fixture = Fixture::open(root.path(), NOW).await?;
     let mut recipient = Socket::open(&fixture, B, SERVICE_B).await?;
+    let inbox = RecipientInbox::open(&root.path().join("recipient"), fixture.io.clone()).await?;
+    let full_limits = collaboration_central_core::central_mailbox_limits()?;
+    let no_room = fleet_sync_delivery::DeliveryLimits::new::<BoardDeliveryTypes>(
+        full_limits.mailbox_payload_bytes(),
+        full_limits.mailbox_items(),
+        full_limits.outbox_bytes(),
+        full_limits.outbox_items(),
+        0,
+        full_limits.settlement_allowance(),
+    )?;
     let item = envelope(B, SERVICE_B)?;
     submit(&fixture, &item).await?;
     let (report, ()) = tokio::time::timeout(CAP, async {
         tokio::try_join!(fixture.runtime.on_alarm(), async {
-            let frame = recipient
-                .push(item.id())
+            let (frame, pushed) = recipient
+                .push_envelope(item.id())
                 .await
                 .map_err(StoreError::backend)?;
+            let answer = inbox
+                .accept(pushed, no_room)
+                .await
+                .map_err(StoreError::backend)?;
+            assert!(matches!(
+                answer,
+                PushResult::Refused {
+                    reason: DeliveryRefusal::MailboxFull
+                }
+            ));
             recipient
-                .answer(
-                    &fixture,
-                    frame,
-                    PushResult::Refused {
-                        reason: DeliveryRefusal::MailboxFull,
-                    },
-                )
+                .answer(&fixture, frame, answer)
                 .await
                 .map_err(StoreError::backend)
         })
@@ -250,21 +280,21 @@ async fn no_capacity_keeps_content_and_retries_the_same_item_after_capacity_retu
     assert!(report.failed.is_empty(), "{report:?}");
     assert_eq!(report.retried.len(), 1, "{report:?}");
     assert_eq!(custody(&fixture, item.id()).await?, ("sent".into(), true));
+    assert_eq!(inbox.count().await?, 0);
     fixture.io.advance(60_000);
     let (report, ()) = tokio::time::timeout(CAP, async {
         tokio::try_join!(fixture.runtime.on_alarm(), async {
-            let frame = recipient
-                .push(item.id())
+            let (frame, pushed) = recipient
+                .push_envelope(item.id())
                 .await
                 .map_err(StoreError::backend)?;
+            let answer = inbox
+                .accept(pushed, full_limits)
+                .await
+                .map_err(StoreError::backend)?;
+            assert!(matches!(answer, PushResult::Accepted { .. }));
             recipient
-                .answer(
-                    &fixture,
-                    frame,
-                    PushResult::Accepted {
-                        accepted_at: fixture.io.now(),
-                    },
-                )
+                .answer(&fixture, frame, answer)
                 .await
                 .map_err(StoreError::backend)
         })
@@ -276,5 +306,7 @@ async fn no_capacity_keeps_content_and_retries_the_same_item_after_capacity_retu
         custody(&fixture, item.id()).await?,
         ("atRecipient".into(), false)
     );
+    assert_eq!(inbox.count().await?, 1);
+    inbox.close().await?;
     fixture.close().await
 }
