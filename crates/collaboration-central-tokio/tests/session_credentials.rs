@@ -26,6 +26,7 @@ mod fixture;
 mod owner_registry_scenarios;
 
 use board_sync_protocol::{BoardAnnotation, BoardConsumerProtocol};
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     ConformanceResult, RuntimeControl, RuntimeControlRequest, RuntimeFaultObservation,
     machine_assertion, owner_assertion,
@@ -227,14 +228,14 @@ async fn replace_registered_socket_before_revocation(
     connection_control(
         fixture.base(),
         RuntimeControl::HoldNextDispatch {
-            destination: ObjectAddress::Fleet,
+            key: DispatchKey::any(ObjectAddress::Fleet),
         },
     )
     .await?;
     let proof=async {
         let frame=creation_scenarios::send(&mut fixture.old,OperationRequest::Lease(LeaseRequest::Renew(request.clone()))).await?;
-        let observation=connection_control(fixture.base(),RuntimeControl::AwaitHeldDispatch).await?;
-        let collaboration_central_conformance::DispatchFaultObservation::Held {destination,request:bytes}=observation.dispatch else {return Err("credential replacement did not hold its real renewal".into());};
+        let observation=connection_control(fixture.base(),RuntimeControl::AwaitHeldDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet) }).await?;
+        let collaboration_central_conformance::DispatchFaultObservation::Held {destination,request:bytes}=observation.dispatch(&DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet)) else {return Err("credential replacement did not hold its real renewal".into());};
         let held:Value=serde_json::from_slice(&bytes)?;
         if destination!=ObjectAddress::Fleet || held.get("kind")!=Some(&json!("central.session-lease"))
             || held.pointer("/request/session/peer")!=Some(&json!(fixture::OLD_PEER))
@@ -242,7 +243,7 @@ async fn replace_registered_socket_before_revocation(
             return Err("credential replacement captured another holder renewal".into());
         }
         let session_id:SessionId=serde_json::from_value(held.pointer("/request/session/sessionId").cloned().ok_or("credential renewal omitted current session ID")?)?;
-        connection_control(fixture.base(),RuntimeControl::ResumeDispatch).await?;
+        connection_control(fixture.base(),RuntimeControl::ResumeDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet) }).await?;
         if !matches!(next_data(&mut fixture.old).await?,ServerFrame::Answer {frame:actual,body:OperationAnswer::Lease(LeaseAnswer::Renew(answer))} if actual==frame && answer==expected_renewal(fixture.database)?) {return Err("captured current-session renewal did not complete exactly".into());}
         let mut replacement=upgrade(&fixture.http,fixture.base(),CREDENTIAL).await?.into_websocket().await?;
         replacement.send(Message::Binary(serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {session_id,schema_support:SchemaSupport {max_version:1}})?.into())).await?;
@@ -256,7 +257,13 @@ async fn replace_registered_socket_before_revocation(
         println!("SESSION_CREDENTIAL_STAGE registered_replacement_is_current_before_revocation passed");
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
     }.await;
-    let _ = connection_control(fixture.base(), RuntimeControl::ResumeDispatch).await;
+    let _ = connection_control(
+        fixture.base(),
+        RuntimeControl::ResumeDispatch {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+        },
+    )
+    .await;
     proof
 }
 

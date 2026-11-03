@@ -3,6 +3,7 @@
 
 #[path = "native_http/support.rs"]
 mod configuration;
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     ConformanceResult, DispatchCallSelector, RuntimeControl, RuntimeControlRequest, fixture_policy,
 };
@@ -19,17 +20,24 @@ async fn startup_refuses_non_arming_controls_before_discovery() -> ConformanceRe
     let root = tempfile::tempdir()?;
     for command in [
         RuntimeControl::Observe,
-        RuntimeControl::AwaitHeldDispatch,
-        RuntimeControl::ResumeDispatch,
-        RuntimeControl::ResumeDispatchAndHoldNext {
-            destination: ObjectAddress::Fleet,
+        RuntimeControl::AwaitHeldDispatch {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
         },
-        RuntimeControl::ResumeDispatchAndHoldNextSelected {
-            destination: ObjectAddress::Fleet,
-            call: DispatchCallSelector::FleetMailSubmit,
+        RuntimeControl::ResumeDispatch {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+        },
+        RuntimeControl::ResumeDispatchAndHoldNext {
+            key: DispatchKey::any(ObjectAddress::Fleet),
+            next: DispatchKey::any(ObjectAddress::Fleet),
+        },
+        RuntimeControl::ResumeDispatchAndHoldNext {
+            key: DispatchKey::new(ObjectAddress::Fleet, DispatchCallSelector::FleetMailSubmit),
+            next: DispatchKey::new(ObjectAddress::Fleet, DispatchCallSelector::FleetMailSubmit),
         },
         RuntimeControl::AwaitDroppedObjectReply,
-        RuntimeControl::DropHeldDispatchReply,
+        RuntimeControl::DropHeldDispatchReply {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+        },
         RuntimeControl::AwaitDroppedAnswer {
             connection: fleet_sync_protocol::ConnectionId::new(durable_steps::Uuid::now_v7())?,
             frame: fleet_sync_protocol::FrameId::new(durable_steps::Uuid::now_v7())?,

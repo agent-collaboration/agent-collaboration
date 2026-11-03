@@ -1,5 +1,6 @@
 //! Process death between Registry's retirement admission and Copy wipe.
 use super::*;
+use collaboration_central_conformance::DispatchKey;
 use fleet_sync_protocol::DatabaseId;
 
 #[expect(
@@ -18,7 +19,7 @@ async fn retirement_resumes_its_stored_step_after_the_server_process_dies() -> C
         &first.base,
         ObjectAddress::Fleet,
         RuntimeControl::HoldNextDispatch {
-            destination: ObjectAddress::Copy(database),
+            key: DispatchKey::any(ObjectAddress::Copy(database)),
         },
     )
     .await?;
@@ -32,10 +33,14 @@ async fn retirement_resumes_its_stored_step_after_the_server_process_dies() -> C
     let held = control(
         &first.base,
         ObjectAddress::Fleet,
-        RuntimeControl::AwaitHeldDispatch,
+        RuntimeControl::AwaitHeldDispatch {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+        },
     )
     .await?;
-    let DispatchFaultObservation::Held { request: bytes, .. } = held.dispatch else {
+    let DispatchFaultObservation::Held { request: bytes, .. } = held.dispatch(&DispatchKey::any(
+        collaboration_central_core::ObjectAddress::Fleet,
+    )) else {
         return Err("retirement did not reach its Copy barrier".into());
     };
     let call: Value = serde_json::from_slice(&bytes)?;

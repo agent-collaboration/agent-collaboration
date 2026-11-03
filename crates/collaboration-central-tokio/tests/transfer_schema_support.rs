@@ -29,6 +29,7 @@ mod missing_copy;
 mod owner_registry_scenarios;
 
 use board_sync_protocol::{BoardAnnotation, BoardConsumerProtocol};
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, JwksFixtureServer, RuntimeControl, enroll_admitted_peer,
     enroll_open_peer_with_label, fixture_policy, machine_assertion,
@@ -114,7 +115,7 @@ async fn enrolled_target_without_hello_reaches_a_real_fence_with_unknown_schema_
     let proof=async {
         let schema=fixture.unchanged().await?;
         let request=fixture.takeover(fixture.preview().await?,"550e8400-e29b-41d4-a716-446655440794");
-        fixture.control(RuntimeControl::HoldNextDispatch {destination:ObjectAddress::Copy(fixture.database)}).await?;
+        fixture.control(RuntimeControl::HoldNextDispatch { key: DispatchKey::any(ObjectAddress::Copy(fixture.database)) }).await?;
         let http=fixture.http.clone();let route=fixture.route("takeover");let sending=request.clone();
         callers.spawn(async move {owner_registry_scenarios::post(&http,&route,&sending).await});
         let held=fixture.held_copy().await?;
@@ -125,7 +126,7 @@ async fn enrolled_target_without_hello_reaches_a_real_fence_with_unknown_schema_
             || fence.expect!=(FenceExpectation {epoch:Epoch::new(1)?,acked:fixture::position(1,1)?}) || fence.target_schema.is_some() {
             return Err(format!("known/no-Hello producer did not reach its exact real Fence with supportNone: {held}").into());
         }
-        fixture.control(RuntimeControl::ResumeDispatch).await?;
+        fixture.control(RuntimeControl::ResumeDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Copy(fixture.database)) }).await?;
         let initial=tokio::time::timeout(Duration::from_secs(8),callers.join_next()).await?.ok_or("unknown-support Takeover caller vanished")???;
         let refused=fixture.complete("takeover",&request,initial).await?;
         let expected=json!({"kind":"refused","value":{"kind":"schemaTooNew","value":{"store":schema,"supported":null}}});
@@ -134,7 +135,13 @@ async fn enrolled_target_without_hello_reaches_a_real_fence_with_unknown_schema_
         println!("TRANSFER_SUPPORT_CASE known_no_Hello_actual_Fence_supportNone_exact_schema_refusal passed");
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
     }.await;
-    let _ = fixture.control(RuntimeControl::ResumeDispatch).await;
+    let _ = fixture
+        .control(RuntimeControl::ResumeDispatch {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Copy(
+                fixture.database,
+            )),
+        })
+        .await;
     callers.abort_all();
     while callers.join_next().await.is_some() {}
     let unknown_closed = unknown

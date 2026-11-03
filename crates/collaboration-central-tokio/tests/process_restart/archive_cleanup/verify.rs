@@ -1,5 +1,6 @@
 //! Observe automatic convergence before replaying the original Claim or archive.
 use super::*;
+use collaboration_central_conformance::DispatchKey;
 use fleet_sync_protocol::{LeaseAnswer, LeaseRequest};
 
 pub(super) async fn verify_cleanup(
@@ -73,14 +74,14 @@ async fn observe_exact_recovered_call(base: &str, input: &CleanupInput) -> Confo
         loop {
             let observed=http.post(format!("{base}/admin/v1/conformance/runtime"))
                 .header("Cf-Access-Jwt-Assertion",owner_assertion()?)
-                .json(&RuntimeControlRequest {address:ObjectAddress::Fleet,command:RuntimeControl::AwaitHeldDispatch})
+                .json(&RuntimeControlRequest {address:ObjectAddress::Fleet,command:RuntimeControl::AwaitHeldDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet) }})
                 .send().await?.error_for_status()?.json::<collaboration_central_conformance::RuntimeFaultObservation>().await?;
-            let DispatchFaultObservation::Held {destination,request}=observed.dispatch else {return Err("startup retry never reached its pre-armed real transport gate".into());};
+            let DispatchFaultObservation::Held {destination,request}=observed.dispatch(&DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet)) else {return Err("startup retry never reached its pre-armed real transport gate".into());};
             if destination!=ObjectAddress::Fleet {return Err("startup retry reached another destination".into());}
             let call:Value=serde_json::from_slice(&request)?;
             if call.get("kind")==Some(&json!(<fleet_sync_lease::ClaimSettlement as durable_steps::CallTarget>::KIND)) {
                 if call!=input.call {return Err(format!("recovered settlement changed its exact original call identity or payload: {call}").into());}
-                control(base,ObjectAddress::Fleet,RuntimeControl::ResumeDispatch).await?;
+                control(base,ObjectAddress::Fleet,RuntimeControl::ResumeDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet) }).await?;
                 println!("ARCHIVE_CLEANUP_RESTART_STAGE actual_retried_call_identity_and_payload_unchanged");
                 return Ok::<_,Box<dyn std::error::Error+Send+Sync>>(());
             }
@@ -89,7 +90,7 @@ async fn observe_exact_recovered_call(base: &str, input: &CleanupInput) -> Confo
             if !matches!(call.get("kind").and_then(Value::as_str),Some("central.lease-incarnation"|"central.lease-projection")) {
                 return Err(format!("startup recovery intercepted an unexpected Fleet call: {call}").into());
             }
-            control(base,ObjectAddress::Fleet,RuntimeControl::ResumeDispatchAndHoldNext {destination:ObjectAddress::Fleet}).await?;
+            control(base,ObjectAddress::Fleet,RuntimeControl::ResumeDispatchAndHoldNext { key: DispatchKey::any(ObjectAddress::Fleet), next: DispatchKey::any(ObjectAddress::Fleet) }).await?;
         }
     }).await.map_err(|_|"startup did not reconstruct the exact original refused-settlement call")?
 }

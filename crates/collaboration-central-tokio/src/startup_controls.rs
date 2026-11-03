@@ -17,18 +17,16 @@ impl PreparedRuntimeControls {
                 | RuntimeControl::CopyFull { .. }
                 | RuntimeControl::DropNextAnswer { .. }
                 | RuntimeControl::HoldNextDispatch { .. }
-                | RuntimeControl::HoldNextSelectedDispatch { .. }
                 | RuntimeControl::DropNextObjectReply { .. }
                 | RuntimeControl::DropNextSelectedObjectReply { .. } => {}
                 RuntimeControl::ProjectUnavailable
                 | RuntimeControl::ClearProjectFault
                 | RuntimeControl::AwaitDroppedAnswer { .. }
-                | RuntimeControl::AwaitHeldDispatch
-                | RuntimeControl::ResumeDispatch
+                | RuntimeControl::AwaitHeldDispatch { .. }
+                | RuntimeControl::ResumeDispatch { .. }
                 | RuntimeControl::ResumeDispatchAndHoldNext { .. }
-                | RuntimeControl::ResumeDispatchAndHoldNextSelected { .. }
                 | RuntimeControl::AwaitDroppedObjectReply
-                | RuntimeControl::DropHeldDispatchReply
+                | RuntimeControl::DropHeldDispatchReply { .. }
                 | RuntimeControl::Observe => {
                     return Err(StoreError::backend(
                         "native conformance startup controls must only arm faults",

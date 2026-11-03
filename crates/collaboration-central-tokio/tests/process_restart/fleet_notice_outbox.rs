@@ -1,5 +1,6 @@
 //! Both original notice-loss paths recover through a fresh native OS process.
 use super::*;
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::ObjectReplyFaultObservation;
 use collaboration_central_core::{ConformanceBoardState, RegistryTime};
 use fleet_admission::{DirectoryEntry, DirectoryLease, DirectorySide, LeaseMetadata};
@@ -162,9 +163,7 @@ async fn prepare_notice_loss(
         // Each released call arms the next hold atomically. A first receiver
         // call may only admit its async append; keep advancing until a real
         // successful reply is lost, then retain the next hold until SIGKILL.
-        control(base, ObjectAddress::Fleet, RuntimeControl::HoldNextDispatch {
-            destination: destination.clone(),
-        }).await?;
+        control(base, ObjectAddress::Fleet, RuntimeControl::HoldNextDispatch { key: DispatchKey::any(destination.clone()) }).await?;
         if matches!(loss,NoticeLoss::Acknowledgement) {
             control(base,ObjectAddress::Fleet,RuntimeControl::DropNextObjectReply {
                 destination: destination.clone(),
@@ -185,16 +184,16 @@ async fn prepare_notice_loss(
         let observed = tokio::time::timeout(Duration::from_secs(8), async {
             let recorded: ConformanceResult<Vec<u8>> = match loss {
                 NoticeLoss::Dispatch => {
-                    let observed = control(base, ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch).await?;
-                    match observed.dispatch {
+                    let observed = control(base, ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet) }).await?;
+                    match observed.dispatch(&DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet)) {
                         DispatchFaultObservation::Held { destination: actual, request } if actual == destination => Ok(request),
                         other => Err(format!("actual notice dispatch did not reach its barrier: {other:?}").into()),
                     }
                 }
                 NoticeLoss::Acknowledgement => {
                     loop {
-                        let observed=control(base,ObjectAddress::Fleet,RuntimeControl::AwaitHeldDispatch).await?;
-                        if !matches!(observed.dispatch,DispatchFaultObservation::Held {destination:ref actual,..} if *actual==destination) {
+                        let observed=control(base,ObjectAddress::Fleet,RuntimeControl::AwaitHeldDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet) }).await?;
+                        if !matches!(observed.dispatch(&DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet)),DispatchFaultObservation::Held {destination:ref actual,..} if *actual==destination) {
                             return Err("notice ACK-loss handoff lost its real next-dispatch hold".into());
                         }
                         if let ObjectReplyFaultObservation::Dropped {destination:actual,request}=observed.object_reply {
@@ -202,7 +201,7 @@ async fn prepare_notice_loss(
                             eprintln!("FLEET_NOTICE_RESTART_STAGE successful_reply_lost_next_dispatch_held");
                             break Ok(request);
                         }
-                        control(base,ObjectAddress::Fleet,RuntimeControl::ResumeDispatchAndHoldNext {destination:destination.clone()}).await?;
+                        control(base,ObjectAddress::Fleet,RuntimeControl::ResumeDispatchAndHoldNext { key: DispatchKey::any(destination.clone()), next: DispatchKey::any(destination.clone()) }).await?;
                     }
                 }
             };

@@ -25,6 +25,7 @@ mod fixture;
 mod owner_registry_scenarios;
 
 use board_sync_protocol::{BoardAnnotation, BoardConsumerProtocol};
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, JwksFixtureServer, RuntimeControl, enroll_admitted_peer,
     fixture_policy, machine_assertion,
@@ -193,7 +194,7 @@ async fn preview_reads_copy_fence_five_and_selects_six_directly() -> Conformance
         let request = fixture.takeover(preview, fixture::TARGET_SERVICE);
         fixture
             .control(RuntimeControl::HoldNextDispatch {
-                destination: ObjectAddress::Copy(fixture.database),
+                key: DispatchKey::any(ObjectAddress::Copy(fixture.database)),
             })
             .await?;
         let http = fixture.http.clone();
@@ -205,7 +206,13 @@ async fn preview_reads_copy_fence_five_and_selects_six_directly() -> Conformance
         if identity.step.as_str() != "fence" {
             return Err("preview selection unexpectedly required the repair retry".into());
         }
-        fixture.control(RuntimeControl::ResumeDispatch).await?;
+        fixture
+            .control(RuntimeControl::ResumeDispatch {
+                key: DispatchKey::any(collaboration_central_core::ObjectAddress::Copy(
+                    fixture.database,
+                )),
+            })
+            .await?;
         let initial = tokio::time::timeout(Duration::from_secs(8), callers.join_next())
             .await?
             .ok_or("preview-selected Takeover caller vanished")???;
@@ -216,7 +223,13 @@ async fn preview_reads_copy_fence_five_and_selects_six_directly() -> Conformance
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }
     .await;
-    let _ = fixture.control(RuntimeControl::ResumeDispatch).await;
+    let _ = fixture
+        .control(RuntimeControl::ResumeDispatch {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Copy(
+                fixture.database,
+            )),
+        })
+        .await;
     callers.abort_all();
     while callers.join_next().await.is_some() {}
     let closed = fixture.close().await;
@@ -237,16 +250,16 @@ async fn retry_above_copy_five(moving: bool) -> ConformanceResult<()> {
             println!("TRANSFER_FLOOR_STAGE correlated_Move_Release_held_before_Copy5 passed");
             fixture.fence_five().await?;
             fixture.copy(5,fixture::position(1,1)?,vec![]).await?;
-            fixture.control(RuntimeControl::HoldNextDispatch {destination:ObjectAddress::Copy(fixture.database)}).await?;
+            fixture.control(RuntimeControl::HoldNextDispatch { key: DispatchKey::any(ObjectAddress::Copy(fixture.database)) }).await?;
             fixture.reply_release(frame,ReleaseAnswer::Released {final_position:fixture::position(1,1)?}).await?;
             let ack=fixture.held_copy().await?;
             if ack.get("kind")!=Some(&json!("fleet-sync.copy-acknowledged")) || ack.pointer("/target/database")!=Some(&json!(fixture.database)) || ack.get("request")!=Some(&json!(AwaitAcked {through:fixture::position(1,1)?})) {return Err(format!("Move did not await its exact correlated released prefix: {ack}").into());}
-            fixture.control(RuntimeControl::ResumeDispatchAndHoldNext {destination:ObjectAddress::Copy(fixture.database)}).await?;
+            fixture.control(RuntimeControl::ResumeDispatchAndHoldNext { key: DispatchKey::any(ObjectAddress::Copy(fixture.database)), next: DispatchKey::any(ObjectAddress::Copy(fixture.database)) }).await?;
         } else {
             fixture.fence_five().await?;
             fixture.copy(5,fixture::position(1,1)?,vec![]).await?;
             old_piece_is_stale(&mut fixture,5).await?;
-            fixture.control(RuntimeControl::HoldNextDispatch {destination:ObjectAddress::Copy(fixture.database)}).await?;
+            fixture.control(RuntimeControl::HoldNextDispatch { key: DispatchKey::any(ObjectAddress::Copy(fixture.database)) }).await?;
             let http=fixture.http.clone();let route=fixture.route("takeover");let sending=request.clone();
             callers.spawn(async move {owner_registry_scenarios::post(&http,&route,&sending).await});
         }
@@ -254,18 +267,24 @@ async fn retry_above_copy_five(moving: bool) -> ConformanceResult<()> {
         let first_id=validate_fence(&first,fixture.database,&request,2,1)?;
         if first_id.step.as_str()!="fence" {return Err("floor repair did not first attempt original reserved Fence2".into());}
         println!("TRANSFER_FLOOR_STAGE original_Fence2_held_after_actual_Copy5 moving={moving} passed");
-        fixture.control(RuntimeControl::ResumeDispatchAndHoldNext {destination:ObjectAddress::Copy(fixture.database)}).await?;
+        fixture.control(RuntimeControl::ResumeDispatchAndHoldNext { key: DispatchKey::any(ObjectAddress::Copy(fixture.database)), next: DispatchKey::any(ObjectAddress::Copy(fixture.database)) }).await?;
         let retry=fixture.held_copy().await?;
         let retry_id=validate_fence(&retry,fixture.database,&request,6,5)?;
         if retry_id.operation!=first_id.operation || retry_id.step.as_str()!="fence:2" {return Err("floor-repair retry lost original operation identity or exact second-Fence step".into());}
         println!("TRANSFER_FLOOR_STAGE exact_same_operation_retries_Fence6_from5 moving={moving} passed");
-        fixture.control(RuntimeControl::ResumeDispatch).await?;
+        fixture.control(RuntimeControl::ResumeDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Copy(fixture.database)) }).await?;
         let initial=tokio::time::timeout(Duration::from_secs(8),callers.join_next()).await?.ok_or("floor-repair owner caller vanished")???;
         finish_exact(&mut fixture,&request,initial,moving).await?;
         println!("TRANSFER_FLOOR_CASE actual_retry_above_Copy5_grants6_and_replays moving={moving} passed");
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
     }.await;
-    let _ = fixture.control(RuntimeControl::ResumeDispatch).await;
+    let _ = fixture
+        .control(RuntimeControl::ResumeDispatch {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Copy(
+                fixture.database,
+            )),
+        })
+        .await;
     callers.abort_all();
     while callers.join_next().await.is_some() {}
     let closed = fixture.close().await;

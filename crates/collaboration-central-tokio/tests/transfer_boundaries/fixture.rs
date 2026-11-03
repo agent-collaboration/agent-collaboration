@@ -1,5 +1,6 @@
 //! Normal creation, owner requests and socket controls shared by transfer cases.
 use super::*;
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     DispatchFaultObservation, RuntimeControl, RuntimeControlRequest, RuntimeFaultObservation,
     owner_assertion,
@@ -280,9 +281,15 @@ impl Fixture {
             destination,
             request,
         } = self
-            .control(RuntimeControl::AwaitHeldDispatch)
+            .control(RuntimeControl::AwaitHeldDispatch {
+                key: DispatchKey::any(collaboration_central_core::ObjectAddress::Copy(
+                    self.database,
+                )),
+            })
             .await?
-            .dispatch
+            .dispatch(&DispatchKey::any(
+                collaboration_central_core::ObjectAddress::Copy(self.database),
+            ))
         else {
             return Err("transfer did not reach its actual held Copy call".into());
         };

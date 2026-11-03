@@ -25,6 +25,7 @@ mod fixture;
 mod owner_registry_scenarios;
 
 use board_sync_protocol::{BoardAnnotation, BoardConsumerProtocol};
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, JwksFixtureServer, RuntimeControl, enroll_admitted_peer,
     fixture_policy, machine_assertion,
@@ -93,7 +94,7 @@ async fn complete_two_row_piece_is_read_before_the_held_fence_is_refused_preview
     let mut callers = tokio::task::JoinSet::new();
     let proof=async {
         let request=fixture.takeover(fixture.preview().await?,fixture::TARGET_SERVICE);
-        fixture.control(RuntimeControl::HoldNextDispatch {destination:ObjectAddress::Copy(fixture.database)}).await?;
+        fixture.control(RuntimeControl::HoldNextDispatch { key: DispatchKey::any(ObjectAddress::Copy(fixture.database)) }).await?;
         let http=fixture.http.clone();let route=fixture.route("takeover");let sending=request.clone();
         callers.spawn(async move {owner_registry_scenarios::post(&http,&route,&sending).await});
         let held=fixture.held_copy().await?;
@@ -104,7 +105,7 @@ async fn complete_two_row_piece_is_read_before_the_held_fence_is_refused_preview
         if !matches!(creation::operation_answer(&mut fixture.old,OperationRequest::Replication(ReplicationRequest::Piece(rows))).await?,OperationAnswer::Replication(ReplicationAnswer::Applied {through}) if through==fixture::position(1,2)?) {return Err("ordered-before Piece did not apply the complete two-row prefix1:2".into());}
         fixture.copy(1,fixture::position(1,2)?,values("before-left","before-right")).await?;
         println!("TRANSFER_ORDERED_STAGE complete_before_left_right_read_while_exact_Fence_held passed");
-        fixture.control(RuntimeControl::ResumeDispatch).await?;
+        fixture.control(RuntimeControl::ResumeDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Copy(fixture.database)) }).await?;
         let initial=tokio::time::timeout(Duration::from_secs(8),callers.join_next()).await?.ok_or("ordered-before Takeover caller vanished")???;
         let refused=fixture.complete("takeover",&request,initial).await?;
         if refused!=json!({"kind":"refused","value":{"kind":"previewStale"}}) {return Err(format!("ordered-before Fence did not refuse its now-stale preview: {refused}").into());}
@@ -112,7 +113,13 @@ async fn complete_two_row_piece_is_read_before_the_held_fence_is_refused_preview
         println!("TRANSFER_ORDERED_CASE whole_Piece_before_Fence_preserves_rows_and_refuses_stale_preview passed");
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
     }.await;
-    let _ = fixture.control(RuntimeControl::ResumeDispatch).await;
+    let _ = fixture
+        .control(RuntimeControl::ResumeDispatch {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Copy(
+                fixture.database,
+            )),
+        })
+        .await;
     callers.abort_all();
     while callers.join_next().await.is_some() {}
     let closed = fixture.close().await;

@@ -53,6 +53,7 @@ mod session_resume;
 mod support;
 
 use board_sync_protocol::*;
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, DispatchFaultObservation, JwksFixtureServer,
     RuntimeControl, enroll_admitted_peer, fixture_policy,
@@ -146,7 +147,7 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
         &first.base,
         ObjectAddress::Fleet,
         RuntimeControl::HoldNextDispatch {
-            destination: ObjectAddress::Fleet,
+            key: DispatchKey::any(ObjectAddress::Fleet),
         },
     )
     .await?;
@@ -174,10 +175,14 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
     let held = control(
         &first.base,
         ObjectAddress::Fleet,
-        RuntimeControl::AwaitHeldDispatch,
+        RuntimeControl::AwaitHeldDispatch {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+        },
     )
     .await?;
-    let DispatchFaultObservation::Held { request: bytes, .. } = held.dispatch else {
+    let DispatchFaultObservation::Held { request: bytes, .. } = held.dispatch(&DispatchKey::any(
+        collaboration_central_core::ObjectAddress::Fleet,
+    )) else {
         return Err("Fleet did not reach its post-commit dispatch barrier".into());
     };
     let call: Value = serde_json::from_slice(&bytes)?;

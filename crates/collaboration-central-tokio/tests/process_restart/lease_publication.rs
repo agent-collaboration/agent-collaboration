@@ -1,5 +1,6 @@
 //! A new Registry process gates publication; Fleet rejects delayed old grants.
 use super::*;
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{RuntimeControlRequest, owner_assertion};
 use collaboration_central_core::{
     ClaimReservationOutcome, ClaimReservationState, ConformanceBoardState, RegistryIncarnation,
@@ -61,7 +62,7 @@ async fn a_new_registry_run_gates_publication_and_fences_delayed_grants() -> Con
     let controls = [RuntimeControlRequest {
         address: ObjectAddress::Fleet,
         command: RuntimeControl::HoldNextDispatch {
-            destination: ObjectAddress::Fleet,
+            key: DispatchKey::any(ObjectAddress::Fleet),
         },
     }];
     let second = ServerProcess::start_with_controls(root.path(), &jwks.url, &controls).await?;
@@ -70,7 +71,9 @@ async fn a_new_registry_run_gates_publication_and_fences_delayed_grants() -> Con
     let _ = control(
         &second.base,
         ObjectAddress::Fleet,
-        RuntimeControl::ResumeDispatch,
+        RuntimeControl::ResumeDispatch {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+        },
     )
     .await;
     let stopped = second.stop().await;
@@ -188,13 +191,17 @@ async fn verify_startup_gate(
     let observed = control(
         base,
         ObjectAddress::Fleet,
-        RuntimeControl::AwaitHeldDispatch,
+        RuntimeControl::AwaitHeldDispatch {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+        },
     )
     .await?;
     let DispatchFaultObservation::Held {
         destination,
         request,
-    } = observed.dispatch
+    } = observed.dispatch(&DispatchKey::any(
+        collaboration_central_core::ObjectAddress::Fleet,
+    ))
     else {
         return Err("Registry startup did not reach its armed transport barrier".into());
     };
@@ -266,7 +273,14 @@ async fn verify_startup_gate(
         if read_directory(&mut holder, initial.database).await? != initial.entry {
             return Err("renewal bypassed the held incarnation gate and published early".into());
         }
-        control(base, ObjectAddress::Fleet, RuntimeControl::ResumeDispatch).await?;
+        control(
+            base,
+            ObjectAddress::Fleet,
+            RuntimeControl::ResumeDispatch {
+                key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+            },
+        )
+        .await?;
         tokio::time::timeout(RECOVERY_BOUND, async {
             loop {
                 let projection = read_projection(root, initial.database).await?;
