@@ -27,7 +27,7 @@ pub enum MailWireEvent {
     },
     ReportAnswered {
         frame: FrameId,
-        answer: ReportResult<Acceptance>,
+        answer: ReportResult,
     },
 }
 

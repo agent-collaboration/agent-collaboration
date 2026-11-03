@@ -81,15 +81,18 @@ async fn run_report(pair: SharedPair) -> ConformanceResult<()> {
     let store = open_store(&directory.path().join("recipient-report.db"), host.clone()).await?;
     let report = prepare_report(&store, &host, item, cancel, batch).await?;
     let mut engine = Engine::new(store, host.clone());
-    engine.register(ReportTask::new(DeliveryTaskConfig {
-        local: LocalDeliveryConfig {
-            owner,
-            limits: limits()?,
+    engine.register(ReportTask::new(
+        DeliveryTaskConfig {
+            local: LocalDeliveryConfig {
+                owner,
+                limits: limits()?,
+            },
+            relay,
+            fetch_items: 10,
+            fetch_bytes: 1_000_000,
         },
-        relay,
-        fetch_items: 10,
-        fetch_bytes: 1_000_000,
-    }))?;
+        host.clone(),
+    ))?;
     let status = engine
         .start_and_settle::<ReportTask>(
             &delivery_request_key(&(report.item, report.report_seq))?,

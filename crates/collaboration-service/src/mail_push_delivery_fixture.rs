@@ -294,7 +294,9 @@ impl Runtime {
                 ProjectionStore,
                 Database,
                 RouterDeliveryTypes,
-            >::new(self.fixture.host.config))
+            >::new(
+                self.fixture.host.config, self.fixture.host.clone()
+            ))
             .unwrap();
         engine
     }

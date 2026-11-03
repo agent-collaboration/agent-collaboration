@@ -61,6 +61,13 @@ impl WakeScheduler for Transport {
     }
 }
 impl PlatformIo for Transport {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     fn before_local_call(
         &self,
         bytes: &[u8],

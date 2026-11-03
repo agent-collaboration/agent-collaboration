@@ -10,8 +10,8 @@ use durable_steps::{
 };
 use fleet_sync_delivery::{PublicationTarget, PublishCall, StatusStream};
 use fleet_sync_protocol::{
-    DeliveryFailureKind, DeliveryRefusal, DeliverySeq, DeliveryStatus, ItemId, PeerId, ReceiverId,
-    StatusCursor, StatusFetchResult, StatusPublication, StatusPublicationResult, StatusVersion,
+    DeliveryFailureKind, DeliveryRefusal, DeliveryStatus, ItemId, PeerId, ReceiverId, StatusCursor,
+    StatusFetchResult, StatusPublication, StatusPublicationResult, StatusVersion,
 };
 use fleet_sync_tokio_runner::{ObjectKey, ObjectStore, TokioObject};
 use message_board::ServiceId;
@@ -60,6 +60,13 @@ impl WakeScheduler for NoObjectCalls {
     }
 }
 impl PlatformIo for NoObjectCalls {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     async fn object_call(&self, _: ObjectAddress, _: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
         self.0.fetch_add(1, Ordering::SeqCst);
         Err(CallFailure::AnswerLost)
@@ -135,9 +142,7 @@ impl Fixture {
         });
         let publication = StatusPublication::<Acceptance> {
             item,
-            status: DeliveryStatus::Sent {
-                seq: DeliverySeq::new(1),
-            },
+            status: DeliveryStatus::Sent,
             version: StatusVersion::new(1),
             cancel: None,
         };
@@ -206,12 +211,7 @@ async fn a_disconnected_leaf_completes_publication_and_fetches_one_revision_afte
     assert_eq!(stored.through, StatusCursor::new(1));
     assert_eq!(stored.events[0].item, item);
     assert_eq!(stored.events[0].version, StatusVersion::new(1));
-    assert_eq!(
-        stored.events[0].status,
-        DeliveryStatus::Sent {
-            seq: DeliverySeq::new(1)
-        }
-    );
+    assert_eq!(stored.events[0].status, DeliveryStatus::Sent);
 
     // A disconnected peer publication finishes, rather than backing off forever.
     assert_eq!(first.runtime.on_alarm().await?.completed.len(), 1);

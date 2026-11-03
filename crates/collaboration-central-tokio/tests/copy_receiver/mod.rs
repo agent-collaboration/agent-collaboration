@@ -53,6 +53,13 @@ impl WakeScheduler for Io {
     }
 }
 impl PlatformIo for Io {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     fn object_call(
         &self,
         destination: ObjectAddress,

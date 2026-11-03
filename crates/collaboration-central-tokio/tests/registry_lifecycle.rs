@@ -48,6 +48,13 @@ impl WakeScheduler for RecordingIo {
     }
 }
 impl PlatformIo for RecordingIo {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     async fn object_call(
         &self,
         destination: ObjectAddress,

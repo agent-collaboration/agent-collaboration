@@ -30,6 +30,13 @@ impl WakeScheduler for TracedIds {
     }
 }
 impl PlatformIo for TracedIds {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     async fn object_call(
         &self,
         address: ObjectAddress,

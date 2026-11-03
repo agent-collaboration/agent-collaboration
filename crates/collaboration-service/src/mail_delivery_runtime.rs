@@ -62,6 +62,7 @@ type MailHost = TokioHost<MailCallRouter, MailClock>;
 type MailStore = InteractionAtomicStore<MailHost>;
 type MailDatabase = <TursoScope<'static, MailHost> as TransactionScope>::Database;
 type LocalMailTask = DeliverLocally<MailStore, MailDatabase, RouterDeliveryTypes, MailConsumer>;
+type RemoveMailRecord = fleet_sync_delivery::RemoveDeliveryRecord<MailStore, MailDatabase>;
 type SubmitMailTask = SubmitItem<MailStore, MailDatabase, RouterDeliveryTypes, MailConsumer>;
 type ReceiveMailTask = ReceiveItems<MailStore, MailDatabase, RouterDeliveryTypes, MailConsumer>;
 type ReportMailTask = ReportOutcome<MailStore, MailDatabase, RouterDeliveryTypes>;
@@ -222,11 +223,12 @@ impl MailDeliveryRuntime {
             .map_err(|_| StoreError::backend("mail store was already installed"))?;
         let mut engine = Engine::new(store.clone(), host.clone());
         engine.register(LocalMailTask::new(config, consumer.clone(), host.clone()))?;
+        engine.register(RemoveMailRecord::new())?;
         if let Some(session) = &session {
             let remote = session.task_config(config)?;
-            engine.register(SubmitMailTask::new(limits, consumer.clone()))?;
+            engine.register(SubmitMailTask::new(limits, consumer.clone(), host.clone()))?;
             engine.register(ReceiveMailTask::new(remote, consumer.clone()))?;
-            engine.register(ReportMailTask::new(remote))?;
+            engine.register(ReportMailTask::new(remote, host.clone()))?;
             engine.register(terminal_retirement::RetireTerminalMail { limits })?;
         }
         Ok(Self {

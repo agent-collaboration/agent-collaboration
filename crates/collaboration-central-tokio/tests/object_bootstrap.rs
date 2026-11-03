@@ -37,6 +37,13 @@ impl WakeScheduler for ProbeIo {
     }
 }
 impl PlatformIo for ProbeIo {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     async fn object_call(
         &self,
         _to: ObjectAddress,

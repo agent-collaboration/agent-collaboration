@@ -92,14 +92,8 @@ impl NoticeLedger {
         store
             .transaction(|scope| {
                 Box::pin(async move {
-                    let mut migrator = sqlx::migrate::Migrator::with_migrations(
-                        fleet_sync_session::SESSION_MIGRATOR
-                            .iter()
-                            .cloned()
-                            .collect::<Vec<_>>(),
-                    );
-                    migrator.dangerous_set_table_name("_fleet_sync_session_history");
-                    migrator
+                    fleet_sync_session::SESSION_MIGRATOR
+                        .with_history_table("_fleet_sync_session_history")
                         .run_direct(None, scope.executor(), false)
                         .await
                         .map_err(StoreError::backend)

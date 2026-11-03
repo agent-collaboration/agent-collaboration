@@ -129,7 +129,12 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
             .transaction(move |scope| {
                 Box::pin(async move {
                     Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(scope, limits)
-                        .enqueue(filler, relay)
+                        .enqueue(
+                            filler,
+                            relay,
+                            peer,
+                            runtime_primitives::Clock::now(&runtime_primitives::SystemClock),
+                        )
                         .await
                         .map_err(delivery_rollback)
                 })
@@ -229,7 +234,11 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
             .transaction(move |scope| {
                 Box::pin(async move {
                     Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(scope, limits)
-                        .record_failure(filler_id, DeliveryFailureKind::ExecutionFailed)
+                        .record_failure(
+                            filler_id,
+                            DeliveryFailureKind::ExecutionFailed,
+                            runtime_primitives::Clock::now(&runtime_primitives::SystemClock),
+                        )
                         .await
                         .map_err(delivery_rollback)
                 })
@@ -303,12 +312,15 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
                         Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(
                             scope, limits,
                         )
-                        .publish_status(fleet_sync_protocol::StatusPublication {
-                            item,
-                            status: DeliveryStatus::Cancelled,
-                            version: StatusVersion::new(2),
-                            cancel: Some(CancelResult::Prevented),
-                        })
+                        .publish_status(
+                            fleet_sync_protocol::StatusPublication {
+                                item,
+                                status: DeliveryStatus::Cancelled,
+                                version: StatusVersion::new(2),
+                                cancel: Some(CancelResult::Prevented),
+                            },
+                            runtime_primitives::Clock::now(&runtime_primitives::SystemClock),
+                        )
                         .await
                         .map_err(delivery_rollback)
                     })

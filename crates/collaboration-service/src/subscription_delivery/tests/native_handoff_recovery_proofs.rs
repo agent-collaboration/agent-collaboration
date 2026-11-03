@@ -122,9 +122,12 @@ async fn assert_recovered_custody(
     let rows = observer
         .transaction(|scope| {
             Box::pin(async move {
-                fleet_sync_delivery::test_support::snapshot(scope)
-                    .await
-                    .map_err(StoreError::backend)
+                fleet_sync_delivery::test_support::snapshot::<
+                    _,
+                    collaboration_contracts::RouterDeliveryTypes,
+                >(scope)
+                .await
+                .map_err(StoreError::backend)
             })
         })
         .await

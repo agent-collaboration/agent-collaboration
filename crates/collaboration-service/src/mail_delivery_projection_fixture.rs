@@ -38,6 +38,8 @@ use std::{
 };
 
 pub type ProjectionStore = InteractionAtomicStore<ProjectionHost>;
+type ProjectionRetention =
+    fleet_sync_delivery::RemoveDeliveryRecord<ProjectionStore, ProjectionDatabase>;
 type ProjectionDatabase = <TursoScope<'static, ProjectionHost> as TransactionScope>::Database;
 pub type ProjectionTask =
     DeliverLocally<ProjectionStore, ProjectionDatabase, RouterDeliveryTypes, ProjectionConsumer>;
@@ -277,6 +279,7 @@ impl Fixture {
     }
     pub fn engine(&self) -> Engine<ProjectionStore, ProjectionHost> {
         let mut engine = Engine::new(self.store.clone(), self.host.clone());
+        engine.register(ProjectionRetention::new()).unwrap();
         engine
             .register(ProjectionTask::new(
                 self.host.config.local,
@@ -342,7 +345,7 @@ impl Fixture {
                         config.local.owner,
                         config.local.limits,
                     )
-                    .enqueue_local_and_admit::<ProjectionTask, _>(
+                    .enqueue_local_and_admit::<ProjectionTask, ProjectionRetention, _>(
                         item,
                         consumer.as_ref(),
                         SyncTime::from_unix_millis(recorded_at().timestamp_millis()),

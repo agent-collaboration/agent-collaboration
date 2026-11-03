@@ -80,6 +80,13 @@ impl WakeScheduler for TokioObjectIo {
     }
 }
 impl PlatformIo for TokioObjectIo {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     #[cfg(feature = "conformance")]
     async fn before_local_call(&self, request: &[u8]) -> Result<(), CallFailure> {
         self.faults

@@ -23,7 +23,7 @@ async fn enqueue_with_answer(
                 )
                 .map_err(StoreError::backend)?;
                 let (admission, operation) = Outbox::<_, BoardDeliveryTypes>::new(scope, limits)
-                    .enqueue_and_admit::<NativeSubmit>(
+                    .enqueue_and_admit::<NativeSubmit, NativeRetention>(
                         item,
                         PeerId::new(uuid::Uuid::now_v7()).unwrap(),
                         PeerId::try_from("019f0000-0000-7000-8000-000000008131".to_owned())

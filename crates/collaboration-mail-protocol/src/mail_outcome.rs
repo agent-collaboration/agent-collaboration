@@ -1,5 +1,5 @@
 //! Canonical custody statuses and recipient reports are separate typed streams.
-use crate::{MailDigest, MailItemId, MailSeq};
+use crate::{MailDigest, MailItemId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -17,12 +17,13 @@ pub enum CarrierAcceptance {
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum MailStatus {
     Queued {},
-    Sent { seq: MailSeq },
+    Sent {},
     AtMachine {},
     Held {},
     Delivered { acceptance: CarrierAcceptance },
     Uncertain {},
     Expired {},
+    ExpiredAtUpgrade {},
     Cancelled {},
     Refused { reason: MailRefusal },
 }
@@ -34,6 +35,7 @@ impl MailStatus {
             Self::Delivered { .. }
                 | Self::Uncertain {}
                 | Self::Expired {}
+                | Self::ExpiredAtUpgrade {}
                 | Self::Cancelled {}
                 | Self::Refused { .. }
         )
@@ -44,6 +46,9 @@ impl MailStatus {
 pub enum MailRefusal {
     MailboxFull {},
     ItemConflict { existing: MailDigest },
+    NotThisMachine {},
+    NotRecipient {},
+    TooOld {},
     RecipientUnknown {},
     RecipientRevoked {},
     RecipientUnsupported {},

@@ -51,6 +51,7 @@ async fn a_relay_cancel_refusal_remains_another_canonical_control_on_same_id_rep
         mailbox: original.recipient().peer,
     };
     let limits = runtime.fixture.host.config.local.limits;
+    let observed_at = runtime_primitives::Clock::now(runtime.fixture.host.as_ref());
     // A typed SubmitResult stands in for relay policy; the public SDK transition,
     // replay classification and physical owner remain real. No canonical custody is claimed.
     use durable_steps::AtomicStore as _;
@@ -70,6 +71,7 @@ async fn a_relay_cancel_refusal_remains_another_canonical_control_on_same_id_rep
                         version: fleet_sync_protocol::StatusVersion::new(1),
                         cancel: Some(fleet_sync_protocol::CancelResult::Pending),
                     },
+                    observed_at,
                 )
                 .await
                 .map_err(durable_steps::StoreError::backend)

@@ -114,7 +114,6 @@ impl FrozenMailQuery {
                                 cancel,
                             },
                             _ => fleet_sync_protocol::SubmitResult::Accepted {
-                                seq: fleet_sync_protocol::DeliverySeq::new(1),
                                 status: fleet_sync_protocol::DeliveryStatus::Held,
                                 version: fleet_sync_protocol::StatusVersion::new(1),
                                 cancel: Some(fleet_sync_protocol::CancelResult::Pending),

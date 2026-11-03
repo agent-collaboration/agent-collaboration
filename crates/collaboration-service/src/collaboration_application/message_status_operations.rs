@@ -326,12 +326,13 @@ fn public_status(
 ) -> Result<RemoteDeliveryStatus, ()> {
     Ok(match status {
         DeliveryStatus::Queued => RemoteDeliveryStatus::Queued,
-        DeliveryStatus::Sent { seq } => RemoteDeliveryStatus::Sent { seq: seq.value() },
+        DeliveryStatus::Sent => RemoteDeliveryStatus::Sent,
         DeliveryStatus::AtRecipient => RemoteDeliveryStatus::AtMachine,
         DeliveryStatus::Held => RemoteDeliveryStatus::Held,
         DeliveryStatus::Delivered { acceptance } => RemoteDeliveryStatus::Delivered { acceptance },
         DeliveryStatus::Uncertain => RemoteDeliveryStatus::Uncertain,
         DeliveryStatus::Expired => RemoteDeliveryStatus::Expired,
+        DeliveryStatus::ExpiredAtUpgrade => RemoteDeliveryStatus::ExpiredAtUpgrade,
         DeliveryStatus::Cancelled => RemoteDeliveryStatus::Cancelled,
         DeliveryStatus::Refused { reason } => RemoteDeliveryStatus::Refused {
             reason: match reason {
@@ -398,6 +399,9 @@ fn public_status(
                             .map_err(|_| ())?,
                     }
                 }
+                DeliveryRefusal::NotThisMachine => RemoteDeliveryRefusal::NotThisMachine,
+                DeliveryRefusal::NotRecipient => RemoteDeliveryRefusal::NotRecipient,
+                DeliveryRefusal::TooOld => RemoteDeliveryRefusal::TooOld,
                 DeliveryRefusal::RecipientUnknown => RemoteDeliveryRefusal::RecipientUnknown,
                 DeliveryRefusal::RecipientRevoked => RemoteDeliveryRefusal::RecipientRevoked,
                 DeliveryRefusal::DroppedByPolicy => RemoteDeliveryRefusal::DroppedByPolicy,

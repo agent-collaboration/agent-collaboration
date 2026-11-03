@@ -23,6 +23,7 @@ mod registration_gate;
 mod session_routes;
 
 pub trait PlatformIo: Clock + IdSource + WakeScheduler + Send + Sync + 'static {
+    fn reply_deadline(&self, remaining: std::time::Duration) -> impl Future<Output = ()> + Send;
     #[cfg(feature = "conformance")]
     fn before_local_call(
         &self,
@@ -52,6 +53,7 @@ pub struct CoreHost<Io: PlatformIo> {
     io: std::sync::Arc<Io>,
     caller: SharedTaskCaller,
     publication: Option<crate::mail_status_dispatch::PublicationDispatcher>,
+    push: Option<crate::mail_push_dispatch::PushDispatcher>,
     authoritative_receiver: ReceiverId,
     #[cfg(feature = "conformance")]
     dispatches: std::sync::Arc<std::sync::Mutex<Vec<ObjectAddress>>>,
@@ -104,6 +106,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
             },
             authoritative_receiver,
             publication: None,
+            push: None,
             local_calls: Default::default(),
             #[cfg(feature = "conformance")]
             dispatches: Default::default(),
@@ -124,6 +127,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
             caller: SharedTaskCaller::StoreOnly,
             authoritative_receiver,
             publication: None,
+            push: None,
             local_calls: Default::default(),
             #[cfg(feature = "conformance")]
             dispatches: Default::default(),
@@ -140,6 +144,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
             caller: SharedTaskCaller::Delivery,
             authoritative_receiver: self.authoritative_receiver,
             publication: self.publication.clone(),
+            push: self.push.clone(),
             local_calls: self.local_calls.clone(),
             #[cfg(feature = "conformance")]
             dispatches: self.dispatches.clone(),
@@ -156,6 +161,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
             caller: SharedTaskCaller::Session(CallerContext::for_machine(installation)),
             authoritative_receiver: self.authoritative_receiver,
             publication: self.publication.clone(),
+            push: self.push.clone(),
             local_calls: self.local_calls.clone(),
             #[cfg(feature = "conformance")]
             dispatches: self.dispatches.clone(),
@@ -170,6 +176,10 @@ impl<Io: PlatformIo> CoreHost<Io> {
         publication: crate::mail_status_dispatch::PublicationDispatcher,
     ) -> Self {
         self.publication = Some(publication);
+        self
+    }
+    pub(crate) fn with_push(mut self, push: crate::mail_push_dispatch::PushDispatcher) -> Self {
+        self.push = Some(push);
         self
     }
     pub(crate) fn install_local_calls(
@@ -524,6 +534,15 @@ impl<Io: PlatformIo> Host for CoreHost<Io> {
         request: Call::Request,
         identity: CallId,
     ) -> Result<Call::Answer, CallFailure> {
+        if Call::KIND
+            == fleet_sync_delivery::PushCall::<board_sync_protocol::BoardDeliveryTypes>::KIND
+            && let Some(push) = &self.push
+        {
+            let target = decode(serde_json::to_value(target).map_err(encode_refusal)?)?;
+            let request = decode(serde_json::to_value(request).map_err(encode_refusal)?)?;
+            let answer = push(target, request, identity).await?;
+            return decode(serde_json::to_value(answer).map_err(encode_refusal)?);
+        }
         if Call::KIND == RegistrationAdmission::KIND {
             let _: RegistrationAdmission =
                 decode(serde_json::to_value(&target).map_err(encode_refusal)?)?;

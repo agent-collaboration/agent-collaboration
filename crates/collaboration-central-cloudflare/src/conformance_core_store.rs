@@ -32,6 +32,13 @@ impl WakeScheduler for ControlIo {
     }
 }
 impl PlatformIo for ControlIo {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        worker::send::SendFuture::new(worker::Delay::from(remaining))
+    }
+
     async fn object_call(
         &self,
         _to: ObjectAddress,
