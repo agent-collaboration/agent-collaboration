@@ -401,6 +401,7 @@ fn public_status(
                 }
                 DeliveryRefusal::NotThisMachine => RemoteDeliveryRefusal::NotThisMachine,
                 DeliveryRefusal::NotRecipient => RemoteDeliveryRefusal::NotRecipient,
+                DeliveryRefusal::NotSubmitter => RemoteDeliveryRefusal::NotSubmitter,
                 DeliveryRefusal::TooOld => RemoteDeliveryRefusal::TooOld,
                 DeliveryRefusal::RecipientUnknown => RemoteDeliveryRefusal::RecipientUnknown,
                 DeliveryRefusal::RecipientRevoked => RemoteDeliveryRefusal::RecipientRevoked,

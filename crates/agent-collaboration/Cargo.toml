@@ -54,7 +54,7 @@ collaboration-central-conformance = { version = "0.1.96", path = "../collaborati
 durable-steps.workspace = true
 fleet-sync-delivery = { workspace = true, features = ["test-support"] }
 interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
-sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0f5007a700c8af73a9d6a82922ed90f19cf80a94" }
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "f5945a6c0458618479173dbdabbc4e60f8f5f0fe" }
 fleet-sync-writer.workspace = true
 fleet-admission = { path = "../fleet-admission", version = "0.1.96" }
 board-central-test-support = { version = "0.1.96", path = "../board-central-test-support" }

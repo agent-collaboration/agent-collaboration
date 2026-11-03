@@ -131,6 +131,7 @@ pub enum RemoteDeliveryRefusal {
     },
     NotThisMachine,
     NotRecipient,
+    NotSubmitter,
     TooOld,
     RecipientUnknown,
     RecipientRevoked,

@@ -188,6 +188,10 @@ pub(crate) struct StoredProjectCreationDecision {
     pub project_id: Option<String>,
     pub creating_request: Option<String>,
     pub carrier_installation: Option<String>,
+    pub created_at: Option<String>,
+    pub created_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_class: Option<String>,
     pub request_id: Option<String>,
     pub canonical_hash: Option<String>,
     pub payload: Option<String>,
@@ -223,6 +227,10 @@ where
                     project_id: row.try_get("project_id")?,
                     creating_request: row.try_get("creating_request")?,
                     carrier_installation: row.try_get("carrier_installation")?,
+                    created_at: row.try_get("created_at")?,
+                    created_class: row.try_get("created_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_class: row.try_get("updated_class")?,
                     request_id: row.try_get("request_id")?,
                     canonical_hash: row.try_get("canonical_hash")?,
                     payload: row.try_get("payload")?,
@@ -242,6 +250,7 @@ pub(crate) fn insert_creation_decision<S>(
     project_id: String,
     creating_request: String,
     carrier_installation: String,
+    now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -255,7 +264,8 @@ where
         )))
         .bind(project_id)
         .bind(creating_request)
-        .bind(carrier_installation);
+        .bind(carrier_installation)
+        .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
     }

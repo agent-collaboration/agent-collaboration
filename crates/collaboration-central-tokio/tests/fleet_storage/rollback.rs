@@ -238,7 +238,7 @@ std::time::Duration::from_secs(2))?;
         let request_id=creation.request_id.as_str().to_owned();
         let saved_request=request_id.clone();
         let counts=fixture.object.transaction(move |scope|Box::pin(async move {
-            let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM creation_decisions) AS bindings,(SELECT count(*) FROM fleet_request_decisions WHERE request_id=?1) AS decisions")
+            let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM fleet_creation_decisions) AS bindings,(SELECT count(*) FROM fleet_request_decisions WHERE request_id=?1) AS decisions")
                 .bind(saved_request).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
             Ok((row.try_get::<i64,_>("bindings").map_err(StoreError::backend)?,row.try_get::<i64,_>("decisions").map_err(StoreError::backend)?))
         })).await?;
@@ -246,7 +246,7 @@ std::time::Duration::from_secs(2))?;
         let bytes=runtime.on_call(call).await.map_err(|error|format!("same creation retry failed: {error:?}"))?;
         assert!(matches!(serde_json::from_slice::<FleetRequestResult>(&bytes)?,FleetRequestResult::Decided(RequestDecision::Accepted {..})));
         let counts=fixture.object.transaction(move |scope|Box::pin(async move {
-            let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM creation_decisions) AS bindings,(SELECT count(*) FROM fleet_request_decisions WHERE request_id=?1) AS decisions")
+            let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM fleet_creation_decisions) AS bindings,(SELECT count(*) FROM fleet_request_decisions WHERE request_id=?1) AS decisions")
                 .bind(request_id).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
             Ok((row.try_get::<i64,_>("bindings").map_err(StoreError::backend)?,row.try_get::<i64,_>("decisions").map_err(StoreError::backend)?))
         })).await?;
