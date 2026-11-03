@@ -62,17 +62,17 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 [workspace.dependencies]
-fleet-sync-protocol = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "48d7505b85b9fccb54b4504da7a77cca75e2b6fe" }
-durable-steps = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "48d7505b85b9fccb54b4504da7a77cca75e2b6fe", default-features = false }
-fleet-sync-query-gen = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "48d7505b85b9fccb54b4504da7a77cca75e2b6fe", default-features = false }
-runtime-primitives = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "48d7505b85b9fccb54b4504da7a77cca75e2b6fe", default-features = false }
-fleet-sync-lease = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "48d7505b85b9fccb54b4504da7a77cca75e2b6fe", default-features = false }
-fleet-sync-session = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "48d7505b85b9fccb54b4504da7a77cca75e2b6fe", default-features = false }
-fleet-sync-tokio-runner = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "48d7505b85b9fccb54b4504da7a77cca75e2b6fe" }
-fleet-sync-service = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "48d7505b85b9fccb54b4504da7a77cca75e2b6fe" }
-fleet-sync-receiver = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "48d7505b85b9fccb54b4504da7a77cca75e2b6fe" }
-fleet-sync-writer = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "48d7505b85b9fccb54b4504da7a77cca75e2b6fe" }
-fleet-sync-delivery = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "48d7505b85b9fccb54b4504da7a77cca75e2b6fe", default-features = false }
+fleet-sync-protocol = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "c05b05da3b0e301cdaa9ba98fee5b63d636ab2e4" }
+durable-steps = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "c05b05da3b0e301cdaa9ba98fee5b63d636ab2e4", default-features = false }
+fleet-sync-query-gen = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "c05b05da3b0e301cdaa9ba98fee5b63d636ab2e4", default-features = false }
+runtime-primitives = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "c05b05da3b0e301cdaa9ba98fee5b63d636ab2e4", default-features = false }
+fleet-sync-lease = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "c05b05da3b0e301cdaa9ba98fee5b63d636ab2e4", default-features = false }
+fleet-sync-session = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "c05b05da3b0e301cdaa9ba98fee5b63d636ab2e4", default-features = false }
+fleet-sync-tokio-runner = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "c05b05da3b0e301cdaa9ba98fee5b63d636ab2e4" }
+fleet-sync-service = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "c05b05da3b0e301cdaa9ba98fee5b63d636ab2e4" }
+fleet-sync-receiver = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "c05b05da3b0e301cdaa9ba98fee5b63d636ab2e4" }
+fleet-sync-writer = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "c05b05da3b0e301cdaa9ba98fee5b63d636ab2e4" }
+fleet-sync-delivery = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "c05b05da3b0e301cdaa9ba98fee5b63d636ab2e4", default-features = false }
 aes-gcm = { version = "=0.11.1", features = ["zeroize"] }
 apple-native-keyring-store = { version = "=1.0.2", default-features = false, features = ["keychain"] }
 agent-client-protocol = "=2.2.0"
