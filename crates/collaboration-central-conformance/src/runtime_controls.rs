@@ -129,6 +129,8 @@ pub enum DispatchCallSelector {
     Any,
     FleetMailSubmit,
     FleetMailSubmitFor { peer: PeerId, item: ItemId },
+    FleetMachineNotice,
+    FleetClaimSettlement,
     InstallationPeer,
     ForwardRoute,
     CopyWrite,
