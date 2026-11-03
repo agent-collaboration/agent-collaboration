@@ -270,3 +270,13 @@ Library batch (L4, lease tables in `fleet-sync-lease`, first seven). Existing UU
 | `_fleet_sync_takeover_previews` | `token` PK; `database`; `fence`; `acked_epoch`; `acked_sequence`; `holder`; `last_seen` (nullable) |
 | `_fleet_sync_transfer_cancels` | `attempt` PK; `cancelled_by` (actor, scalar); `reason`; `cancelled_at` |
 | `_fleet_sync_schema_support` | `peer` PK; `session_id`; `attach_seq` (non-zero); `max_version` |
+
+Library batch (L4, lease workflow tables). Every library-owned answer, refusal and phase is flattened into typed nullable columns (which ones are set depends on the variant, validated in Rust); there are no JSON columns. Full column lists: `agent-fleet-sync` `tmp/d1-library/L4-lease-workflow-columns.json`.
+
+| Table | Key and shape |
+| --- | --- |
+| `_fleet_sync_renewal_attempts` | `id` UUIDv7 PK (new); UNIQUE(`database`, `attempt`); request (`request_epoch`, `holder`), answer (`answer_kind`, recorded lease, current lease view, `replayed` boolean), refusal fields |
+| `_fleet_sync_transfer_admissions` | `attempt` PK; `operation` UNIQUE; the immutable request: kind, `database`, `from_epoch`, `to_peer`, `claimant`, `reason`, preview fields, `requested_by`, `admitted_at`, `target_schema_max_version`, `follow_up` |
+| `_fleet_sync_transfers` | `attempt` PK; `database`; `new_epoch`; outcome (granted lease, pending transfer, failure, refusal fields); current phase (`phase_kind`, final position); cleanup failure |
+| `_fleet_sync_transfer_phase_history` | `id` UUIDv7 PK; `attempt`; `position` (0–7); `phase_kind`; final position; `entered_at`; UNIQUE(`attempt`, `position`); written in the parent's transaction |
+| `_fleet_sync_lifecycle_attempts` | `attempt` PK; `database`; intent (`intent_kind`, `writer`, origin, `import_digest`, expected fence); outcome and answer (lease view, `replayed` boolean); refusal and mismatch fields; `retired_at` |
