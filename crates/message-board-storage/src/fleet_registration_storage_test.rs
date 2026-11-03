@@ -32,8 +32,12 @@ async fn fleet_registration_typed_columns_keep_all_lifecycles_and_timestamps_aft
             .try_into()
             .unwrap(),
     );
-    preparation.launch.launch_context.commit =
-        Some("abcdef1234567890".to_owned().try_into().unwrap());
+    preparation.launch.launch_context.commit = Some(
+        "0123456789abcdef0123456789abcdef01234567"
+            .to_owned()
+            .try_into()
+            .unwrap(),
+    );
     preparation.launch.launch_context.model = Some("fixture-model".to_owned().try_into().unwrap());
     preparation.launch.machine_environment = fleet_identity_protocol::MachineEnvironment::CloudVm;
     preparation.launch.isolation.kind = fleet_identity_protocol::IsolationKind::Vm;
