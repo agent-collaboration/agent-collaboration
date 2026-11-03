@@ -91,7 +91,7 @@ pub(crate) async fn prepare_schedule(
     let inspected = store
         .lock()
         .await
-        .inspect_schedule::<SessionRef, EndpointRef, message_board::ProjectId>(&params.schedule_id)
+        .inspect_schedule::<SessionRef, EndpointRef>(&params.schedule_id)
         .await;
     let inspected = match inspected {
         Ok(inspected) => inspected,
@@ -153,7 +153,7 @@ pub(crate) async fn prepare_schedule(
     let admitted = store
         .lock()
         .await
-        .admit_schedule_preparation::<_, ScheduleInspection<SessionRef, EndpointRef, message_board::ProjectId>>(
+        .admit_schedule_preparation::<_, ScheduleInspection<SessionRef, EndpointRef>>(
             &ExternalAdmission {
                 operation_id: params.operation_id.clone(),
                 schedule_id: params.schedule_id.clone(),

@@ -83,7 +83,7 @@ pub async fn exercise(proof: &mut ProofContext, portable: PortableRunProof) -> P
         || imported.definition.enabled
         || !matches!(
             imported.definition.destination,
-            ExecutionDestination::FreshEachRunUnprepared { project_id: None }
+            ExecutionDestination::FreshEachRunUnprepared
         )
         || !matches!(&imported.imported_continuity, ImportedContinuity::ImportedSummary { text, .. } if text == &portable.summary_text)
     {

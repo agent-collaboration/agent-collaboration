@@ -44,7 +44,6 @@ pub(crate) fn worker_timeout_checkpoint(stage: &str) {
 type StoredRun = agent_automation::RunRecord<
     SessionRef,
     EndpointRef,
-    message_board::ProjectId,
     CodexGeneration,
     crate::stored_run_receipt::StoredRunReceipt,
 >;
@@ -79,7 +78,7 @@ impl ScheduledRunWorker {
             .store
             .lock()
             .await
-            .read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&id)
+            .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&id)
             .await?;
         if record.phase == RunPhase::Preparing {
             let origin = schedule_run_origin_reference(&record.schedule_id, &record.run_id);
@@ -234,7 +233,7 @@ impl ScheduledRunWorker {
                 self.store
                     .lock()
                     .await
-                    .retain_run_uncertainty::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
+                    .retain_run_uncertainty::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
                         RunUncertainty { run_id: id, effects: native },
                     )
                     .await?;
@@ -273,7 +272,7 @@ impl ScheduledRunWorker {
         ) {
             Ok(text) => text,
             Err(_) => {
-                self.store.lock().await.fail_run_preparation::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
+                self.store.lock().await.fail_run_preparation::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
                     automation_storage::RunPreparationFailure {
                         run_id: id,
                         effects: selected_evidence,
@@ -334,8 +333,7 @@ impl ScheduledRunWorker {
                     task_input: text.try_into().map_err(|_| StorageError::InvalidRecord)?,
                 }
             }
-            ExecutionDestination::Unprepared { .. }
-            | ExecutionDestination::FreshEachRunUnprepared { .. } => {
+            ExecutionDestination::Unprepared | ExecutionDestination::FreshEachRunUnprepared => {
                 return Err(StorageError::InvalidRecord);
             }
         };
@@ -399,11 +397,7 @@ impl ScheduledRunWorker {
         run_id: &RunId,
         schedule_id: &agent_automation::ScheduleId,
         target: &SessionRef,
-        inputs: &agent_automation::CapturedRunInputs<
-            SessionRef,
-            EndpointRef,
-            message_board::ProjectId,
-        >,
+        inputs: &agent_automation::CapturedRunInputs<SessionRef, EndpointRef>,
     ) -> Result<SchedulePushPreparation, StorageError> {
         let origin_router_ref = schedule_run_origin_reference(schedule_id, run_id);
         let encoded_origin_reference = origin_router_ref
@@ -579,11 +573,7 @@ impl ScheduledRunWorker {
     async fn prepare_target(
         &self,
         record: StoredRun,
-        inputs: agent_automation::CapturedRunInputs<
-            SessionRef,
-            EndpointRef,
-            message_board::ProjectId,
-        >,
+        inputs: agent_automation::CapturedRunInputs<SessionRef, EndpointRef>,
         text: String,
     ) -> Result<(), StorageError> {
         let destination = preparation_destination(&inputs)?;
@@ -600,16 +590,12 @@ impl ScheduledRunWorker {
                     .prepare_existing_target(&target, &cwd, &sink)
                     .await
             }
-            DestinationPreparation::Fresh {
-                endpoint,
-                cwd,
-                project_id,
-            } => {
+            DestinationPreparation::Fresh { endpoint, cwd, .. } => {
                 self.execution
                     .prepare_fresh_session(
                         collaboration_contracts::FreshSessionRequest {
                             run_id: record.run_id.clone(),
-                            project_id,
+                            project_id: None,
                             endpoint,
                             working_directory: cwd,
                             message: text.try_into().map_err(|_| StorageError::InvalidRecord)?,
@@ -630,11 +616,11 @@ impl ScheduledRunWorker {
                 if let RouteEffectEvidence::CodexAppServer(native) = &evidence
                     && route_preparation_unknown(&evidence)
                 {
-                    self.store.lock().await.retain_run_uncertainty::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
+                    self.store.lock().await.retain_run_uncertainty::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
                         RunUncertainty { run_id: record.run_id, effects: native.clone() },
                     ).await?;
                 } else {
-                    self.store.lock().await.fail_run_preparation::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
+                    self.store.lock().await.fail_run_preparation::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
                         automation_storage::RunPreparationFailure {
                             run_id: record.run_id,
                             effects: evidence,
@@ -730,7 +716,7 @@ fn route_target(evidence: &RouteEffectEvidence<SessionRef, CodexGeneration>) -> 
 }
 
 fn captured_target(
-    inputs: &agent_automation::CapturedRunInputs<SessionRef, EndpointRef, message_board::ProjectId>,
+    inputs: &agent_automation::CapturedRunInputs<SessionRef, EndpointRef>,
 ) -> Option<SessionRef> {
     match &inputs.execution_configuration.destination {
         ExecutionDestination::OwnedThread { target, .. } => Some(target.clone()),
@@ -739,28 +725,25 @@ fn captured_target(
 }
 
 fn preparation_destination(
-    inputs: &agent_automation::CapturedRunInputs<SessionRef, EndpointRef, message_board::ProjectId>,
+    inputs: &agent_automation::CapturedRunInputs<SessionRef, EndpointRef>,
 ) -> Result<DestinationPreparation, StorageError> {
     match &inputs.execution_configuration.destination {
-        ExecutionDestination::Unprepared { .. }
-        | ExecutionDestination::FreshEachRunUnprepared { .. } => Err(StorageError::InvalidRecord),
+        ExecutionDestination::Unprepared | ExecutionDestination::FreshEachRunUnprepared => {
+            Err(StorageError::InvalidRecord)
+        }
         ExecutionDestination::OwnedThread { target, cwd } => Ok(DestinationPreparation::Existing {
             target: target.clone(),
             cwd: cwd.clone(),
         }),
-        ExecutionDestination::FreshEachRun {
-            endpoint,
-            cwd,
-            project_id,
-        } => Ok(DestinationPreparation::Fresh {
+        ExecutionDestination::FreshEachRun { endpoint, cwd } => Ok(DestinationPreparation::Fresh {
             endpoint: endpoint.clone(),
             cwd: cwd.clone(),
-            project_id: project_id.clone(),
+            project_id: None,
         }),
     }
 }
 fn render_instructions(
-    inputs: &agent_automation::CapturedRunInputs<SessionRef, EndpointRef, message_board::ProjectId>,
+    inputs: &agent_automation::CapturedRunInputs<SessionRef, EndpointRef>,
     schedule_id: &str,
     run_id: &str,
     target: Option<&SessionRef>,

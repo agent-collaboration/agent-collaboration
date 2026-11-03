@@ -613,7 +613,7 @@ async fn schedule_send(
                     seconds: 5.try_into()?,
                 },
                 enabled: false,
-                destination: ExecutionDestination::Unprepared { project_id: None },
+                destination: ExecutionDestination::Unprepared,
                 execution_timeout_seconds: Some(120.try_into()?),
                 model: Some("gpt-5.6-luna".to_owned()),
                 effort: Some("low".to_owned()),

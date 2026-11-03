@@ -27,7 +27,6 @@ pub async fn exercise() -> ProofResult<()> {
                 },
                 enabled: true,
                 destination: ExecutionDestination::FreshEachRun {
-                    project_id: None,
                     endpoint: proof.endpoint.clone(),
                     cwd: proof.workspace.to_string_lossy().into_owned(),
                 },

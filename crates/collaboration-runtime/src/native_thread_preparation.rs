@@ -110,8 +110,13 @@ pub(crate) async fn prepare(
             input.effort,
         )
         .await
-        .map_err(|_| NativePreparationFailure {
-            explanation: "Session launch admission refused; no native mutation dispatched.",
+        .map_err(|error| NativePreparationFailure {
+            explanation: match error {
+                collaboration_contracts::HarnessLaunchFailure::ProjectRequired => {
+                    "Session launch requires a project; no native mutation dispatched."
+                }
+                _ => "Session launch admission refused; no native mutation dispatched.",
+            },
             effects: Box::new(effects.clone()),
             uncertain: false,
         })?;

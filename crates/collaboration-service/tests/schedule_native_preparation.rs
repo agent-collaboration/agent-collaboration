@@ -145,7 +145,7 @@ async fn exercise_preparation(
                 let current = backend_store
                     .lock()
                     .await
-                    .inspect_schedule::<SessionRef, collaboration_protocol::EndpointRef, message_board::ProjectId>(
+                    .inspect_schedule::<SessionRef, collaboration_protocol::EndpointRef>(
                         &backend_schedule,
                     )
                     .await?;

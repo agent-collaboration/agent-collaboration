@@ -9,7 +9,7 @@ use collaboration_protocol::{EndpointRef, SessionRef, UuidIdentity};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 pub(crate) struct ActivationRequest<'a> {
-    pub definition: &'a ScheduleDefinition<SessionRef, EndpointRef, message_board::ProjectId>,
+    pub definition: &'a ScheduleDefinition<SessionRef, EndpointRef>,
     pub schedule_id: Option<&'a ScheduleId>,
     pub operation_id: &'a OperationId,
     pub service_id: &'a UuidIdentity,
@@ -29,25 +29,21 @@ pub(crate) async fn validate(
         return Ok(());
     }
     let destination = match &request.definition.destination {
-        ExecutionDestination::FreshEachRunUnprepared { .. } => {
+        ExecutionDestination::FreshEachRunUnprepared => {
             return Err(StorageError::InvalidSchedule {
                 field: "destination",
                 reason: "use schedule update to set a freshEachRun endpoint and absolute workspace before enabling; execution mode remains fresh-per-run",
             });
         }
-        ExecutionDestination::Unprepared { .. } => {
+        ExecutionDestination::Unprepared => {
             return Err(StorageError::InvalidSchedule {
                 field: "enabled",
                 reason: "prepare the destination before enabling future triggers",
             });
         }
-        ExecutionDestination::FreshEachRun {
-            endpoint,
-            project_id,
-            ..
-        } => ScheduleDestination::Fresh {
+        ExecutionDestination::FreshEachRun { endpoint, .. } => ScheduleDestination::Fresh {
             endpoint: endpoint.clone(),
-            project_id: project_id.clone(),
+            project_id: None,
         },
         ExecutionDestination::OwnedThread { target, .. } => {
             let Some(schedule_id) = request.schedule_id else {

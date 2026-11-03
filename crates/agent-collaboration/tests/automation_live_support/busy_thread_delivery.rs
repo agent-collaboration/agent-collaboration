@@ -55,7 +55,7 @@ pub async fn exercise() -> ProofResult<()> {
                     seconds: 5.try_into()?,
                 },
                 enabled: false,
-                destination: ExecutionDestination::Unprepared { project_id: None },
+                destination: ExecutionDestination::Unprepared,
                 execution_timeout_seconds: Some(120.try_into()?),
                 model: Some("gpt-5.6-sol".into()),
                 effort: Some("medium".into()),

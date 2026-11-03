@@ -29,10 +29,7 @@ impl PreparationEvidenceSink for Evidence {
     fn record_prepared<'a>(
         &'a self,
         _: &'a PreparedTarget,
-    ) -> DeliveryFuture<
-        'a,
-        automation_storage::ScheduleInspection<SessionRef, EndpointRef, message_board::ProjectId>,
-    > {
+    ) -> DeliveryFuture<'a, automation_storage::ScheduleInspection<SessionRef, EndpointRef>> {
         Box::pin(async { Err(DeliveryContractError::EvidencePersistence) })
     }
     fn record_failure<'a>(
@@ -202,7 +199,7 @@ impl DirectRuntime {
             run_id: SECOND.to_owned().try_into().unwrap(), endpoint: self.endpoint.clone(),
             working_directory: self.fixture.root.path().to_str().unwrap().to_owned(),
             project_id: Some(PROJECT.to_owned().try_into().unwrap()), message: "Fixture task".to_owned().try_into().unwrap(),
-            inputs: serde_json::from_value(json!({"scheduleChangeId":FIRST,"instructionRevisionId":FIRST,"instructionText":"Fixture task","continuity":{"kind":"none"},"executionConfiguration":{"destination":{"kind":"freshEachRun","endpoint":self.endpoint,"cwd":self.fixture.root.path(),"projectId":PROJECT},"executionTimeoutSeconds":null,"model":"fixture-native-model","effort":"medium"}})).unwrap(),
+            inputs: serde_json::from_value(json!({"scheduleChangeId":FIRST,"instructionRevisionId":FIRST,"instructionText":"Fixture task","continuity":{"kind":"none"},"executionConfiguration":{"destination":{"kind":"freshEachRun","endpoint":self.endpoint,"cwd":self.fixture.root.path()},"executionTimeoutSeconds":null,"model":"fixture-native-model","effort":"medium"}})).unwrap(),
         }
     }
 }
@@ -301,6 +298,53 @@ async fn f4a_native_delivery_missing_capability_never_creates() {
             .fixture
             .authority
             .registrations
+            .lock()
+            .unwrap()
+            .is_empty()
+    );
+    runtime.native.shutdown().await;
+}
+
+// Oracle: Lead01a1a1d4-ef85. Token starts need a project before any native mutation.
+// The paired Access test below preserves main's project-free scheduled start.
+// No pre-fix semantic red collected: source export awaits owner approval.
+#[tokio::test]
+async fn f4a_native_delivery_missing_project_returns_the_reason_before_any_create() {
+    let runtime = DirectRuntime::new(SessionRegistrationMode::MachineTokens, false).await;
+    let mut request = runtime.request(false, FIRST);
+    let DestinationPreparation::Fresh { project_id, .. } = &mut request.destination else {
+        panic!("fresh native fixture destination")
+    };
+    *project_id = None;
+    let outcome = runtime
+        .route
+        .prepare_destination(request, &Evidence::default())
+        .await
+        .unwrap();
+    let SchedulePreparationOutcome::Failed(failure) = outcome else {
+        panic!("project-free token start was admitted: {outcome:?}")
+    };
+    assert!(
+        failure.explanation.to_ascii_lowercase().contains("project"),
+        "{failure:?}"
+    );
+    assert!(!failure.uncertain, "project refusal must precede dispatch");
+    assert!(runtime.native.creates.lock().unwrap().is_empty());
+    assert!(runtime.fixture.authority.checks.lock().unwrap().is_empty());
+    assert!(
+        runtime
+            .fixture
+            .authority
+            .registrations
+            .lock()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        runtime
+            .fixture
+            .repository
+            .records
             .lock()
             .unwrap()
             .is_empty()

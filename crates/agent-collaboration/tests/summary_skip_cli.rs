@@ -32,39 +32,30 @@ async fn cli_summary_skip_preserves_worker_and_releases_schedule()
         )
         .await?;
     let schedule = store
-        .create_schedule(
-            &ScheduleCreate::<SessionRef, EndpointRef, message_board::ProjectId> {
-                operation_id: OperationId::generate(),
-                definition: ScheduleDefinition {
-                    instruction_id: instruction.instruction_id,
-                    timing: TimingRule::Interval { seconds: 60 },
-                    enabled: true,
-                    destination: ExecutionDestination::FreshEachRun {
-                        project_id: None,
-                        endpoint: target.endpoint.clone(),
-                        cwd: "/isolated-fixture".into(),
-                    },
-                    execution_timeout_seconds: Some(120),
-                    model: Some("gpt-5.6-sol".into()),
-                    effort: Some("medium".into()),
+        .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
+            operation_id: OperationId::generate(),
+            definition: ScheduleDefinition {
+                instruction_id: instruction.instruction_id,
+                timing: TimingRule::Interval { seconds: 60 },
+                enabled: true,
+                destination: ExecutionDestination::FreshEachRun {
+                    endpoint: target.endpoint.clone(),
+                    cwd: "/isolated-fixture".into(),
                 },
-                imported_continuity: ContinuityInput::None,
-                now_ms: 0,
+                execution_timeout_seconds: Some(120),
+                model: Some("gpt-5.6-sol".into()),
+                effort: Some("medium".into()),
             },
-        )
+            imported_continuity: ContinuityInput::None,
+            now_ms: 0,
+        })
         .await?;
     let run_id = store
-        .enqueue_due_run::<SessionRef, EndpointRef, message_board::ProjectId>(
-            &schedule.schedule_id,
-            60000,
-        )
+        .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60000)
         .await?
         .ok_or("run missing")?;
     store
-        .admit_waiting_run::<SessionRef, EndpointRef, message_board::ProjectId>(
-            &schedule.schedule_id,
-            60001,
-        )
+        .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60001)
         .await?;
     let mut effects: NativeEffectEvidence<SessionRef, CodexGeneration> = serde_json::from_value(
         json!({"target":target,"generation":generation,"clientUserMessageId":run_id,"nativeTurnId":null,"nativeSubmissionId":null,"allocation":"notRequested","resume":"notRequested","submission":"dispatching","cessation":"unconfirmed"}),
@@ -72,7 +63,7 @@ async fn cli_summary_skip_preserves_worker_and_releases_schedule()
     let mut prepared = effects.clone();
     prepared.submission = agent_automation::SubmissionEffect::NotDispatched;
     store
-        .begin_run_preparation::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, NativeSendReceipt>(
+        .begin_run_preparation::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
             automation_storage::RunPreparationIntent {
                 run_id: run_id.clone(),
                 effects: prepared.into(),
@@ -80,14 +71,12 @@ async fn cli_summary_skip_preserves_worker_and_releases_schedule()
         )
         .await?;
     store
-        .begin_run_dispatch::<_, EndpointRef, message_board::ProjectId, _, NativeSendReceipt>(
-            RunDispatchIntent {
-                run_id: run_id.clone(),
-                effects: effects.clone().into(),
-                configured_timeout_seconds: 3600,
-                now_ms: 61000,
-            },
-        )
+        .begin_run_dispatch::<_, EndpointRef, _, NativeSendReceipt>(RunDispatchIntent {
+            run_id: run_id.clone(),
+            effects: effects.clone().into(),
+            configured_timeout_seconds: 3600,
+            now_ms: 61000,
+        })
         .await?;
     effects.native_turn_id = Some("recorded-turn".into());
     effects.submission = agent_automation::SubmissionEffect::Accepted;
@@ -95,19 +84,17 @@ async fn cli_summary_skip_preserves_worker_and_releases_schedule()
         json!({"target":target,"generation":generation,"inputKind":"agent","representation":"declaredAgentText","clientUserMessageId":run_id,"resumeEffect":"notRequested","acceptance":{"kind":"nativeInputAccepted","operation":"turnStart","disposition":"startedOrSteered","turnId":"recorded-turn"}}),
     )?;
     store
-        .record_run_submission::<_, EndpointRef, message_board::ProjectId, _, _>(
-            automation_storage::RunSubmissionResult {
-                run_id: run_id.clone(),
-                effects: effects.clone().into(),
-                outcome: automation_storage::RunSubmissionOutcome::Accepted {
-                    turn_id: "recorded-turn".into(),
-                    receipt,
-                },
+        .record_run_submission::<_, EndpointRef, _, _>(automation_storage::RunSubmissionResult {
+            run_id: run_id.clone(),
+            effects: effects.clone().into(),
+            outcome: automation_storage::RunSubmissionOutcome::Accepted {
+                turn_id: "recorded-turn".into(),
+                receipt,
             },
-        )
+        })
         .await?;
     store
-        .complete_run_settlement::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, NativeSendReceipt>(
+        .complete_run_settlement::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
             automation_storage::RunCompletion {
                 run_id: run_id.clone(),
                 settlement: automation_storage::RunStopIdentity::NativeTurn("recorded-turn".into()),
@@ -117,7 +104,7 @@ async fn cli_summary_skip_preserves_worker_and_releases_schedule()
         )
         .await?;
     store
-        .begin_required_summary::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, NativeSendReceipt>(
+        .begin_required_summary::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(
             &automation_storage::SummaryAdmission {
                 run_id: run_id.clone(),
                 timeout_seconds: 900,
@@ -126,7 +113,7 @@ async fn cli_summary_skip_preserves_worker_and_releases_schedule()
         )
         .await?;
     let previous = store
-        .read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, NativeSendReceipt>(&run_id)
+        .read_run::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&run_id)
         .await?
         .summary_attempt
         .ok_or("missing attempt")?;
@@ -185,7 +172,7 @@ async fn cli_summary_skip_preserves_worker_and_releases_schedule()
     let current = store
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, NativeSendReceipt>(&run_id)
+        .read_run::<SessionRef, EndpointRef, CodexGeneration, NativeSendReceipt>(&run_id)
         .await?;
     if !matches!(
         current.worker_outcome,
@@ -197,9 +184,7 @@ async fn cli_summary_skip_preserves_worker_and_releases_schedule()
         || store
             .lock()
             .await
-            .inspect_schedule::<SessionRef, EndpointRef, message_board::ProjectId>(
-                &schedule.schedule_id,
-            )
+            .inspect_schedule::<SessionRef, EndpointRef>(&schedule.schedule_id)
             .await?
             .active_run_id
             .is_some()

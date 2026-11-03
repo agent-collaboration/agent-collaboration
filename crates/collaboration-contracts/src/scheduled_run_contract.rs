@@ -31,7 +31,7 @@ pub struct FreshSessionRequest {
     pub working_directory: String,
     pub project_id: Option<message_board::ProjectId>,
     pub message: MessageText,
-    pub inputs: CapturedRunInputs<SessionRef, EndpointRef, message_board::ProjectId>,
+    pub inputs: CapturedRunInputs<SessionRef, EndpointRef>,
 }
 
 #[derive(Clone, Debug)]
@@ -74,10 +74,7 @@ pub trait PreparationEvidenceSink: Send + Sync {
     fn record_prepared<'a>(
         &'a self,
         prepared: &'a PreparedTarget,
-    ) -> DeliveryFuture<
-        'a,
-        automation_storage::ScheduleInspection<SessionRef, EndpointRef, message_board::ProjectId>,
-    >;
+    ) -> DeliveryFuture<'a, automation_storage::ScheduleInspection<SessionRef, EndpointRef>>;
 
     fn record_failure<'a>(
         &'a self,
@@ -93,7 +90,7 @@ pub struct ScheduledRunSubmission {
     pub target: SessionRef,
     pub payload: ScheduledRunPayload,
     pub precondition: DeliveryPrecondition,
-    pub inputs: CapturedRunInputs<SessionRef, EndpointRef, message_board::ProjectId>,
+    pub inputs: CapturedRunInputs<SessionRef, EndpointRef>,
     pub recorded: RouteEffectEvidence<SessionRef, CodexGeneration>,
 }
 
@@ -128,7 +125,7 @@ pub struct RunObservationContext {
     pub run_id: RunId,
     pub phase: RunPhase,
     pub recorded: RouteEffectEvidence<SessionRef, CodexGeneration>,
-    pub inputs: CapturedRunInputs<SessionRef, EndpointRef, message_board::ProjectId>,
+    pub inputs: CapturedRunInputs<SessionRef, EndpointRef>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

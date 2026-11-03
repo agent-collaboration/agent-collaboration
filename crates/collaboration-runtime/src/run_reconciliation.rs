@@ -14,7 +14,6 @@ use tokio::sync::Mutex;
 pub(crate) type StoredRun = RunRecord<
     SessionRef,
     EndpointRef,
-    message_board::ProjectId,
     CodexGeneration,
     crate::stored_run_receipt::StoredRunReceipt,
 >;
@@ -127,7 +126,7 @@ pub(crate) async fn persist_settlement(
     store
         .lock()
         .await
-        .complete_run_settlement::<SessionRef, EndpointRef, message_board::ProjectId, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
+        .complete_run_settlement::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
             RunCompletion {
                 run_id: record.run_id.clone(),
                 settlement: identity,

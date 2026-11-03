@@ -781,17 +781,16 @@ mod tests {
             "nativeSubmissionId":null,"allocation":"notRequested","resume":"notRequested",
             "submission":"accepted","cessation":"unconfirmed"
         }))?;
-        let inputs: CapturedRunInputs<SessionRef, EndpointRef, message_board::ProjectId> =
-            serde_json::from_value(json!({
-                "scheduleChangeId":agent_automation::ChangeId::generate(),
-                "instructionRevisionId":agent_automation::RevisionId::generate(),
-                "instructionText":"Check work",
-                "continuity":{"kind":"none"},
-                "executionConfiguration":{
-                    "destination":{"kind":"ownedThread","target":target,"cwd":"/tmp"},
-                    "executionTimeoutSeconds":120,"model":"fixture-model","effort":"medium"
-                }
-            }))?;
+        let inputs: CapturedRunInputs<SessionRef, EndpointRef> = serde_json::from_value(json!({
+            "scheduleChangeId":agent_automation::ChangeId::generate(),
+            "instructionRevisionId":agent_automation::RevisionId::generate(),
+            "instructionText":"Check work",
+            "continuity":{"kind":"none"},
+            "executionConfiguration":{
+                "destination":{"kind":"ownedThread","target":target,"cwd":"/tmp"},
+                "executionTimeoutSeconds":120,"model":"fixture-model","effort":"medium"
+            }
+        }))?;
         let sink = CountingStopSink {
             writes: AtomicUsize::new(0),
         };

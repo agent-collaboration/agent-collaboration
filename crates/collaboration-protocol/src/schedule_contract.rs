@@ -9,24 +9,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ExecutionDestination {
-    Unprepared {
-        #[serde(rename = "projectId", default, skip_serializing_if = "Option::is_none")]
-        project_id: Option<message_board::ProjectId>,
-    },
-    FreshEachRunUnprepared {
-        #[serde(rename = "projectId", default, skip_serializing_if = "Option::is_none")]
-        project_id: Option<message_board::ProjectId>,
-    },
-    OwnedThread {
-        target: SessionRef,
-        cwd: String,
-    },
-    FreshEachRun {
-        endpoint: EndpointRef,
-        cwd: String,
-        #[serde(rename = "projectId", default, skip_serializing_if = "Option::is_none")]
-        project_id: Option<message_board::ProjectId>,
-    },
+    Unprepared,
+    FreshEachRunUnprepared,
+    OwnedThread { target: SessionRef, cwd: String },
+    FreshEachRun { endpoint: EndpointRef, cwd: String },
 }
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
