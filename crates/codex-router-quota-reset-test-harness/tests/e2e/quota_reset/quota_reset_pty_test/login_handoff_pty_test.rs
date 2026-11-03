@@ -110,6 +110,8 @@ async fn real_login_child_inherits_restored_terminal_and_returns_after_each_exit
             "one login outcome must launch exactly one recording child",
         )?;
         let receipt = receipts.first().ok_or("login child receipt missing")?;
+        // The harness admits a canonical root, including through macOS temp aliases.
+        let expected_router_root = fixture.root().canonicalize()?;
         ensure(
             receipt.exit_code == exit_code,
             "recorded login exit status must match the injected outcome",
@@ -124,8 +126,7 @@ async fn real_login_child_inherits_restored_terminal_and_returns_after_each_exit
                     "--label",
                     "pty-beta",
                     "--router-root",
-                    fixture
-                        .root()
+                    expected_router_root
                         .to_str()
                         .ok_or_else(|| std::io::Error::other("fixture root is not UTF-8"))?,
                 ],
