@@ -121,6 +121,11 @@ impl CollaborationLifecycle {
         if self.runtime.is_none() {
             let inputs_started_at = std::time::Instant::now();
             let router_root = self.router_root.clone();
+            crate::enrollment_reset::resume_enrollment_reset(
+                &crate::router_collaboration_directory(&router_root),
+                &self.directory,
+            )
+            .await?;
             let board_session = tokio::task::spawn_blocking(move || {
                 crate::fleet_enrollment_file::load_router_fleet_enrollment(&router_root)
             })
@@ -146,6 +151,9 @@ impl CollaborationLifecycle {
             );
             let mut runtime = CollaborationRuntime::start_for_host_with_router_proxy_endpoint(
                 crate::HostCollaborationInputs {
+                    enrollment_reset_directory: crate::router_collaboration_directory(
+                        &self.router_root,
+                    ),
                     collaboration_runtime: CollaborationRuntimeInputs {
                         board_session,
                         directory: self.directory.clone(),
