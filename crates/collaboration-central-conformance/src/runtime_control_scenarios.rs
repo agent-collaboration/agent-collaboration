@@ -98,11 +98,43 @@ pub async fn run_runtime_control_conformance(client: &ConformanceClient) -> Conf
             return Err("resuming the real dispatch did not apply its exact piece".into());
         }
         require_status(&mut peer.socket, fixture.database, 4).await?;
+        control(client, session.clone(), RuntimeControl::HoldNextSelectedDispatch {
+            destination: ObjectAddress::Fleet, call: crate::DispatchCallSelector::ForwardRoute,
+        }).await?;
+        let local_frame = FrameId::new(durable_steps::Uuid::now_v7())?;
+        let project = message_board::ProjectId::try_from(durable_steps::Uuid::now_v7().to_string())?;
+        send(&mut peer.socket, local_frame, OperationRequest::Consumer(BoardConsumerRequest::ForwardedPost {
+            project: project.clone(), post: board_sync_protocol::ForwardedPost {
+                kind: board_sync_protocol::ForwardedPostKind::ThreadPost,
+                body: BoardPayload::encode(&serde_json::json!({"local":"dispatch hold"}))?,
+            },
+        })).await?;
+        let DispatchFaultObservation::Held {destination, request} = control(client, session.clone(), RuntimeControl::AwaitHeldDispatch).await?.dispatch
+            else {return Err("the local Session-to-Fleet call bypassed its dispatch hold".into());};
+        let held: serde_json::Value = serde_json::from_slice(&request)?;
+        if destination != ObjectAddress::Fleet || held.get("kind") != Some(&serde_json::json!("central.forward-route"))
+            || held.get("sourceFace") != Some(&serde_json::json!("session"))
+            || held.pointer("/request/session/peer") != Some(&serde_json::json!(fixture.peer))
+            || held.pointer("/request/project") != Some(&serde_json::json!(project)) {
+            return Err("the local dispatch hold captured another call or principal".into());
+        }
+        control(client, session.clone(), RuntimeControl::ResumeDispatch).await?;
+        if !matches!(receive(&mut peer.socket, local_frame).await?, OperationAnswer::Consumer(BoardConsumerAnswer::ForwardedPost(board_sync_protocol::ForwardOutcome::NotHeld))) {
+            return Err("resuming the local dispatch did not complete its exact missing-project request".into());
+        }
+        println!("LOCAL_DISPATCH_CASE exact_local_Session_to_Fleet_hold_and_release passed");
         // Advance the shared Fleet clock after the session admissions it also owns.
         pin_fleet_clock(client, &mut peer.socket).await?;
         if !matches!(control(client, copy.clone(), RuntimeControl::Observe).await?.clock, crate::ClockObservation::Wall) {
             return Err("Fleet SetTime leaked to a different object's clock".into());
         }
+        let crate::ClockObservation::Pinned {now} = control(client, session.clone(), RuntimeControl::Observe).await?.clock
+            else {return Err("Fleet clock lost its pin".into());};
+        let fresh = enroll_admitted_peer(client, &durable_steps::Uuid::now_v7().to_string(), &durable_steps::Uuid::now_v7().to_string(), "after-pinned-clock", &durable_steps::Uuid::now_v7().to_string()).await?;
+        let same_clock = matches!(control(client, session.clone(), RuntimeControl::Observe).await?.clock, crate::ClockObservation::Pinned {now:actual} if actual == now);
+        fresh.socket.close(reqwest_websocket::CloseCode::Normal, None).await?;
+        if !same_clock {return Err("admission changed the pinned clock instead of waking due work".into());}
+        println!("PINNED_CLOCK_CASE new_Hello_admission_wakes_at_the_same_injected_time passed");
         println!("RUNTIME_CONTROLS_CASE real_object_clock_late_storage_rollback_exact_answer_drop_and_owned_dispatch_hold passed");
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }.await;

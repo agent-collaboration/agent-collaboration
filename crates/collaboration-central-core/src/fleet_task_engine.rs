@@ -3,8 +3,12 @@ use durable_steps::{
     AtomicStore, BoxFuture, DriveReport, Engine, OperationId, OperationStatus, RequestKey,
     StartRefusal, StoreError, storage::TransactionScope,
 };
-use fleet_sync_lease::{ImportTask, PreviewTakeoverTask, RegistrationTask, RetirementTask};
-use fleet_sync_protocol::{Import, PreviewTakeover, Registration, Retirement};
+#[cfg(feature = "conformance")]
+use fleet_sync_lease::ImportTask;
+use fleet_sync_lease::{PreviewTakeoverTask, RegistrationTask, RetirementTask};
+#[cfg(feature = "conformance")]
+use fleet_sync_protocol::Import;
+use fleet_sync_protocol::{PreviewTakeover, Registration, Retirement};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -13,6 +17,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 pub(crate) enum FleetTaskInput {
     Register(Registration),
+    #[cfg(feature = "conformance")]
     Import(Import),
     Retire(Retirement),
     Preview(PreviewTakeover),
@@ -32,6 +37,7 @@ pub(crate) trait FleetTaskEngine: Send + Sync {
     ) -> BoxFuture<'call, Result<OperationId, StartRefusal>> {
         self.start(key, FleetTaskInput::Register(input))
     }
+    #[cfg(feature = "conformance")]
     fn start_import<'call>(
         &'call self,
         key: &'call RequestKey,
@@ -86,6 +92,7 @@ where
                         .start::<RegistrationTask<Store, Driver, Hook>>(key, input)
                         .await
                 }
+                #[cfg(feature = "conformance")]
                 FleetTaskInput::Import(input) => {
                     self.engine
                         .start::<ImportTask<Store, Driver, Hook>>(key, input)

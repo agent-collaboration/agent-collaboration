@@ -129,6 +129,9 @@ async fn reconnect(
             .into(),
         ))
         .await?;
+    ConformanceClient::new(base)?
+        .wake_due_after_hello(session_id)
+        .await?;
     let proof =
         tokio::time::timeout(Duration::from_secs(5), async {
             loop {

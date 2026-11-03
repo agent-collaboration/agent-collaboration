@@ -17,6 +17,7 @@ pub(super) fn bounded_http_client() -> ConformanceResult<reqwest::Client> {
 }
 
 pub(super) struct NormalSession {
+    base: String,
     pub service: String,
     pub peer: durable_steps::Uuid,
     pub session: String,
@@ -56,6 +57,7 @@ impl NormalSession {
             return Err(format!("normal socket was not Opening: {connection}").into());
         }
         Ok(Self {
+            base: base.to_owned(),
             connection: connection
                 .get("connection")
                 .and_then(Value::as_str)
@@ -81,6 +83,9 @@ impl NormalSession {
     }
 
     pub async fn welcome(&mut self) -> ConformanceResult<()> {
+        ConformanceClient::new(&self.base)?
+            .wake_due_after_hello(self.session.clone().try_into()?)
+            .await?;
         let actual = data(&mut self.socket).await?;
         if actual != json!({"kind":"welcome","value":{"sessionId":self.session,"databases":[]}}) {
             return Err(format!("normal session Welcome changed: {actual}").into());
@@ -120,6 +125,7 @@ impl NormalSession {
             .ok_or("replacement Opening connection missing")?
             .to_owned();
         let mut replacement = Self {
+            base: base.to_owned(),
             service: self.service.clone(),
             peer: admitted.peer,
             session: self.session.clone(),
@@ -163,7 +169,7 @@ impl NormalSession {
             base,
             "runtime",
             json!({
-                "address":{"kind":"connection","value":self.service},"command":command
+                "address":{"kind":"fleet"},"command":command
             }),
         )
         .await

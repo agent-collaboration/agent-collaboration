@@ -13,7 +13,7 @@ pub(super) async fn prepare_cleanup(
         chrono::DateTime::from_timestamp_millis(chrono::Utc::now().timestamp_millis())
             .ok_or("cleanup fixture time is outside range")?,
     );
-    for address in [ObjectAddress::Registry, ObjectAddress::Fleet] {
+    for address in [ObjectAddress::Fleet, ObjectAddress::Fleet] {
         control(base, address, RuntimeControl::SetTime { now: at }).await?;
     }
     let client = ConformanceClient::new(base)?;
@@ -33,6 +33,9 @@ pub(super) async fn prepare_cleanup(
             json!({"kind":"hello","value":{"sessionId":session,"schemaSupport":{"maxVersion":0}}})
                 .to_string(),
         ))
+        .await?;
+    ConformanceClient::new(base)?
+        .wake_due_after_hello(fleet_sync_protocol::SessionId::new(session)?)
         .await?;
     let welcome = tokio::time::timeout(Duration::from_secs(5), claimant.socket.next())
         .await?
@@ -79,7 +82,7 @@ pub(super) async fn prepare_cleanup(
     let copy = ObjectAddress::Copy(database);
     control(
         base,
-        ObjectAddress::Registry,
+        ObjectAddress::Fleet,
         RuntimeControl::HoldNextDispatch {
             destination: copy.clone(),
         },
@@ -111,7 +114,7 @@ pub(super) async fn prepare_cleanup(
     }
     control(
         base,
-        ObjectAddress::Registry,
+        ObjectAddress::Fleet,
         RuntimeControl::ResumeDispatchAndHoldNext {
             destination: copy.clone(),
         },
@@ -152,7 +155,7 @@ pub(super) async fn prepare_cleanup(
         CleanupLoss::Dispatch => {
             control(
                 base,
-                ObjectAddress::Registry,
+                ObjectAddress::Fleet,
                 RuntimeControl::ResumeDispatchAndHoldNext {
                     destination: ObjectAddress::Fleet,
                 },
@@ -162,18 +165,13 @@ pub(super) async fn prepare_cleanup(
         CleanupLoss::Acknowledgement => {
             control(
                 base,
-                ObjectAddress::Registry,
+                ObjectAddress::Fleet,
                 RuntimeControl::DropNextObjectReply {
                     destination: ObjectAddress::Fleet,
                 },
             )
             .await?;
-            control(
-                base,
-                ObjectAddress::Registry,
-                RuntimeControl::ResumeDispatch,
-            )
-            .await?;
+            control(base, ObjectAddress::Fleet, RuntimeControl::ResumeDispatch).await?;
         }
     }
     let call = match loss {
@@ -181,7 +179,7 @@ pub(super) async fn prepare_cleanup(
         CleanupLoss::Acknowledgement => {
             let observed = control(
                 base,
-                ObjectAddress::Registry,
+                ObjectAddress::Fleet,
                 RuntimeControl::AwaitDroppedObjectReply,
             )
             .await?;
@@ -274,7 +272,7 @@ async fn await_call(base: &str, destination: &ObjectAddress) -> ConformanceResul
         Duration::from_secs(8),
         control(
             base,
-            ObjectAddress::Registry,
+            ObjectAddress::Fleet,
             RuntimeControl::AwaitHeldDispatch,
         ),
     )

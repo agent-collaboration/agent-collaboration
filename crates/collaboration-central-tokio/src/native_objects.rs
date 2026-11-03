@@ -80,6 +80,19 @@ impl WakeScheduler for TokioObjectIo {
     }
 }
 impl PlatformIo for TokioObjectIo {
+    #[cfg(feature = "conformance")]
+    async fn before_local_call(&self, request: &[u8]) -> Result<(), CallFailure> {
+        self.faults
+            .before_dispatch(&ObjectAddress::Fleet, request)
+            .await
+            .map_err(|_| CallFailure::AnswerLost)
+    }
+    #[cfg(feature = "conformance")]
+    fn drop_local_reply(&self, request: &[u8]) -> Result<bool, CallFailure> {
+        self.faults
+            .drop_successful_object_reply(&ObjectAddress::Fleet, request)
+            .map_err(|_| CallFailure::AnswerLost)
+    }
     async fn object_call(
         &self,
         address: ObjectAddress,
@@ -564,7 +577,7 @@ impl NativeObjects {
     #[cfg(feature = "conformance")]
     pub(crate) async fn session_connections(
         &self,
-        service: &message_board::ServiceId,
+        service: Option<&message_board::ServiceId>,
     ) -> Result<Vec<SessionConnectionSnapshot>, collaboration_central_core::SocketFailure> {
         use collaboration_central_core::ObjectHost;
         let slot = self.slots.lock().await.get("fleet").cloned();
@@ -575,7 +588,7 @@ impl NativeObjects {
         let mut connections = Vec::new();
         for (connection, registration) in host.registrations().await? {
             let origin = host.admission_origin(connection).await?;
-            if &origin.installation == service {
+            if service.is_none_or(|service| &origin.installation == service) {
                 let binding = host.admission_binding(connection).await?;
                 connections.push(SessionConnectionSnapshot {
                     connection,

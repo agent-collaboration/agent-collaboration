@@ -31,6 +31,9 @@ pub async fn connect(base: &str, credential: &str) -> ConformanceResult<WebSocke
         },
     )
     .await?;
+    collaboration_central_conformance::ConformanceClient::new(base)?
+        .wake_due_after_hello(session_id)
+        .await?;
     if !matches!(next(&mut socket).await?,ServerFrame::Welcome {session_id:actual,..} if actual==session_id)
     {
         return Err("forwarding connection lost its exact Welcome session identity".into());

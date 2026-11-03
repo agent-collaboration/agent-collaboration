@@ -37,13 +37,10 @@ use reqwest_websocket::{Message, RequestBuilderExt, WebSocket};
 use serde_json::{Value, json};
 use std::time::Duration;
 
-const SERVICE: &str = "550e8400-e29b-41d4-a716-446655440751";
 const CREDENTIAL: &str = "normal Move old holder";
 
 fn session_address() -> ConformanceResult<ObjectAddress> {
-    Ok(ObjectAddress::Connection(
-        message_board::ServiceId::try_from(SERVICE.to_owned())?,
-    ))
+    Ok(ObjectAddress::Fleet)
 }
 async fn control(
     base: &str,
@@ -115,6 +112,9 @@ async fn replacement(
             .into(),
         ))
         .await?;
+    collaboration_central_conformance::ConformanceClient::new(base)?
+        .wake_due_after_hello(session_id)
+        .await?;
     match receive(&mut socket).await? {
         ServerFrame::Welcome {
             session_id: actual,
@@ -140,7 +140,7 @@ fn exact_held_renewal(held: &Value, request: &RenewRequest) -> ConformanceResult
     if held.get("kind") != Some(&json!("central.session-lease"))
         || held.get("source") != Some(&serde_json::to_value(session_address()?)?)
         || held.get("sourceFace") != Some(&json!("session"))
-        || held.get("destination") != Some(&serde_json::to_value(ObjectAddress::Registry)?)
+        || held.get("destination") != Some(&serde_json::to_value(ObjectAddress::Fleet)?)
         || held.pointer("/request/session/peer") != Some(&json!(fixture::OLD_PEER))
         || held.pointer("/request/request") != Some(&expected)
     {
@@ -166,10 +166,10 @@ async fn exact_held_renewal_resends_on_the_same_session_replacement_and_then_rep
             chrono::DateTime::from_timestamp_millis(fixture::time(900_000)?.unix_millis()).ok_or("inflight Registry time outside range")?
         )).await?;
         let request=RenewRequest {attempt:RequestId::new(Uuid::now_v7())?,database:fixture.database,epoch:Epoch::new(1)?};
-        control(fixture.base(),RuntimeControl::HoldNextDispatch {destination:ObjectAddress::Registry}).await?;
+        control(fixture.base(),RuntimeControl::HoldNextDispatch {destination:ObjectAddress::Fleet}).await?;
         let original_frame=creation_scenarios::send(&mut fixture.old,OperationRequest::Lease(LeaseRequest::Renew(request.clone()))).await?;
         let DispatchFaultObservation::Held {destination,request:bytes}=control(fixture.base(),RuntimeControl::AwaitHeldDispatch).await?.dispatch else {return Err("registered renewal did not reach the real owned hold".into());};
-        if destination!=ObjectAddress::Registry {return Err("inflight renewal hold targeted another object".into());}
+        if destination!=ObjectAddress::Fleet {return Err("inflight renewal hold targeted another object".into());}
         let held:Value=serde_json::from_slice(&bytes)?;
         let session_id=exact_held_renewal(&held,&request)?;
         println!("SESSION_INFLIGHT_STAGE exact_original_renewal_held passed");

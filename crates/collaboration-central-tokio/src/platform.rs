@@ -216,7 +216,7 @@ impl TokioCentralPlatform {
     #[cfg(feature = "conformance")]
     pub(crate) async fn conformance_session_connections(
         &self,
-        service: &message_board::ServiceId,
+        service: Option<&message_board::ServiceId>,
     ) -> Result<
         Vec<crate::native_objects::SessionConnectionSnapshot>,
         collaboration_central_core::SocketFailure,
