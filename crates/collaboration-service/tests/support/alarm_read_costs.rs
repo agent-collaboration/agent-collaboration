@@ -147,14 +147,157 @@ impl std::fmt::Debug for AlarmRunCosts {
             .finish_non_exhaustive()
     }
 }
-impl AlarmRunCosts {
-    pub fn distinct_costs(&self) -> BTreeMap<String, BTreeSet<u64>> {
-        self.by_object
-            .iter()
-            .map(|(kind, counts)| (kind.clone(), counts.iter().copied().collect()))
-            .collect()
+// One fresh fixture machine has no expired feed, forwards or notices. Each
+// maintenance owner reads its fixed operands before variable queued work.
+// SQL identities come from those owners, while
+// the literal per-query counts below are the independent scaling oracle.
+#[expect(
+    clippy::expect_used,
+    reason = "Unclassified captured SQL is an explicit test inventory failure."
+)]
+pub fn fixed_fleet_maintenance_profiles(
+    costs: &AlarmRunCosts,
+) -> BTreeSet<BTreeMap<&'static str, u64>> {
+    const QUERIES: [(&str, &str); 11] = [
+        (
+            "feed.state",
+            include_str!("../../../collaboration-central-core/sql/fleet/read_fleet_feed_state.sql"),
+        ),
+        (
+            "feed.expired",
+            include_str!(
+                "../../../collaboration-central-core/sql/fleet/read_expired_fleet_feed.sql"
+            ),
+        ),
+        (
+            "forwards.rows",
+            include_str!("../../../collaboration-central-core/sql/forwards/read_forward_rows.sql"),
+        ),
+        (
+            "notices.peers",
+            include_str!(
+                "../../../collaboration-central-core/sql/machine_notices/read_machine_notice_peers.sql"
+            ),
+        ),
+        (
+            "notices.state",
+            include_str!(
+                "../../../collaboration-central-core/sql/machine_notices/read_machine_notice_state.sql"
+            ),
+        ),
+        (
+            "notices.bounds",
+            include_str!(
+                "../../../collaboration-central-core/sql/machine_notices/read_machine_notice_bounds.sql"
+            ),
+        ),
+        (
+            "notices.expired",
+            include_str!(
+                "../../../collaboration-central-core/sql/machine_notices/read_expired_machine_notices.sql"
+            ),
+        ),
+        (
+            "notices.next_expiry",
+            include_str!(
+                "../../../collaboration-central-core/sql/machine_notices/read_machine_notice_expiry.sql"
+            ),
+        ),
+        (
+            "notices.append",
+            include_str!(
+                "../../../collaboration-central-core/sql/machine_notices/append_machine_notice.sql"
+            ),
+        ),
+        (
+            "notices.head",
+            include_str!(
+                "../../../collaboration-central-core/sql/machine_notices/advance_machine_notice_head.sql"
+            ),
+        ),
+        (
+            "directory.installation",
+            include_str!("../../../collaboration-central-core/sql/read_enrollments.sql"),
+        ),
+    ];
+    let normalize = |sql: &str| sql.split_whitespace().collect::<Vec<_>>().join(" ");
+    let queries: BTreeMap<_, _> = QUERIES
+        .into_iter()
+        .map(|(owner, sql)| (normalize(sql), owner))
+        .collect();
+    let expected = BTreeMap::from([
+        ("feed.state", 1),
+        ("feed.expired", 1),
+        // SessionScope::expire_forwards reads origin and holder sides once each.
+        ("forwards.rows", 2),
+        ("notices.peers", 1),
+        ("notices.state", 1),
+        ("notices.bounds", 1),
+        ("notices.expired", 1),
+        ("notices.next_expiry", 1),
+    ]);
+    let mut observed = BTreeSet::new();
+    for (object, runs) in &costs.sql_by_object {
+        assert_eq!(object, "fleet", "unexpected context alarm owner");
+        for run in runs {
+            let labels = run
+                .iter()
+                .map(|sql| {
+                    *queries
+                        .get(&normalize(sql))
+                        .expect("unclassified alarm SQL changed the bounded owner inventory")
+                })
+                .collect::<Vec<_>>();
+            assert!(labels.len() >= 9, "Fleet alarm omitted a maintenance owner");
+            let (maintenance, mut dynamic) = labels.split_at(9);
+            let mut counts = BTreeMap::new();
+            for owner in maintenance {
+                *counts.entry(*owner).or_insert(0_u64) += 1;
+            }
+            assert_eq!(
+                counts, expected,
+                "maintenance owner grew with retained data"
+            );
+            // The suffix is variable queued work. Recognize its SQL boundary,
+            // but do not pretend this stream identifies individual dispatches:
+            // Central's per-callback conformance tests own those cost bounds.
+            const APPEND: [&str; 8] = [
+                "notices.state",
+                "notices.bounds",
+                "notices.expired",
+                "notices.state",
+                "notices.bounds",
+                "notices.append",
+                "notices.head",
+                "notices.next_expiry",
+            ];
+            while !dynamic.is_empty() {
+                if let Some(rest) = dynamic.strip_prefix(&["directory.installation"]) {
+                    dynamic = rest;
+                } else {
+                    dynamic = dynamic
+                        .strip_prefix(&APPEND)
+                        .expect("variable work no longer matches the inventoried notice callback");
+                }
+            }
+            let mut owners = BTreeMap::new();
+            for (query, count) in counts {
+                let owner = query
+                    .split('.')
+                    .next()
+                    .expect("owner-qualified query identity");
+                *owners.entry(owner).or_insert(0_u64) += count;
+            }
+            assert_eq!(
+                owners,
+                BTreeMap::from([("feed", 2), ("forwards", 2), ("notices", 5)])
+            );
+            observed.insert(owners);
+        }
     }
+    observed
 }
+
 #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
 pub fn observe_alarm_costs() -> AlarmCostObservation {
     let state = state().lock().unwrap();
@@ -169,9 +312,40 @@ pub fn observe_alarm_costs() -> AlarmCostObservation {
     }
 }
 impl AlarmCostObservation {
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
+    pub async fn finish_after_new_alarm(
+        self,
+    ) -> Result<AlarmRunCosts, Box<dyn std::error::Error + Send + Sync>> {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+        let mut completed = completed_runs().subscribe();
+        tokio::time::timeout_at(deadline, async {
+            loop {
+                completed.borrow_and_update();
+                if state().lock().unwrap().next_id > self.first_new_run {
+                    return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
+                }
+                completed
+                    .changed()
+                    .await
+                    .map_err(|_| "alarm observation closed")?;
+            }
+        })
+        .await
+        .map_err(|_| "public probe did not start an actual Fleet alarm")??;
+        self.finish_at(deadline).await
+    }
+
+    pub async fn finish(self) -> Result<AlarmRunCosts, Box<dyn std::error::Error + Send + Sync>> {
+        self.finish_at(tokio::time::Instant::now() + Duration::from_secs(20))
+            .await
+    }
+
     #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
     #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
-    pub async fn finish(self) -> Result<AlarmRunCosts, Box<dyn std::error::Error + Send + Sync>> {
+    async fn finish_at(
+        self,
+        deadline: tokio::time::Instant,
+    ) -> Result<AlarmRunCosts, Box<dyn std::error::Error + Send + Sync>> {
         let mut completed = completed_runs().subscribe();
         let (overlapping_statements, selected) = {
             let state = state().lock().unwrap();
@@ -183,7 +357,7 @@ impl AlarmCostObservation {
                 .collect::<Vec<_>>();
             (state.statements - self.statements_before, selected)
         };
-        tokio::time::timeout(Duration::from_secs(20), async {
+        tokio::time::timeout_at(deadline, async {
             loop {
                 completed.borrow_and_update();
                 let completed_costs = {
