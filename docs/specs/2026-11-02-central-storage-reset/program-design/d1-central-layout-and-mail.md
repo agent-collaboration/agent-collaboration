@@ -1,6 +1,6 @@
 # Program Design: D1, central layout and mail
 
-How D1 realizes [R1–R6](../specification/central-layout.md) and [R7–R15](../specification/mail.md). Evidence: the Worker inventory in `tmp/d1-inventory/` (source-verified at `fb3cf6b5`, library `v0.4.0` `b9da4b5`). **Scope assumes option A (pending the owner):** every table D1 creates or reshapes gets the full storage rule; tables D1 only moves get a prefix rename; project content tables are untouched.
+How D1 realizes [R1–R6](../specification/central-layout.md) and [R7–R15](../specification/mail.md). Evidence: the Worker inventory in `tmp/d1-inventory/` (source-verified at `fb3cf6b5`, library `v0.4.0` `b9da4b5`). **Scope assumes option A (pending the owner):** every table D1 creates or reshapes gets the full storage rule; tables D1 only moves get a prefix rename; project tables are out of scope (owner: “it’s out of scope”).
 
 ## What you will be able to do
 
@@ -162,4 +162,4 @@ sequenceDiagram
 
 ## Not in D1
 
-Fleet sending its own messages and remote create (D2); renaming Router app tables, JSON files, the machine-id change (D3, pending the owner's A/B/C choice; until then both `machine_id` and `service_id` are kept); wakes and notifications (D4a); schedules (D4b); JSON-to-columns cleanup of the prefix-renamed tables (option A's follow-up).
+Fleet sending its own messages and remote create (D2); renaming Router app tables, JSON files, the machine-id change (D3, pending the owner's A/B/C choice; until then both `machine_id` and `service_id` are kept); wakes and notifications (D4a); schedules (D4b); D1b, right after D1: the Fleet store’s prefix-renamed tables (Fleet directory, library lease and session tables) to typed columns with timestamps. Project tables are out of scope.
