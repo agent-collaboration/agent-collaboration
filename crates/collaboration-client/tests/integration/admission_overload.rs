@@ -3,7 +3,7 @@
 //! uncertain outcome. The served API runs one request at a time on its socket; a held wake
 //! wait takes that one, so every other call is shed.
 
-#[path = "../../collaboration-service/tests/support/native_registry.rs"]
+#[path = "../../../collaboration-service/tests/support/native_registry.rs"]
 #[expect(
     dead_code,
     reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."

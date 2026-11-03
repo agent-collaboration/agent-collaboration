@@ -6,12 +6,7 @@ use collaboration_client::protocol::{
 use collaboration_client::{ClientError, CollaborationClient, operation_failure_from_client_error};
 use serde_json::{Value, json};
 
-#[expect(
-    dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)]
-#[path = "support/scripted_api.rs"]
-mod scripted_api;
+use crate::scripted_api;
 use scripted_api::{SCRIPTED_SERVICE_ID, ScriptedApi};
 
 #[tokio::test]

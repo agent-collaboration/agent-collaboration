@@ -5,12 +5,7 @@ use collaboration_protocol::*;
 use serde_json::{Value, json};
 use std::time::Duration;
 
-#[expect(
-    dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)]
-#[path = "support/scripted_api.rs"]
-mod scripted_api;
+use crate::scripted_api;
 use scripted_api::{SCRIPTED_SERVICE_EPOCH, SCRIPTED_SERVICE_ID, ScriptedApi};
 
 #[expect(

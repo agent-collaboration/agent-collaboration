@@ -5,12 +5,7 @@ use message_board::{
 };
 use serde_json::Value;
 
-#[expect(
-    dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)]
-#[path = "support/scripted_api.rs"]
-mod scripted_api;
+use crate::scripted_api;
 use scripted_api::ScriptedApi;
 
 #[tokio::test]

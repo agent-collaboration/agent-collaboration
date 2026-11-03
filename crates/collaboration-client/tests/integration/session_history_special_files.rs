@@ -40,18 +40,31 @@ async fn history_rejects_fifo_without_waiting_for_a_writer() -> TestResult {
     }
 
     // A missing regular-file guard must fail the test, not hang the test runner.
+    let child_stdout_path = fixture.0.join("history-child.stdout");
+    let child_namespace = module_path!()
+        .split_once("::")
+        .map_or(module_path!(), |(_, namespace)| namespace);
+    let child_selector = format!("{child_namespace}::fifo_history_child");
     let mut child = tokio::process::Command::new(std::env::current_exe()?)
-        .args(["--ignored", "--exact", "fifo_history_child"])
+        .args(["--ignored", "--exact", &child_selector])
         .env("COLLABORATION_HISTORY_FIXTURE_ROOT", &fixture.0)
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
+        .stdout(std::fs::File::create(&child_stdout_path)?)
         .stderr(Stdio::inherit())
         .kill_on_drop(true)
         .spawn()?;
     match tokio::time::timeout(Duration::from_secs(5), child.wait()).await {
         Ok(status) => {
             if status?.success() {
-                Ok(())
+                let stdout = std::fs::read_to_string(&child_stdout_path)?;
+                if stdout.contains("test result: ok. 1 passed;") {
+                    Ok(())
+                } else {
+                    Err(
+                        format!("history child selector must complete exactly one case: {stdout}")
+                            .into(),
+                    )
+                }
             } else {
                 Err("history child did not report unavailable for a FIFO".into())
             }

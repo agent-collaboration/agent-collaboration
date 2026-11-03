@@ -11,8 +11,7 @@ use std::os::unix::fs::DirBuilderExt;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio_util::sync::CancellationToken;
 
-#[tokio::test]
-async fn aggregate_existing_prompt_handles_missing_reply_and_history_setup_failure() {
+pub(super) async fn aggregate_existing_prompt_handles_missing_reply_and_history_setup_failure() {
     let root = std::path::PathBuf::from(format!(
         "/tmp/acp-existing-prompt-flow-{}",
         std::process::id()
@@ -187,8 +186,7 @@ async fn aggregate_existing_prompt_handles_missing_reply_and_history_setup_failu
     std::fs::remove_dir(root).unwrap();
 }
 
-#[tokio::test]
-async fn aggregate_prompt_does_not_retain_more_than_one_thousand_updates() {
+pub(super) async fn aggregate_prompt_does_not_retain_more_than_one_thousand_updates() {
     let root = std::path::PathBuf::from(format!(
         "/tmp/acp-prompt-aggregate-bound-{}",
         std::process::id()

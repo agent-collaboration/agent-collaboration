@@ -229,8 +229,17 @@ async fn create_and_first_prompt_backend_rejection_retains_created_target() {
     std::fs::remove_dir(root).unwrap();
 }
 
-#[path = "acp_aggregate_prompt_outputs.rs"]
-mod aggregate_prompt_outputs;
+mod aggregate_prompt_outputs {
+    #[tokio::test]
+    async fn aggregate_existing_prompt_handles_missing_reply_and_history_setup_failure() {
+        crate::acp_aggregate_prompt_outputs_test::aggregate_existing_prompt_handles_missing_reply_and_history_setup_failure().await;
+    }
+
+    #[tokio::test]
+    async fn aggregate_prompt_does_not_retain_more_than_one_thousand_updates() {
+        crate::acp_aggregate_prompt_outputs_test::aggregate_prompt_does_not_retain_more_than_one_thousand_updates().await;
+    }
+}
 
 #[tokio::test]
 async fn reusable_acp_client_orders_load_updates_and_detaches_on_caller_cancel() {

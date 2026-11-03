@@ -10,12 +10,7 @@ use serde_json::{Value, json};
 use std::time::Duration;
 use tokio::sync::oneshot;
 
-#[expect(
-    dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)]
-#[path = "support/scripted_api.rs"]
-mod scripted_api;
+use crate::scripted_api;
 use scripted_api::{ScriptedApi, ScriptedCalls};
 
 type TestError = Box<dyn std::error::Error + Send + Sync>;
