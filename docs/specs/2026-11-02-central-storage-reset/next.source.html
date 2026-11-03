@@ -12,6 +12,9 @@
 <ex-document id="content">
 <h1>Next work after D1: D2, D3, D4a, D4b</h1>
 <p>The designs for the deliverables after D1. D2 is written in full (obligations, program design, proof). D3, D4a and D4b are program designs with their tables; their obligations and proofs are written when each starts. Decisions so far: <a href="decisions.html">decisions.html</a>. D1: <a href="d1.html">d1.html</a>.</p>
+<ex-callout title="Tables for your review (D2)" tone="note" icon="database">
+<p>D2 adds two small tables, shown in its program design below: <code>fleet_remote_creates</code> in the Fleet (keeps the requester after the command's content is dropped, refuses a reused id with different content, fixes the result message's id up front) and <code>mail_create_commands</code> on each machine (binds a command to its one create and one first-input prompt). Strike either if you see a better home.</p>
+</ex-callout>
 <ex-callout title="One choice for you (D3)" tone="decision" icon="users">
 <p>Moving each machine to its UUIDv7 id means rewriting stored session addresses that carry the old UUIDv4 service id. Local stores are rewritten at upgrade. But <strong>project content also stores session addresses</strong> (thread participants, watches, actors), it replicates between machines, and project tables are out of scope.</p>
 <ul>

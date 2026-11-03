@@ -15,7 +15,7 @@ A plan: nothing here has been observed. Upstream: [R16–R22](../specification/r
 
 | Requirement | Proven by | Passes when | Unverified |
 | --- | --- | --- | --- |
-| U10 (R16–R20, R22) | P1–P4, P6, P7 | one session per request; stages in order; result exactly once; first input once; refusals store nothing; approvals on B; a build that creates twice on replay or after a crash fails P2/P3 | real Claude and Cursor endpoints beyond the first one driven |
+| U10 (R16–R20, R22) | P1–P4, P6–P8 | one session per request; stages in order; result exactly once; first input at most once, with “unknown” when B cannot tell; refusals store nothing; approvals on B; a build that creates twice on replay or after a crash fails P2/P3 | real Claude and Cursor endpoints beyond the first one driven |
 | U8 (R21) | P1, P5 | the recipient shows the Fleet as sender; a machine cannot submit as the Fleet | Fleet messages from automations (D4) |
 
 P1's agent reply needs a model turn, so it needs the debug Router running.
