@@ -34,8 +34,8 @@ Use one directory per retained child; never reuse a finished child's receipts.
 Qualification:
 
 ```sh
-pnpm --dir scripts/verification/tui exec vitest run sessions-receipt-directory.test.ts
-cargo test -p codex-router-quota-reset-test-harness --test quota_storyboard_capture_test sessions_ -- --nocapture
+pnpm --dir scripts/verification/tui exec vitest run sessions/sessions-receipt-directory.test.ts
+cargo test -p codex-router-quota-reset-test-harness --test e2e sessions_ -- --nocapture
 ```
 
 The TypeScript checks exercise fresh-path rejection, absence, quota isolation

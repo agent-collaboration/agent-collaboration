@@ -31,7 +31,8 @@ const baselineSchema = z.object({
     files: z.record(z.string(), z.string()).optional(),
   }),
 });
-const packedRows = readFileSync(new URL("./baselines/embedded-acp.jsonl", import.meta.url), "utf8")
+const packedRows = new TextDecoder("utf-8", { fatal: true })
+  .decode(readFileSync(new URL("./baselines/embedded-acp.jsonl", import.meta.url)))
   .trimEnd()
   .split("\n")
   .map((line, index) =>
