@@ -27,8 +27,9 @@ pub use rebuild::FleetCacheRebuild;
 
 static CACHE_MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./fleet_cache_migrations");
 
-// Only these central-derived tables are cleared. Everything else in this store,
-// including login, session registrations and install attempts, survives enrollment.
+// Only these central-derived tables are cleared; login and session registrations
+// in this store survive enrollment. D1 removes file-based snapshot install attempts
+// during reset; D3 will move those attempts into a kept table.
 const CENTRAL_CACHE_DELETIONS: [&str; 3] = [
     "DELETE FROM cached_fleet_records",
     "DELETE FROM fleet_cache_rebuild_records",
