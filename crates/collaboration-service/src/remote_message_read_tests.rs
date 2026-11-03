@@ -1,6 +1,9 @@
 //! Remote show and history preserve sender context, admission order and reopen state.
 use super::*;
 
+#[path = "collaboration_application/message_status_operations_test.rs"]
+mod retention_status;
+
 async fn remote_application(
     runtime: &Runtime,
 ) -> (Arc<MailDeliveryRuntime>, crate::CollaborationApplication) {

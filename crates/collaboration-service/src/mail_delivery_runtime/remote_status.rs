@@ -18,6 +18,10 @@ pub(super) fn status_call(step: &str) -> Result<CallId, StoreError> {
 }
 
 impl MailDeliveryRuntime {
+    pub(crate) fn custody_record_is_past_retention(&self, item: ItemId) -> bool {
+        fleet_sync_delivery::item_is_too_old(item, self.host.now())
+    }
+
     pub(crate) async fn outbox_status(
         &self,
         item: ItemId,

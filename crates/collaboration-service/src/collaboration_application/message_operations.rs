@@ -471,7 +471,7 @@ pub enum MessageFailureKind {
     /// The push lives on another machine; cross-machine reads are not available yet.
     ForeignMachine,
     Unavailable,
-    /// The push expired after two calendar months, or never existed.
+    /// No retained push or sender-custody record matched.
     NotFound,
     NotPermitted,
     NotDirectMessage,
