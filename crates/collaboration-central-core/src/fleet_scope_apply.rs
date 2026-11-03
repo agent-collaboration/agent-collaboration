@@ -86,7 +86,7 @@ where
                     || creation.is_some()
                 {
                     return Err(corrupt(
-                        "creation_decisions",
+                        "fleet_creation_decisions",
                         "binding does not belong to this ledger's carrier",
                     ));
                 }
@@ -164,7 +164,7 @@ where
         ));
     }
     if let Some((project, request, carrier)) = creation {
-        crate::fleet_creation_store::insert(scope, &project, &request, &carrier).await?;
+        crate::fleet_creation_store::insert(scope, &project, &request, &carrier, now).await?;
     }
     crate::fleet_feed_store::append(scope, &decision.feed, now, row_ids).await?;
     Ok(result)

@@ -138,6 +138,11 @@
           "name": "carrier_installation",
           "kind": "text",
           "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
         }
       ]
     }

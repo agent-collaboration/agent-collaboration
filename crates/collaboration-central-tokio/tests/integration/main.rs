@@ -7,6 +7,7 @@ mod fleet_lease_atomicity;
 mod composed_fleet_fixture;
 mod fleet_claim_columns;
 mod fleet_claim_settlement;
+mod fleet_creation_columns;
 mod fleet_feed_notices;
 mod fleet_feed_timestamps;
 mod fleet_mail_admission;

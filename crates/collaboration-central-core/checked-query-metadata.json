@@ -1,7 +1,7 @@
 {
   "producer": "owned sqlx-turso / Turso 0.8.1 describe",
   "sources": {
-    "checked-queries.json": "74d4391ec1f127685bc92f9eeaf2e9ed0f410e8612c0cc539ce5f542c8e76ba5",
+    "checked-queries.json": "1220eaecf469e771b6c6ec7e964706cbb118b46b7e62017a4495582b64c098dc",
     "core_migrations/0000_migration_history.sql": "d30bfbde01af17b339ef44b0c4034fd22250680b09b07011287a80f2b10be539",
     "core_migrations/0001_fleet_decisions.sql": "32dbcb0f9130a307c10c0f4be5d0d229a400915ff0a77fc8d1361cf51282e770",
     "core_migrations/0002_fleet_decision_receipts.sql": "4e56a7411eaba1fbd0c20601f38c215c0f73f1fa52a352cdecb400c620216cfb",
@@ -9,7 +9,7 @@
     "core_migrations/0004_directory_copy_summary.sql": "0fd0ccb64479650ee17ea2c46c88b12617631bba3c5b18c9533671cd239ee148",
     "core_migrations/0005_claim_lease_projection.sql": "28758a050b06a0e497cc234be802903b421551cfafbd36af2307849f9a8a1a61",
     "core_migrations/0006_archive_reports.sql": "0a808b5c57a9fb3250fd46ff0208638ef7bc8440b48a79defedeb08d6156cffb",
-    "core_migrations/0007_creation_decisions.sql": "51f95c896d06ae224ab1cb97d111e6e93ea3fad126d5e293606c93ddade3c5ba",
+    "core_migrations/0007_creation_decisions.sql": "0292e6a4f8406b77586d00b876626ad4987e9392381356126503e0c7e5dc1242",
     "core_migrations/0008_feed_readers.sql": "dda67da87b76d2cc87645e4ae7c2119a704ee88603f3bab40c9357019b9d3a47",
     "core_migrations/0009_migration_failures.sql": "cb66a15734e44a6dd6d022dc79601ae018824125c51104f95b8859cbdaf70674",
     "generator:fleet-sync-query-gen/Cargo.toml": "01210c567dcbccb4ff127626a0ff7625641edd4c5f0787ea41777757b1eaa3e6",
@@ -64,16 +64,16 @@
     "generator:sqlx-turso/src/lib.rs": "32ec3ac4ca4d0d703a452496262928a3a00ddfdf71eac8cbbe4ce1a3da69d9b5",
     "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
-    "sql/insert_creation_decision.sql": "27938b2b2f7626d99ecebe8b136dd53548ff639566b01acd80965eaae1c072c5",
+    "sql/insert_creation_decision.sql": "88cc9796b0a2650a4be4e6ea622d092a05540c8b380234bc026c7670b8430ab2",
     "sql/insert_fleet_decision.sql": "b8774c7a11fa3ac2cd4e6a37466cf2776daf0bfcace084f06d4308dc5cf121b9",
     "sql/insert_fleet_decision_receipt.sql": "f146c66915f72d0fac707271a86cd2f8490500444be94e6fed06d2b671435613",
-    "sql/read_creation_decision.sql": "9c8bfb1dbfa3dde2c3ab097c1a386e3bb6fb5485103740b86f04e564fa3abe43",
+    "sql/read_creation_decision.sql": "5213b8222adba590586d19465e9ff2326dfbc271fe5785a6327ebbda1d7c8636",
     "sql/read_fleet_decision.sql": "da5ae64fab5f965708df2556239e3c450d1487b9f7866da7f1d12908dc728ead",
     "sql/read_fleet_decision_receipts.sql": "948970489cc37747ca7b2a01efacfe98a9d203691cde8d5c5a3644e71e3187a0",
     "sql/read_fleet_receipt_page.sql": "d7a172a1933cdb37bcd4ac5db47a8a413ed2a13ee76e8c4100a24bc57d0f9cc3",
-    "src/generated_statements.rs": "12f7f5e59ecb00430b119ea06bdb07950f8533cbe95af9134fbeefc84ed0b01b"
+    "src/generated_statements.rs": "d3f1cfa890f3a8130f4e39962ed8be81af0453fe78997e08d8e0368ad213199e"
   },
-  "queries_digest": "dd8c43d869e256eaa4f00fec808315432d742f49a1e9cf643acb6524fef83707",
+  "queries_digest": "bb1f3937098395448e34ed468735bcc835c3d7d701ce3c7faceb1c9abcfb9fc9",
   "queries": [
     {
       "name": "read_fleet_decision",
@@ -248,6 +248,34 @@
           "type_source": "driver"
         },
         {
+          "name": "created_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "created_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "updated_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "updated_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
           "name": "request_id",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
@@ -314,7 +342,7 @@
     },
     {
       "name": "insert_creation_decision",
-      "bind_slots": 3,
+      "bind_slots": 4,
       "columns": []
     }
   ]
