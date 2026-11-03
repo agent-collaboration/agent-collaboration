@@ -134,6 +134,16 @@ Hosted `agent-sessions` new/resume launches
 resolve the advertised public native selector. Backend replacement closes native
 connections; the native TUI owns bounded reconnection without a Sessions supervisor.
 
+Resume with `agent-sessions <full-uuid>` or `agent-sessions --id <id>`.
+`--id` detects Codex or Claude automatically and also accepts a Claude background
+job handle or a unique UUID prefix of at least eight hex digits. Ambiguous IDs
+list their matches; use a full UUID and `--provider codex|claude` to choose.
+Claude background jobs keep their background mode; ordinary stored Claude sessions
+resume in the foreground from the directory recorded in their transcript.
+Live foreground sessions and sessions with uncertain state or directory are refused.
+Use `--dry-run` to inspect the chosen command, or `--provider codex|claude --new`
+to start a new session.
+
 ```shell
 cargo run -p agent-collaboration --bin agent-sessions -- --id 019fe7c6-f493-7f02-be72-2feac69d6e6d
 cargo run -p codex-router-cli -- host status

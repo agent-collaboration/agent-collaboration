@@ -230,7 +230,7 @@ fn hosted_native_launcher_reports_initial_permission_denial() {
         };
 
         let output = std::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-            .arg("--new")
+            .args(["--provider", "codex", "--new"])
             .env("CODEX_HOME", router_root.join("codex-home"))
             .env("CODEX_ROUTER_DEBUG_ROUTER_ROOT", &router_root)
             .env(

@@ -104,9 +104,9 @@ pub struct SessionsCommand {
     pub format: SessionsFormat,
     /// Resume the latest session matching filters.
     pub last: bool,
-    /// Resume one exact Codex session UUID without loading session records.
+    /// Resume a UUID, Claude background job handle, or unique UUID prefix.
     pub id: Option<String>,
-    /// Launch a new Codex session instead of resuming one.
+    /// Launch a new session with the explicitly selected provider.
     pub new: bool,
     /// Use the Codex-only local picker (no provider Sessions), then launch Codex locally.
     pub local: bool,
@@ -148,25 +148,19 @@ impl SessionsCommand {
         let passthrough_separator_index = arguments
             .iter()
             .position(|argument| argument == OsStr::new("--"));
-        let router_arguments_before_passthrough = passthrough_separator_index
-            .and_then(|index| arguments.get(..index))
-            .map(<[OsString]>::to_vec);
         let first_argument = arguments
             .first()
             .and_then(|argument| argument.to_str())
             .map(str::to_owned);
-        if let Some(first_argument) = first_argument {
-            if validate_exact_uuid_session_id(&first_argument).is_ok() {
-                let positional_option_end = passthrough_separator_index.unwrap_or(arguments.len());
-                let positional_options =
-                    arguments.get(1..positional_option_end).unwrap_or_default();
-                if contains_explicit_session_id_option(positional_options) {
-                    return Err("positional session UUID cannot be combined with --id".to_owned());
-                }
-                arguments.insert(0, OsString::from("--id"));
-            } else if resembles_uuid_session_id(&first_argument) {
-                validate_exact_uuid_session_id(&first_argument)?;
+        if let Some(first_argument) = first_argument
+            && validate_exact_uuid_session_id(&first_argument).is_ok()
+        {
+            let positional_option_end = passthrough_separator_index.unwrap_or(arguments.len());
+            let positional_options = arguments.get(1..positional_option_end).unwrap_or_default();
+            if contains_explicit_session_id_option(positional_options) {
+                return Err("positional session UUID cannot be combined with --id".to_owned());
             }
+            arguments.insert(0, OsString::from("--id"));
         }
         let mut argv = Vec::with_capacity(arguments.len() + 1);
         argv.push(OsString::from("sessions"));
@@ -174,20 +168,16 @@ impl SessionsCommand {
         let parsed =
             ClapSessionsCommand::try_parse_from(argv).map_err(|error| error.to_string())?;
         if let Some(session_id) = parsed.id.as_deref() {
-            validate_exact_uuid_session_id(session_id)?;
+            validate_resume_selector(session_id)?;
         }
-        validate_claude_command(&parsed)?;
+        if parsed.new && parsed.provider == SessionsProvider::Any {
+            return Err("--new requires --provider to choose Codex or Claude".to_owned());
+        }
+
         reject_legacy_router_options(&parsed.codex_args)?;
-        if parsed.id.is_none() {
-            reject_misplaced_positional_session_id(
-                router_arguments_before_passthrough
-                    .as_deref()
-                    .unwrap_or(&parsed.codex_args),
-            )?;
-        }
         reject_interactive_limit(&parsed)?;
         reject_interactive_checkout(&parsed)?;
-        Ok(Self {
+        let command = Self {
             root: parsed.root()?,
             provider: parsed.provider,
             source: parsed.source,
@@ -202,7 +192,9 @@ impl SessionsCommand {
             include_empty_sessions: parsed.include_empty_sessions,
             dry_run: parsed.dry_run,
             codex_args: parsed.codex_args,
-        })
+        };
+        validate_claude_command(&command)?;
+        Ok(command)
     }
 }
 
@@ -225,27 +217,29 @@ fn reject_legacy_router_options(codex_args: &[OsString]) -> Result<(), String> {
     Ok(())
 }
 
-fn reject_misplaced_positional_session_id(codex_args: &[OsString]) -> Result<(), String> {
-    if codex_args.iter().any(|argument| {
-        argument
-            .to_str()
-            .is_some_and(|argument| validate_exact_uuid_session_id(argument).is_ok())
-    }) {
-        return Err("session UUID must be the first argument or use --id <uuid>".to_owned());
+fn validate_resume_selector(selector: &str) -> Result<(), String> {
+    if validate_exact_uuid_session_id(selector).is_ok() {
+        return Ok(());
     }
-    Ok(())
-}
-
-fn resembles_uuid_session_id(argument: &str) -> bool {
-    let bytes = argument.as_bytes();
-    (32..=36).contains(&bytes.len())
-        && bytes
-            .get(..8)
-            .is_some_and(|prefix| prefix.iter().all(u8::is_ascii_alphanumeric))
-        && bytes.iter().any(u8::is_ascii_digit)
-        && bytes
-            .iter()
-            .all(|byte| byte.is_ascii_alphanumeric() || *byte == b'-')
+    let hex = selector.bytes().filter(|byte| *byte != b'-').count();
+    let compact = !selector.contains('-') && (8..=32).contains(&selector.len());
+    let canonical_prefix = (8..36).contains(&selector.len())
+        && selector.bytes().enumerate().all(|(index, byte)| {
+            if matches!(index, 8 | 13 | 18 | 23) {
+                byte == b'-'
+            } else {
+                byte.is_ascii_hexdigit()
+            }
+        });
+    if (8..=32).contains(&hex)
+        && (compact || canonical_prefix)
+        && selector
+            .bytes()
+            .all(|byte| byte == b'-' || byte.is_ascii_hexdigit())
+    {
+        return Ok(());
+    }
+    Err("--id requires a complete UUID, a Claude job handle, or a UUID prefix of at least 8 hexadecimal characters".to_owned())
 }
 
 fn reject_interactive_limit(command: &ClapSessionsCommand) -> Result<(), String> {
@@ -266,7 +260,7 @@ fn reject_interactive_checkout(command: &ClapSessionsCommand) -> Result<(), Stri
     Ok(())
 }
 
-fn validate_claude_command(command: &ClapSessionsCommand) -> Result<(), String> {
+pub(crate) fn validate_claude_command(command: &SessionsCommand) -> Result<(), String> {
     if command.provider != SessionsProvider::ClaudeCode {
         return Ok(());
     }
@@ -279,7 +273,7 @@ fn validate_claude_command(command: &ClapSessionsCommand) -> Result<(), String> 
     if !command.list && !command.new && command.id.is_none() {
         return Err("--provider claude requires --list, --new, or --id <uuid>".to_owned());
     }
-    if command.checkout || command.repo || command.any {
+    if command.root != SessionsRoot::Cwd {
         return Err("Claude session commands do not accept Codex root filters".to_owned());
     }
     if command.source != SessionsSource::Interactive {
@@ -322,7 +316,7 @@ struct ClapSessionsCommand {
     #[arg(
         long,
         default_value = "any",
-        help = "Codex model-provider filter, or claude to list/launch Claude Code through Router"
+        help = "Codex model-provider filter, or claude; --id detects the agent automatically"
     )]
     provider: SessionsProvider,
     #[arg(long, value_enum, default_value = "interactive")]
@@ -335,7 +329,7 @@ struct ClapSessionsCommand {
     format: SessionsFormat,
     #[arg(long, conflicts_with = "list")]
     last: bool,
-    /// Resume one complete canonical UUID directly without opening the picker.
+    /// Resume a UUID, Claude job handle, or unique UUID prefix (at least 8 hex digits).
     #[arg(long, conflicts_with_all = ["new", "last", "list"])]
     id: Option<String>,
     #[arg(long, conflicts_with_all = ["list", "last"])]
@@ -373,3 +367,7 @@ pub fn command_help(executable_name: &'static str) -> String {
         .render_long_help()
         .to_string()
 }
+
+#[cfg(test)]
+#[path = "session_command_options_test.rs"]
+mod session_command_options_test;

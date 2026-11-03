@@ -75,36 +75,31 @@ fn include_empty_sessions_is_an_explicit_picker_and_list_opt_in() {
 }
 
 #[test]
-fn positional_session_id_after_an_option_is_rejected_instead_of_forwarded() {
-    let error = SessionsCommand::parse(vec![
-        "--local".into(),
-        "019ff0bb-5993-70d3-b1ba-f56724b94919".into(),
-    ])
-    .expect_err("a misplaced positional session id must not become a Codex argument");
-
-    assert!(
-        error.contains("session UUID must be the first argument or use --id"),
-        "{error}"
-    );
+fn positional_session_id_after_an_option_stays_native_passthrough() {
+    let id = "019ff0bb-5993-70d3-b1ba-f56724b94919";
+    let command = SessionsCommand::parse(vec!["--local".into(), id.into()]).unwrap();
+    assert!(command.id.is_none());
+    assert_eq!(command.codex_args, [std::ffi::OsString::from(id)]);
 }
 
 #[test]
-fn near_miss_positional_session_id_is_rejected_instead_of_forwarded() {
-    for near_miss in [
+fn noncanonical_positionals_stay_native_passthrough() {
+    for argument in [
         "019ff05e-77c0-7831-8f68-40bf182509f",
         "019ff05g-77c0-7831-8f68-40bf182509f6",
         "019ff05e77c078318f6840bf182509f6",
     ] {
-        let error = SessionsCommand::parse(vec![near_miss.into()])
-            .expect_err("a positional UUID typo must not become a Codex argument");
-
-        assert!(error.contains("complete UUID"), "{near_miss}: {error}");
+        let command = SessionsCommand::parse(vec![argument.into()]).unwrap();
+        assert!(command.id.is_none());
+        assert_eq!(command.codex_args, [std::ffi::OsString::from(argument)]);
     }
 }
 
 #[test]
 fn sessions_command_preserves_escaped_uuid_passthrough_without_resume_mode() {
     let command = SessionsCommand::parse(vec![
+        "--provider".into(),
+        "codex".into(),
         "--new".into(),
         "--".into(),
         "--request-id".into(),
