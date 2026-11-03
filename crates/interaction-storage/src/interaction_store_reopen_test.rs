@@ -30,9 +30,9 @@ async fn altered_delivery_indexes_are_refused_without_rewriting_them()
             "CREATE INDEX _fleet_sync_inbox_accounting ON _fleet_sync_inbox_items(item_id)",
         ),
         (
-            "_fleet_sync_status_owed_machine",
-            "DROP INDEX _fleet_sync_status_owed_machine",
-            "CREATE INDEX _fleet_sync_status_owed_machine ON _fleet_sync_status_owed(item_id)",
+            "_fleet_sync_status_owed_submitter",
+            "DROP INDEX _fleet_sync_status_owed_submitter",
+            "CREATE INDEX _fleet_sync_status_owed_submitter ON _fleet_sync_status_owed(item_id)",
         ),
     ] {
         let directory = tempfile::tempdir()?;
