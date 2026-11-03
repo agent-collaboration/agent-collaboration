@@ -24,7 +24,7 @@ struct ArchiveState {
     records: Vec<Record>,
     feed: Vec<(i64, String)>,
     ledgers: Vec<String>,
-    reports: Vec<String>,
+    reports: Vec<Value>,
     projection: Option<String>,
     reservation: Option<ClaimReservationState>,
 }
@@ -37,7 +37,17 @@ async fn inspect(fixture: &Fixture) -> TestResult<ArchiveState> {
         }).collect::<Result<Vec<_>,_>>()?;
         let feed = query::<sqlx_turso::Turso>("SELECT position,payload FROM fleet_feed ORDER BY position").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|Ok((row.try_get::<i64,_>("position").map_err(StoreError::backend)?,row.try_get::<String,_>("payload").map_err(StoreError::backend)?))).collect::<Result<Vec<_>,StoreError>>()?;
         let ledgers = query::<sqlx_turso::Turso>("SELECT payload FROM fleet_request_decisions ORDER BY request_id").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|row.try_get::<String,_>("payload").map_err(StoreError::backend)).collect::<Result<Vec<_>,_>>()?;
-        let reports = query::<sqlx_turso::Turso>("SELECT report FROM archive_reports ORDER BY board_id,project_id").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|row.try_get::<String,_>("report").map_err(StoreError::backend)).collect::<Result<Vec<_>,_>>()?;
+        let reports = query::<sqlx_turso::Turso>("SELECT report_id,board_id,project_id,epoch,commit_sequence,installation,reported_at,created_at,updated_at FROM fleet_archive_reports ORDER BY board_id,project_id").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|Ok::<_,StoreError>(json!({
+            "report_id":row.try_get::<String,_>("report_id").map_err(StoreError::backend)?,
+            "board_id":row.try_get::<String,_>("board_id").map_err(StoreError::backend)?,
+            "project_id":row.try_get::<String,_>("project_id").map_err(StoreError::backend)?,
+            "epoch":row.try_get::<String,_>("epoch").map_err(StoreError::backend)?,
+            "commit_sequence":row.try_get::<String,_>("commit_sequence").map_err(StoreError::backend)?,
+            "installation":row.try_get::<String,_>("installation").map_err(StoreError::backend)?,
+            "reported_at":row.try_get::<String,_>("reported_at").map_err(StoreError::backend)?,
+            "created_at":row.try_get::<i64,_>("created_at").map_err(StoreError::backend)?,
+            "updated_at":row.try_get::<i64,_>("updated_at").map_err(StoreError::backend)?,
+        }))).collect::<Result<Vec<_>,_>>()?;
         let row = query::<sqlx_turso::Turso>("SELECT d.lease_projection,r.state_kind,r.outcome FROM project_directory d LEFT JOIN lease_claim_reservations r ON r.project_id=d.project_id AND r.attempt_id=? WHERE d.project_id=?").bind(ATTEMPT).bind(PROJECT).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
         let reservation = crate::typed_claim_observer::reservation_state(&row)?.map(|value|serde_json::from_value(value).map_err(StoreError::backend)).transpose()?;
         Ok(ArchiveState { records, feed, ledgers, reports, projection:row.try_get("lease_projection").map_err(StoreError::backend)?,reservation })
@@ -279,11 +289,11 @@ async fn final_report_and_archive_completion_roll_back_and_retry_together() -> T
         let after = inspect(&fixture).await?;
         assert_finalized(&before, &after)?;
         assert_eq!(after.reports.len(), 1);
-        let stored: Value =
-            serde_json::from_str(after.reports.first().ok_or("native report absent")?)?;
+        let stored = after.reports.first().ok_or("native report absent")?;
+        assert_eq!(stored.get("epoch"), Some(&json!("7")));
         assert_eq!(
-            stored.get("position"),
-            Some(&json!({"epoch":7,"sequence":9_007_199_254_740_993_u64}))
+            stored.get("commit_sequence"),
+            Some(&json!("9007199254740993"))
         );
         assert_eq!(
             stored.get("installation"),
@@ -323,10 +333,12 @@ fn archive_report_call(project: &str) -> TestResult<Vec<u8>> {
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn stored_legacy_and_mixed_positions_cannot_count_as_archive_reports() -> TestResult {
-    for invalid_position in [
-        json!({"epoch":7,"commitId":11}),
-        json!({"epoch":7,"sequence":11,"commitId":11}),
+async fn invalid_stored_native_positions_cannot_count_as_archive_reports() -> TestResult {
+    for (epoch, sequence) in [
+        ("0", "11"),
+        ("7", "legacy commit id"),
+        ("7", "01"),
+        ("18446744073709551616", "11"),
     ] {
         let root = tempfile::tempdir()?;
         let fixture = Fixture::open(root.path()).await?;
@@ -341,12 +353,8 @@ async fn stored_legacy_and_mixed_positions_cannot_count_as_archive_reports() -> 
             fixture.fleet_request(&request(FleetOperation::WorkspaceArchive {})?).await?;
             let bytes = fixture.runtime.on_call(archive_report_call(PROJECT)?).await.map_err(|error| format!("partial report: {error:?}"))?;
             assert_eq!(serde_json::from_slice::<fleet_admission::ArchiveReportOutcome>(&bytes)?, fleet_admission::ArchiveReportOutcome::Recorded);
-            let state = inspect(&fixture).await?;
-            let mut stored: Value = serde_json::from_str(state.reports.first().ok_or("partial report absent")?)?;
-            stored["position"] = invalid_position;
-            let payload = serde_json::to_string(&stored)?;
             fixture.object.transaction(move |scope|Box::pin(async move {
-                query::<sqlx_turso::Turso>("UPDATE archive_reports SET report=? WHERE project_id=?").bind(payload).bind(PROJECT).execute(scope.executor()).await.map_err(StoreError::backend)?;
+                query::<sqlx_turso::Turso>("UPDATE fleet_archive_reports SET epoch=?,commit_sequence=? WHERE project_id=?").bind(epoch).bind(sequence).bind(PROJECT).execute(scope.executor()).await.map_err(StoreError::backend)?;
                 Ok(())
             })).await?;
             let before = inspect(&fixture).await?;
