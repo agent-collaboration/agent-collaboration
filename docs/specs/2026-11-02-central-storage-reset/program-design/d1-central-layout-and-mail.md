@@ -243,7 +243,7 @@ Times are Unix milliseconds unless noted; enum and variant fields are validated 
 | --- | --- |
 | `fleet_feed_state` | `state_id` UUIDv7 PK; `name` UNIQUE; `last_position`; `retained_through`; `created_at`; `updated_at` |
 | `fleet_feed_readers` | `reader_id` UUIDv7 PK; `installation` UNIQUE (today's session-address id until D3); `last_read_position`; `created_at`; `updated_at` |
-| `fleet_creation_decisions` | `project_id` UUIDv7 PK, FK `fleet_project_directory`; `creating_request` UUIDv7 UNIQUE, FK `fleet_request_decisions`; `carrier_installation`; `created_at`; `updated_at` |
+| `fleet_creation_decisions` | `project_id` UUIDv7 PK (no FK to the directory: a rejected creation keeps its decision with no directory row, `fleet_rules.rs:172–183`); `creating_request` UUIDv7 UNIQUE, FK `fleet_request_decisions`; `carrier_installation`; `created_at`; `updated_at` |
 | `lease_claim_reservations` | `attempt_id` UUIDv7 PK; `project_id` FK `fleet_project_directory`; `state_kind` (`active`, `settled`); `outcome` (`granted`, `refused`; only when settled); `created_at`; `updated_at` |
 | `lease_claim_settlement_receipts` | `receipt_id` UUIDv7 PK; `operation_id` UUIDv7; `step_name`; `attempt_id` FK reservations; `project_id` FK directory; `result_kind` (`applied`, `duplicate`, `older`, `conflict`); `stored_epoch`, `stored_incarnation`, `stored_change` (only for `older`/`conflict`); `created_at`; `updated_at`; UNIQUE(`operation_id`, `step_name`). The old `fenced` variant goes with the removed handshake |
 | `fleet_archive_reports` | `report_id` UUIDv7 PK; `board_id` FK `fleet_boards`; `project_id` FK directory; `epoch`; `commit_sequence`; `installation`; `reported_at` (RFC3339, the domain time); `created_at`; `updated_at`; UNIQUE(`board_id`, `project_id`) |
