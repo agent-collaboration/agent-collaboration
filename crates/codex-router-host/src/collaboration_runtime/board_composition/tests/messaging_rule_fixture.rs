@@ -2,9 +2,6 @@
 use super::super::forwarded_notification_fixture::MailWorkerStart;
 use super::*;
 use board_sync_protocol::BoardDeliveryTypes;
-use collaboration_central_conformance::{
-    AdmittedPeerSocket, ConformanceClient, enroll_admitted_peer,
-};
 use collaboration_service::{IntentHandoffInput, IntentRecipientEnrollment};
 use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, PeerId};
 use message_board_storage::MailHandoffItem;
@@ -22,7 +19,7 @@ pub(super) const RECIPIENT: &str = "550e8400-e29b-41d4-a716-446655445183";
 pub(super) struct RuleFixture {
     pub holder: claim_fixture::ClaimFixture,
     pub successor: RuleMachine,
-    pub recipient: AdmittedPeerSocket,
+    pub recipient: RuleMachine,
     pub project: ProjectId,
     pub successor_origin: ActorOrigin,
 }
@@ -69,15 +66,7 @@ impl RuleFixture {
         };
         let successor =
             Box::pin(RuleMachine::open(&holder, &successor_origin, worker_start)).await?;
-        let client = ConformanceClient::new(holder.central.base_url())?;
-        let recipient = enroll_admitted_peer(
-            &client,
-            RECIPIENT,
-            "019f0000-0000-7000-8000-000000051083",
-            "rule-mailbox-recipient",
-            "019f0000-0000-7000-8000-000000061083",
-        )
-        .await?;
+        let recipient = Box::pin(RuleMachine::open_recipient(&holder)).await?;
         let fixture = Self {
             holder,
             successor,
@@ -222,10 +211,7 @@ impl RuleFixture {
             .central
             .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
             .await;
-        self.recipient
-            .socket
-            .close(reqwest_websocket::CloseCode::Normal, None)
-            .await?;
+        self.recipient.close().await?;
         self.successor.close().await?;
         self.holder.shutdown().await
     }

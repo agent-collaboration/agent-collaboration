@@ -124,7 +124,8 @@ async fn queued_answer_reopens_with_custody_and_failure_rolls_back_without_a_pus
     );
     let counts: (i64,i64,i64,i64) = sqlx::query_as("SELECT (SELECT count(*) FROM router_pushes),(SELECT count(*) FROM _fleet_sync_outbox_items),(SELECT count(*) FROM _fleet_sync_operations),(SELECT count(*) FROM message_send_answers)")
         .fetch_one(&mut *owner.writer.lock().await).await.unwrap();
-    assert_eq!(counts, (0, 1, 1, 1));
+    assert_eq!(counts, (0, 1, 2, 1));
+    assert_mail_admission_tasks(&mut *owner.writer.lock().await).await;
 
     sqlx::query("UPDATE message_send_answers SET settled_at_ms=NULL WHERE item_id=?")
         .bind(id.as_str())

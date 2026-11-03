@@ -85,7 +85,12 @@ impl Lifetime {
         self.admission.create_project(&request).await?;
         let writer = self.projects.ensure(&request.project_id).await?;
         assert!(matches!(
-            timeout(BOUND, writer.runtime.wait_registration()).await??,
+            timeout(BOUND, writer.runtime.wait_registration())
+                .await
+                .map_err(|error| format!(
+                    "registration wait {}: {error}",
+                    request.project_id.as_str()
+                ))??,
             WriterRegistrationOutcome::Ready { .. }
         ));
         let created = self.admission.create_project(&request).await?;
@@ -176,7 +181,8 @@ impl Lifetime {
                 tokio::task::yield_now().await;
             }
         })
-        .await??;
+        .await
+        .map_err(|error| format!("copy acknowledgement {}: {error}", project.as_str()))??;
         Ok(())
     }
 
@@ -228,7 +234,7 @@ async fn reenrollment_with_an_existing_writer_renews_and_writes_against_unchange
         .database(&project)
         .await?
         .subscribe_authority_changes();
-    timeout(BOUND, async {
+    let refusal = timeout(BOUND, async {
         loop {
             if matches!(
                 writer.store.writer_state().await?,
@@ -239,7 +245,15 @@ async fn reenrollment_with_an_existing_writer_renews_and_writes_against_unchange
             changes.changed().await?;
         }
     })
-    .await??;
+    .await;
+    if let Err(error) = refusal {
+        return Err(format!(
+            "unchanged-central renewal: {error}; state={:?}",
+            writer.store.writer_state().await
+        )
+        .into());
+    }
+    refusal??;
     drop(writer);
     // Assert a new real admission and Copy succeed without rebuilding the file.
     let written = reopened.write(&project, "after reenrollment").await?;
@@ -297,7 +311,7 @@ async fn wiped_central_leaves_only_the_unknown_project_read_only_while_new_creat
         .await?
         .subscribe_authority_changes();
     reopened.projects.prompt_project_renewal(&project).await?;
-    timeout(BOUND, async {
+    let refusal = timeout(BOUND, async {
         loop {
             if matches!(
                 writer.store.writer_state().await,
@@ -314,7 +328,15 @@ async fn wiped_central_leaves_only_the_unknown_project_read_only_while_new_creat
             changes.changed().await?;
         }
     })
-    .await??;
+    .await;
+    if let Err(error) = refusal {
+        return Err(format!(
+            "wiped-central authoritative refusal: {error}; state={:?}",
+            writer.store.writer_state().await
+        )
+        .into());
+    }
+    refusal??;
     drop(writer);
 
     // Assert the existing native snapshot remains readable with its exact prior head.

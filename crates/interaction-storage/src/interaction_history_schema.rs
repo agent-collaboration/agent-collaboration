@@ -47,6 +47,7 @@ const SCHEDULED_RETRY_READINESS_VERSION: i64 = 202610210003;
 const MAIL_ROUTE_EVIDENCE_VERSION: i64 = 202610210004;
 const SETTLED_ANSWER_RETENTION_VERSION: i64 = 202610310001;
 const APPROVAL_ROUTES_VERSION: i64 = 202610310002;
+const MAIL_REMOVAL_BACKFILL_VERSION: i64 = 202611030001;
 
 fn expected_table_sql(
     table_name: &str,
@@ -159,6 +160,9 @@ pub(super) async fn inspect_schema(
     let has_approval_routes = migrations
         .iter()
         .any(|row| row.version == APPROVAL_ROUTES_VERSION);
+    let has_mail_removal_backfill = migrations
+        .iter()
+        .any(|row| row.version == MAIL_REMOVAL_BACKFILL_VERSION);
     let history_tables = BTreeSet::from([
         "_sqlx_migrations",
         "interaction_history_revision",
@@ -242,6 +246,9 @@ pub(super) async fn inspect_schema(
     }
     if has_approval_routes {
         composed_tables.insert("approval_routes");
+    }
+    if has_mail_removal_backfill {
+        composed_tables.insert("mail_removal_backfill");
     }
     let composed = tables == composed_tables;
     if tables != history_tables && !composed {
@@ -425,6 +432,7 @@ pub(super) async fn inspect_schema(
                         | "pending_poll_mail"
                         | "mail_read_contexts"
                         | "approval_routes"
+                        | "mail_removal_backfill"
                 ))
     }) {
         let actual = object.sql.as_deref().ok_or(StorageError::InvalidSchema)?;
@@ -478,6 +486,7 @@ pub(super) async fn inspect_schema(
             - usize::from(!has_read_contexts)
             - usize::from(!has_settled_answer_retention)
             - usize::from(!has_approval_routes)
+            - usize::from(!has_mail_removal_backfill)
     } else {
         1
     };

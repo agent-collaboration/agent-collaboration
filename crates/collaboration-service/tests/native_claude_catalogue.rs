@@ -228,7 +228,12 @@ async fn resumed_peer_directory_does_not_invalidate_other_native_sessions() {
         .await
         .expect("a resumed peer's current directory must not invalidate the catalogue");
 
-    assert_eq!(loaded.sessions.len(), 2);
+    assert_eq!(
+        loaded.sessions.len(),
+        2,
+        "native coverage: {:?}",
+        loaded.native_coverage
+    );
     let resumed = loaded
         .sessions
         .iter()

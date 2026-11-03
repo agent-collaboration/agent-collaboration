@@ -79,6 +79,8 @@ mod local_runtime;
 mod remote_assembly;
 #[path = "remote_wake_replay_tests.rs"]
 mod remote_wakes;
+#[path = "mail_removal_backfill_test.rs"]
+mod removal_backfill;
 
 #[tokio::test]
 async fn remote_follow_retries_use_item_counts_and_library_deadlines_across_cold_reopen() {

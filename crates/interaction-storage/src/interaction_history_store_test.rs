@@ -4,9 +4,9 @@ use chrono::{Duration, Utc};
 use message_board::{Identity, SessionRef};
 use sqlx::Connection;
 
-#[path = "interaction_history_legacy_tests.rs"]
+#[path = "interaction_history_legacy_test.rs"]
 mod legacy_scenarios;
-#[path = "interaction_history_sqlite_tests.rs"]
+#[path = "interaction_history_sqlite_test.rs"]
 mod sqlite_scenarios;
 
 fn session_ref(session_id: &str) -> SessionRef {

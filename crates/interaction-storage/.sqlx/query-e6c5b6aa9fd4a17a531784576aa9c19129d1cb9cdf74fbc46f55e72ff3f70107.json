@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT id AS \"id!: String\", admitted_count AS \"admitted_count!: i64\", created_at AS \"created_at!: i64\", updated_at AS \"updated_at!: i64\" FROM mail_removal_backfill WHERE migration_name=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "admitted_count!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "created_at!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "updated_at!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "e6c5b6aa9fd4a17a531784576aa9c19129d1cb9cdf74fbc46f55e72ff3f70107"
+}

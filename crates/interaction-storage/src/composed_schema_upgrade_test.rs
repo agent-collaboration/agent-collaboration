@@ -157,7 +157,7 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
         .await
         .unwrap();
 
-    // Act: today's public opener admits this exact file and runs the three newer migrations.
+    // Act: today's public opener admits this exact file and runs the four newer migrations.
     for _ in 0..2 {
         let owner = Arc::new(
             InteractionStore::open(&path)
@@ -182,7 +182,15 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
                 .fetch_one(&mut *writer)
                 .await
                 .unwrap();
-            assert_eq!(migrations, 15);
+            assert_eq!(migrations, 16);
+            let markers: i64 = sqlx::query_scalar("SELECT count(*) FROM mail_removal_backfill")
+                .fetch_one(&mut *writer)
+                .await
+                .unwrap();
+            assert_eq!(
+                markers, 0,
+                "schema upgrade must leave the atomic custody backfill pending for its owning engine"
+            );
             let completed_answer: Option<i64> = sqlx::query_scalar(
                 "SELECT settled_at_ms FROM message_send_answers WHERE item_id=?",
             )

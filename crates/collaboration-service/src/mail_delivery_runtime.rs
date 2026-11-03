@@ -38,6 +38,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 mod frozen_cancel_outcome;
 mod frozen_handoff_status;
 pub(crate) use frozen_cancel_outcome::{FrozenCancelSettlement, RemoteCancelReplay};
+mod custody_backfill;
 mod held_readiness;
 #[cfg(feature = "test-support")]
 mod inbound_wake_probe;
@@ -72,6 +73,8 @@ pub struct MailDeliveryRuntime {
     pub(crate) cancel_admission_probe: Option<std::path::PathBuf>,
     #[cfg(test)]
     pub(crate) project_admission_probe: Option<std::path::PathBuf>,
+    #[cfg(test)]
+    pub(crate) backfill_admission_probe: Option<std::path::PathBuf>,
     settlement_drives: Arc<std::sync::Mutex<TaskTracker>>,
     project_replication:
         Arc<OnceLock<Arc<dyn collaboration_contracts::ProjectReplicationPosition>>>,
@@ -234,6 +237,8 @@ impl MailDeliveryRuntime {
             cancel_admission_probe: None,
             #[cfg(test)]
             project_admission_probe: None,
+            #[cfg(test)]
+            backfill_admission_probe: None,
             settlement_drives: Arc::new(std::sync::Mutex::new(TaskTracker::new())),
             owner,
             store,
@@ -286,6 +291,9 @@ impl MailDeliveryRuntime {
 
     /// Host monitors this future and drains in-flight native work during shutdown.
     pub async fn run(&self, shutdown: CancellationToken) -> Result<(), StoreError> {
+        if let Some(admitted) = self.initialize_record_removals().await? {
+            tracing::info!(admitted, "admitted existing mail custody removal records");
+        }
         for target in self
             .owner
             .held_mail_targets()

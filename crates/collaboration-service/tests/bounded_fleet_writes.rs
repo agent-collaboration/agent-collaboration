@@ -119,12 +119,16 @@ async fn fleet_write_reads_only_its_operands_and_survives_an_unrelated_corrupt_c
         (large.0, large.1),
         "fleet write decoded unrelated cached directory bodies"
     );
+    // C1 (fea23186b) removed remember_machine_notice_peer's unconditional
+    // UPDATE machine_notice_state SET peer_id=... once per incoming frame.
+    // FleetClient::write sends one write frame, then refresh_cache sends one
+    // FleetRecords frame: those two no-op updates made the former budget 40.
     assert_eq!(
-        small.0.statements, 40,
+        small.0.statements, 38,
         "exact foreground board/cache SQL budget"
     );
     assert_eq!(
-        large.0.statements, 40,
+        large.0.statements, 38,
         "exact foreground board/cache SQL budget"
     );
     assert!(

@@ -9,6 +9,27 @@ use fleet_sync_protocol::{DeliveryEnvelope, PushResult};
 use runtime_primitives::{Clock, WakeScheduler};
 
 impl MailDeliveryRuntime {
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    pub async fn runtime_test_pushed_item(
+        &self,
+        reference: fleet_sync_protocol::DeliveryItemRef,
+    ) -> Result<fleet_sync_protocol::DeliveryItem<BoardDeliveryTypes>, StoreError> {
+        let config = self.config;
+        let item = self
+            .store
+            .transaction(move |scope| {
+                Box::pin(async move {
+                    Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
+                        .resolve_delivery(&reference)
+                        .await
+                        .map_err(StoreError::backend)
+                })
+            })
+            .await?;
+        serde_json::from_value(serde_json::to_value(item).map_err(StoreError::backend)?)
+            .map_err(StoreError::backend)
+    }
+
     pub async fn accept_pushed_mail(
         &self,
         item: DeliveryEnvelope<BoardDeliveryTypes>,

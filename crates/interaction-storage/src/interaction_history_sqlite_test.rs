@@ -247,5 +247,5 @@ fn question(request_id: &str) -> session_event_model::QuestionRequest {
     .expect("question")
 }
 
-#[path = "interaction_history_sqlite_lifecycle_tests.rs"]
+#[path = "interaction_history_sqlite_lifecycle_test.rs"]
 mod lifecycle_scenarios;

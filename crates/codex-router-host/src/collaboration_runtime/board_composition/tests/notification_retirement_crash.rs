@@ -140,8 +140,8 @@ async fn acknowledged_frontier_recovers_after_sigkill_without_early_custody_remo
     );
     recovered??;
     assert!(
-        final_outcome.is_some(),
-        "frontier replay erased retained custody"
+        matches!(final_outcome, Some(RecipientOutcome::Prevented { .. })),
+        "frontier replay must retain the exact Prevented outcome"
     );
     assert_eq!(
         serde_json::to_value(final_show)?,

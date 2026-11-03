@@ -38,6 +38,10 @@ pub(super) enum MailWorkerStart {
 }
 
 impl HolderNotifications {
+    pub fn mail_runtime(&self) -> &collaboration_service::MailDeliveryRuntime {
+        self.mail.runtime()
+    }
+
     pub async fn hold_progress_writer(
         &self,
     ) -> Result<

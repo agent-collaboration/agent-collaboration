@@ -5,10 +5,10 @@ use board_sync_protocol::{
 };
 use collaboration_central_conformance::DispatchCallSelector;
 use fleet_sync_protocol::{
-    DeliveryEnvelope, Epoch, OperationAnswer, OperationRequest, SubmitResult,
+    DeliveryEnvelope, DeliveryStream, Epoch, OperationAnswer, OperationRequest, SubmitResult,
 };
 use message_board_storage::MailCancelGroup;
-use relay_transport::{operation, relay_request};
+use relay_transport::relay_request;
 
 #[tokio::test]
 async fn unreplicated_subscription_end_never_sends_its_cancel_after_takeover() -> TestResult {
@@ -65,38 +65,79 @@ async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
         let (group, cancel) = arrange_remote_end(&fixture, &seed, case).await?;
         let mailbox = ObjectAddress::Mailbox(rule_fixture::RECIPIENT.to_owned().try_into()?);
         if matches!(case, CancelPrefix::LostReceipt) {
-            hold_lost_receipt_submit(&fixture, mailbox.clone(), fixture.successor.projects.peer, seed.item.id()).await?;
+            hold_lost_receipt_submit(
+                &fixture,
+                mailbox.clone(),
+                fixture.successor.projects.peer,
+                seed.item.id(),
+            )
+            .await?;
         }
         fixture.holder.disconnect_holder().await?;
-        let moved = fixture.holder.central.take_over_project(DatabaseId::try_from(fixture.project.as_str().to_owned())?,
-            &fixture.successor_origin.installation, TransferId::new(durable_steps::Uuid::now_v7())?).await?;
+        let moved = fixture
+            .holder
+            .central
+            .take_over_project(
+                DatabaseId::try_from(fixture.project.as_str().to_owned())?,
+                &fixture.successor_origin.installation,
+                TransferId::new(durable_steps::Uuid::now_v7())?,
+            )
+            .await?;
         assert_eq!(moved.pointer("/value/newEpoch"), Some(&json!(3)));
         if matches!(case, CancelPrefix::Discarded) {
-            fixture.holder.central.runtime_control(connection, RuntimeControl::ResumeDispatch).await?;
+            fixture
+                .holder
+                .central
+                .runtime_control(connection, RuntimeControl::ResumeDispatch)
+                .await?;
         }
-        received_grants::wait_published_project(&fixture.successor.registry, &fixture.project, 3).await?;
+        received_grants::wait_published_project(&fixture.successor.registry, &fixture.project, 3)
+            .await?;
         if matches!(case, CancelPrefix::LostReceipt) {
             lose_actual_submit_answer(&fixture, mailbox, seed.item.id()).await?;
         }
-        let items = wait_fetch(&mut fixture, "items").await?;
-        assert_eq!(items.pointer("/value/value/through"), Some(&json!(1)));
-        assert_eq!(items.pointer("/value/value/entries"), Some(&json!([{"kind":"item","value":{"seq":1,"item":{"kind":"item","value":seed.item}}}])));
+        let items = wait_pushed(&fixture, DeliveryStream::Items).await?;
+        assert_eq!(
+            serde_json::to_value(items)?,
+            json!([{"kind":"item","value":seed.item}])
+        );
         if matches!(case, CancelPrefix::Discarded) {
-            assert_eq!(operation(&mut fixture.recipient.socket, relay_request("fetch", json!({"stream":"controls","after":0,"maxItems":10,"maxBytes":1_000_000}))).await?,
-                json!({"kind":"delivery","value":{"kind":"fetch","value":{"stream":"controls","entries":[],"through":0}}}));
+            assert!(
+                fixture
+                    .recipient
+                    .pushed_envelopes(DeliveryStream::Controls)
+                    .await?
+                    .is_empty()
+            );
         } else {
-            let controls = wait_fetch(&mut fixture, "controls").await?;
-            assert_eq!(controls.pointer("/value/value/entries"), Some(&json!([{"kind":"item","value":{"seq":1,"item":cancel}}])));
-            assert_eq!(controls.pointer("/value/value/through"), Some(&json!(1)));
+            let controls = wait_pushed(&fixture, DeliveryStream::Controls).await?;
+            assert_eq!(serde_json::to_value(controls)?, json!([cancel]));
             decide_and_replay(&mut fixture, &seed, &cancel).await?;
         }
-        let store = fixture.successor.registry.existing_project(&fixture.project).await?.ok_or("successor store")?;
+        let store = fixture
+            .successor
+            .registry
+            .existing_project(&fixture.project)
+            .await?
+            .ok_or("successor store")?;
         let mut read = store.snapshot().await?;
-        assert_eq!(read.mail_handoff(&group.id).await?.is_some(), !matches!(case, CancelPrefix::Discarded));
-        assert_eq!(read.mail_cancel_expansion_for_target(&group.id, &seed.item.id().as_uuid().to_string().try_into()?).await?.is_some(), !matches!(case, CancelPrefix::Discarded));
+        assert_eq!(
+            read.mail_handoff(&group.id).await?.is_some(),
+            !matches!(case, CancelPrefix::Discarded)
+        );
+        assert_eq!(
+            read.mail_cancel_expansion_for_target(
+                &group.id,
+                &seed.item.id().as_uuid().to_string().try_into()?
+            )
+            .await?
+            .is_some(),
+            !matches!(case, CancelPrefix::Discarded)
+        );
         read.finish().await?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
-    }).await;
+    })
+    .await;
     let _ = fixture
         .holder
         .central
@@ -122,23 +163,23 @@ async fn arrange_sent_follow(
     release.send(()).map_err(|_| "old publication hold ended")?;
     task.await??;
     queue_old_publisher(fixture).await?;
-    let sent = wait_fetch(fixture, "items").await?;
+    let sent = wait_pushed(fixture, DeliveryStream::Items).await?;
     assert_eq!(
-        sent.pointer("/value/value/entries"),
-        Some(&json!([{"kind":"item","value":{"seq":1,"item":{"kind":"item","value":seed.item}}}]))
+        serde_json::to_value(sent)?,
+        json!([{"kind":"item","value":seed.item}])
     );
-    let held = operation(
-        &mut fixture.recipient.socket,
-        relay_request(
+    let held = fixture
+        .recipient
+        .operation(relay_request(
             "report",
             json!({"report":{"item":seed.item.id(),"reportSeq":1,"outcome":{"kind":"held"}}}),
-        ),
-    )
-    .await?;
+        ))
+        .await?;
     assert_eq!(
-        held.pointer("/value/value/value/status"),
-        Some(&json!({"kind":"held"}))
+        held,
+        json!({"kind":"delivery","value":{"kind":"report","value":{"kind":"ack","value":{"reportSeq":1}}}})
     );
+
     Ok(seed)
 }
 
@@ -271,26 +312,15 @@ async fn assert_no_outgoing_cancel(fixture: &RuleFixture, original: ItemId) -> T
     Ok(())
 }
 
-async fn wait_fetch(
-    fixture: &mut RuleFixture,
-    stream: &str,
-) -> Result<serde_json::Value, Box<dyn std::error::Error + Send + Sync>> {
+async fn wait_pushed(
+    fixture: &RuleFixture,
+    stream: DeliveryStream,
+) -> Result<Vec<DeliveryEnvelope<BoardDeliveryTypes>>, Box<dyn std::error::Error + Send + Sync>> {
     timeout(BOUND, async {
         loop {
-            let fetched = operation(
-                &mut fixture.recipient.socket,
-                relay_request(
-                    "fetch",
-                    json!({"stream":stream,"after":0,"maxItems":10,"maxBytes":1_000_000}),
-                ),
-            )
-            .await?;
-            if fetched
-                .pointer("/value/value/entries")
-                .and_then(serde_json::Value::as_array)
-                .is_some_and(|entries| !entries.is_empty())
-            {
-                return Ok(fetched);
+            let pushed = fixture.recipient.pushed_envelopes(stream).await?;
+            if !pushed.is_empty() {
+                return Ok(pushed);
             }
             tokio::task::yield_now().await;
         }
@@ -447,35 +477,44 @@ async fn decide_and_replay(
     cancel: &DeliveryEnvelope<BoardDeliveryTypes>,
 ) -> TestResult {
     for (item, report_seq) in [(seed.item.id(), 2), (cancel.id(), 1)] {
-        let answer = operation(&mut fixture.recipient.socket, relay_request("report", json!({"report":{"item":item,"reportSeq":report_seq,"outcome":{"kind":"prevented","value":{"cancel":cancel.id()}}}}))).await?;
+        let answer = fixture.recipient.operation(relay_request("report", json!({"report":{"item":item,"reportSeq":report_seq,"outcome":{"kind":"prevented","value":{"cancel":cancel.id()}}}}))).await?;
         assert_eq!(
-            answer.pointer("/value/value/value/status"),
-            Some(&json!({"kind":"cancelled"}))
+            answer,
+            json!({"kind":"delivery","value":{"kind":"report","value":{"kind":"ack","value":{"reportSeq":report_seq}}}})
         );
     }
     for value in [
         json!({"kind":"item","value":seed.item}),
         serde_json::to_value(cancel)?,
     ] {
+        let replay_item =
+            serde_json::from_value::<DeliveryEnvelope<BoardDeliveryTypes>>(value.clone())?.id();
         let answer = replay_after_reconnect(fixture, value).await?;
-        assert!(matches!(
-            answer,
-            OperationAnswer::Consumer(BoardConsumerAnswer::MailSubmit(
-                MailSubmitAnswer::Submitted(SubmitResult::Replayed {
-                    status: fleet_sync_protocol::DeliveryStatus::Cancelled,
-                    ..
-                })
-            ))
-        ));
+        let answer_wire = serde_json::to_value(&answer)?;
+        assert!(
+            matches!(
+                &answer,
+                OperationAnswer::Consumer(BoardConsumerAnswer::MailSubmit(
+                    MailSubmitAnswer::Submitted(SubmitResult::Replayed {
+                        status: fleet_sync_protocol::DeliveryStatus::Cancelled,
+                        ..
+                    })
+                ))
+            ),
+            "frozen replay={answer_wire}; project={}; item={}; original submitter={} at epoch2; replayer={} at epoch3",
+            fixture.project.as_str(),
+            replay_item.as_uuid(),
+            fixture.holder.projects.peer.as_uuid(),
+            fixture.successor.projects.peer.as_uuid()
+        );
     }
-    let statuses = operation(
-        &mut fixture.recipient.socket,
-        relay_request(
+    let statuses = fixture
+        .successor
+        .operation(relay_request(
             "query",
             json!({"mailbox":fixture.recipient.peer,"items":[seed.item.id(),cancel.id()]}),
-        ),
-    )
-    .await?;
+        ))
+        .await?;
     assert_eq!(
         statuses.pointer("/value/value/statuses/0/state/value/status"),
         Some(&json!({"kind":"cancelled"}))
@@ -485,16 +524,13 @@ async fn decide_and_replay(
         Some(&json!({"kind":"prevented"}))
     );
     assert_eq!(
-        operation(
-            &mut fixture.recipient.socket,
-            relay_request(
-                "fetch",
-                json!({"stream":"controls","after":1,"maxItems":10,"maxBytes":1_000_000})
-            )
-        )
-        .await?
-        .pointer("/value/value/through"),
-        Some(&json!(1))
+        serde_json::to_value(
+            fixture
+                .recipient
+                .pushed_envelopes(DeliveryStream::Controls)
+                .await?
+        )?,
+        json!([cancel])
     );
     Ok(())
 }

@@ -71,7 +71,6 @@ async fn interrupted_reset_resumes_before_activation_and_preserves_router_owned_
     for name in [
         "machine-session/state.json",
         "machine-session/machine-notice-progress.json",
-        "fleet-cache.sqlite",
         "board-read-cache",
     ] {
         assert!(
@@ -89,11 +88,22 @@ async fn interrupted_reset_resumes_before_activation_and_preserves_router_owned_
         assert_eq!(tokio::fs::read(storage.join(name)).await?, name.as_bytes());
     }
     // Replaying completion cannot clear state learned after the reset.
-    tokio::fs::write(storage.join("fleet-cache.sqlite"), b"new central cache").await?;
+    let cache =
+        message_board_storage::FleetCache::open(&storage.join("fleet-cache.sqlite")).await?;
+    cache
+        .replace_snapshot(&message_board_storage::FleetRecordSnapshot {
+            through: message_board::FleetPosition::try_from(7)?,
+            records: Vec::new(),
+        })
+        .await?;
+    cache.close().await;
     resume_enrollment_reset(&journal, &storage).await?;
+    let cache =
+        message_board_storage::FleetCache::open(&storage.join("fleet-cache.sqlite")).await?;
     assert_eq!(
-        tokio::fs::read(storage.join("fleet-cache.sqlite")).await?,
-        b"new central cache"
+        cache.checkpoint().await?,
+        message_board::FleetPosition::try_from(7)?
     );
+    cache.close().await;
     Ok(())
 }

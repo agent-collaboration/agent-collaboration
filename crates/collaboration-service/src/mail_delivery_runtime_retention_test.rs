@@ -72,11 +72,15 @@ async fn local_custody_survives_project_frontier_release_and_day59_then_removes_
         0
     );
     set_day(&runtime, item, 61);
-    assert!(
+    assert!(matches!(
         mail.send_local(draft, "too-old local replay".to_owned())
-            .await
-            .is_err()
-    );
+            .await,
+        Err(
+            crate::push_record_delivery::PushDeliveryFailure::MailRefused(
+                collaboration_mail_protocol::MailRefusal::TooOld {}
+            )
+        )
+    ));
     assert_eq!(
         runtime.client.calls(item),
         1,

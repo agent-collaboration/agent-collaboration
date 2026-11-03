@@ -44,22 +44,15 @@ async fn inherited_handoff_cancel_reaches_the_remote_hold_before_any_local_submi
         );
 
         fixture.successor.notifications.start_mail_worker()?;
-        let controls = wait_fetch(&mut fixture, "controls").await?;
-        assert_eq!(
-            controls.pointer("/value/value/entries"),
-            Some(&json!([{"kind":"item","value":{"seq":1,"item":cancel}}]))
-        );
+        let controls = wait_pushed(&fixture, DeliveryStream::Controls).await?;
+        assert_eq!(serde_json::to_value(controls)?, json!([cancel]));
         decide_and_replay(&mut fixture, &seed, &cancel).await?;
-        let fetched = operation(
-            &mut fixture.recipient.socket,
-            relay_request(
-                "fetch",
-                json!({"stream":"items","after":1,"maxItems":10,"maxBytes":1_000_000}),
-            ),
-        )
-        .await?;
-        assert_eq!(fetched.pointer("/value/value/entries"), Some(&json!([])));
-        assert_eq!(fetched.pointer("/value/value/through"), Some(&json!(1)));
+        let originals = fixture
+            .recipient
+            .pushed_envelopes(DeliveryStream::Items)
+            .await?;
+        assert_eq!(originals.len(), 1);
+        assert_eq!(originals[0].id(), seed.item.id());
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     })
     .await;

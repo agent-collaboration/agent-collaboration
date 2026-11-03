@@ -152,9 +152,6 @@ async fn clear_router_state(directory: &Path) -> io::Result<()> {
     for file in [
         "machine-session/state.json",
         "machine-session/machine-notice-progress.json",
-        "fleet-cache.sqlite",
-        "fleet-cache.sqlite-wal",
-        "fleet-cache.sqlite-shm",
     ] {
         match tokio::fs::remove_file(directory.join(file)).await {
             Ok(()) => {}
@@ -162,6 +159,12 @@ async fn clear_router_state(directory: &Path) -> io::Result<()> {
             Err(error) => return Err(error),
         }
     }
+    let cache = message_board_storage::FleetCache::open(&directory.join("fleet-cache.sqlite"))
+        .await
+        .map_err(io::Error::other)?;
+    let cleared = cache.clear_central_derived_cache().await;
+    cache.close().await;
+    cleared.map_err(io::Error::other)?;
     for child in [
         "board-read-cache",
         "claim-installs",
@@ -189,3 +192,7 @@ async fn reset_barrier() -> io::Result<()> {
 #[cfg(test)]
 #[path = "enrollment_reset_test.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "enrollment_reset_cache_test.rs"]
+mod cache_tests;

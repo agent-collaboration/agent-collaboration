@@ -1,6 +1,8 @@
 //! One Turso transaction owner for typed interactions and local message delivery.
 mod interaction_store;
-pub use interaction_store::{InteractionStore, StorageError};
+pub use interaction_store::InteractionStore;
+mod error;
+pub use error::StorageError;
 mod approval_routes;
 pub use approval_routes::StoredApprovalRoute;
 /// Retention shared by settled interaction records in `interaction.sqlite`.
@@ -44,7 +46,11 @@ pub use mail_push_projection::{
     read_mail_push_in_scope,
 };
 mod installation_peer_directory;
+mod mail_removal_backfill;
 mod mail_retirement_progress;
+pub use mail_removal_backfill::{
+    complete_mail_removal_backfill_in_scope, mail_removal_backfill_completed_in_scope,
+};
 mod pending_poll_mail;
 pub use pending_poll_mail::{
     PendingPollMail, delete_pending_poll_in_scope, insert_pending_poll_in_scope,
@@ -80,6 +86,7 @@ pub use subscription_delivery_progress::{
 };
 
 #[cfg(test)]
+#[path = "interaction_atomic_store_test.rs"]
 mod interaction_atomic_store_tests;
 #[cfg(test)]
 mod schema_prefix_fixture;

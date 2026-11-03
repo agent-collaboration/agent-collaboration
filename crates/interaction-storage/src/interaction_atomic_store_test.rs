@@ -96,11 +96,11 @@ mod retention_tests;
 type NativeSubmit =
     SubmitItem<NativeStore, sqlx_turso::Turso, BoardDeliveryTypes, NoDeliveryConsumer>;
 
-#[path = "composed_schema_upgrade_tests.rs"]
+#[path = "composed_schema_upgrade_test.rs"]
 mod composed_schema_upgrade;
 #[path = "local_cancel_delivery_storage_tests.rs"]
 mod local_cancels;
-#[path = "message_send_answer_custody_tests.rs"]
+#[path = "message_send_answer_custody_test.rs"]
 mod queued_answers;
 #[path = "mail_submission_epoch_tests.rs"]
 mod submission_epochs;
@@ -263,7 +263,8 @@ async fn library_outbox_and_journal_commit_with_push_and_roll_back_on_real_push_
     let mut connection = reopened.writer.lock().await;
     let counts: (i64, i64, i64) = sqlx::query_as("SELECT (SELECT count(*) FROM router_pushes),(SELECT count(*) FROM _fleet_sync_outbox_items),(SELECT count(*) FROM _fleet_sync_operations)")
         .fetch_one(&mut *connection).await.expect("durable custody, journal and push counts");
-    assert_eq!(counts, (1, 1, 1));
+    assert_eq!(counts, (1, 1, 2));
+    assert_mail_admission_tasks(&mut connection).await;
     let answers: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM message_send_answers")
         .fetch_one(&mut *connection)
         .await
@@ -274,4 +275,20 @@ async fn library_outbox_and_journal_commit_with_push_and_roll_back_on_real_push_
     );
     drop(connection);
     reopened.close().await.expect("close proof owner");
+}
+
+async fn assert_mail_admission_tasks(connection: &mut sqlx_turso::TursoConnection) {
+    let kinds: Vec<String> =
+        sqlx::query_scalar("SELECT kind FROM _fleet_sync_operations ORDER BY kind")
+            .fetch_all(connection)
+            .await
+            .unwrap();
+    assert_eq!(
+        kinds,
+        [
+            "fleet-sync.delivery.remove-record",
+            "fleet-sync.delivery.submit-item"
+        ],
+        "custody admission needs exactly its submit and 60-day removal, and failed admission leaves neither"
+    );
 }

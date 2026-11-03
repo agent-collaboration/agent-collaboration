@@ -15,6 +15,7 @@ use tracing_subscriber::{Layer, layer::Context, registry::LookupSpan};
 struct AlarmRun {
     object_kind: String,
     statements: u64,
+    sql: Vec<String>,
     completed: bool,
 }
 #[derive(Default)]
@@ -67,6 +68,7 @@ where
                 AlarmRun {
                     object_kind: object_kind.0,
                     statements: 0,
+                    sql: Vec::new(),
                     completed: false,
                 },
             );
@@ -100,11 +102,9 @@ where
         if let Some(run_id) = run_id {
             let mut state = state().lock().unwrap();
             state.statements += 1;
-            state
-                .runs
-                .get_mut(&run_id)
-                .expect("registered alarm run")
-                .statements += 1;
+            let run = state.runs.get_mut(&run_id).expect("registered alarm run");
+            run.statements += 1;
+            run.sql.push(statement.to_owned());
         }
     }
     #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
@@ -131,12 +131,21 @@ pub struct AlarmCostObservation {
     already_running: BTreeSet<u64>,
     statements_before: u64,
 }
-#[derive(Debug)]
 pub struct AlarmRunCosts {
     /// All alarm SQL in the same window as the foreground cost counter.
     pub overlapping_statements: u64,
     /// Complete runs, including a run that straddled either observation boundary.
     pub by_object: BTreeMap<String, Vec<u64>>,
+    pub sql_by_object: BTreeMap<String, Vec<Vec<String>>>,
+}
+impl std::fmt::Debug for AlarmRunCosts {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("AlarmRunCosts")
+            .field("overlapping_statements", &self.overlapping_statements)
+            .field("by_object", &self.by_object)
+            .finish_non_exhaustive()
+    }
 }
 impl AlarmRunCosts {
     pub fn distinct_costs(&self) -> BTreeMap<String, BTreeSet<u64>> {
@@ -177,7 +186,7 @@ impl AlarmCostObservation {
         tokio::time::timeout(Duration::from_secs(20), async {
             loop {
                 completed.borrow_and_update();
-                let by_object = {
+                let completed_costs = {
                     let state = state().lock().unwrap();
                     let runs = selected
                         .iter()
@@ -185,21 +194,27 @@ impl AlarmCostObservation {
                         .collect::<Vec<_>>();
                     if runs.iter().all(|run| run.completed) {
                         let mut by_object: BTreeMap<String, Vec<u64>> = BTreeMap::new();
+                        let mut sql_by_object: BTreeMap<String, Vec<Vec<String>>> = BTreeMap::new();
                         for run in runs {
                             by_object
                                 .entry(run.object_kind.clone())
                                 .or_default()
                                 .push(run.statements);
+                            sql_by_object
+                                .entry(run.object_kind.clone())
+                                .or_default()
+                                .push(run.sql.clone());
                         }
-                        Some(by_object)
+                        Some((by_object, sql_by_object))
                     } else {
                         None
                     }
                 };
-                if let Some(by_object) = by_object {
+                if let Some((by_object, sql_by_object)) = completed_costs {
                     return Ok(AlarmRunCosts {
                         overlapping_statements,
                         by_object,
+                        sql_by_object,
                     });
                 }
                 completed

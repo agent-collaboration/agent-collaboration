@@ -287,6 +287,7 @@ fn map_refusal(reason: DeliveryRefusal) -> PushDeliveryFailure {
         DeliveryRefusal::MailboxFull => {
             PushDeliveryFailure::MailRefused(MailRefusal::MailboxFull {})
         }
+        DeliveryRefusal::TooOld => PushDeliveryFailure::MailRefused(MailRefusal::TooOld {}),
         _ => PushDeliveryFailure::StoreFailed,
     }
 }

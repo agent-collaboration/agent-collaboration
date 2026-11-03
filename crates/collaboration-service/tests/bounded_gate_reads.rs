@@ -16,7 +16,109 @@ use message_board::*;
 use read_cost_counter::{ReadCost, current_cost};
 use serde_json::json;
 use sqlx::{ConnectOptions, Connection};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+
+// One fresh fixture machine has no expired feed, forwards or notices. Each
+// maintenance owner reads its fixed operands; a due session task may also
+// resolve this one installation. SQL identities come from those owners, while
+// the literal per-query counts below are the independent scaling oracle.
+#[expect(
+    clippy::expect_used,
+    reason = "Unclassified captured SQL is an explicit test inventory failure."
+)]
+fn context_alarm_owner_costs(
+    costs: &read_cost_counter::alarm_read_costs::AlarmRunCosts,
+) -> BTreeSet<BTreeMap<&'static str, u64>> {
+    const QUERIES: [(&str, &str); 9] = [
+        (
+            "feed.state",
+            include_str!("../../collaboration-central-core/sql/fleet/read_fleet_feed_state.sql"),
+        ),
+        (
+            "feed.expired",
+            include_str!("../../collaboration-central-core/sql/fleet/read_expired_fleet_feed.sql"),
+        ),
+        (
+            "forwards.rows",
+            include_str!("../../collaboration-central-core/sql/forwards/read_forward_rows.sql"),
+        ),
+        (
+            "notices.peers",
+            include_str!(
+                "../../collaboration-central-core/sql/machine_notices/read_machine_notice_peers.sql"
+            ),
+        ),
+        (
+            "notices.state",
+            include_str!(
+                "../../collaboration-central-core/sql/machine_notices/read_machine_notice_state.sql"
+            ),
+        ),
+        (
+            "notices.bounds",
+            include_str!(
+                "../../collaboration-central-core/sql/machine_notices/read_machine_notice_bounds.sql"
+            ),
+        ),
+        (
+            "notices.expired",
+            include_str!(
+                "../../collaboration-central-core/sql/machine_notices/read_expired_machine_notices.sql"
+            ),
+        ),
+        (
+            "notices.next_expiry",
+            include_str!(
+                "../../collaboration-central-core/sql/machine_notices/read_machine_notice_expiry.sql"
+            ),
+        ),
+        (
+            "directory.installation",
+            include_str!("../../collaboration-central-core/sql/read_enrollments.sql"),
+        ),
+    ];
+    let normalize = |sql: &str| sql.split_whitespace().collect::<Vec<_>>().join(" ");
+    let queries: BTreeMap<_, _> = QUERIES
+        .into_iter()
+        .map(|(owner, sql)| (normalize(sql), owner))
+        .collect();
+    let expected = BTreeMap::from([
+        ("feed.state", 1),
+        ("feed.expired", 1),
+        // SessionScope::expire_forwards reads origin and holder sides once each.
+        ("forwards.rows", 2),
+        ("notices.peers", 1),
+        ("notices.state", 1),
+        ("notices.bounds", 1),
+        ("notices.expired", 1),
+        ("notices.next_expiry", 1),
+    ]);
+    let mut observed = BTreeSet::new();
+    for (object, runs) in &costs.sql_by_object {
+        assert_eq!(object, "fleet", "unexpected context alarm owner");
+        for run in runs {
+            let mut counts = BTreeMap::new();
+            for sql in run {
+                let owner = queries
+                    .get(&normalize(sql))
+                    .expect("unclassified alarm SQL changed the bounded owner inventory");
+                *counts.entry(*owner).or_insert(0_u64) += 1;
+            }
+            let directory = counts.remove("directory.installation").unwrap_or(0);
+            assert!(
+                directory <= 1,
+                "one due session task resolved unrelated installations"
+            );
+            assert_eq!(
+                counts, expected,
+                "maintenance owner grew with retained data"
+            );
+            counts.insert("directory.installation", directory);
+            observed.insert(counts);
+        }
+    }
+    observed
+}
 
 async fn unrelated_operands(
     store: &collaboration_runtime::NativeProjectStore,
@@ -376,22 +478,10 @@ async fn covered_reads_and_session_context_have_operand_bounded_cost() -> Result
         large.0.statements, 12,
         "exact foreground context SQL budget"
     );
-    // A read may overlap no alarm at all. When a fresh Fleet retention run
-    // overlaps, it reads state and its expired prefix: exactly two statements.
-    // bounded_fleet_writes also exercises this component at both fixture sizes.
-    for alarm_costs in [&small.1, &large.1] {
-        for (object_kind, runs) in &alarm_costs.by_object {
-            assert_eq!(
-                object_kind, "fleet",
-                "unexpected context alarm: {alarm_costs:?}"
-            );
-            for run_statements in runs {
-                assert_eq!(
-                    *run_statements, 2,
-                    "fresh retention run grew with unrelated history: {alarm_costs:?}"
-                );
-            }
-        }
-    }
+    assert_eq!(
+        context_alarm_owner_costs(&small.1),
+        context_alarm_owner_costs(&large.1),
+        "per-owner alarm SQL grew with unrelated retained history"
+    );
     Ok(())
 }
