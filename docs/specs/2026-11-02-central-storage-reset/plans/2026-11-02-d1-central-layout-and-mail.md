@@ -35,8 +35,8 @@ From `AGENTS.md` and owner rules: UUIDv7 ids only; SQL CHECK only for booleans; 
 
 ## Orchestration across the two repositories
 
-1. **agent-fleet-sync PR** (slices L1–L5) is built first on branch `feat/fleet-relay-outbox`. During development codex-router depends on that branch by git revision.
-2. The library PR merges and is tagged **v0.5.0** before the codex-router PR merges; codex-router's `Cargo.toml` then pins `tag = "v0.5.0"` and `Cargo.lock` is refreshed.
+1. **agent-fleet-sync PR** on branch `feat/fleet-relay-outbox`: L1–L4 come first. During development codex-router depends on that branch by git revision. **L5 (removing the Mailbox role) waits until codex-router C4 and C5 no longer use it**; only then is the library finished.
+2. After L5, the library PR merges and is tagged **v0.5.0**, before the codex-router PR merges; codex-router's `Cargo.toml` then pins `tag = "v0.5.0"` and `Cargo.lock` is refreshed.
 3. **codex-router PR** (slices C1–C7) on `feat/central-storage-reset-d1`, created from `design/central-storage-reset` so the design set travels in the same PR.
 4. End-to-end proofs (O1–O11) pass only with both sides; the Lead owns that gate.
 
@@ -52,7 +52,7 @@ From `AGENTS.md` and owner rules: UUIDv7 ids only; SQL CHECK only for booleans; 
 | **L4** typed lease and session tables (D1b) | contract | R6, R13 | PD “Moved and converted to typed columns” | `fleet-sync-lease`, `fleet-sync-session` migrations, records, queries | lease and session behaviour tests keep passing against typed columns; no `record` JSON column remains except with a stated reason (PD rule) |
 | **L5** remove the Mailbox role | cleanup | R1 (no per-machine custody) | PD “Deleted from central” | `mail_storage`, `mailbox_*`, fetch cycle, `fleet-sync-service` per-peer delivery host | removed with a dead-contract proof: the codex-router branch builds and passes with no Mailbox use |
 
-Edges: L1 → L2 → L3; L1 → L4 (shared migration harness); L2 → L5.
+Edges: L1 → L2 → L3; L1 → L4 (shared migration harness); L2 → L5; **C4 and C5 → L5** (the Router and central no longer use the Mailbox). L4 carries the same owner gate as C6: each lease and session table's typed column list goes to the Lead for `d1.html` before its queries are rewritten.
 
 ### codex-router
 
@@ -66,9 +66,9 @@ Edges: L1 → L2 → L3; L1 → L4 (shared migration harness); L2 → L5.
 | **C6** typed Fleet directory tables (D1b) | contract | R6, R13 | PD “Moved and converted to typed columns” | `core_migrations`, `sql/fleet/*`, generated wrappers | **gate:** column lists for each table posted on `d1.html` for the owner before that table's queries are rewritten; Fleet directory tests pass on typed columns |
 | **C7** verification journeys | proof-only | VD O1–O11 | VD | `.agents/skills/verify-codex-router` journey extensions (`needed:` items), `verification/` cases | each journey driven once on Tokio by the Verifier before the full run |
 
-Edges: C1 → C2 → C3; C1 → C4 (needs L2); C4 → C5 (needs L2, L3); C1 → C6 (needs L4 for lease/session); C2, C3, C4, C5, C6 → C7. Library-to-router: L2 → C4, C5; L3 → C5; L4 → C6.
+Edges: C1 → C2 → C3; C1 → C4 (needs L2); C4 → C5 (needs L2, L3); C1 → C6 (needs L4 for lease/session); C2, C3, C4, C5, C6 → C7. Library-to-router: L2 → C4, C5; L3 → C5; L4 → C6. Router-to-library: C4, C5 → L5.
 
-**Grouping choice:** one vertical grouping per repository; slices are ordered so each leaves its repository building. Alternative considered: a separate PR for D1b. Rejected by the owner's one-PR decision.
+**Grouping choice:** one vertical grouping per repository; slices are ordered so each leaves its repository building against the library revision it pins at that point. Alternative considered: a separate PR for D1b. Rejected by the owner's one-PR decision.
 
 ## Verification Design rows → slice and command
 
