@@ -11,7 +11,7 @@ use std::num::NonZeroU64;
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn imported_claim_grants_once_and_the_normal_alarm_acknowledges_its_publication()
+async fn imported_claim_grants_once_and_its_committed_fleet_view_is_immediately_readable()
 -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
@@ -64,9 +64,9 @@ async fn imported_claim_grants_once_and_the_normal_alarm_acknowledges_its_public
                 holder: PeerId::try_from(PEER.to_owned())?
             })
         );
-        // A settlement can update Fleet without acknowledging the separate publication.
-        // Observe the latter's own durable acknowledgement before any shutdown/reopen repair.
-        wait_publication(root.path(), database, Epoch::new(2)?, 1).await?;
+        // The hook commits the view with the lease; no second owner's ACK or
+        // forced alarm is needed before the next real Directory read.
+        assert_directory_version(&mut machine.socket, database, Epoch::new(2)?, 1).await?;
         assert_directory_holder(&mut machine.socket, database, *expires_at).await?;
         match support::answer(
             &mut machine.socket,
@@ -140,7 +140,7 @@ async fn new_registration_is_published_without_reopening_or_forcing_an_alarm()
         };
         assert_eq!(lease.epoch, Epoch::new(1)?);
         assert_eq!(lease.holder, PeerId::try_from(PEER.to_owned())?);
-        wait_publication(root.path(), database, Epoch::new(1)?, 1).await?;
+        assert_directory_version(&mut machine.socket, database, Epoch::new(1)?, 1).await?;
         assert_directory_holder(&mut machine.socket, database, lease.expires_at).await?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }
@@ -418,5 +418,25 @@ async fn assert_directory_holder(
         lease: DirectoryLease::Held { holder, expires_at, .. }, ..
     }) if holder.as_str() == SERVICE && expires_at.timestamp_millis() == expected_expiry.unix_millis())
     );
+    Ok(())
+}
+
+async fn assert_directory_version(
+    socket: &mut reqwest_websocket::WebSocket,
+    database: DatabaseId,
+    epoch: Epoch,
+    change: u64,
+) -> ConformanceResult<()> {
+    let entries = support::directory(socket, DirectoryQuery::default()).await?;
+    let entry = entries
+        .iter()
+        .find(|entry| entry.project.as_str() == database.to_string())
+        .ok_or("committed Fleet view omitted its project")?;
+    let DirectorySide::Known(metadata) = &entry.lease_side else {
+        return Err("successful lease answer preceded its Fleet view commit".into());
+    };
+    assert_eq!(metadata.lease_version.epoch().get(), epoch.value());
+    assert_eq!(metadata.lease_version.change(), change);
+    assert!(metadata.lease_version.incarnation().value() > 0);
     Ok(())
 }
