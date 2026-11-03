@@ -66,6 +66,7 @@ where
                         &self.installation,
                         after,
                         self.row_ids.next()?,
+                        self.as_of,
                     )
                     .await?;
                     let records = entries

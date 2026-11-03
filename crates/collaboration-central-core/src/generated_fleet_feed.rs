@@ -15,6 +15,10 @@ pub(crate) struct StoredFleetFeedState {
     pub position_class: Option<String>,
     pub retained_through: Option<String>,
     pub floor_class: Option<String>,
+    pub created_at: Option<String>,
+    pub created_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_class: Option<String>,
 }
 pub(crate) fn read_fleet_feed_state<S>(
     scope: &mut S,
@@ -40,6 +44,10 @@ where
                     position_class: row.try_get("position_class")?,
                     retained_through: row.try_get("retained_through")?,
                     floor_class: row.try_get("floor_class")?,
+                    created_at: row.try_get("created_at")?,
+                    created_class: row.try_get("created_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_class: row.try_get("updated_class")?,
                 })
             })
             .collect()
@@ -48,6 +56,7 @@ where
 pub(crate) fn initialize_fleet_feed_state<S>(
     scope: &mut S,
     state_id: String,
+    now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -59,7 +68,8 @@ where
             env!("CARGO_MANIFEST_DIR"),
             "/sql/fleet/initialize_fleet_feed_state.sql"
         )))
-        .bind(state_id);
+        .bind(state_id)
+        .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -67,6 +77,7 @@ where
 pub(crate) fn advance_fleet_feed_head<S>(
     scope: &mut S,
     position: String,
+    now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -78,7 +89,8 @@ where
             env!("CARGO_MANIFEST_DIR"),
             "/sql/fleet/advance_fleet_feed_head.sql"
         )))
-        .bind(position);
+        .bind(position)
+        .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -86,6 +98,7 @@ where
 pub(crate) fn advance_fleet_feed_floor<S>(
     scope: &mut S,
     position: String,
+    now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -97,7 +110,8 @@ where
             env!("CARGO_MANIFEST_DIR"),
             "/sql/fleet/advance_fleet_feed_floor.sql"
         )))
-        .bind(position);
+        .bind(position)
+        .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -244,6 +258,10 @@ pub(crate) struct StoredFleetFeedReader {
     pub installation: Option<String>,
     pub last_read_position: Option<String>,
     pub position_class: Option<String>,
+    pub created_at: Option<String>,
+    pub created_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_class: Option<String>,
 }
 pub(crate) fn read_feed_readers<S>(
     scope: &mut S,
@@ -267,6 +285,10 @@ where
                     installation: row.try_get("installation")?,
                     last_read_position: row.try_get("last_read_position")?,
                     position_class: row.try_get("position_class")?,
+                    created_at: row.try_get("created_at")?,
+                    created_class: row.try_get("created_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_class: row.try_get("updated_class")?,
                 })
             })
             .collect()
@@ -277,6 +299,7 @@ pub(crate) fn store_feed_reader<S>(
     reader_id: String,
     installation: String,
     position: String,
+    now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -290,7 +313,8 @@ where
         )))
         .bind(reader_id)
         .bind(installation)
-        .bind(position);
+        .bind(position)
+        .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
     }

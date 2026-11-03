@@ -61,7 +61,6 @@ where
                 match request {
                     request @ (DeliveryRequest::Fetch { .. }
                     | DeliveryRequest::Received { .. }
-                    | DeliveryRequest::Report { .. }
                     | DeliveryRequest::Query { .. }
                     | DeliveryRequest::Settle { .. }
                     | DeliveryRequest::Retire { .. }) => {
@@ -72,9 +71,11 @@ where
                             request: Box::new(request),
                         })
                     }
-                    DeliveryRequest::StatusAck { .. } | DeliveryRequest::StatusFetch { .. } => {
+                    DeliveryRequest::StatusAck { .. }
+                    | DeliveryRequest::StatusFetch { .. }
+                    | DeliveryRequest::Report { .. } => {
                         return Err(StoreError::Aborted {
-                            reason: "status-stream request bypassed its local frame handler".into(),
+                            reason: "Fleet mail request bypassed its local frame handler".into(),
                         });
                     }
                     // Board mail must enter MailSubmit's provenance/epoch gate.

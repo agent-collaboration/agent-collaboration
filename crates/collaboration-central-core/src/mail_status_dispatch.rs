@@ -82,6 +82,7 @@ where
             if stored != publication {
                 return Ok(invalid_route());
             }
+            let deadline_io = io.clone();
             let attempt = crate::peer_request::begin_peer_request(
                 host,
                 io,
@@ -89,6 +90,7 @@ where
                 peer,
                 ServerCall::PublishStatus { call, publication },
                 timeout,
+                move |remaining| async move { deadline_io.reply_deadline(remaining).await },
             )
             .await;
             // Applied means stored and fetchable. Waiting here for the Router

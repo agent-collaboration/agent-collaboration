@@ -4,7 +4,7 @@ use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
 use serde_json::{Value, json};
 use sqlx_core::{query::query, row::Row};
 
-async fn settle(
+pub(super) async fn settle(
     fixture: &Fixture,
     operation: durable_steps::Uuid,
     attempt: durable_steps::Uuid,
@@ -19,13 +19,13 @@ async fn settle(
     Ok(serde_json::from_slice(&reply)?)
 }
 
-async fn receipts(fixture: &Fixture) -> TestResult<i64> {
+pub(super) async fn receipts(fixture: &Fixture) -> TestResult<i64> {
     Ok(fixture
         .store
         .transaction(|scope| {
             Box::pin(async move {
                 query::<sqlx_turso::Turso>(
-                    "SELECT COUNT(*) AS count FROM claim_settlement_receipts",
+                    "SELECT COUNT(*) AS count FROM lease_claim_settlement_receipts",
                 )
                 .fetch_one(scope.executor())
                 .await
@@ -89,7 +89,7 @@ async fn settlement_receipts_observe_the_hook_view_and_never_publish_a_newer_pro
             .transaction(move |scope| {
                 Box::pin(async move {
                     let row = query::<sqlx_turso::Turso>(
-                        "SELECT project_id,state FROM claim_reservations WHERE attempt_id=?",
+                        "SELECT project_id,state_kind,outcome FROM lease_claim_reservations WHERE attempt_id=?",
                     )
                     .bind(attempt.to_string())
                     .fetch_one(scope.executor())
@@ -98,8 +98,9 @@ async fn settlement_receipts_observe_the_hook_view_and_never_publish_a_newer_pro
                     Ok((
                         row.try_get::<String, _>("project_id")
                             .map_err(StoreError::backend)?,
-                        row.try_get::<String, _>("state")
+                        row.try_get::<String, _>("state_kind")
                             .map_err(StoreError::backend)?,
+                        row.try_get::<Option<String>, _>("outcome").map_err(StoreError::backend)?,
                     ))
                 })
             })
@@ -107,7 +108,8 @@ async fn settlement_receipts_observe_the_hook_view_and_never_publish_a_newer_pro
         if state
             != (
                 PROJECT.to_owned(),
-                r#"{"kind":"settled","value":{"outcome":"granted"}}"#.to_owned(),
+                "settled".to_owned(),
+                Some("granted".to_owned()),
             )
         {
             return Err(format!(

@@ -6,23 +6,27 @@ use crate::{
     object_call_envelope::encode_refusal,
 };
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
-use durable_steps::CallFailure;
+use durable_steps::{CallFailure, CallRetryReason};
 use fleet_sync_protocol::{FrameId, PeerId, ServerCall, ServerFrame, ServerRequest};
 use fleet_sync_session::{ConnectionRegistration, SessionKey};
+use futures_util::future::{Either, select};
 use runtime_primitives::{Clock, IdSource, WakeScheduler};
-use std::{sync::Arc, time::Duration};
+use std::{future::Future, sync::Arc, time::Duration};
 
-pub(crate) async fn begin_peer_request<Host, Time>(
+pub(crate) async fn begin_peer_request<Host, Time, MakeDeadline, Deadline>(
     host: Arc<Host>,
     time: Arc<Time>,
     replies: Arc<HolderReplyHub>,
     peer: PeerId,
     body: ServerCall<BoardDeliveryTypes>,
     timeout: Duration,
+    deadline_after: MakeDeadline,
 ) -> Result<ReplyWaiter, CallFailure>
 where
     Host: ObjectHost,
     Time: Clock + IdSource + Send + Sync + 'static,
+    MakeDeadline: FnOnce(Duration) -> Deadline + Send,
+    Deadline: Future<Output = ()> + Send,
 {
     let frame = FrameId::new(time.new_id()).map_err(encode_refusal)?;
     let bytes = serde_json::to_vec(&ServerFrame::<BoardConsumerProtocol>::Request {
@@ -31,6 +35,7 @@ where
     })
     .map_err(encode_refusal)?;
     let selection_host = host.clone();
+    let selection_time = time.clone();
     let (connection, waiter, deadline) = host
         .with_local_section(async move {
             for (connection, registration) in
@@ -42,7 +47,7 @@ where
                 let Ok(binding) = selection_host.admission_binding(connection).await else {
                     continue;
                 };
-                let now = time.now();
+                let now = selection_time.now();
                 if binding.connection != connection
                     || binding.peer != peer
                     || binding.expires_at <= now
@@ -62,10 +67,31 @@ where
         })
         .await
         .map_err(|_| unsent())??;
-    host.wake().wake_at(deadline).await.map_err(|_| unsent())?;
-    host.send_frame(connection, bytes.into())
-        .await
-        .map_err(|_| CallFailure::AnswerLost)?;
+    let remaining = Duration::from_millis(
+        u64::try_from(
+            deadline
+                .unix_millis()
+                .saturating_sub(time.now().unix_millis()),
+        )
+        .unwrap_or(0),
+    );
+    let send = async {
+        host.wake().wake_at(deadline).await.map_err(|_| unsent())?;
+        host.send_frame(connection, bytes.into())
+            .await
+            .map_err(|_| CallFailure::AnswerLost)
+    };
+    match select(Box::pin(send), Box::pin(deadline_after(remaining))).await {
+        Either::Left((sent, _)) => sent?,
+        Either::Right(_) => {
+            return Err(CallFailure::Retryable {
+                reason: CallRetryReason {
+                    code: "peerSendDeadline".into(),
+                    detail: "peer request could not enqueue before its answer deadline".into(),
+                },
+            });
+        }
+    }
     Ok(waiter)
 }
 

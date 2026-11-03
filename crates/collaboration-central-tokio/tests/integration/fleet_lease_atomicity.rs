@@ -27,10 +27,10 @@ async fn seed_existing_grant(fixture: &Fixture) -> TestResult {
         query::<sqlx_turso::Turso>("INSERT INTO machine_enrollments(machine_id,service_id,machine_label,access_client_id,credential_hash,state,expires_at,created_at,updated_at) VALUES(?,?,'writer','atomic-writer','atomic-credential','enrolled','2033-05-18T03:33:20+00:00','2026-10-18T00:00:00+00:00','2026-10-18T00:00:00+00:00')")
             .bind(PEER).bind(SERVICE).execute(scope.executor()).await.map_err(StoreError::backend)?;
         // Arrange only: a pre-existing library grant. The Act uses the public renew entry and its real hook.
-        let database = json!({"database":PROJECT,"lifecycle":{"state":"registered","origin":{"kind":"empty"},"importedFrom":null},"revision":{"epoch":1,"change":1},"changed_at":NOW-1000});
-        let lease = json!({"database":PROJECT,"holder":PEER,"epoch":1,"expires_at":NOW+1000,"last_renewed_at":NOW-1000});
-        query::<sqlx_turso::Turso>("INSERT INTO _fleet_sync_databases(database,record) VALUES(?,?)").bind(PROJECT).bind(database.to_string()).execute(scope.executor()).await.map_err(StoreError::backend)?;
-        query::<sqlx_turso::Turso>("INSERT INTO _fleet_sync_leases(database,record) VALUES(?,?)").bind(PROJECT).bind(lease.to_string()).execute(scope.executor()).await.map_err(StoreError::backend)?;
+        query::<sqlx_turso::Turso>("INSERT INTO _fleet_sync_databases(database,lifecycle_kind,origin_kind,revision_epoch,revision_change,changed_at,created_at,updated_at) VALUES(?,'registered','empty','1','1',?,?,?)")
+            .bind(PROJECT).bind(NOW-1000).bind(NOW-1000).bind(NOW-1000).execute(scope.executor()).await.map_err(StoreError::backend)?;
+        query::<sqlx_turso::Turso>("INSERT INTO _fleet_sync_leases(database,holder,epoch,expires_at,last_renewed_at,created_at,updated_at) VALUES(?,?,'1',?,?,?,?)")
+            .bind(PROJECT).bind(PEER).bind(NOW+1000).bind(NOW-1000).bind(NOW-1000).bind(NOW-1000).execute(scope.executor()).await.map_err(StoreError::backend)?;
         Ok(())
     })).await?;
     Ok(())

@@ -2,13 +2,22 @@
 
 use crate::{
     CallerKind, CoreHost, EngineSchema, FleetKind, ObjectAddress, ObjectBootstrap, ObjectHost,
-    ObjectRuntime, PlatformIo, caller_context::CallAuthority, fleet_effects_read::ReadFleetEffects,
-    object_call_envelope::ObjectCallEnvelope, object_runtime::ObjectWork, step_driver::StepDriver,
+    ObjectRuntime, PlatformIo,
+    caller_context::CallAuthority,
+    fleet_effects_read::ReadFleetEffects,
+    holder_reply_hub::HolderReplyHub,
+    mail_push_dispatch::PushDispatcher,
+    object_call_envelope::ObjectCallEnvelope,
+    object_runtime::ObjectWork,
+    step_driver::{StepCallback, StepDriver, StepResult},
 };
+use board_sync_protocol::BoardDeliveryTypes;
 use durable_steps::{
-    AtomicStore, CallFailure, CallTarget, NotSentReason, StoreError,
+    AtomicStore, BoxFuture, CallFailure, CallTarget, NotSentReason, StoreError,
     storage::{JournalStorage, TransactionScope},
 };
+use fleet_sync_delivery::{DeliveryLimits, Outbox};
+use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItemRef, ServerCall};
 use message_board::RequestEffectsRequest;
 use runtime_primitives::WakeScheduler;
 use serde::{Deserialize, Serialize};
@@ -16,7 +25,12 @@ use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
 };
-use std::{marker::PhantomData, sync::Arc};
+use std::{
+    convert::Infallible,
+    marker::PhantomData,
+    sync::{Arc, Weak},
+    time::Duration,
+};
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct FleetRequestEffects;
@@ -62,7 +76,7 @@ where
                 Some(crate::registry_lease_store::bind(Arc::downgrade(&host))),
             )
             .with_publication(publication)
-            .with_push(crate::mail_push_dispatch::bind(
+            .with_push(bind_mail_push(
                 Arc::downgrade(&host),
                 io.clone(),
                 replies.clone(),
@@ -99,22 +113,15 @@ where
         engine.register(crate::session_revocation::EndSessionsTask::<Host, Io>(
             PhantomData,
         ))?;
-        engine.register(fleet_sync_delivery::PublishStatus::<
+        engine.register(crate::fleet_mail_tasks::FleetStatusTask::<
             crate::session_store::CoreSessionStore<Host, Io>,
             Host::Database,
-            board_sync_protocol::BoardDeliveryTypes,
         >::new())?;
-        engine.register(fleet_sync_delivery::PushItem::<
+        engine.register(crate::fleet_mail_tasks::FleetPushTask::<
             crate::session_store::CoreSessionStore<Host, Io>,
             Host::Database,
-            board_sync_protocol::BoardDeliveryTypes,
-            fleet_sync_delivery::PublishStatus<
-                crate::session_store::CoreSessionStore<Host, Io>,
-                Host::Database,
-                board_sync_protocol::BoardDeliveryTypes,
-            >,
         >::new(mail_limits, shared_host.clone()))?;
-        engine.register(fleet_sync_delivery::RemoveDeliveryRecord::<
+        engine.register(crate::fleet_mail_tasks::FleetMailRemoval::<
             crate::session_store::CoreSessionStore<Host, Io>,
             Host::Database,
         >::new())?;
@@ -343,5 +350,92 @@ fn wrong_face() -> StoreError {
 fn refused() -> CallFailure {
     CallFailure::NotSent {
         reason: NotSentReason::Unreachable { last_seen: None },
+    }
+}
+
+fn bind_mail_push<Host, Io>(
+    host: Weak<Host>,
+    io: Arc<Io>,
+    replies: Arc<HolderReplyHub>,
+    limits: DeliveryLimits,
+    timeout: Duration,
+) -> PushDispatcher
+where
+    Host: ObjectHost,
+    Io: PlatformIo,
+    for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
+        TransactionScope<Database = Host::Database>,
+    <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'value> String:
+        Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
+    for<'value> Option<String>:
+        Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
+    for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
+{
+    Arc::new(move |target, reference, call| {
+        let host = host.clone();
+        let io = io.clone();
+        let replies = replies.clone();
+        Box::pin(async move {
+            let host = host.upgrade().ok_or(CallFailure::AnswerLost)?;
+            let (item, _) = StepDriver::new(host.clone())
+                .run(ResolvePush { reference, limits })
+                .await
+                .map_err(|_| CallFailure::AnswerLost)?;
+            let item = item.ok_or(CallFailure::AnswerLost)?;
+            if item.recipient().peer != target.recipient {
+                return Err(CallFailure::AnswerLost);
+            }
+            let deadline_io = io.clone();
+            let waiter = crate::peer_request::begin_peer_request(
+                host,
+                io.clone(),
+                replies,
+                target.recipient,
+                ServerCall::Push { call, item: *item },
+                timeout,
+                move |remaining| async move { deadline_io.reply_deadline(remaining).await },
+            )
+            .await?;
+            let remaining = Duration::from_millis(
+                u64::try_from(
+                    waiter
+                        .deadline()
+                        .unix_millis()
+                        .saturating_sub(io.now().unix_millis()),
+                )
+                .unwrap_or(0),
+            );
+            crate::mail_push_dispatch::bounded_answer(waiter.answer(), io.reply_deadline(remaining))
+                .await
+        })
+    })
+}
+
+struct ResolvePush {
+    reference: DeliveryItemRef,
+    limits: DeliveryLimits,
+}
+impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for ResolvePush
+where
+    for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
+    Driver::Arguments: IntoArguments<Driver>,
+    for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
+    for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
+    for<'row> &'row str: ColumnIndex<Driver::Row>,
+{
+    type Output = Option<Box<DeliveryEnvelope<BoardDeliveryTypes>>>;
+    type Effect = Infallible;
+    fn run<'scope, 'transaction>(
+        self,
+        scope: &'scope mut Store::Scope<'transaction>,
+    ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
+        Box::pin(async move {
+            let item = Outbox::<_, BoardDeliveryTypes>::new(scope, self.limits)
+                .resolve_push(&self.reference)
+                .await
+                .map_err(StoreError::backend)?;
+            Ok((item.map(Box::new), Vec::new()))
+        })
     }
 }

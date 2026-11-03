@@ -64,13 +64,6 @@ impl Io {
             .map_err(|_| "call mutex poisoned")?
             .clone())
     }
-    pub fn wakes(&self) -> TestResult<Vec<SyncTime>> {
-        Ok(self
-            .wakes
-            .lock()
-            .map_err(|_| "wake mutex poisoned")?
-            .clone())
-    }
 }
 impl Clock for Io {
     fn now(&self) -> SyncTime {
@@ -145,7 +138,6 @@ impl PlatformIo for Io {
 pub struct Fixture {
     pub objects: ObjectStore<CoreHost<Io>>,
     pub object: Arc<Native>,
-    pub host: Arc<FaultHost>,
     pub runtime: ObjectRuntime<FleetKind, FaultHost, Io>,
     pub io: Io,
 }
@@ -191,7 +183,6 @@ impl Fixture {
         Ok(Self {
             objects,
             object,
-            host,
             runtime,
             io,
         })
@@ -223,15 +214,9 @@ impl Fixture {
         assert_eq!(self.runtime.on_alarm().await?.completed.len(), 1);
         Ok(())
     }
-    pub async fn counts(&self) -> TestResult<(i64, i64)> {
-        Ok(self.object.transaction(|scope|Box::pin(async move {
-            let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM workspaces) AS workspaces,(SELECT count(*) FROM fleet_feed) AS feed").fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
-            Ok((row.try_get("workspaces").map_err(StoreError::backend)?,row.try_get("feed").map_err(StoreError::backend)?))
-        })).await?)
-    }
     pub async fn reader_rows(&self) -> TestResult<Vec<(String, String, i64)>> {
         Ok(self.object.transaction(|scope|Box::pin(async move {
-            query::<sqlx_turso::Turso>("SELECT reader_id,installation,last_read_position FROM feed_readers ORDER BY installation").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|Ok((row.try_get("reader_id").map_err(StoreError::backend)?,row.try_get("installation").map_err(StoreError::backend)?,row.try_get("last_read_position").map_err(StoreError::backend)?))).collect()
+            query::<sqlx_turso::Turso>("SELECT reader_id,installation,last_read_position FROM fleet_feed_readers ORDER BY installation").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|Ok((row.try_get("reader_id").map_err(StoreError::backend)?,row.try_get("installation").map_err(StoreError::backend)?,row.try_get("last_read_position").map_err(StoreError::backend)?))).collect()
         })).await?)
     }
 }

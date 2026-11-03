@@ -51,7 +51,12 @@ where
             else {
                 return Err(refused());
             };
-            ClaimStep::Reserve { database, attempt }
+            ClaimStep::Reserve {
+                database,
+                attempt,
+                now: chrono::DateTime::from_timestamp_millis(io.now().unix_millis())
+                    .ok_or(CallFailure::AnswerLost)?,
+            }
         } else {
             let _: fleet_sync_lease::ClaimSettlement =
                 serde_json::from_value(call.target).map_err(|_| refused())?;

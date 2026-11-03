@@ -73,7 +73,7 @@ async fn admit(
 
 async fn projection(fixture: &RegistryFixture) -> TestResult<(Value, i64, i64)> {
     Ok(fixture.fleet.object.transaction(|scope|Box::pin(async move {
-        let row = query::<sqlx_turso::Turso>("SELECT lease_projection,(SELECT count(*) FROM claim_reservations) AS claims,(SELECT count(*) FROM claim_settlement_receipts) AS receipts FROM project_directory WHERE project_id=?")
+        let row = query::<sqlx_turso::Turso>("SELECT lease_projection,(SELECT count(*) FROM lease_claim_reservations) AS claims,(SELECT count(*) FROM lease_claim_settlement_receipts) AS receipts FROM project_directory WHERE project_id=?")
             .bind(DATABASE).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
         let projection: String = row.try_get("lease_projection").map_err(StoreError::backend)?;
         Ok((serde_json::from_str(&projection).map_err(StoreError::backend)?,row.try_get("claims").map_err(StoreError::backend)?,row.try_get("receipts").map_err(StoreError::backend)?))
@@ -87,7 +87,7 @@ async fn receipt(fixture: &RegistryFixture, operation: OperationId) -> TestResul
         .transaction(move |scope| {
             Box::pin(async move {
                 let row = query::<sqlx_turso::Turso>(
-                    "SELECT step_name,result FROM claim_settlement_receipts WHERE operation_id=?",
+                    "SELECT step_name,result_kind,stored_epoch,stored_incarnation,stored_change FROM lease_claim_settlement_receipts WHERE operation_id=?",
                 )
                 .bind(operation.as_uuid().to_string())
                 .fetch_one(scope.executor())
@@ -99,8 +99,7 @@ async fn receipt(fixture: &RegistryFixture, operation: OperationId) -> TestResul
                         "claim receipt changed the durable step",
                     ));
                 }
-                let result: String = row.try_get("result").map_err(StoreError::backend)?;
-                serde_json::from_str(&result).map_err(StoreError::backend)
+                crate::typed_claim_observer::receipt_result(&row)
             })
         })
         .await?)

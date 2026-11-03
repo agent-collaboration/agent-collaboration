@@ -22,6 +22,11 @@
           "name": "state_id",
           "kind": "text",
           "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
         }
       ]
     },
@@ -35,6 +40,11 @@
           "name": "position",
           "kind": "text",
           "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
         }
       ]
     },
@@ -46,6 +56,11 @@
       "parameters": [
         {
           "name": "position",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
           "kind": "text",
           "nullable": false
         }
@@ -153,6 +168,11 @@
         },
         {
           "name": "position",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
           "kind": "text",
           "nullable": false
         }

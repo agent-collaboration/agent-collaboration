@@ -142,6 +142,26 @@ where
                 SessionEffect::Route {
                     session,
                     frame,
+                    operation: OperationRequest::Delivery(DeliveryRequest::Report { report, .. }),
+                } => {
+                    let limits = crate::central_mailbox_limits().map_err(StoreError::backend)?;
+                    let result =
+                        fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes>::new(self, limits)
+                            .recipient_report::<crate::fleet_mail_tasks::FleetStatusTask<
+                                crate::session_store::CoreSessionStore<Host, Io>,
+                                Host::Database,
+                            >>(session.peer, report, now)
+                            .await
+                            .map_err(fleet_sync_delivery::delivery_rollback)?;
+                    self.stage_operation_answer(
+                        connection,
+                        frame,
+                        OperationAnswer::Delivery(DeliveryAnswer::Report(result)),
+                    )?;
+                }
+                SessionEffect::Route {
+                    session,
+                    frame,
                     operation:
                         OperationRequest::Delivery(DeliveryRequest::StatusAck { through, .. }),
                 } => {
@@ -150,7 +170,7 @@ where
                         session.peer,
                         installation.clone(),
                     )
-                    .acknowledge(through)
+                    .acknowledge(through, now)
                     .await
                     .map_err(StoreError::backend)?;
                     let bytes = serde_json::to_vec(&ServerFrame::<BoardConsumerProtocol>::Answer {

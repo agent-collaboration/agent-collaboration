@@ -15,11 +15,14 @@
 <ex-callout title="Tables for your review (D2)" tone="note" icon="database">
 <p>D2 adds two small tables, shown in its program design below: <code>fleet_remote_creates</code> in the Fleet (keeps the requester after the command's content is dropped, refuses a reused id with different content, fixes the result message's id up front) and <code>mail_create_commands</code> on each machine (binds a command to its one create and one first-input prompt). Strike either if you see a better home.</p>
 </ex-callout>
+<ex-callout title="Decisions for you in D4a and D4b" tone="decision" icon="clock">
+<p>D4a: what an offline target gets across several firings (latest only, or all); the notification coverage record. D4b: whether overlapping runs are prevented; schedule lifetime; continuity between fresh runs. Each has a recommendation in its section below; both designs also list the design work still remaining before they are planned.</p>
+</ex-callout>
 <ex-callout title="One choice for you (D3)" tone="decision" icon="users">
 <p>Moving each machine to its UUIDv7 id means rewriting stored session addresses that carry the old UUIDv4 service id. Local stores are rewritten at upgrade. But <strong>project content also stores session addresses</strong> (thread participants, watches, actors), it replicates between machines, and project tables are out of scope.</p>
 <ul>
-<li><strong>A (recommended):</strong> the Fleet records each machine's former service id on its enrollment (<code>former_service_id</code>), and reading old project records resolves the old id to the machine through it. Project content stays untouched. Cost: one recorded column and a lookup when reading old records.</li>
-<li><strong>B:</strong> rewrite the session addresses inside project content too. Cost: brings project tables into scope for this one change, rewritten on every machine and in central.</li>
+<li><strong>A (recommended): ended, like wakes.</strong> Frozen content keeps the old id as history, and the Fleet records <code>former_service_id</code> so old records still show the right machine. What stops working at cutover: (1) messages still queued with the old id: the Router first stops new sends and lets its outbox drain, and anything left after that expires with the sender told “expired”; (2) subscriptions and watches whose reader carries the old id lapse, and agents subscribe again, the same way you chose for wakes (“no moves, we just message the agents”). Project content stays untouched.</li>
+<li><strong>B: carried over.</strong> Rewrite the live reader references in project content (subscriptions, watches) so they keep working, and re-issue queued messages under new ids. Cost: a coordinated change of replicated project content on every machine and in central (actor identities are UNIQUE; project mail handoffs carry content hashes), re-sent messages arrive as new messages, and project tables come into scope.</li>
 </ul>
 </ex-callout>
 <h2 id="d2">D2: Fleet sends and remote create</h2>

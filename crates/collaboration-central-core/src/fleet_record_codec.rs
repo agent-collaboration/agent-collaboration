@@ -212,21 +212,4 @@ pub(crate) fn decode_json<T: DeserializeOwned + Serialize>(
     Ok(decoded)
 }
 
-pub(crate) fn required(value: Option<String>, field: &str) -> Result<String, StoreError> {
-    value.ok_or_else(|| corrupt(field, "required Fleet column is NULL"))
-}
-
-pub(crate) fn check_private_id(value: &str, field: &str) -> Result<(), StoreError> {
-    let id = durable_steps::Uuid::parse_str(value).map_err(|error| corrupt(field, error))?;
-    if id.get_version_num() != 7 || id.to_string() != value {
-        return Err(corrupt(field, "identity must be canonical UUIDv7"));
-    }
-    Ok(())
-}
-
-pub(crate) fn corrupt(field: &str, message: impl std::fmt::Display) -> StoreError {
-    StoreError::Corrupt {
-        field: format!("fleet.{field}"),
-        message: message.to_string(),
-    }
-}
+pub(crate) use crate::fleet_row_codec::{check_millis, check_private_id, corrupt, required};

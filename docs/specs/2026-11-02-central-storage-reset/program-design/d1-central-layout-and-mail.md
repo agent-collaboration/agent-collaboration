@@ -83,7 +83,7 @@ Each table below moves into the Fleet store under its new name and its JSON `rec
 | `registry_lease_incarnation` | `lease_incarnation`, the one monotonic incarnation counter (see Lease versions) |
 | library lease tables `_fleet_sync_databases`, `_fleet_sync_leases`, `_fleet_sync_epoch_floor`, … (11) | names kept (L10); typed columns in the library; keyed per project, they don't need their own store |
 | library session tables `_fleet_sync_sessions`, `_fleet_sync_notices`, `_fleet_sync_attach_sequences` | names kept; typed columns in the library; already keyed per machine peer |
-| journal and migration bookkeeping (`_fleet_sync_operations`, `_fleet_sync_steps`, `_fleet_sync_schema`, `_fleet_sync_migrations`, `central_schema_migrations`, `central_schema_migration_failures`) | `central_schema_migrations` and `central_schema_migration_failures` (codex-router's own corpus) gain `applied_at` and `failed_at`. The journal tables `_fleet_sync_operations`, `_fleet_sync_steps`, `_fleet_sync_schema` and `_fleet_sync_migrations` gain `created_at` and `updated_at` in the journal library (`durable-steps`), so **every** store gets them: the Fleet, project objects and every machine (owner, 2026-11-03: “yes they should get timestamp columns”). This is an additive column migration in each store. Task input stays the task's own serialized form, which the library never queries by field |
+| journal and migration bookkeeping (`_fleet_sync_operations`, `_fleet_sync_steps`, `_fleet_sync_schema`, `_fleet_sync_migrations`, `central_schema_migrations`, `central_schema_migration_failures`) | `central_schema_migrations` and `central_schema_migration_failures` (codex-router's own corpus) gain `applied_at` and `failed_at`. The journal tables `_fleet_sync_operations`, `_fleet_sync_steps` and `_fleet_sync_schema` (every store) and `_fleet_sync_migrations` (native SQLite stores only; a Durable Object store bootstraps its schema version without receipts, `durable_object_store.rs:44–60`) gain a UUIDv7 key where they lack one and `created_at` and `updated_at` in the journal library (`durable-steps`), so **every** store gets them: the Fleet, project objects and every machine (owner, 2026-11-03: “yes they should get timestamp columns”). This is an additive column migration in each store. Task input stays the task's own serialized form, which the library never queries by field |
 
 ### Deleted from central
 
@@ -154,15 +154,41 @@ sequenceDiagram
 
 ## Lease numbers and the staging wipe
 
-**What a lease is.** One machine at a time may write a project: it holds that project's lease. Central tells machines who holds each lease, stamped with a number that only goes up (`epoch`, `incarnation`, `change`). Each Router remembers the highest number it has seen and ignores anything lower, so stale or delayed messages can't undo a newer one (`writer_observation.rs:28–43`; `central_project_reads.rs:280–289`).
+**What a lease is.** One machine at a time may write a project: it holds that project's lease. Central tells machines who holds each lease, stamped with numbers that only go up (`epoch`, `incarnation`, `change`). Each Router keeps the highest number it has seen and ignores anything lower, so a stale or delayed message can't undo a newer one (`writer_observation.rs:28–43`; `central_project_reads.rs:280–289`).
 
-**Normal running.** The version stays integer counters (owner, 2026-11-02: “ok integer version is fine”); a lease is identified by its project's UUIDv7 id plus its epoch. Central keeps the counter in its own store (`lease_incarnation`, today's `registry_lease_incarnation`, renamed) and advances it in the same transaction as the lease change, so a central restart never reuses a number.
+**Normal running.** The version stays as integer counters (owner, 2026-11-02: “ok integer version is fine”). A lease is identified by its project's UUIDv7 id plus its epoch. Central keeps the counter in its own store (`lease_incarnation`, renamed from today's `registry_lease_incarnation`) and advances it in the same transaction as the lease change, so a restart of central never reuses a number.
 
-**The staging wipe.** The new, empty central starts counting from 1, while every Router still remembers higher numbers from the old central. Without a fix, every Router would ignore the new central's leases as stale, and no machine could write its projects. A wiped central keeps the same URL and configured ids (`fleet_enrollment_file.rs:20–28`, `delivery_config.rs:1–9`, `machine_enrollment.rs:140–141`), so a Router can't tell it is new.
+**The staging wipe.** A wiped central keeps the same URL and configured ids (`fleet_enrollment_file.rs:20–28`, `delivery_config.rs:1–9`, `machine_enrollment.rs:140–141`), so a Router can't tell it is new, and the new central knows none of the projects.
 
-**The rule:** on every successful enrollment, a Router forgets what it learned from central (lease numbers, its cached Fleet directory, project read copies) and starts fresh. It records that the forgetting finished before it talks to central again; if it crashes halfway, it finishes on restart. Its own project content, unsent messages, approvals, history and machine identity are never touched. Re-enrolling with an unchanged central just costs one refresh.
+**Correction (2026-11-03, Lead; the earlier text was wrong).** The earlier design said a Router just forgets its learned lease numbers and the new central counts from 1. That was my inference, not an owner decision, and the library shows it can't work. A project file's epoch is not just remembered authority: it anchors the file's captured history and positions (`writer_file_record.rs:121–145`, `capture_stream.rs:323`). A grant must match the file's epoch (`writer_registration_state.rs:185–189`). Central creates every new copy at epoch 1 (`registration_rules.rs:132–150, 239–247`), and a seed must publish at the copy's fence (`seed_rules.rs:192–203`). Lowering a file from epoch 41 to 1 would rewrite its history; the corrected design never does that.
 
-**Proof:** wipe staging, keep the same URL and ids, re-enroll a Router that still remembers old numbers: it accepts the new central's lease and writes its project. Kill it while it is forgetting: on restart it finishes before reading from central.
+**The rule now: rejoin keeps the file's lineage.** Status: **open design, not ready for implementation.** The Advisor's second look (2026-11-03) found five realization gaps, listed below the steps; the steps include the corrections already made.
+
+| Step | Where | What happens |
+| --- | --- | --- |
+| 1. Forget learned numbers | Router, on every successful enrollment (journaled, resumes after a crash, before the next attach) | Clears what the Router learned from central: machine session, notice position, cached directory, read copies, install caches, and each writer file's latest learned observation. The file's own registration, grant receipt, release and supersession evidence are **kept** at this step. |
+| 2. Ask central | Router, at the first attach | For each project the Router holds as writer, it reads central's state: (a) central has it, with this machine as holder → normal renew and reattach, nothing rebuilt (this is every re-enrollment with an unchanged central); (b) central doesn't have it → rejoin, if eligible; (c) central has it with another holder or a conflicting seed → fail closed, the file stays read-only and status says why. |
+| 3. Eligibility | Library `prepare_rejoin(file)`, before clearing anything | Only a file whose own record shows it was the **current** writer (Granted, not Released, Superseded, retired or bootstrap-incomplete) is eligible. The rejoin binds the authenticated machine, DatabaseId, frozen head (N, s), schema and digest to a new stable rejoin attempt. Only then does it clear the old registration and receiver-binding evidence under that attempt. |
+| 4. Admit | Central, through the existing durable registration coordinator (not one transaction: the copy is in the project object, and the lease, history and floor are in the Fleet store) | Restores the project's directory record from the attempt. Creates the copy at fence N expecting (N, s). Reserves the lease at epoch N for this machine so the seed can run while local writes stay gated. Finalizes readiness. A replay of the same attempt resumes; a different head under the same attempt is refused. |
+| 5. Seed and grant | Existing seed and receiver path at fence N | Publishes the snapshot at (N, s), verifies, grants at epoch N; `record_grant` accepts (grant epoch = file epoch). Writes reopen in the same `eN.sqlite`. |
+| 6. Later handovers | Normal | A successor epoch above N, through today's bootstrap. |
+
+**Who is the source is an owner decision.** A local "current writer" check is necessary but not enough. A machine whose epoch-8 lease simply expired while it was offline still looks current locally, even after another machine legitimately took over at epoch 9 (takeover fences without a release: `holder_change_rules.rs:49–60, 186–189`; an expired holder becomes Paused, not Superseded: `lease_holder.rs:185–190`). After a wipe, the first claimant could be the stale one. So rejoin never picks a source automatically. Options for the owner: (a) **controlled cutover**: each project waits as "rejoin pending", status lists every machine's claim with its epoch and head, and the owner runs one rejoin command per project from the machine they choose; (b) highest claimed epoch wins after all enrolled machines have reported; (c) first eligible claimant wins. Recommended: (a). It's explicit and fails closed, and with a few machines and projects it costs one command per project.
+
+**Open realization gaps (Advisor, with anchors):**
+- **Router dispatch.** Discovery picks the greatest local `eN` (`project_store_paths.rs:39–56`). A rejoin-pending file needs an explicit dispatch in `project_store_registry.rs:258–316`, not the provisional-registration or bootstrap branch. The lower-grant guards in `project_installation.rs:66–67, 84–85` stay as they are.
+- **Receiver evidence.** The fixed `writer-registration` journal key and an old receiver start (`registration_bookkeeping.rs:179–205`) need an explicit rebind under the rejoin attempt, without replaying old ACKs.
+- **Directory admission.** Today's registration gate requires the original creator (`registration_gate.rs:17–35`, `writer_registration.rs:107–118`). Rejoin needs its own admission that restores the directory record and validates the designated writer, without weakening normal creation.
+- **Seed authority.** The seed copy renews before seed-open (`seed_copy_task.rs:43–44`), so the epoch-N reservation in step 4 must exist before the seed, with no circular "grant after seed / seed after grant".
+- **Proof matrix.** Re-enrollment with an unchanged central; an ordinary offline expiry, then a takeover, then a wipe, with the old holder claiming first (its claim must not become the source on its own); a crash after its own admission; a released old writer arriving before the current one; a local higher `eM`; the same attempt with a different digest; a lost receiver ACK or old journal output; plus the uncontested writer at epoch N > 1.
+
+**What this guarantees.** Project content, history, positions and DatabaseId are unchanged. Lease numbers keep going up within each project's lineage. A wiped central learns each project from the machine that held it. Unsent messages, approvals, history and machine identity on the Router are never touched (as before).
+
+**What it does not do.** It doesn't merge, and it never chooses a source by itself; the owner's chosen rule does (see above). A claim refused because the project is already present keeps its file unchanged, but its newer work is not in central; the status says so. It doesn't rejoin a project that no machine holds as writer: such a project is gone from central until someone creates it again. If the owner wants a different rule for a refused second holder, that is a separate decision; the refusal is safe and loses nothing.
+
+**Library changes (v0.5.0).** `Origin::Rejoin` in registration; registration rules that admit Rejoin only into an absent project, at fence and lease epoch N; the writer's `prepare_rejoin` and its rejoin-pending registration state (a new stored variant added, nothing existing reshaped); seed and grant reused at fence N.
+
+**Proof.** A writer at epoch N > 1, with activity across an earlier holder change. Wipe staging with the same URL and ids, re-enroll, and the Router rejoins. Then: the row and history hashes and the old cursors are unchanged; the seed lands at exactly (N, s); a new write replicates without resetting capture. Crash at each commit (prepare, register, seed, grant), reopen, and the rejoin finishes once. A second machine holding the same project is refused and its file is unchanged. Central refuses a Rejoin for a project it already holds.
 
 ## Fleet and project objects
 
@@ -223,3 +249,60 @@ Fleet sending its own messages and remote create (D2); renaming Router app table
 | R13 | library tables | UUIDv7 ids, timestamps | row readback; v4 refusal |
 | R14 | Fleet and Router removal work | 60-day removal, too-old refusal | injected clock |
 | R15 | Fleet admission | Submit `refused {sender not enrolled}` | unenrolled submit |
+
+## Column lists for moved tables (D1b), posted for the owner
+
+Times are Unix milliseconds unless noted; enum and variant fields are validated in Rust; CHECK only for booleans. First batch, from the Central Implementer (2026-11-03):
+
+| Table | Columns |
+| --- | --- |
+| `fleet_feed_state` | `state_id` UUIDv7 PK; `name` UNIQUE; `last_position`; `retained_through`; `created_at`; `updated_at` |
+| `fleet_feed_readers` | `reader_id` UUIDv7 PK; `installation` UNIQUE (today's session-address id until D3); `last_read_position`; `created_at`; `updated_at` |
+| `fleet_creation_decisions` | `project_id` UUIDv7 PK, FK `fleet_project_directory`; `creating_request` UUIDv7 UNIQUE, FK `fleet_request_decisions`; `carrier_installation`; `created_at`; `updated_at` |
+| `lease_claim_reservations` | `attempt_id` UUIDv7 PK; `project_id` FK `fleet_project_directory`; `state_kind` (`active`, `settled`); `outcome` (`granted`, `refused`; only when settled); `created_at`; `updated_at` |
+| `lease_claim_settlement_receipts` | `receipt_id` UUIDv7 PK; `operation_id` UUIDv7; `step_name`; `attempt_id` FK reservations; `project_id` FK directory; `result_kind` (`applied`, `duplicate`, `older`, `conflict`); `stored_epoch`, `stored_incarnation`, `stored_change` (only for `older`/`conflict`); `created_at`; `updated_at`; UNIQUE(`operation_id`, `step_name`). The old `fenced` variant goes with the removed handshake |
+| `fleet_archive_reports` | `report_id` UUIDv7 PK; `board_id` FK `fleet_boards`; `project_id` FK directory; `epoch`; `commit_sequence`; `installation`; `reported_at` (RFC3339, the domain time); `created_at`; `updated_at`; UNIQUE(`board_id`, `project_id`) |
+
+
+Second batch (directory). Every row below also carries the **record envelope columns**: `actor_kind`, `actor_human_id`, `actor_service_id`, `actor_endpoint_id`, `actor_session_id`, `actor_router_component` (set per actor kind), `request_id`, `fleet_position`, `router_time` (RFC3339), `time_basis` (`router`, `legacy_unknown`), `origin_installation`, `origin_machine`, `import_digest`, `created_at`, `updated_at`.
+
+| Table | Columns |
+| --- | --- |
+| `fleet_workspaces` | `workspace_id` UUIDv7 PK; `name` UNIQUE; `description`; `state` (`active`, `archiving`, `archived`) |
+| `fleet_boards` | `board_id` UUIDv7 PK; `workspace_id` FK; `name`; `description`; `board_kind` (`initiative`, `area`); `initiative_goal`; `initiative_done_when`; `state` (`open`, `closed`, `archiving`, `archived`); UNIQUE(`workspace_id`, `name`) |
+| `fleet_project_directory` | `project_id` UUIDv7 PK; `workspace_id` FK; `board_id` (FK with `workspace_id` to boards); `name`, UNIQUE(`board_id`, `name`). Copy summary: `copy_epoch`, `copy_sequence`, `copy_acked_at`, `copy_latest_time_basis`, `copy_latest_record_at`. Lease view kept current by the lease hook in the same transaction, so each feed record stands alone: `lease_epoch`, `lease_change`, `lease_incarnation`, `lease_changed_at`, `lease_lifecycle_kind`, `lease_origin_kind`, `lease_origin_epoch`, `lease_origin_sequence`, `lease_import_digest`, `lease_retiring_attempt_id`, `lease_retired_at`, `lease_holder_machine_id`, `lease_holder_service_id` (until D3), `lease_expires_at`, `lease_digest` |
+| `fleet_workspace_adrs` | `adr_id` UUIDv7 PK; `workspace_id` FK; `title`; `text` (Markdown); `status` (`proposed`, `accepted`, `superseded`, `withdrawn`); `supersedes_adr_id` FK; `made_in_kind`; `made_in_record_id`; `revision` |
+| `fleet_adr_repository_files` | `id` UUIDv7 PK; `adr_id` FK; `ordinal`; `repository_origin`; `path`; `commit_sha`; `created_at`; `updated_at`; UNIQUE(`adr_id`, `ordinal`) (the ordered file list, without JSON) |
+| `fleet_repository_attachments` | `attachment_id` UUIDv7 PK; `workspace_id` FK; `reference_kind` (`origin`, `local`); `normalized_origin`; `service_id`; `common_directory`; `router_time`; `time_basis`; `origin_installation`; `origin_machine`; `import_digest`; `created_at`; `updated_at`; UNIQUE(`workspace_id`, `normalized_origin`) for origins, UNIQUE(`workspace_id`, `service_id`, `common_directory`) for local |
+
+Feed, decision and import tables follow in the next batch.
+
+Library batch (L4, session tables in `fleet-sync-session`). Counters stay as today's canonical decimal text (`position TEXT` in `202610160001_sessions.sql:10`), compared in Rust after decode (`session_storage.rs:177`), so full `u64` values survive.
+
+| Table | Columns |
+| --- | --- |
+| `_fleet_sync_sessions` | `id` UUIDv7 PK; `peer` UUIDv7; `session_id` UUIDv7; `state_kind`; `connection_id` UUIDv7 (nullable); `detached_since` (nullable); `end_reason` (nullable); `notice_head` (decimal u64); `created_at`; `updated_at`; UNIQUE(`peer`, `session_id`) |
+| `_fleet_sync_notices` | `id` UUIDv7 PK; `peer`; `session_id`; `position` (decimal u64); `notice_kind`; `database_id` UUIDv7 (nullable, for lease-changed notices); `consumer_body` (nullable; serialized, because the consumer owns the notice schema, the same reason as delivery values); `created_at`; `updated_at`; UNIQUE(`peer`, `session_id`, `position`) |
+| `_fleet_sync_attach_sequences` | `peer` UUIDv7 PK (an existing UUIDv7 key stays the key); `sequence` (decimal u64); `created_at`; `updated_at` |
+
+Library batch (L4, lease tables in `fleet-sync-lease`, first seven). Existing UUIDv7 keys stay the key (database, attempt, peer, and the takeover preview token, already a validated UUIDv7: `lifecycle_message.rs:33–49`). Counters are decimal u64 text, as in the session tables. Every table also has `created_at` and `updated_at`.
+
+| Table | Columns |
+| --- | --- |
+| `_fleet_sync_databases` | `database` PK; `lifecycle_kind`; `origin_kind`, `origin_epoch`, `origin_sequence`, `import_digest` (nullable); `retiring_attempt`, `retired_at` (nullable); `revision_epoch`; `revision_change` (non-zero); `changed_at` |
+| `_fleet_sync_leases` | `database` PK; `holder`; `epoch`; `expires_at`; `last_renewed_at` |
+| `_fleet_sync_epoch_floor` | `database` PK; `epoch` |
+| `_fleet_sync_epoch_history` | `id` UUIDv7 PK (new); `database`; `epoch`; `holder`; `granted_at`; `ended_epoch`, `ended_sequence` (nullable); UNIQUE(`database`, `epoch`) |
+| `_fleet_sync_takeover_previews` | `token` PK; `database`; `fence`; `acked_epoch`; `acked_sequence`; `holder`; `last_seen` (nullable) |
+| `_fleet_sync_transfer_cancels` | `attempt` PK; `cancelled_by` (actor, scalar); `reason`; `cancelled_at` |
+| `_fleet_sync_schema_support` | `peer` PK; `session_id`; `attach_seq` (non-zero); `max_version` |
+
+Library batch (L4, lease workflow tables). Every library-owned answer, refusal and phase is flattened into typed nullable columns (which ones are set depends on the variant, validated in Rust); there are no JSON columns. Full column lists: `agent-fleet-sync` `tmp/d1-library/L4-lease-workflow-columns.json`.
+
+| Table | Key and shape |
+| --- | --- |
+| `_fleet_sync_renewal_attempts` | `id` UUIDv7 PK (new); UNIQUE(`database`, `attempt`); request (`request_epoch`, `holder`), answer (`answer_kind`, recorded lease, current lease view, `replayed` boolean), refusal fields |
+| `_fleet_sync_transfer_admissions` | `attempt` PK; `operation` UNIQUE; the immutable request: kind, `database`, `from_epoch`, `to_peer`, `claimant`, `reason`, preview fields, `requested_by`, `admitted_at`, `target_schema_max_version`, `follow_up` |
+| `_fleet_sync_transfers` | `attempt` PK; `database`; `new_epoch`; outcome (granted lease, pending transfer, failure, refusal fields); current phase (`phase_kind`, final position); cleanup failure |
+| `_fleet_sync_transfer_phase_history` | `id` UUIDv7 PK; `attempt`; `position` (0–7); `phase_kind`; final position; `entered_at`; UNIQUE(`attempt`, `position`); written in the parent's transaction |
+| `_fleet_sync_lifecycle_attempts` | `attempt` PK; `database`; intent (`intent_kind`, `writer`, origin, `import_digest`, expected fence); outcome and answer (lease view, `replayed` boolean); refusal and mismatch fields; `retired_at` |

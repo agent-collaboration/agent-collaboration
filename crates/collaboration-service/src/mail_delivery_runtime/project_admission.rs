@@ -111,7 +111,12 @@ impl MailDeliveryRuntime {
                         // Mark it in this transaction before any cancel can withdraw it locally.
                         // All project cancels consequently go remote, even before our first submit.
                         outbox
-                            .mark_submit_attempted(original_id)
+                            .mark_submit_attempted(
+                                original_id,
+                                runtime_primitives::SyncTime::from_unix_millis(
+                                    now.timestamp_millis(),
+                                ),
+                            )
                             .await
                             .map_err(delivery_rollback)?;
                     }

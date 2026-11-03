@@ -79,7 +79,7 @@ where
                             CoreSessionStore<Host, Io>,
                             Host::Database,
                             BoardDeliveryTypes,
-                        >>(&publication)
+                        >>(&publication, now)
                         .await
                     {
                         Ok(_) => {

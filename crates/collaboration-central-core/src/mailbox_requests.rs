@@ -186,7 +186,7 @@ where
                     ),
                     DeliveryRequest::Report { report, .. } => {
                         DeliveryAnswer::Report(
-                            mailbox.report(self.input.actor, report).await.map_err(|error| {
+                            mailbox.report(self.input.actor, report, self.now).await.map_err(|error| {
                                 match error {
                                     // Preserve rollback, but give the remote report task a
                                     // terminal answer instead of an endless lost-answer retry.

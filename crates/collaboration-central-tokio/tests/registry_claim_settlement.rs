@@ -2,6 +2,12 @@
 //! The reused grant-history arranger keeps its declared registration-gate stand-in.
 //! Settlement debt is a typed component input, not a normal Claim admission proof.
 #![cfg(feature = "conformance")]
+#[expect(
+    dead_code,
+    reason = "The shared observer also serves reservation-state oracles in the Fleet storage target."
+)]
+#[path = "integration/typed_claim_observer.rs"]
+mod typed_claim_observer;
 
 #[path = "registry_claim_settlement/adapter_outcomes.rs"]
 mod adapter_outcomes;
@@ -218,8 +224,8 @@ std::time::Duration::from_secs(2))?;
 
 async fn stored_receipt(fleet: &FleetFixture) -> TestResult<(i64, String, String, String)> {
     Ok(fleet.object.transaction(|scope|Box::pin(async move {
-        let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM claim_settlement_receipts) AS receipts,operation_id,step_name,result FROM claim_settlement_receipts WHERE attempt_id=?")
+        let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM lease_claim_settlement_receipts) AS receipts,operation_id,step_name,result_kind,stored_epoch,stored_incarnation,stored_change FROM lease_claim_settlement_receipts WHERE attempt_id=?")
             .bind(ATTEMPT).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
-        Ok((row.try_get("receipts").map_err(StoreError::backend)?,row.try_get("operation_id").map_err(StoreError::backend)?,row.try_get("step_name").map_err(StoreError::backend)?,row.try_get("result").map_err(StoreError::backend)?))
+        Ok((row.try_get("receipts").map_err(StoreError::backend)?,row.try_get("operation_id").map_err(StoreError::backend)?,row.try_get("step_name").map_err(StoreError::backend)?,serde_json::to_string(&crate::typed_claim_observer::receipt_result(&row)?).map_err(StoreError::backend)?))
     })).await?)
 }

@@ -34,7 +34,8 @@ where
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
             let reservation =
-                crate::fleet_claim_step::read(scope, self.database, self.attempt).await?;
+                crate::fleet_claim_store::read_reservation(scope, self.database, self.attempt)
+                    .await?;
             Ok((reservation, Vec::new()))
         })
     }

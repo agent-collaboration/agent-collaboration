@@ -1,14 +1,16 @@
-//! The registry validates recipient identity and exact historical mail authority.
+//! Fleet validates mail authority and admits custody in the same transaction.
 
 use crate::{
-    mail_submit_calls::{MailSubmitReply, MailSubmitRequest, MailboxSubmission, MailboxSubmit},
+    mail_submit_calls::{MailSubmitReply, MailSubmitRequest},
     registry_peer_lookup::service_for_peer,
     step_driver::{StepCallback, StepResult},
 };
-use board_sync_protocol::{BoardConsumerRequest, MailSubmitAnswer};
+use board_sync_protocol::{BoardConsumerRequest, BoardDeliveryTypes, MailSubmitAnswer};
 use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScope};
+use fleet_sync_delivery::{DeliveryLimits, Outbox};
 use fleet_sync_protocol::{DatabaseId, DeliveryRefusal, SubmitResult};
 use message_board::ServiceId;
+use runtime_primitives::SyncTime;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -18,14 +20,9 @@ use std::convert::Infallible;
 pub(crate) struct AdmitMailSubmit {
     pub source: ServiceId,
     pub request: MailSubmitRequest,
-}
-
-pub(crate) enum MailSubmitAdmission {
-    Reply(MailSubmitReply),
-    Submit {
-        target: MailboxSubmit,
-        request: MailboxSubmission,
-    },
+    pub limits: DeliveryLimits,
+    pub relay: fleet_sync_protocol::PeerId,
+    pub now: SyncTime,
 }
 
 impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for AdmitMailSubmit
@@ -36,7 +33,7 @@ where
     for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'row> &'row str: ColumnIndex<Driver::Row>,
 {
-    type Output = MailSubmitAdmission;
+    type Output = MailSubmitReply;
     type Effect = Infallible;
     fn run<'scope, 'transaction>(
         self,
@@ -87,7 +84,7 @@ where
                     reason: "mail constructor returned a different operation".into(),
                 });
             };
-            let rank = match (item.sender(), origin_epoch) {
+            match (item.sender(), origin_epoch) {
                 (collaboration_mail_protocol::MailSender::Project { project }, Some(epoch)) => {
                     let database = DatabaseId::try_from(project.as_str().to_owned())
                         .map_err(StoreError::backend)?;
@@ -97,13 +94,12 @@ where
                     if !grant.is_some_and(|grant| grant.holder == session.peer) {
                         return reply(MailSubmitReply::Answer(MailSubmitAnswer::NotWriter));
                     }
-                    Some(epoch.value())
                 }
                 (
                     collaboration_mail_protocol::MailSender::Session(_)
                     | collaboration_mail_protocol::MailSender::HumanUser { .. },
                     None,
-                ) => None,
+                ) => {}
                 (collaboration_mail_protocol::MailSender::Project { .. }, None)
                 | (
                     collaboration_mail_protocol::MailSender::Session(_)
@@ -114,26 +110,22 @@ where
                         field: "originEpoch".into(),
                     });
                 }
-            };
+            }
+            let answer = Outbox::<_, BoardDeliveryTypes>::new(scope, self.limits)
+                .submit_relay::<
+                    crate::fleet_mail_tasks::FleetPushTask<Store, Driver>,
+                    crate::fleet_mail_tasks::FleetMailRemoval<Store, Driver>,
+                >(session.peer, *item, self.relay, origin.installation, self.now)
+                .await
+                .map_err(fleet_sync_delivery::delivery_rollback)?;
             Ok((
-                MailSubmitAdmission::Submit {
-                    target: MailboxSubmit {
-                        installation,
-                        recipient,
-                    },
-                    request: MailboxSubmission {
-                        origin: session.peer,
-                        route: origin.installation,
-                        rank,
-                        item,
-                    },
-                },
+                MailSubmitReply::Answer(MailSubmitAnswer::Submitted(answer)),
                 Vec::new(),
             ))
         })
     }
 }
 
-fn reply(value: MailSubmitReply) -> StepResult<MailSubmitAdmission, Infallible> {
-    Ok((MailSubmitAdmission::Reply(value), Vec::new()))
+fn reply(value: MailSubmitReply) -> StepResult<MailSubmitReply, Infallible> {
+    Ok((value, Vec::new()))
 }

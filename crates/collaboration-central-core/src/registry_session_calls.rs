@@ -180,7 +180,7 @@ where
                     let newly_admitted = previous
                         .as_ref()
                         .is_none_or(|previous| previous.attach_seq < report.attach_seq);
-                    let answer = fleet_sync_lease::report_schema_support(scope, &report)
+                    let answer = fleet_sync_lease::report_schema_support(scope, &report, self.now)
                         .await
                         .map_err(StoreError::backend)?;
                     if newly_admitted {

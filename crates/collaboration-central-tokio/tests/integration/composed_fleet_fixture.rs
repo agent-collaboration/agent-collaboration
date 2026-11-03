@@ -15,16 +15,20 @@ use std::{
     path::Path,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicI64, Ordering},
+        atomic::{AtomicBool, AtomicI64, Ordering},
     },
     time::Duration,
 };
+#[path = "../fleet_notice_outbox/fault_store.rs"]
+mod fault_store;
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 pub const PROJECT: &str = "019f0000-0000-7000-8000-000000008199";
 pub const A: &str = "019f0000-0000-7000-8000-000000008111";
 pub const B: &str = "019f0000-0000-7000-8000-000000008112";
+pub const C: &str = "019f0000-0000-7000-8000-000000008113";
 pub const SERVICE_A: &str = "019f0000-0000-7000-8000-000000008101";
 pub const SERVICE_B: &str = "019f0000-0000-7000-8000-000000008102";
+pub const SERVICE_C: &str = "019f0000-0000-7000-8000-000000008103";
 pub const NOW: i64 = 1_792_281_600_000;
 type Route = Arc<dyn Fn(Vec<u8>) -> BoxFuture<'static, Result<Vec<u8>, CallFailure>> + Send + Sync>;
 #[derive(Clone)]
@@ -32,6 +36,24 @@ pub struct Io {
     pub now: Arc<AtomicI64>,
     routes: Arc<Mutex<Option<(Route, Route)>>>,
     wakes: Arc<Mutex<Vec<SyncTime>>>,
+    time_changed: tokio::sync::watch::Sender<i64>,
+    pub reply_deadlines: tokio::sync::watch::Sender<usize>,
+    pub reject_next_notice: Arc<AtomicBool>,
+    pub lose_next_notice_reply: Arc<AtomicBool>,
+    pub notice_calls: Arc<Mutex<Vec<Value>>>,
+}
+impl Io {
+    pub fn advance(&self, millis: i64) {
+        let now = self.now.fetch_add(millis, Ordering::SeqCst) + millis;
+        self.time_changed.send_replace(now);
+    }
+    pub fn wakes(&self) -> TestResult<Vec<SyncTime>> {
+        Ok(self
+            .wakes
+            .lock()
+            .map_err(|_| "fixture wake lock poisoned")?
+            .clone())
+    }
 }
 impl Clock for Io {
     fn now(&self) -> SyncTime {
@@ -55,11 +77,49 @@ impl WakeScheduler for Io {
     }
 }
 impl PlatformIo for Io {
+    async fn before_local_call(&self, request: &[u8]) -> Result<(), CallFailure> {
+        let call: Value = serde_json::from_slice(request).map_err(|_| CallFailure::AnswerLost)?;
+        if call.get("kind").and_then(Value::as_str) == Some("central.machine-notice") {
+            self.notice_calls
+                .lock()
+                .map_err(|_| CallFailure::AnswerLost)?
+                .push(call);
+            if self.reject_next_notice.swap(false, Ordering::SeqCst) {
+                return Err(CallFailure::NotSent {
+                    reason: NotSentReason::Unreachable { last_seen: None },
+                });
+            }
+        }
+        Ok(())
+    }
+    fn drop_local_reply(&self, request: &[u8]) -> Result<bool, CallFailure> {
+        let call: Value = serde_json::from_slice(request).map_err(|_| CallFailure::AnswerLost)?;
+        Ok(
+            call.get("kind").and_then(Value::as_str) == Some("central.machine-notice")
+                && self.lose_next_notice_reply.swap(false, Ordering::SeqCst),
+        )
+    }
+    #[expect(
+        clippy::expect_used,
+        reason = "The fixture retains its injected clock for every active call."
+    )]
     fn reply_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
-        tokio::time::sleep(remaining)
+        let deadline = self.now().after(remaining);
+        let mut changed = self.time_changed.subscribe();
+        let now = self.now.clone();
+        let started = self.reply_deadlines.clone();
+        async move {
+            started.send_modify(|count| *count += 1);
+            while now.load(Ordering::SeqCst) < deadline.unix_millis() {
+                changed
+                    .changed()
+                    .await
+                    .expect("fixture clock remains owned");
+            }
+        }
     }
 
     async fn object_call(
@@ -88,13 +148,15 @@ fn no_route() -> CallFailure {
     }
 }
 type Native = TokioObject<CoreHost<Io>>;
-type Host = TokioStorageHost<CoreHost<Io>>;
+type NativeHost = TokioStorageHost<CoreHost<Io>>;
+type Host = fault_store::FaultHost;
 type Fleet = ObjectRuntime<FleetKind, Host, Io>;
-type Copy = ObjectRuntime<CopyKind, Host, Io>;
+type Copy = ObjectRuntime<CopyKind, NativeHost, Io>;
 pub struct Fixture {
     objects: ObjectStore<CoreHost<Io>>,
     pub store: Arc<Native>,
-    pub host: Arc<Host>,
+    pub host: Arc<NativeHost>,
+    pub faults: Arc<fault_store::FaultStore>,
     pub runtime: Arc<Fleet>,
     _project: Arc<Copy>,
     pub io: Io,
@@ -105,6 +167,11 @@ impl Fixture {
             now: Arc::new(AtomicI64::new(now)),
             routes: Arc::default(),
             wakes: Arc::default(),
+            time_changed: tokio::sync::watch::channel(now).0,
+            reply_deadlines: tokio::sync::watch::channel(0).0,
+            reject_next_notice: Arc::default(),
+            lose_next_notice_reply: Arc::default(),
+            notice_calls: Arc::default(),
         };
         let receiver = ReceiverId::try_from("019f0000-0000-7000-8000-000000000010".to_owned())?;
         let objects = ObjectStore::open(path).await?;
@@ -115,9 +182,18 @@ impl Fixture {
                 Arc::new(CoreHost::for_store(io.clone(), receiver)),
             )
             .await?;
-        let host = Arc::new(Host::new(store.clone()));
+        let host = Arc::new(NativeHost::new(store.clone()));
+        let faults = Arc::new(fault_store::FaultStore {
+            object: store.clone(),
+            armed: Arc::default(),
+            injected: Arc::default(),
+        });
+        let fault_host = Arc::new(Host {
+            native: host.clone(),
+            store: faults.clone(),
+        });
         let runtime = Arc::new(ObjectRuntime::fleet(
-            host.clone(),
+            fault_host,
             io.clone(),
             fleet_sync_lease::RegistryConfig {
                 authoritative_receiver: receiver,
@@ -147,7 +223,7 @@ impl Fixture {
             )
             .await?;
         let project = Arc::new(ObjectRuntime::copy(
-            Arc::new(Host::new(project_store)),
+            Arc::new(NativeHost::new(project_store)),
             io.clone(),
             receiver,
             database,
@@ -168,7 +244,7 @@ impl Fixture {
         ));
         // Supplied authenticated enrollment is this ObjectRuntime component fixture's input.
         store.transaction(|scope|Box::pin(async move {
-            for (peer,service) in [(A,SERVICE_A),(B,SERVICE_B)] {
+            for (peer,service) in [(A,SERVICE_A),(B,SERVICE_B),(C,SERVICE_C)] {
                 query::<sqlx_turso::Turso>("INSERT INTO machine_enrollments(machine_id,service_id,machine_label,access_client_id,credential_hash,state,expires_at,created_at,updated_at) VALUES(?,?,'composed fixture',?,?,'enrolled','2033-05-18T03:33:20+00:00','2026-10-18T00:00:00+00:00','2026-10-18T00:00:00+00:00') ON CONFLICT(machine_id) DO NOTHING")
                     .bind(peer).bind(service).bind(format!("fixture-client-{peer}")).bind(format!("fixture-credential-{peer}")).execute(scope.executor()).await.map_err(StoreError::backend)?;
             } Ok(())
@@ -177,6 +253,7 @@ impl Fixture {
             objects,
             store,
             host,
+            faults,
             runtime,
             _project: project,
             io,
@@ -195,7 +272,7 @@ impl Fixture {
             json!({"kind":"machine","value":{"installation":SERVICE_A}})
         };
         let bytes = serde_json::to_vec(
-            &json!({"source":{"kind":"fleet"},"sourceFace":face,"authority":authority,"destination":{"kind":"fleet"},"destinationFace":if kind=="central.owner-registry" || kind=="central.session-lease" {"registry"} else {"fleet"},"identity":{"operation":durable_steps::Uuid::now_v7(),"step":"component_call"},"kind":kind,"target":target,"request":request}),
+            &json!({"source":{"kind":"fleet"},"sourceFace":face,"authority":authority,"destination":{"kind":"fleet"},"destinationFace":if matches!(kind,"central.owner-registry" | "central.session-lease" | "central.mail-submit-registry") {"registry"} else {"fleet"},"identity":{"operation":durable_steps::Uuid::now_v7(),"step":"component_call"},"kind":kind,"target":target,"request":request}),
         )?;
         let answer = self
             .runtime

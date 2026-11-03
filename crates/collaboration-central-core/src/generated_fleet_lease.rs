@@ -64,8 +64,14 @@ where
 
 #[derive(Debug)]
 pub(crate) struct StoredClaimReservation {
+    pub attempt_id: Option<String>,
     pub project_id: Option<String>,
-    pub state: Option<String>,
+    pub state_kind: Option<String>,
+    pub outcome: Option<String>,
+    pub created_at: Option<String>,
+    pub created_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_class: Option<String>,
 }
 pub(crate) fn read_claim_reservation<S>(
     scope: &mut S,
@@ -88,8 +94,14 @@ where
         row.as_ref()
             .map(|row| {
                 Ok(StoredClaimReservation {
+                    attempt_id: row.try_get("attempt_id")?,
                     project_id: row.try_get("project_id")?,
-                    state: row.try_get("state")?,
+                    state_kind: row.try_get("state_kind")?,
+                    outcome: row.try_get("outcome")?,
+                    created_at: row.try_get("created_at")?,
+                    created_class: row.try_get("created_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_class: row.try_get("updated_class")?,
                 })
             })
             .transpose()
@@ -99,11 +111,14 @@ pub(crate) fn store_claim_reservation<S>(
     scope: &mut S,
     attempt_id: String,
     project_id: String,
-    state: String,
+    state_kind: String,
+    outcome: Option<String>,
+    now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
     for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
@@ -113,7 +128,9 @@ where
         )))
         .bind(attempt_id)
         .bind(project_id)
-        .bind(state);
+        .bind(state_kind)
+        .bind(outcome)
+        .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -122,9 +139,18 @@ where
 #[derive(Debug)]
 pub(crate) struct StoredClaimSettlementReceipt {
     pub receipt_id: Option<String>,
+    pub operation_id: Option<String>,
+    pub step_name: Option<String>,
     pub attempt_id: Option<String>,
     pub project_id: Option<String>,
-    pub result: Option<String>,
+    pub result_kind: Option<String>,
+    pub stored_epoch: Option<String>,
+    pub stored_incarnation: Option<String>,
+    pub stored_change: Option<String>,
+    pub created_at: Option<String>,
+    pub created_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_class: Option<String>,
 }
 pub(crate) fn read_claim_settlement_receipt<S>(
     scope: &mut S,
@@ -151,9 +177,18 @@ where
             .map(|row| {
                 Ok(StoredClaimSettlementReceipt {
                     receipt_id: row.try_get("receipt_id")?,
+                    operation_id: row.try_get("operation_id")?,
+                    step_name: row.try_get("step_name")?,
                     attempt_id: row.try_get("attempt_id")?,
                     project_id: row.try_get("project_id")?,
-                    result: row.try_get("result")?,
+                    result_kind: row.try_get("result_kind")?,
+                    stored_epoch: row.try_get("stored_epoch")?,
+                    stored_incarnation: row.try_get("stored_incarnation")?,
+                    stored_change: row.try_get("stored_change")?,
+                    created_at: row.try_get("created_at")?,
+                    created_class: row.try_get("created_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_class: row.try_get("updated_class")?,
                 })
             })
             .transpose()
@@ -166,11 +201,16 @@ pub(crate) fn insert_claim_settlement_receipt<S>(
     step_name: String,
     attempt_id: String,
     project_id: String,
-    result: String,
+    result_kind: String,
+    stored_epoch: Option<String>,
+    stored_incarnation: Option<String>,
+    stored_change: Option<String>,
+    now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
     for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
@@ -183,22 +223,19 @@ where
         .bind(step_name)
         .bind(attempt_id)
         .bind(project_id)
-        .bind(result);
+        .bind(result_kind)
+        .bind(stored_epoch)
+        .bind(stored_incarnation)
+        .bind(stored_change)
+        .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
 }
-
-#[derive(Debug)]
-pub(crate) struct StoredProjectClaimReservation {
-    pub attempt_id: Option<String>,
-    pub project_id: Option<String>,
-    pub state: Option<String>,
-}
 pub(crate) fn list_project_claim_reservations<S>(
     scope: &mut S,
     project_id: String,
-) -> impl std::future::Future<Output = Result<Vec<StoredProjectClaimReservation>, sqlx_core::Error>> + Send
+) -> impl std::future::Future<Output = Result<Vec<StoredClaimReservation>, sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
@@ -215,10 +252,15 @@ where
         let rows = statement.fetch_all(scope.executor()).await?;
         rows.iter()
             .map(|row| {
-                Ok(StoredProjectClaimReservation {
+                Ok(StoredClaimReservation {
                     attempt_id: row.try_get("attempt_id")?,
                     project_id: row.try_get("project_id")?,
-                    state: row.try_get("state")?,
+                    state_kind: row.try_get("state_kind")?,
+                    outcome: row.try_get("outcome")?,
+                    created_at: row.try_get("created_at")?,
+                    created_class: row.try_get("created_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_class: row.try_get("updated_class")?,
                 })
             })
             .collect()
