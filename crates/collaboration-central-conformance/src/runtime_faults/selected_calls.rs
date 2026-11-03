@@ -16,31 +16,36 @@ struct InvocationKind {
 }
 
 #[derive(Deserialize)]
-struct MailboxInvocation {
+struct FleetInvocation {
     kind: SelectedInvocationKind,
-    request: MailboxSubmitIdentity,
+    request: FleetSubmitIdentity,
 }
 
 #[derive(Deserialize)]
-struct MailboxSubmitIdentity {
-    origin: PeerId,
-    item: MailboxItem,
+struct FleetSubmitIdentity {
+    session: SubmittingSession,
+    item: FleetItem,
 }
 
 #[derive(Deserialize)]
-struct MailboxItem {
-    value: MailboxItemIdentity,
+struct SubmittingSession {
+    peer: PeerId,
 }
 
 #[derive(Deserialize)]
-struct MailboxItemIdentity {
+struct FleetItem {
+    value: FleetItemIdentity,
+}
+
+#[derive(Deserialize)]
+struct FleetItemIdentity {
     id: ItemId,
 }
 
 #[derive(Deserialize)]
 enum SelectedInvocationKind {
-    #[serde(rename = "central.mailbox-submit")]
-    MailboxSubmit,
+    #[serde(rename = "central.mail-submit")]
+    FleetMailSubmit,
     #[serde(rename = "central.installation-peer")]
     InstallationPeer,
     #[serde(rename = "central.forward-route")]
@@ -56,10 +61,10 @@ impl DispatchSelection {
         match self {
             Self::Any => true,
             Self::ExactRequest(expected) => expected == request,
-            Self::Call(DispatchCallSelector::MailboxSubmitFor { origin, item }) => {
-                serde_json::from_slice::<MailboxInvocation>(request).is_ok_and(|invocation| {
-                    matches!(invocation.kind, SelectedInvocationKind::MailboxSubmit)
-                        && invocation.request.origin == *origin
+            Self::Call(DispatchCallSelector::FleetMailSubmitFor { peer, item }) => {
+                serde_json::from_slice::<FleetInvocation>(request).is_ok_and(|invocation| {
+                    matches!(invocation.kind, SelectedInvocationKind::FleetMailSubmit)
+                        && invocation.request.session.peer == *peer
                         && invocation.request.item.value.id == *item
                 })
             }
@@ -68,8 +73,8 @@ impl DispatchSelection {
                     matches!(
                         (call, invocation.kind),
                         (
-                            DispatchCallSelector::MailboxSubmit,
-                            SelectedInvocationKind::MailboxSubmit
+                            DispatchCallSelector::FleetMailSubmit,
+                            SelectedInvocationKind::FleetMailSubmit
                         ) | (
                             DispatchCallSelector::InstallationPeer,
                             SelectedInvocationKind::InstallationPeer

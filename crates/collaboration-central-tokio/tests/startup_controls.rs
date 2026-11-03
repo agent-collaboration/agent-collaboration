@@ -26,7 +26,7 @@ async fn startup_refuses_non_arming_controls_before_discovery() -> ConformanceRe
         },
         RuntimeControl::ResumeDispatchAndHoldNextSelected {
             destination: ObjectAddress::Fleet,
-            call: DispatchCallSelector::MailboxSubmit,
+            call: DispatchCallSelector::FleetMailSubmit,
         },
         RuntimeControl::AwaitDroppedObjectReply,
         RuntimeControl::DropHeldDispatchReply,

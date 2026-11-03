@@ -33,8 +33,8 @@ mod inherited_cancel;
 
 async fn hold_lost_receipt_submit(
     fixture: &RuleFixture,
-    mailbox: ObjectAddress,
-    origin: fleet_sync_protocol::PeerId,
+    fleet: ObjectAddress,
+    peer: fleet_sync_protocol::PeerId,
     item: ItemId,
 ) -> TestResult {
     fixture
@@ -43,8 +43,8 @@ async fn hold_lost_receipt_submit(
         .runtime_control(
             ObjectAddress::Fleet,
             RuntimeControl::HoldNextSelectedDispatch {
-                destination: mailbox,
-                call: DispatchCallSelector::MailboxSubmitFor { origin, item },
+                destination: fleet,
+                call: DispatchCallSelector::FleetMailSubmitFor { peer, item },
             },
         )
         .await?;
@@ -63,11 +63,11 @@ async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
         let seed = Box::pin(arrange_sent_follow(&mut fixture)).await?;
         let connection = ObjectAddress::Fleet;
         let (group, cancel) = arrange_remote_end(&fixture, &seed, case).await?;
-        let mailbox = ObjectAddress::Mailbox(rule_fixture::RECIPIENT.to_owned().try_into()?);
+        let fleet = ObjectAddress::Fleet;
         if matches!(case, CancelPrefix::LostReceipt) {
             hold_lost_receipt_submit(
                 &fixture,
-                mailbox.clone(),
+                fleet.clone(),
                 fixture.successor.projects.peer,
                 seed.item.id(),
             )
@@ -94,7 +94,7 @@ async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
         received_grants::wait_published_project(&fixture.successor.registry, &fixture.project, 3)
             .await?;
         if matches!(case, CancelPrefix::LostReceipt) {
-            lose_actual_submit_answer(&fixture, mailbox, seed.item.id()).await?;
+            lose_actual_submit_answer(&fixture, fleet, seed.item.id()).await?;
         }
         let items = wait_pushed(&fixture, DeliveryStream::Items).await?;
         assert_eq!(
@@ -330,7 +330,7 @@ async fn wait_pushed(
 
 async fn lose_actual_submit_answer(
     fixture: &RuleFixture,
-    mailbox: ObjectAddress,
+    fleet: ObjectAddress,
     item: ItemId,
 ) -> TestResult {
     timeout(BOUND, async {
@@ -381,11 +381,11 @@ async fn lose_actual_submit_answer(
         else {
             return Err("registry dispatch was not held".into());
         };
-        assert_eq!(destination, mailbox);
+        assert_eq!(destination, fleet);
         let request: serde_json::Value = serde_json::from_slice(&held_request)?;
-        assert_eq!(request.get("kind"), Some(&json!("central.mailbox-submit")));
+        assert_eq!(request.get("kind"), Some(&json!("central.mail-submit")));
         assert_eq!(
-            request.pointer("/request/origin"),
+            request.pointer("/request/session/peer"),
             Some(&json!(fixture.successor.projects.peer))
         );
         assert_eq!(
@@ -417,7 +417,7 @@ async fn lose_actual_submit_answer(
         else {
             return Err("successor submit reply was not dropped".into());
         };
-        assert_eq!(destination, mailbox);
+        assert_eq!(destination, fleet);
         assert_eq!(
             dropped_request, held_request,
             "lost reply must belong to the exact held successor submit"

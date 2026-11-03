@@ -77,8 +77,8 @@ async fn hold_old_cancel_away_from_mailbox(
         .runtime_control(
             ObjectAddress::Fleet,
             RuntimeControl::HoldNextSelectedDispatch {
-                destination: ObjectAddress::Mailbox(rule_fixture::RECIPIENT.to_owned().try_into()?),
-                call: DispatchCallSelector::MailboxSubmit,
+                destination: ObjectAddress::Fleet,
+                call: DispatchCallSelector::FleetMailSubmit,
             },
         )
         .await?;

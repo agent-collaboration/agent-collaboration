@@ -50,7 +50,7 @@ async fn prove_transfer(
     controls::hold_selected(
         fixture,
         controls::connection(fixture)?,
-        ObjectAddress::Registry,
+        ObjectAddress::Fleet,
         DispatchCallSelector::InstallationPeer,
     )
     .await?;
@@ -173,7 +173,7 @@ async fn assert_unallocated(
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 pub fn submitted_item(request: &Value) -> FixtureResult<DeliveryItem<BoardDeliveryTypes>> {
-    assert_eq!(request.get("kind"), Some(&json!("central.mailbox-submit")));
+    assert_eq!(request.get("kind"), Some(&json!("central.mail-submit")));
     let envelope: DeliveryEnvelope<BoardDeliveryTypes> =
         serde_json::from_value(at(request, "/request/item")?.clone())?;
     let DeliveryEnvelope::Item(item) = envelope else {

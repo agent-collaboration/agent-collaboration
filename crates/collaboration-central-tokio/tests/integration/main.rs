@@ -5,6 +5,7 @@ mod fleet_layout;
 mod fleet_lease_atomicity;
 
 mod composed_fleet_fixture;
+mod fleet_alarm_sql;
 mod fleet_archive_columns;
 mod fleet_claim_columns;
 mod fleet_claim_settlement;
@@ -18,6 +19,7 @@ mod fleet_mail_inbox_fixture;
 mod fleet_mail_query;
 mod fleet_mail_receipt_loss;
 mod fleet_mail_reports;
+mod fleet_mail_selector;
 mod fleet_mail_settle;
 mod fleet_mail_status_wire;
 mod fleet_ownership_restart;

@@ -230,3 +230,54 @@ async fn lost_offered_page_keeps_its_applied_cursor_and_a_later_append_still_hin
     assert_eq!(reader(&fixture).await?, (before.0, 4));
     fixture.close().await
 }
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Each alarm's real SQL must match independently observed dispatches and committed notice appends, including a duplicate-lookup negative control."
+)]
+#[tokio::test]
+async fn each_fleet_alarm_pays_eight_sql_per_append_and_one_lookup_per_dispatched_task()
+-> TestResult {
+    use super::{
+        fleet_alarm_sql::{AlarmSql, validate_alarm},
+        fleet_mail_dispatch::Socket,
+    };
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path(), NOW).await?;
+    let _sender = Socket::open(&fixture, A, SERVICE_A).await?;
+    feed(&fixture, 0).await?;
+    decide(&fixture, &request(true)?).await?;
+    // The receiving task is admitted by the first real dispatch. A later alarm
+    // appends; the final replay answers the original sender without appending.
+    for (index, expected) in [(0, (1, 0)), (1, (0, 1)), (2, (1, 0)), (3, (0, 0))] {
+        if index == 2 {
+            fixture.io.advance(10_000);
+        }
+        let before = (calls(&fixture)?.len(), notices(&fixture).await?.len());
+        let trace = AlarmSql::default();
+        let report = trace.observe(fixture.runtime.on_alarm()).await?;
+        assert!(report.failed.is_empty(), "{report:?}");
+        let observed = (
+            calls(&fixture)?.len() - before.0,
+            notices(&fixture).await?.len() - before.1,
+        );
+        assert_eq!(
+            observed, expected,
+            "alarm {index} must execute its actual work"
+        );
+        let statements = trace.statements()?;
+        validate_alarm(&statements, observed.0, observed.1)?;
+        if observed.0 > 0 {
+            let mut duplicate_lookup = statements;
+            duplicate_lookup.push(
+                include_str!("../../../collaboration-central-core/sql/read_enrollments.sql")
+                    .to_owned(),
+            );
+            assert!(
+                validate_alarm(&duplicate_lookup, observed.0, observed.1).is_err(),
+                "a second lookup for the same actual task escaped its per-callback cost bound"
+            );
+        }
+    }
+    fixture.close().await
+}

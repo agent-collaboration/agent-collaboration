@@ -8,11 +8,78 @@ use std::time::Duration;
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 const BOUND: Duration = Duration::from_secs(2);
 const SELECTED_KINDS: [&str; 4] = [
-    "central.mailbox-submit",
+    "central.mail-submit",
     "central.installation-peer",
     "central.forward-route",
     "central.copy-session-write",
 ];
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The exact Fleet submit must be held while another peer or item progresses through the same local seam."
+)]
+async fn fleet_submit_selector_holds_only_its_authenticated_peer_and_item() -> TestResult {
+    let peer = "019f0000-0000-7000-8000-000000000910";
+    let item = "019f0000-0000-7000-8000-000000000911";
+    let submission = |peer: &str, item: &str| {
+        json!({
+            "kind":"central.mail-submit",
+            "identity":{"operation":"019f0000-0000-7000-8000-000000000912","step":"fleet-submit"},
+            "request":{"session":{"peer":peer,"sessionId":"019f0000-0000-7000-8000-000000000913"},"item":{"kind":"item","value":{"id":item}}}
+        })
+    };
+    let expected = serde_json::to_vec(&submission(peer, item))?;
+    let other_item = serde_json::to_vec(&submission(peer, "019f0000-0000-7000-8000-000000000914"))?;
+    let other_peer = serde_json::to_vec(&submission("019f0000-0000-7000-8000-000000000915", item))?;
+    let faults = RuntimeFaults::default();
+    let destination = ObjectAddress::Fleet;
+    faults
+        .control(RuntimeControl::HoldNextSelectedDispatch {
+            destination: destination.clone(),
+            call: DispatchCallSelector::FleetMailSubmitFor {
+                peer: peer.to_owned().try_into()?,
+                item: item.to_owned().try_into()?,
+            },
+        })
+        .await?;
+    for unrelated in [&other_item, &other_peer] {
+        tokio::time::timeout(BOUND, faults.before_dispatch(&destination, unrelated)).await??;
+        assert!(matches!(
+            faults.observe()?.dispatch,
+            DispatchFaultObservation::Armed { .. }
+        ));
+    }
+    let selected = faults.before_dispatch(&destination, &expected);
+    tokio::pin!(selected);
+    assert!(
+        futures_util::poll!(&mut selected).is_pending(),
+        "current Fleet submission bypassed its exact selector"
+    );
+    assert!(
+        matches!(faults.control(RuntimeControl::AwaitHeldDispatch).await?.dispatch,DispatchFaultObservation::Held {request,..} if request==expected)
+    );
+    for unrelated in [&other_item, &other_peer] {
+        tokio::time::timeout(BOUND, faults.before_dispatch(&destination, unrelated)).await??;
+    }
+    faults.control(RuntimeControl::ResumeDispatch).await?;
+    tokio::time::timeout(BOUND, selected).await??;
+    faults
+        .control(RuntimeControl::DropNextSelectedObjectReply {
+            destination: destination.clone(),
+            call: DispatchCallSelector::FleetMailSubmitFor {
+                peer: peer.to_owned().try_into()?,
+                item: item.to_owned().try_into()?,
+            },
+        })
+        .await?;
+    for unrelated in [&other_item, &other_peer] {
+        assert!(!faults.drop_successful_object_reply(&destination, unrelated)?);
+    }
+    assert!(faults.drop_successful_object_reply(&destination, &expected)?);
+    assert!(!faults.drop_successful_object_reply(&destination, &expected)?);
+    Ok(())
+}
 
 fn other_object() -> Result<ObjectAddress, Box<dyn std::error::Error + Send + Sync>> {
     Ok(ObjectAddress::Copy(
@@ -26,7 +93,7 @@ fn invocation(kind: &str) -> serde_json::Result<Vec<u8>> {
     serde_json::to_vec(&json!({
         "kind": kind,
         "identity": {"operation":"019f0000-0000-7000-8000-000000000806","step":"selected"},
-        "request": {"text":"central.mailbox-submit central.installation-peer central.forward-route central.copy-session-write"},
+        "request": {"text":"central.mail-submit central.installation-peer central.forward-route central.copy-session-write"},
     }))
 }
 
@@ -42,7 +109,7 @@ async fn selected_hold(
             call,
         })
         .await?;
-    let unrelated = invocation("central.mailbox-request")?;
+    let unrelated = invocation("central.sender-mail")?;
     let status = serde_json::to_vec(&json!({
         "kind":"central.copy-session-read", "request":{"kind":"status"}
     }))?;
@@ -112,13 +179,10 @@ async fn selected_hold(
 }
 
 #[tokio::test]
-async fn mailbox_submit_hold_ignores_mailbox_requests_and_preserves_the_selected_bytes()
--> TestResult {
+async fn fleet_submit_hold_ignores_sender_requests_and_preserves_the_selected_bytes() -> TestResult
+{
     for (call, kind) in [
-        (
-            DispatchCallSelector::MailboxSubmit,
-            "central.mailbox-submit",
-        ),
+        (DispatchCallSelector::FleetMailSubmit, "central.mail-submit"),
         (DispatchCallSelector::ForwardRoute, "central.forward-route"),
     ] {
         selected_hold(call, kind, ObjectAddress::Fleet).await?;
@@ -196,13 +260,10 @@ async fn selected_drop(call: DispatchCallSelector, kind: &str) -> TestResult {
 }
 
 #[tokio::test]
-async fn mailbox_submit_reply_drop_ignores_background_requests_and_drops_the_selected_reply_once()
+async fn fleet_submit_reply_drop_ignores_background_requests_and_drops_the_selected_reply_once()
 -> TestResult {
     for (call, kind) in [
-        (
-            DispatchCallSelector::MailboxSubmit,
-            "central.mailbox-submit",
-        ),
+        (DispatchCallSelector::FleetMailSubmit, "central.mail-submit"),
         (DispatchCallSelector::ForwardRoute, "central.forward-route"),
     ] {
         selected_drop(call, kind).await?;
@@ -281,11 +342,11 @@ async fn existing_any_controls_still_accept_opaque_calls_and_resume_before_the_n
     Ok(())
 }
 
-fn mailbox_submit_identity(origin: &str, item: &str, operation: &str) -> serde_json::Value {
+fn fleet_submit_identity(peer: &str, item: &str, operation: &str) -> serde_json::Value {
     json!({
-        "kind": "central.mailbox-submit",
+        "kind": "central.mail-submit",
         "identity": {"operation": operation, "step": "selected-item"},
-        "request": {"origin": origin, "item": {"kind": "item", "value": {"id": item}}},
+        "request": {"session": {"peer": peer}, "item": {"kind": "item", "value": {"id": item}}},
     })
 }
 
@@ -294,17 +355,17 @@ fn mailbox_submit_identity(origin: &str, item: &str, operation: &str) -> serde_j
     clippy::panic_in_result_fn,
     reason = "Contract assertions fail the test while fixture errors propagate."
 )]
-async fn mailbox_item_selection_ignores_other_origins_items_cancels_and_queries() -> TestResult {
-    let origin = "019f0000-0000-7000-8000-000000000810";
+async fn fleet_item_selection_ignores_other_peers_items_cancels_and_queries() -> TestResult {
+    let peer = "019f0000-0000-7000-8000-000000000810";
     let item = "019f0000-0000-7000-8000-000000000811";
     let operation = "019f0000-0000-7000-8000-000000000812";
-    let selector = DispatchCallSelector::MailboxSubmitFor {
-        origin: origin.to_owned().try_into()?,
+    let selector = DispatchCallSelector::FleetMailSubmitFor {
+        peer: peer.to_owned().try_into()?,
         item: item.to_owned().try_into()?,
     };
     assert_eq!(
         serde_json::to_value(selector)?,
-        json!({"mailboxSubmitFor": {"origin": origin, "item": item}})
+        json!({"fleetMailSubmitFor": {"peer": peer, "item": item}})
     );
     let selector = serde_json::from_value(serde_json::to_value(selector)?)?;
     let faults = RuntimeFaults::default();
@@ -315,9 +376,9 @@ async fn mailbox_item_selection_ignores_other_origins_items_cancels_and_queries(
             call: selector,
         })
         .await?;
-    let expected = mailbox_submit_identity(origin, item, operation);
-    let mut wrong_origin = expected.clone();
-    wrong_origin["request"]["origin"] = json!("019f0000-0000-7000-8000-000000000813");
+    let expected = fleet_submit_identity(peer, item, operation);
+    let mut wrong_peer = expected.clone();
+    wrong_peer["request"]["session"]["peer"] = json!("019f0000-0000-7000-8000-000000000813");
     let mut wrong_item = expected.clone();
     wrong_item["request"]["item"]["value"]["id"] = json!("019f0000-0000-7000-8000-000000000814");
     let mut cancel = wrong_item.clone();
@@ -327,8 +388,18 @@ async fn mailbox_item_selection_ignores_other_origins_items_cancels_and_queries(
     let mut invalid = expected.clone();
     invalid["request"]["item"]["value"]["id"] = json!("invalid");
     let mut missing = expected.clone();
-    missing["request"] = json!({"origin": origin});
-    for unrelated in [wrong_origin, wrong_item, cancel, query, invalid, missing] {
+    missing["request"] = json!({"peer": peer});
+    let mut retired_mailbox = expected.clone();
+    retired_mailbox["kind"] = json!("central.mailbox-submit");
+    for unrelated in [
+        wrong_peer,
+        wrong_item,
+        cancel,
+        query,
+        invalid,
+        missing,
+        retired_mailbox,
+    ] {
         tokio::time::timeout(
             BOUND,
             faults.before_dispatch(&destination, &serde_json::to_vec(&unrelated)?),
@@ -411,7 +482,7 @@ async fn held_reply_binding_ignores_a_bypassing_submit_and_same_item_with_new_ca
 -> TestResult {
     let faults = RuntimeFaults::default();
     let destination = ObjectAddress::Fleet;
-    let expected = mailbox_submit_identity(
+    let expected = fleet_submit_identity(
         "019f0000-0000-7000-8000-000000000810",
         "019f0000-0000-7000-8000-000000000811",
         "019f0000-0000-7000-8000-000000000812",

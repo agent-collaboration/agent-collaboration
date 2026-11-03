@@ -1836,6 +1836,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "turso_parser",
 ]
 
 [[package]]
