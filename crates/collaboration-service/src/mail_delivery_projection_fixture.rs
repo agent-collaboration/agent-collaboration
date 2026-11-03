@@ -381,6 +381,7 @@ impl Fixture {
         items: Vec<DeliveryItem<RouterDeliveryTypes>>,
     ) -> Result<(), StoreError> {
         let config = self.host.config;
+        let now = self.host.now();
         let consumer = self.host.consumer.clone();
         self.store
             .transaction(move |scope| {
@@ -391,7 +392,7 @@ impl Fixture {
                         config.local.limits,
                     );
                     let input = inbox
-                        .begin_receive(DeliveryStream::Items)
+                        .begin_receive(DeliveryStream::Items, now)
                         .await
                         .map_err(StoreError::backend)?
                         .ok_or_else(|| StoreError::backend("receive fixture cycle absent"))?;
@@ -419,7 +420,7 @@ impl Fixture {
                                     .collect::<Result<Vec<_>, StoreError>>()?,
                             },
                             consumer.as_ref(),
-                            SyncTime::from_unix_millis(recorded_at().timestamp_millis()),
+                            now,
                         )
                         .await
                         .map_err(StoreError::backend)?;
@@ -453,6 +454,7 @@ impl Fixture {
         )
         .unwrap();
         let config = self.host.config;
+        let now = self.host.now();
         let consumer = self.host.consumer.clone();
         self.store
             .transaction(move |scope| {
@@ -463,7 +465,7 @@ impl Fixture {
                         config.local.limits,
                     );
                     let input = inbox
-                        .begin_receive(DeliveryStream::Controls)
+                        .begin_receive(DeliveryStream::Controls, now)
                         .await
                         .map_err(StoreError::backend)?
                         .ok_or_else(|| StoreError::backend("control fixture cycle absent"))?;
@@ -479,7 +481,7 @@ impl Fixture {
                                 }],
                             },
                             consumer.as_ref(),
-                            SyncTime::from_unix_millis(recorded_at().timestamp_millis()),
+                            now,
                         )
                         .await
                         .map_err(StoreError::backend)?;
