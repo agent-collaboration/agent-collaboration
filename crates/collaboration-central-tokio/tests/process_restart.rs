@@ -102,6 +102,13 @@ async fn native_central_process() -> ConformanceResult<()> {
     Ok(())
 }
 
+fn notice_key() -> DispatchKey {
+    DispatchKey::new(
+        ObjectAddress::Fleet,
+        collaboration_central_conformance::DispatchCallSelector::FleetMachineNotice,
+    )
+}
+
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Assertions must fail this test while fixture errors propagate through Result."
@@ -144,9 +151,7 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
     control(
         &first.base,
         ObjectAddress::Fleet,
-        RuntimeControl::HoldNextDispatch {
-            key: DispatchKey::any(ObjectAddress::Fleet),
-        },
+        RuntimeControl::HoldNextDispatch { key: notice_key() },
     )
     .await?;
     let request = FleetRequest {
@@ -173,14 +178,10 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
     let held = control(
         &first.base,
         ObjectAddress::Fleet,
-        RuntimeControl::AwaitHeldDispatch {
-            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
-        },
+        RuntimeControl::AwaitHeldDispatch { key: notice_key() },
     )
     .await?;
-    let DispatchFaultObservation::Held { request: bytes, .. } = held.dispatch(&DispatchKey::any(
-        collaboration_central_core::ObjectAddress::Fleet,
-    )) else {
+    let DispatchFaultObservation::Held { request: bytes, .. } = held.dispatch(&notice_key()) else {
         return Err("Fleet did not reach its post-commit dispatch barrier".into());
     };
     let call: Value = serde_json::from_slice(&bytes)?;
@@ -189,14 +190,13 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
         .ok_or("notice call omitted its durable identity")?
         .clone();
     let fleet_path = root.path().join("fleet.db");
-    let connection_path = root.path().join("fleet.db");
     let before = operation(&fleet_path, &operation_id).await?;
     assert_eq!(before.0, "running");
     assert_eq!(before.2, 1);
     assert_eq!(
         read_count(
-            &connection_path,
-            "SELECT COUNT(*) AS count FROM machine_notices"
+            &fleet_path,
+            "SELECT COUNT(*) AS count FROM machine_control_notices"
         )
         .await?,
         0
@@ -290,8 +290,8 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
     );
     assert_eq!(
         read_count(
-            &connection_path,
-            "SELECT COUNT(*) AS count FROM machine_notices"
+            &fleet_path,
+            "SELECT COUNT(*) AS count FROM machine_control_notices"
         )
         .await?,
         1
