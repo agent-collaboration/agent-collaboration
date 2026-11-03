@@ -1,12 +1,7 @@
 //! The shipped CLI derives the two files from its existing one-root argument.
-#[path = "upload_support/central_fixture.rs"]
-#[expect(
-    dead_code,
-    reason = "The sibling importer targets also use the owner client helper."
-)]
-mod central_fixture;
-mod message_support;
-mod support;
+use crate::central_fixture;
+use crate::message_support;
+use crate::support;
 use message_support::*;
 use std::{os::unix::fs::PermissionsExt, path::Path};
 

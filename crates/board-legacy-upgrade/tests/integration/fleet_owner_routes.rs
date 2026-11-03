@@ -1,17 +1,7 @@
 //! The retained Fleet obligations run on current owner and normal-session routes.
-#[path = "upload_support/central_fixture.rs"]
-#[expect(
-    dead_code,
-    reason = "Shared fixture helpers serve different subsets of integration targets."
-)]
-mod central_fixture;
-mod support;
-#[path = "upload_support/mod.rs"]
-#[expect(
-    dead_code,
-    reason = "Other shared helpers serve the project publication tests."
-)]
-mod upload_support;
+use crate::central_fixture;
+use crate::support;
+use crate::upload_support;
 
 use collaboration_central_conformance::{
     ConformanceClient, JwksFixtureServer, run_composed_fleet_conflict,

@@ -1,10 +1,5 @@
 //! Measure the actual single-request Fleet boundary without weakening its limit.
-#[path = "upload_support/central_fixture.rs"]
-#[expect(
-    dead_code,
-    reason = "Shared fixture helpers serve different subsets of integration targets."
-)]
-mod central_fixture;
+use crate::central_fixture;
 
 use collaboration_central_conformance::JwksFixtureServer;
 use fleet_admission::{FleetImportBundle, FleetImportCounts, FleetImportRecord, FleetImportResult};

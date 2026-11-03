@@ -1,17 +1,7 @@
 //! Actual owner import status/body failures preserve retained workflow identity.
-#[path = "upload_support/central_fixture.rs"]
-#[expect(
-    dead_code,
-    reason = "Shared fixture helpers serve different subsets of integration targets."
-)]
-mod central_fixture;
-mod support;
-#[path = "upload_support/mod.rs"]
-#[expect(
-    dead_code,
-    reason = "Sibling publication tests use the remaining helpers."
-)]
-mod upload_support;
+use crate::central_fixture;
+use crate::support;
+use crate::upload_support;
 
 use board_legacy_upgrade::{PreparedUpgrade, UpgradePublisher, UpgradeUploadError};
 use collaboration_central_admin_protocol::OwnerOperationFailure;

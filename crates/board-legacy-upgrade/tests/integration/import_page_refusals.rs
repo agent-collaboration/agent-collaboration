@@ -1,17 +1,7 @@
 //! Invalid owner requests must not poison or publish the retained native seed.
-#[path = "upload_support/central_fixture.rs"]
-#[expect(
-    dead_code,
-    reason = "Shared fixture helpers serve different subsets of integration targets."
-)]
-mod central_fixture;
-mod support;
-#[path = "upload_support/mod.rs"]
-#[expect(
-    dead_code,
-    reason = "The other publication helpers serve sibling importer tests."
-)]
-mod upload_support;
+use crate::central_fixture;
+use crate::support;
+use crate::upload_support;
 
 use board_legacy_upgrade::UpgradePublisher;
 use collaboration_central_conformance::{ConformanceClient, JwksFixtureServer};

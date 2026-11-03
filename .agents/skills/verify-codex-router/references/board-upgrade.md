@@ -2,10 +2,10 @@
 
 ## Current entry
 
-The wrapper retired in 0.1.102. The retained Rust preparation, publication, replay and restart route is `crates/board-legacy-upgrade/tests/upgrade_binary_e2e.rs`. Prepare the real local entry points as CI does, then run:
+The wrapper retired in 0.1.102. The retained Rust preparation, publication, replay and restart route is `crates/board-legacy-upgrade/tests/e2e/upgrade_binary_e2e.rs`. Prepare the real local entry points as CI does, then run:
 
 ```sh
-cargo test --locked -p board-legacy-upgrade --test upgrade_binary_e2e -- --test-threads=1
+cargo nextest run --locked --profile ci -p board-legacy-upgrade --test e2e --test-threads 1
 ```
 
 The retained independent inbox oracle is `crates/board-legacy-upgrade/examples/legacy_selection_oracle.rs`; build/run that example with an explicitly supplied sealed copy, copy root and private output. Its owning tests remain in the example and upgrade suite.

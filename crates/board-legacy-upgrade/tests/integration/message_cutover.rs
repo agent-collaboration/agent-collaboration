@@ -1,5 +1,5 @@
 //! Four real tables cross owners; only A's migrator may finish the move.
-mod message_support;
+use crate::message_support;
 use board_legacy_upgrade::{MessageCopyCounts, MessageUpgrade, MessageUpgradeReport};
 use interaction_storage::InteractionStore;
 use message_support::*;

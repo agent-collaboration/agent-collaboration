@@ -1,17 +1,7 @@
 //! D's actual owner import must remain readable and claimable by normal sessions.
-#[path = "upload_support/central_fixture.rs"]
-#[expect(
-    dead_code,
-    reason = "Shared fixture helpers serve different subsets of integration targets."
-)]
-mod central_fixture;
-mod support;
-#[path = "upload_support/mod.rs"]
-#[expect(
-    dead_code,
-    reason = "The shared publication helpers also serve the existing upload route tests."
-)]
-mod upload_support;
+use crate::central_fixture;
+use crate::support;
+use crate::upload_support;
 
 use board_legacy_upgrade::UpgradePublisher;
 use board_sync_protocol::BoardConsumerProtocol;

@@ -1,22 +1,16 @@
 //! The actual uploader publishes every copy before recording workflow completion.
-mod support;
-#[expect(
-    dead_code,
-    reason = "The shared actual-CLI helper is consumed by sibling import integration targets."
-)]
-#[path = "upload_support/mod.rs"]
-mod upload_support;
+use crate::central_fixture;
+use crate::support;
+use crate::upload_support;
 use board_legacy_upgrade::{PreparedUpgrade, UpgradePublisher};
+use central_fixture::{RestartableCentral, owner_client};
+use codex_router_test_support::scenario_finalization::run_scenario;
 use collaboration_central_core::{
     AdminImportPhase, AdminProjectImportAnswer, AdminProjectImportRequest,
 };
 use std::{error::Error, fmt::Display, time::Duration};
 use support::*;
-#[path = "upload_support/central_fixture.rs"]
-mod central_fixture;
-use central_fixture::{RestartableCentral, owner_client};
-use codex_router_test_support::scenario_finalization::run_scenario;
-#[path = "upload_support/publication_faults.rs"]
+#[path = "../upload_support/publication_faults.rs"]
 mod publication_faults;
 
 type SafeResult<Value = ()> = codex_router_test_support::FixtureResult<Value>;

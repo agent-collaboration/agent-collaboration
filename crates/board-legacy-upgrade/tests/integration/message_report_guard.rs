@@ -1,5 +1,5 @@
 //! Report aliases must refuse before any legacy source or message store is opened.
-mod support;
+use crate::support;
 use std::{path::Path, process::Output, time::Duration};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;

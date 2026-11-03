@@ -1,5 +1,5 @@
 //! The real publisher preserves an injected typed server refusal over HTTP.
-mod support;
+use crate::support;
 use board_legacy_upgrade::{UpgradePublisher, UpgradeUploadError};
 use collaboration_central_core::{
     AdminImportRefusal, AdminProjectImportAnswer, AdminProjectImportRequest,

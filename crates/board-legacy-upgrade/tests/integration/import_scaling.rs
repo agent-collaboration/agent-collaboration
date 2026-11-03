@@ -1,5 +1,5 @@
 //! Retained, synthetic-only measurements for the offline import's actual CLI path.
-mod support;
+use crate::support;
 
 use message_board::PostId;
 use rusqlite::params;

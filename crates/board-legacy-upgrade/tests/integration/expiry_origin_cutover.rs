@@ -1,6 +1,6 @@
 //! Decision 1050: the old canonical expiry key carries a retired board scope.
-mod message_support;
-mod support;
+use crate::message_support;
+use crate::support;
 use board_legacy_upgrade::{MessageUpgrade, MessageUpgradeError};
 use collaboration_protocol::RouterOriginRef;
 use interaction_storage::InteractionStore;

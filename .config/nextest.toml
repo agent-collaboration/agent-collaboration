@@ -89,6 +89,6 @@ threads-required = "num-test-threads"
 
 # Real local Host/central journeys run in the required slower CI job.
 [[profile.ci.overrides]]
-filter = "(package(=agent-collaboration) & binary(=e2e)) | binary(=upgrade_binary_e2e) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/))"
+filter = "(package(=agent-collaboration) & binary(=e2e)) | (package(=board-legacy-upgrade) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"

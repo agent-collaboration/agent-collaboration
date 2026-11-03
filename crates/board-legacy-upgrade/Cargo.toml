@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "board-legacy-upgrade"
 version.workspace = true
 edition.workspace = true
@@ -57,3 +58,11 @@ futures-util.workspace = true
 reqwest-websocket = "=0.5.1"
 collaboration-central-tokio = { version = "0.1.100", path = "../collaboration-central-tokio", features = ["conformance"] }
 collaboration-central-conformance = { version = "0.1.100", path = "../collaboration-central-conformance" }
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"
+
+[[test]]
+name = "e2e"
+path = "tests/e2e/main.rs"

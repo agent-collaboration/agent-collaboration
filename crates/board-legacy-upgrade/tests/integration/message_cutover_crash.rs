@@ -1,6 +1,6 @@
 //! A process can disappear after copy commit without authorizing the source drop.
-mod message_support;
-mod support;
+use crate::message_support;
+use crate::support;
 use board_legacy_upgrade::MessageUpgrade;
 use message_support::*;
 
@@ -32,15 +32,14 @@ async fn process_exit_after_copy_retries_the_same_ids_before_real_drop() -> Test
         &board,
     )?;
     let original = std::fs::read(&source)?;
+    let child_namespace = module_path!()
+        .split_once("::")
+        .map_or(module_path!(), |(_, namespace)| namespace);
+    let child_selector = format!("{child_namespace}::message_copy_checkpoint_child");
     let output = tokio::time::timeout(
         std::time::Duration::from_secs(30),
         tokio::process::Command::new(std::env::current_exe()?)
-            .args([
-                "--exact",
-                "message_copy_checkpoint_child",
-                "--ignored",
-                "--nocapture",
-            ])
+            .args(["--exact", &child_selector, "--ignored", "--nocapture"])
             .env("MESSAGE_COPY_CHILD_ROOT", directory.path())
             .kill_on_drop(true)
             .output(),

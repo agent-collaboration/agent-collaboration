@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 use board_legacy_upgrade::UpgradeError;
 use support::*;
 

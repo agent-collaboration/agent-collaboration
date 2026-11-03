@@ -1,10 +1,5 @@
-#[expect(
-    dead_code,
-    reason = "The shared CLI owner is also used by the IB and BC05 integration targets."
-)]
-#[path = "upload_support/actual_cli.rs"]
-mod actual_cli;
-mod support;
+use crate::support;
+use crate::upload_support::actual_cli;
 use actual_cli::{ImporterCliInvocation, run_importer_cli};
 use codex_router_test_support::owned_cli_process::run_cli_output;
 use std::{

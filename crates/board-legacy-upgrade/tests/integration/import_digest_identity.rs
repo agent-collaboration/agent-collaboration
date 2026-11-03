@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 use board_legacy_upgrade::prepare_sources;
 use message_board::*;
 use support::*;

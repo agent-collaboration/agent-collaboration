@@ -1,6 +1,6 @@
 //! Legacy global bounds must retain their thread's imported coverage.
-mod message_support;
-mod support;
+use crate::message_support;
+use crate::support;
 use board_legacy_upgrade::{MessageUpgrade, MessageUpgradeError};
 use interaction_storage::InteractionStore;
 use message_support::*;

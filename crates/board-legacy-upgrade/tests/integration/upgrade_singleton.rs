@@ -1,5 +1,5 @@
 //! Offline upgrade and the running Host share the shipped singleton artifact.
-mod support;
+use crate::support;
 
 use codex_router_host::{HostCoordinationPaths, HostInstance, router_collaboration_directory};
 use std::{
