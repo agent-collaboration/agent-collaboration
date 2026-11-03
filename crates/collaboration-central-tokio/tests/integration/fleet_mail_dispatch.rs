@@ -18,13 +18,13 @@ use sqlx_core::{query::query, row::Row};
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-const CAP: Duration = Duration::from_secs(3);
-struct Socket {
-    binding: ConnectionBinding,
+pub(super) const CAP: Duration = Duration::from_secs(3);
+pub(super) struct Socket {
+    pub(super) binding: ConnectionBinding,
     frames: mpsc::Receiver<SocketCommand>,
 }
 impl Socket {
-    async fn open(fixture: &Fixture, peer: &str, service: &str) -> TestResult<Self> {
+    pub(super) async fn open(fixture: &Fixture, peer: &str, service: &str) -> TestResult<Self> {
         let binding = ConnectionBinding::new(
             ConnectionId::new(durable_steps::Uuid::now_v7())?,
             VerifiedPeer {
@@ -63,7 +63,7 @@ impl Socket {
         }
         Ok(socket)
     }
-    async fn next(&mut self) -> TestResult<ServerFrame<BoardConsumerProtocol>> {
+    pub(super) async fn next(&mut self) -> TestResult<ServerFrame<BoardConsumerProtocol>> {
         match tokio::time::timeout(CAP, self.frames.recv())
             .await?
             .ok_or("socket ended")?
@@ -72,7 +72,7 @@ impl Socket {
             SocketCommand::Close(reason) => Err(format!("socket closed: {reason:?}").into()),
         }
     }
-    async fn push(&mut self, expected: ItemId) -> TestResult<FrameId> {
+    pub(super) async fn push(&mut self, expected: ItemId) -> TestResult<FrameId> {
         loop {
             if let ServerFrame::Request {
                 frame,
@@ -84,7 +84,7 @@ impl Socket {
             }
         }
     }
-    async fn answer(
+    pub(super) async fn answer(
         &self,
         fixture: &Fixture,
         frame: FrameId,
@@ -103,7 +103,10 @@ impl Socket {
         Ok(())
     }
 }
-fn envelope(peer: &str, service: &str) -> TestResult<DeliveryEnvelope<BoardDeliveryTypes>> {
+pub(super) fn envelope(
+    peer: &str,
+    service: &str,
+) -> TestResult<DeliveryEnvelope<BoardDeliveryTypes>> {
     Ok(DeliveryEnvelope::Item(DeliveryItem::new(
         ItemId::new(durable_steps::Uuid::now_v7())?,
         serde_json::from_value(json!({"kind":"humanUser","installation":SERVICE_A}))?,
@@ -119,7 +122,10 @@ fn envelope(peer: &str, service: &str) -> TestResult<DeliveryEnvelope<BoardDeliv
         )?,
     )?))
 }
-async fn submit(fixture: &Fixture, item: &DeliveryEnvelope<BoardDeliveryTypes>) -> TestResult {
+pub(super) async fn submit(
+    fixture: &Fixture,
+    item: &DeliveryEnvelope<BoardDeliveryTypes>,
+) -> TestResult {
     let answer = fixture
         .call(
             "session",
@@ -144,7 +150,7 @@ async fn submit(fixture: &Fixture, item: &DeliveryEnvelope<BoardDeliveryTypes>) 
     );
     Ok(())
 }
-async fn custody(fixture: &Fixture, item: ItemId) -> TestResult<(String, bool)> {
+pub(super) async fn custody(fixture: &Fixture, item: ItemId) -> TestResult<(String, bool)> {
     Ok(fixture.store.transaction(move |scope| Box::pin(async move {
         let row = query::<sqlx_turso::Turso>("SELECT status_kind,payload IS NOT NULL AS retained FROM _fleet_sync_outbox_items WHERE item_id=?")
             .bind(item.as_uuid().to_string()).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
