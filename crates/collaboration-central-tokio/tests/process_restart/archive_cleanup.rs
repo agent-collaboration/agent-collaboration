@@ -43,7 +43,6 @@ struct FleetView {
 
 struct CleanupInput {
     database: DatabaseId,
-    at: RegistryTime,
     original: ClaimSettlement,
     call: Value,
     operation: Value,
@@ -61,6 +60,14 @@ struct SavedJournal {
     input: Vec<u8>,
     digest: Vec<u8>,
     kind: String,
+    ready_at: RegistryTime,
+}
+
+fn settlement_key() -> DispatchKey {
+    DispatchKey::new(
+        ObjectAddress::Fleet,
+        collaboration_central_conformance::DispatchCallSelector::FleetClaimSettlement,
+    )
 }
 
 #[tokio::test]
@@ -111,13 +118,13 @@ async fn run_cleanup_restart(loss: CleanupLoss) -> ConformanceResult<()> {
         RuntimeControlRequest {
             address: ObjectAddress::Fleet,
             command: RuntimeControl::SetTime {
-                now: RegistryTime(input.at.0 + chrono::TimeDelta::seconds(6)),
+                now: journal.ready_at,
             },
         },
         RuntimeControlRequest {
             address: ObjectAddress::Fleet,
             command: RuntimeControl::HoldNextDispatch {
-                key: DispatchKey::any(ObjectAddress::Fleet),
+                key: settlement_key(),
             },
         },
     ];
@@ -127,7 +134,7 @@ async fn run_cleanup_restart(loss: CleanupLoss) -> ConformanceResult<()> {
         &second.base,
         ObjectAddress::Fleet,
         RuntimeControl::ResumeDispatch {
-            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+            key: settlement_key(),
         },
     )
     .await;
@@ -285,7 +292,7 @@ async fn read_journal(
         .await?;
     let result = async {
         let row = query::<sqlx_turso::Turso>(
-            "SELECT input,input_digest,kind FROM _fleet_sync_operations WHERE operation_id=?",
+            "SELECT input,input_digest,kind,state,next_attempt_at,drive_until FROM _fleet_sync_operations WHERE operation_id=?",
         )
         .bind(
             operation
@@ -294,10 +301,17 @@ async fn read_journal(
         )
         .fetch_one(&mut connection)
         .await?;
+        if row.try_get::<String,_>("state")? != "running" {
+            return Err("stopped original settlement is not pending".into());
+        }
+        let ready = row.try_get::<Option<i64>,_>("next_attempt_at")?.into_iter()
+            .chain(row.try_get::<Option<i64>,_>("drive_until")?).max()
+            .and_then(|deadline|deadline.checked_add(1)).ok_or("stopped settlement has no recoverable deadline")?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(SavedJournal {
             input: row.try_get("input")?,
             digest: row.try_get("input_digest")?,
             kind: row.try_get("kind")?,
+            ready_at: RegistryTime(chrono::DateTime::from_timestamp_millis(ready).ok_or("recovery deadline outside clock range")?),
         })
     }
     .await;

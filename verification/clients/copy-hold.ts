@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { decode, encode, field } from "../exact-json.ts";
 import type { CentralOwner } from "./central-owner.ts";
@@ -16,6 +17,9 @@ const dispatchSchema = z.discriminatedUnion("kind", [
     }),
   }),
 ]);
+const dispatchesSchema = z.object({
+  dispatches: z.array(z.object({ key: z.unknown(), state: z.unknown() })),
+});
 export const positionSchema = z.object({
   epoch: z.bigint().nonnegative(),
   sequence: z.bigint().nonnegative(),
@@ -41,7 +45,6 @@ type Command =
   | "observe";
 interface CopyHoldInput {
   readonly owner: CentralOwner;
-  readonly service: string;
   readonly project: string;
   readonly receipt: Receipt;
 }
@@ -53,16 +56,31 @@ export class CopyHold {
   }
   private async command(kind: Command): Promise<z.infer<typeof dispatchSchema>> {
     const destination = { kind: "copy", value: this.input.project };
+    const key = { destination, call: "any" };
     const reply = await this.input.owner.control(
-      { kind: "connection", value: this.input.service },
-      kind === "holdNextDispatch" || kind === "resumeDispatchAndHoldNext"
-        ? { kind, value: { destination } }
-        : { kind },
+      { kind: "fleet" },
+      kind === "observe"
+        ? { kind }
+        : {
+            kind,
+            value: kind === "resumeDispatchAndHoldNext" ? { key, next: key } : { key },
+          },
     );
-    const dispatch = dispatchSchema.parse(field(reply, "dispatch"));
+    const entries = dispatchesSchema
+      .parse(reply)
+      .dispatches.filter((entry): boolean => isDeepStrictEqual(entry.key, key));
+    if (entries.length > 1) throw new Error("control duplicated the owned Copy dispatch key");
+    const selected = entries[0];
+    const dispatch = dispatchSchema.parse(
+      selected === undefined ? { kind: "idle" } : selected.state,
+    );
     if (dispatch.kind !== "idle" && dispatch.value.destination.value !== this.input.project)
       throw new Error("control selected another physical Copy");
-    await this.input.receipt.record("copyDispatchControl", { command: kind, state: dispatch.kind });
+    await this.input.receipt.record("copyDispatchControl", {
+      command: kind,
+      key,
+      state: dispatch.kind,
+    });
     return dispatch;
   }
   async arm(): Promise<void> {

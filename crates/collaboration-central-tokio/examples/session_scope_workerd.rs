@@ -146,7 +146,6 @@ enum Scenario {
     MailSubmitAdmission,
     RawSubmitRefusal,
     SenderSettlement,
-    SenderRetirement,
     HttpBodyKeepalive,
     HttpBodyOverLimit,
     CreationGates,
@@ -235,7 +234,6 @@ async fn main() -> ConformanceResult<()> {
         Some("mail-submit-admission") => Scenario::MailSubmitAdmission,
         Some("raw-submit-refusal") => Scenario::RawSubmitRefusal,
         Some("sender-settlement") => Scenario::SenderSettlement,
-        Some("sender-retirement") => Scenario::SenderRetirement,
         Some("http-body-keepalive") => Scenario::HttpBodyKeepalive,
         Some("http-body-over-limit") => Scenario::HttpBodyOverLimit,
         Some("creation-gates") => Scenario::CreationGates,
@@ -347,7 +345,6 @@ async fn main() -> ConformanceResult<()> {
         Scenario::HttpBodyOverLimit => http_body_scenarios::an_over_limit_body_is_refused_and_the_connection_is_closed(&format!("http://127.0.0.1:{port}")).await,
         Scenario::RawSubmitRefusal => sender_control_scenarios::raw_submit_is_refused_without_custody_and_the_same_socket_remains_usable(&format!("http://127.0.0.1:{port}")).await,
         Scenario::SenderSettlement => sender_control_scenarios::sender_query_and_settlement_preserve_existing_custody_and_pin_unknown_identity(&format!("http://127.0.0.1:{port}")).await,
-        Scenario::SenderRetirement => sender_control_scenarios::retirement_uses_the_verified_sender_and_replays_its_original_call_receipt(&format!("http://127.0.0.1:{port}")).await,
         Scenario::CopyReads => copy_read_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::MalformedFrames => {
             malformed_frame_scenarios::run(&format!("http://127.0.0.1:{port}")).await

@@ -1,8 +1,16 @@
 //! Directory reads preserve native summaries and Registry-verified service identities.
 #![cfg(feature = "conformance")]
 
+#[path = "directory_session/annotation_setup.rs"]
+mod annotation_setup;
 #[path = "directory_session/claim_routes.rs"]
 mod claim_routes;
+#[expect(
+    dead_code,
+    reason = "The shared composed fixture supplies only actual import setup to this HTTP target."
+)]
+#[path = "integration/composed_fleet_fixture.rs"]
+mod composed_fleet_fixture;
 #[path = "native_http/support.rs"]
 mod configuration;
 #[expect(
@@ -48,7 +56,6 @@ async fn directory_reads_real_copy_annotations_and_the_verified_holder_after_reo
 -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
-    let config = configuration::registry_config()?;
     let workspace = WorkspaceId::generate();
     let board = BoardId::generate();
     let databases = [
@@ -57,36 +64,14 @@ async fn directory_reads_real_copy_annotations_and_the_verified_holder_after_reo
         DatabaseId::new(durable_steps::Uuid::now_v7())?,
         DatabaseId::new(durable_steps::Uuid::now_v7())?,
     ];
-    let server = support::start(root.path(), &jwks.url).await?;
+    let server = annotation_setup::start(root.path(), &jwks.url, annotation_setup::NOW).await?;
+    annotation_setup::import_graph(&server, &workspace, &board, &databases).await?;
     let mut machine = support::admit(&server).await?;
-    support::create_graph(&mut machine.socket, &workspace, &board, &databases).await?;
-    machine
-        .socket
-        .close(reqwest_websocket::CloseCode::Normal, None)
+    annotation_setup::create_projects(&mut machine.socket, &workspace, &board, &databases[..2])
         .await?;
-    server.shutdown().await?;
-
-    // Public library tasks create genuine grants and physical Copies. The arranger's
-    // admission gate is a setup stand-in, not proof of normal Register composition.
     for database in &databases[..2] {
-        registry_setup::register_grant_history(
-            root.path(),
-            config,
-            *database,
-            vec![(Epoch::new(1)?, PeerId::new(machine.peer)?)],
-        )
-        .await?;
+        annotation_setup::register(&mut machine.socket, *database).await?;
     }
-    registry_setup::import_unheld(root.path(), config, databases[2]).await?;
-    let retired_at = registry_setup::retire_unheld(
-        root.path(),
-        config,
-        databases[3],
-        PeerId::new(machine.peer)?,
-    )
-    .await?;
-    let server = support::start(root.path(), &jwks.url).await?;
-    let mut machine = support::connect(&server).await?;
     let latest: RecordTime = serde_json::from_value(
         serde_json::json!({"kind":"router","value":"2026-10-18T10:00:00.123Z"}),
     )?;
@@ -120,7 +105,7 @@ async fn directory_reads_real_copy_annotations_and_the_verified_holder_after_reo
                 &mut machine.socket,
                 OperationRequest::Replication(ReplicationRequest::Piece(piece))
             )
-            .await?,
+            .await.map_err(|error|format!("Directory annotation Piece for {database}: {error}"))?,
             OperationAnswer::Replication(ReplicationAnswer::Applied { through: actual }) if actual == through
         ));
     }
@@ -130,11 +115,37 @@ async fn directory_reads_real_copy_annotations_and_the_verified_holder_after_reo
         .await?;
     server.shutdown().await?;
 
-    // Drive each actual owner's alarm to completion before restarting the native
-    // server. This is operation-owned readiness, not a timing or polling assumption.
-    let observed = support::publish(root.path(), config, &databases).await?;
-    let server = support::start(root.path(), &jwks.url).await?;
-    let mut machine = support::connect(&server).await?;
+    annotation_setup::admit_imports(root.path(), &databases[2..]).await?;
+    let server = annotation_setup::start(root.path(), &jwks.url, annotation_setup::NOW).await?;
+    let mut machine = support::connect(&server)
+        .await
+        .map_err(|error| format!("Directory import reopen: {error}"))?;
+    annotation_setup::await_imports(&mut machine.socket, &databases[2..])
+        .await
+        .map_err(|error| format!("Directory import readiness: {error}"))?;
+    let retired_at = annotation_setup::retire(&server, databases[3]).await?;
+    machine
+        .socket
+        .close(reqwest_websocket::CloseCode::Normal, None)
+        .await?;
+    server.shutdown().await?;
+
+    // Observe committed public snapshots without running another publisher or alarm.
+    let observed =
+        support::read_committed_owners(root.path(), configuration::registry_config()?, &databases)
+            .await?;
+    let expired_at = annotation_setup::NOW
+        + i64::try_from(
+            configuration::registry_config()?
+                .lease
+                .lease_duration
+                .as_millis(),
+        )?
+        + 1;
+    let server = annotation_setup::start(root.path(), &jwks.url, expired_at).await?;
+    let mut machine = support::connect(&server)
+        .await
+        .map_err(|error| format!("Directory expired-lease reopen: {error}"))?;
     let proof = async {
         let entries = support::directory(&mut machine.socket, DirectoryQuery::default()).await?;
         assert_eq!(entries.len(), 4);

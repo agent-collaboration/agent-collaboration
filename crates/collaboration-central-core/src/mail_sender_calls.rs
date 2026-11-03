@@ -62,10 +62,31 @@ where
             }
             if let DeliveryRequest::Query { items, .. } = self.input.request.as_ref() {
                 let mut statuses = Vec::with_capacity(items.len());
-                let mut outbox =
-                    fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes>::new(scope, self.limits);
                 for item in items {
-                    match outbox.relay_query(self.input.session.peer, *item).await {
+                    let Some(submitter) = crate::mail_sender_authority::authorized_submitter(
+                        scope,
+                        self.input.session.peer,
+                        *item,
+                        self.limits,
+                        self.now,
+                    )
+                    .await?
+                    else {
+                        return Ok((
+                            SenderRoute::Answered(DeliveryAnswer::MailboxUnavailable {
+                                reason: fleet_sync_protocol::DeliveryRefusal::NotSubmitter,
+                            }),
+                            Vec::new(),
+                        ));
+                    };
+                    match fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
+                        scope,
+                        self.limits,
+                        &crate::fleet_sender_binding::FleetSenderBinding,
+                    )
+                    .relay_query(submitter, *item)
+                    .await
+                    {
                         Ok(status) => statuses.push(status),
                         Err(fleet_sync_delivery::DeliveryError::Refused { reason }) => {
                             return Ok((
@@ -86,15 +107,34 @@ where
                 ));
             }
             if let DeliveryRequest::Settle { item, digest, .. } = self.input.request.as_ref() {
-                let answer =
-                    fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes>::new(scope, self.limits)
-                        .relay_settle::<crate::fleet_mail_tasks::FleetMailRemoval<Store, Driver>>(
-                            self.input.session.peer,
-                            *item,
-                            digest.clone(),
-                            self.now,
-                        )
-                        .await;
+                let Some(submitter) = crate::mail_sender_authority::authorized_submitter(
+                    scope,
+                    self.input.session.peer,
+                    *item,
+                    self.limits,
+                    self.now,
+                )
+                .await?
+                else {
+                    return Ok((
+                        SenderRoute::Answered(DeliveryAnswer::MailboxUnavailable {
+                            reason: fleet_sync_protocol::DeliveryRefusal::NotSubmitter,
+                        }),
+                        Vec::new(),
+                    ));
+                };
+                let answer = fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
+                    scope,
+                    self.limits,
+                    &crate::fleet_sender_binding::FleetSenderBinding,
+                )
+                .relay_settle::<crate::fleet_mail_tasks::FleetMailRemoval<Store, Driver>>(
+                    submitter,
+                    *item,
+                    digest.clone(),
+                    self.now,
+                )
+                .await;
                 let answer = match answer {
                     Ok(result) => DeliveryAnswer::Settle(result),
                     Err(fleet_sync_delivery::DeliveryError::Refused { reason }) => {

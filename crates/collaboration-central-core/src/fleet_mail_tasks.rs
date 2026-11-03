@@ -8,6 +8,7 @@ pub(crate) type FleetPushTask<Store, Driver> = fleet_sync_delivery::PushItem<
     Driver,
     BoardDeliveryTypes,
     FleetStatusTask<Store, Driver>,
+    crate::fleet_sender_binding::FleetSenderBinding,
 >;
 pub(crate) type FleetMailRemoval<Store, Driver> =
     fleet_sync_delivery::RemoveDeliveryRecord<Store, Driver>;

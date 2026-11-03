@@ -108,10 +108,7 @@ impl Scenario {
                 "RAW_SUBMIT_RESULT 1 passed; 0 failed; 0 ignored (normal admitted sockets, permanent raw Submit refusal, same-socket survival and empty recipient custody)"
             ),
             Scenario::SenderSettlement => println!(
-                "SENDER_SETTLEMENT_RESULT 1 passed; 0 failed; 0 ignored (normal Query and Settle through Registry to recipient Mailbox, known custody replay, unknown tombstone, late Submit refusal and custody readback)"
-            ),
-            Scenario::SenderRetirement => println!(
-                "SENDER_RETIREMENT_RESULT 1 passed; 0 failed; 0 ignored (verified sender fencing, actual recipient Mailbox, same-CallId receipt replay and one control effect)"
+                "SENDER_SETTLEMENT_RESULT 1 passed; 0 failed; 0 ignored (normal Query and Settle at Fleet, known custody replay, unknown settlement, late Submit replay, exact original Push and no socket-write custody acknowledgement)"
             ),
             Scenario::CopyReads => println!(
                 "COPY_READ_RESULT 1 passed; 0 failed; 0 ignored (normal session→Copy, shared manifest/page/status reads, per-copy uninitialized/retired containment; no applied rows, large pages or healthy idle hibernation claim)"

@@ -3,7 +3,11 @@ use collaboration_central_conformance::{
     ConformanceResult, RuntimeControl, RuntimeControlRequest, RuntimeFaultObservation,
     owner_assertion,
 };
-use collaboration_central_core::ObjectAddress;
+use collaboration_central_core::{
+    ClaimReservationState, ObjectAddress, StepControl, StepControlReply,
+};
+use durable_steps::StoreError;
+use fleet_sync_protocol::{DatabaseId, TransferId};
 use serde_json::Value;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
@@ -198,4 +202,28 @@ pub async fn journal_result(path: &Path, kind: &str) -> ConformanceResult<(Strin
     let result = (row.try_get("operation_id")?, row.try_get("result")?);
     connection.close().await?;
     Ok(result)
+}
+
+// This observer belongs to all process recovery cases, not the removed publisher handshake.
+pub(super) async fn read_claim_reservation(
+    base: &str,
+    database: DatabaseId,
+    attempt: TransferId,
+) -> ConformanceResult<Option<ClaimReservationState>> {
+    let response = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(10))
+        .build()?
+        .post(format!("{base}/admin/v1/conformance/fleet-receipt"))
+        .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
+        .json(&StepControl::ReadClaimReservation { database, attempt })
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<Result<StepControlReply, StoreError>>()
+        .await??;
+    match response {
+        StepControlReply::ClaimReservation(state) => Ok(state),
+        _ => Err("Claim reservation observer returned another result".into()),
+    }
 }

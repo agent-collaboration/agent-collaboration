@@ -50,6 +50,10 @@ enum SelectedInvocationKind {
     InstallationPeer,
     #[serde(rename = "central.forward-route")]
     ForwardRoute,
+    #[serde(rename = "central.machine-notice")]
+    FleetMachineNotice,
+    #[serde(rename = "fleet-sync.claim-settlement")]
+    FleetClaimSettlement,
     #[serde(rename = "central.copy-session-write")]
     CopyWrite,
     #[serde(rename = "fleet-sync.copy-fence")]
@@ -83,6 +87,12 @@ impl DispatchSelection {
                         ) | (
                             DispatchCallSelector::ForwardRoute,
                             SelectedInvocationKind::ForwardRoute
+                        ) | (
+                            DispatchCallSelector::FleetMachineNotice,
+                            SelectedInvocationKind::FleetMachineNotice
+                        ) | (
+                            DispatchCallSelector::FleetClaimSettlement,
+                            SelectedInvocationKind::FleetClaimSettlement
                         ) | (
                             DispatchCallSelector::CopyWrite,
                             SelectedInvocationKind::CopyWrite

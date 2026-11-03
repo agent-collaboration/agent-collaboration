@@ -20,6 +20,8 @@ use selected_calls::DispatchSelection;
 #[cfg(all(test, feature = "client"))]
 mod connection_drop_test;
 #[cfg(all(test, feature = "client"))]
+mod effect_selector_test;
+#[cfg(all(test, feature = "client"))]
 mod keyed_dispatch_test;
 #[cfg(all(test, feature = "client"))]
 mod selected_call_tests;

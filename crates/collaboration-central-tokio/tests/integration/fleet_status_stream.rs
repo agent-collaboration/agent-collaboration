@@ -1,22 +1,21 @@
-//! A disconnected delivery leaf completes only after preserving fetchable status.
+//! Fleet status debt stays fetchable across offline publication and owning-store reopen.
 #![cfg(feature = "conformance")]
 
 use board_sync_protocol::BoardDeliveryTypes;
-use collaboration_central_core::{CoreHost, ObjectAddress, ObjectRuntime, PlatformIo};
+use collaboration_central_core::{CoreHost, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo};
 use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{
-    AtomicStore, CallFailure, CallId, CallTarget, OperationId, StepName, StoreError, Uuid,
+    AtomicStore, CallFailure, CallId, OperationId, StepName, StoreError, Uuid,
     storage::TransactionScope,
 };
-use fleet_sync_delivery::{PublicationTarget, PublishCall, StatusStream};
+use fleet_sync_delivery::{PublishStatus, StatusStream};
 use fleet_sync_protocol::{
-    DeliveryFailureKind, DeliveryRefusal, DeliveryStatus, ItemId, PeerId, ReceiverId, StatusCursor,
-    StatusFetchResult, StatusPublication, StatusPublicationResult, StatusVersion,
+    DeliveryStatus, ItemId, PeerId, ReceiverId, StatusCursor, StatusFetchResult, StatusPublication,
+    StatusVersion,
 };
 use fleet_sync_tokio_runner::{ObjectKey, ObjectStore, TokioObject};
 use message_board::ServiceId;
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
-use serde_json::json;
 use sqlx_core::query::query;
 use std::{
     path::Path,
@@ -39,7 +38,7 @@ type Runtime = ObjectRuntime<
     dead_code,
     reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
-#[path = "session_publication/support.rs"]
+#[path = "../session_publication/support.rs"]
 mod session_fixture;
 
 #[derive(Clone, Default)]
@@ -87,7 +86,7 @@ impl Fixture {
         let objects = ObjectStore::open(root).await?;
         let object = objects
             .object(
-                ObjectKey::new("connection-status-leaf")?,
+                ObjectKey::new("fleet")?,
                 Default::default(),
                 Arc::new(CoreHost::for_store(io.clone(), receiver)),
             )
@@ -121,45 +120,22 @@ impl Fixture {
         })
     }
 
-    async fn publish(
-        &self,
-        peer: PeerId,
-        route: ServiceId,
-        item: ItemId,
-        call: &CallId,
-    ) -> TestResult<StatusPublicationResult> {
+    async fn publish(&self, peer: PeerId, route: ServiceId, item: ItemId) -> TestResult {
         let installation = self.installation.clone();
+        let now = self.io.now();
         self.object.transaction(move |scope| Box::pin(async move {
-            // Supply the enrollment that normal authenticated session setup owns.
+            // Enrollment is the fixture input; stream storage, journal admission and dispatch are real.
             query::<sqlx_turso::Turso>("INSERT INTO machine_enrollments(machine_id,service_id,machine_label,access_client_id,credential_hash,state,expires_at,created_at,updated_at) VALUES(?,?,'status fixture',?,?,'enrolled','2033-05-18T03:33:20+00:00','2026-10-18T00:00:00+00:00','2026-10-18T00:00:00+00:00') ON CONFLICT(machine_id) DO NOTHING")
                 .bind(peer.to_string()).bind(installation.as_str()).bind(format!("status-client-{peer}")).bind(format!("status-credential-{peer}"))
-                .execute(scope.executor()).await.map_err(durable_steps::StoreError::backend)?;
+                .execute(scope.executor()).await.map_err(StoreError::backend)?;
+            StatusStream::<_, BoardDeliveryTypes>::new(scope, peer, route)
+                .append_and_admit::<PublishStatus<TokioObject<CoreHost<NoObjectCalls>>, sqlx_turso::Turso, BoardDeliveryTypes>>(
+                    &StatusPublication { item, status: DeliveryStatus::Sent, version: StatusVersion::new(1), cancel: None },
+                    now,
+                ).await.map_err(fleet_sync_delivery::delivery_rollback)?;
             Ok(())
         })).await?;
-        let target = PublishCall::<BoardDeliveryTypes>::new(PublicationTarget::StatusStream {
-            sender: peer,
-            route,
-        });
-        let publication = StatusPublication::<Acceptance> {
-            item,
-            status: DeliveryStatus::Sent,
-            version: StatusVersion::new(1),
-            cancel: None,
-        };
-        let bytes = serde_json::to_vec(&json!({
-            "source":{"kind":"mailbox","value":"550e8400-e29b-41d4-a716-4466554400e5"},
-            "sourceFace":"mailbox","authority":{"kind":"object"},
-            "destination":{"kind":"fleet"},
-            "destinationFace":"delivery","identity":call,
-            "kind":PublishCall::<BoardDeliveryTypes>::KIND,"target":target,"request":publication
-        }))?;
-        let answer = self
-            .runtime
-            .delivery()?
-            .on_call(bytes)
-            .await
-            .map_err(|error| format!("mailbox publication was not answered: {error:?}"))?;
-        Ok(serde_json::from_slice(&answer)?)
+        Ok(())
     }
 
     async fn fetch(&self, peer: PeerId) -> TestResult<StatusFetchResult<Acceptance>> {
@@ -198,14 +174,8 @@ async fn a_disconnected_leaf_completes_publication_and_fetches_one_revision_afte
     let installation = ServiceId::try_from("550e8400-e29b-41d4-a716-4466554400e4".to_owned())?;
     let peer = PeerId::new(Uuid::now_v7())?;
     let item = ItemId::new(Uuid::now_v7())?;
-    let identity = call()?;
     let first = Fixture::open(root.path(), installation.clone()).await?;
-    assert_eq!(
-        first
-            .publish(peer, installation.clone(), item, &identity)
-            .await?,
-        StatusPublicationResult::Applied
-    );
+    first.publish(peer, installation.clone(), item).await?;
     let stored = first.fetch(peer).await?;
     assert_eq!(stored.events.len(), 1);
     assert_eq!(stored.through, StatusCursor::new(1));
@@ -221,24 +191,14 @@ async fn a_disconnected_leaf_completes_publication_and_fetches_one_revision_afte
         0,
         "leaf made an object call"
     );
-    assert_eq!(
-        first
-            .publish(peer, installation.clone(), item, &identity)
-            .await?,
-        StatusPublicationResult::Applied
-    );
+    first.publish(peer, installation.clone(), item).await?;
     assert_eq!(first.fetch(peer).await?, stored);
     first.objects.close().await?;
     drop(first);
 
     let reopened = Fixture::open(root.path(), installation.clone()).await?;
     assert_eq!(reopened.fetch(peer).await?, stored);
-    assert_eq!(
-        reopened
-            .publish(peer, installation, item, &identity)
-            .await?,
-        StatusPublicationResult::Applied
-    );
+    reopened.publish(peer, installation, item).await?;
     assert!(reopened.runtime.on_alarm().await?.completed.is_empty());
     assert_eq!(reopened.fetch(peer).await?, stored);
     assert_eq!(reopened.io.0.load(Ordering::SeqCst), 0);
@@ -256,18 +216,28 @@ async fn a_status_route_for_another_installation_is_refused_without_forwarding()
     let installation = ServiceId::try_from("550e8400-e29b-41d4-a716-4466554400e3".to_owned())?;
     let wrong_route = ServiceId::try_from("550e8400-e29b-41d4-a716-4466554400e2".to_owned())?;
     let peer = PeerId::new(Uuid::now_v7())?;
-    let fixture = Fixture::open(root.path(), installation).await?;
-    assert_eq!(
-        fixture
-            .publish(peer, wrong_route, ItemId::new(Uuid::now_v7())?, &call()?)
-            .await?,
-        StatusPublicationResult::Refused {
-            reason: DeliveryRefusal::ProcessingFailed {
-                kind: DeliveryFailureKind::InvalidPayload
-            }
-        }
+    let fixture = Fixture::open(root.path(), installation.clone()).await?;
+    fixture
+        .publish(peer, installation, ItemId::new(Uuid::now_v7())?)
+        .await?;
+    let before = fixture.fetch(peer).await?;
+    let refusal = fixture
+        .publish(peer, wrong_route, ItemId::new(Uuid::now_v7())?)
+        .await;
+    let Err(error) = refusal else {
+        return Err("another route overwrote the retained stream owner".into());
+    };
+    let store_error = error
+        .downcast_ref::<StoreError>()
+        .ok_or("wrong-route failure was not the owning store's rollback")?;
+    let classified = fleet_sync_delivery::classify_delivery_store_error(store_error.clone());
+    assert!(
+        matches!(&classified, fleet_sync_delivery::DeliveryTransactionFailure::Corrupt { field }
+        if field == "status stream owner or cursor"),
+        "{classified:?}"
     );
-    assert!(fixture.fetch(peer).await?.events.is_empty());
+    assert_eq!(fixture.fetch(peer).await?, before);
+    assert_eq!(fixture.runtime.on_alarm().await?.completed.len(), 1);
     assert!(fixture.runtime.on_alarm().await?.completed.is_empty());
     assert_eq!(fixture.io.0.load(Ordering::SeqCst), 0);
     fixture.objects.close().await?;
@@ -285,12 +255,7 @@ async fn reopening_between_storage_and_the_live_attempt_keeps_status_fetchable()
     let peer = PeerId::new(Uuid::now_v7())?;
     let item = ItemId::new(Uuid::now_v7())?;
     let first = Fixture::open(root.path(), installation.clone()).await?;
-    assert_eq!(
-        first
-            .publish(peer, installation.clone(), item, &call()?)
-            .await?,
-        StatusPublicationResult::Applied
-    );
+    first.publish(peer, installation.clone(), item).await?;
     let saved = first.fetch(peer).await?;
     // No alarm has sent or retired this publication when the real store closes.
     first.objects.close().await?;
@@ -335,26 +300,20 @@ async fn a_live_status_attempt_never_waits_for_the_router_and_session_fetch_keep
         version: StatusVersion::new(1),
         cancel: None,
     };
-    let target = PublishCall::<BoardDeliveryTypes>::new(PublicationTarget::StatusStream {
-        sender: binding.peer,
-        route: route.clone(),
-    });
     let before = fixture
         .io
         .calls
         .lock()
         .map_err(|_| "call mutex poisoned")?
         .len();
-    let answer = fixture.runtime.delivery()?.on_call(serde_json::to_vec(&json!({
-        "source":{"kind":"mailbox","value":"550e8400-e29b-41d4-a716-4466554400e5"},
-        "sourceFace":"mailbox","authority":{"kind":"object"},
-        "destination":{"kind":"fleet"},"destinationFace":"delivery",
-        "identity":call()?,"kind":PublishCall::<BoardDeliveryTypes>::KIND,"target":target,"request":publication
-    }))?).await?;
-    assert_eq!(
-        serde_json::from_slice::<StatusPublicationResult>(&answer)?,
-        StatusPublicationResult::Applied
-    );
+    let publication_for_store = publication.clone();
+    let now = fixture.io.now();
+    fixture.host.store().transaction(move |scope| Box::pin(async move {
+        StatusStream::<_, BoardDeliveryTypes>::new(scope, binding.peer, route)
+            .append_and_admit::<PublishStatus<session_fixture::TestStore, sqlx_turso::Turso, BoardDeliveryTypes>>(&publication_for_store, now)
+            .await.map_err(fleet_sync_delivery::delivery_rollback)?;
+        Ok(())
+    })).await?;
     // The configured answer deadline is two seconds. This drive must finish
     // without any Router answer, well before that independent deadline.
     let driven = tokio::time::timeout(Duration::from_secs(1), fixture.runtime.on_alarm()).await??;

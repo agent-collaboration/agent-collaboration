@@ -1,6 +1,6 @@
 //! The Push protocol boundary validates replies and makes deadline expiry retryable.
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
-use durable_steps::{BoxFuture, CallFailure, CallId, CallRetryReason};
+use durable_steps::{BoxFuture, CallFailure, CallId, CallRetryReason, StoreError};
 use fleet_sync_delivery::PushCall;
 use fleet_sync_protocol::{
     ClientAnswer, DeliveryItemRef, DeliveryTypes, PushResult, ServerCallAnswer,
@@ -18,6 +18,20 @@ pub(crate) type PushDispatcher = Arc<
         + Send
         + Sync,
 >;
+
+pub(crate) fn store_failure(error: StoreError) -> CallFailure {
+    match fleet_sync_delivery::classify_delivery_store_error(error) {
+        fleet_sync_delivery::DeliveryTransactionFailure::BindingUnavailable { reason, .. } => {
+            CallFailure::Retryable {
+                reason: CallRetryReason {
+                    code: reason.code().into(),
+                    detail: "Fleet sender binding is unavailable".into(),
+                },
+            }
+        }
+        _ => CallFailure::AnswerLost,
+    }
+}
 
 pub(crate) async fn bounded_answer(
     answer: impl Future<Output = Result<ClientAnswer<BoardConsumerProtocol>, CallFailure>> + Send,

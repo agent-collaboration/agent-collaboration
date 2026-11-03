@@ -56,6 +56,10 @@ mod delivery_config;
 pub use delivery_config::DeliveryConfig;
 mod effect_driver;
 mod fleet_mail_tasks;
+mod fleet_sender_binding;
+mod mail_sender_authority;
+#[cfg(feature = "conformance")]
+pub use fleet_sender_binding::FleetSenderBinding;
 mod fleet_outbox_limits;
 mod forward_calls;
 mod forward_delivery;

@@ -14,9 +14,12 @@ pub(super) async fn prepare_cleanup(
         chrono::DateTime::from_timestamp_millis(chrono::Utc::now().timestamp_millis())
             .ok_or("cleanup fixture time is outside range")?,
     );
-    for address in [ObjectAddress::Fleet, ObjectAddress::Fleet] {
-        control(base, address, RuntimeControl::SetTime { now: at }).await?;
-    }
+    control(
+        base,
+        ObjectAddress::Fleet,
+        RuntimeControl::SetTime { now: at },
+    )
+    .await?;
     let client = ConformanceClient::new(base)?;
     let mut claimant = enroll_open_peer_with_label(
         &client,
@@ -108,8 +111,7 @@ pub(super) async fn prepare_cleanup(
             format!("Claim did not hold its actual Copy status path: {status_call}").into(),
         );
     }
-    if lease_publication::reservation(base, database, attempt).await?
-        != Some(ClaimReservationState::Active)
+    if read_claim_reservation(base, database, attempt).await? != Some(ClaimReservationState::Active)
     {
         return Err("normal Claim did not create its real Active reservation".into());
     }
@@ -160,7 +162,7 @@ pub(super) async fn prepare_cleanup(
                 ObjectAddress::Fleet,
                 RuntimeControl::ResumeDispatchAndHoldNext {
                     key: DispatchKey::any(ObjectAddress::Copy(database)),
-                    next: DispatchKey::any(ObjectAddress::Fleet),
+                    next: settlement_key(),
                 },
             )
             .await?;
@@ -169,8 +171,9 @@ pub(super) async fn prepare_cleanup(
             control(
                 base,
                 ObjectAddress::Fleet,
-                RuntimeControl::DropNextObjectReply {
+                RuntimeControl::DropNextSelectedObjectReply {
                     destination: ObjectAddress::Fleet,
+                    call: collaboration_central_conformance::DispatchCallSelector::FleetClaimSettlement,
                 },
             )
             .await?;
@@ -242,7 +245,7 @@ pub(super) async fn prepare_cleanup(
     let settled_before = match loss {
         CleanupLoss::Dispatch => {
             if read_fleet(&mut reader.socket).await? != before
-                || lease_publication::reservation(base, database, attempt).await?
+                || read_claim_reservation(base, database, attempt).await?
                     != Some(ClaimReservationState::Active)
             {
                 return Err("pre-dispatch loss already applied the refused settlement".into());
@@ -251,7 +254,8 @@ pub(super) async fn prepare_cleanup(
         }
         CleanupLoss::Acknowledgement => {
             let expected = finalized(&before, at)?;
-            if read_fleet(&mut reader.socket).await? != expected {
+            let actual = read_fleet(&mut reader.socket).await?;
+            if actual != expected {
                 return Err(
                     "lost real settlement ACK did not follow exact committed archive finalization"
                         .into(),
@@ -263,7 +267,6 @@ pub(super) async fn prepare_cleanup(
     Ok(PreparedCleanup {
         input: CleanupInput {
             database,
-            at,
             original,
             call,
             operation,
@@ -278,14 +281,17 @@ pub(super) async fn prepare_cleanup(
 }
 
 async fn await_call(base: &str, destination: &ObjectAddress) -> ConformanceResult<Value> {
+    let key = if *destination == ObjectAddress::Fleet {
+        settlement_key()
+    } else {
+        DispatchKey::any(destination.clone())
+    };
     let observed = tokio::time::timeout(
         Duration::from_secs(8),
         control(
             base,
             ObjectAddress::Fleet,
-            RuntimeControl::AwaitHeldDispatch {
-                key: DispatchKey::any(destination.clone()),
-            },
+            RuntimeControl::AwaitHeldDispatch { key: key.clone() },
         ),
     )
     .await
@@ -293,7 +299,7 @@ async fn await_call(base: &str, destination: &ObjectAddress) -> ConformanceResul
     let DispatchFaultObservation::Held {
         destination: actual,
         request,
-    } = observed.dispatch(&DispatchKey::any(destination.clone()))
+    } = observed.dispatch(&key)
     else {
         return Err("actual cleanup dispatch did not reach its barrier".into());
     };
