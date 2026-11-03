@@ -25,7 +25,7 @@ pub(crate) fn check_millis(
 
 pub(crate) fn check_private_id(value: &str, field: &str) -> Result<(), StoreError> {
     let id = durable_steps::Uuid::parse_str(value).map_err(|error| corrupt(field, error))?;
-    if id.get_version_num() != 7 || id.to_string() != value {
+    if !runtime_primitives::uuid_v7(id) || id.to_string() != value {
         return Err(corrupt(field, "identity must be canonical UUIDv7"));
     }
     Ok(())

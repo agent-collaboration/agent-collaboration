@@ -40,7 +40,27 @@
           "nullable": false
         },
         {
-          "name": "report",
+          "name": "epoch",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "commit_sequence",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "installation",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "reported_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
           "kind": "text",
           "nullable": false
         }

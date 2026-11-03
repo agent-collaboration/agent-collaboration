@@ -12,7 +12,14 @@ pub(crate) struct StoredArchiveReport {
     pub report_id: Option<String>,
     pub board_id: Option<String>,
     pub project_id: Option<String>,
-    pub report: Option<String>,
+    pub epoch: Option<String>,
+    pub commit_sequence: Option<String>,
+    pub installation: Option<String>,
+    pub reported_at: Option<String>,
+    pub created_at: Option<String>,
+    pub created_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_class: Option<String>,
 }
 pub(crate) fn list_archive_reports<S>(
     scope: &mut S,
@@ -38,7 +45,14 @@ where
                     report_id: row.try_get("report_id")?,
                     board_id: row.try_get("board_id")?,
                     project_id: row.try_get("project_id")?,
-                    report: row.try_get("report")?,
+                    epoch: row.try_get("epoch")?,
+                    commit_sequence: row.try_get("commit_sequence")?,
+                    installation: row.try_get("installation")?,
+                    reported_at: row.try_get("reported_at")?,
+                    created_at: row.try_get("created_at")?,
+                    created_class: row.try_get("created_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_class: row.try_get("updated_class")?,
                 })
             })
             .collect()
@@ -49,7 +63,11 @@ pub(crate) fn insert_archive_report<S>(
     report_id: String,
     board_id: String,
     project_id: String,
-    report: String,
+    epoch: String,
+    commit_sequence: String,
+    installation: String,
+    reported_at: String,
+    now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -64,7 +82,11 @@ where
         .bind(report_id)
         .bind(board_id)
         .bind(project_id)
-        .bind(report);
+        .bind(epoch)
+        .bind(commit_sequence)
+        .bind(installation)
+        .bind(reported_at)
+        .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
