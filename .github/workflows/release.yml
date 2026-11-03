@@ -133,9 +133,9 @@ jobs:
         working-directory: release-source
         run: |
           set -euo pipefail
-          cargo test --locked --release -p acp-client-runtime --test provider_transport_idle \
+          cargo test --locked --release -p acp-client-runtime --test integration \
             --no-run --message-format=json --timings > "$RUNNER_TEMP/transport-build.jsonl"
-          transport_binary="$(jq -r 'select(.reason == "compiler-artifact" and .target.name == "provider_transport_idle" and .executable != null) | .executable' "$RUNNER_TEMP/transport-build.jsonl")"
+          transport_binary="$(jq -r 'select(.reason == "compiler-artifact" and .target.name == "integration" and .executable != null) | .executable' "$RUNNER_TEMP/transport-build.jsonl")"
           test -x "$transport_binary"
           echo "transport_binary=$transport_binary" >> "$GITHUB_OUTPUT"
           cargo build --locked --release -p collaboration-protocol --example export_protocol_types --timings
@@ -155,7 +155,7 @@ jobs:
           TRANSPORT_BINARY: ${{ steps.prebuild.outputs.transport_binary }}
         run: |
           set -euo pipefail
-          transport_tests="$("$TRANSPORT_BINARY" --list | sed -n 's/: test$//p')"
+          transport_tests="$("$TRANSPORT_BINARY" --list | sed -n 's/^\(provider_transport_idle::.*\): test$/\1/p')"
           test -n "$transport_tests"
           failed_tests=0
           while IFS= read -r test_name; do

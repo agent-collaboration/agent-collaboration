@@ -9,8 +9,7 @@ mod negative_literals;
 #[path = "read_literals.rs"]
 mod read_literals;
 #[cfg(test)]
-#[path = "schema_validation.rs"]
-mod schema_validation;
+use crate::schema_validation;
 
 pub fn assert_contract<T: JsonSchema + Serialize + DeserializeOwned>(
     name: &str,

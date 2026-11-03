@@ -1,0 +1,475 @@
+//! Opt-in live proof. Run only against automation-debug-host, never production or an existing thread.
+#[path = "../automation_live_support/automatic_summary_timeout.rs"]
+mod automatic_summary_timeout;
+#[path = "../automation_live_support/busy_thread_delivery.rs"]
+mod busy_thread_delivery;
+use crate::debug_backend_restart;
+#[path = "../automation_live_support/durable_delivery_recovery.rs"]
+mod durable_delivery_recovery;
+#[path = "../automation_live_support/native_fork_continuation.rs"]
+mod native_fork_continuation;
+mod proof_context {
+    pub(super) use crate::proof_context::*;
+    mod native_notification_diagnostics {
+        mod tests {
+            #[test]
+            fn retains_retry_class_without_provider_body_or_unrelated_thread_data() {
+                crate::proof_context::native_notification_diagnostics::tests::retains_retry_class_without_provider_body_or_unrelated_thread_data()
+            }
+
+            #[test]
+            fn unknown_provider_payload_is_not_copied_into_diagnostics() {
+                crate::proof_context::native_notification_diagnostics::tests::unknown_provider_payload_is_not_copied_into_diagnostics()
+            }
+
+            #[test]
+            fn underlying_transport_hints_do_not_retain_urls_or_error_bodies() {
+                crate::proof_context::native_notification_diagnostics::tests::underlying_transport_hints_do_not_retain_urls_or_error_bodies()
+            }
+        }
+    }
+}
+#[path = "../automation_live_support/scheduled_continuity.rs"]
+mod scheduled_continuity;
+#[path = "../automation_live_support/summary_failure_recovery.rs"]
+mod summary_failure_recovery;
+#[path = "../automation_live_support/worker_timeout_proof.rs"]
+mod worker_timeout_proof;
+use collaboration_client::protocol::{
+    AutomationPageRequest, DeliveryClientReceipt, DeliveryEvidence, DeliveryListRequest,
+    MessageContent, MessageDelivery, NativeSendReceipt, PushMessageSendResult, PushOrigin,
+    PushRecordHistoryParams, SessionMessageSendParams,
+};
+use proof_context::{ProofContext, ProofResult, shell_quote};
+use serde_json::{Value, json};
+
+#[tokio::test]
+#[ignore = "requires isolated debug Host; only the service timer interrupts its fresh Luna summary"]
+async fn summary_timeout_is_requested_by_service_and_confirms_native_cessation() -> ProofResult<()>
+{
+    automatic_summary_timeout::exercise().await
+}
+
+#[tokio::test]
+#[ignore = "requires an isolated debug Host and fresh Luna source/fork threads"]
+async fn scheduled_fork_preserves_source_context_without_reusing_source() -> ProofResult<()> {
+    native_fork_continuation::exercise().await
+}
+
+#[tokio::test]
+#[ignore = "requires an isolated debug Host; interrupts only its own Luna summary and opens a controlled delivery gate"]
+async fn summary_recovery_and_durable_delivery_preserve_original_work() -> ProofResult<()> {
+    let mut proof = ProofContext::connect().await?;
+    worker_timeout_proof::exercise(&mut proof).await?;
+    let portable = summary_failure_recovery::exercise(&mut proof).await?;
+    durable_delivery_recovery::exercise(&mut proof, portable).await?;
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires an isolated debug Host; exercises busy Luna input and owned backend replacement"]
+async fn scheduled_work_waits_while_ordinary_messages_steer() -> ProofResult<()> {
+    busy_thread_delivery::exercise().await
+}
+
+#[tokio::test]
+#[ignore = "requires an isolated debug Host; runs two fresh Luna workflows and their summaries"]
+async fn fresh_scheduled_run_uses_previous_luna_summary() -> ProofResult<()> {
+    scheduled_continuity::exercise().await
+}
+
+#[tokio::test]
+#[ignore = "requires an isolated debug Host; submits one minimal Luna turn and observes its history"]
+async fn fresh_native_history_becomes_readable_without_resubmission() -> ProofResult<()> {
+    let mut proof = ProofContext::connect().await?;
+    let target = proof.start_thread("Luna history readiness probe").await?;
+    let thread_id = String::from(target.session_id.clone());
+    let database_path = std::path::PathBuf::from(std::env::var_os("HOME").ok_or("HOME missing")?)
+        .join(".codex/state_5.sqlite");
+    let options = sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(database_path)
+        .read_only(true)
+        .create_if_missing(false);
+    let metadata = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await?;
+    let receipt = proof
+        .client
+        .send_agent_message(SessionMessageSendParams {
+            item_id: None,
+            target: target.clone(),
+            generation_guard: Some(proof.generation.clone()),
+            message: MessageContent::Agent {
+                sender: target.clone(),
+                text: "Output exactly HISTORY_READY. Do not call tools or other agents."
+                    .to_owned()
+                    .try_into()?,
+            },
+            mode: MessageDelivery::Auto,
+        })
+        .await?;
+    let collaboration_client::protocol::MessageSendResult::Local(receipt) = receipt else {
+        return Err("Local history probe returned remote sender custody".into());
+    };
+    let receipt = receipt.receipt;
+    let turn_id = match &receipt.client {
+        Some(DeliveryClientReceipt::CodexAppServer(NativeSendReceipt {
+            acceptance:
+                collaboration_client::protocol::NativeSendAcceptance::NativeInputAccepted {
+                    turn_id,
+                    ..
+                },
+            ..
+        })) => String::from(turn_id.clone()),
+        _ => return Err("Fresh history probe did not receive an exact native turn".into()),
+    };
+    proof.record("historyProbeInputAccepted", json!(receipt))?;
+    let started = tokio::time::Instant::now();
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
+    loop {
+        interval.tick().await;
+        let history_mode: Option<String> =
+            sqlx::query_scalar("SELECT history_mode FROM threads WHERE id = ?")
+                .bind(&thread_id)
+                .fetch_optional(&metadata)
+                .await?;
+        let response = proof
+            .native
+            .request_validated(
+                &proof.schemas,
+                codex_native_integration::NativeOperation::ReadThread,
+                json!({"threadId":thread_id,"includeTurns":true}),
+            )
+            .await;
+        match response {
+            Ok(response) => {
+                if response.pointer("/thread/id").and_then(Value::as_str)
+                    != Some(thread_id.as_str())
+                {
+                    return Err("History probe returned a different native thread".into());
+                }
+                let turn = response
+                    .pointer("/thread/turns")
+                    .and_then(Value::as_array)
+                    .and_then(|turns| {
+                        turns.iter().find(|turn| {
+                            turn.get("id").and_then(Value::as_str) == Some(turn_id.as_str())
+                        })
+                    });
+                proof.record(
+                    "historyReadinessObserved",
+                    json!({
+                        "elapsedMs":started.elapsed().as_millis(),"historyMode":history_mode,
+                        "target":target,"turn":turn
+                    }),
+                )?;
+                if turn.is_some_and(|turn| {
+                    turn.get("status").and_then(Value::as_str) == Some("completed")
+                        && proof_context::agent_text(turn).contains("HISTORY_READY")
+                }) {
+                    metadata.close().await;
+                    return Ok(());
+                }
+            }
+            Err(error) => {
+                let rejection = proof.native.take_last_rejection();
+                proof.record(
+                    "historyReadinessRejected",
+                    json!({
+                        "elapsedMs":started.elapsed().as_millis(),"historyMode":history_mode,
+                        "target":target,"rejection":rejection
+                    }),
+                )?;
+                if !matches!(
+                    error,
+                    codex_native_integration::NativeConnectionError::Rejected { .. }
+                ) {
+                    return Err(error.into());
+                }
+            }
+        }
+        if started.elapsed() >= std::time::Duration::from_secs(45) {
+            return Err("Exact fresh turn history was not readable and completed within 45 seconds; no input was resent".into());
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires an explicitly launched isolated automation-debug-host and real Luna access"]
+async fn luna_agents_arrange_wake_and_reply_through_the_real_cli() -> ProofResult<()> {
+    let mut proof = ProofContext::connect().await?;
+    let node = proof_context::node_executable().await?;
+    let forbidden_socket = proof.root.join("other-control.sock");
+    let _forbidden_listener = tokio::net::UnixListener::bind(&forbidden_socket)?;
+    let forbidden_tcp = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))?;
+    let forbidden_port = forbidden_tcp.local_addr()?.port();
+    let alpha = proof.start_thread("Luna A").await?;
+    let beta = proof.start_thread("Luna B").await?;
+    let identity = collaboration_client::protocol::OperationId::generate();
+    let wake_marker = format!("WAKE_{}", identity.as_str());
+    let reply_marker = format!("REPLY_{}", identity.as_str());
+    let acknowledgement = format!("ACK_{}", identity.as_str());
+    let beta_done = format!("B_DONE_{}", identity.as_str());
+    let cli = shell_quote(env!("CARGO_BIN_EXE_agent-collaboration"));
+    let directory = shell_quote(&proof.service_directory.to_string_lossy());
+    let alpha_address = shell_quote(&serde_json::to_string(&alpha)?);
+    let beta_address = shell_quote(&serde_json::to_string(&beta)?);
+    let alpha_harness_id = shell_quote(&String::from(alpha.session_id.clone()));
+    let beta_harness_id = shell_quote(&String::from(beta.session_id.clone()));
+    let reply = format!(
+        "{reply_marker}. This is the requested explicit peer reply. Do not call any tools or send another message. Output exactly {acknowledgement}."
+    );
+    let reply_file = proof.workspace.join("peer-reply-message.txt");
+    std::fs::write(&reply_file, &reply)?;
+    let reply_command = format!(
+        "env -u CLAUDE_CODE_SESSION_ID -u CURSOR_CONVERSATION_ID CODEX_THREAD_ID={beta_harness_id} {cli} message send --to {alpha_address} --text-file {} --service-directory {directory} --json",
+        shell_quote(&reply_file.to_string_lossy())
+    );
+    let beta_task = format!(
+        "{wake_marker}\nExecute this exact CLI command once to reply to Luna A:\n{reply_command}\nAfter successful CLI acceptance output exactly {beta_done}. If the command fails, report its exact failure and do not resend. Do not use a subagent or another communication mechanism."
+    );
+    let wake_file = proof.workspace.join("peer-wake-message.txt");
+    std::fs::write(&wake_file, &beta_task)?;
+    let wake_command = format!(
+        "env -u CLAUDE_CODE_SESSION_ID -u CURSOR_CONVERSATION_ID CODEX_THREAD_ID={alpha_harness_id} {cli} wake send --to {beta_address} --text-file {} --after 1s --wait-until-first-fire --operation-id {} --service-directory {directory} --json",
+        shell_quote(&wake_file.to_string_lossy()),
+        identity.as_str()
+    );
+    let permission_script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../verification/tooling/socket-permission-probe.ts")
+        .canonicalize()?;
+    let permission_command = format!(
+        "{} {} {} {forbidden_port}",
+        shell_quote(&node.to_string_lossy()),
+        shell_quote(&permission_script.to_string_lossy()),
+        shell_quote(&forbidden_socket.to_string_lossy())
+    );
+    let alpha_task = format!(
+        "Create one timed message for Luna B using the actual CLI from your sandbox. First execute this permission probe and require exit zero with SOCKET_BOUNDARY_OK and TCP_BOUNDARY_OK: {permission_command}\nIf it fails, stop and report. Then run {cli} wake send --help. Then execute exactly once:\n{wake_command}\nReport the firing receipt. If any CLI command fails, report its error without retrying. Do not use subagents or another communication mechanism. A peer reply may arrive afterward; follow its acknowledgement instruction."
+    );
+    let initial = proof
+        .client
+        .send_agent_message(SessionMessageSendParams {
+            item_id: None,
+            target: alpha.clone(),
+            generation_guard: Some(proof.generation.clone()),
+            message: MessageContent::Agent {
+                sender: alpha.clone(),
+                text: alpha_task.try_into()?,
+            },
+            mode: MessageDelivery::Auto,
+        })
+        .await?;
+    let collaboration_client::protocol::MessageSendResult::Local(initial) = initial else {
+        return Err("Local input returned remote sender custody".into());
+    };
+    let initial = initial.receipt;
+    proof.record("alphaInputAccepted", json!(initial))?;
+    let initial_turn = match &initial.client {
+        Some(DeliveryClientReceipt::CodexAppServer(NativeSendReceipt {
+            acceptance:
+                collaboration_client::protocol::NativeSendAcceptance::NativeInputAccepted {
+                    turn_id,
+                    ..
+                }
+                | collaboration_client::protocol::NativeSendAcceptance::SteerAccepted { turn_id, .. },
+            ..
+        })) => String::from(turn_id.clone()),
+        _ => return Err("Initial sender did not receive a native turn identity".into()),
+    };
+    proof
+        .wait_for_arranged_wake(&alpha, &initial_turn, &wake_marker)
+        .await?;
+    let beta_turns = proof.wait_for_text(&beta, &beta_done).await?;
+    let alpha_turns = proof.wait_for_text(&alpha, &acknowledgement).await?;
+    let permissions_verified = alpha_turns
+        .iter()
+        .filter_map(|turn| turn.get("items").and_then(Value::as_array))
+        .flatten()
+        .filter(|item| {
+            item.get("type").and_then(Value::as_str) == Some("commandExecution")
+                && item.get("exitCode").and_then(Value::as_i64) == Some(0)
+        })
+        .filter_map(|item| item.get("aggregatedOutput").and_then(Value::as_str))
+        .any(|output| output.contains("SOCKET_BOUNDARY_OK") && output.contains("TCP_BOUNDARY_OK"));
+    if !permissions_verified {
+        return Err(
+            "No actual sandbox evidence retained for forbidden socket and TCP denial".into(),
+        );
+    }
+    let explicit_reply = beta_turns
+        .iter()
+        .filter_map(|turn| turn.get("items").and_then(Value::as_array))
+        .flatten()
+        .filter(|item| item.get("type").and_then(Value::as_str) == Some("commandExecution"))
+        .filter(|item| item.get("exitCode").and_then(Value::as_i64) == Some(0))
+        .filter_map(|item| item.get("aggregatedOutput").and_then(Value::as_str))
+        .flat_map(str::lines)
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .filter_map(|output| output.get("result").cloned())
+        .filter_map(|result| serde_json::from_value::<PushMessageSendResult>(result).ok())
+        .find(|result| result.target == alpha)
+        .ok_or(
+            "B emitted a completion marker but no successful real CLI reply receipt was observed",
+        )?;
+    let reply_history = proof
+        .client
+        .message_history(PushRecordHistoryParams {
+            caller: alpha.clone(),
+            with: beta.clone(),
+            limit: 100,
+        })
+        .await?;
+    let stored_reply = reply_history
+        .records
+        .iter()
+        .filter_map(|entry| match entry {
+            collaboration_client::protocol::MessageHistoryEntry::Local(record) => Some(record),
+            collaboration_client::protocol::MessageHistoryEntry::Remote { .. } => None,
+        })
+        .find(|record| record.push_id == explicit_reply.push_id)
+        .ok_or("explicit reply push is absent from the participant history")?;
+    if stored_reply.target != alpha
+        || stored_reply.origin != PushOrigin::Session(beta.clone())
+        || stored_reply.delivery_state
+            != collaboration_client::protocol::PushDeliveryState::Delivered
+    {
+        return Err("reply push history lost its sender, target, or delivered state".into());
+    }
+    let reply_line = stored_reply.line.clone();
+    let wakes = proof
+        .client
+        .list_wakeups(AutomationPageRequest {
+            cursor: None,
+            limit: 100.try_into()?,
+        })
+        .await?;
+    let wake = wakes
+        .records
+        .iter()
+        .find(|wake| match &wake.definition.message.content {
+            MessageContent::Agent { text, .. } => text.as_str().contains(&wake_marker),
+            _ => false,
+        })
+        .ok_or("A did not create its durable wake through the CLI")?;
+    if wake.first_fire.is_none() {
+        return Err("wake has no first-firing evidence".into());
+    }
+    let deliveries = proof
+        .client
+        .list_deliveries(DeliveryListRequest {
+            wakeup_id: Some(wake.definition.wakeup_id.clone()),
+            cursor: None,
+            limit: 100.try_into()?,
+        })
+        .await?;
+    if !deliveries.records.iter().any(|delivery| {
+        delivery.target == beta && matches!(delivery.evidence, DeliveryEvidence::Accepted { .. })
+    }) {
+        return Err(
+            "firing was mistaken for native acceptance; delivery lacks an accepted receipt".into(),
+        );
+    }
+    if !alpha_turns.iter().any(|turn| {
+        turn.get("items")
+            .and_then(Value::as_array)
+            .is_some_and(|items| {
+                items.iter().enumerate().any(|(index, item)| {
+                    let incoming =
+                        item.get("type").and_then(Value::as_str) == Some("userMessage")
+                            && item.get("content").and_then(Value::as_array).is_some_and(
+                                |content| {
+                                    content.iter().any(|input| {
+                                        input.get("text").and_then(Value::as_str).is_some_and(
+                                            |text| {
+                                                text == reply_line
+                                                    && text.contains(&reply_marker)
+                                                    && text.contains(&explicit_reply.link)
+                                            },
+                                        )
+                                    })
+                                },
+                            );
+                    incoming
+                        && items.iter().skip(index + 1).any(|later| {
+                            later.get("type").and_then(Value::as_str) == Some("agentMessage")
+                                && later
+                                    .get("text")
+                                    .and_then(Value::as_str)
+                                    .is_some_and(|text| text.contains(&acknowledgement))
+                        })
+                })
+            })
+    }) {
+        return Err("A's acknowledgement did not follow the actual stored reply push line".into());
+    }
+    proof.record("agentCliRoundTripVerified", json!({"alpha":alpha,"beta":beta,"wakeupId":wake.definition.wakeup_id,"firstFire":wake.first_fire,"explicitReplyReceipt":explicit_reply,"deliveries":deliveries.records,"acknowledgement":acknowledgement}))?;
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires an isolated debug Host; reads only a thread created by an earlier proof"]
+async fn recorded_test_history_is_readable_without_resume() -> ProofResult<()> {
+    let mut proof = ProofContext::connect().await?;
+    let source = std::path::PathBuf::from(
+        std::env::var_os("CODEX_AUTOMATION_SOURCE_PROOF_ROOT")
+            .ok_or("source proof root required")?,
+    )
+    .canonicalize()?;
+    if source.parent() != proof.root.parent() {
+        return Err("Source must be a sibling private proof root under /tmp".into());
+    }
+    let context: Value =
+        serde_json::from_slice(&std::fs::read(source.join("debug-host-context.json"))?)?;
+    if context.get("profile").and_then(Value::as_str) != Some("codex-router-debug")
+        || context.get("model").and_then(Value::as_str) != Some("gpt-5.6-luna")
+    {
+        return Err("Source was not a Luna debug proof".into());
+    }
+    let events = std::fs::read_to_string(source.join("proof-events.jsonl"))?;
+    let target: collaboration_client::protocol::SessionRef = events
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .find(|event| {
+            event.get("event").and_then(Value::as_str) == Some("freshThread")
+                && event.pointer("/details/role").and_then(Value::as_str) == Some("Luna A")
+        })
+        .and_then(|event| event.pointer("/details/target").cloned())
+        .map(serde_json::from_value)
+        .transpose()?
+        .ok_or("fresh Alpha identity missing")?;
+    let result = proof
+        .native
+        .request_validated(
+            &proof.schemas,
+            codex_native_integration::NativeOperation::ReadThread,
+            json!({"threadId":String::from(target.session_id.clone()),"includeTurns":true}),
+        )
+        .await;
+    let result = match result {
+        Ok(result) => result,
+        Err(error) => {
+            let rejection = proof.native.take_last_rejection();
+            proof.record(
+                "threadReadRejected",
+                json!({"target":target,"rejection":rejection}),
+            )?;
+            return Err(error.into());
+        }
+    };
+    if result.pointer("/thread/id").and_then(Value::as_str)
+        != Some(String::from(target.session_id.clone()).as_str())
+        || result
+            .pointer("/thread/turns")
+            .and_then(Value::as_array)
+            .is_none_or(Vec::is_empty)
+    {
+        return Err("thread/read did not return the exact saved test thread and its turns".into());
+    }
+    proof.record(
+        "readOnlySavedHistoryVerified",
+        json!({"target":target,"response":result}),
+    )?;
+    Ok(())
+}

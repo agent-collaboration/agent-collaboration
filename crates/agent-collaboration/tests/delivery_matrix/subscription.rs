@@ -1,5 +1,5 @@
 //! Subscription producer and recipient-observed stored-range proof for the delivery matrix.
-use super::{ProofContext, ProofResult, SUBSCRIPTION_NOTICE_LABEL};
+use super::{ProofContext, ProofResult};
 use collaboration_client::board::{
     BoardCreateRequest, BoardId, Description, Identity, ParticipantRole, PostId, PostReferences,
     ProjectCreateRequest, ProjectId, ResourceName, SubscriptionMode, SubscriptionPolicyPatch,
@@ -9,8 +9,7 @@ use collaboration_client::board::{
 use collaboration_client::protocol::{SessionRef, ThreadSubscribeRequest};
 use serde_json::json;
 
-#[path = "subscription_notice_observer.rs"]
-mod notice_observer;
+use crate::subscription_notice_observer as notice_observer;
 pub(super) use notice_observer::verify_subscription_notice;
 
 pub(super) async fn board_subscription_push(

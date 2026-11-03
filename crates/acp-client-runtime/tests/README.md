@@ -1,0 +1,20 @@
+# ACP client runtime tests
+
+Run with the feature set enabled in workspace CI:
+
+```sh
+cargo nextest run --locked --profile ci -p acp-client-runtime --features test-observation
+```
+
+`integration/main.rs` gathers the 19 former external roots. Cases cover provider
+lifecycle and transport, prompt boundaries and output, settings and history
+ordering, permissions, questions, cancellation, input and idle events. Library
+unit tests remain colocated.
+
+Case expansions and fixture data retain their existing directories. No shared
+helper implementation needs hoisting, and CI selects no separate e2e category,
+so only the integration target is declared.
+
+A former binary `<root>` and test `<case>` becomes binary `integration` and
+test `<root>::<case>`. Library test identities do not change. Nextest preserves
+one process per case and the existing scheduling and deadline rules.
