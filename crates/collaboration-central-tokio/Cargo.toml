@@ -59,6 +59,7 @@ serde_json.workspace = true
 sqlx-core.workspace = true
 tempfile = "3.27.0"
 tracing-subscriber.workspace = true
+turso_parser = { version = "=0.8.1", features = ["serde"] }
 
 [[example]]
 name = "step_scope_workerd"
