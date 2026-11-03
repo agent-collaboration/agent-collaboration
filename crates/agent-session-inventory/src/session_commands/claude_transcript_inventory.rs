@@ -76,3 +76,63 @@ fn is_canonical_session_uuid(session_id: &str) -> bool {
             .enumerate()
             .all(|(index, byte)| matches!(index, 8 | 13 | 18 | 23) || byte.is_ascii_hexdigit())
 }
+
+/// Recover cwd from matching transcript entries, never from the lossy project folder name.
+pub(super) fn recorded_resume_directory(
+    projects: &Path,
+    session_id: &str,
+) -> Result<std::path::PathBuf, String> {
+    use std::io::BufRead;
+    let mut directories = std::collections::BTreeSet::new();
+    let projects = fs::read_dir(projects)
+        .map_err(|error| format!("Could not read Claude's recorded project directory: {error}"))?;
+    for project in projects {
+        let project = project.map_err(|error| format!("Could not read Claude project: {error}"))?;
+        if !project
+            .file_type()
+            .map_err(|error| error.to_string())?
+            .is_dir()
+        {
+            continue;
+        }
+        let path = project.path().join(format!("{session_id}.jsonl"));
+        let file = match fs::File::open(&path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(format!(
+                    "Could not read Claude's recorded project directory: {error}"
+                ));
+            }
+        };
+        for line in std::io::BufReader::new(file).lines() {
+            let line = line.map_err(|error| error.to_string())?;
+            let record: serde_json::Value = serde_json::from_str(&line).map_err(|error| format!("Claude transcript is unreadable: {error}; cannot establish its project directory"))?;
+            if record
+                .get("sessionId")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|id| id.eq_ignore_ascii_case(session_id))
+                && let Some(directory) = record.get("cwd").and_then(serde_json::Value::as_str)
+            {
+                let directory = std::path::PathBuf::from(directory);
+                if !directory.is_absolute() {
+                    return Err("Claude's recorded project directory is not absolute".to_owned());
+                }
+                directories.insert(directory);
+            }
+        }
+    }
+    if directories.len() != 1 {
+        return Err("Claude's original project directory could not be established unambiguously from its transcript. Run claude --resume from the session's original project directory; agent-sessions will not guess it from the encoded project folder.".to_owned());
+    }
+    let directory = directories
+        .pop_first()
+        .ok_or_else(|| "Claude has no recorded project directory".to_owned())?;
+    if !directory.is_dir() {
+        return Err(format!(
+            "Claude's recorded project directory {} is unavailable. Restore that directory before resuming.",
+            directory.display()
+        ));
+    }
+    Ok(directory)
+}
