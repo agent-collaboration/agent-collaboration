@@ -42,9 +42,11 @@ async fn hold_lost_receipt_submit(
         .central
         .runtime_control(
             ObjectAddress::Fleet,
-            RuntimeControl::HoldNextSelectedDispatch {
-                destination: fleet,
-                call: DispatchCallSelector::FleetMailSubmitFor { peer, item },
+            RuntimeControl::HoldNextDispatch {
+                key: board_central_test_support::DispatchKey::new(
+                    fleet,
+                    DispatchCallSelector::FleetMailSubmitFor { peer, item },
+                ),
             },
         )
         .await?;
@@ -88,7 +90,12 @@ async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
             fixture
                 .holder
                 .central
-                .runtime_control(connection, RuntimeControl::ResumeDispatch)
+                .runtime_control(
+                    connection,
+                    RuntimeControl::ResumeDispatch {
+                        key: fixture.copy_write_key()?,
+                    },
+                )
                 .await?;
         }
         received_grants::wait_published_project(&fixture.successor.registry, &fixture.project, 3)
@@ -141,7 +148,7 @@ async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
     let _ = fixture
         .holder
         .central
-        .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
+        .release_held_dispatches(ObjectAddress::Fleet)
         .await;
     let closed = fixture.close().await;
     closed?;
@@ -217,9 +224,7 @@ async fn arrange_remote_end(
             .runtime_control(
                 connection.clone(),
                 RuntimeControl::HoldNextDispatch {
-                    destination: ObjectAddress::Copy(DatabaseId::try_from(
-                        fixture.project.as_str().to_owned(),
-                    )?),
+                    key: fixture.copy_write_key()?,
                 },
             )
             .await?;
@@ -229,7 +234,12 @@ async fn arrange_remote_end(
         fixture
             .holder
             .central
-            .runtime_control(connection, RuntimeControl::AwaitHeldDispatch)
+            .runtime_control(
+                connection,
+                RuntimeControl::AwaitHeldDispatch {
+                    key: fixture.copy_write_key()?,
+                },
+            )
             .await?;
         queue_old_publisher(fixture).await?;
         assert_no_outgoing_cancel(fixture, seed.item.id()).await?;
@@ -333,6 +343,7 @@ async fn lose_actual_submit_answer(
     fleet: ObjectAddress,
     item: ItemId,
 ) -> TestResult {
+    let dispatch_key = RuleFixture::submit_key(fixture.successor.projects.peer, item);
     timeout(BOUND, async {
         // Publication is eligible only after the successor's real copy ACK.
         // Drive that prefix before opening the HTTP held-dispatch observation;
@@ -362,7 +373,12 @@ async fn lose_actual_submit_answer(
         let held = fixture
             .holder
             .central
-            .runtime_control(ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch)
+            .runtime_control(
+                ObjectAddress::Fleet,
+                RuntimeControl::AwaitHeldDispatch {
+                    key: dispatch_key.clone(),
+                },
+            )
             .await;
         let held = match held {
             Ok(held) => held,
@@ -377,7 +393,7 @@ async fn lose_actual_submit_answer(
         let board_central_test_support::DispatchFaultObservation::Held {
             destination,
             request: held_request,
-        } = held.dispatch
+        } = held.dispatch(&dispatch_key)
         else {
             return Err("registry dispatch was not held".into());
         };
@@ -392,15 +408,16 @@ async fn lose_actual_submit_answer(
             request.pointer("/request/item/value/id"),
             Some(&json!(item))
         );
+        fault_selection::drop_held_reply(fixture, dispatch_key.clone()).await?;
         fixture
             .holder
             .central
-            .runtime_control(ObjectAddress::Fleet, RuntimeControl::DropHeldDispatchReply)
-            .await?;
-        fixture
-            .holder
-            .central
-            .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
+            .runtime_control(
+                ObjectAddress::Fleet,
+                RuntimeControl::ResumeDispatch {
+                    key: dispatch_key.clone(),
+                },
+            )
             .await?;
         let lost = fixture
             .holder

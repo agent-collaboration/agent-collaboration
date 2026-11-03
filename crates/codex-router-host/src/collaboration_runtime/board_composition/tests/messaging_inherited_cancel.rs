@@ -11,7 +11,7 @@ async fn inherited_handoff_cancel_reaches_the_remote_hold_before_any_local_submi
     let mut fixture = Box::pin(RuleFixture::open_with_deferred_successor()).await?;
     let proof = Box::pin(async {
         let seed = Box::pin(arrange_sent_follow(&mut fixture)).await?;
-        let cancel = hold_old_cancel_away_from_mailbox(&fixture, &seed).await?;
+        let cancel = hold_old_cancel_submit(&fixture, &seed).await?;
         publish_inherited_prefix_with_worker_deferred(&mut fixture).await?;
 
         // No successor mail worker has run. Cancellation admission must not
@@ -59,14 +59,14 @@ async fn inherited_handoff_cancel_reaches_the_remote_hold_before_any_local_submi
     let _ = fixture
         .holder
         .central
-        .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
+        .release_held_dispatches(ObjectAddress::Fleet)
         .await;
     let closed = fixture.close().await;
     closed?;
     proof
 }
 
-async fn hold_old_cancel_away_from_mailbox(
+async fn hold_old_cancel_submit(
     fixture: &RuleFixture,
     seed: &FollowSeed,
 ) -> Result<DeliveryEnvelope<BoardDeliveryTypes>, Box<dyn std::error::Error + Send + Sync>> {
@@ -76,9 +76,11 @@ async fn hold_old_cancel_away_from_mailbox(
         .central
         .runtime_control(
             ObjectAddress::Fleet,
-            RuntimeControl::HoldNextSelectedDispatch {
-                destination: ObjectAddress::Fleet,
-                call: DispatchCallSelector::FleetMailSubmit,
+            RuntimeControl::HoldNextDispatch {
+                key: board_central_test_support::DispatchKey::new(
+                    ObjectAddress::Fleet,
+                    DispatchCallSelector::FleetMailSubmit,
+                ),
             },
         )
         .await?;
@@ -86,9 +88,21 @@ async fn hold_old_cancel_away_from_mailbox(
     let held = fixture
         .holder
         .central
-        .runtime_control(ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch)
+        .runtime_control(
+            ObjectAddress::Fleet,
+            RuntimeControl::AwaitHeldDispatch {
+                key: board_central_test_support::DispatchKey::new(
+                    ObjectAddress::Fleet,
+                    DispatchCallSelector::FleetMailSubmit,
+                ),
+            },
+        )
         .await?;
-    let board_central_test_support::DispatchFaultObservation::Held { request, .. } = held.dispatch
+    let board_central_test_support::DispatchFaultObservation::Held { request, .. } =
+        held.dispatch(&board_central_test_support::DispatchKey::new(
+            ObjectAddress::Fleet,
+            DispatchCallSelector::FleetMailSubmit,
+        ))
     else {
         return Err("old holder cancel was not held".into());
     };

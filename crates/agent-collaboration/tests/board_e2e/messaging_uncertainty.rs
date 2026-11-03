@@ -4,7 +4,8 @@ use codex_router_test_support::FixtureResult;
 use serde_json::json;
 
 pub async fn carrier_receipt_is_lost(scope: &mut MessagingCase<'_>) -> FixtureResult {
-    let item = "019f0000-0000-7000-8000-000000092171";
+    let item_identity = super::fixture::identity();
+    let item = item_identity.as_str();
     let text = "B+ actual carrier write loses its journal receipt";
     let stopped = scope.recipient.stop_for_readback().await?;
     messaging_stopped_owner::install_fault(

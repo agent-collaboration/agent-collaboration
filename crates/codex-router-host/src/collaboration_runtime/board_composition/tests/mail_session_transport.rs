@@ -35,8 +35,8 @@ impl NoticeTransport {
             observer: Arc::new(WireObserver::default()),
         }
     }
-    pub async fn publish(&self, position: u64, stream: DeliveryStream) -> Result<(), TestError> {
-        for frame in self.ledger.publish(position, stream).await? {
+    pub async fn publish(&self, position: u64) -> Result<(), TestError> {
+        for frame in self.ledger.publish(position).await? {
             self.sender.send(frame).await?;
         }
         Ok(())
@@ -456,7 +456,7 @@ impl TransportConnection for NoticeConnection {
             if self.initial_notice.swap(false, Ordering::SeqCst) {
                 frames.extend(
                     self.ledger
-                        .publish(1, DeliveryStream::Items)
+                        .publish(1)
                         .await
                         .map_err(|_| ConnectionClosed::Transport)?,
                 );

@@ -81,7 +81,7 @@ async fn sdk_generated_notice_before_welcome_allows_a_real_durable_client_acknow
         .ok_or("notice event missing")?;
     assert!(
         matches!(event, ClientEvent::Notice { position, body: Notice::Consumer(ref notice) }
-        if position == NoticePosition::new(1) && matches!(notice.kind, board_sync_protocol::BoardNotice::MailWaiting { stream: DeliveryStream::Items }))
+        if position == NoticePosition::new(1) && matches!(notice.kind, board_sync_protocol::BoardNotice::LeaseSuperseded { .. }))
     );
     requests.acknowledge_notice(NoticePosition::new(1)).await?;
     let resumed = MachineSessionStore::open(&root)

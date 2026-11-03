@@ -245,7 +245,9 @@ async fn run_restart_journey(journey: RestartJourney) -> TestResult {
                 .runtime_control(
                     board_central_test_support::ObjectAddress::Fleet,
                     board_central_test_support::RuntimeControl::HoldNextDispatch {
-                        destination: board_central_test_support::ObjectAddress::Fleet,
+                        key: board_central_test_support::DispatchKey::any(
+                            board_central_test_support::ObjectAddress::Fleet,
+                        ),
                     },
                 )
                 .await?;
@@ -318,7 +320,11 @@ async fn run_restart_journey(journey: RestartJourney) -> TestResult {
         let _ = central
             .runtime_control(
                 board_central_test_support::ObjectAddress::Fleet,
-                board_central_test_support::RuntimeControl::ResumeDispatch,
+                board_central_test_support::RuntimeControl::ResumeDispatch {
+                    key: board_central_test_support::DispatchKey::any(
+                        board_central_test_support::ObjectAddress::Fleet,
+                    ),
+                },
             )
             .await;
     }

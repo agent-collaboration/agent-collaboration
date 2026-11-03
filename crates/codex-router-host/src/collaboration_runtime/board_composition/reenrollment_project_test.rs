@@ -162,6 +162,33 @@ impl Lifetime {
         Ok(self.admission.submit(&request).await?)
     }
 
+    async fn renew_project(&self, project: &ProjectId) -> TestResult {
+        let writer = self.projects.ensure(project).await?;
+        let operation = writer.runtime.prompt_renewal().await?;
+        timeout(BOUND, async {
+            loop {
+                match writer.runtime.engine().status(&operation).await {
+                    Err(durable_steps::StoreError::MissingOperation { id }) if id == operation => {
+                        return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
+                    }
+                    Ok(status) => {
+                        if let durable_steps::OperationState::Failed { reason } = status.state {
+                            return Err(format!(
+                                "prior successful-central renewal failed: {reason}"
+                            )
+                            .into());
+                        }
+                    }
+                    Err(error) => return Err(error.into()),
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .map_err(|error| format!("prior renewal did not finish: {error}"))??;
+        Ok(())
+    }
+
     async fn await_copy(&self, project: &ProjectId, central: &TestCentral) -> TestResult {
         let store = self
             .admission
@@ -284,6 +311,8 @@ async fn wiped_central_leaves_only_the_unknown_project_read_only_while_new_creat
     let original = Lifetime::open(&root, &central).await?;
     let project = original.create_project().await?;
     original.await_copy(&project, &central).await?;
+    // Establish a real persisted renewal observation before authority is wiped.
+    original.renew_project(&project).await?;
     let store = original
         .admission
         .project_registry()

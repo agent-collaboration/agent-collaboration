@@ -11,6 +11,12 @@ mod mail_migration;
 mod mail_wakes;
 #[expect(
     dead_code,
+    reason = "Shared native observer serves several integration targets."
+)]
+#[path = "support/local_mail_native_sql.rs"]
+mod native_sql;
+#[expect(
+    dead_code,
     reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "board_e2e/owned_host.rs"]

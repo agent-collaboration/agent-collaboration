@@ -117,7 +117,11 @@ pub(crate) async fn resume_enrollment_reset(
     journal_directory: &Path,
     storage_directory: &Path,
 ) -> io::Result<()> {
-    resume_with_barrier(journal_directory, storage_directory, reset_barrier()).await
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    let barrier = reset_barrier();
+    #[cfg(not(all(debug_assertions, feature = "runtime-test-support")))]
+    let barrier = std::future::ready(Ok(()));
+    resume_with_barrier(journal_directory, storage_directory, barrier).await
 }
 
 async fn resume_with_barrier(
@@ -179,8 +183,8 @@ async fn clear_router_state(directory: &Path) -> io::Result<()> {
     tokio::fs::File::open(directory).await?.sync_all().await
 }
 
+#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
 async fn reset_barrier() -> io::Result<()> {
-    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
     crate::debug_runtime_barrier::wait_at_socket(
         "CODEX_ROUTER_DEBUG_ENROLLMENT_RESET_BARRIER_SOCKET",
         b"router-state-cleared\n",

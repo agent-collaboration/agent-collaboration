@@ -47,10 +47,10 @@ pub async fn delivery_rows(stopped: &StoppedHost) -> FixtureResult<Vec<DeliveryO
         .await?;
     let observed: FixtureResult<Vec<DeliveryObservation>> = async {
         let mut transaction = connection.begin().await?;
-        let rows = fleet_sync_delivery::test_support::snapshot(&mut TursoScope::new(
-            &mut transaction,
-            &SqlHost,
-        ))
+        let rows = fleet_sync_delivery::test_support::snapshot::<
+            _,
+            collaboration_contracts::RouterDeliveryTypes,
+        >(&mut TursoScope::new(&mut transaction, &SqlHost))
         .await?;
         transaction.commit().await?;
         Ok(rows)

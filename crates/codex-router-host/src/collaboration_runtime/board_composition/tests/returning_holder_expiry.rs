@@ -82,12 +82,10 @@ async fn membership_expiry_during_a_returning_install_does_not_quarantine_the_pr
         timeout(BOUND, notice.wait_held()).await??;
         let grant = fixture.projects.confirmed_snapshot_grant(&project, Epoch::new(4)?).await?.ok_or("real return grant")?;
         let start = grant.start;
-        fixture.central.runtime_control(connection.clone(), RuntimeControl::HoldNextDispatch {
-            destination: ObjectAddress::Copy(database),
-        }).await?;
+        fixture.central.runtime_control(connection.clone(), RuntimeControl::HoldNextDispatch { key: board_central_test_support::DispatchKey::any(ObjectAddress::Copy(database)) }).await?;
         fixture.projects.prepare_snapshot_install(&project, grant).await?;
-        let observed = timeout(BOUND, fixture.central.runtime_control(connection.clone(), RuntimeControl::AwaitHeldDispatch)).await??;
-        assert!(matches!(observed.dispatch, DispatchFaultObservation::Held { destination: ObjectAddress::Copy(actual), .. } if actual == database));
+        let observed = timeout(BOUND, fixture.central.runtime_control(connection.clone(), RuntimeControl::AwaitHeldDispatch { key: board_central_test_support::DispatchKey::any(ObjectAddress::Copy(database)) })).await??;
+        assert!(matches!(observed.dispatch(&board_central_test_support::DispatchKey::any(ObjectAddress::Copy(database))), DispatchFaultObservation::Held { destination: ObjectAddress::Copy(actual), .. } if actual == database));
         assert!(fixture.registry.existing_project(&project).await.is_err(), "unverified return seed became writable");
 
         // The same read called by ReaderDeliveryOwner's expiry pass runs while
@@ -105,7 +103,7 @@ async fn membership_expiry_during_a_returning_install_does_not_quarantine_the_pr
             return Err(format!("expiry scan quarantined the real receiving install: {error}").into());
         }
         assert!(expiry.is_err(), "installing project must remain retryable, not be discarded as definitive");
-        fixture.central.runtime_control(connection.clone(), RuntimeControl::ResumeDispatch).await?;
+        fixture.central.runtime_control(connection.clone(), RuntimeControl::ResumeDispatch { key: board_central_test_support::DispatchKey::any(ObjectAddress::Copy(database)) }).await?;
         notice.release()?;
         let store = wait_published_project(&fixture.registry, &project, 4).await?;
         let mut read = store.snapshot().await?;
@@ -123,10 +121,7 @@ async fn membership_expiry_during_a_returning_install_does_not_quarantine_the_pr
         write_and_replicate(&fixture.projects, &fixture.registry, &project, 4, &actual, origin()?).await?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }.await;
-    let _ = fixture
-        .central
-        .runtime_control(connection, RuntimeControl::ResumeDispatch)
-        .await;
+    let _ = fixture.central.release_held_dispatches(connection).await;
     let stopped = second_running.shutdown().await;
     drop(second_projects);
     drop(second_registry);

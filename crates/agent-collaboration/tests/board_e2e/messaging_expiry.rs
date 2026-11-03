@@ -5,7 +5,8 @@ use runtime_primitives::SyncTime;
 use serde_json::{Value, json};
 
 pub async fn sender_sees_expiry(scope: &mut MessagingCase<'_>) -> FixtureResult {
-    let operation = "019f0000-0000-7000-8000-000000092091";
+    let operation_identity = super::fixture::identity();
+    let operation = operation_identity.as_str();
     let text = "B+ remote wake expires before its recipient returns";
     scope.recipient.stop_host().await?;
     let now = chrono::Utc::now();

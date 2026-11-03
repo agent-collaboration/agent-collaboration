@@ -24,6 +24,23 @@ pub(super) struct RuleFixture {
     pub successor_origin: ActorOrigin,
 }
 impl RuleFixture {
+    pub fn copy_write_key(
+        &self,
+    ) -> Result<board_central_test_support::DispatchKey, Box<dyn std::error::Error + Send + Sync>>
+    {
+        Ok(board_central_test_support::DispatchKey::new(
+            ObjectAddress::Copy(self.project.as_str().to_owned().try_into()?),
+            board_central_test_support::DispatchCallSelector::CopyWrite,
+        ))
+    }
+
+    pub fn submit_key(peer: PeerId, item: ItemId) -> board_central_test_support::DispatchKey {
+        board_central_test_support::DispatchKey::new(
+            ObjectAddress::Fleet,
+            board_central_test_support::DispatchCallSelector::FleetMailSubmitFor { peer, item },
+        )
+    }
+
     pub async fn open(
         holder_notifications: bool,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
@@ -209,7 +226,7 @@ impl RuleFixture {
         let _ = self
             .holder
             .central
-            .runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch)
+            .release_held_dispatches(ObjectAddress::Fleet)
             .await;
         self.recipient.close().await?;
         self.successor.close().await?;

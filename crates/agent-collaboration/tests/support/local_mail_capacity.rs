@@ -44,13 +44,16 @@ async fn observe_ordinary_reserve(surfaces: &Surfaces, item: &PushId) -> TestRes
     )
     .transaction(move |scope| {
         Box::pin(async move {
-            let row = fleet_sync_delivery::test_support::snapshot(scope)
-                .await
-                .map_err(StoreError::backend)?
-                .into_iter()
-                .find(|row| row.category == "inbox" && row.identity == identity)
-                .and_then(|row| row.content)
-                .ok_or_else(|| StoreError::backend("ordinary inbox snapshot header missing"))?;
+            let row = fleet_sync_delivery::test_support::snapshot::<
+                _,
+                collaboration_contracts::RouterDeliveryTypes,
+            >(scope)
+            .await
+            .map_err(StoreError::backend)?
+            .into_iter()
+            .find(|row| row.category == "inbox" && row.identity == identity)
+            .and_then(|row| row.content)
+            .ok_or_else(|| StoreError::backend("ordinary inbox snapshot header missing"))?;
             serde_json::from_str::<StoredOrdinaryReserve>(&row).map_err(StoreError::backend)
         })
     })

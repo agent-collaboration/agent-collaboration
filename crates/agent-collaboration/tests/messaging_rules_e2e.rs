@@ -63,8 +63,8 @@ async fn valid_until_expiry_is_visible_to_the_sender() -> FixtureResult {
 }
 
 #[tokio::test]
-async fn full_mailbox_refuses_before_custody_with_per_item_allowance() -> FixtureResult {
-    mail_scenario(messaging_capacity::full_mailbox).await
+async fn full_inbox_retries_frozen_items_after_recipient_capacity_is_restored() -> FixtureResult {
+    mail_scenario(messaging_capacity::full_inbox).await
 }
 
 #[tokio::test]

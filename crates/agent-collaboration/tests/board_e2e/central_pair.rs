@@ -152,21 +152,12 @@ where
     fixture::scenario(async move |fixture| with_second_host(fixture, case).await).await
 }
 
-// Shared roots choose the Router layout or mailbox-capacity entry.
+// Shared roots choose the Router layout.
 pub async fn router_root_scenario<F>(case: F) -> FixtureResult
 where
     F: for<'a> AsyncFnOnce(&'a mut BoardFixture, &'a mut SecondHost) -> FixtureResult,
 {
     fixture::router_root_scenario(async move |fixture| with_second_host(fixture, case).await).await
-}
-
-// Only retirement cases configure the real mailbox capacity.
-pub async fn scenario_with_small_mailbox<F>(case: F) -> FixtureResult
-where
-    F: for<'a> AsyncFnOnce(&'a mut BoardFixture, &'a mut SecondHost) -> FixtureResult,
-{
-    fixture::scenario_with_small_mailbox(async move |fixture| with_second_host(fixture, case).await)
-        .await
 }
 
 async fn with_second_host<F>(fixture: &mut BoardFixture, case: F) -> FixtureResult

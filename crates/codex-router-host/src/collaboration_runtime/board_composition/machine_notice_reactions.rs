@@ -174,8 +174,6 @@ async fn reconcile_notice(
         BoardNotice::FleetFeedAdvanced { .. } | BoardNotice::BoardArchiving { .. } => {
             super::archive_observation::synchronize_and_observe(projects, admission, fleet).await
         }
-        // Mail custody arrives only through the correlated Fleet Push request.
-        BoardNotice::MailWaiting { .. } => Ok(()),
     }
 }
 

@@ -93,18 +93,17 @@ pub(super) async fn welcome(harness: &mut MailHarness) -> Result<(), TestError> 
     clippy::panic_in_result_fn,
     reason = "Contract assertions; setup propagates errors."
 )]
-async fn welcome_and_legacy_mail_hints_do_not_admit_recipient_fetch_work() -> Result<(), TestError>
-{
-    // Arrange a real pre-Welcome legacy hint; the runtime must receive custody only by Push.
+async fn welcome_and_lease_notices_do_not_admit_recipient_fetch_work() -> Result<(), TestError> {
+    // Arrange a real pre-Welcome lease notice; mail custody arrives only by Push.
     let mut harness = MailHarness::open(true).await?;
     assert!(harness.mail.state().await?.is_none());
     // Act through the actual pump and Host's deferred-notice path.
     welcome(&mut harness).await?;
     harness.wait_ack(NoticePosition::new(1)).await?;
-    // Assert the hint's handling commits its cursor without a Fetch admission.
+    // Assert the notice's handling commits its cursor without a Fetch admission.
     assert!(
         harness.mail.state().await?.is_none(),
-        "Welcome or MailWaiting admitted obsolete receive cycles"
+        "Welcome or a lease notice admitted obsolete receive cycles"
     );
     assert!(
         !harness

@@ -95,10 +95,6 @@ impl BoardFixture {
     }
 
     async fn start(&mut self) -> FixtureResult {
-        self.start_with_small_mailbox(false).await
-    }
-
-    async fn start_with_small_mailbox(&mut self, small_mailbox: bool) -> FixtureResult {
         self.host = Some(BoardHost::start(&self.directory, None).await?);
         let client = collaboration_client::CollaborationClient::connect(
             &self.directory,
@@ -113,21 +109,12 @@ impl BoardFixture {
             installation: String::from(installation.service_id.clone()).try_into()?,
             machine: installation.machine_label.as_str().to_owned().try_into()?,
         };
-        let controls = small_mailbox
-            .then(|| board_central_test_support::RuntimeControlRequest {
-                address: board_central_test_support::ObjectAddress::Mailbox(
-                    origin.installation.clone(),
-                ),
-                command: board_central_test_support::RuntimeControl::SmallMailboxCapacity,
-            })
-            .into_iter()
-            .collect();
         self.central = Some(
             board_central_test_support::TestCentral::start_with_peer_and_controls(
                 &self.root.path().join("central"),
                 &origin,
                 installation.peer_id.as_str().to_owned().try_into()?,
-                controls,
+                Vec::new(),
             )
             .await?,
         );
@@ -322,26 +309,6 @@ where
         BoardFixture::new(directory_name)?,
         async move |fixture: &mut BoardFixture| {
             fixture.start().await?;
-            case(fixture).await?;
-            fixture.finished = true;
-            Ok(())
-        },
-        BoardFixture::shutdown,
-        || Ok(()),
-    )
-    .await
-}
-
-/// A real small mailbox makes missing retirement observable as admission refusal.
-// Only the mail retirement root reaches it, through central_pair.
-pub async fn scenario_with_small_mailbox<F>(case: F) -> FixtureResult
-where
-    F: for<'a> AsyncFnOnce(&'a mut BoardFixture) -> FixtureResult,
-{
-    run_scenario(
-        BoardFixture::new("host-a")?,
-        async move |fixture: &mut BoardFixture| {
-            fixture.start_with_small_mailbox(true).await?;
             case(fixture).await?;
             fixture.finished = true;
             Ok(())

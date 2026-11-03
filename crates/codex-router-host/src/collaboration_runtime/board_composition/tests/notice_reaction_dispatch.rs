@@ -28,9 +28,8 @@ async fn welcomed_manual() -> Result<(tempfile::TempDir, MailHarness), TestError
 async fn actual_notice(
     harness: &mut MailHarness,
     position: u64,
-    stream: DeliveryStream,
 ) -> Result<(NoticePosition, Notice<BoardConsumerProtocol>), TestError> {
-    harness.transport.publish(position, stream).await?;
+    harness.transport.publish(position).await?;
     let ClientEvent::Notice {
         position: actual,
         body,
@@ -75,20 +74,15 @@ async fn one_reaction_owner_defers_y_while_x_waits_on_notice_catch_up_and_reques
     harness
         .central
         .script_notice_answers(vec![board_sync_protocol::NoticeRead::Page {
-            notices: vec![board_sync_protocol::PositionedBoardNotice {
-                position: NoticePosition::new(1),
-                kind: board_sync_protocol::BoardNotice::MailWaiting {
-                    stream: DeliveryStream::Items,
-                },
-            }],
+            notices: vec![ledger::positioned_notice(1)?],
             as_of: chrono::Utc::now(),
         }])
         .await;
-    let (first, first_body) = actual_notice(&mut harness, 2, DeliveryStream::Items).await?;
+    let (first, first_body) = actual_notice(&mut harness, 2).await?;
     queue_notice(&mut reactions, &mut receipts, 1, first, first_body);
     reactions.dispatch_next(&mut handlers, &owners, &harness.requests);
     tokio::time::timeout(BOUND, entered).await??;
-    let (later, later_body) = actual_notice(&mut harness, 3, DeliveryStream::Controls).await?;
+    let (later, later_body) = actual_notice(&mut harness, 3).await?;
     queue_notice(&mut reactions, &mut receipts, 1, later, later_body);
     reactions.dispatch_next(&mut handlers, &owners, &harness.requests);
     assert_eq!(
@@ -164,7 +158,7 @@ async fn stale_generation_completion_returns_the_owner_without_acknowledging_new
         NoticeReactionQueue::new(MachineNoticeReactions::open(&harness.root).await?);
     let mut receipts = NoticeReceipts::default();
     let mut handlers = JoinSet::new();
-    let (position, body) = actual_notice(&mut harness, 1, DeliveryStream::Items).await?;
+    let (position, body) = actual_notice(&mut harness, 1).await?;
     let replayed = serde_json::from_slice(&serde_json::to_vec(&body)?)?;
     queue_notice(&mut reactions, &mut receipts, 1, position, body);
     reactions.dispatch_next(&mut handlers, &owners, &harness.requests);

@@ -85,7 +85,10 @@ async fn archive_with_held_copy(fixture: &claim_fixture::ClaimFixture) -> TestRe
         .runtime_control(
             connection.clone(),
             RuntimeControl::HoldNextDispatch {
-                destination: copy.clone(),
+                key: board_central_test_support::DispatchKey::new(
+                    copy.clone(),
+                    board_central_test_support::DispatchCallSelector::CopyWrite,
+                ),
             },
         )
         .await?;
@@ -124,13 +127,19 @@ async fn archive_with_held_copy(fixture: &claim_fixture::ClaimFixture) -> TestRe
         .ok_or("archive fact cursor")?;
     let held = timeout(
         BOUND,
-        fixture
-            .central
-            .runtime_control(connection.clone(), RuntimeControl::AwaitHeldDispatch),
+        fixture.central.runtime_control(
+            connection.clone(),
+            RuntimeControl::AwaitHeldDispatch {
+                key: board_central_test_support::DispatchKey::new(
+                    copy.clone(),
+                    board_central_test_support::DispatchCallSelector::CopyWrite,
+                ),
+            },
+        ),
     )
     .await??;
     assert!(
-        matches!(held.dispatch, DispatchFaultObservation::Held { destination, .. } if destination == copy)
+        matches!(held.dispatch(&board_central_test_support::DispatchKey::new(copy.clone(), board_central_test_support::DispatchCallSelector::CopyWrite)), DispatchFaultObservation::Held { destination, .. } if destination == copy)
     );
     let through = fixture
         .projects
@@ -155,7 +164,15 @@ async fn archive_with_held_copy(fixture: &claim_fixture::ClaimFixture) -> TestRe
     assert_eq!(observed_fact(&store, &board).await?.fact_id, fact.fact_id);
     fixture
         .central
-        .runtime_control(connection, RuntimeControl::ResumeDispatch)
+        .runtime_control(
+            connection,
+            RuntimeControl::ResumeDispatch {
+                key: board_central_test_support::DispatchKey::new(
+                    copy.clone(),
+                    board_central_test_support::DispatchCallSelector::CopyWrite,
+                ),
+            },
+        )
         .await?;
     timeout(BOUND, async {
         loop {
@@ -189,21 +206,7 @@ async fn archiving_a_held_project_records_its_own_fact_then_finalizes_the_board(
         .catch_unwind()
         .await;
     let connection = ObjectAddress::Fleet;
-    let released = match fixture
-        .central
-        .runtime_control(connection.clone(), RuntimeControl::Observe)
-        .await
-    {
-        Ok(observed) => match observed.dispatch {
-            DispatchFaultObservation::Held { .. } => fixture
-                .central
-                .runtime_control(connection, RuntimeControl::ResumeDispatch)
-                .await
-                .map(|_| ()),
-            DispatchFaultObservation::Idle | DispatchFaultObservation::Armed { .. } => Ok(()),
-        },
-        Err(error) => Err(error),
-    };
+    let released = fixture.central.release_held_dispatches(connection).await;
     let closed = fixture.shutdown().await;
     let cleanup = match (released, closed) {
         (Ok(()), result) | (result, Ok(())) => result,
