@@ -40,7 +40,7 @@ async fn pin_registry(base: &str, millis: i64) -> ConformanceResult<()> {
         &bounded_http_client()?,
         base,
         "runtime",
-        json!({"address":{"kind":"registry"},"command":{"kind":"setTime","value":{"now":now}}}),
+        json!({"address":{"kind":"fleet"},"command":{"kind":"setTime","value":{"now":now}}}),
     )
     .await?;
     Ok(())

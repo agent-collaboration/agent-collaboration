@@ -91,8 +91,18 @@ impl ShellActor {
             if !matches!(runtime, RuntimeFace::Fleet(_)) {
                 return Err(error("session observation requires a Connection object"));
             }
-            return Response::from_json(&host.conformance_session_connections().map_err(error)?)
-                .map(Some);
+            let installation: Option<message_board::ServiceId> = request.json().await?;
+            let connections = host
+                .conformance_session_connections()
+                .map_err(error)?
+                .into_iter()
+                .filter(|connection| {
+                    installation
+                        .as_ref()
+                        .is_none_or(|installation| connection.belongs_to(installation))
+                })
+                .collect::<Vec<_>>();
+            return Response::from_json(&connections).map(Some);
         }
         if request.path() == "/test/session-faults" {
             if !matches!(runtime, RuntimeFace::Fleet(_)) {

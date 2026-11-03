@@ -203,9 +203,7 @@ async fn connection_control(
         .post(format!("{base}/admin/v1/conformance/runtime"))
         .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
         .json(&RuntimeControlRequest {
-            address: ObjectAddress::Connection(message_board::ServiceId::try_from(
-                SERVICE.to_owned(),
-            )?),
+            address: ObjectAddress::Fleet,
             command,
         })
         .send()
@@ -227,7 +225,7 @@ async fn replace_registered_socket_before_revocation(
     connection_control(
         fixture.base(),
         RuntimeControl::HoldNextDispatch {
-            destination: ObjectAddress::Registry,
+            destination: ObjectAddress::Fleet,
         },
     )
     .await?;
@@ -236,7 +234,7 @@ async fn replace_registered_socket_before_revocation(
         let observation=connection_control(fixture.base(),RuntimeControl::AwaitHeldDispatch).await?;
         let collaboration_central_conformance::DispatchFaultObservation::Held {destination,request:bytes}=observation.dispatch else {return Err("credential replacement did not hold its real renewal".into());};
         let held:Value=serde_json::from_slice(&bytes)?;
-        if destination!=ObjectAddress::Registry || held.get("kind")!=Some(&json!("central.session-lease"))
+        if destination!=ObjectAddress::Fleet || held.get("kind")!=Some(&json!("central.session-lease"))
             || held.pointer("/request/session/peer")!=Some(&json!(fixture::OLD_PEER))
             || held.pointer("/request/request")!=Some(&serde_json::to_value(LeaseRequest::Renew(request))?) {
             return Err("credential replacement captured another holder renewal".into());
@@ -246,6 +244,7 @@ async fn replace_registered_socket_before_revocation(
         if !matches!(next_data(&mut fixture.old).await?,ServerFrame::Answer {frame:actual,body:OperationAnswer::Lease(LeaseAnswer::Renew(answer))} if actual==frame && answer==expected_renewal(fixture.database)?) {return Err("captured current-session renewal did not complete exactly".into());}
         let mut replacement=upgrade(&fixture.http,fixture.base(),CREDENTIAL).await?.into_websocket().await?;
         replacement.send(Message::Binary(serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {session_id,schema_support:SchemaSupport {max_version:1}})?.into())).await?;
+        collaboration_central_conformance::ConformanceClient::new(fixture.base())?.wake_due_after_hello(session_id).await?;
         if !matches!(next_data(&mut replacement).await?,ServerFrame::Welcome {session_id:actual,databases} if actual==session_id && databases==vec![DatabaseStatus::Ready {database:fixture.database,acked:fixture::position(1,1)?,lease:fixture::lease(fixture.database,1,fixture::OLD_PEER)?}]) {return Err("pre-revocation replacement lost the exact registered Welcome".into());}
         if !matches!(next_data(&mut fixture.old).await?,ServerFrame::Closed {reason:CloseReason::ConnectionReplaced}) {return Err("pre-revocation old socket lost typed replacement close".into());}
         if !matches!(tokio::time::timeout(Duration::from_secs(5),fixture.old.next()).await?,Some(Ok(Message::Close {..}))|None) {return Err("pre-revocation old socket did not physically close".into());}
@@ -283,6 +282,7 @@ async fn reconnect_unrelated_installation_after_revocation(
                 .into(),
             ))
             .await?;
+        collaboration_central_conformance::ConformanceClient::new(fixture.base())?.wake_due_after_hello(session_id).await?;
         if !matches!(next_data(&mut socket).await?,ServerFrame::Welcome {session_id:actual,databases} if actual==session_id && databases.is_empty())
         {
             return Err(
@@ -369,7 +369,7 @@ async fn expired_machine_credential_closes_on_frame_and_refuses_a_fresh_access_v
         // The reused normal enrollment verifies its requested2033 expiry. Only
         // the owning Registry and old Connection clocks advance beyond it.
         let now=RegistryTime("2033-05-18T03:33:20.001Z".parse()?);
-        for address in [ObjectAddress::Registry,ObjectAddress::Connection(message_board::ServiceId::try_from(SERVICE.to_owned())?)] {
+        for address in [ObjectAddress::Fleet,ObjectAddress::Fleet] {
             let observed:RuntimeFaultObservation=fixture.http.post(format!("{}/admin/v1/conformance/runtime",fixture.base()))
                 .header("Cf-Access-Jwt-Assertion",owner_assertion()?)
                 .json(&RuntimeControlRequest {address,command:RuntimeControl::SetTime {now}})

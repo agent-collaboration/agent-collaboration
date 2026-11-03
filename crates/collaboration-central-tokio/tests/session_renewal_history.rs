@@ -136,6 +136,9 @@ async fn reconnect_writer(
             .into(),
         ))
         .await?;
+    ConformanceClient::new(base)?
+        .wake_due_after_hello(session)
+        .await?;
     let message = tokio::time::timeout(Duration::from_secs(5), replacement.next())
         .await?
         .ok_or("renewal reconnect ended before Welcome")??;

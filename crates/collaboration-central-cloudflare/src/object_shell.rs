@@ -49,6 +49,19 @@ impl WakeScheduler for CloudflareObjectIo {
     }
 }
 impl PlatformIo for CloudflareObjectIo {
+    #[cfg(feature = "conformance")]
+    async fn before_local_call(&self, request: &[u8]) -> std::result::Result<(), CallFailure> {
+        self.faults
+            .before_dispatch(&ObjectAddress::Fleet, request)
+            .await
+            .map_err(|_| CallFailure::AnswerLost)
+    }
+    #[cfg(feature = "conformance")]
+    fn drop_local_reply(&self, request: &[u8]) -> std::result::Result<bool, CallFailure> {
+        self.faults
+            .drop_successful_object_reply(&ObjectAddress::Fleet, request)
+            .map_err(|_| CallFailure::AnswerLost)
+    }
     fn object_call(
         &self,
         address: ObjectAddress,

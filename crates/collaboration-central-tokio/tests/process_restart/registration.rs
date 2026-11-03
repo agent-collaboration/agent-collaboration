@@ -173,6 +173,9 @@ pub(super) async fn reconnect_peer_with_welcome(
                 .to_string(),
         ))
         .await?;
+    ConformanceClient::new(base)?
+        .wake_due_after_hello(fleet_sync_protocol::SessionId::new(session)?)
+        .await?;
     let databases = read_reopened_welcome(&mut socket, session).await?;
     Ok((socket, databases))
 }

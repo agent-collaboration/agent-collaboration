@@ -44,7 +44,7 @@ enum Command {
         operation: durable_steps::OperationId,
     },
     SessionConnections {
-        service: message_board::ServiceId,
+        service: Option<message_board::ServiceId>,
     },
     AttachmentCodec {
         service: message_board::ServiceId,
@@ -108,9 +108,11 @@ async fn forward_command(command: Command, env: Env) -> Result<Response> {
             "/test/session-faults",
             Some(serde_json::to_string(&command)?),
         ),
-        Command::SessionConnections { service: _service } => {
-            (ObjectAddress::Fleet, "/test/session-connections", None)
-        }
+        Command::SessionConnections { service } => (
+            ObjectAddress::Fleet,
+            "/test/session-connections",
+            Some(serde_json::to_string(&service)?),
+        ),
         Command::AttachmentCodec {
             service: _service,
             connection,

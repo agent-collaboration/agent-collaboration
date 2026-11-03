@@ -14,6 +14,12 @@ pub struct ConformanceClient {
     pub(crate) base_url: String,
     access: AccessCredentials,
 }
+#[derive(serde::Deserialize)]
+struct AdmittedConnectionObservation {
+    connection: fleet_sync_protocol::ConnectionId,
+    peer: fleet_sync_protocol::PeerId,
+    registration: fleet_sync_session::ConnectionRegistration,
+}
 impl ConformanceClient {
     /// Select the actual live socket for a normally admitted peer.
     pub async fn active_connection(
@@ -21,23 +27,7 @@ impl ConformanceClient {
         service: &str,
         peer: fleet_sync_protocol::PeerId,
     ) -> ConformanceResult<fleet_sync_protocol::ConnectionId> {
-        #[derive(serde::Deserialize)]
-        struct AdmittedConnectionObservation {
-            connection: fleet_sync_protocol::ConnectionId,
-            peer: fleet_sync_protocol::PeerId,
-            registration: fleet_sync_session::ConnectionRegistration,
-        }
-        let connections: Vec<AdmittedConnectionObservation> = self
-            .with_owner_access(
-                self.client
-                    .post(format!("{}/__conformance/admission", self.base_url)),
-            )?
-            .json(&serde_json::json!({"kind":"sessionConnections","value":{"service":service}}))
-            .send()
-            .await?
-            .error_for_status()?
-            .json()
-            .await?;
+        let connections = self.session_connections(Some(service)).await?;
         let mut live = connections.into_iter().filter(|connection| {
             connection.peer == peer
                 && !matches!(
@@ -53,6 +43,64 @@ impl ConformanceClient {
             return Err("peer has multiple live normal sockets".into());
         }
         Ok(connection)
+    }
+
+    async fn session_connections(
+        &self,
+        service: Option<&str>,
+    ) -> ConformanceResult<Vec<AdmittedConnectionObservation>> {
+        Ok(self
+            .with_owner_access(
+                self.client
+                    .post(format!("{}/__conformance/admission", self.base_url)),
+            )?
+            .json(&serde_json::json!({"kind":"sessionConnections","value":{"service":service}}))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?)
+    }
+
+    /// Wake local injected-clock work after this Hello's admission has committed.
+    pub async fn wake_due_after_hello(
+        &self,
+        session: fleet_sync_protocol::SessionId,
+    ) -> ConformanceResult<()> {
+        if self.staging_access().is_some() {
+            return Ok(());
+        }
+        let observed = crate::composed_client::control(
+            self,
+            collaboration_central_core::ObjectAddress::Fleet,
+            crate::RuntimeControl::Observe,
+        )
+        .await?;
+        let crate::ClockObservation::Pinned { now } = observed.clock else {
+            return Ok(());
+        };
+        // Observe the real committed attachment before waking; an HTTP control may overtake a socket frame.
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let connections = self.session_connections(None).await?;
+                let admitted = connections.iter().any(|connection| {
+                    matches!(connection.registration,
+                        fleet_sync_session::ConnectionRegistration::Attaching {session_id,..}
+                        | fleet_sync_session::ConnectionRegistration::Attached {session_id,..} if session_id == session)
+                        && !connections.iter().any(|other| other.peer == connection.peer
+                            && matches!(other.registration, fleet_sync_session::ConnectionRegistration::Opening))
+                });
+                if admitted { return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(()); }
+                tokio::task::yield_now().await;
+            }
+        }).await??;
+        crate::composed_client::control(
+            self,
+            collaboration_central_core::ObjectAddress::Fleet,
+            crate::RuntimeControl::SetTime { now },
+        )
+        .await?;
+        Ok(())
     }
 
     pub fn new(base_url: &str) -> ConformanceResult<Self> {

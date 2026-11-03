@@ -50,7 +50,9 @@ pub(crate) fn mount(
     deny_unknown_fields
 )]
 enum AdmissionObservation {
-    SessionConnections { service: message_board::ServiceId },
+    SessionConnections {
+        service: Option<message_board::ServiceId>,
+    },
 }
 
 async fn admission(
@@ -73,7 +75,7 @@ async fn admission(
     let AdmissionObservation::SessionConnections { service } = request;
     match controls
         .platform
-        .conformance_session_connections(&service)
+        .conformance_session_connections(service.as_ref())
         .await
     {
         Ok(connections) => Json(connections).into_response(),

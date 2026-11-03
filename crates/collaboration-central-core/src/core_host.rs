@@ -23,6 +23,17 @@ mod registration_gate;
 mod session_routes;
 
 pub trait PlatformIo: Clock + IdSource + WakeScheduler + Send + Sync + 'static {
+    #[cfg(feature = "conformance")]
+    fn before_local_call(
+        &self,
+        _request: &[u8],
+    ) -> impl Future<Output = Result<(), CallFailure>> + Send {
+        std::future::ready(Ok(()))
+    }
+    #[cfg(feature = "conformance")]
+    fn drop_local_reply(&self, _request: &[u8]) -> Result<bool, CallFailure> {
+        Ok(false)
+    }
     fn object_call(
         &self,
         destination: ObjectAddress,
@@ -466,14 +477,26 @@ impl<Io: PlatformIo> CoreHost<Io> {
         }
     }
     async fn transmit(&self, call: SerializedObjectCall) -> Result<Vec<u8>, CallFailure> {
-        #[cfg(feature = "conformance")]
-        if let Ok(mut dispatches) = self.dispatches.lock() {
-            dispatches.push(call.destination.clone());
-        }
         if call.destination == ObjectAddress::Fleet
             && let Some(local) = self.local_calls.get()
         {
+            #[cfg(feature = "conformance")]
+            {
+                self.io.before_local_call(&call.bytes).await?;
+                let request = call.bytes.clone();
+                let answer = local(call.bytes).await?;
+                if self.io.drop_local_reply(&request)? {
+                    return Err(CallFailure::AnswerLost);
+                }
+                return Ok(answer);
+            }
+            #[cfg(not(feature = "conformance"))]
             return local(call.bytes).await;
+        }
+        // Observe actual platform calls; in-Fleet calls use the local fault controls above.
+        #[cfg(feature = "conformance")]
+        if let Ok(mut dispatches) = self.dispatches.lock() {
+            dispatches.push(call.destination.clone());
         }
         self.io.object_call(call.destination, call.bytes).await
     }
