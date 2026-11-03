@@ -38,7 +38,7 @@ const PROVIDER_SESSION_PAGE_SIZE: u32 = 100;
 pub struct ClaudeLaunchTarget {
     service_directory: PathBuf,
     secret_root: PathBuf,
-    claude_projects_directory: Option<PathBuf>,
+    pub(super) claude_projects_directory: Option<PathBuf>,
 }
 
 #[derive(Clone)]
@@ -337,7 +337,7 @@ impl ClaudeLaunchTarget {
         Ok(token)
     }
 
-    async fn stored_transcript_records(
+    pub(super) async fn stored_transcript_records(
         &self,
     ) -> Result<Vec<serde_json::Value>, SessionsCommandError> {
         let Some(projects_directory) = self.claude_projects_directory.clone() else {

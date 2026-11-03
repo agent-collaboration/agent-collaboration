@@ -10,7 +10,7 @@ fn debug_hosted_dry_run_refuses_missing_or_production_endpoint() {
     ] {
         let mut command = Command::new(env!("CARGO_BIN_EXE_agent-collaboration"));
         command
-            .args(["--new", "--dry-run"])
+            .args(["--provider", "codex", "--new", "--dry-run"])
             .env("CODEX_HOME", "/tmp/debug-selection-home")
             .env_remove("CODEX_ROUTER_USE_HOME_DEFAULT")
             .env_remove("CODEX_ROUTER_DEBUG_APP_SERVER_SOCKET");
@@ -33,7 +33,7 @@ fn debug_hosted_dry_run_refuses_missing_or_production_endpoint() {
 fn local_debug_dry_run_keeps_profile_without_a_hosted_endpoint() {
     // Arrange / Act: local embedded Codex needs no external backend endpoint.
     let output = Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-        .args(["--local", "--new", "--dry-run"])
+        .args(["--provider", "codex", "--local", "--new", "--dry-run"])
         .env_remove("CODEX_ROUTER_USE_HOME_DEFAULT")
         .env_remove("CODEX_ROUTER_DEBUG_APP_SERVER_SOCKET")
         .env("PATH", "")
@@ -124,7 +124,7 @@ fn debug_dry_run_preserves_isolated_socket_and_never_executes_codex() {
         .env("CODEX_ROUTER_DEBUG_ROUTER_ROOT", &router_root)
         .env("PATH", "")
         .env("CODEX_ROUTER_DEBUG_APP_SERVER_SOCKET", &owner_socket)
-        .args(["--new", "--dry-run"])
+        .args(["--provider", "codex", "--new", "--dry-run"])
         // Act
         .output()
         .unwrap_or_else(|error| panic!("dry-run should execute: {error}"));

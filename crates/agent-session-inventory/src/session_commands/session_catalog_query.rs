@@ -11,9 +11,6 @@ use collaboration_client::session_catalog::{
 };
 use std::path::Path;
 
-/// A session-id search is a substring match, so read a few rows and keep the exact one.
-const SESSION_ID_LOOKUP_LIMIT: usize = 8;
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SessionRecordQuery {
     root: SessionCatalogRoot,
@@ -49,8 +46,18 @@ impl SessionRecordQuery {
             sort: SessionCatalogSort::Updated,
             last: false,
             include_empty_sessions: true,
-            limit: SESSION_ID_LOOKUP_LIMIT,
+            // Substring lookalikes must never hide the exact UUID behind a row limit.
+            limit: 0,
             search: format!("id:{session_id}"),
+        }
+    }
+
+    /// Prefix resolution must inspect every candidate before deciding uniqueness.
+    pub fn for_session_prefix() -> Self {
+        Self {
+            limit: 0,
+            search: String::new(),
+            ..Self::for_session_id("")
         }
     }
 
