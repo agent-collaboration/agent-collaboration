@@ -539,8 +539,8 @@ async fn insert_retries_native_busy_only_within_the_five_second_window() {
     store.close().await.expect("close interaction store");
 }
 
-#[path = "push_repository/reply_references.rs"]
+#[path = "../push_repository/reply_references.rs"]
 mod reply_references;
 
-#[path = "push_repository/carrier_outcomes.rs"]
+#[path = "../push_repository/carrier_outcomes.rs"]
 mod carrier_outcomes;
