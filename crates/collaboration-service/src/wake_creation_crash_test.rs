@@ -97,10 +97,18 @@ async fn wake_creation_replay_survives_service_exit_before_response() -> TestRes
         drop(application);
         for entry in std::fs::read_dir(&root)? {
             let entry = entry?;
-            if !entry.file_type()?.is_file() {
-                return Err("unexpected fixture cleanup entry".into());
+            match entry.file_type() {
+                Ok(kind) if kind.is_file() => {}
+                Ok(_) => return Err("unexpected fixture cleanup entry".into()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error.into()),
             }
-            std::fs::remove_file(entry.path())?;
+            // Already removed SQLite sidecars satisfy the cleanup outcome.
+            match std::fs::remove_file(entry.path()) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
         }
         std::fs::remove_dir(root)?;
     }
