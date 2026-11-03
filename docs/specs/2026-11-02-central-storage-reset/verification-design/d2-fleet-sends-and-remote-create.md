@@ -4,9 +4,10 @@ A plan: nothing here has been observed. Upstream: [R16–R22](../specification/r
 
 | Obs. | Observation | Decides |
 | --- | --- | --- |
-| P1 | B stopped; from a session on A request a session on B with a first input; read A's remote-create status (“accepted”, then “waiting for B”); start B; read status (“B has your request”); read the result message in the requesting session; message the new session and read its reply | R16, R18, R20 |
+| P1 | B stopped; from a session on A request a session on B with a first input; read A's remote-create status (“accepted”, then “waiting for B”); start B; with a conformance pause in B's command owner after inbox acceptance and before the provider create, read status (“B has your request”); release the pause; read the result message in the requesting session; message the new session and read its reply | R16, R18, R20 |
 | P2 | Push the same create command to B twice (conformance replay control); count sessions on B | R19 |
-| P3 | Crash B at the named point after the provider create and before the result is recorded; restart; read the report and count sessions | R19 |
+| P3 | Crash at each named point: B after the provider create and before recording it; B after the prompt and before the report; the Fleet after applying the report (the result must still arrive once). Restart; read reports, sessions, prompts and result messages | R19, R20 |
+| P8 | Same request id with a different command; a request whose deadline passes with B offline; a create with partial settings and a first input | R16, R18, R20 |
 | P4 | Request from never-enrolled installation D, and to a target that is not enrolled; read the answers and the Fleet outbox count | R16 |
 | P5 | Submit an item with sender `Fleet` from machine A over its socket; read the refusal | R21 |
 | P6 | In the new session on B, trigger a tool call that needs approval; read B's owner approval list | R22 |
