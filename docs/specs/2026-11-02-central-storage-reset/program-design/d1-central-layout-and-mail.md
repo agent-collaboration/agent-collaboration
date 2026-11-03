@@ -47,6 +47,11 @@ flowchart LR
 
 Central: **one Fleet store** (`fleet.db` on Tokio; one `FLEET` Durable Object on Cloudflare) and **one store per project** (unchanged). Deleted: Registry, every `connection-<service>`, every `mailbox-<service>`, and their Cloudflare bindings (`cloudflare.config.ts:21–43`, `object_keys.rs:4`, `object_location.rs:3`). Staging starts empty (U3), so the Fleet schema is created fresh; nothing is migrated.
 
+
+## Every table: UUIDv7 primary key and timestamps
+
+Owner rule (2026-11-03: “all pk should be uuidv7”; `AGENTS.md` Identifiers): **every table this work creates or changes has a UUIDv7 primary key and `created_at` / `updated_at`**. Where a table is keyed today by a natural key (an item id, a project id, a peer, a composite such as operation + step, a version number or a cursor), that key becomes a `UNIQUE` constraint and the table gains a UUIDv7 `id` primary key; counters such as lease epochs, report sequences and feed positions stay as ordinary columns. This applies in the Fleet store and to the delivery, lease, session and journal library tables in every store, including the machine inbox and outbox; existing rows on machines get a generated UUIDv7 id and `created_at` from the best recorded time during the additive migration. Not ours to change: tables owned by a third party, such as Cloudflare's own `__cf_kv`.
+
 ## Fleet store tables
 
 ### Reshaped or new (full rule: prefix, UUIDv7, timestamps, typed columns, CHECK only for booleans)

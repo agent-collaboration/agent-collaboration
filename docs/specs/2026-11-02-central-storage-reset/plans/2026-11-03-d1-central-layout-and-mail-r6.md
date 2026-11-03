@@ -28,7 +28,7 @@ planned at: design/central-storage-reset @ 6fb9b616a
 
 | Change | Why | Invalidates |
 | --- | --- | --- |
-| New library slice **L7 journal timestamps**: `durable-steps` adds `created_at` and `updated_at` to `_fleet_sync_operations`, `_fleet_sync_steps`, `_fleet_sync_schema`, `_fleet_sync_migrations`, with an additive migration that runs in every store (Fleet, project objects, machines). Edge L1 → L7; L7 before the library tag | owner decided F6 = B (“yes they should get timestamp columns”) | the journal-table fence in the earlier packets; VD O8 now expects timestamps on those tables too |
+| New library slice **L7 UUIDv7 keys and timestamps for every library table** (delivery, lease, session, journal; natural keys become UNIQUE). For the journal, `durable-steps` adds a UUIDv7 id, `created_at` and `updated_at` to `_fleet_sync_operations`, `_fleet_sync_steps`, `_fleet_sync_schema`, `_fleet_sync_migrations`, with an additive migration that runs in every store (Fleet, project objects, machines). Edge L1 → L7; L7 before the library tag | owner decided F6 = B (“yes they should get timestamp columns”) | the journal-table fence in the earlier packets; VD O8 now expects timestamps on those tables too |
 
 ## Earlier change: from 2026-11-03-d1-central-layout-and-mail-r4.md
 
