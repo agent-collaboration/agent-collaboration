@@ -1,7 +1,7 @@
 //! Owner requests admit local work, then drive the existing library outside it.
 use crate::FleetKind;
 use crate::{
-    CallerKind, ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
+    CallerKind, ObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     object_call_envelope::{ObjectCallEnvelope, encode_refusal},
     object_runtime::ObjectWork,
@@ -18,7 +18,6 @@ use crate::{
 use durable_steps::{
     AtomicStore, CallFailure, OperationState, RequestKey, storage::TransactionScope,
 };
-use fleet_sync_lease::PreviewTakeoverTask;
 use fleet_sync_protocol::PreviewTakeover;
 use runtime_primitives::Clock;
 use sqlx_core::{
@@ -152,10 +151,6 @@ where
             .run(ReadOwnerTransfer { request })
             .await
             .map_err(|_| CallFailure::AnswerLost)?;
-        if matches!(
-            &answer,
-            OwnerTransferAnswer::Moved { .. } | OwnerTransferAnswer::Granted { .. }
-        ) {}
         Ok(answer)
     }
 }

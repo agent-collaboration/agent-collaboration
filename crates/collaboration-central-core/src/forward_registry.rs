@@ -1,7 +1,7 @@
 //! The Registry supplies forwarding provenance, holder presence and installation peers.
 use crate::FleetKind;
 use crate::{
-    CallerKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
+    CallerKind, ObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     forward_calls::{
         ForwardRoute, ForwardRouteRequest, ForwardRouteResult, InstallationPeerRegistry,

@@ -2,19 +2,15 @@
 use crate::FleetKind;
 
 use crate::{
-    CoreHost, ObjectHost, ObjectRuntime, PlatformIo, SessionKind, object_runtime::ObjectWork,
+    CoreHost, ObjectHost, ObjectRuntime, PlatformIo, object_runtime::ObjectWork,
     session_store::CoreSessionStore,
 };
-use durable_steps::{
-    AtomicStore, DriveReport, Engine, ReborrowScope, StoreError, storage::TransactionScope,
-};
-use fleet_sync_protocol::ReceiverId;
-use fleet_sync_session::PublishSchemaSupport;
+use durable_steps::{AtomicStore, ReborrowScope, StoreError, storage::TransactionScope};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
 };
-use std::{marker::PhantomData, sync::Arc};
+use std::sync::Arc;
 
 type SessionRuntimeHandles<Host, Io> = (Arc<CoreSessionStore<Host, Io>>, Arc<CoreHost<Io>>);
 

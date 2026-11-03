@@ -2,7 +2,7 @@
 use crate::FleetKind;
 
 use crate::{
-    CallerKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
+    CallerKind, ObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     mail_submit_admission::{AdmitMailSubmit, MailSubmitAdmission},
     mail_submit_calls::{MailSubmitRegistry, MailSubmitReply, MailSubmitRequest},

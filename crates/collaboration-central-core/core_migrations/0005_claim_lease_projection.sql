@@ -1,11 +1,5 @@
 ALTER TABLE project_directory ADD COLUMN lease_projection TEXT;
 
-CREATE TABLE lease_incarnation_fence (
-    fence_id TEXT NOT NULL PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    incarnation TEXT NOT NULL
-);
-
 CREATE TABLE claim_reservations (
     attempt_id TEXT NOT NULL PRIMARY KEY,
     project_id TEXT NOT NULL,

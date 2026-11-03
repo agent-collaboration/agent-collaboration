@@ -16,7 +16,7 @@ use crate::{SocketCommand, TokioStorageHost};
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
 use collaboration_central_core::{
     AdmissionOrigin, CopyKind, CoreHost, FleetKind, MailboxKind, ObjectAddress, ObjectRuntime,
-    PlatformIo, RegistryKind, SessionKind,
+    PlatformIo,
 };
 use durable_steps::{BoxFuture, CallFailure, NotSentReason, StoreError};
 use fleet_sync_lease::RegistryConfig;
@@ -32,8 +32,6 @@ use tokio::sync::{Mutex, OnceCell};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 type NativeHost = TokioStorageHost<CoreHost<TokioObjectIo>>;
-type RegistryRuntime = ObjectRuntime<RegistryKind, NativeHost, TokioObjectIo>;
-type SessionRuntime = ObjectRuntime<SessionKind, NativeHost, TokioObjectIo>;
 type CopyRuntime = ObjectRuntime<CopyKind, NativeHost, TokioObjectIo>;
 type FleetRuntime = ObjectRuntime<FleetKind, NativeHost, TokioObjectIo>;
 type MailboxRuntime = ObjectRuntime<MailboxKind, NativeHost, TokioObjectIo>;
@@ -522,7 +520,7 @@ impl NativeObjects {
     #[cfg(feature = "conformance")]
     pub(crate) async fn forward_state(
         &self,
-        service: &message_board::ServiceId,
+        _service: &message_board::ServiceId,
     ) -> Result<collaboration_central_core::ForwardStateObservation, StoreError> {
         let slot = self.slots.lock().await.get("fleet").cloned();
         match slot
@@ -540,7 +538,7 @@ impl NativeObjects {
     #[cfg(feature = "conformance")]
     pub(crate) async fn holder_frames(
         &self,
-        service: &message_board::ServiceId,
+        _service: &message_board::ServiceId,
     ) -> Result<Vec<fleet_sync_protocol::FrameId>, StoreError> {
         let slot = self.slots.lock().await.get("fleet").cloned();
         match slot

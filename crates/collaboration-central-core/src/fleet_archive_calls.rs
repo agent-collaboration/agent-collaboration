@@ -1,8 +1,8 @@
 //! The authenticated Session supplies the installation; Fleet supplies report time.
 use crate::{
-    CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
-    caller_context::CallAuthority, fleet_archive_step::ReportArchive,
-    object_call_envelope::ObjectCallEnvelope, object_runtime::ObjectWork, step_driver::StepDriver,
+    CallerKind, FleetKind, ObjectHost, ObjectRuntime, PlatformIo, caller_context::CallAuthority,
+    fleet_archive_step::ReportArchive, object_call_envelope::ObjectCallEnvelope,
+    object_runtime::ObjectWork, step_driver::StepDriver,
 };
 use durable_steps::{
     AtomicStore, CallFailure, CallTarget, NotSentReason, storage::TransactionScope,
@@ -41,10 +41,7 @@ where
         {
             return Err(refused());
         }
-        let CallAuthority::Machine {
-            installation: installation,
-        } = call.authority
-        else {
+        let CallAuthority::Machine { installation } = call.authority else {
             return Err(refused());
         };
         let _: FleetArchiveReport = serde_json::from_value(call.target).map_err(|_| refused())?;

@@ -62,7 +62,6 @@ enum SharedTaskCaller {
         database: DatabaseId,
     },
     StoreOnly,
-    Fleet(CallerContext<FleetKind>),
     Mailbox(CallerContext<MailboxKind>),
     Session(CallerContext<SessionKind>),
     Delivery,
@@ -92,22 +91,6 @@ impl<Io: PlatformIo> CoreHost<Io> {
                 peer_directory,
                 lease_publication: lease_store.map(lease_settlement::RegistryLeasePublication::new),
             },
-            authoritative_receiver,
-            publication: None,
-            local_calls: Default::default(),
-            #[cfg(feature = "conformance")]
-            dispatches: Default::default(),
-            #[cfg(feature = "conformance")]
-            forward_route_probe: Default::default(),
-            #[cfg(feature = "conformance")]
-            revocation_probe: Default::default(),
-        }
-    }
-
-    pub(crate) fn fleet(io: std::sync::Arc<Io>, authoritative_receiver: ReceiverId) -> Self {
-        Self {
-            io,
-            caller: SharedTaskCaller::Fleet(CallerContext::for_object(())),
             authoritative_receiver,
             publication: None,
             local_calls: Default::default(),
@@ -286,20 +269,6 @@ impl<Io: PlatformIo> CoreHost<Io> {
         let target = serde_json::to_value(target).map_err(encode_refusal)?;
         let request = serde_json::to_value(request).map_err(encode_refusal)?;
         match &self.caller {
-            SharedTaskCaller::Fleet(caller) => {
-                use crate::machine_notice_delivery::DeliverMachineNotice;
-                if Call::KIND != DeliverMachineNotice::KIND {
-                    return Err(no_route());
-                }
-                let target: DeliverMachineNotice = decode(target)?;
-                encode_shared_call::<FleetKind, DeliveryKind, DeliverMachineNotice>(
-                    caller,
-                    target.installation.clone(),
-                    target,
-                    decode(request)?,
-                    identity,
-                )
-            }
             SharedTaskCaller::Mailbox(caller) => {
                 if Call::KIND == crate::machine_notice_delivery::DeliverMachineNotice::KIND {
                     let target: crate::machine_notice_delivery::DeliverMachineNotice =
@@ -503,9 +472,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                     RetirementAdmission::KIND => to_fleet!(RetirementAdmission),
                     ClaimReservation::KIND => to_fleet!(ClaimReservation),
                     ClaimSettlement::KIND => to_fleet!(ClaimSettlement),
-                    crate::fleet_lease_calls::AdvanceLeaseIncarnation::KIND => to_fleet!(crate::fleet_lease_calls::AdvanceLeaseIncarnation),
                     crate::fleet_lease_calls::ClaimGranted::KIND => to_fleet!(crate::fleet_lease_calls::ClaimGranted),
-                    crate::fleet_lease_calls::PublishLeaseProjection::KIND => to_fleet!(crate::fleet_lease_calls::PublishLeaseProjection),
                     _ => Err(no_route()),
                 }
             }

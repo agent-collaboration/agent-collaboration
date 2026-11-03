@@ -1,7 +1,7 @@
 //! Conformance-only raw owning rows and completed route callbacks, never a forwarding store.
 use crate::FleetKind;
 use crate::{
-    ObjectHost, ObjectRuntime, PlatformIo, SessionKind,
+    ObjectHost, ObjectRuntime, PlatformIo,
     object_runtime::ObjectWork,
     step_driver::{StepCallback, StepDriver, StepResult},
 };

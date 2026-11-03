@@ -117,7 +117,7 @@ object_kind!(
 );
 object_kind!(
     CopyKind,
-    3,
+    6,
     Copy,
     DatabaseId,
     SharedCallOnly,
@@ -160,9 +160,9 @@ macro_rules! allowed_edges {
     }
 }
 allowed_edges!(
-    EdgeKind=>SessionKind, EdgeKind=>RegistryKind, EdgeKind=>CopyKind, EdgeKind=>FleetKind,
+    EdgeKind=>SessionKind, EdgeKind=>RegistryKind, EdgeKind=>FleetKind,
     SessionKind=>RegistryKind, SessionKind=>CopyKind, SessionKind=>FleetKind, SessionKind=>DeliveryKind,
     RegistryKind=>CopyKind, RegistryKind=>FleetKind, RegistryKind=>DeliveryKind,
     SessionKind=>MailboxKind, RegistryKind=>MailboxKind, MailboxKind=>DeliveryKind,
-    CopyKind=>FleetKind, FleetKind=>DeliveryKind,
+    FleetKind=>CopyKind, FleetKind=>DeliveryKind,
 );

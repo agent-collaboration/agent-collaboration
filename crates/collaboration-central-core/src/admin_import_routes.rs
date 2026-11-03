@@ -1,12 +1,12 @@
 //! Owner HTTP requests compose persisted workflow state with library authority.
 
 use crate::{
-    AccessCaller, CallOutcome, CallerContext, CentralApplication, CentralPlatform, CopyKind,
-    EdgeKind, FleetCall, FleetKind, FleetResult, MayCall, ObjectKind, RegistryKind,
+    AccessCaller, CallOutcome, CallerContext, CentralApplication, CentralPlatform, EdgeKind,
+    FleetCall, FleetKind, FleetResult, MayCall, ObjectKind, RegistryKind,
     admin_import_contract::{
         AdminImportPhase, AdminImportRecord, AdminProjectImportAnswer, AdminProjectImportRequest,
     },
-    admin_import_copy::{AdminCopySeed, AdminSeedAnswer, AdminSeedRequest},
+    admin_import_copy::{AdminSeedAnswer, AdminSeedRequest, FleetAdminCopySeed},
     admin_import_fleet::AdminImportWorkflow,
     admin_import_registry::{AdminImportReservation, ReservationAnswer},
     admin_import_store::{AdminImportCommand, AdminImportRefusal},
@@ -152,11 +152,11 @@ async fn project_request<Platform: CentralPlatform>(
     }
     // Reconcile the receiver's retained seed-completion evidence before
     // comparing a changed physical header or attempting another publication.
-    match invoke::<_, CopyKind, _>(
+    match invoke::<_, FleetKind, _>(
         application,
         caller.clone(),
-        database,
-        AdminCopySeed { database },
+        (),
+        FleetAdminCopySeed { database },
         AdminSeedRequest::ReconcilePublication(Box::new(record.clone())),
     )
     .await?
@@ -190,11 +190,11 @@ async fn project_request<Platform: CentralPlatform>(
     }
     match request {
         AdminProjectImportRequest::Begin { .. } => {
-            match invoke::<_, CopyKind, _>(
+            match invoke::<_, FleetKind, _>(
                 application,
                 caller,
-                database,
-                AdminCopySeed { database },
+                (),
+                FleetAdminCopySeed { database },
                 AdminSeedRequest::Begin { import_id },
             )
             .await?
@@ -221,11 +221,11 @@ async fn project_request<Platform: CentralPlatform>(
                     AdminImportRefusal::InvalidHeader,
                 ));
             }
-            match invoke::<_, CopyKind, _>(
+            match invoke::<_, FleetKind, _>(
                 application,
                 caller,
-                database,
-                AdminCopySeed { database },
+                (),
+                FleetAdminCopySeed { database },
                 AdminSeedRequest::Page {
                     import_id,
                     page,
@@ -246,11 +246,11 @@ async fn project_request<Platform: CentralPlatform>(
             }
         }
         AdminProjectImportRequest::Complete { .. } => {
-            match invoke::<_, CopyKind, _>(
+            match invoke::<_, FleetKind, _>(
                 application,
                 caller.clone(),
-                database,
-                AdminCopySeed { database },
+                (),
+                FleetAdminCopySeed { database },
                 AdminSeedRequest::Complete(Box::new(record.clone())),
             )
             .await?

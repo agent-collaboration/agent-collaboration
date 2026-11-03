@@ -244,6 +244,14 @@ where
 
     async fn dispatch_call(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
         let call = ObjectCallEnvelope::decode(&bytes, ObjectAddress::Fleet, CallerKind::Fleet)?;
+        if matches!(
+            call.kind.as_str(),
+            crate::owner_operation_calls::FleetProjectOperations::KIND
+                | crate::admin_import_copy::FleetAdminCopySeed::KIND
+                | crate::copy_write_calls::FleetProjectSeed::KIND
+        ) {
+            return self.owner_project_call(call).await;
+        }
         if call.kind == crate::owner_operation_calls::ReadCopyDirectoryPage::KIND {
             return self.owner_directory_page(call).await;
         }
@@ -273,14 +281,8 @@ where
         if call.kind == crate::fleet_metadata_calls::FleetMetadata::KIND {
             return self.metadata_call(call).await;
         }
-        if call.kind == crate::fleet_lease_calls::AdvanceLeaseIncarnation::KIND {
-            return self.advance_lease_incarnation_call(call).await;
-        }
         if call.kind == crate::fleet_lease_calls::ClaimGranted::KIND {
             return self.claim_granted_call(call).await;
-        }
-        if call.kind == crate::fleet_lease_calls::PublishLeaseProjection::KIND {
-            return self.publish_lease_projection_call(call).await;
         }
         if call.kind == crate::admin_import_fleet::AdminImportWorkflow::KIND {
             return self.admin_import_workflow(call).await;

@@ -1,19 +1,15 @@
 //! Admin continuation composes the shared Copy seed entry and its committed summary.
 
 use crate::{
-    CallerContext, CallerKind, CopyKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime,
-    PlatformIo,
+    CallerKind, CopyKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
     admin_import_contract::AdminImportRecord,
-    admin_import_fleet::AdminImportWorkflow,
-    admin_import_store::AdminImportCommand,
     caller_context::CallAuthority,
     copy_write_calls::{AdminCopySeedRequest, CopyAdminSeed},
-    object_call_envelope::{ObjectCallEnvelope, encode_shared_call},
+    object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork,
 };
 use durable_steps::{
-    AtomicStore, CallFailure, CallId, CallTarget, NotSentReason, OperationId, StepName,
-    storage::TransactionScope,
+    AtomicStore, CallFailure, CallTarget, NotSentReason, storage::TransactionScope,
 };
 use fleet_sync_protocol::{
     CopyStatusAnswer, DatabaseId, PageDigest, ReplicationAnswer, ReplicationPosition, RequestId,
@@ -87,7 +83,7 @@ where
         &self,
         mut call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
-        if call.source_face != CallerKind::Edge
+        if call.source_face != CallerKind::Fleet
             || call.source != ObjectAddress::Fleet
             || !matches!(call.authority, CallAuthority::Owner(_))
         {
@@ -169,8 +165,6 @@ where
                         {
                             return Err(CallFailure::AnswerLost);
                         }
-                        self.record_publication(&record, record.header.manifest.position)
-                            .await?;
                         AdminSeedAnswer::Published {
                             position: record.header.manifest.position,
                         }
@@ -187,7 +181,6 @@ where
                     if position != record.header.manifest.position {
                         return Err(CallFailure::AnswerLost);
                     }
-                    self.record_publication(&record, position).await?;
                     AdminSeedAnswer::Published { position }
                 } else {
                     AdminSeedAnswer::Replication(answer)
@@ -269,37 +262,6 @@ where
         let bytes = self.admin_seed_call(invocation).await?;
         serde_json::from_slice(&bytes).map_err(|_| CallFailure::AnswerLost)
     }
-
-    async fn record_publication(
-        &self,
-        record: &AdminImportRecord,
-        position: ReplicationPosition,
-    ) -> Result<(), CallFailure> {
-        let ObjectWork::Copy { database, io, .. } = &self.work else {
-            return Err(refused());
-        };
-        let caller = CallerContext::<CopyKind>::for_object(*database);
-        let identity = CallId {
-            operation: OperationId::new(record.import_id.as_uuid()).map_err(|_| refused())?,
-            step: StepName::new("admin_import_published").map_err(|_| refused())?,
-        };
-        let call = encode_shared_call::<CopyKind, FleetKind, AdminImportWorkflow>(
-            &caller,
-            (),
-            AdminImportWorkflow,
-            AdminImportCommand::Published {
-                database: *database,
-                digest: record.header.digest.clone(),
-                import_id: record.import_id,
-                position,
-            },
-            identity,
-        )?;
-        let bytes = io.object_call(call.destination, call.bytes).await?;
-        let answer: Result<AdminImportRecord, crate::AdminImportRefusal> =
-            serde_json::from_slice(&bytes).map_err(|_| CallFailure::AnswerLost)?;
-        answer.map(|_| ()).map_err(|_| CallFailure::AnswerLost)
-    }
 }
 fn seed_attempt(import_id: RequestId) -> Result<SeedAttemptId, CallFailure> {
     SeedAttemptId::new(import_id.as_uuid()).map_err(|_| refused())
@@ -308,4 +270,15 @@ fn refused() -> CallFailure {
     CallFailure::NotSent {
         reason: NotSentReason::Unreachable { last_seen: None },
     }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct FleetAdminCopySeed {
+    pub database: DatabaseId,
+}
+impl CallTarget for FleetAdminCopySeed {
+    const KIND: &'static str = "central.fleet-admin-copy-seed";
+    type Request = AdminSeedRequest;
+    type Answer = AdminSeedAnswer;
 }

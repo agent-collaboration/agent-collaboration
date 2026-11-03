@@ -11,6 +11,15 @@ async fn a_project_outage_stays_active_for_repeated_reads_and_writes_until_clear
         assert!(faults.project_unavailable()?);
         assert!(faults.fail_after_writes(written)?);
     }
+    assert!(matches!(
+        faults
+            .control(RuntimeControl::CopyFull {
+                after_writes: std::num::NonZeroU64::MIN
+            })
+            .await,
+        Err(RuntimeControlFailure::AlreadyArmed)
+    ));
+    assert!(faults.project_unavailable()?);
     faults.control(RuntimeControl::ClearProjectFault).await?;
     assert!(!faults.project_unavailable()?);
     assert!(!faults.fail_after_writes(1)?);

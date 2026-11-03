@@ -1,96 +1,16 @@
-//! Ordinary publication and claim settlement share the same fenced projection write.
+//! Lease changes project directory state and ownership notices in their own transaction.
 use crate::{
     RegistryIncarnation,
     fleet_record_codec::{corrupt, decode_json, required},
     generated_fleet_lease as queries,
     lease_projection::{LeaseProjection, LeaseProjectionResult},
-    step_driver::{StepCallback, StepResult},
 };
-use durable_steps::{AtomicStore, BoxFuture, StoreError, Uuid, storage::TransactionScope};
+use durable_steps::{AtomicStore, StoreError, Uuid, storage::TransactionScope};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
 };
-use std::convert::Infallible;
 
-pub(crate) struct StoreLeaseProjection {
-    pub projection: LeaseProjection,
-    pub now: chrono::DateTime<chrono::Utc>,
-    pub row_ids: crate::fleet_row_ids::FleetRowIds,
-}
-impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for StoreLeaseProjection
-where
-    for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
-    Driver::Arguments: IntoArguments<Driver>,
-    for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
-    for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
-    for<'row> &'row str: ColumnIndex<Driver::Row>,
-{
-    type Output = LeaseProjectionResult;
-    type Effect = Infallible;
-    fn run<'scope, 'transaction>(
-        mut self,
-        scope: &'scope mut Store::Scope<'transaction>,
-    ) -> BoxFuture<'scope, StepResult<Self::Output, Infallible>> {
-        Box::pin(async move {
-            let previous_feed = crate::fleet_feed_store::high_water(scope).await?;
-            let result = apply_projection(scope, &self.projection).await?;
-            if !matches!(
-                result,
-                LeaseProjectionResult::Fenced { .. } | LeaseProjectionResult::Conflict { .. }
-            ) {
-                let project = message_board::ProjectId::try_from(
-                    self.projection.database().as_uuid().to_string(),
-                )
-                .map_err(|error| corrupt("lease.project", error))?;
-                crate::fleet_archive_completion::complete_project(
-                    scope,
-                    &project,
-                    self.now,
-                    &mut self.row_ids,
-                )
-                .await?;
-            }
-            crate::fleet_notice_admission::admit_mutation_notices::<Store, Driver, _>(
-                scope,
-                previous_feed,
-                runtime_primitives::SyncTime::from_unix_millis(self.now.timestamp_millis()),
-            )
-            .await?;
-            Ok((result, Vec::new()))
-        })
-    }
-}
-pub(crate) async fn read_incarnation_fence<Scope: TransactionScope>(
-    scope: &mut Scope,
-) -> Result<Option<(String, RegistryIncarnation)>, StoreError>
-where
-    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
-    for<'value> String:
-        Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
-    for<'value> Option<String>:
-        Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
-    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
-{
-    let Some(row) = queries::read_lease_incarnation(scope)
-        .await
-        .map_err(StoreError::backend)?
-    else {
-        return Ok(None);
-    };
-    let row_id = checked_row_id(row.fence_id, "incarnation.fence_id")?;
-    let value = required(row.incarnation, "incarnation.value")?;
-    let incarnation = RegistryIncarnation::new(
-        value
-            .parse::<u64>()
-            .map_err(|error| corrupt("incarnation.value", error))?,
-    )
-    .map_err(|error| corrupt("incarnation.value", error))?;
-    if incarnation.value().to_string() != value {
-        return Err(corrupt("incarnation.value", "noncanonical integer"));
-    }
-    Ok(Some((row_id, incarnation)))
-}
 pub(crate) async fn apply_projection<Scope: TransactionScope>(
     scope: &mut Scope,
     projection: &LeaseProjection,
@@ -195,7 +115,6 @@ where
         change: &fleet_sync_lease::LeaseChange,
     ) -> Result<(), fleet_sync_lease::LeaseError> {
         use crate::machine_notice_contract::MachineNoticeAppend;
-        use durable_steps::JournalScope;
         let applied = async {
             let now = change.after.changed_at;
             let clock = chrono::DateTime::from_timestamp_millis(now.unix_millis())

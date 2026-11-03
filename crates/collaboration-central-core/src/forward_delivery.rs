@@ -1,6 +1,6 @@
 //! Delivery accepts verified object callers; opaque replies travel only after commit.
 use crate::{
-    CallerKind, DeliveryKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, DeliveryKind, ObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     forward_calls::{
         AnswerForward, DeliverForward, ForwardAnswerRequest, ForwardDeliveryRequest,
@@ -63,7 +63,7 @@ where
         let store = CoreSessionStore::new(host.clone(), shared_host.clone(), replies.clone());
         match invocation.kind.as_str() {
             DeliverForward::KIND => {
-                let target: DeliverForward =
+                let _target: DeliverForward =
                     serde_json::from_value(invocation.target).map_err(encode_refusal)?;
                 let request: ForwardDeliveryRequest =
                     serde_json::from_value(invocation.request).map_err(encode_refusal)?;
@@ -158,7 +158,7 @@ where
                 serde_json::to_vec(&result).map_err(|_| CallFailure::AnswerLost)
             }
             AnswerForward::KIND => {
-                let target: AnswerForward =
+                let _target: AnswerForward =
                     serde_json::from_value(invocation.target).map_err(encode_refusal)?;
                 let request: ForwardAnswerRequest =
                     serde_json::from_value(invocation.request).map_err(encode_refusal)?;

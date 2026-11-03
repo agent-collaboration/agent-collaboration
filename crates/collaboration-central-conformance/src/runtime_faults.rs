@@ -344,7 +344,11 @@ impl RuntimeFaults {
             RuntimeControl::SmallMailboxCapacity => self.state()?.small_mailbox_capacity = true,
             RuntimeControl::SetTime { now } => self.state()?.clock = Some(now),
             RuntimeControl::CopyFull { after_writes } => {
-                self.state()?.storage = StorageFaultObservation::Armed { after_writes };
+                let mut state = self.state()?;
+                if matches!(state.storage, StorageFaultObservation::Unavailable) {
+                    return Err(RuntimeControlFailure::AlreadyArmed);
+                }
+                state.storage = StorageFaultObservation::Armed { after_writes };
             }
             RuntimeControl::DropNextAnswer { frame } => {
                 let mut state = self.state()?;

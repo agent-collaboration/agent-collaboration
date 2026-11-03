@@ -2,7 +2,7 @@
 use super::{CoreHost, DatabaseId, IdSource, PlatformIo};
 use crate::FleetKind;
 use crate::{
-    CallerContext, CopyKind, EdgeKind, ObjectHost, ObjectRuntime, OwnerIdentity, RegistryKind,
+    CallerContext, EdgeKind, ObjectHost, ObjectRuntime, OwnerIdentity,
     copy_write_calls::{AdminCopySeedRequest, CopyAdminSeed},
     object_runtime::ObjectWork,
 };
@@ -181,10 +181,10 @@ pub(super) async fn fixture_seed<Io: PlatformIo>(
     request: AdminCopySeedRequest,
 ) -> Result<ReplicationAnswer, StoreError> {
     let caller = CallerContext::<EdgeKind>::for_owner(owner.clone());
-    let call = crate::object_call_envelope::encode_shared_call::<EdgeKind, CopyKind, _>(
+    let call = crate::object_call_envelope::encode_shared_call::<EdgeKind, FleetKind, _>(
         &caller,
-        target.database,
-        CopyAdminSeed {
+        (),
+        crate::copy_write_calls::FleetProjectSeed {
             copy: target.copy,
             database: target.database,
         },

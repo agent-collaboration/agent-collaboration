@@ -4,8 +4,8 @@ use crate::FleetKind;
 use super::{
     AtomicStore, BoxFuture, ColumnIndex, Database, Decode, Deserialize, Encode, EnrollmentState,
     Infallible, IntoArguments, ObjectHost, ObjectRuntime, ObjectWork, PeerId, PlatformIo,
-    RegistryKind, Serialize, ServiceId, StepCallback, StepDriver, StepResult, StoreError,
-    StoredMachine, TransactionScope, Type, corrupt, queries,
+    Serialize, ServiceId, StepCallback, StepDriver, StepResult, StoreError, StoredMachine,
+    TransactionScope, Type, corrupt, queries,
 };
 use crate::{
     AccessCaller, CallerKind, CentralApplication, CentralPlatform, ObjectAddress,

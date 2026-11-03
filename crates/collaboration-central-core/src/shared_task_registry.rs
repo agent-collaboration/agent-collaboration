@@ -67,15 +67,3 @@ where
     engine.register(SettleReservationTask::<Store>::new())?;
     Ok(engine)
 }
-
-/// Fleet registers one central notice workflow; inbound mutations only admit it.
-pub(crate) fn fleet_engine<Store: AtomicStore, Io: PlatformIo>(
-    store: Arc<Store>,
-    host: Arc<CoreHost<Io>>,
-) -> Result<Engine<Store, CoreHost<Io>>, StoreError> {
-    let mut engine = Engine::new(store, host);
-    engine.register(crate::machine_notice_outbox::FleetNoticeTask::<Store>(
-        std::marker::PhantomData,
-    ))?;
-    Ok(engine)
-}

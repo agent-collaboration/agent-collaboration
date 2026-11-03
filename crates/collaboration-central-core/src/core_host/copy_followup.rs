@@ -1,9 +1,9 @@
 //! The copy's journal invokes the board follow-up after its publication commits.
 use super::{
-    CallFailure, CallId, CallerContext, CopyKind, CoreHost, DatabaseId, FleetKind, PlatformIo,
-    ReceiverId, SharedTaskCaller, decode, encode_refusal, encode_shared_call, no_route,
+    CallFailure, CallId, CallerContext, CoreHost, DatabaseId, PlatformIo, ReceiverId,
+    SharedTaskCaller, decode, encode_refusal, no_route,
 };
-use crate::{CopyDirectorySummary, copy_directory_summary::DirectorySummaryUpdate};
+use crate::CopyDirectorySummary;
 use fleet_sync_receiver::{
     FollowUpAnswer, FollowUpCall, FollowUpDone, FollowUpFailure, FollowUpHandler,
 };
@@ -66,14 +66,9 @@ impl<Io: PlatformIo> FollowUpHandler for CoreHost<Io> {
         if item.database != *database {
             return Err(FollowUpFailure::Retry);
         }
-        let call = encode_shared_call::<CopyKind, FleetKind, DirectorySummaryUpdate>(
-            caller,
-            (),
-            DirectorySummaryUpdate,
-            item.clone(),
-            identity,
-        )
-        .map_err(|_| FollowUpFailure::Retry)?;
+        let call =
+            crate::object_call_envelope::encode_summary_delivery(caller, item.clone(), identity)
+                .map_err(|_| FollowUpFailure::Retry)?;
         let response = self
             .io
             .object_call(call.destination, call.bytes)

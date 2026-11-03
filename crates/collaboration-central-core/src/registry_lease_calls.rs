@@ -2,7 +2,7 @@
 use crate::FleetKind;
 
 use crate::{
-    CallerKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
+    CallerKind, ObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork,
@@ -14,10 +14,10 @@ use durable_steps::{
     AtomicStore, BoxFuture, CallFailure, NotSentReason, OperationState, StoreError,
     storage::TransactionScope,
 };
-use fleet_sync_lease::{DatabaseLifecycle, LeasePolicy, RegistrationTask, lifecycle_request_key};
+use fleet_sync_lease::{DatabaseLifecycle, lifecycle_request_key};
 use fleet_sync_protocol::{
     ActorRef, DatabaseId, HolderChangeAnswer, HolderChangeRefusal, HolderChangeRequest,
-    LeaseAnswer, LeaseRequest, RegistrationAnswer, RegistrationRefusal, RenewRequest, TransferId,
+    LeaseAnswer, LeaseRequest, RegistrationAnswer, RegistrationRefusal, TransferId,
 };
 use fleet_sync_session::SessionKey;
 use message_board::ServiceId;

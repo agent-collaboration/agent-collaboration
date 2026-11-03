@@ -1,7 +1,7 @@
 //! Sender query, retirement and settlement use the authenticated Registry mapping.
 use crate::FleetKind;
 use crate::{
-    CallerKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
+    CallerKind, ObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     mailbox_requests::{MailboxRelayRequest, MailboxRequest},
     object_call_envelope::{ObjectCallEnvelope, encode_refusal},

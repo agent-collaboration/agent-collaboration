@@ -4,7 +4,7 @@ use crate::FleetKind;
 use crate::machine_enrollment_record::{EnrollmentState, StoredMachine, corrupt, valid_hash};
 use crate::{
     AccessClientId, AdmissionOrigin, ObjectHost, ObjectRuntime, OwnerIdentity, PlatformIo,
-    RegistryKind, generated_enrollment as queries,
+    generated_enrollment as queries,
     object_runtime::ObjectWork,
     step_driver::{StepCallback, StepDriver, StepResult},
 };
@@ -290,7 +290,7 @@ where
             let peer = request.peer;
             if let Some(machine) = previous {
                 if machine.state == EnrollmentState::Enrolled
-                    && enrollment_matches(&machine, &request)
+                    && enrollment_matches(machine, &request)
                 {
                     return Ok((
                         EnrollmentAdmission::Answered(EnrollmentDecision::MachineEnrolled {
@@ -311,7 +311,7 @@ where
                 .await?
                 {
                     return Ok((
-                        if enrollment_matches(&machine, &request) {
+                        if enrollment_matches(machine, &request) {
                             EnrollmentAdmission::Readmitting {
                                 operation: machine
                                     .last_enrollment_operation

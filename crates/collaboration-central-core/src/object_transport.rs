@@ -4,7 +4,7 @@ use crate::FleetKind;
 use crate::object_call_envelope::{ObjectCallEnvelope, encode_envelope, encode_refusal};
 use crate::{
     CallerContext, CallerKind, Dispatch, MayCall, ObjectAddress, ObjectHost, ObjectKind,
-    ObjectRuntime, PlatformIo, RegistryCall, RegistryKind, RegistryResult, WireCall, WireKind,
+    ObjectRuntime, PlatformIo, RegistryCall, RegistryResult, WireCall, WireKind,
     caller_context::CallAuthority,
 };
 use durable_steps::{
@@ -72,7 +72,11 @@ impl ObjectCallEnvelope {
         let call: Self = serde_json::from_slice(bytes).map_err(|_| refused())?;
         if call.destination != destination
             || call.destination_face != face
-            || !call.source_face.may_call(face)
+            || !(call.source_face.may_call(face)
+                || (call.source_face == CallerKind::Copy
+                    && face == CallerKind::Fleet
+                    && call.kind == crate::copy_directory_summary::DirectorySummaryUpdate::KIND
+                    && matches!(call.authority, CallAuthority::Object)))
             || !source_matches(&call)
         {
             return Err(refused());
@@ -82,7 +86,11 @@ impl ObjectCallEnvelope {
 }
 fn source_matches(call: &ObjectCallEnvelope) -> bool {
     match &call.authority {
-        CallAuthority::Owner(_) | CallAuthority::AccessMachine(_) => {
+        CallAuthority::Owner(_) => {
+            call.source == ObjectAddress::Fleet
+                && matches!(call.source_face, CallerKind::Edge | CallerKind::Fleet)
+        }
+        CallAuthority::AccessMachine(_) => {
             call.source_face == CallerKind::Edge && call.source == ObjectAddress::Fleet
         }
         CallAuthority::Object => matches!(

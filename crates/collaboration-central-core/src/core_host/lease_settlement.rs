@@ -65,9 +65,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
             | LeaseProjectionResult::Older { .. } => {
                 serde_json::to_value(SettlementRecorded).map_err(|_| CallFailure::AnswerLost)
             }
-            LeaseProjectionResult::Fenced { .. } | LeaseProjectionResult::Conflict { .. } => {
-                Err(CallFailure::AnswerLost)
-            }
+            LeaseProjectionResult::Conflict { .. } => Err(CallFailure::AnswerLost),
         }
     }
     pub(crate) async fn retirement_directory_acknowledged(

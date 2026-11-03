@@ -3,7 +3,7 @@ use crate::FleetKind;
 
 use crate::{
     AccessCaller, CallerKind, CentralApplication, CentralPlatform, ObjectAddress, ObjectHost,
-    ObjectRuntime, PlatformIo, RegistryKind,
+    ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     conformance_copy_wait::{ControlCopyWait, CopyWaitInput, CopyWaitTarget},
     conformance_holder::{ProbeAnswer, invoke_probe, probe_response},

@@ -14,11 +14,6 @@ pub(crate) struct LeaseProjectionVersion {
     incarnation: RegistryIncarnation,
     change: NonZeroU64,
 }
-impl LeaseProjectionVersion {
-    pub(crate) fn incarnation(&self) -> RegistryIncarnation {
-        self.incarnation
-    }
-}
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", try_from = "LeaseProjectionFields")]
@@ -78,9 +73,6 @@ impl LeaseProjection {
     }
     pub(crate) fn database(&self) -> DatabaseId {
         self.snapshot.database
-    }
-    pub(crate) fn incarnation(&self) -> RegistryIncarnation {
-        self.incarnation
     }
     pub(crate) fn version(&self) -> LeaseProjectionVersion {
         LeaseProjectionVersion {
@@ -195,6 +187,5 @@ pub(crate) enum LeaseProjectionResult {
     Applied,
     Duplicate,
     Older { stored: LeaseProjectionVersion },
-    Fenced { fence: RegistryIncarnation },
     Conflict { stored: LeaseProjectionVersion },
 }

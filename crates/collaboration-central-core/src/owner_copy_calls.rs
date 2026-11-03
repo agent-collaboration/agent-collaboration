@@ -48,7 +48,7 @@ where
         })
     }
     fn decode_owner_operation(&self, call: ObjectCallEnvelope) -> Result<CopyOpsCall, CallFailure> {
-        if call.source_face != CallerKind::Edge
+        if call.source_face != CallerKind::Fleet
             || !matches!(call.authority, CallAuthority::Owner(_))
         {
             return Err(CallFailure::AnswerLost);
@@ -96,7 +96,7 @@ where
         &self,
         call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
-        if call.source_face != CallerKind::Edge
+        if call.source_face != CallerKind::Fleet
             || !matches!(call.authority, CallAuthority::Owner(_))
         {
             return Err(CallFailure::AnswerLost);

@@ -3,7 +3,7 @@ use super::imported_unheld_fixture::{fixture_fleet, fixture_seed};
 use super::{IdSource, PlatformIo};
 use crate::FleetKind;
 use crate::{
-    ConformanceBoardState, ObjectHost, ObjectRuntime, OwnerIdentity, RegistryKind,
+    ConformanceBoardState, ObjectHost, ObjectRuntime, OwnerIdentity,
     copy_write_calls::{AdminCopySeedRequest, CopyAdminSeed},
     object_runtime::ObjectWork,
 };

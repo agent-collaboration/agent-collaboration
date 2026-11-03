@@ -66,3 +66,15 @@ impl CallTarget for CopyOperations {
 }
 
 pub(crate) use collaboration_central_admin_protocol::{CopyDirectoryPage, CopyMigrationResult};
+
+/// Owner project operations enter Fleet before crossing the project boundary.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct FleetProjectOperations {
+    pub database: DatabaseId,
+}
+impl CallTarget for FleetProjectOperations {
+    const KIND: &'static str = "central.fleet-project-operations";
+    type Request = CopyOpsCall;
+    type Answer = CopyOpsAnswer;
+}

@@ -1,7 +1,7 @@
 //! The library commits retirement; existing alarm publication owns Directory.
 use crate::FleetKind;
 use crate::{
-    ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
+    ObjectHost, ObjectRuntime, PlatformIo,
     object_runtime::ObjectWork,
     owner_registry_calls::{
         OwnerBlockedSubject, OwnerRetirement, OwnerRetirementAnswer, OwnerRetirementPhase,
@@ -13,7 +13,7 @@ use durable_steps::{
     StoreError,
     storage::{JournalStorage, StepState, TransactionScope},
 };
-use fleet_sync_lease::{DatabaseLifecycle, RetirementTask};
+use fleet_sync_lease::DatabaseLifecycle;
 use fleet_sync_protocol::{
     CopyUnavailableReason, DatabaseId, Retirement, RetirementAnswer, SyncTime, TransferId,
 };

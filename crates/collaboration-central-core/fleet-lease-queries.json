@@ -6,49 +6,6 @@
   "metadata": "fleet-lease-query-metadata.json",
   "queries": [
     {
-      "name": "read_lease_incarnation",
-      "sql": "sql/fleet/read_lease_incarnation.sql",
-      "row": "StoredLeaseIncarnation",
-      "result": "optional",
-      "parameters": []
-    },
-    {
-      "name": "insert_lease_incarnation",
-      "sql": "sql/fleet/insert_lease_incarnation.sql",
-      "row": null,
-      "result": "execute",
-      "parameters": [
-        {
-          "name": "fence_id",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "incarnation",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "store_lease_incarnation",
-      "sql": "sql/fleet/store_lease_incarnation.sql",
-      "row": null,
-      "result": "execute",
-      "parameters": [
-        {
-          "name": "incarnation",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "fence_id",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
       "name": "read_directory_lease",
       "sql": "sql/fleet/read_directory_lease.sql",
       "row": "StoredDirectoryLease",

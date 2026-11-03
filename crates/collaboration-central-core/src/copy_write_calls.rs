@@ -189,7 +189,7 @@ where
         call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if !matches!(call.authority, CallAuthority::Owner(_))
-            || call.source_face != CallerKind::Edge
+            || call.source_face != CallerKind::Fleet
         {
             return Err(refused());
         }
@@ -453,4 +453,16 @@ fn refused() -> CallFailure {
     CallFailure::NotSent {
         reason: durable_steps::NotSentReason::Unreachable { last_seen: None },
     }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct FleetProjectSeed {
+    pub copy: ReceiverId,
+    pub database: DatabaseId,
+}
+impl CallTarget for FleetProjectSeed {
+    const KIND: &'static str = "central.fleet-project-seed";
+    type Request = AdminCopySeedRequest;
+    type Answer = ReplicationAnswer;
 }

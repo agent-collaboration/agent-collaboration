@@ -59,10 +59,7 @@ where
         {
             return Err(refused());
         }
-        let CallAuthority::Machine {
-            installation: installation,
-        } = call.authority
-        else {
+        let CallAuthority::Machine { installation } = call.authority else {
             return Err(refused());
         };
         let _: FleetRead = serde_json::from_value(call.target).map_err(|_| refused())?;

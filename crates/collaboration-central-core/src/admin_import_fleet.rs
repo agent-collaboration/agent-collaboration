@@ -45,12 +45,7 @@ where
         let command: AdminImportCommand =
             serde_json::from_value(call.request).map_err(|_| refused())?;
         let allowed = match &command {
-            AdminImportCommand::Published { .. } => {
-                call.source_face == CallerKind::Copy
-                    && matches!(call.authority, CallAuthority::Object)
-                    && matches!(&call.source, ObjectAddress::Copy(project)
-                        if *project == command.database())
-            }
+            AdminImportCommand::Published { .. } => false,
             _ => {
                 call.source_face == CallerKind::Edge
                     && call.source == ObjectAddress::Fleet
