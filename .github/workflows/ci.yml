@@ -516,7 +516,7 @@ jobs:
         working-directory: release-source
         run: |
           set -euo pipefail
-          cargo test --locked --release -p acp-client-runtime --test provider_transport_idle \
+          cargo test --locked --release -p acp-client-runtime --test integration \
             --no-run --message-format=json --timings > "$RUNNER_TEMP/transport-build.jsonl"
           cargo build --locked --release -p collaboration-protocol --example export_protocol_types --timings
       - name: Build release binaries
