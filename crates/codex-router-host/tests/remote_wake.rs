@@ -276,7 +276,7 @@ async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestR
         assert!(matches!(source_client.send_wakeup(in_transit).await,Err(collaboration_client::WakeClientError::Rejected(error)) if matches!(error.reason,WakeFailureReason::DeadlineExpired)));
         let service:message_board::ServiceId=String::from(offline_target.endpoint.service_id.clone()).try_into()?;
         let mailbox=board_central_test_support::ObjectAddress::Mailbox(service.clone());
-        let connection=board_central_test_support::ObjectAddress::Connection(service);
+        let connection=board_central_test_support::ObjectAddress::Fleet;
         central.runtime_control(mailbox.clone(),board_central_test_support::RuntimeControl::DropNextObjectReply{destination:connection}).await?;
         let item=collaboration_protocol::MailItemId::generate();
         let queued=collaboration_client::MessageSendRequest {
