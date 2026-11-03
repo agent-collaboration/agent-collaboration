@@ -1,7 +1,8 @@
 //! Local control attribution, SDK custody and every attempt commit together.
 use super::{
     AtomicStore, Clock, DeliveryItemRef, Inbox, ItemId, LocalMailTask, MailDeliveryRuntime,
-    MailHost, ReportMailTask, RouterDeliveryTypes, StoreError, SyncTime, TursoScope,
+    MailHost, RemoveMailRecord, ReportMailTask, RouterDeliveryTypes, StoreError, SyncTime,
+    TursoScope,
 };
 use collaboration_mail_protocol::{CancelCause, MailItemId};
 use durable_steps::JournalScope;
@@ -77,7 +78,7 @@ impl MailDeliveryRuntime {
                     }
                     let admitted =
                         Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
-                            .enqueue_local_cancel(
+                            .enqueue_local_cancel_and_admit::<RemoveMailRecord, _>(
                                 cancel,
                                 &*consumer,
                                 SyncTime::from_unix_millis(now.timestamp_millis()),

@@ -18,11 +18,11 @@ use durable_steps::{
 };
 use fleet_sync_delivery::{
     DeliverCall, DeliverLocally, DeliveryConsumer, DeliveryError, DeliveryLimits, GateDecision,
-    Inbox, LocalDelivery, LocalDeliveryConfig, ReceiveItems, ReportOutcome, SubmitItem,
+    Inbox, LocalDelivery, LocalDeliveryConfig, ReportOutcome, SubmitItem,
     minimum_settlement_allowance,
 };
 use fleet_sync_protocol::{
-    DeliveryHeader, DeliveryItem, DeliveryItemRef, DeliveryStream, ItemId, PeerId, RecipientOutcome,
+    DeliveryHeader, DeliveryItem, DeliveryItemRef, ItemId, PeerId, RecipientOutcome,
 };
 use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost, TokioRunner};
 use interaction_storage::{
@@ -48,13 +48,13 @@ mod local_project_admission;
 mod poll_handover;
 mod project_admission;
 mod project_cancellation;
+mod pushed_mail;
 pub(crate) use project_cancellation::other_canonical_cancel;
 mod remote_admission;
 mod remote_wakes;
 pub(crate) use remote_wakes::LocalWakeOwner;
 mod remote_calls;
 mod remote_status;
-mod terminal_retirement;
 pub(crate) use installation_directory::InstallationPeerResolutionError;
 pub use local_cancellation::LocalCancelReference;
 
@@ -64,7 +64,6 @@ type MailDatabase = <TursoScope<'static, MailHost> as TransactionScope>::Databas
 type LocalMailTask = DeliverLocally<MailStore, MailDatabase, RouterDeliveryTypes, MailConsumer>;
 type RemoveMailRecord = fleet_sync_delivery::RemoveDeliveryRecord<MailStore, MailDatabase>;
 type SubmitMailTask = SubmitItem<MailStore, MailDatabase, RouterDeliveryTypes, MailConsumer>;
-type ReceiveMailTask = ReceiveItems<MailStore, MailDatabase, RouterDeliveryTypes, MailConsumer>;
 type ReportMailTask = ReportOutcome<MailStore, MailDatabase, RouterDeliveryTypes>;
 
 #[derive(Clone)]
@@ -227,9 +226,7 @@ impl MailDeliveryRuntime {
         if let Some(session) = &session {
             let remote = session.task_config(config)?;
             engine.register(SubmitMailTask::new(limits, consumer.clone(), host.clone()))?;
-            engine.register(ReceiveMailTask::new(remote, consumer.clone()))?;
             engine.register(ReportMailTask::new(remote, host.clone()))?;
-            engine.register(terminal_retirement::RetireTerminalMail { limits })?;
         }
         Ok(Self {
             project_replication,
@@ -248,43 +245,6 @@ impl MailDeliveryRuntime {
             service,
             clock,
             session,
-        })
-    }
-
-    /// Admission commits before the session may acknowledge its hint.
-    pub async fn prompt_receive(&self, stream: DeliveryStream) -> Result<(), StoreError> {
-        self.admit_receive_cycles(vec![stream]).await
-    }
-
-    pub async fn prompt_receive_all(&self) -> Result<(), StoreError> {
-        self.admit_receive_cycles(vec![DeliveryStream::Controls, DeliveryStream::Items])
-            .await
-    }
-
-    async fn admit_receive_cycles(&self, streams: Vec<DeliveryStream>) -> Result<(), StoreError> {
-        let session = self
-            .session
-            .as_ref()
-            .ok_or_else(|| StoreError::backend("remote mail session is not attached"))?;
-        if !*session.welcomed.borrow() {
-            return Err(StoreError::backend("remote mail session is not welcomed"));
-        }
-        let config = self.config;
-        self.store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    for stream in streams {
-                        Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
-                            .begin_receive_and_admit::<ReceiveMailTask>(stream)
-                            .await
-                            .map_err(fleet_sync_delivery::delivery_rollback)?;
-                    }
-                    Ok(())
-                })
-            })
-            .await?;
-        self.host.wake_at(self.host.now()).await.map_err(|_| {
-            StoreError::backend("mail receive admission committed but the runner wake failed")
         })
     }
 

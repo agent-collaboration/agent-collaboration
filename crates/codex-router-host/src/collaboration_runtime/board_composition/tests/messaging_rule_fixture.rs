@@ -42,6 +42,10 @@ impl RuleFixture {
         holder_notifications: bool,
         worker_start: MailWorkerStart,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let _ = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::WARN)
+            .with_test_writer()
+            .try_init();
         let holder = if holder_notifications {
             Box::pin(claim_fixture::ClaimFixture::start_with_notifications()).await?
         } else {
@@ -182,7 +186,7 @@ impl RuleFixture {
             })
             .ok_or("cause intent")?;
         read.finish().await?;
-        let item = ItemId::try_from("019f0000-0000-7000-8000-000000071081".to_owned())?;
+        let item = ItemId::new(durable_steps::Uuid::now_v7())?;
         self.holder
             .admission
             .claim_intent(

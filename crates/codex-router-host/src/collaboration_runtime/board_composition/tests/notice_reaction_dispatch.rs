@@ -1,17 +1,7 @@
-//! The movable reaction owner uses real SDK notices and actual mail transactions.
+//! One movable reaction owner serializes real SDK notice catch-up while requests continue.
 use super::super::super::{finish_reaction, notice_dispatch::NoticeReactionQueue};
 use super::*;
-use durable_steps::{AtomicStore, CallFailure};
 use fleet_sync_protocol::{OperationAnswer, OperationRequest};
-use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost};
-use runtime_primitives::SystemClock;
-
-struct NoTransactionEffects;
-impl CallRouter for NoTransactionEffects {
-    async fn dispatch(&self, _: CallEnvelope) -> Result<serde_json::Value, CallFailure> {
-        Err(CallFailure::AnswerLost)
-    }
-}
 
 fn event_owners(harness: &MailHarness) -> MachineSessionEventOwners {
     MachineSessionEventOwners {
@@ -48,7 +38,9 @@ async fn actual_notice(
     else {
         return Err("SDK did not yield the published notice".into());
     };
-    assert_eq!(actual, NoticePosition::new(position));
+    assert!(
+        matches!(&body, Notice::Consumer(notice) if notice.position == NoticePosition::new(position))
+    );
     Ok((actual, body))
 }
 
@@ -69,7 +61,7 @@ async fn completion(
     clippy::panic_in_result_fn,
     reason = "Contract asserts; setup may fail."
 )]
-async fn one_reaction_owner_defers_y_while_x_waits_on_the_actual_store_and_requests_continue()
+async fn one_reaction_owner_defers_y_while_x_waits_on_notice_catch_up_and_requests_continue()
 -> Result<(), TestError> {
     let (_directory, mut harness) = welcomed_manual().await?;
     let owners = event_owners(&harness);
@@ -77,33 +69,26 @@ async fn one_reaction_owner_defers_y_while_x_waits_on_the_actual_store_and_reque
         NoticeReactionQueue::new(MachineNoticeReactions::open(&harness.root).await?);
     let mut receipts = NoticeReceipts::default();
     let mut handlers = JoinSet::new();
-    let (entered, observed) = tokio::sync::oneshot::channel();
-    let (release, released) = tokio::sync::oneshot::channel();
-    let owner = harness.mail.owner.clone();
-    // Borrow the same physical owner's write lock. No alternate file or mocked
-    // successful reaction can stand in for the blocked durable admission.
-    let holding = tokio::spawn(async move {
-        let store = interaction_storage::InteractionAtomicStore::new(
-            owner,
-            Arc::new(TokioHost::new(Arc::new(NoTransactionEffects), SystemClock)),
-        );
-        store
-            .transaction(move |_| {
-                Box::pin(async move {
-                    entered
-                        .send(())
-                        .map_err(|_| durable_steps::StoreError::backend("store observer closed"))?;
-                    released.await.map_err(durable_steps::StoreError::backend)?;
-                    Ok(())
-                })
-            })
-            .await
-    });
-    tokio::time::timeout(BOUND, observed).await??;
-    let (first, first_body) = actual_notice(&mut harness, 1, DeliveryStream::Items).await?;
+    // Hold the real notice-read reply needed to fill the first notice's gap.
+    // The pump must keep serving independent requests while one reaction owns catch-up.
+    let (entered, release) = harness.transport.observer.hold_next_notice_read();
+    harness
+        .central
+        .script_notice_answers(vec![board_sync_protocol::NoticeRead::Page {
+            notices: vec![board_sync_protocol::PositionedBoardNotice {
+                position: NoticePosition::new(1),
+                kind: board_sync_protocol::BoardNotice::MailWaiting {
+                    stream: DeliveryStream::Items,
+                },
+            }],
+            as_of: chrono::Utc::now(),
+        }])
+        .await;
+    let (first, first_body) = actual_notice(&mut harness, 2, DeliveryStream::Items).await?;
     queue_notice(&mut reactions, &mut receipts, 1, first, first_body);
     reactions.dispatch_next(&mut handlers, &owners, &harness.requests);
-    let (later, later_body) = actual_notice(&mut harness, 2, DeliveryStream::Controls).await?;
+    tokio::time::timeout(BOUND, entered).await??;
+    let (later, later_body) = actual_notice(&mut harness, 3, DeliveryStream::Controls).await?;
     queue_notice(&mut reactions, &mut receipts, 1, later, later_body);
     reactions.dispatch_next(&mut handlers, &owners, &harness.requests);
     assert_eq!(
@@ -126,8 +111,9 @@ async fn one_reaction_owner_defers_y_while_x_waits_on_the_actual_store_and_reque
         answer,
         OperationAnswer::Consumer(board_sync_protocol::BoardConsumerAnswer::Read(_))
     ));
-    release.send(()).map_err(|_| "store hold ended early")?;
-    tokio::time::timeout(BOUND, holding).await???;
+    release
+        .send(())
+        .map_err(|_| "notice-read hold ended early")?;
     let first = completion(&mut handlers).await?;
     finish_reaction(
         first,
@@ -151,21 +137,15 @@ async fn one_reaction_owner_defers_y_while_x_waits_on_the_actual_store_and_reque
     )
     .await?;
     assert_eq!(harness.ack().await?, NoticePosition::new(2));
-    let state = harness
-        .mail
-        .state()
-        .await?
-        .ok_or("actual receive obligations missing")?;
-    assert_eq!(state["items"]["active"]["cycle"], 1);
-    assert_eq!(state["controls"]["active"]["cycle"], 1);
+    assert!(harness.mail.state().await?.is_none());
     assert_eq!(
         board_fleet_sync::MachineNoticeProgressStore::open(&harness.root)
             .await?
             .load()
             .await?,
-        NoticePosition::new(2)
+        NoticePosition::new(3)
     );
-    println!("NOTICE_DISPATCH_CASE one_owner_x_then_y_real_store_hold_requests_continue");
+    println!("NOTICE_DISPATCH_CASE one_owner_x_then_y_real_catch_up_hold_requests_continue");
     drop(owners);
     drop(reactions);
     harness.close().await
@@ -189,11 +169,8 @@ async fn stale_generation_completion_returns_the_owner_without_acknowledging_new
     queue_notice(&mut reactions, &mut receipts, 1, position, body);
     reactions.dispatch_next(&mut handlers, &owners, &harness.requests);
     let completed = completion(&mut handlers).await?;
-    let state = harness
-        .mail
-        .state()
-        .await?
-        .ok_or("actual receive admission missing")?;
+    let state = harness.mail.state().await?;
+    assert!(state.is_none());
     // Model the exact completion boundary after connection generation changes:
     // the new generation has received this coordinate, but has not handled it.
     receipts = NoticeReceipts::default();
@@ -227,8 +204,8 @@ async fn stale_generation_completion_returns_the_owner_without_acknowledging_new
     assert_eq!(harness.ack().await?, position);
     assert_eq!(
         harness.mail.state().await?,
-        Some(state),
-        "replayed inner notice repeated durable admission"
+        state,
+        "replayed legacy notice admitted obsolete Fetch work"
     );
     println!(
         "NOTICE_DISPATCH_CASE stale_completion_restores_owner_without_ack_new_generation_replay_idempotent"

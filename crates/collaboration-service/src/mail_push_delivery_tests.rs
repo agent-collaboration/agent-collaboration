@@ -69,6 +69,8 @@ async fn poll_has_no_push_or_native_call_at_the_delivery_entry() {
 }
 use native::*;
 
+#[path = "mail_delivery_runtime_retention_test.rs"]
+mod custody_retention;
 #[path = "mail_push_direct_delivery_tests.rs"]
 mod direct;
 #[path = "local_mail_runtime_tests.rs"]

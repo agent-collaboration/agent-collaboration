@@ -149,11 +149,8 @@ async fn recover_owners(
     projects: &Arc<ProjectWriters>,
     admission: &Weak<ProjectAdmission>,
     fleet: &Weak<FleetClient>,
-    mail: &Weak<MailDeliveryRuntime>,
+    _mail: &Weak<MailDeliveryRuntime>,
 ) -> io::Result<()> {
-    if let Some(mail) = mail.upgrade() {
-        mail.prompt_receive_all().await.map_err(io::Error::other)?;
-    }
     projects.prompt_all_renewals().await?;
     super::archive_observation::synchronize_and_observe(projects, admission, fleet).await
 }
@@ -165,7 +162,7 @@ async fn reconcile_notice(
     projects: &Arc<ProjectWriters>,
     admission: &Weak<ProjectAdmission>,
     fleet: &Weak<FleetClient>,
-    mail: &Weak<MailDeliveryRuntime>,
+    _mail: &Weak<MailDeliveryRuntime>,
 ) -> io::Result<()> {
     match notice {
         BoardNotice::LeaseGranted { project, epoch } => {
@@ -177,12 +174,8 @@ async fn reconcile_notice(
         BoardNotice::FleetFeedAdvanced { .. } | BoardNotice::BoardArchiving { .. } => {
             super::archive_observation::synchronize_and_observe(projects, admission, fleet).await
         }
-        BoardNotice::MailWaiting { stream } => {
-            let mail = mail
-                .upgrade()
-                .ok_or_else(|| invalid_notice("mail runtime has closed"))?;
-            mail.prompt_receive(*stream).await.map_err(io::Error::other)
-        }
+        // Mail custody arrives only through the correlated Fleet Push request.
+        BoardNotice::MailWaiting { .. } => Ok(()),
     }
 }
 

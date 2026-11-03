@@ -51,6 +51,10 @@ impl NoticeTransport {
 
 #[derive(Clone, Debug)]
 pub(super) enum WireEvent {
+    Pushed {
+        frame: fleet_sync_protocol::FrameId,
+        result: fleet_sync_protocol::PushResult<collaboration_mail_protocol::CarrierAcceptance>,
+    },
     Renewal(fleet_sync_protocol::Epoch),
     Notice(u64),
     MailSubmit(fleet_sync_protocol::ItemId),
@@ -99,6 +103,7 @@ pub(super) enum WireEvent {
     },
 }
 pub(super) struct WireObserver {
+    push_receipt_path: std::sync::Mutex<Option<std::path::PathBuf>>,
     events: std::sync::Mutex<Vec<WireEvent>>,
     changed: watch::Sender<()>,
     next_hold: std::sync::Mutex<Option<FetchReplyPlan>>,
@@ -107,6 +112,7 @@ pub(super) struct WireObserver {
 impl Default for WireObserver {
     fn default() -> Self {
         Self {
+            push_receipt_path: Default::default(),
             events: Default::default(),
             changed: watch::channel(()).0,
             next_hold: Default::default(),
@@ -115,6 +121,9 @@ impl Default for WireObserver {
     }
 }
 impl WireObserver {
+    pub fn record_push_receipts_to(&self, path: std::path::PathBuf) {
+        *self.push_receipt_path.lock().unwrap() = Some(path);
+    }
     pub fn lose_next_status_ack(&self) {
         assert!(!self.lose_status_ack.swap(true, Ordering::SeqCst));
     }
@@ -147,6 +156,14 @@ impl WireObserver {
         tokio::sync::oneshot::Sender<()>,
     ) {
         self.hold_reply(ReplyKind::Receive(stream))
+    }
+    pub fn hold_next_notice_read(
+        &self,
+    ) -> (
+        tokio::sync::oneshot::Receiver<()>,
+        tokio::sync::oneshot::Sender<()>,
+    ) {
+        self.hold_reply(ReplyKind::NoticeRead)
     }
     pub fn hold_next_status_fetch(
         &self,
@@ -200,6 +217,10 @@ impl WireObserver {
             return None;
         };
         let kind = match body {
+            OperationRequest::Consumer(board_sync_protocol::BoardConsumerRequest::Read {
+                scope: board_sync_protocol::BoardReadScope::Notices,
+                ..
+            }) => ReplyKind::NoticeRead,
             OperationRequest::Delivery(fleet_sync_protocol::DeliveryRequest::Fetch {
                 stream,
                 ..
@@ -312,6 +333,10 @@ impl WireObserver {
                 },
                 ClientFrame::Answer {
                     frame,
+                    body: ClientAnswer::Crate(ServerCallAnswer::Pushed(result)),
+                } => Some(WireEvent::Pushed { frame, result }),
+                ClientFrame::Answer {
+                    frame,
                     body: ClientAnswer::Crate(ServerCallAnswer::Published(result)),
                 } => Some(WireEvent::Published {
                     frame,
@@ -320,6 +345,12 @@ impl WireObserver {
                 _ => None,
             };
             if let Some(event) = event {
+                if matches!(event, WireEvent::Pushed { .. })
+                    && let Some(path) = self.push_receipt_path.lock().unwrap().as_ref()
+                {
+                    std::fs::write(path, b"pushed receipt observed")
+                        .expect("Push receipt observation");
+                }
                 self.record(event);
             }
         }
@@ -502,6 +533,7 @@ struct FetchReplyPlan {
 }
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum ReplyKind {
+    NoticeRead,
     Receive(DeliveryStream),
     Status,
     Renewal,

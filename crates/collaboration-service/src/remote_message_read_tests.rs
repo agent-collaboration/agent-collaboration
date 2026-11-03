@@ -152,13 +152,27 @@ async fn assert_history_admission_order(mixed: bool) {
     let runtime = Runtime::new().await;
     let (mail, app) = remote_application(&runtime).await;
     let sender = runtime.fixture.draft().target;
+    // Freeze valid-age UUIDv7 inputs at this fixture's injected clock. Their
+    // lexical order intentionally opposes the admission order below.
+    let millis = u128::try_from(
+        runtime
+            .fixture
+            .host
+            .clock
+            .load(std::sync::atomic::Ordering::SeqCst),
+    )
+    .unwrap();
+    let prefix = (millis << 80) | (0x7_u128 << 76) | (0x8_u128 << 60);
+    let smaller: collaboration_protocol::MailItemId = uuid::Uuid::from_u128(prefix | 0x10)
+        .to_string()
+        .try_into()
+        .unwrap();
+    let larger: collaboration_protocol::MailItemId = uuid::Uuid::from_u128(prefix | 0x20)
+        .to_string()
+        .try_into()
+        .unwrap();
     let mut newer = request(&runtime);
-    newer.item_id = Some(
-        "0192a1b2-c3d4-7000-8000-000000000010"
-            .to_owned()
-            .try_into()
-            .unwrap(),
-    );
+    newer.item_id = Some(smaller);
     newer.message = MessageContent::Agent {
         sender: sender.clone(),
         text: "newer admission with smaller supplied ID"
@@ -167,12 +181,7 @@ async fn assert_history_admission_order(mixed: bool) {
             .unwrap(),
     };
     let mut older = newer.clone();
-    older.item_id = Some(
-        "0192a1b2-c3d4-7000-8000-000000000020"
-            .to_owned()
-            .try_into()
-            .unwrap(),
-    );
+    older.item_id = Some(larger);
     let older_id = older.item_id.clone().unwrap();
     app.messages().message_send(older).await.unwrap();
     let admitted_at = runtime

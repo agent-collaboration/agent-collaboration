@@ -304,7 +304,7 @@ async fn a_relay_refused_proposed_child_keeps_its_epoch_but_waits_for_the_other_
 }
 
 #[tokio::test]
-async fn remote_retirement_preserves_an_earlier_control_and_retires_only_its_own_identities() {
+async fn project_frontier_release_preserves_canonical_controls_without_early_custody_retirement() {
     // Arrange public SDK custody, then physically reopen the native owner.
     let runtime = Runtime::new().await;
     let directory = tempfile::tempdir().unwrap();
@@ -412,13 +412,9 @@ async fn remote_retirement_preserves_an_earlier_control_and_retires_only_its_own
         "a non-terminal own control was retired: {pending_requests:?}"
     );
     assert!(own_done && original_done);
-    let mailbox = original.recipient().peer;
-    assert_eq!(
-        requests,
-        vec![
-            (mailbox, vec![canonical.item]),
-            (mailbox, vec![original_ref.item]),
-        ]
+    assert!(
+        requests.is_empty(),
+        "project cleanup sent an early custody Retire"
     );
     assert!(no_proposed_custody && no_proposed_epoch);
 }

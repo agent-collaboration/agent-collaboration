@@ -125,13 +125,7 @@ async fn welcome_catch_up_commits_pages_and_resumes_after_a_lost_status_ack()
         2,
         "the same pump must reconnect after the simulated transport loss"
     );
-    // The separate Welcome receive handlers also commit while status paging runs.
-    let state = harness
-        .mail
-        .state()
-        .await?
-        .ok_or("independent Welcome receives missing")?;
-    assert_eq!(state["items"]["active"]["cycle"], 1);
-    assert_eq!(state["controls"]["active"]["cycle"], 1);
+    // Status recovery must not create obsolete recipient receive work.
+    assert!(harness.mail.state().await?.is_none());
     harness.close().await
 }

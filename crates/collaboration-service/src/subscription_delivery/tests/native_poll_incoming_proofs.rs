@@ -88,7 +88,16 @@ async fn remote_incoming_poll_uses_its_frozen_policy_without_opening_the_senders
             .unwrap()
             .is_none()
     );
-    native.runtime().prompt_receive_all().await.unwrap();
+    assert!(matches!(
+        native
+            .runtime()
+            .accept_pushed_mail(
+                serde_json::from_value(serde_json::to_value(&transport.item).unwrap()).unwrap()
+            )
+            .await
+            .unwrap(),
+        fleet_sync_protocol::PushResult::Accepted { .. }
+    ));
     tokio::time::timeout(Duration::from_secs(6), async {
         while !transport
             .reports

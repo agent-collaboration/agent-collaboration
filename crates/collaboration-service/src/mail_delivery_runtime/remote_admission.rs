@@ -76,12 +76,6 @@ impl MailDeliveryRuntime {
         let limits = self.config.limits;
         let submitter = self.config.owner;
         let now = self.clock.now();
-        let retirement = fleet_sync_delivery::SubmitInput {
-            item: item.id(),
-            digest: item.digest().clone(),
-            relay,
-            mailbox: peer,
-        };
         let answer = self
             .store
             .transaction(move |scope| {
@@ -95,10 +89,6 @@ impl MailDeliveryRuntime {
                         )
                         .await
                         .map_err(delivery_rollback)?;
-                    super::terminal_retirement::admit_terminal_retirement(
-                        scope, &admission, retirement,
-                    )
-                    .await?;
                     match admission {
                         OutboxAdmission::Queued { .. } => {
                             interaction_storage::record_mail_read_context_in_scope(

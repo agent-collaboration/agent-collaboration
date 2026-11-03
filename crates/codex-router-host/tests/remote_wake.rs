@@ -68,6 +68,10 @@ fn request(creator: &SessionRef, recipient: &SessionRef) -> TestResult<WakeSendR
     reason = "Behavior assertions stay distinct from propagated fixture failures."
 )]
 async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestResult {
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::WARN)
+        .with_test_writer()
+        .try_init();
     let root = tempfile::Builder::new().prefix("rw-").tempdir_in("/tmp")?;
     let a = root.path().join("a");
     let b = root.path().join("b");

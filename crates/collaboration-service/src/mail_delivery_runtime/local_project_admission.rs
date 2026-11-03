@@ -1,10 +1,9 @@
 //! A frozen project notification enters local custody without consulting a relay.
 use super::{
     AtomicStore, DeliveryConsumer, DeliveryError, DeliveryItem, Inbox, LocalMailTask,
-    MailDeliveryRuntime, MailSender, OperationState, RecipientOutcome, RouterDeliveryTypes,
-    StoreError, SyncTime, WakeScheduler,
+    MailDeliveryRuntime, MailSender, OperationState, RecipientOutcome, RemoveMailRecord,
+    RouterDeliveryTypes, StoreError, SyncTime, WakeScheduler,
 };
-use durable_steps::JournalScope;
 use fleet_sync_delivery::{
     DeliveryTransactionFailure, LocalItemAdmission, classify_delivery_store_error,
     delivery_request_key, delivery_rollback,
@@ -116,21 +115,13 @@ impl MailDeliveryRuntime {
                         }
                     }
                     match Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
-                        .enqueue_local(item, &*consumer, now)
+                        .enqueue_local_and_admit::<LocalMailTask, RemoveMailRecord, _>(
+                            item, &*consumer, now,
+                        )
                         .await
                         .map_err(delivery_rollback)?
                     {
-                        LocalItemAdmission::Attempt(attempt) => {
-                            scope
-                                .admit::<LocalMailTask>(
-                                    &delivery_request_key(&(attempt.item, attempt.attempt))
-                                        .map_err(StoreError::backend)?,
-                                    &attempt,
-                                )
-                                .await
-                                .map_err(StoreError::backend)?;
-                            Ok(Some(attempt))
-                        }
+                        LocalItemAdmission::Attempt(attempt) => Ok(Some(attempt)),
                         LocalItemAdmission::Replayed if inserted_projection => {
                             // Replayed pending custody with no projection is corruption,
                             // not a new receive. Roll the tentative insertion back.

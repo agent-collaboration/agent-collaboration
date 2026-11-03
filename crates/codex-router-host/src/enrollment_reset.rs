@@ -144,7 +144,6 @@ async fn resume_with_barrier(
     }
     // Cancellation here leaves the committed stage for the next Host start.
     barrier.await?;
-    forget_project_authority(storage_directory).await?;
     persist_phase(journal_directory, &reset, ResetPhase::Completed).await
 }
 
@@ -177,65 +176,13 @@ async fn clear_router_state(directory: &Path) -> io::Result<()> {
     tokio::fs::File::open(directory).await?.sync_all().await
 }
 
-async fn forget_project_authority(directory: &Path) -> io::Result<()> {
-    let registry = collaboration_runtime::ProjectStoreRegistry::new(
-        directory,
-        None,
-        std::sync::Arc::new(runtime_primitives::SystemClock),
-    );
-    let projects = registry.project_ids().await.map_err(io::Error::other)?;
-    if !projects.is_empty() {
-        // The library owns these records. Keep the session detached until its
-        // validated forget_central_authority operation preserves each file.
-        return Err(io::Error::other(
-            "enrollment reset awaits writer authority reset support; central session remains detached",
-        ));
-    }
-    Ok(())
-}
-
 async fn reset_barrier() -> io::Result<()> {
     #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-    if let Some(path) = std::env::var_os("CODEX_ROUTER_DEBUG_ENROLLMENT_RESET_BARRIER_SOCKET") {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        validate_barrier_socket(Path::new(&path))?;
-        let mut barrier = tokio::net::UnixStream::connect(path).await?;
-        barrier.write_all(b"router-state-cleared\n").await?;
-        let mut release = [0];
-        tokio::time::timeout(
-            std::time::Duration::from_secs(30),
-            barrier.read_exact(&mut release),
-        )
-        .await
-        .map_err(io::Error::other)??;
-    }
-    Ok(())
-}
-
-#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-fn validate_barrier_socket(socket: &Path) -> io::Result<()> {
-    use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
-    if !socket.is_absolute() {
-        return Err(io::Error::other(
-            "debug enrollment reset barrier socket must be absolute",
-        ));
-    }
-    let parent = socket
-        .parent()
-        .ok_or_else(|| io::Error::other("debug barrier requires a dedicated directory"))?;
-    let directory = std::fs::symlink_metadata(parent)?;
-    let endpoint = std::fs::symlink_metadata(socket)?;
-    let owner = rustix::process::geteuid().as_raw();
-    if !directory.is_dir()
-        || directory.uid() != owner
-        || directory.permissions().mode() & 0o077 != 0
-        || !endpoint.file_type().is_socket()
-        || endpoint.uid() != owner
-    {
-        return Err(io::Error::other(
-            "debug enrollment reset barrier requires an owner-controlled socket in a private directory",
-        ));
-    }
+    crate::debug_runtime_barrier::wait_at_socket(
+        "CODEX_ROUTER_DEBUG_ENROLLMENT_RESET_BARRIER_SOCKET",
+        b"router-state-cleared\n",
+    )
+    .await?;
     Ok(())
 }
 

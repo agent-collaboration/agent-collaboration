@@ -12,7 +12,7 @@ use message_board_storage::MailHandoffItem;
     clippy::panic_in_result_fn,
     reason = "Contract asserts; setup may fail."
 )]
-async fn local_custody_waits_for_the_real_frontier_ack_and_host_prompt_before_retirement()
+async fn local_custody_is_retained_when_real_frontier_ack_releases_host_progress()
 -> Result<(), TestError> {
     // Arrange the actual default Host writer, receiver, mail owner and event loop.
     let directory = tempfile::tempdir()?;
@@ -188,10 +188,16 @@ async fn local_custody_waits_for_the_real_frontier_ack_and_host_prompt_before_re
     );
     retired??;
     assert_eq!(marks_after.settled_through, Some(head.get()));
-    assert!(outcome_after.is_none(), "retired local SDK custody remains");
+    assert!(
+        matches!(outcome_after, Some(RecipientOutcome::Prevented { .. })),
+        "frontier ACK erased retained local custody"
+    );
     assert_eq!(restored_marks, marks_after);
     assert_eq!(restored_progress, head);
-    assert!(restored_outcome.is_none());
+    assert!(matches!(
+        restored_outcome,
+        Some(RecipientOutcome::Prevented { .. })
+    ));
     assert_eq!(restored_show.record.push_id, shown.record.push_id);
     assert_eq!(
         restored_show.record.delivery_state,

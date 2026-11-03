@@ -305,6 +305,11 @@ fn work_view_schema_accepts_typed_writer_observations_and_refuses_removed_shapes
             CurrentWriter::Unknown {},
             serde_json::json!({"kind":"unknown"}),
         ),
+        (
+            CopySource::Writer {},
+            CurrentWriter::NotInCentral {},
+            serde_json::json!({"kind":"notInCentral"}),
+        ),
     ] {
         let view = WorkView {
             project: project.clone(),

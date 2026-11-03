@@ -1,4 +1,4 @@
-//! SIGKILL after the real frontier ACK and SDK deletion, before local progress commits.
+//! SIGKILL after the real frontier ACK, before local progress commits; custody remains.
 use super::*;
 use super::super::notification_owner::ProjectNotificationFixture;
 use crate::collaboration_runtime::board_composition::tests::notification_publisher::project_fixture::NotificationSeed;
@@ -25,9 +25,9 @@ struct RetirementCheckpoint {
     clippy::panic_in_result_fn,
     reason = "Contract asserts; setup may fail."
 )]
-async fn acknowledged_sdk_retirement_retries_absent_custody_after_sigkill_before_progress()
+async fn acknowledged_frontier_recovers_after_sigkill_without_early_custody_removal()
 -> Result<(), TestError> {
-    // Arrange: the child can report ready only after the real ACK and deletion.
+    // Arrange: the child can report ready only after the real ACK and terminal custody.
     let (directory, state) = kill_child(CrashKind::FrontierRetirement).await?;
     let checkpoint: RetirementCheckpoint =
         serde_json::from_slice(&std::fs::read(directory.path().join("retirement.json"))?)?;
@@ -71,8 +71,8 @@ async fn acknowledged_sdk_retirement_retries_absent_custody_after_sigkill_before
             .mail
             .local_outcome(state.peer, item)
             .await?
-            .is_none(),
-        "SDK deletion did not survive SIGKILL"
+            .is_some(),
+        "frontier acknowledgement erased retained custody"
     );
     let push = item.as_uuid().to_string().try_into()?;
     assert_eq!(
@@ -133,15 +133,15 @@ async fn acknowledged_sdk_retirement_retries_absent_custody_after_sigkill_before
     read.finish().await?;
     drop(store);
     reopened.close().await?;
-    // Assert after all real owners drain, including on a missing-Absent mutant.
+    // Assert after every real owner drains. The day60 test owns custody deletion.
     assert!(
         recovered.is_ok(),
-        "absent native custody stranded acknowledged retirement progress after SIGKILL"
+        "retained terminal custody stranded acknowledged frontier progress after SIGKILL"
     );
     recovered??;
     assert!(
-        final_outcome.is_none(),
-        "retirement replay recreated SDK custody"
+        final_outcome.is_some(),
+        "frontier replay erased retained custody"
     );
     assert_eq!(
         serde_json::to_value(final_show)?,
@@ -235,7 +235,7 @@ pub(super) async fn retirement_checkpoint_child(base: &Path) -> Result<(), TestE
                     .mail
                     .local_outcome(peer, item)
                     .await?
-                    .is_none()
+                    .is_some_and(|outcome| !matches!(outcome, RecipientOutcome::Held))
             {
                 return Ok::<_, TestError>(());
             }

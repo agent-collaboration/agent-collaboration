@@ -1,14 +1,13 @@
 //! Prepare application projections before local custody can record an outcome.
 use super::{
     AtomicStore, Clock, Inbox, LocalMailTask, MailDeliveryRuntime, MailHost, OperationState,
-    PushMessageSendResult, PushRecordDraft, RouterDeliveryTypes, StoreError, SyncTime, TursoScope,
-    outgoing_mail_message,
+    PushMessageSendResult, PushRecordDraft, RemoveMailRecord, RouterDeliveryTypes, StoreError,
+    SyncTime, TursoScope, outgoing_mail_message,
 };
 #[cfg(test)]
 use super::{CarrierAcceptance, DeliveryError, DeliveryItemRef, ItemId, RecipientOutcome};
 use crate::push_record_delivery::PushDeliveryFailure;
 use collaboration_protocol::{MailItemId, MessageSendResult};
-use durable_steps::JournalScope;
 use fleet_sync_delivery::{
     DeliveryAttempt, DeliveryTransactionFailure, LocalItemAdmission, classify_delivery_store_error,
     delivery_request_key, delivery_rollback,
@@ -31,24 +30,19 @@ impl MailDeliveryRuntime {
         &self,
         reference: DeliveryItemRef,
     ) -> Result<bool, StoreError> {
-        let config = self.config;
         self.store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    // The public API's Absent result establishes no custody row exists.
-                    // Refusals write nothing; an unexpected retirement rolls back so
-                    // this probe cannot erase the evidence of a bad admission.
-                    match Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
-                        .retire_local(&reference)
+                    let rows =
+                        fleet_sync_delivery::test_support::snapshot::<_, RouterDeliveryTypes>(
+                            scope,
+                        )
                         .await
-                        .map_err(StoreError::backend)?
-                    {
-                        fleet_sync_delivery::LocalRetirement::Absent => Ok(true),
-                        fleet_sync_delivery::LocalRetirement::Refused(_) => Ok(false),
-                        fleet_sync_delivery::LocalRetirement::Retired => Err(StoreError::backend(
-                            "absence probe found unexpected terminal custody",
-                        )),
-                    }
+                        .map_err(StoreError::backend)?;
+                    Ok(!rows.iter().any(|row| {
+                        row.category == "inbox"
+                            && row.identity == reference.item.as_uuid().to_string()
+                    }))
                 })
             })
             .await
@@ -157,7 +151,7 @@ impl MailDeliveryRuntime {
                     prepare_send_projections(scope, &item_id, draft, &target_identity, now).await?;
                     let admission =
                         Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
-                            .enqueue_local(
+                            .enqueue_local_and_admit::<LocalMailTask, RemoveMailRecord, _>(
                                 item,
                                 &*consumer,
                                 SyncTime::from_unix_millis(now.timestamp_millis()),
@@ -165,17 +159,7 @@ impl MailDeliveryRuntime {
                             .await
                             .map_err(delivery_rollback)?;
                     match admission {
-                        LocalItemAdmission::Attempt(input) => {
-                            scope
-                                .admit::<LocalMailTask>(
-                                    &delivery_request_key(&(input.item, input.attempt))
-                                        .map_err(StoreError::backend)?,
-                                    &input,
-                                )
-                                .await
-                                .map_err(StoreError::backend)?;
-                            Ok(LocalAdmission::Attempt(input))
-                        }
+                        LocalItemAdmission::Attempt(input) => Ok(LocalAdmission::Attempt(input)),
                         LocalItemAdmission::Replayed => Ok(LocalAdmission::Replayed(
                             read_local_answer(scope, &item_id).await?,
                         )),

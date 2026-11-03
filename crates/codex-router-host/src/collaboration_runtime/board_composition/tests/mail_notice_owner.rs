@@ -289,7 +289,7 @@ impl MailOwner {
                         _,
                         collaboration_contracts::RouterDeliveryTypes,
                     >::new(scope, limits)
-                    .enqueue_and_admit::<ArrangedSubmit>(
+                    .enqueue_and_admit::<ArrangedSubmit, fleet_sync_delivery::RemoveDeliveryRecord<ObserverStore, ObserverDatabase>>(
                         item,
                         relay,
                         submitter,

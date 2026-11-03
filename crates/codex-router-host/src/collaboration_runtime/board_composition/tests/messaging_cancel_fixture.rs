@@ -154,7 +154,7 @@ impl RuleFixture {
         through: FeedCursor,
     ) -> Result<DeliveryItem<BoardDeliveryTypes>, Box<dyn std::error::Error + Send + Sync>> {
         Ok(DeliveryItem::new(
-            ItemId::try_from("019f0000-0000-7000-8000-000000081081".to_owned())?,
+            ItemId::new(durable_steps::Uuid::now_v7())?,
             MailSender::Project {
                 project: self.project.clone(),
             },
@@ -222,7 +222,7 @@ impl RuleFixture {
     ) -> Result<DeliveryEnvelope<BoardDeliveryTypes>, Box<dyn std::error::Error + Send + Sync>>
     {
         let envelope = DeliveryEnvelope::Cancel(DeliveryCancel::new(
-            ItemId::try_from("019f0000-0000-7000-8000-000000081082".to_owned())?,
+            ItemId::new(durable_steps::Uuid::now_v7())?,
             seed.item.sender().clone(),
             seed.item.recipient().clone(),
             None,

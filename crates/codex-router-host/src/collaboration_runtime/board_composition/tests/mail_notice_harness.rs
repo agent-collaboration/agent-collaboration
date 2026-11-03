@@ -63,7 +63,7 @@ impl MailHarness {
     ) -> Result<Self, TestError> {
         Self::open_configured(base, None, false, true, peer, None).await
     }
-    async fn open_configured(
+    pub(super) async fn open_configured(
         base: &Path,
         directory: Option<tempfile::TempDir>,
         initial_notice: bool,
@@ -373,28 +373,6 @@ impl MailHarness {
             .await?
             .ok_or("resume missing")?
             .notice_cursor)
-    }
-    pub async fn wait_state(
-        &self,
-        ready: impl Fn(&serde_json::Value) -> bool,
-        failure: &'static str,
-    ) -> Result<serde_json::Value, TestError> {
-        let started = std::time::Instant::now();
-        tokio::time::timeout(BOUND, async {
-            loop {
-                if let Some(state) = self.mail.state().await?
-                    && ready(&state)
-                {
-                    return Ok(state);
-                }
-                if started.elapsed() >= BOUND {
-                    return Err(io::Error::other(failure).into());
-                }
-                tokio::task::yield_now().await;
-            }
-        })
-        .await
-        .map_err(|_| io::Error::other(failure))?
     }
     pub async fn wait_ack(&self, position: NoticePosition) -> Result<(), TestError> {
         tokio::time::timeout(BOUND, async {
