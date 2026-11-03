@@ -1,14 +1,11 @@
 use super::*;
-use collaboration_central_core::{
-    CopyDirectorySummary, CoreHost, ObjectAddress, ObjectRuntime, PlatformIo,
-};
+use collaboration_central_core::{CopyDirectorySummary, CoreHost, ObjectRuntime};
 use collaboration_central_tokio::TokioStorageHost;
-use durable_steps::{AtomicStore, CallFailure, StoreError};
+use durable_steps::{AtomicStore, StoreError};
 use fleet_sync_lease::{RegistryConfig, RegistrySnapshot};
 use fleet_sync_tokio_runner::{ObjectKey, ObjectOptions, ObjectStore};
 use futures_util::{SinkExt, StreamExt};
 use reqwest_websocket::{Message, RequestBuilderExt, WebSocket};
-use runtime_primitives::{Clock, IdSource, WakeFailure, WakeScheduler};
 use std::sync::Arc;
 
 pub(super) async fn start(root: &Path, jwks: &str) -> ConformanceResult<TokioServer> {
@@ -199,73 +196,20 @@ pub(super) async fn create_graph(
     Ok(())
 }
 
-#[derive(Clone)]
-struct PublicationIo(Arc<native_fleet::Fixture>);
-impl Clock for PublicationIo {
-    fn now(&self) -> SyncTime {
-        SyncTime::from_unix_millis(1_792_281_600_000)
-    }
-}
-impl IdSource for PublicationIo {
-    fn new_id(&self) -> durable_steps::Uuid {
-        durable_steps::Uuid::now_v7()
-    }
-}
-impl WakeScheduler for PublicationIo {
-    async fn wake_at(&self, _: SyncTime) -> Result<(), WakeFailure> {
-        Ok(())
-    }
-}
-impl PlatformIo for PublicationIo {
-    fn reply_deadline(
-        &self,
-        remaining: std::time::Duration,
-    ) -> impl std::future::Future<Output = ()> + Send {
-        tokio::time::sleep(remaining)
-    }
-
-    async fn object_call(
-        &self,
-        destination: ObjectAddress,
-        bytes: Vec<u8>,
-    ) -> Result<Vec<u8>, CallFailure> {
-        if destination != ObjectAddress::Fleet {
-            return Err(CallFailure::AnswerLost);
-        }
-        self.0.runtime.on_call(bytes).await
-    }
-}
-pub(super) async fn publish(
+pub(super) async fn read_committed_owners(
     root: &Path,
     config: RegistryConfig,
     databases: &[DatabaseId],
 ) -> ConformanceResult<Vec<(Option<CopyDirectorySummary>, RegistrySnapshot)>> {
-    let fleet = Arc::new(native_fleet::Fixture::open(root).await?);
-    let io = PublicationIo(fleet.clone());
     let objects = ObjectStore::open(root).await?;
+    let io = native_fleet::Io::default();
     let registry = objects
         .object(
             ObjectKey::new("fleet")?,
             Default::default(),
-            Arc::new(CoreHost::for_store(
-                io.clone(),
-                config.authoritative_receiver,
-            )),
+            Arc::new(CoreHost::for_store(io, config.authoritative_receiver)),
         )
         .await?;
-    let runtime = ObjectRuntime::fleet(
-        Arc::new(TokioStorageHost::new(registry.clone())),
-        io.clone(),
-        config,
-        collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
-                "019f0000-0000-7000-8000-000000005240".to_owned(),
-            )?,
-        },
-        std::time::Duration::from_secs(2),
-    )?;
-    runtime.initialize().await?;
-    runtime.on_alarm().await?;
     let mut observed = Vec::new();
     for database in databases {
         let database = *database;
@@ -278,31 +222,26 @@ pub(super) async fn publish(
                 })
             })
             .await?
-            .ok_or("public Registry snapshot missing")?;
+            .ok_or("committed public Registry snapshot missing")?;
         let copy_store = objects
             .object(
                 ObjectKey::new(format!("copy-{database}"))?,
                 ObjectOptions {
                     foreign_keys: false,
                 },
-                Arc::new(CoreHost::for_store(
-                    io.clone(),
-                    config.authoritative_receiver,
-                )),
+                Arc::new(CoreHost::for_store(io, config.authoritative_receiver)),
             )
             .await?;
         let copy = ObjectRuntime::copy(
             Arc::new(TokioStorageHost::new(copy_store)),
-            io.clone(),
+            io,
             config.authoritative_receiver,
             database,
             Duration::from_secs(2),
         );
         copy.initialize().await?;
-        copy.on_alarm().await?;
         observed.push((copy.copy_summary().await?, snapshot));
     }
     objects.close().await?;
-    fleet.objects.close().await?;
     Ok(observed)
 }
