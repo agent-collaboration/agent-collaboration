@@ -31,6 +31,7 @@ pub struct CollaborationRuntimeInputs {
 
 /// Host-owned startup facts that are not part of the public collaboration runtime inputs.
 pub(crate) struct HostCollaborationInputs {
+    pub enrollment_reset_directory: PathBuf,
     pub collaboration_runtime: CollaborationRuntimeInputs,
     pub router_proxy_endpoint: SocketAddr,
     pub remote_access: Option<crate::RemoteAccess>,

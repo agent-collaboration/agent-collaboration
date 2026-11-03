@@ -127,11 +127,31 @@ impl ProjectRegistration for UnattachedProjectRegistration {
     }
 }
 
+#[cfg(test)]
 pub(super) async fn open_board_admission(
     directory: &Path,
     identity: MachineIdentity,
     session_inputs: Option<BoardSessionInputs>,
 ) -> io::Result<BoardComposition> {
+    crate::enrollment_reset::resume_enrollment_reset(directory, directory).await?;
+    open_board_admission_with_enrollment(directory, identity, session_inputs, directory).await
+}
+
+pub(super) async fn open_board_admission_with_enrollment(
+    directory: &Path,
+    identity: MachineIdentity,
+    session_inputs: Option<BoardSessionInputs>,
+    enrollment_directory: &Path,
+) -> io::Result<BoardComposition> {
+    let marker = enrollment_directory.to_owned();
+    if tokio::task::spawn_blocking(move || {
+        crate::enrollment_reset::reset_pending_in_directory(&marker)
+    })
+    .await
+    .map_err(io::Error::other)??
+    {
+        return Err(io::Error::other(crate::ENROLLMENT_RESTART_INSTRUCTION));
+    }
     let registry = Arc::new(ProjectStoreRegistry::new(
         directory,
         session_inputs.as_ref().map(|inputs| inputs.peer),
@@ -142,7 +162,10 @@ pub(super) async fn open_board_admission(
             // Keep nested native startup out of every Host caller's future layout.
             Some(
                 Box::pin(PreparedMachineSession::prepare(
-                    directory, inputs, &registry,
+                    directory,
+                    inputs,
+                    &registry,
+                    enrollment_directory,
                 ))
                 .await?,
             )

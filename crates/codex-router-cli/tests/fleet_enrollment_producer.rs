@@ -46,6 +46,10 @@ async fn actual_enrollment_command_attaches_production_host_and_creates_project(
             let reply = fleet_cli::require_success(&output)?;
             assert_eq!(reply["decision"]["kind"], "machineEnrolled");
             assert_eq!(reply["activation"], "nextRouterStart");
+            assert_eq!(
+                reply["restartInstruction"],
+                "Enrollment changed; restart the Host before it connects to central again."
+            );
             assert_eq!(central.enrollment_calls(), 1);
             assert_eq!(
                 central.session_connections(),
@@ -61,6 +65,7 @@ async fn actual_enrollment_command_attaches_production_host_and_creates_project(
             let status_output = fleet_cli::status(router_root).await?;
             let status = fleet_cli::require_success(&status_output)?;
             assert_eq!(status["status"]["kind"], "valid");
+            assert_eq!(status["restartInstruction"], reply["restartInstruction"]);
             assert_eq!(
                 status["status"]["enrollment"]["peer"],
                 document.peer.to_string()

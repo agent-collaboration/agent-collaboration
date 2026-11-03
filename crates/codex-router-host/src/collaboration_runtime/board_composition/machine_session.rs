@@ -59,8 +59,11 @@ fn mail_status_interval() -> Duration {
 )]
 mod mail_notice_events;
 
-type BoardSessionPump =
-    SessionPump<ReqwestSessionTransport, MachineSessionStore, BoardConsumerProtocol>;
+type BoardSessionPump = SessionPump<
+    crate::enrollment_session_transport::EnrollmentSessionTransport,
+    MachineSessionStore,
+    BoardConsumerProtocol,
+>;
 
 pub(super) struct PreparedMachineSession {
     pump: BoardSessionPump,
@@ -86,6 +89,7 @@ impl PreparedMachineSession {
         directory: &Path,
         inputs: BoardSessionInputs,
         registry: &Arc<ProjectStoreRegistry>,
+        enrollment_directory: &Path,
     ) -> io::Result<Self> {
         let schema = BoardProjectSchema::new().map_err(io::Error::other)?;
         let max_version = schema
@@ -100,6 +104,10 @@ impl PreparedMachineSession {
             SESSION_CALL_TIMEOUT,
         )
         .map_err(io::Error::other)?;
+        let transport = crate::enrollment_session_transport::EnrollmentSessionTransport::new(
+            transport,
+            enrollment_directory,
+        );
         let client = SessionClient::<_, _, BoardConsumerProtocol>::load(
             transport,
             MachineSessionStore::open(directory)

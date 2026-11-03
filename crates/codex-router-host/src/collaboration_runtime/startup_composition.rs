@@ -39,6 +39,7 @@ impl CollaborationRuntime {
             relation_receiver,
             None,
             None,
+            None,
         ))
         .await
     }
@@ -58,6 +59,7 @@ impl CollaborationRuntime {
             relation_receiver,
             Some(host_inputs.router_proxy_endpoint),
             prepared_exposure,
+            Some(host_inputs.enrollment_reset_directory),
         ))
         .await
     }
@@ -68,6 +70,7 @@ impl CollaborationRuntime {
         relation_receiver: tokio::sync::watch::Receiver<RouterExecutableRelation>,
         router_proxy_endpoint: Option<SocketAddr>,
         prepared_exposure: Option<crate::tailscale_exposure::PreparedTailscaleExposure>,
+        enrollment_reset_directory: Option<std::path::PathBuf>,
     ) -> io::Result<Self> {
         let mut owner_human_id = inputs.owner_human_id.clone();
         let service_id = load_service_identity(&inputs.directory)?;
@@ -149,10 +152,13 @@ impl CollaborationRuntime {
             dyn collaboration_contracts::ProjectReplicationPosition,
         > = std::sync::Arc::new(collaboration_contracts::UnacknowledgedProjectReplication);
         let mut configuration = collaboration_runtime::AutomationConfigurationHandle::default();
-        let opened_board = board_composition::open_board_admission(
+        let opened_board = board_composition::open_board_admission_with_enrollment(
             &inputs.directory,
             machine_identity.clone(),
             inputs.board_session,
+            enrollment_reset_directory
+                .as_deref()
+                .unwrap_or(&inputs.directory),
         )
         .await;
         let mut prepared_board = None;

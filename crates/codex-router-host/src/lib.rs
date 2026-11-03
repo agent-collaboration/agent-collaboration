@@ -43,7 +43,10 @@ mod external_provider_supervisor;
 pub use external_provider_supervisor::{
     ExternalProviderBinding, ExternalProviderSupervisor, ProviderPromptContentsRequest,
 };
+mod enrollment_reset;
+mod enrollment_session_transport;
 mod fleet_enrollment_file;
+pub use enrollment_reset::{ENROLLMENT_RESTART_INSTRUCTION, fleet_enrollment_restart_required};
 mod global_claude_executable;
 pub use fleet_enrollment_file::{
     FleetAccess, FleetAccessReference, FleetEnrollmentDocument, FleetEnrollmentMetadata,
