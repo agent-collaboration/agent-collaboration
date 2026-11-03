@@ -205,6 +205,9 @@ impl CollaborationRuntime {
     #[cfg(feature = "runtime-test-support")]
     pub const RUNTIME_TEST_MAIL_FAULT_FILE: &str = "messaging-test-fault.json";
 
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    pub const RUNTIME_TEST_INBOX_LIMIT_FILE: &str = crate::debug_inbox_limit::FILE_NAME;
+
     #[cfg(feature = "runtime-test-support")]
     pub async fn runtime_test_install_mail_fault(
         &self,
@@ -253,6 +256,8 @@ use collaboration_api_serving::{BoundCollaborationApi, ServedCollaborationApi};
 mod board_composition;
 #[path = "collaboration_runtime/lifecycle.rs"]
 mod lifecycle;
+#[path = "collaboration_runtime/mail_delivery_composition.rs"]
+mod mail_delivery_composition;
 #[path = "collaboration_runtime/native_backend.rs"]
 mod native_backend;
 #[path = "collaboration_runtime/startup_composition.rs"]

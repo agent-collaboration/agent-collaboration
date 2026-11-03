@@ -150,13 +150,32 @@ impl MailDeliveryRuntime {
         props: MailPushDeliveryProps,
         session: Option<MailDeliverySession>,
     ) -> Result<Self, StoreError> {
+        Self::with_default_limits(peer, props, session, 256 * 1024 * 1024)
+    }
+
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    pub fn runtime_test_new_with_inbox_limit(
+        peer: PeerId,
+        props: MailPushDeliveryProps,
+        session: Option<MailDeliverySession>,
+        inbox_bytes: std::num::NonZeroU64,
+    ) -> Result<Self, StoreError> {
+        Self::with_default_limits(peer, props, session, inbox_bytes.get())
+    }
+
+    fn with_default_limits(
+        peer: PeerId,
+        props: MailPushDeliveryProps,
+        session: Option<MailDeliverySession>,
+        inbox_bytes: u64,
+    ) -> Result<Self, StoreError> {
         // PD4 §3's quotas reserve the SDK-computed settlement allowance.
         let limits = DeliveryLimits::new::<RouterDeliveryTypes>(
             1024 * 1024 * 1024,
             200_000,
             256 * 1024 * 1024,
             50_000,
-            256 * 1024 * 1024,
+            inbox_bytes,
             minimum_settlement_allowance::<RouterDeliveryTypes>().map_err(StoreError::backend)?,
         )
         .map_err(StoreError::backend)?;

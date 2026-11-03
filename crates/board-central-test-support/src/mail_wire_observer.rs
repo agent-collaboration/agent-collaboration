@@ -2,9 +2,10 @@
 use crate::{BOUND, FixtureResult};
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use fleet_sync_protocol::{
-    ClientFrame, DeliveryAnswer, DeliveryRequest, DeliveryTypes, FrameId, ItemId, OperationAnswer,
-    OperationRequest, RecipientOutcome, ReportResult, ReportSeq, ServerCall, ServerFrame,
-    ServerRequest, StatusCursor, StatusFetchResult, StatusPublication,
+    ClientAnswer, ClientFrame, DeliveryAnswer, DeliveryRequest, DeliveryTypes, FrameId, ItemId,
+    OperationAnswer, OperationRequest, PushResult, RecipientOutcome, ReportResult, ReportSeq,
+    ServerCall, ServerCallAnswer, ServerFrame, ServerRequest, StatusCursor, StatusFetchResult,
+    StatusPublication,
 };
 use std::sync::{Arc, Mutex};
 use tokio::sync::watch;
@@ -13,6 +14,14 @@ type Acceptance = <BoardDeliveryTypes as DeliveryTypes>::Acceptance;
 
 #[derive(Clone, Debug)]
 pub enum MailWireEvent {
+    PushSent {
+        frame: FrameId,
+        item: ItemId,
+    },
+    PushAnswered {
+        frame: FrameId,
+        result: PushResult<Acceptance>,
+    },
     Publication {
         publication: StatusPublication<Acceptance>,
         dropped: bool,
@@ -69,12 +78,15 @@ impl MailWireObserver {
         let Some(state) = state.as_ref() else {
             return Ok(());
         };
-        if let ClientFrame::Request {
-            frame,
-            body: OperationRequest::Delivery(request),
-        } = serde_json::from_slice::<ClientFrame<BoardConsumerProtocol>>(bytes)?
-        {
-            match request {
+        match serde_json::from_slice::<ClientFrame<BoardConsumerProtocol>>(bytes)? {
+            ClientFrame::Answer {
+                frame,
+                body: ClientAnswer::Crate(ServerCallAnswer::Pushed(result)),
+            } => record(state, MailWireEvent::PushAnswered { frame, result })?,
+            ClientFrame::Request {
+                frame,
+                body: OperationRequest::Delivery(request),
+            } => match request {
                 DeliveryRequest::Report { report, .. } => record(
                     state,
                     MailWireEvent::ReportSent {
@@ -88,7 +100,8 @@ impl MailWireObserver {
                     record(state, MailWireEvent::StatusAcknowledged(through))?
                 }
                 _ => {}
-            }
+            },
+            _ => {}
         }
         Ok(())
     }
@@ -99,6 +112,16 @@ impl MailWireObserver {
             return Ok(false);
         };
         match serde_json::from_slice::<ServerFrame<BoardConsumerProtocol>>(bytes)? {
+            ServerFrame::Request {
+                frame,
+                body: ServerRequest::Crate(ServerCall::Push { item, .. }),
+            } => record(
+                state,
+                MailWireEvent::PushSent {
+                    frame,
+                    item: item.id(),
+                },
+            )?,
             ServerFrame::Request {
                 body: ServerRequest::Crate(ServerCall::PublishStatus { publication, .. }),
                 ..
@@ -161,3 +184,7 @@ impl Drop for MailWireObservation {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "mail_wire_observer_test.rs"]
+mod tests;
