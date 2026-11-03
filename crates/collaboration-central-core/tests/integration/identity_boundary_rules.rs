@@ -1,6 +1,5 @@
 #[cfg(test)]
-#[path = "support/schema_validation.rs"]
-mod schema_validation;
+use crate::schema_validation;
 
 use collaboration_central_core::identity_contract::{
     ConnectionView, DecideDeviceLogin, MachineEnrollment, MachinePresenceAnswer,
@@ -45,8 +44,10 @@ fn assert_null_read_omitted_write<T: DeserializeOwned + Serialize + JsonSchema>(
 
 #[test]
 fn internal_enrollments_never_become_public_states() {
-    let fixtures: Vec<Value> =
-        serde_json::from_str(include_str!("../contracts/MachineEnrollment.fixtures.json")).unwrap();
+    let fixtures: Vec<Value> = serde_json::from_str(include_str!(
+        "../../contracts/MachineEnrollment.fixtures.json"
+    ))
+    .unwrap();
     for state in ["reserved", "approved"] {
         let mut invalid = fixtures[0].clone();
         invalid["state"] = json!(state);
@@ -82,14 +83,18 @@ fn optional_reads_accept_null_but_writes_omit_the_key() {
         json!({"operation":"admitSignIn","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002"}),
         "verifiedEmail",
     );
-    let decisions: Vec<Value> =
-        serde_json::from_str(include_str!("../contracts/DecideDeviceLogin.fixtures.json")).unwrap();
+    let decisions: Vec<Value> = serde_json::from_str(include_str!(
+        "../../contracts/DecideDeviceLogin.fixtures.json"
+    ))
+    .unwrap();
     assert_null_read_omitted_write::<DecideDeviceLogin>(
         decisions[0].clone(),
         "approverSecondFactorAt",
     );
-    let enrollments: Vec<Value> =
-        serde_json::from_str(include_str!("../contracts/MachineEnrollment.fixtures.json")).unwrap();
+    let enrollments: Vec<Value> = serde_json::from_str(include_str!(
+        "../../contracts/MachineEnrollment.fixtures.json"
+    ))
+    .unwrap();
     for index in [0, 2, 4] {
         assert_null_read_omitted_write::<MachineEnrollment>(enrollments[index].clone(), "endsAt");
     }
@@ -98,7 +103,7 @@ fn optional_reads_accept_null_but_writes_omit_the_key() {
 #[test]
 fn javascript_counters_refuse_two_to_the_fifty_third() {
     let activity: Value = serde_json::from_str(include_str!(
-        "../../fleet-identity-protocol/contracts/ReportSessionActivity.fixtures.json"
+        "../../../fleet-identity-protocol/contracts/ReportSessionActivity.fixtures.json"
     ))
     .unwrap();
     let mut invalid = activity[0].clone();
@@ -111,7 +116,7 @@ fn javascript_counters_refuse_two_to_the_fifty_third() {
             .is_valid(&invalid)
     );
     let presence: Value = serde_json::from_str(include_str!(
-        "../contracts/MachinePresenceAnswer.fixtures.json"
+        "../../contracts/MachinePresenceAnswer.fixtures.json"
     ))
     .unwrap();
     let mut invalid = presence[0].clone();
@@ -135,7 +140,7 @@ fn configured_token_lifetime_requires_the_adopted_range() {
 #[test]
 fn reviewed_scalar_claim_schema_rejects_invalid_installation() {
     let fixtures: Vec<Value> = serde_json::from_str(include_str!(
-        "../contracts/MachineTokenClaims.fixtures.json"
+        "../../contracts/MachineTokenClaims.fixtures.json"
     ))
     .unwrap();
     let mut invalid = fixtures[0].clone();

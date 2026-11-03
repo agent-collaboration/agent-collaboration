@@ -1,6 +1,5 @@
 #[cfg(test)]
-#[path = "support/schema_validation.rs"]
-mod schema_validation;
+use crate::schema_validation;
 
 use collaboration_central_core::identity_contract::{MachinePrincipal, MachineTokenClaims};
 use serde_json::json;

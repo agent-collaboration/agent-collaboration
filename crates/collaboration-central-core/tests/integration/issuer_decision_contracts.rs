@@ -1,4 +1,6 @@
 //! Literal wire oracles and serializer-generated artifact freshness.
+#[cfg(test)]
+use crate::contract_artifacts;
 use collaboration_central_core::identity_contract::{
     AdmitMachineConnection, AdmittedMachine, DecideDeviceLogin, DecideMachineToken,
     DeviceLoginDecision, DeviceLoginRefusal, DisableMachineClient, DisabledMachineClient,
@@ -7,9 +9,6 @@ use collaboration_central_core::identity_contract::{
     PresentedMachine, StandingRole,
 };
 use serde_json::json;
-#[cfg(test)]
-#[path = "support/contract_artifacts.rs"]
-mod contract_artifacts;
 
 #[test]
 fn decide_device_login_wire_contract() {

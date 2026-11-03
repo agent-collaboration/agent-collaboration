@@ -1,12 +1,11 @@
 //! Literal wire oracles and serializer-generated artifact freshness.
+#[cfg(test)]
+use crate::contract_artifacts;
 use collaboration_central_core::identity_contract::{
     AllowedMachineRow, CommandStatusResult, IdentityLookupResult, MachineLookupResult,
     WorkspaceLookupResult,
 };
 use serde_json::json;
-#[cfg(test)]
-#[path = "support/contract_artifacts.rs"]
-mod contract_artifacts;
 
 #[test]
 fn identity_lookup_result_wire_contract() {

@@ -1,12 +1,11 @@
 //! Literal wire oracles and serializer-generated artifact freshness.
+#[cfg(test)]
+use crate::contract_artifacts;
 use collaboration_central_core::identity_contract::{
     AdmissionId, AdmissionRef, ClientId, CommandId, DeviceLoginRequestId, EnrollmentAuthorization,
     EnrollmentRevocationReason, MachineEnrollment, PersonId,
 };
 use serde_json::json;
-#[cfg(test)]
-#[path = "support/contract_artifacts.rs"]
-mod contract_artifacts;
 
 #[test]
 fn admission_ref_wire_contract() {

@@ -1,13 +1,12 @@
 //! Literal wire oracles and serializer-generated artifact freshness.
+#[cfg(test)]
+use crate::contract_artifacts;
 use collaboration_central_core::identity_contract::{
     AdmittedPersonRow, ConnectionView, EnrollmentView, MachinePresenceAnswer, MachineRow,
     OwnerRefusal, ProjectRef, ReadMachinePresence, SessionRow, SessionStateView, WhoIsLoggedIn,
     WhoIsLoggedInResult, WorkspaceRef,
 };
 use serde_json::json;
-#[cfg(test)]
-#[path = "support/contract_artifacts.rs"]
-mod contract_artifacts;
 
 #[test]
 fn read_machine_presence_wire_contract() {
