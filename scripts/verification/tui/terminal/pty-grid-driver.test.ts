@@ -14,6 +14,10 @@ afterEach(() => {
 	for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
+// Original Codex 0.165 startup through its first duplicate mode reset; no Session data.
+const CODEX_STARTUP_HEX =
+	'2f6d6f64656c1b5b3f32303034681b5b3e343b306d1b5b3e35751b5b3f31303034681b5b366e1b5d31303b3f1b5c1b5d31313b3f1b5c1b5b3f751b5b631b5b3f32303236681b5b3f32303236681b5b313b31481b5b4a1b5b3f32356c1b5b313b32481b5b306d1b5b4b1b5b323b3239481b5b306d1b5b4b1b5b333b3133481b5b306d1b5b4b1b5b343b3230481b5b306d1b5b4b1b5b353b32481b5b306d1b5b4b1b5b363b3237481b5b306d1b5b4b1b5b373b32481b5b306d1b5b4b1b5b383b32481b5b306d1b5b4b1b5b313b3148201b5b323b314820203e5f201b5b316d4f70656e414920436f6465781b5b32326d1b5b326d1b5b326d202876302e3136352e30291b5b333b31481b5b32326d20202020201b5b326d6c6f6164696e671b5b343b31482020526573756d696e672073657373696f6ee280a61b5b353b31481b5b32326d201b5b363b31481b5b316de280ba1b5b32326d201b5b326d41736b20436f64657820746f20646f20616e797468696e671b5b373b31481b5b32326d201b5b383b3148201b5b306d1b5b313b31481b5b3020711b5b313b3148201b5b306d1b5b363b33481b5b3f3235681b5b3f323032366c1b5b3f323032366c';
+
 // The peer publishes output without read commands. Inputs release a frame, a stream error or EOF.
 const STREAM_PEER = `
 const fs = require('node:fs');
@@ -26,6 +30,7 @@ readline.createInterface({input: process.stdin}).on('line', (line) => {
 	if (command === 'finish' || command === 'stop') { emit('FINISHED 0'); process.exit(0); }
 	if (command === 'write') {
 		const input = Buffer.from(argument, 'hex').toString();
+		if (input === 'codex-startup') emit('BYTES ' + ${JSON.stringify(CODEX_STARTUP_HEX)});
 		if (input === 'marker') emit('BYTES ' + Buffer.from('ACP_BRIDGE_CLAUDE_7FA28C|ALPHA|RED').toString('hex'));
 		if (input === 'fail') { emit('READ_ERROR disconnected before EOF'); return; }
 		if (input === 'eof') emit('EOF');
@@ -104,6 +109,25 @@ test('EOF completion comes from the stream and does not require a read command',
 		await driver.send(Buffer.from('eof'));
 		await driver.waitForEof('normal quit');
 		expect(await driver.finish()).toBe(0);
+	} finally {
+		await driver.stop();
+	}
+});
+
+test('the streamed driver accepts the original Codex startup with repeated synchronized mode writes', async () => {
+	const { driver, root } = await standInDriver();
+	try {
+		await driver.send(Buffer.from('codex-startup'));
+		const grid = await driver.waitForGrid('Codex startup', (observed) =>
+			gridLines(observed).join('\n').includes('Resuming session…'),
+		);
+		expect(gridLines(grid).join('\n')).toContain('OpenAI Codex');
+		await driver.send(Buffer.from('eof'));
+		await driver.waitForEof('startup complete');
+		expect(await driver.finish()).toBe(0);
+		expect(readFileSync(join(root, 'terminal.ansi')).subarray(0, 444)).toEqual(
+			Buffer.from(CODEX_STARTUP_HEX, 'hex'),
+		);
 	} finally {
 		await driver.stop();
 	}

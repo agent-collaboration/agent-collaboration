@@ -74,26 +74,20 @@ test('a symlinked trusted cwd is refused', async () => {
 	);
 });
 
-test('the observer must read the same client, raw Session and native alias', async () => {
-	const mismatches = [
-		['session_id', ALIAS],
-		['native_thread_id', '019a0000-0000-7000-8000-0000000000ab'],
-		['endpoint_id', 'claude-local'],
-		['codex_sha256', '0'.repeat(64)],
-	] as const;
-	const fixtures = await Promise.all(mismatches.map(async () => targetFixture()));
-	for (const [index, [field, value]] of mismatches.entries()) {
-		const fixture = fixtures[index];
-		if (fixture === undefined) throw new Error('missing observer fixture');
-		const { root, target, observerPlan } = fixture;
-		writeFileSync(
-			join(root, 'observer-plan.json'),
-			JSON.stringify({ ...observerPlan, [field]: value }),
-		);
-		expect(() => qualifyCodexAcpTarget(target), field).toThrow(
-			'supporting observer plan addresses a different client or Session',
-		);
-	}
+test.each([
+	['session_id', ALIAS],
+	['native_thread_id', '019a0000-0000-7000-8000-0000000000ab'],
+	['endpoint_id', 'claude-local'],
+	['codex_sha256', '0'.repeat(64)],
+] as const)('the observer must match the client and Session: %s', async (field, value) => {
+	const { root, target, observerPlan } = await targetFixture();
+	writeFileSync(
+		join(root, 'observer-plan.json'),
+		JSON.stringify({ ...observerPlan, [field]: value }),
+	);
+	expect(() => qualifyCodexAcpTarget(target), field).toThrow(
+		'supporting observer plan addresses a different client or Session',
+	);
 });
 
 test('the launch cwd may differ from the Session cwd the observer declares', async () => {
