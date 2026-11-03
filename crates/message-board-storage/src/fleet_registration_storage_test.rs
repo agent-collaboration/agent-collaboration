@@ -165,3 +165,233 @@ async fn fleet_registration_unused_payload_and_partial_triples_are_invalid_witho
     assert_eq!(retained, "unexplained-partial-session");
     cache.close().await;
 }
+
+#[tokio::test]
+async fn fleet_registration_native_uniqueness_replays_the_operation_and_rolls_back_other_conflicts()
+{
+    let directory = tempfile::tempdir().unwrap();
+    let cache = FleetCache::open_with_sources(
+        &directory.path().join("fleet-cache.sqlite"),
+        Arc::new(FixedClock(AtomicI64::new(1000))),
+        Arc::new(FixedIds),
+    )
+    .await
+    .unwrap();
+    let initial = FleetSessionRegistrationRecord::new(
+        preparation(),
+        FleetSessionBindingLifecycle::Prepared {
+            creation: PreparedSessionCreation::NotDispatched {},
+        },
+    )
+    .unwrap();
+    cache.insert(&initial).await.unwrap();
+    let mut other = initial.preparation().clone();
+    other.registration_id = "01900000-0000-7000-8000-000000000011"
+        .to_owned()
+        .try_into()
+        .unwrap();
+    other.binding_address = "http://127.0.0.1:8788/mcp/session/11111111111111111111111111111111"
+        .to_owned()
+        .try_into()
+        .unwrap();
+    let replay =
+        FleetSessionRegistrationRecord::new(other.clone(), initial.lifecycle().clone()).unwrap();
+    assert!(
+        matches!(cache.insert(&replay).await.unwrap(),RegistrationInsert::Existing(record) if *record==initial)
+    );
+    other.operation_id = "01900000-0000-7000-8000-000000000012"
+        .to_owned()
+        .try_into()
+        .unwrap();
+    other.registration_id = initial.preparation().registration_id.clone();
+    let key_conflict =
+        FleetSessionRegistrationRecord::new(other.clone(), initial.lifecycle().clone()).unwrap();
+    assert!(matches!(
+        cache.insert(&key_conflict).await,
+        Err(FleetSessionStorageFailure::Conflict)
+    ));
+    other.registration_id = "01900000-0000-7000-8000-000000000011"
+        .to_owned()
+        .try_into()
+        .unwrap();
+    other.binding_address = initial.preparation().binding_address.clone();
+    let binding_conflict =
+        FleetSessionRegistrationRecord::new(other.clone(), initial.lifecycle().clone()).unwrap();
+    assert!(matches!(
+        cache.insert(&binding_conflict).await,
+        Err(FleetSessionStorageFailure::Conflict)
+    ));
+    let active = initial
+        .with_lifecycle(FleetSessionBindingLifecycle::Active {
+            confirmed: confirmed(initial.preparation()),
+        })
+        .unwrap();
+    assert!(cache.replace(&initial, &active).await.unwrap());
+    other.binding_address = "http://127.0.0.1:8788/mcp/session/11111111111111111111111111111111"
+        .to_owned()
+        .try_into()
+        .unwrap();
+    let conversation_conflict =
+        FleetSessionRegistrationRecord::new(other, active.lifecycle().clone()).unwrap();
+    assert!(matches!(
+        cache.insert(&conversation_conflict).await,
+        Err(FleetSessionStorageFailure::Conflict)
+    ));
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM fleet_session_registrations")
+        .fetch_one(&cache.database.pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 1);
+    assert_eq!(
+        cache
+            .operation(&initial.preparation().operation_id)
+            .await
+            .unwrap(),
+        Some(active)
+    );
+    cache.close().await;
+}
+
+#[tokio::test]
+async fn fleet_registration_native_competing_transitions_have_one_winner_and_keep_preparation_immutable()
+ {
+    let directory = tempfile::tempdir().unwrap();
+    let cache = FleetCache::open_with_sources(
+        &directory.path().join("fleet-cache.sqlite"),
+        Arc::new(FixedClock(AtomicI64::new(1000))),
+        Arc::new(FixedIds),
+    )
+    .await
+    .unwrap();
+    let initial = FleetSessionRegistrationRecord::new(
+        preparation(),
+        FleetSessionBindingLifecycle::Prepared {
+            creation: PreparedSessionCreation::NotDispatched {},
+        },
+    )
+    .unwrap();
+    cache.insert(&initial).await.unwrap();
+    let dispatched = initial
+        .with_lifecycle(FleetSessionBindingLifecycle::Prepared {
+            creation: PreparedSessionCreation::Dispatched {},
+        })
+        .unwrap();
+    let abandoned = initial
+        .with_lifecycle(FleetSessionBindingLifecycle::Abandoned {
+            creation: AbandonedSessionCreation::NotCreated {},
+        })
+        .unwrap();
+    let (left, right) = tokio::join!(
+        cache.replace(&initial, &dispatched),
+        cache.replace(&initial, &abandoned)
+    );
+    let (left, right) = (left.unwrap(), right.unwrap());
+    assert_ne!(left, right);
+    let expected = if left { dispatched } else { abandoned };
+    assert_eq!(
+        cache
+            .operation(&initial.preparation().operation_id)
+            .await
+            .unwrap(),
+        Some(expected.clone())
+    );
+    let mut changed = expected.preparation().clone();
+    changed.launch.project_id = "01900000-0000-7000-8000-000000000013"
+        .to_owned()
+        .try_into()
+        .unwrap();
+    let invalid_replacement =
+        FleetSessionRegistrationRecord::new(changed, expected.lifecycle().clone()).unwrap();
+    assert!(
+        !cache
+            .replace(&expected, &invalid_replacement)
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        cache
+            .operation(&initial.preparation().operation_id)
+            .await
+            .unwrap(),
+        Some(expected)
+    );
+    cache.close().await;
+}
+
+#[tokio::test]
+async fn fleet_registration_native_decode_rejects_each_invalid_typed_column_without_deleting_rows()
+{
+    let directory = tempfile::tempdir().unwrap();
+    let text_columns = [
+        "registration_id",
+        "operation_id",
+        "installation_id",
+        "binding_address",
+        "endpoint_service_id",
+        "endpoint_id",
+        "project_id",
+        "checked_workspace_id",
+        "started_by_kind",
+        "started_by_service_id",
+        "started_by_endpoint_id",
+        "started_by_session_id",
+        "remote_start_id",
+        "isolation_kind",
+        "isolation_instance_id",
+        "working_directory",
+        "repository",
+        "commit_id",
+        "model",
+        "machine_environment",
+        "lifecycle_state",
+        "creation_state",
+        "session_service_id",
+        "session_endpoint_id",
+        "session_id",
+        "organization_id",
+        "abandonment_cause",
+        "refused_setting",
+    ];
+    for column in text_columns.into_iter().chain(["created_at", "updated_at"]) {
+        let path = directory.path().join(format!("corrupt-{column}.sqlite"));
+        let cache = FleetCache::open_with_sources(
+            &path,
+            Arc::new(FixedClock(AtomicI64::new(1000))),
+            Arc::new(FixedIds),
+        )
+        .await
+        .unwrap();
+        let record = FleetSessionRegistrationRecord::new(
+            preparation(),
+            FleetSessionBindingLifecycle::Prepared {
+                creation: PreparedSessionCreation::NotDispatched {},
+            },
+        )
+        .unwrap();
+        cache.insert(&record).await.unwrap();
+        let sql = format!("UPDATE fleet_session_registrations SET {column}=?");
+        if matches!(column, "created_at" | "updated_at") {
+            sqlx::query(&sql)
+                .bind(-1_i64)
+                .execute(&cache.database.pool)
+                .await
+                .unwrap();
+        } else {
+            sqlx::query(&sql)
+                .bind("")
+                .execute(&cache.database.pool)
+                .await
+                .unwrap();
+        }
+        assert!(
+            cache.reconcile_candidates().await.is_err(),
+            "invalid {column} accepted"
+        );
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM fleet_session_registrations")
+            .fetch_one(&cache.database.pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 1, "invalid {column} was silently removed");
+        cache.close().await;
+    }
+}
