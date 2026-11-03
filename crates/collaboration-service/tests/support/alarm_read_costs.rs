@@ -147,6 +147,78 @@ impl std::fmt::Debug for AlarmRunCosts {
             .finish_non_exhaustive()
     }
 }
+const FLEET_ALARM_QUERIES: [(&str, &str); 11] = [
+    (
+        "feed.state",
+        include_str!("../../../collaboration-central-core/sql/fleet/read_fleet_feed_state.sql"),
+    ),
+    (
+        "feed.expired",
+        include_str!("../../../collaboration-central-core/sql/fleet/read_expired_fleet_feed.sql"),
+    ),
+    (
+        "forwards.rows",
+        include_str!("../../../collaboration-central-core/sql/forwards/read_forward_rows.sql"),
+    ),
+    (
+        "notices.peers",
+        include_str!(
+            "../../../collaboration-central-core/sql/machine_notices/read_machine_notice_peers.sql"
+        ),
+    ),
+    (
+        "notices.state",
+        include_str!(
+            "../../../collaboration-central-core/sql/machine_notices/read_machine_notice_state.sql"
+        ),
+    ),
+    (
+        "notices.bounds",
+        include_str!(
+            "../../../collaboration-central-core/sql/machine_notices/read_machine_notice_bounds.sql"
+        ),
+    ),
+    (
+        "notices.expired",
+        include_str!(
+            "../../../collaboration-central-core/sql/machine_notices/read_expired_machine_notices.sql"
+        ),
+    ),
+    (
+        "notices.next_expiry",
+        include_str!(
+            "../../../collaboration-central-core/sql/machine_notices/read_machine_notice_expiry.sql"
+        ),
+    ),
+    (
+        "notices.append",
+        include_str!(
+            "../../../collaboration-central-core/sql/machine_notices/append_machine_notice.sql"
+        ),
+    ),
+    (
+        "notices.head",
+        include_str!(
+            "../../../collaboration-central-core/sql/machine_notices/advance_machine_notice_head.sql"
+        ),
+    ),
+    (
+        "directory.installation",
+        include_str!("../../../collaboration-central-core/sql/read_enrollments.sql"),
+    ),
+];
+
+const NOTICE_APPEND_QUERY_OWNERS: [&str; 8] = [
+    "notices.state",
+    "notices.bounds",
+    "notices.expired",
+    "notices.state",
+    "notices.bounds",
+    "notices.append",
+    "notices.head",
+    "notices.next_expiry",
+];
+
 // One fresh fixture machine has no expired feed, forwards or notices. Each
 // maintenance owner reads its fixed operands before variable queued work.
 // SQL identities come from those owners, while
@@ -158,70 +230,8 @@ impl std::fmt::Debug for AlarmRunCosts {
 pub fn fixed_fleet_maintenance_profiles(
     costs: &AlarmRunCosts,
 ) -> BTreeSet<BTreeMap<&'static str, u64>> {
-    const QUERIES: [(&str, &str); 11] = [
-        (
-            "feed.state",
-            include_str!("../../../collaboration-central-core/sql/fleet/read_fleet_feed_state.sql"),
-        ),
-        (
-            "feed.expired",
-            include_str!(
-                "../../../collaboration-central-core/sql/fleet/read_expired_fleet_feed.sql"
-            ),
-        ),
-        (
-            "forwards.rows",
-            include_str!("../../../collaboration-central-core/sql/forwards/read_forward_rows.sql"),
-        ),
-        (
-            "notices.peers",
-            include_str!(
-                "../../../collaboration-central-core/sql/machine_notices/read_machine_notice_peers.sql"
-            ),
-        ),
-        (
-            "notices.state",
-            include_str!(
-                "../../../collaboration-central-core/sql/machine_notices/read_machine_notice_state.sql"
-            ),
-        ),
-        (
-            "notices.bounds",
-            include_str!(
-                "../../../collaboration-central-core/sql/machine_notices/read_machine_notice_bounds.sql"
-            ),
-        ),
-        (
-            "notices.expired",
-            include_str!(
-                "../../../collaboration-central-core/sql/machine_notices/read_expired_machine_notices.sql"
-            ),
-        ),
-        (
-            "notices.next_expiry",
-            include_str!(
-                "../../../collaboration-central-core/sql/machine_notices/read_machine_notice_expiry.sql"
-            ),
-        ),
-        (
-            "notices.append",
-            include_str!(
-                "../../../collaboration-central-core/sql/machine_notices/append_machine_notice.sql"
-            ),
-        ),
-        (
-            "notices.head",
-            include_str!(
-                "../../../collaboration-central-core/sql/machine_notices/advance_machine_notice_head.sql"
-            ),
-        ),
-        (
-            "directory.installation",
-            include_str!("../../../collaboration-central-core/sql/read_enrollments.sql"),
-        ),
-    ];
     let normalize = |sql: &str| sql.split_whitespace().collect::<Vec<_>>().join(" ");
-    let queries: BTreeMap<_, _> = QUERIES
+    let queries: BTreeMap<_, _> = FLEET_ALARM_QUERIES
         .into_iter()
         .map(|(owner, sql)| (normalize(sql), owner))
         .collect();
@@ -261,22 +271,13 @@ pub fn fixed_fleet_maintenance_profiles(
             // The suffix is variable queued work. Recognize its SQL boundary,
             // but do not pretend this stream identifies individual dispatches:
             // Central's per-callback conformance tests own those cost bounds.
-            const APPEND: [&str; 8] = [
-                "notices.state",
-                "notices.bounds",
-                "notices.expired",
-                "notices.state",
-                "notices.bounds",
-                "notices.append",
-                "notices.head",
-                "notices.next_expiry",
-            ];
+
             while !dynamic.is_empty() {
                 if let Some(rest) = dynamic.strip_prefix(&["directory.installation"]) {
                     dynamic = rest;
                 } else {
                     dynamic = dynamic
-                        .strip_prefix(&APPEND)
+                        .strip_prefix(&NOTICE_APPEND_QUERY_OWNERS)
                         .expect("variable work no longer matches the inventoried notice callback");
                 }
             }
@@ -295,6 +296,10 @@ pub fn fixed_fleet_maintenance_profiles(
             observed.insert(owners);
         }
     }
+    assert!(
+        !observed.is_empty(),
+        "no actual Fleet maintenance was observed"
+    );
     observed
 }
 
