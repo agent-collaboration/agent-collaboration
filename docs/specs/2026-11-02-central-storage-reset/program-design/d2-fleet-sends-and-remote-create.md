@@ -25,7 +25,7 @@ The request is a call to the Fleet over A's socket, not mail, because only the F
 
 | Table | Store | Columns | Why it is needed |
 | --- | --- | --- | --- |
-| `fleet_remote_creates` | Fleet | `id` UUIDv7 PK (= request id, minted by A before its first call and reused on every retry), `command_digest`, `requester_machine_id`, `requester_endpoint`, `requester_session_id`, `target_machine_id`, `command_item_id`, `result_item_id` (UUIDv7, chosen at admission), `deadline_at`, `created_at`, `updated_at` | the requester must survive the command's content being dropped; the same id with a different digest is refused here; the result message id is fixed up front so a retried report cannot send a second result |
+| `fleet_remote_creates` | Fleet | `id` UUIDv7 PK (= request id, minted by A before its first call and reused on every retry), `command_digest`, `requester_machine_id`, `requester_endpoint`, `requester_session_id`, `target_machine_id`, `command_item_id`, `result_item_id` (UUIDv7, chosen at admission), `created_at`, `updated_at` | the requester must survive the command's content being dropped; the same id with a different digest is refused here; the result message id is fixed up front so a retried report cannot send a second result |
 | `mail_create_commands` | each machine (`interaction.sqlite`) | `id` UUIDv7 PK (= request id), `command_digest`, `create_operation_id` (= request id), `prompt_operation_id` (UUIDv7, allocated once, stored before the prompt is sent), `create_outcome` (`pending`, `created`, `refused`, `unknown`), `new_session_*`, `settings_outcome` (`all applied`, `partial`), `prompt_outcome` (`not requested`, `not attempted`, `accepted`, `failed`, `unknown`), `created_at`, `updated_at` | binds the command to the one local create and the one prompt it may cause; a replay answers from this row; an operation the command did not create is never adopted |
 
 When the Fleet applies B's report for a create command, it admits the result message (`result_item_id`) in the **same transaction** as the report, so a crash between the two cannot lose the result.
@@ -58,7 +58,7 @@ When the Fleet applies B's report for a create command, it admits the result mes
 | Create succeeds, first input fails | result `created` with “first input not delivered” |
 | A offline when the result is ready | the result message waits in Fleet's outbox for A |
 | A machine submits an item with sender `Fleet` | refused at Fleet admission (R21) |
-| Deadline passes before B takes the command | the command has a deadline (default 24 hours, `--deadline` to change, recorded in `fleet_remote_creates`); when it passes undelivered, the Fleet sends the requester “expired” |
+| B never takes the command | it waits within D1's 60-day retention; when the removal reaches an undelivered command, the Fleet sends the requester “expired” in the same transaction |
 | Fleet applies the report, then crashes before sending the result | cannot happen: the report and the result message are admitted together |
 | B crashes after the prompt is sent, before the result is reported | the stored prompt id is reused; the prompt outcome is `unknown` if B cannot tell; no second prompt |
 
