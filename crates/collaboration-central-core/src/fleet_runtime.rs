@@ -480,7 +480,11 @@ where
                 })
                 .await
                 .map_err(crate::mail_push_dispatch::store_failure)?;
-            let resolved = resolved.ok_or(CallFailure::AnswerLost)?;
+            // No peer request has started. An absent, expired or gated item
+            // cannot truthfully turn this attempt into possible recipient reach.
+            let resolved = resolved.ok_or(CallFailure::NotSent {
+                reason: NotSentReason::Unreachable { last_seen: None },
+            })?;
             let item = resolved.item;
             if item.recipient().peer != target.recipient {
                 return Err(CallFailure::AnswerLost);
