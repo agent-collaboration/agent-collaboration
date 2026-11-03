@@ -1,6 +1,6 @@
 import { createFixtureDirectory } from "../test-support/fixture-directory.ts";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
@@ -19,11 +19,32 @@ const schema = z.object({
     marker: z.boolean(),
   }),
 });
-const directory = new URL("./baselines/", import.meta.url);
-for (const filename of readdirSync(directory)
-  .filter((name) => name.startsWith("scripted-"))
-  .sort()) {
-  const entry = schema.parse(JSON.parse(readFileSync(new URL(filename, directory), "utf8")));
+const packedRows = readFileSync(new URL("./baselines/scripted.jsonl", import.meta.url), "utf8")
+  .trimEnd()
+  .split("\n")
+  .map((line, index) =>
+    z
+      .strictObject({ name: z.string(), source: z.string() })
+      .parse(JSON.parse(line), { error: (): string => `scripted JSONL row ${index + 1}` }),
+  );
+assert.deepEqual(packedRows.map((row) => row.name).sort(), [
+  "scripted-early-exit.json",
+  "scripted-exact-params.json",
+  "scripted-exchange-and-tail.json",
+  "scripted-large-request-id.json",
+  "scripted-mismatch.json",
+  "scripted-uncaptured-response.json",
+  "scripted-unexpected-eof.json",
+]);
+for (const { name, source } of packedRows.toSorted((left, right) =>
+  left.name.localeCompare(right.name),
+)) {
+  let entry: z.infer<typeof schema>;
+  try {
+    entry = schema.parse(JSON.parse(source));
+  } catch (error) {
+    throw new Error(`Invalid fixture ${name}`, { cause: error });
+  }
   test(`scripted ACP ${entry.name} matches original replies, diagnostics and receipt bytes`, (): void => {
     const root = createFixtureDirectory("acp-fixture");
     try {

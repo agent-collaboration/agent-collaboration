@@ -31,11 +31,30 @@ const baselineSchema = z.object({
     files: z.record(z.string(), z.string()).optional(),
   }),
 });
-const directory = new URL("./baselines/", import.meta.url);
-for (const name of readdirSync(directory)
-  .filter((name) => /^embedded-acp-\d+\.json$/.test(name))
-  .sort()) {
-  const fixture = baselineSchema.parse(decodeEvidenceJson(readFileSync(new URL(name, directory))));
+const packedRows = readFileSync(new URL("./baselines/embedded-acp.jsonl", import.meta.url), "utf8")
+  .trimEnd()
+  .split("\n")
+  .map((line, index) =>
+    z
+      .strictObject({ name: z.string(), source: z.string() })
+      .parse(JSON.parse(line), { error: (): string => `embedded-acp JSONL row ${index + 1}` }),
+  );
+assert.deepEqual(
+  packedRows.map((row) => row.name).sort(),
+  Array.from(
+    { length: 173 },
+    (_, index) => `embedded-acp-${String(index).padStart(2, "0")}.json`,
+  ).sort(),
+);
+for (const { name, source } of packedRows.toSorted((left, right) =>
+  left.name.localeCompare(right.name),
+)) {
+  let fixture: z.infer<typeof baselineSchema>;
+  try {
+    fixture = baselineSchema.parse(decodeEvidenceJson(source));
+  } catch (error) {
+    throw new Error(`Invalid fixture ${name}`, { cause: error });
+  }
   test(`embedded ACP port matches original wire and receipt bytes: ${name} ${fixture.target}`, (): void => {
     const root = createFixtureDirectory("embedded-acp");
     const receipt = join(root, "receipt.json");
