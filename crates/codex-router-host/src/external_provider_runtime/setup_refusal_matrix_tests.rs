@@ -7,10 +7,10 @@ use acp_client_runtime::{
     ExternalProviderCreatedSession, ExternalProviderRuntimeError, ProviderSettingKind,
     RequestedProviderSettings,
 };
-use codex_router_fleet_state::fleet_session_registration::{
+use collaboration_service::fleet_session_registrar::SessionRegistrationMode;
+use message_board_storage::fleet_session_registration::{
     AbandonedSessionCreation, FleetSessionBindingLifecycle, FleetSessionRegistrationRecord,
 };
-use collaboration_service::fleet_session_registrar::SessionRegistrationMode;
 use serde_json::{Value, json};
 use std::io;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

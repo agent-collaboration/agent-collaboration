@@ -1,9 +1,9 @@
 //! Event-controlled atomic store stand-in for focused real-client/Host/registrar integration.
 //! It proves no SQLite durability or process-restart persistence.
-use codex_router_fleet_state::fleet_session_registration::{
+use message_board_storage::fleet_session_registration::{
     FleetSessionBindingLifecycle, FleetSessionRegistrationRecord, SessionBindingAddress,
 };
-use codex_router_fleet_state::session_registration_repository::{
+use message_board_storage::session_registration_repository::{
     FleetSessionRegistrationRepository, FleetSessionStorageFailure, FleetSessionStorageRequest,
     RegistrationInsert,
 };
@@ -99,7 +99,7 @@ impl FleetSessionRegistrationRepository for MemoryRegistrationRepository {
     ) -> FleetSessionStorageRequest<'a, bool> {
         Box::pin(async move {
             if matches!(next.lifecycle(), FleetSessionBindingLifecycle::Prepared {
-                creation: codex_router_fleet_state::fleet_session_registration::PreparedSessionCreation::CreatedPendingSetup { .. }
+                creation: message_board_storage::fleet_session_registration::PreparedSessionCreation::CreatedPendingSetup { .. }
             }) {
                 let control = { self.pending_setup.lock().map_err(|_| FleetSessionStorageFailure::Unavailable)?.take() };
                 if let Some(control) = control {

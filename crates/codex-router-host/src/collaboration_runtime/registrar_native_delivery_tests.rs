@@ -74,7 +74,7 @@ impl DirectRuntime {
     async fn with_repository(
         mode: SessionRegistrationMode,
         unavailable: bool,
-        repository: Option<Arc<dyn codex_router_fleet_state::session_registration_repository::FleetSessionRegistrationRepository>>,
+        repository: Option<Arc<dyn message_board_storage::session_registration_repository::FleetSessionRegistrationRepository>>,
     ) -> Self {
         let fixture = RuntimeFixture::new();
         let native = NativeFixture::start(fixture.root.path()).await;

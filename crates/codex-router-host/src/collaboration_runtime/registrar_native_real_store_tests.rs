@@ -1,10 +1,9 @@
 //! Actual Host native route and SQL rows; central/native replies remain stand-ins.
+use super::super::real_store::open_fleet_cache;
 use super::{DirectRuntime, Evidence, FIRST, SECOND};
-use codex_router_fleet_state::{
-    FleetStateStore, session_registration_repository::FleetSessionRegistrationRepository,
-};
 use collaboration_contracts::{SchedulePreparationOutcome, ScheduledRunExecution};
 use collaboration_service::fleet_session_registrar::SessionRegistrationMode;
+use message_board_storage::session_registration_repository::FleetSessionRegistrationRepository;
 use serde_json::json;
 use std::{os::unix::fs::PermissionsExt, sync::Arc};
 
@@ -14,11 +13,7 @@ async fn f4a_real_store_native_create_and_fork_keep_their_returned_ids_and_bindi
         .permissions(std::fs::Permissions::from_mode(0o700))
         .tempdir()
         .unwrap();
-    let store = Arc::new(
-        FleetStateStore::open_and_migrate(root.path())
-            .await
-            .unwrap(),
-    );
+    let store = Arc::new(open_fleet_cache(root.path()).await.unwrap());
     let runtime = DirectRuntime::with_repository(
         SessionRegistrationMode::MachineTokens,
         false,
@@ -87,7 +82,7 @@ async fn f4a_real_store_native_create_and_fork_keep_their_returned_ids_and_bindi
     runtime.native.shutdown().await;
     store.close().await;
 
-    let reopened = FleetStateStore::open_read_only(root.path()).await.unwrap();
+    let reopened = open_fleet_cache(root.path()).await.unwrap();
     for record in retained {
         assert_eq!(
             reopened

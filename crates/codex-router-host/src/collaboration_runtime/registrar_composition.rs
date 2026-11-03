@@ -6,14 +6,14 @@ use collaboration_service::fleet_session_registrar::FleetSessionRegistrar;
 
 #[cfg(feature = "runtime-test-support")]
 use {
-    codex_router_fleet_state::session_registration_repository::{
-        FleetSessionRegistrationRepository, FleetSessionStorageFailure,
-    },
     collaboration_service::fleet_session_registrar::{
         FleetSessionConnection, FleetSessionRegistrarProps, SessionBindingEntropy,
         SessionBindingListener, SessionRegistrationMode, SessionRegistrationModeSource,
     },
     fleet_identity_protocol::MachineEnvironment,
+    message_board_storage::session_registration_repository::{
+        FleetSessionRegistrationRepository, FleetSessionStorageFailure,
+    },
     runtime_primitives::IdSource,
 };
 

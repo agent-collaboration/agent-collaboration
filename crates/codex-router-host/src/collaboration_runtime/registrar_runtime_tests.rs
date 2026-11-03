@@ -49,7 +49,7 @@ async fn f4a_registrar_runtime_missing_repository_is_typed_unavailable_before_st
     )
     .await;
     let error = result.err().unwrap();
-    assert_eq!(error.get_ref().and_then(|source|source.downcast_ref::<codex_router_fleet_state::session_registration_repository::FleetSessionStorageFailure>()),Some(&codex_router_fleet_state::session_registration_repository::FleetSessionStorageFailure::Unavailable));
+    assert_eq!(error.get_ref().and_then(|source|source.downcast_ref::<message_board_storage::session_registration_repository::FleetSessionStorageFailure>()),Some(&message_board_storage::session_registration_repository::FleetSessionStorageFailure::Unavailable));
     assert!(!fixture.root.path().join("service/service.json").exists());
 }
 

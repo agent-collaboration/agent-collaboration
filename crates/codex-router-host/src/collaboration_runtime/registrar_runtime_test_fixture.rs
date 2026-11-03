@@ -154,7 +154,7 @@ impl RuntimeFixture {
         repository: bool,
     ) -> RuntimeTestRegistrarCapabilities {
         RuntimeTestRegistrarCapabilities {
-            repository: repository.then(|| self.repository.clone() as Arc<dyn codex_router_fleet_state::session_registration_repository::FleetSessionRegistrationRepository>),
+            repository: repository.then(|| self.repository.clone() as Arc<dyn message_board_storage::session_registration_repository::FleetSessionRegistrationRepository>),
             connection: self.authority.clone(),
             mode: Arc::new(FixedMode(mode)),
             confirmed_machine_environment: MachineEnvironment::CloudVm,

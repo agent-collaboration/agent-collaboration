@@ -5,7 +5,7 @@ use acp_client_runtime::{
     ProviderSessionSetupReadiness, ProviderSessionSetupUnavailable, ProviderSettingKind,
     RequestedProviderSettings,
 };
-use codex_router_fleet_state::session_registration_repository::FleetSessionStorageFailure;
+use message_board_storage::session_registration_repository::FleetSessionStorageFailure;
 use serde_json::json;
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

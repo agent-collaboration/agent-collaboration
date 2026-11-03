@@ -1,10 +1,10 @@
 //! A real returned identity is retained before local setup can fail or be interrupted.
 use super::{FleetSessionRegistrar, RegistrarFailure, RegistrationCompletion};
-use codex_router_fleet_state::fleet_session_registration::{
-    AbandonedSessionCreation, FleetSessionBindingLifecycle, PreparedSessionCreation,
-};
 use collaboration_protocol::{OperationId, SessionSetupAbandonmentCause};
 use message_board::SessionRef;
+use message_board_storage::fleet_session_registration::{
+    AbandonedSessionCreation, FleetSessionBindingLifecycle, PreparedSessionCreation,
+};
 
 impl FleetSessionRegistrar {
     pub async fn record_provider_created(

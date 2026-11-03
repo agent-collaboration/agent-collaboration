@@ -1,10 +1,10 @@
 //! Only an active, local persisted registration resolves to a session actor.
-use codex_router_fleet_state::fleet_session_registration::{
+use fleet_identity_protocol::OrganizationId;
+use message_board::{Identity, SessionRef, WorkspaceId};
+use message_board_storage::fleet_session_registration::{
     FleetSessionBindingLifecycle, FleetSessionRegistrationId, FleetSessionRegistrationRecord,
     SessionBindingAddress,
 };
-use fleet_identity_protocol::OrganizationId;
-use message_board::{Identity, SessionRef, WorkspaceId};
 
 use super::{FleetSessionRegistrar, RegistrarFailure};
 

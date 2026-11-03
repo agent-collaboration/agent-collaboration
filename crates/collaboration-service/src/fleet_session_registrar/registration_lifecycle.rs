@@ -1,13 +1,13 @@
 //! Provider outcomes and confirmed registration determine activation; an unknown create is never replayed.
-use codex_router_fleet_state::fleet_session_registration::{
-    AbandonedSessionCreation, FleetSessionBindingLifecycle, FleetSessionRegistrationRecord,
-    PreparedSessionCreation, RegisteredFleetSession, SessionBindingAddress,
-};
 use collaboration_protocol::OperationId;
 use fleet_identity_protocol::{
     EndFleetSession, RegisterFleetSessionResult, SessionEndCause, SessionRefusal,
 };
 use message_board::SessionRef;
+use message_board_storage::fleet_session_registration::{
+    AbandonedSessionCreation, FleetSessionBindingLifecycle, FleetSessionRegistrationRecord,
+    PreparedSessionCreation, RegisteredFleetSession, SessionBindingAddress,
+};
 
 use super::{BoundFleetSession, FleetSessionRegistrar, RegistrarFailure};
 

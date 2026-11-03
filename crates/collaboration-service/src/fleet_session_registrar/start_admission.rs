@@ -1,5 +1,5 @@
 //! Start admission reads live authority before minting a prepared binding or creating anything.
-use codex_router_fleet_state::session_registration_repository::{
+use message_board_storage::session_registration_repository::{
     FleetSessionRegistrationRepository, FleetSessionStorageFailure, RegistrationInsert,
 };
 use std::{
@@ -7,14 +7,14 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use codex_router_fleet_state::fleet_session_registration::{
-    FleetSessionBindingLifecycle, FleetSessionPreparation, FleetSessionRegistrationRecord,
-    PreparedFleetSession, PreparedSessionCreation, SessionBindingOrigin,
-};
 use collaboration_contracts::{HarnessLaunchIdentity, HarnessSessionLaunch};
 use collaboration_protocol::OperationId;
 use fleet_identity_protocol::{
     CheckSessionStart, InstallationId, SessionStartCheck, SessionStartRefusal,
+};
+use message_board_storage::fleet_session_registration::{
+    FleetSessionBindingLifecycle, FleetSessionPreparation, FleetSessionRegistrationRecord,
+    PreparedFleetSession, PreparedSessionCreation, SessionBindingOrigin,
 };
 use runtime_primitives::IdSource;
 

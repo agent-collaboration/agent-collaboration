@@ -133,7 +133,7 @@ async fn provider_registration_refuses_missing_http_and_a_mode_downgrade_before_
             serde_json::from_str::<Value>(line).unwrap()["method"] == "session/new"
         }));
         if registration_mode == SessionRegistrationMode::MachineTokens {
-            use codex_router_fleet_state::fleet_session_registration::{
+            use message_board_storage::fleet_session_registration::{
                 AbandonedSessionCreation, FleetSessionBindingLifecycle,
             };
             let records = registrar.repository.records.lock().unwrap();

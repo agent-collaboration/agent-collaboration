@@ -1,35 +1,54 @@
-//! Real Host caller/registrar/SQLite boundaries. Central and ACP answers are
+//! Real Host caller/registrar/Turso boundaries. Central and ACP answers are
 //! explicit stand-ins; real central/provider acceptance remains a separate gate.
 use super::{
     FIRST, SECOND,
     fixture::{PROJECT, RuntimeFixture, call},
     provider, script, wire,
 };
-use codex_router_fleet_state::{
-    FleetStateStore,
+use collaboration_service::fleet_session_registrar::{
+    FleetSessionRegistrar, FleetSessionRegistrarProps, SessionBindingListener,
+    SessionRegistrationMode,
+};
+use message_board_storage::{
+    FleetCache,
     fleet_session_registration::{
         AbandonedSessionCreation, FleetSessionBindingLifecycle, FleetSessionPreparation,
         FleetSessionRegistrationRecord, PreparedSessionCreation,
     },
     session_registration_repository::FleetSessionRegistrationRepository,
 };
-use collaboration_service::fleet_session_registrar::{
-    FleetSessionRegistrar, FleetSessionRegistrarProps, SessionBindingListener,
-    SessionRegistrationMode,
-};
 use serde_json::json;
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
+
+struct FixedStorageClock;
+impl runtime_primitives::Clock for FixedStorageClock {
+    fn now(&self) -> runtime_primitives::SyncTime {
+        runtime_primitives::SyncTime::from_unix_millis(1000)
+    }
+}
+struct FixedStorageIds;
+impl runtime_primitives::IdSource for FixedStorageIds {
+    fn new_id(&self) -> uuid::Uuid {
+        uuid::Uuid::from_u128(0x019f0000_0000_7000_8000_000000000199)
+    }
+}
+pub(super) async fn open_fleet_cache(
+    root: &Path,
+) -> Result<FleetCache, message_board_storage::RouterLocalStorageError> {
+    FleetCache::open_with_sources(
+        &root.join("fleet-cache.sqlite"),
+        Arc::new(FixedStorageClock),
+        Arc::new(FixedStorageIds),
+    )
+    .await
+}
 
 #[tokio::test]
 async fn f4a_real_store_public_provider_create_and_restarted_load_keep_one_registration_and_binding()
  {
     let fixture = RuntimeFixture::new();
-    let router_root = fixture.root.path().join("router");
-    let store = Arc::new(
-        FleetStateStore::open_and_migrate(&router_root)
-            .await
-            .unwrap(),
-    );
+    let cache_directory = fixture.root.path().join("service");
+    let store = Arc::new(open_fleet_cache(&cache_directory).await.unwrap());
     let mut capabilities = fixture.capabilities(SessionRegistrationMode::MachineTokens, true);
     capabilities.repository = Some(store.clone());
     let requests = fixture.root.path().join("create.jsonl");
@@ -69,11 +88,7 @@ async fn f4a_real_store_public_provider_create_and_restarted_load_keep_one_regis
     runtime.shutdown().await.unwrap();
     store.close().await;
 
-    let reopened = Arc::new(
-        FleetStateStore::open_and_migrate(&router_root)
-            .await
-            .unwrap(),
-    );
+    let reopened = Arc::new(open_fleet_cache(&cache_directory).await.unwrap());
     assert_eq!(
         reopened.binding(&binding).await.unwrap(),
         Some(saved.clone())
@@ -129,12 +144,8 @@ async fn f4a_real_store_restart_settlement_keeps_the_actual_id_and_never_registe
  {
     use collaboration_protocol::SessionSetupAbandonmentCause;
     let fixture = RuntimeFixture::new();
-    let router_root = fixture.root.path().join("router");
-    let store = Arc::new(
-        FleetStateStore::open_and_migrate(&router_root)
-            .await
-            .unwrap(),
-    );
+    let cache_directory = fixture.root.path().join("service");
+    let store = Arc::new(open_fleet_cache(&cache_directory).await.unwrap());
     let installation = "019f0000-0000-7000-8000-000000000111";
     let mut operations = Vec::new();
     let mut addresses = Vec::new();
@@ -165,11 +176,7 @@ async fn f4a_real_store_restart_settlement_keeps_the_actual_id_and_never_registe
             .unwrap();
     }
     store.close().await;
-    let reopened = Arc::new(
-        FleetStateStore::open_and_migrate(&router_root)
-            .await
-            .unwrap(),
-    );
+    let reopened = Arc::new(open_fleet_cache(&cache_directory).await.unwrap());
     let capabilities = fixture.capabilities(SessionRegistrationMode::MachineTokens, true);
     let registrar = FleetSessionRegistrar::new(FleetSessionRegistrarProps {
         installation: installation.to_owned().try_into().unwrap(),

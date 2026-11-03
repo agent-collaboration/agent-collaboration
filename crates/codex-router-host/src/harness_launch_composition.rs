@@ -1,7 +1,4 @@
 //! The Host translates the shared harness port into the sole registrar's policy.
-use codex_router_fleet_state::fleet_session_registration::{
-    FleetSessionBindingLifecycle, PreparedSessionCreation,
-};
 use collaboration_contracts::{
     HarnessLaunchFailure, HarnessLaunchFuture, HarnessLocalSetupRefusal,
     HarnessRegistrationOutcome, HarnessRestoreAdmission, HarnessSessionBinding,
@@ -13,6 +10,9 @@ use collaboration_service::fleet_session_registrar::{
     SessionRegistrationMode,
 };
 use message_board::SessionRef;
+use message_board_storage::fleet_session_registration::{
+    FleetSessionBindingLifecycle, PreparedSessionCreation,
+};
 use std::sync::Arc;
 
 const NATIVE_COLLABORATION_MCP_SERVER_NAME: &str = "agent-router";
