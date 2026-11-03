@@ -9,7 +9,7 @@ use fleet_sync_protocol::{
     DatabaseId, GateAnswer, HolderChangeRequest, PeerId, SettleOutcome, TransferId,
 };
 use serde_json::{Value, json};
-use sqlx_core::{query::query, row::Row};
+use sqlx_core::query::query;
 
 const PROJECT: &str = "019f0000-0000-7000-8000-000000000a83";
 const ATTEMPT: &str = "019f0000-0000-7000-8000-000000000b01";
@@ -63,19 +63,18 @@ async fn state(fixture: &Fixture) -> TestResult<ClaimReservationState> {
         .transaction(|scope| {
             Box::pin(async move {
                 let row = query::<sqlx_turso::Turso>(
-                    "SELECT state FROM claim_reservations WHERE attempt_id=? AND project_id=?",
+                    "SELECT state_kind,outcome FROM lease_claim_reservations WHERE attempt_id=? AND project_id=?",
                 )
                 .bind(ATTEMPT)
                 .bind(PROJECT)
                 .fetch_one(scope.executor())
                 .await
                 .map_err(StoreError::backend)?;
-                row.try_get::<String, _>("state")
-                    .map_err(StoreError::backend)
+                crate::typed_claim_observer::reservation_state(&row)?.ok_or_else(||StoreError::backend("reservation absent"))
             })
         })
         .await?;
-    Ok(serde_json::from_str(&payload)?)
+    Ok(serde_json::from_value(payload)?)
 }
 
 #[expect(

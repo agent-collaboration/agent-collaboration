@@ -85,7 +85,7 @@ async fn stored_settlement(fixture: &Fixture) -> TestResult<(String, String, Str
         .transaction(|scope| {
             Box::pin(async move {
                 let row = query::<sqlx_turso::Turso>(
-                    "SELECT d.lease_projection,r.state,c.receipt_id,c.result,(SELECT count(*) FROM claim_settlement_receipts WHERE attempt_id=r.attempt_id) AS receipt_count FROM project_directory d JOIN claim_reservations r ON r.project_id=d.project_id JOIN claim_settlement_receipts c ON c.attempt_id=r.attempt_id WHERE d.project_id=? AND r.attempt_id=?",
+                    "SELECT d.lease_projection,r.state_kind,r.outcome,c.receipt_id,c.result_kind,c.stored_epoch,c.stored_incarnation,c.stored_change,(SELECT count(*) FROM lease_claim_settlement_receipts WHERE attempt_id=r.attempt_id) AS receipt_count FROM project_directory d JOIN lease_claim_reservations r ON r.project_id=d.project_id JOIN lease_claim_settlement_receipts c ON c.attempt_id=r.attempt_id WHERE d.project_id=? AND r.attempt_id=?",
                 )
                 .bind(PROJECT)
                 .bind(ATTEMPT)
@@ -94,9 +94,9 @@ async fn stored_settlement(fixture: &Fixture) -> TestResult<(String, String, Str
                 .map_err(StoreError::backend)?;
                 Ok((
                     row.try_get("lease_projection").map_err(StoreError::backend)?,
-                    row.try_get("state").map_err(StoreError::backend)?,
+                    serde_json::to_string(&crate::typed_claim_observer::reservation_state(&row)?.ok_or_else(||StoreError::backend("reservation absent"))?).map_err(StoreError::backend)?,
                     row.try_get("receipt_id").map_err(StoreError::backend)?,
-                    row.try_get("result").map_err(StoreError::backend)?,
+                    serde_json::to_string(&crate::typed_claim_observer::receipt_result(&row)?).map_err(StoreError::backend)?,
                     row.try_get("receipt_count").map_err(StoreError::backend)?,
                 ))
             })
@@ -123,11 +123,11 @@ async fn supply_active_reservation(fixture: &Fixture) -> TestResult {
         .transaction(|scope| {
             Box::pin(async move {
                 query::<sqlx_turso::Turso>(
-                    "INSERT INTO claim_reservations(attempt_id,project_id,state) VALUES(?,?,?)",
+                    "INSERT INTO lease_claim_reservations(attempt_id,project_id,state_kind,outcome,created_at,updated_at) VALUES(?1,?2,'active',NULL,?3,?3)",
                 )
                 .bind(ATTEMPT)
                 .bind(PROJECT)
-                .bind(r#"{"kind":"active"}"#)
+                .bind(1_792_281_600_000_i64)
                 .execute(scope.executor())
                 .await
                 .map_err(StoreError::backend)?;
@@ -144,18 +144,18 @@ async fn reservation_state(fixture: &Fixture) -> TestResult<Value> {
         .transaction(|scope| {
             Box::pin(async move {
                 let row = query::<sqlx_turso::Turso>(
-                    "SELECT state FROM claim_reservations WHERE attempt_id=?",
+                    "SELECT state_kind,outcome FROM lease_claim_reservations WHERE attempt_id=?",
                 )
                 .bind(ATTEMPT)
                 .fetch_one(scope.executor())
                 .await
                 .map_err(StoreError::backend)?;
-                row.try_get::<String, _>("state")
-                    .map_err(StoreError::backend)
+                crate::typed_claim_observer::reservation_state(&row)?
+                    .ok_or_else(|| StoreError::backend("reservation absent"))
             })
         })
         .await?;
-    Ok(serde_json::from_str(&state)?)
+    Ok(state)
 }
 
 #[expect(
@@ -201,7 +201,7 @@ async fn receipt_write_failure_rolls_back_the_projection_and_keeps_the_reservati
         // The active reservation is a supplied component input; reserve admission is separate.
         supply_active_reservation(&fixture).await?;
         fixture.object.transaction(|scope|Box::pin(async move {
-            scope.executor().execute("CREATE TRIGGER fail_claim_receipt BEFORE INSERT ON claim_settlement_receipts BEGIN SELECT RAISE(ABORT,'claim receipt fixture fault'); END")
+            scope.executor().execute("CREATE TRIGGER fail_claim_receipt BEFORE INSERT ON lease_claim_settlement_receipts BEGIN SELECT RAISE(ABORT,'claim receipt fixture fault'); END")
                 .await.map_err(StoreError::backend)?;
             Ok(())
         })).await?;
@@ -210,7 +210,7 @@ async fn receipt_write_failure_rolls_back_the_projection_and_keeps_the_reservati
         assert!(matches!(fixture.runtime.on_call(call.clone()).await,Err(durable_steps::CallFailure::AnswerLost)));
         assert_eq!(reservation_state(&fixture).await?,json!({"kind":"active"}));
         let unchanged=fixture.object.transaction(|scope|Box::pin(async move {
-            let row=query::<sqlx_turso::Turso>("SELECT lease_projection,(SELECT count(*) FROM claim_settlement_receipts) AS receipts FROM project_directory WHERE project_id=?")
+            let row=query::<sqlx_turso::Turso>("SELECT lease_projection,(SELECT count(*) FROM lease_claim_settlement_receipts) AS receipts FROM project_directory WHERE project_id=?")
                 .bind(PROJECT).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
             Ok((row.try_get::<Option<String>,_>("lease_projection").map_err(StoreError::backend)?,row.try_get::<i64,_>("receipts").map_err(StoreError::backend)?))
         })).await?;
@@ -313,7 +313,7 @@ async fn untrusted_source_and_invalid_snapshot_digest_create_no_projection_or_re
             assert!(matches!(fixture.runtime.on_call(serde_json::to_vec(&call)?).await,Err(durable_steps::CallFailure::NotSent { .. })));
         }
         let unchanged=fixture.object.transaction(|scope|Box::pin(async move {
-            let row=query::<sqlx_turso::Turso>("SELECT lease_projection,(SELECT count(*) FROM claim_reservations) AS claims,(SELECT count(*) FROM claim_settlement_receipts) AS receipts FROM project_directory WHERE project_id=?")
+            let row=query::<sqlx_turso::Turso>("SELECT lease_projection,(SELECT count(*) FROM lease_claim_reservations) AS claims,(SELECT count(*) FROM lease_claim_settlement_receipts) AS receipts FROM project_directory WHERE project_id=?")
                 .bind(PROJECT).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
             Ok((row.try_get::<Option<String>,_>("lease_projection").map_err(StoreError::backend)?,row.try_get::<i64,_>("claims").map_err(StoreError::backend)?,row.try_get::<i64,_>("receipts").map_err(StoreError::backend)?))
         })).await?;

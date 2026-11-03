@@ -22,6 +22,7 @@ use tokio::sync::mpsc;
 pub(super) const CAP: Duration = Duration::from_secs(3);
 pub(super) struct Socket {
     pub(super) binding: ConnectionBinding,
+    session_id: SessionId,
     frames: mpsc::Receiver<SocketCommand>,
 }
 impl Socket {
@@ -44,25 +45,48 @@ impl Socket {
             )
             .await;
         fixture.runtime.on_socket_opened(binding).await?;
+        let session_id = SessionId::new(durable_steps::Uuid::now_v7())?;
         fixture
             .runtime
             .on_frame(
                 binding,
                 serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {
-                    session_id: SessionId::new(durable_steps::Uuid::now_v7())?,
+                    session_id,
                     schema_support: SchemaSupport { max_version: 7 },
                 })?,
             )
             .await?;
         let report = fixture.runtime.on_alarm().await?;
         assert!(report.failed.is_empty(), "session setup: {report:?}");
-        let mut socket = Self { binding, frames };
+        let mut socket = Self {
+            binding,
+            session_id,
+            frames,
+        };
         loop {
             if matches!(socket.next().await?, ServerFrame::Welcome { .. }) {
                 break;
             }
         }
         Ok(socket)
+    }
+    pub(super) async fn fill_send_queue(&self, fixture: &Fixture) -> TestResult {
+        use collaboration_central_core::ObjectHost;
+        // Valid transport frames occupy the actual native queue; this receiver deliberately holds them.
+        let frame = serde_json::to_vec(&ServerFrame::<BoardConsumerProtocol>::Welcome {
+            session_id: self.session_id,
+            databases: Vec::new(),
+        })?;
+        for _ in 0..self.frames.capacity() {
+            fixture
+                .host
+                .send_frame(self.binding.connection, frame.clone().into())
+                .await?;
+        }
+        if self.frames.capacity() != 0 {
+            return Err("native send queue was not filled".into());
+        }
+        Ok(())
     }
     pub(super) async fn next(&mut self) -> TestResult<ServerFrame<BoardConsumerProtocol>> {
         match tokio::time::timeout(CAP, self.frames.recv())
@@ -120,7 +144,7 @@ pub(super) fn envelope(
         Recipient {
             peer: peer.to_owned().try_into()?,
             address: serde_json::from_value(json!({
-                "endpoint":{"serviceId":service,"endpointId":"codex-local"},"sessionId":"recipient"
+                "endpoint":{"serviceId":service,"endpointId":"codex-local"},"sessionId":"019f0000-0000-7000-8000-000000008121"
             }))?,
         },
         None,

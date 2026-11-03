@@ -1,7 +1,6 @@
 //! Claim settlement receipts observe the lease hook's committed directory projection.
 use crate::{
     ClaimReservationOutcome, ClaimReservationState,
-    fleet_lease_projection_step::checked_row_id,
     fleet_record_codec::{corrupt, decode_json, required},
     generated_fleet_lease as queries,
     lease_projection::{ClaimGrantedUpdate, LeaseProjection, LeaseProjectionResult},
@@ -42,27 +41,17 @@ where
                 projection,
             } = self.update;
             let project = projection.database().as_uuid().to_string();
-            let attempt = attempt.as_uuid().to_string();
+            let attempt_id = attempt;
             // The CallId identifies the original settlement across projection refreshes.
-            if let Some(receipt) = queries::read_claim_settlement_receipt(
-                scope,
-                self.call.operation.as_uuid().to_string(),
-                self.call.step.as_str().into(),
-            )
-            .await
-            .map_err(StoreError::backend)?
+            if let Some(receipt) = crate::fleet_claim_store::read_receipt(scope, &self.call).await?
             {
-                checked_row_id(receipt.receipt_id, "claim.receipt_id")?;
-                if required(receipt.attempt_id, "claim.attempt_id")? != attempt.as_str()
-                    || required(receipt.project_id, "claim.project_id")? != project.as_str()
-                {
+                if receipt.attempt != attempt_id || receipt.database != projection.database() {
                     return Err(corrupt(
                         "claim.receipt",
                         "CallId belongs to another settlement",
                     ));
                 }
-                let result: LeaseProjectionResult =
-                    decode_json(&required(receipt.result, "claim.result")?, "claim.result")?;
+                let result = receipt.result;
                 if matches!(result, LeaseProjectionResult::Conflict { .. }) {
                     return Err(corrupt(
                         "claim.result",
@@ -102,48 +91,41 @@ where
             if matches!(result, LeaseProjectionResult::Conflict { .. }) {
                 return Ok((result, Vec::new()));
             }
-            if let Some(previous) = queries::read_claim_reservation(scope, attempt.as_str().into())
-                .await
-                .map_err(StoreError::backend)?
-            {
-                if required(previous.project_id, "claim.project_id")? != project.as_str() {
-                    return Err(corrupt(
-                        "claim.project_id",
-                        "attempt belongs to another project",
-                    ));
-                }
-                let state: ClaimReservationState =
-                    decode_json(&required(previous.state, "claim.state")?, "claim.state")?;
-                if state
-                    == (ClaimReservationState::Settled {
-                        outcome: ClaimReservationOutcome::Refused,
-                    })
-                {
-                    return Err(corrupt("claim.state", "cannot grant a refused settlement"));
-                }
-            }
-            queries::store_claim_reservation(
-                scope,
-                attempt.as_str().into(),
-                project.as_str().into(),
-                serde_json::to_string(&ClaimReservationState::Settled {
-                    outcome: ClaimReservationOutcome::Granted,
+            if matches!(
+                crate::fleet_claim_store::read_reservation(
+                    scope,
+                    projection.database(),
+                    attempt_id
+                )
+                .await?,
+                Some(ClaimReservationState::Settled {
+                    outcome: ClaimReservationOutcome::Refused
                 })
-                .map_err(StoreError::backend)?,
-            )
-            .await
-            .map_err(StoreError::backend)?;
-            queries::insert_claim_settlement_receipt(
+            ) {
+                return Err(corrupt("claim.state", "cannot grant a refused settlement"));
+            }
+            crate::fleet_claim_store::write_reservation(
                 scope,
-                self.row_ids.next()?.to_string(),
-                self.call.operation.as_uuid().to_string(),
-                self.call.step.as_str().into(),
-                attempt.as_str().into(),
-                project.as_str().into(),
-                serde_json::to_string(&result).map_err(StoreError::backend)?,
+                projection.database(),
+                attempt_id,
+                ClaimReservationState::Settled {
+                    outcome: ClaimReservationOutcome::Granted,
+                },
+                self.now,
             )
-            .await
-            .map_err(StoreError::backend)?;
+            .await?;
+            crate::fleet_claim_store::insert_receipt(
+                scope,
+                crate::fleet_claim_store::ClaimReceiptInput {
+                    id: self.row_ids.next()?,
+                    call: self.call,
+                    attempt: attempt_id,
+                    database: projection.database(),
+                    result: result.clone(),
+                    now: self.now,
+                },
+            )
+            .await?;
             let project = message_board::ProjectId::try_from(project)
                 .map_err(|error| corrupt("claim.project_id", error))?;
             crate::fleet_archive_completion::complete_project(

@@ -66,7 +66,17 @@
           "nullable": false
         },
         {
-          "name": "state",
+          "name": "state_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "outcome",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "now",
           "kind": "text",
           "nullable": false
         }
@@ -122,7 +132,27 @@
           "nullable": false
         },
         {
-          "name": "result",
+          "name": "result_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "stored_epoch",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "stored_incarnation",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "stored_change",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "now",
           "kind": "text",
           "nullable": false
         }
@@ -131,7 +161,7 @@
     {
       "name": "list_project_claim_reservations",
       "sql": "sql/fleet/list_project_claim_reservations.sql",
-      "row": "StoredProjectClaimReservation",
+      "row": "StoredClaimReservation",
       "result": "many",
       "parameters": [
         {

@@ -156,7 +156,7 @@ where
     pub async fn on_call(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
         let ObjectWork::Fleet {
             host,
-            shared_host,
+            io,
             replies,
             holder_answer_timeout,
             ..
@@ -232,13 +232,15 @@ where
                 HolderReplyKind::Withdrawal,
             ),
         };
+        let deadline_io = io.clone();
         let answer = crate::peer_request::begin_peer_request(
             host.clone(),
-            shared_host.clone(),
+            io.clone(),
             replies.clone(),
             holder,
             body,
             *holder_answer_timeout,
+            move |remaining| async move { deadline_io.reply_deadline(remaining).await },
         )
         .await?
         .answer()

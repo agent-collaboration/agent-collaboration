@@ -38,8 +38,8 @@ async fn inspect(fixture: &Fixture) -> TestResult<ArchiveState> {
         let feed = query::<sqlx_turso::Turso>("SELECT position,payload FROM fleet_feed ORDER BY position").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|Ok((row.try_get::<i64,_>("position").map_err(StoreError::backend)?,row.try_get::<String,_>("payload").map_err(StoreError::backend)?))).collect::<Result<Vec<_>,StoreError>>()?;
         let ledgers = query::<sqlx_turso::Turso>("SELECT payload FROM fleet_request_decisions ORDER BY request_id").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|row.try_get::<String,_>("payload").map_err(StoreError::backend)).collect::<Result<Vec<_>,_>>()?;
         let reports = query::<sqlx_turso::Turso>("SELECT report FROM archive_reports ORDER BY board_id,project_id").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|row.try_get::<String,_>("report").map_err(StoreError::backend)).collect::<Result<Vec<_>,_>>()?;
-        let row = query::<sqlx_turso::Turso>("SELECT lease_projection,(SELECT state FROM claim_reservations WHERE attempt_id=?) AS reservation FROM project_directory WHERE project_id=?").bind(ATTEMPT).bind(PROJECT).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
-        let reservation = row.try_get::<Option<String>,_>("reservation").map_err(StoreError::backend)?.map(|payload|serde_json::from_str(&payload).map_err(StoreError::backend)).transpose()?;
+        let row = query::<sqlx_turso::Turso>("SELECT d.lease_projection,r.state_kind,r.outcome FROM project_directory d LEFT JOIN lease_claim_reservations r ON r.project_id=d.project_id AND r.attempt_id=? WHERE d.project_id=?").bind(ATTEMPT).bind(PROJECT).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
+        let reservation = crate::typed_claim_observer::reservation_state(&row)?.map(|value|serde_json::from_value(value).map_err(StoreError::backend)).transpose()?;
         Ok(ArchiveState { records, feed, ledgers, reports, projection:row.try_get("lease_projection").map_err(StoreError::backend)?,reservation })
     })).await?)
 }

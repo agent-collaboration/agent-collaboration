@@ -93,21 +93,14 @@ where
             .await
             .map_err(StoreError::backend)?
         {
-            check_private_id(
-                &required(claim.attempt_id, "archive.claim.attempt_id")?,
-                "archive.claim.attempt_id",
-            )?;
-            if required(claim.project_id, "archive.claim.project_id")? != project.id.as_str() {
+            let claim = crate::fleet_claim_store::decode_reservation(claim)?;
+            if claim.database.as_uuid().to_string() != project.id.as_str() {
                 return Err(corrupt(
                     "archive.claim.project_id",
                     "reservation belongs to another project",
                 ));
             }
-            let state: ClaimReservationState = decode_json(
-                &required(claim.state, "archive.claim.state")?,
-                "archive.claim.state",
-            )?;
-            if state == ClaimReservationState::Active
+            if claim.state == ClaimReservationState::Active
                 && !snapshot.claim_reservations.contains(&project.id)
             {
                 snapshot.claim_reservations.push(project.id.clone());
