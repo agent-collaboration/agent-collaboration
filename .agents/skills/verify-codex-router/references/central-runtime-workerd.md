@@ -2,6 +2,8 @@
 
 This section retains the former wrapper’s Worker selectors, qualification evidence and coverage obligations. The wrapper retired in0.1.102; these selectors are historical, not current CLI flags. Use the retained Rust `composed_scope_workerd` and `session_scope_workerd` examples with CI’s pinned tools and explicit scenarios. Current TypeScript target declarations are in `verification/declaration.ts`. An obligation without a mapped retained case remains unavailable. See [central runtime](central-runtime.md) for current entries, native coverage and shared cleanup rules.
 
+D1 source mapping: Central `ad34f727f28d1e573fd7be74e8366cf88eb382e3` (including the retirement removal at `381326da8`). Fleet owns machine sessions, admission, lease state and mail outbox custody; Copy owns project storage. Historical selector names such as `owner-registry` do not name another physical object. Typed Submitter and D1 mail expiry/retention remain pending their combined library/Central pin; retained pre-cutover results do not qualify them.
+
 The default Worker selection is `composed-transactions` plus `composed-numeric`.
 Use repeated `--workerd-mode` flags for another explicit selection:
 
@@ -11,7 +13,7 @@ Use repeated `--workerd-mode` flags for another explicit selection:
 | `fleet-receipt` | `step_scope_workerd -- NODE MF PERSIST PORT`; owner-verified `/admin/v1/conformance/fleet-receipt`, ten checked-step groups |
 | `bootstrap` | `bootstrap_scope_workerd -- NODE MF PERSIST PORT`; owner-verified `/admin/v1/conformance/bootstrap`, fifteen schema/enrollment fixture cases |
 | `access-sessions`, `access-carryover`, `session-carryover` | `session_scope_workerd -- NODE MF PERSIST PORT MODE`; explicit normal-session mode last |
-| `session-capabilities` | The same normal-session entry; actual workers-rs attachment integer/origin roundtrip and the same Connection object's competing-deadline alarm; two groups |
+| `session-capabilities` | The same normal-session entry; actual workers-rs attachment integer/origin roundtrip and the owning Fleet object's competing-deadline alarm; two groups |
 | `session-failures` | The same entry; targeted postcommit attachment error/physical close, healthy installation, correlated Register refusal, callback and SQL rollback with journal readback, ordered barrier and real retry; five groups |
 | `holder-lifecycle` | The same entry; normal holder readiness/expiry/replacement, exact frame/connection, close/alarm/late response and held schema publication; five groups, with the fifth explicitly split into hub primitive and changed-SessionId wire close |
 | `archive-reports` | The same entry; retained exact archive report/replay and Fleet board/workspace/feed/ledger oracle; one group |
@@ -21,15 +23,14 @@ Use repeated `--workerd-mode` flags for another explicit selection:
 | `forward-origin`, `forward-disconnected`, `forward-reconnect` | The same entry; shared Native forwarding oracles with normal enrollment/Fleet/Register, literal origin/opaque body/reply, stored presence or original reconnect correlation; one group each |
 | `forward-capacity`, `forward-deadline` | The same entry; reserved sixteenth slot/seventeenth Overloaded and terminal reuse, or original Unanswered/late-reply isolation; one group each |
 | `forward-reopen` | The same entry with two owned process lifetimes on the same persistence; known correlation presence/body absence, retained sixteen slots, expiry and sixteen fresh deliveries; one group, at least two reaps |
-| `raw-submit-refusal` | The same normal-session entry; permanent correlated raw Submit refusal, same-socket survival and no recipient custody |
-| `sender-settlement` | The same entry; Query/Settle through Registry to recipient Mailbox, existing custody replay, unknown tombstone and later Submit refusal |
-| `sender-retirement` | The same entry; authenticated sender fencing, original CallId receipt replay and one recipient control effect |
+| `raw-submit-refusal` | Normal admitted sockets; correlated raw Submit InvalidShape, same-socket status/Query usability, unknown Fleet custody and no unexpected recipient Push |
+| `sender-settlement` | Authenticated sender Query/Settle against Fleet outbox custody, known Sent replay, unknown identity settled as CustodyUnresolvable, late Submit replay and exact original Push body; no recipient receipt is sent |
 | `http-body-keepalive` | The same entry; exactly 2 MiB unauthorized production enrollment with a withheld suffix, then valid enrollment on the same physical TCP socket |
 | `http-body-over-limit` | The same entry; eight route/auth/method variants with 2 MiB+1, each requiring 413 followed by physical EOF/reset; one grouped scenario |
 | `creation-gates` | The same entry; normal enrolled sessions, four creation-gate outcomes, same-attempt replay/reconnect/retry, first Copy piece and held Claim refusal; one grouped scenario |
 | `delivery-config` | The same entry with an explicit UUIDv7 relay after the mode; first/replay/update/completed readmission/replay return that relay; one grouped scenario |
 | `delivery-config-refusals` | The same entry without a relay argument; actual Worker missing relay field and malformed peer refusals; two groups |
-| `mailbox-deadline` | The same entry; normal session, offline recipient, actual alarm, newer status and released payload; one group, no physical restart claim |
+| `mailbox-deadline` | Retained selector spelling only; its helper still uses retired Fetch and sequence-bearing Sent. D1 expiry coverage is pending its pin; do not select this as Fleet Push expiry proof |
 | `installation-directory` | The same entry; multi-page normal-session ordering/cursor refusals and immutable revoked bindings with Submit refusal; three groups |
 | `fleet-notices` | The same entry; three admitted sessions, two reader installations, journaled Fleet hints through the real alarm/Delivery path and exact positioned notice readback; one grouped scenario |
 | `copy-owner` | The same entry; actual owner HTTP Health before initialization, shell storage bytes, empty Page, Repair response, machine refusal and minimal retired receipt; one grouped scenario |
@@ -49,10 +50,24 @@ Its four groups are not the retired workflow's outer/inner log-layer proof.
 `access-sessions` separately covers normal signed HTTP/socket admission and
 revocation. Each selection uses fresh persistence and must stop/reap its process.
 
-The three sender modes each run one shared native/Worker scenario through actual
-admitted sockets and recipient custody. They do not establish positive Worker
-forwarding, forwarding races/reopen, normal registration, or full session/holder
-equivalence. Select them explicitly; the default modes remain unchanged.
+The two sender modes share `tests/support/sender_control_scenarios.rs` with the
+Native `mail_submit_http::sender_controls` cases. Their Push conversion is built
+at `ad34f727f`; observing the exact pushed body must leave the known item Sent,
+because the helper deliberately sends no recipient inbox receipt. The Native
+`integration::fleet_mail_settle` separately covers known custody replay, unknown identity
+settlement, sender/digest conflict and owner reopen. `fleet_mail_query` commits
+the recipient inbox, returns its receipt and checks AtRecipient plus released
+Fleet payload; `fleet_mail_receipt_loss` reopens that inbox after a lost receipt.
+`fleet_mail_reports` checks recipient-only Report/ACK/replay and rollback, while
+`fleet_mail_status_wire` observes AtRecipient then one Delivered publication on
+the submitter's real socket. These are separate source-backed observations,
+not extra Worker groups or new run results. Push-body readback alone must not
+claim inbox custody, payload release, Report or terminal status publication.
+
+`sender-retirement` was removed at `381326da8` with no positive replacement:
+sender Retire is a retired operation. Its surviving refusal/custody obligations
+are `integration::fleet_mail_query::retired_fetch_received_and_retire_requests_are_invalid_and_leave_custody_queryable`
+and the Fleet Query/Settle cases above; there is no `SENDER_RETIREMENT_RESULT` to require.
 
 For the seven session and five holder obligations, explicitly select
 `session-capabilities`, `session-failures` and `holder-lifecycle`. Decisions 604,
@@ -65,7 +80,7 @@ holder five once. `holder-schema-overlap` selects an already included case in
 the product example and is deliberately not another catalog journey.
 
 The fifth holder group calls the existing fresh-hub SessionKey primitive only
-after normal admission on its owning Connection. Separately, a changed Hello
+after normal admission on its owning Fleet session. Separately, a changed Hello
 SessionId on that admitted wire must return typed `MalformedFrame` and physically
 close. It is not a wire answer that differs solely in SessionId. Separate real
 installations exercise the healthy-versus-failed attachment case. The former
@@ -75,7 +90,7 @@ workers-rs attachment encoding/origin and the same object's real alarm.
 The original ten closure selectors contain eleven groups, since `imported-claim`
 contains two. Decisions 645/650 and the declared leaf handoffs govern them.
 `ConformanceBoardState` selects Open or Archived only in the existing real
-Fleet Import/Registry ImportTask/Copy seed arranger. It is not HTTP import proof
+Fleet import task and Copy seed arranger. It is not HTTP import proof
 or a production admission policy. Open retirement refusal requires the exact
 GateRefused answer and unchanged readable seed; successful Claim requires exact
 epoch/start/expiry, replay and actual published holder/Copy fence. Current
@@ -92,7 +107,7 @@ This selector adds one group beyond the ten closure selectors' eleven groups.
 Forwarding setup normally enrolls both peers, creates the Fleet graph and
 Registers the holder. Shared test bodies keep Native and Worker literal oracles
 in one home; the holder is a fixture socket, not the Router writer. Capacity
-holds the real sixteenth Registry dispatch, observes the seventeenth refusal
+holds the real sixteenth Fleet dispatch, observes the seventeenth refusal
 before releasing it, and verifies terminal slot reuse. Deadline uses the owning
 sender clock and actual alarm, then rejects the late answer on a fresh identity.
 
@@ -124,7 +139,7 @@ workerd strips the hop-by-hop `Connection` header. Its eight iterations include
 two POST-enroll variants with different auth but identical printed route text.
 Count the grouped result once; printed lines are not distinct-case identities.
 
-`creation-gates` uses actual Fleet/Registry/Copy owners. It checks the recorded
+`creation-gates` uses actual Fleet and Copy owners. It checks the recorded
 carrier against the enrolled writer, exact rejection detail, and a retryable
 missing creation followed by the same attempt succeeding after reconnect. Its
 four gates, first-piece and held-Claim markers are subcases of one result. The
@@ -139,36 +154,21 @@ driver passes it after the mode to `session_scope_workerd`. Use a fresh evidence
 directory and persistence for each configured value when comparing two values.
 This mode compares complete normal enrollment responses and uses the owning
 revocation/readmission journal's operation IDs and `Completed` state before the
-readmission checks. The original five stage markers and the extension below
-remain subcases of one grouped result.
-It does not exercise missing/invalid Worker bindings, Router Submit/Fetch/Received
+readmission checks. Its five stage markers remain subcases of one grouped result.
+It does not exercise missing/invalid Worker bindings, Router Submit/Push/receipt/Report
 or wrong-relay transport refusal, physical restart, or decision 539's peer refresh.
 Central returns the relay; decision 524's amendment puts the delivery-call relay
 check in the Router transport, since the session wire has no relay field.
 
-Decision 909 adds a second lifecycle in this same scenario, with a distinct
-installation, peer, Access client and fixture credentials. After that peer's
-referenced revocation is Completed, arm the existing DropNextObjectReply for
-Mailbox(installation), then readmit. Await the real dropped reply concurrently
-with the unchanged ten-second readmission Completed oracle. The drop must name
-central.open-peer-mailbox, that exact target peer and the unit request body;
-the lifecycle must match the enrollment row's operation ID and revoked=false.
-Require exact full enrollment identities and replay after both waits complete.
-
-Select the same scenario natively with --package collaboration-central-tokio,
---features conformance and --test-target delivery_config. Require the five
-original stages, five lost-reply stages and the explicit successful Open-loss
-assertion on both runtimes. These remain one Native case or one Worker group,
-not eleven distinct cases. The earlier unexplained Worker timeout stays open;
-a passing lost-reply case is coverage, not a diagnosis or production repair.
-
-In private Worker source, suppress alarms only after the actual reply-drop
-observation. The original delivered-reply stages must still pass; the new case
-must observe its exact drop, then fail the original ten-second readiness check
-with the referenced readmission Running and Open CallPending/MayHaveReached.
-A failure before the fault is armed supplies no sensitivity credit: retain it
-and its disposition. Keep owned Node settlement, exact source/image restoration
-and a fresh-state restored pass. No production hook or longer deadline follows.
+The old decision-909 lost-Open subcase is removed: there is no recipient object
+Open call or reply to drop. At this pin `delivery_config_scenarios.rs` retains
+five enrollment answer stages and observes the exact Fleet revocation/readmission
+operation reaching Completed within its existing ten-second bound. Select the
+same Native fixture with `--test delivery_config`; no lost-Open marker is owed.
+The separate `integration::fleet_mail_readmission::same_peer_readmission_pushes_and_receipts_the_pre_revoke_item_once`
+observes the surviving mail obligation through actual Fleet Push and recipient
+receipt after same-peer readmission. It does not recreate the deleted Open hop
+or establish Worker parity for that Native case.
 
 `fleet-notices` covers decision 497's normal producer path. Two installations
 read Fleet at their applied cursors, a third mutates it, and each reader receives
@@ -181,7 +181,7 @@ page's `through`; native `fleet_notice_outbox` cases separately exercise that
 rule, transaction rollback, dispatch/ACK loss, owning store/runtime reopen and
 archive-holder notices. Those component cases use core-envelope fixtures and
 explicit alarms. This Worker mode proves neither fault/reopen parity nor a real
-Registry producer of archive projections, physical/automatic server restart,
+Fleet producer of archive projections, physical/automatic server restart,
 or full legacy rows 27–28 equivalence. Run with fresh persistence and require
 the complete `FLEET_NOTICES_RESULT` group and owned process settlement.
 
@@ -208,7 +208,7 @@ reads, recovery and populated exclusive paging; `copy_receiver` checks local
 metadata exclusion from the replicated catalog and collision rollback. These
 are distinct from full Worker migration-fault/recovery/populated-page parity,
 physical storage exhaustion, full Worker migration parity, normal
-Registry administration and complete legacy row 16 equivalence. Worker storage
+Fleet administration and complete legacy row 16 equivalence. Worker storage
 measurement here is positive and shell-owned, with no independent quantitative
 byte attribution. The `bootstrap` journey separately retains fifteen schema/
 enrollment groups across restart; its enrollment oracle requires all four fields
@@ -265,14 +265,14 @@ For a held owner Fence racing the old holder's Piece (legacy row 11; decision
 740 and its adopted map), run the Native recipe with
 `--test-target owner_fence_ordering --test-target owner_registry`.
 The declared checkpoint has three ordering cases plus twelve retained owner
-Registry cases. The ordering selectors are:
+Fleet cases. The ordering selectors are:
 
 - `held_old_piece_commits_before_the_owner_fence_without_partial_rows`
 - `held_owner_fence_commits_before_the_old_piece_with_the_exact_cutoff`
 - `both_held_calls_resume_before_either_answer_and_resolve_to_one_complete_order`
 
 Require normal enrollment, Fleet creation, Register and schema 1. Verify the
-Registry's held CopyFence database/transfer/target/epoch/expected prefix, and the
+Fleet's held CopyFence database/transfer/target/epoch/expected prefix, and the
 old session's entire held Piece and sender, against the same Copy. Both holds
 must still be present together before release. The concurrent case releases
 both before awaiting either answer; ordered cases alone do not establish that

@@ -11,10 +11,11 @@ The wrapper retired in 0.1.102. Current execution is `node verification/run.ts "
 The sections below preserve the governing obligations and earlier qualification limits. Descriptions of retired wrappers and their inputs are historical; they are not current command contracts. Use the retained source above to determine actual coverage, and report any obligation without a current route as unavailable. This documentation change supplies no new runtime proof or operating authority.
 
 
-This lasting journey drives reachable OB4 routes through two declared debug
-Hosts and retains all ten case results. It is a **partial driver**. Recipient
+At Central `ad34f727f`, this lasting journey drives the seven cases actually
+registered in `verification/case-registry.ts` through two declared debug
+Hosts. It is a **partial driver**. Recipient
 routes need authenticated exact-model sessions. The driver uses an existing
-pre-apply Copy dispatch hold and normal Session retirement/recovery operations;
+pre-apply Copy dispatch hold and normal Session recovery operations;
 each still needs qualification on the declared target. Launch, sender acceptance and
 component proof do not establish recipient arrival.
 
@@ -66,7 +67,7 @@ new authentication wiring. The driver builds nothing.
   only, with all behavioral cases not-run.
 - `local-conformance`: two local Hosts and the real declared Tokio central.
   Disposable synthetic enrollment uses the existing fixture Access edge;
-  registry, forwarding, storage and mail stay real. The edge forwards WebSocket
+  Fleet admission, forwarding, storage and mail stay real. The edge forwards WebSocket
   bytes unchanged. The per-installation Session gate can pause the declared
   connection and preserves that pause across Host restart. This mode activates
   the reachable behavioral cases; the pre-apply hold uses a separate existing
@@ -120,33 +121,41 @@ and authentication before any input. This is the [documented native alias bindin
 |---|---|
 | Fleet outage | Original pending UUID during pause; stop owner, read closed cache/outbox, restart same installation, resume and compare exact replayed decision |
 | Forwarding | Root/reply, CLI/MCP replay, origin/actor, one holder effect, non-post refusal before/after B obtains completed authority, imported unheld refusal, independent offline `lastSeen`; production deadline/cap and central content nonretention unqualified |
-| Both directions | Direct messages and board notifications in both actual recipient sessions; event cursor acquired before input |
+| Both directions | Direct messages and board notifications in both actual recipient sessions; event cursor acquired before input. Match the submitted item to `SessionSnapshot.pushedItemIds.items` and its Push-count increase; an old mail-waiting hint is not Push evidence |
 | Local independence | Actual local notification while that Host's central Session is paused |
-| Held copy acknowledgement | Existing pre-apply Copy dispatch hold on the holder installation ServiceId; decode the intended cause Piece, observe the cause outside the acknowledged prefix and unrelated actual mail, then release and observe the notification |
+| Held copy acknowledgement | Existing keyed pre-apply Copy dispatch hold owned by Fleet; decode the intended cause Piece, observe the cause outside the acknowledged prefix and unrelated actual mail, then release and observe the notification |
 | Distinct handoffs | Public frozen intent IDs, distinct local/remote recipients, stable IDs on replay and correlated arrival; stopped-owner handoff-body readback/reopen unqualified |
-| Receipt retention | Pause the actual recipient, freeze original, stop/reopen sender and compare closed-store bytes, replay identical envelope while unsettled, resume and observe arrival; terminal normal retirement and original replay preserve public sender status and cause no second injection in a bounded quiet window. Compact row/reopen/conflict proof remains separate Tokio evidence |
-| Offline retry | Pause recipient Session, same-item retries, reconnect, actual output, then no repeated input/output in a bounded quiet window; receipt-retention covers unsettled sender reopen. Provider restart and long-term dedup remain unqualified |
+| Receipt retention | No current two-Host retention case is registered. Surviving Native `integration::fleet_mail_receipt_loss`, `fleet_mail_query` and `fleet_mail_settle` observe original inbox custody/replay, sender status/digest and owner reopen. Sender Retire success is removed; retired-operation refusal is covered by `fleet_mail_query`. Router/model retention and D1 expiry remain pending their declared pin/driver |
+| Offline retry | Pause recipient Session, same-item retries, reconnect, actual output, then no repeated input/output in a bounded quiet window. Unsettled sender reopen, provider restart and long-term dedup have no current two-Host case and remain unqualified |
 | Automatic board cancellation | Board membership/generation/copy controls remain unqualified across machines; local native and real-Host cases provide their separately declared coverage |
 | Wakes | Actual timer arrival, original-operation slot replay, unrelated actual-controller refusal, creator replacement; target replacement and lifetime/timing matrix unqualified |
 
 The central conformance selector is **pre-apply Copy dispatch hold, which
 withholds the normal replication acknowledgement** (decision 1118). Address
-`/admin/v1/conformance/runtime` at `connection:<holder installation ServiceId>`,
-select `copy:<project UUID>`, and use `holdNextDispatch`, `awaitHeldDispatch`,
-`resumeDispatchAndHoldNext` for unrelated earlier Copy requests, and
-`resumeDispatch` in cleanup. Decode recorded request bytes and require the
-intended cause Piece before counting the hold. Mailbox and Registry remain live.
+`/admin/v1/conformance/runtime` with `address:{kind:"fleet"}` and
+`key:{destination:{kind:"copy",value:project},call:"any"}`. Use
+`holdNextDispatch`, `awaitHeldDispatch` and `resumeDispatch` with `{key}`;
+handoff for unrelated earlier requests uses `resumeDispatchAndHoldNext` with
+`{key,next:key}`. Select that exact key from `dispatches[]`, decode its recorded
+request bytes and require the intended cause Piece before counting the hold.
+Fleet sessions/admission and Fleet outbox Push/receipt/Report/status work remain
+live while the selected Copy invocation is held. `verification/clients/copy-hold.ts`
+implements this control shape; no separate session object is addressed.
 This is not a post-commit acknowledgement-only barrier. Use only the conformance
 Worker for this case; qualify its exact bundle/workerd receipt separately.
 
-Normal retention replay reads the exact original item/digest/body from a stopped
-owning project store and submits it at `/v1/session`. Never mint a new machine
-SessionId when the Host will resume: that intentionally ends its prior session.
-Reuse its exact saved SessionId only after Host exit, leave saved notice cursors
-unchanged, and close the diagnostic connection before restarting the Host.
-Retire only a normal terminal result; unsettled status is a pending observation,
-never a fabricated delivered outcome. Model-free replay qualification receives
-no actual-recipient or compact-row credit.
+The former two-Host project-store retention replay procedure has no current
+case-registry entry, so it is unavailable at this pin. For a separately declared
+session diagnostic, never mint a new machine SessionId when the Host will resume:
+that intentionally ends its prior session. Reuse its exact saved SessionId only
+after Host exit, leave saved notice cursors unchanged, and close the diagnostic
+connection before restarting the Host; these are safety constraints, not a new
+retention driver.
+Do not submit Retire: it is refused at Fleet. Observe normal terminal status via
+recipient Report and submitter publication/Query; Settle may resolve an unknown
+custody identity but must preserve a known item's status and digest. This is the
+surviving Native oracle, not an implemented two-Host retention case. Model-free
+replay qualification receives no actual-recipient or compact-row credit.
 
 Public outgoing project status requires its normal active lead access. When
 authorized for the owned fixture, record an owner grant and install the same

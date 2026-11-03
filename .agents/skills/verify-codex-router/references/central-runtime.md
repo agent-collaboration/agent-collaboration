@@ -1,6 +1,8 @@
 # Central runtime
 
-For central-storage-reset D1, use [D1 central mail](d1-central-mail.md). Its three-Router/two-project topology and new Push controls are not supplied by the historical recipes below. The D1 entry currently prepares coverage only; no live D1 result is implied.
+For central-storage-reset D1, use [D1 central mail](d1-central-mail.md). Its three-Router/two-project topology and Push controls are not supplied by the historical recipes below. The partial Tokio driver has bounded intermediate observations; no final D1 or newly pinned live result is implied.
+
+This mapping is pinned to Central `ad34f727f28d1e573fd7be74e8366cf88eb382e3`. Fleet owns sessions, admission, lease state and mail outbox custody; Copy owns project storage. Legacy test/selector names and logical envelope facets may retain `registry`, but there is no separate object or store for that role. Typed Submitter and D1 mail expiry/retention await their combined pin.
 
 ## Current entry
 
@@ -9,6 +11,21 @@ The wrapper retired in 0.1.102. Current native conformance belongs to `crates/co
 ```sh
 cargo test --locked -p collaboration-central-tokio --features conformance --test forwarded_posts --test forwarding_real_timer --test mailbox_rules -- --test-threads=1
 ```
+
+That retained legacy selection does not qualify D1 mail. Current Fleet mail
+observations are the real `integration` modules `fleet_mail_dispatch`,
+`fleet_mail_receipt_loss`, `fleet_mail_reports`, `fleet_mail_query`,
+`fleet_mail_settle` and `fleet_mail_status_wire`:
+
+```sh
+cargo test --locked -p collaboration-central-tokio --features conformance --test integration fleet_mail_ -- --test-threads=1
+```
+
+Require the exact Push item/digest, real recipient inbox commit and receipt before
+Fleet payload release, recipient-only Report/ACK/replay, and versioned status
+publication to the submitter. Query/Settle bind sender authority and digest;
+retired Fetch/Received/Retire return InvalidShape without changing custody.
+These Native fixtures do not establish a Router/model turn or Worker/hosted parity.
 
 Current local workerd entries are the crate’s `composed_scope_workerd` and `session_scope_workerd` examples, using the pinned tools and scenario selections in the CI Worker job. `verification/run.ts` also selects explicit Tokio/workerd targets from `verification/declaration.ts`. Select actual retained targets and cases; a historical target name below is not an executable current selection.
 
@@ -90,7 +107,7 @@ tests and name each retained integration target. Each must execute at least one
 test. Counts retain passed/failed/ignored and filtered totals; empty or missing
 suites cannot turn green. Never change selection merely to avoid a failure.
 
-For the Native Registry notice producer (decisions 687/689/690/691), use three
+For the Native Fleet notice producer (decisions 687/689/690/691), use three
 separate invocations of the Native recipe with these exact target/name pairs:
 
 | `--test-target` | `--test-name` |
@@ -218,7 +235,7 @@ must retain acknowledgement 1:1 and the exact epoch, holder, Held state and expi
 Identical Piece replay returns AlreadyApplied; SnapshotPage retains schema 1,
 position 1:1, the original table and empty rows. Replay the original renewal
 attempt twice: replayed true, no transfer, unchanged recorded expiry and authority,
-with remaining lifetime decreasing as Registry time advances. Wrong Welcome
+with remaining lifetime decreasing as Fleet time advances. Wrong Welcome
 acknowledgements and fresh renewal keys must fail after physical restart; mapping
 AlreadyApplied to Applied must also fail. Restore exact source before rerunning.
 This is the test harness's real Native HTTP/socket/store/process boundary, not a
@@ -270,16 +287,16 @@ attempt reserved epoch 2; under 785 the next Takeover must use epoch 3 and
 start 1:2, with no historical grant at epoch 2. Do not reset or split the fixture
 to recover the retired numeric-2 expectation.
 
-Hold the actual Registry-to-Copy Fence and check its typed target, database,
+Hold the actual Fleet-to-Copy Fence and check its typed target, database,
 transfer, CallId, new epoch 3, target holder, expected epoch 1/ack 1:2 and schema
 support. Lose that exact successful reply after the real Copy call. Require the
 same public Pending transfer and Copy fence 3/target holder/retained row 2 before
 reopen. After owning server shutdown, the test-local grant_readback module uses
-only public fleet_sync_lease::epoch_holder on an existing registry.db opened
+only public fleet_sync_lease::epoch_holder on an existing fleet.db opened
 read_only: exact grant 1, no grant 2 and no grant 3. It rolls back its read
 transaction and closes before a new server starts; no private SQL is needed.
 
-Start a fresh owning server/store on the same root, with Registry time advanced
+Start a fresh owning server/store on the same root, with Fleet time advanced
 one second and the existing Copy-dispatch hold pre-armed. Require exact equality
 of the full decoded original Fence envelope, including CallId/request/target, then
 resume. The same owner attempt must grant and replay exact epoch 3/start 1:2.
@@ -330,8 +347,8 @@ correlated Release, hold it while Copy advances to 5, acknowledge final 1:1 via
 the actual CopyAcknowledged call, then observe the same Fence2→6 repair. Each
 must grant/move and replay exact epoch 6/start 1:1, retain the empty Copy,
 refuse the old writer at 6/cutoff 1:1, and install the target's entire usable
-Registry lease 6. The older-Preview case also checks old-writer StaleEpoch 5
-before transfer. Never arrange this through a private Registry-floor edit.
+Fleet lease 6. The older-Preview case also checks old-writer StaleEpoch 5
+before transfer. Never arrange this through a private Fleet-floor edit.
 
 Ordered cases retain literal UUID-keyed rows with numbers 1/2: before-left/right
 commit and are completely read at 1:2 while exact Fence2 is held, then the Fence
@@ -351,25 +368,26 @@ This is Native fixture-client HTTP/socket/core/store composition. DAG envelopes,
 public missing-Copy/no-grant, full rows 5/9/10/12, OS recovery, Worker/DO,
 Router integration and full gate 737 remain separate.
 
-For row 5 groups 4–5 (decisions 769/806/807/808), keep these six cases distinct:
-one Core typed edge test, three Core decoder unit tests, one direct Registry
-on_call case and one Native missing-Copy recovery case. For the typed test,
-use the Native recipe with `--package collaboration-central-core --test-target
-call_edge_mapping`. For decoder units, run from the declared source:
+For the row 5 caller-boundary obligations (decisions 769/806/807/808), use
+Core `call_edge_mapping` and `object_transport::tests`, plus the direct Native
+`machine_enrollment` case below. At this pin synchronous Copy→Fleet calls are
+refused; Fleet→Copy is allowed. The exception for a Copy's durable directory
+summary is checked separately by the real decoder. Run decoder units from the
+declared source:
 
 ```sh
 cargo test --locked --offline -p collaboration-central-core --lib \
   object_transport::tests:: -- --nocapture
 ```
 
-The production decoder is tested by an in-crate cfg(test) module; no public
-test export is needed. Require typed CallEdgeRefused{Copy, Registry} with
-Copy→Fleet allowed. Direct decode must refuse well-formed Copy/Object→Registry,
-and allow Session/Object→Registry plus Copy/Object→Fleet. Removing only outer
-may_call must fail the decoder case (2/1/0) while direct public on_call still
-passes (1/0/0): the inner Registry handler independently refuses it. Record
-that masking as defense in depth, not isolated decoder proof. A changed build
-that refuses everything must fail both allowed decoder controls (1/2/0).
+The production decoder is tested by an in-crate cfg(test) module. A retained
+logical `registry` facet/enum tag belongs to physical `ObjectAddress::Fleet`;
+it does not create another owner. Require both forbidden synchronous Copy
+edges, the allowed Fleet→Copy edge, machine-session peer read and exact durable
+directory-summary exception. Removed physical addresses must fail before
+dispatch. The old Copy→Fleet synchronous-allow assertion is removed because
+project returns now use durable follow-ups. Prior sensitivity counts are not
+current-target execution results.
 
 For public on_call, use the Native recipe with `--test-target machine_enrollment`
 and exact `--test-name call_edge_mapping::registry_public_call_refuses_copy_authority_and_allows_session_peer_read`.
@@ -380,7 +398,7 @@ For missing Copy, use `--test-target transfer_schema_support` and exact
 `--test-name missing_copy::missing_copy_after_preview_is_unavailable_without_grant_then_same_takeover_recovers`.
 Create/Register/schema 1 and Preview normally, then gracefully stop all owners
 before moving only this test's Copy database and present WAL/SHM files outside
-the scanned root, retaining exact bytes. Reopen with the same Registry root.
+the scanned root, retaining exact bytes. Reopen with the same Fleet root.
 Require session CopyUnavailable(Uninitialized), owner HTTP 503 typed Unavailable
 for the same transfer twice, and a fresh target Welcome with no lease.
 
@@ -395,9 +413,9 @@ expectation is corrected under 808 and supplies no product-failure credit.
 Stop owners before restoring: remove only newly created empty files for that
 one Copy, check saved bytes, rename them back. Before retry, the public complete
 original CopyStatus must retain fence 1/holder/schema/prefix. Advance only the
-existing Registry fixture clock five seconds for the real retry deadline.
+existing Fleet fixture clock five seconds for the real retry deadline.
 The same full Takeover must grant epoch 2/start 1:1. Require actual Copy fence
-2/target/prefix and stopped public Registry lease/history/outcome 2, no grants
+2/target/prefix and stopped public Fleet lease/history/outcome 2, no grants
 3–6. A changed build replacing retryable absence with terminal refusal, or
 misreporting recovered epoch 3, must fail the corresponding exact assertion.
 Restore exact private source and rerun all six unique cases.
@@ -414,14 +432,14 @@ decision 734), use `--test-target session_renewal_history`. Its two cases are:
 - `expired_welcome_is_restored_by_a_fresh_same_epoch_renewal`
 
 Both normally create, Register and apply schema 1 at prefix 1:1. The first loses
-the exact committed R1 frame answer, reconnects 15 Registry minutes later and
+the exact committed R1 frame answer, reconnects 15 Fleet minutes later and
 requires the entire Welcome lease to retain the original four-hour expiry.
 Replayed R1 remains unchanged; fresh R2 extends expiry by 15 minutes. After real
 owner Takeover and exact grant replay to epoch 2, R1 still reports recorded
 epoch-1 success and its original expiry alongside current epoch-2 target
 authority. A fresh old-holder attempt must return StaleEpoch 2/cutoff 1:1.
 
-The separate fresh-fixture expiry case reconnects after five Registry hours:
+The separate fresh-fixture expiry case reconnects after five Fleet hours:
 Welcome must show Expired, original expiry and zero remaining. Fresh renewal
 restores Held in the same epoch, with literal expiry nine hours after the start
 and four hours remaining. Keep full typed lease/result equality, transfer=None,
@@ -457,7 +475,7 @@ with Renewal/lastRenewedAt, decoding to native HolderStale with the exact time;
 actual detached recent-holder delivery failure is Presence/lastSeen, decoding
 to native HolderUnreachable. Assert literal shapes and native decoding. The
 fixture checks actual socket detachment, uses release_unsent_for=0 and advances
-Registry time 10 ms after the first Pending attempt, matching the engine's
+Fleet time 10 ms after the first Pending attempt, matching the engine's
 initial retry and strict unsent boundary. This is not a production timeout proof.
 
 Lost transfer notices, bypassed Copy waits, changed migration detail and swapped
@@ -473,7 +491,7 @@ Its one Native case is
 `exact_held_renewal_resends_on_the_same_session_replacement_and_then_replays_exactly`.
 
 Reuse normal Fleet creation, Register and schema 1 at prefix 1:1. Advance
-Registry time 15 minutes, hold the actual Connection-to-Registry dispatch and
+Fleet time 15 minutes, hold the owning Fleet renewal invocation and
 require its full RenewRequest, kind, source, face, destination and authenticated
 peer. Extract the actual held session identity. An authenticated Hello with that
 same identity must return the entire original Ready entry: prefix 1:1, epoch 1,
@@ -490,7 +508,7 @@ empty rows and no next page. Keep strict frame correlation throughout.
 
 Native deliberately aborts and drains the replaced socket's request futures
 in `native_objects.rs`; the original call's completion and committed fate are
-not this oracle. Fresh actual Registry renewal keys must fail exact replay;
+not this oracle. Fresh actual Fleet renewal keys must fail exact replay;
 a different typed replacement close reason must fail after the new Welcome.
 Sending a different valid renewal into the hold must fail full attribution
 before the held-request credit marker. That last check is fixture sensitivity,
@@ -519,8 +537,8 @@ CredentialRejected(Revoked) and physically close. A fresh Access-signed upgrade
 with the same credential must return 401/Revoked.
 
 The enrollment helper verifies the stored expiry `2033-05-18T03:33:20Z`.
-Advance Registry and the old Connection clocks one millisecond beyond it and
-require both exact readbacks. A real Renew frame must receive typed/physical
+Advance the owning Fleet clock one millisecond beyond it and require its exact
+readback. A real Renew frame must receive typed/physical
 Expired close, then a fresh Access-signed upgrade must return 401/Expired.
 The edge's Access clock stays at normal wall time: this checks stored machine
 expiry, not JWT expiry, wall-time passage or a universal credential lifetime.
@@ -595,7 +613,7 @@ adds a guard; it never replaces or changes the complete-prefix oracle.
 Then perform the honest same-session B reconnect, replay the saved Piece through
 4:2, write row 9 at 4:3 and compare all eight full rows. Replay the saved owner
 Takeover 4/start 2:3 and reconnect the old writer to require the same stale4
-cutoff2:3. After successful shutdown, open the existing Registry read-only and
+cutoff2:3. After successful shutdown, open the existing Fleet read-only and
 call public epoch_holder(database, 3), requiring None. Roll back and close the
 reader; this check does not assert the entire grant history.
 
@@ -825,18 +843,18 @@ native capability integration or full response parity across runtime application
 | --- | --- | --- |
 | Commit and rollback | `composed-transactions`, `fleet-receipt`; real owning stores and reopen | G18 panic rollback and store usability are not established by the retired hook |
 | Exact scalar transport | `composed-numeric`; literal i64 extremes, 2^53 and 2^53+1, REAL 1.0, snapshot and receipt replay after restart | NULL, text/blob, wide rowid, other boundaries and corrupt stored-value refusal are not inferred |
-| Bootstrap and admission fixtures | `bootstrap`; real owner controls, schema/history and enrollment across restart | Normal routing/admission, Copy apply and mailbox delivery are separate proof |
+| Bootstrap and admission fixtures | `bootstrap`; real owner controls, schema/history and enrollment across restart | Normal routing/admission, Copy apply and Fleet Push/recipient inbox custody are separate proof |
 | Access and status behavior | `access-sessions` and `access-carryover`; real RSA/WebCrypto, fixture JWKS and normal HTTP/sockets | Local crypto is not hosted Access or complete status/body parity |
 | Clock, rollback, lost answer and dispatch hold | `runtime-controls`; current composed controls | Physical eviction, real IO failure and blocking fsync remain unobserved |
 | Session and holder replacements | `session-capabilities` two, `session-failures` five and `holder-lifecycle` five; actual admission, journal and socket observations | The fifth holder group combines a post-admission primitive with a separate typed wire close; no eviction/hibernation or hosted parity follows |
 | Caller refusal | Retired aggregate/control entries are recorded without credit (508/513) | Selected session/carryover modes do not substitute for undeclared DAG/caller-refusal replacements |
-| Sender delivery controls | `raw-submit-refusal`, `sender-settlement`, `sender-retirement`; normal sockets and recipient mailbox readback | Private installation-peer lookup and exact Registry presence need separate observations; positive forwarding remains separate proof |
+| Sender delivery controls | `raw-submit-refusal`/`sender-settlement` on normal sessions at `ad34f727f`: Fleet Query/Settle and exact Push body. Native `integration::fleet_mail_query`, `fleet_mail_settle`, `fleet_mail_receipt_loss`, `fleet_mail_reports` and `fleet_mail_status_wire` separately cover inbox commit/receipt, recipient Report and submitter status publication | Worker sender helpers send no inbox receipt, so they establish no payload release or Delivered publication. `sender-retirement` has no replacement success scenario: Retire is refused. Typed Submitter, D1 expiry and Router/model delivery remain pending their separate pin/drive |
 | Worker HTTP upload completion | `http-body-keepalive`, `http-body-over-limit`; actual production enrollment, physical TCP reuse and closure at the 2 MiB boundary | Local dev image, not hosted or worker-release proof; chunked uploads, abort behavior and memory peak are separate observations |
-| Creation and registration | `creation-gates`; real enrolled sessions, stored Fleet decision, Registry carrier gate and first Copy piece | Positive imported Claim, physical server/writer recovery, Router startup and full legacy-row equivalence remain unobserved |
+| Creation and registration | `creation-gates`; real enrolled sessions, stored Fleet decision, machine carrier gate and first Copy piece | Positive imported Claim, physical server/writer recovery, Router startup and full legacy-row equivalence remain unobserved |
 | Configured delivery relay | `delivery-config` with explicit `--delivery-relay-peer`; five normal enrollment answers and owning lifecycle journal completion | Missing/invalid deployment bindings, Router delivery-call closure and mismatch refusal, peer refresh and physical restart need separate observations |
-| Fleet notice production | `fleet-notices`; actual Fleet mutation/replay, alarm/Delivery and two readers' exact numbered hints and notice readback | Worker faults/reopen, real Registry archive projections, physical/automatic server restart and full rows 27–28 equivalence remain separate proof |
+| Fleet notice production | `fleet-notices`; actual Fleet mutation/replay, alarm/Delivery and two readers' exact numbered hints and notice readback | Worker faults/reopen, real Fleet archive projections, physical/automatic server restart and full rows 27–28 equivalence remain separate proof |
 | Owner Copy operations | `copy-owner`, plus native `copy_receiver::owner_repair`; owner HTTP observations and separate real Repair duty effects | Full Worker diagnostic/recovery/populated-page parity and row 16 equivalence remain separate proof |
-| Owner Registry and retirement | `owner-registry`, `owner-retirement`; real normal owner actions and a separate physical fixture-table read after workerd stops | D1b HTTP import, new process restart, live sign-in/whole CLI path, A restack and broader readiness remain open |
+| Owner Fleet and retirement | `owner-registry`, `owner-retirement`; real normal owner actions and a separate physical fixture-table read after workerd stops | D1b HTTP import, new process restart, live sign-in/whole CLI path, A restack and broader readiness remain open |
 | One core, one owner | No behavioral journey substitutes for OB8 | Per-target graphs, visibility, lint inheritance, checked-SQL freshness and compiler gate await B6 and independent review |
 
 Check each offered test for the wrong behavior its assertion must reject, at
