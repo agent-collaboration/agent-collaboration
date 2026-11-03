@@ -1,6 +1,5 @@
 #[cfg(test)]
-#[path = "support/schema_validation.rs"]
-mod schema_validation;
+use crate::schema_validation;
 
 use fleet_identity_protocol::{
     AbsolutePath, CommitId, IsolationInstanceId, IsolationKind, LaunchContext, MachineEnvironment,

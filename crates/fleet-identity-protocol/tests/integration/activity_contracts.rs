@@ -1,12 +1,11 @@
 //! Literal wire oracles and serializer-generated artifact freshness.
+#[cfg(test)]
+use crate::contract_artifacts;
 use fleet_identity_protocol::{
     Activity, ActivityRefusal, Heartbeat, MachineCapability, RenewMachineToken,
     ReportSessionActivity, ReportSessionActivityResult, SessionActivityEntry,
 };
 use serde_json::json;
-#[cfg(test)]
-#[path = "support/contract_artifacts.rs"]
-mod contract_artifacts;
 
 #[test]
 fn heartbeat_wire_contract() {

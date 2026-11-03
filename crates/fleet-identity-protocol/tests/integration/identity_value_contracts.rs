@@ -1,12 +1,11 @@
 //! Literal wire oracles and serializer-generated artifact freshness.
+#[cfg(test)]
+use crate::contract_artifacts;
 use fleet_identity_protocol::{
     AbsolutePath, CommitId, EnrollmentId, InstallationId, IsolationInstanceId, ModelName,
     OrganizationId, RemoteStartId, RepositoryLocator, SequenceNumber, UnixMillis, UnixSeconds,
 };
 use serde_json::json;
-#[cfg(test)]
-#[path = "support/contract_artifacts.rs"]
-mod contract_artifacts;
 
 #[test]
 fn borrowed_machine_label_wire_contract() {

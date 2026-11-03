@@ -1,4 +1,6 @@
 //! Literal wire oracles and serializer-generated artifact freshness.
+#[cfg(test)]
+use crate::contract_artifacts;
 use fleet_identity_protocol::{
     HarnessKind, ListWorkspaceMachines, RemoteLaunch, RemoteLaunchAccess, RemoteLaunchPolicy,
     RemoteStartAdmission, RemoteStartAnswer, RemoteStartOutcome, RemoteStartRefusal,
@@ -6,9 +8,6 @@ use fleet_identity_protocol::{
     StartRequestedSession, TargetStartRefusal, WorkspaceMachine,
 };
 use serde_json::json;
-#[cfg(test)]
-#[path = "support/contract_artifacts.rs"]
-mod contract_artifacts;
 
 #[test]
 fn request_remote_start_wire_contract() {

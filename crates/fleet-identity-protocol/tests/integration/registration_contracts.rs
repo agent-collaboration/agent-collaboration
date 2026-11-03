@@ -1,12 +1,11 @@
 //! Literal wire oracles and serializer-generated artifact freshness.
+#[cfg(test)]
+use crate::contract_artifacts;
 use fleet_identity_protocol::{
     AgentIsolation, EndFleetSession, IsolationKind, LaunchContext, MachineEnvironment,
     RegisterFleetSession, RegisterFleetSessionResult, SessionEndCause, SessionRefusal, StartedBy,
 };
 use serde_json::json;
-#[cfg(test)]
-#[path = "support/contract_artifacts.rs"]
-mod contract_artifacts;
 
 #[test]
 fn register_fleet_session_wire_contract() {
