@@ -1,10 +1,10 @@
-//! Projection order and the separately receipted claim settle in one local transaction.
+//! Claim settlement receipts observe the lease hook's committed directory projection.
 use crate::{
     ClaimReservationOutcome, ClaimReservationState,
-    fleet_lease_projection_step::{apply_projection, checked_row_id},
+    fleet_lease_projection_step::checked_row_id,
     fleet_record_codec::{corrupt, decode_json, required},
     generated_fleet_lease as queries,
-    lease_projection::{ClaimGrantedUpdate, LeaseProjectionResult},
+    lease_projection::{ClaimGrantedUpdate, LeaseProjection, LeaseProjectionResult},
     step_driver::{StepCallback, StepResult},
 };
 use durable_steps::{AtomicStore, BoxFuture, CallId, StoreError, storage::TransactionScope};
@@ -71,7 +71,34 @@ where
                 }
                 return Ok((result, Vec::new()));
             }
-            let result = apply_projection(scope, &projection).await?;
+            let row = queries::read_directory_lease(scope, project.clone())
+                .await
+                .map_err(StoreError::backend)?
+                .ok_or_else(|| corrupt("claim.project", "directory entry is missing"))?;
+            let committed: LeaseProjection = decode_json(
+                &required(row.lease_projection, "claim.lease_projection")?,
+                "claim.lease_projection",
+            )?;
+            if committed.database() != projection.database() {
+                return Err(corrupt(
+                    "claim.project",
+                    "projection belongs to another project",
+                ));
+            }
+            // Only the lease hook writes this view. Settlement can observe an equal or newer revision.
+            let result = if projection.version() < committed.version() {
+                LeaseProjectionResult::Older {
+                    stored: committed.version(),
+                }
+            } else if projection.version() == committed.version()
+                && projection.digest() == committed.digest()
+            {
+                LeaseProjectionResult::Duplicate
+            } else {
+                LeaseProjectionResult::Conflict {
+                    stored: committed.version(),
+                }
+            };
             if matches!(result, LeaseProjectionResult::Conflict { .. }) {
                 return Ok((result, Vec::new()));
             }
