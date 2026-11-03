@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 )]
 fn live_record_fixture(process_id: u32, session_id: &str) -> Value {
     let mut record: Value =
-        serde_json::from_str(include_str!("fixtures/claude_code_session_record.json"))
+        serde_json::from_str(include_str!("../fixtures/claude_code_session_record.json"))
             .expect("Claude Code registry fixture");
     let object = record
         .as_object_mut()
