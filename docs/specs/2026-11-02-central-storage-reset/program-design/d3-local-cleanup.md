@@ -34,21 +34,32 @@ Other stores keep their concern prefix or gain one (`provider_operations`, `prov
 | `ports.json`, `providers.json`, `fleet/enrollment.json` | stay JSON | configuration the owner and CLI edit by hand; a file is the right home |
 | `service.json` | stays JSON | the published discovery manifest other processes read; generated, not state |
 | `<schema-digest>.json` | stays | immutable generated protocol schema bundle |
-| `machine-session/state.json`, `machine-session/machine-notice-progress.json` | **move into SQLite** (`fleet-cache.sqlite`: `fleet_session_state`, `fleet_notice_progress`) | durable protocol state, replaced atomically today by hand; belongs in a store with transactions |
-| `snapshot-install-attempts/<project>-e<epoch>.json` | **move into SQLite** (`fleet-cache.sqlite`: `fleet_snapshot_installs`) | durable install correlation |
+| `machine-session/state.json`, `machine-session/machine-notice-progress.json` | **move into SQLite** (`router-state.sqlite`: `session_resume_state`, `session_notice_progress`), with an explicit rule: enrollment resets them, since they belong to one central's session | durable protocol state, replaced atomically today by hand; belongs in a store with transactions |
+| `snapshot-install-attempts/<project>-e<epoch>.json` | **move into SQLite**, in `interaction.sqlite`'s neighbour for durable Router state (`router-state.sqlite`: `install_attempts`), **not** the Fleet cache that enrollment clears | durable install correlation: one attempt per project and epoch, reused (`install_attempts.rs:15–58`); losing it would mint a new identity for an in-flight install |
 | `automation-settings.json` | deleted with automations (D4b) | |
 | `approval-routes.json` legacy importer | **deleted** (hard cutover; PR 1 already moved routes into `interaction.sqlite`) | |
 | `service-identity.json` | **deleted** after the machine-id move | the machine id is the installation peer id (`installation-peer.json`) |
 
 ## 60-day removal for local copies
 
-`mail_pushes` and the other `mail_*` tables follow U9: removed 60 days after the message's creation, no matter their state; today's 2-calendar-month pruning (`interaction_retention.rs:35`) is replaced for messages. Approval and question records keep today's retention (D-7).
+Retention follows **kind**, not prefix. In `mail_pushes` (today's mixed `router_pushes`, `push_line.rs:185`), direct-message, wake, schedule-run and board-activity rows are removed 60 days after creation (U9); approval and question rows keep today's retention (D-7), and their dependent rows live as long as they do. `mail_peer_directory` is a routing lookup, kept while the peer is enrolled. The shared prune helper (`interaction_retention.rs:35–57`, which also prunes `approval_routes`) is split so the 60-day message cutoff never applies to approvals.
 
 ## The machine id move (owner: “v7 id only for machines”)
 
-Each Router's one id becomes its UUIDv7 installation peer id. At upgrade, the Router rewrites, in one transaction per store, every stored session address and record that carries its old UUIDv4 service id (mail pushes, interaction history, provider operations and session records, session registry, Fleet cache), then deletes `service-identity.json`. The Fleet's `machine_enrollments.service_id` column is dropped once every Router has re-enrolled with the machine id.
+Each Router's one active id becomes its UUIDv7 installation peer id (`installation-peer.json`). Two kinds of stored data carry the old UUIDv4 service id, and they are treated differently:
 
-**Open, for the owner:** project content also stores session addresses (thread participants, watches, actors), it replicates between machines, and project tables are out of scope. See the D3 page for the choice.
+| Kind | Examples | Treatment |
+| --- | --- | --- |
+| **Live keys** used to route or look things up | provider operation and session record targets, session registry addresses, approval routes, Fleet cache keys, pending outbox routing columns | rewritten to the machine id in one explicit cutover |
+| **Frozen content and evidence** whose bytes are hashed or replayed | mail envelopes (the library hashes sender and recipient, `delivery_item.rs:119–184`), request canonical hashes, journal inputs and outputs, history | **never rewritten**; the old id stays as historical provenance |
+
+**Cutover, once per Router at startup, before it serves reads, callbacks or publishes its manifest:** write a durable cutover record (old id, new id, the ordered list of stores); rewrite each store's live keys in that store's transaction and mark that store done in the record; resume from the record after a crash; only when every store is done, publish the manifest with the new id and retire `service-identity.json`. Credential references in `fleet/enrollment.json` move through the enrollment owner without touching resolved secrets.
+
+**After cutover:** new records use only the machine id. A session address with the old service id is refused for new routing with “this machine's id is now …”; there is no alias. The old id is kept only as historical provenance: locally in the cutover record, and in the Fleet as `former_service_id` on the machine's enrollment (written at re-enrollment), so historical records can still be labelled with the right machine.
+
+**Proof:** kill the Router between every pair of stores and before and after retiring `service-identity.json`; it completes on restart with pending approvals and known provider operations intact, and frozen mail still verifies its digest.
+
+**Open, for the owner (project content):** project records also hold session addresses (thread participants, watches, actors) and they replicate. **A:** keep them as historical provenance like other frozen content, labelled through `former_service_id`; old `router://` links and sealed requests naming the old id resolve for display only, not for new routing. **B:** change project content too: a coordinated, replicated provenance change across every replica (actor canonical identities are UNIQUE; project mail handoffs carry digests), not a simple update. A keeps project tables out of scope; B brings them in.
 
 ## Not in D3
 

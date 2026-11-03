@@ -18,8 +18,8 @@
 <ex-callout title="One choice for you (D3)" tone="decision" icon="users">
 <p>Moving each machine to its UUIDv7 id means rewriting stored session addresses that carry the old UUIDv4 service id. Local stores are rewritten at upgrade. But <strong>project content also stores session addresses</strong> (thread participants, watches, actors), it replicates between machines, and project tables are out of scope.</p>
 <ul>
-<li><strong>A (recommended):</strong> the Fleet records each machine's former service id on its enrollment (<code>former_service_id</code>), and reading old project records resolves the old id to the machine through it. Project content stays untouched. Cost: one recorded column and a lookup when reading old records.</li>
-<li><strong>B:</strong> rewrite the session addresses inside project content too. Cost: brings project tables into scope for this one change, rewritten on every machine and in central.</li>
+<li><strong>A (recommended):</strong> project records keep the old id as historical provenance, like all other frozen content (messages and hashes can't be rewritten without breaking their digests). The Fleet records each machine's former service id (<code>former_service_id</code>) so old records and old <code>router://</code> links still show the right machine. They resolve for display only, never for new routing. Project content stays untouched.</li>
+<li><strong>B:</strong> change the session addresses inside project content too. Cost: a coordinated change of replicated provenance on every machine and in central (actor identities are UNIQUE; project mail handoffs carry content hashes), and it brings project tables into scope.</li>
 </ul>
 </ex-callout>
 <h2 id="d2">D2: Fleet sends and remote create</h2>
