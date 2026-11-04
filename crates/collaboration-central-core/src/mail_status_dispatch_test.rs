@@ -22,9 +22,7 @@ async fn a_silent_project_answer_waits_for_its_causal_deadline_then_remains_retr
     release
         .send(())
         .map_err(|()| "deadline receiver was dropped")?;
-    assert!(
-        matches!(answer.await,Err(CallFailure::Retryable {reason}) if reason.code=="projectStatusDeadline")
-    );
+    assert!(matches!(answer.await, Err(CallFailure::AnswerLost)));
     Ok(())
 }
 

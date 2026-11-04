@@ -12,6 +12,10 @@ use sqlx_core::{
 };
 use std::{collections::BTreeMap, convert::Infallible, sync::Arc};
 
+#[cfg(test)]
+#[path = "migration_bookkeeping_test.rs"]
+mod tests;
+
 #[cfg(feature = "conformance")]
 mod conformance;
 #[cfg(feature = "conformance")]
@@ -372,6 +376,7 @@ where
         .await
         .map_err(bootstrap_sql_error)?
     {
+        crate::migration_bookkeeping::validate_history_times(&row)?;
         crate::fleet_record_codec::check_private_id(
             &row.row_id
                 .ok_or_else(|| corrupt("missing physical row identity"))?,
@@ -456,6 +461,7 @@ where
             corpus.into(),
             migration.version.to_string(),
             checksum(migration)?,
+            now.unix_millis().to_string(),
         )
         .await
         .map_err(|error| {

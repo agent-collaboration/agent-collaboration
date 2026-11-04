@@ -1,8 +1,8 @@
 {
   "producer": "owned sqlx-turso / Turso 0.8.1 describe",
   "sources": {
-    "bootstrap-queries.json": "dc8b4b55a157f9c4c003b5b7eff9bc0d559569bf4a26c0478cd53196a87b1414",
-    "core_migrations/0000_migration_history.sql": "d30bfbde01af17b339ef44b0c4034fd22250680b09b07011287a80f2b10be539",
+    "bootstrap-queries.json": "1174e55a461d560a69d529b23d6d97d01982f35e28bc44eb177bd93fad3bc389",
+    "core_migrations/0000_migration_history.sql": "5967bc796201ffc01357c7f30b6986d31c6f97b0f6a4712d8dfee7656d184666",
     "core_migrations/0001_fleet_decisions.sql": "32dbcb0f9130a307c10c0f4be5d0d229a400915ff0a77fc8d1361cf51282e770",
     "core_migrations/0002_fleet_decision_receipts.sql": "4e56a7411eaba1fbd0c20601f38c215c0f73f1fa52a352cdecb400c620216cfb",
     "core_migrations/0003_fleet_records.sql": "a13a088af015134e34d40b1819f2d1ce29e2bc8364bfe01d160cb51bf0b2ade4",
@@ -11,7 +11,7 @@
     "core_migrations/0006_archive_reports.sql": "5a6e44b30e6fb80437c69da17e289a6ed97eb3714751bfd1b2d29d9304697554",
     "core_migrations/0007_creation_decisions.sql": "0292e6a4f8406b77586d00b876626ad4987e9392381356126503e0c7e5dc1242",
     "core_migrations/0008_feed_readers.sql": "dda67da87b76d2cc87645e4ae7c2119a704ee88603f3bab40c9357019b9d3a47",
-    "core_migrations/0009_migration_failures.sql": "cb66a15734e44a6dd6d022dc79601ae018824125c51104f95b8859cbdaf70674",
+    "core_migrations/0009_migration_failures.sql": "1ffdb253f6bd1ec0387bb92e8ff69a2788d7478b1ea8fa333638ae89848c31fa",
     "generator:fleet-sync-query-gen/Cargo.toml": "01210c567dcbccb4ff127626a0ff7625641edd4c5f0787ea41777757b1eaa3e6",
     "generator:fleet-sync-query-gen/src/expression_classes.rs": "14dc40abaec059e437d3e44bc187b9560812b0ed21ee2ad9d558364032fb097e",
     "generator:fleet-sync-query-gen/src/lib.rs": "df50be1a279adf266fdd12d184637b0113740390c0cef7273d1995dea0475152",
@@ -65,14 +65,14 @@
     "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
     "sql/clear_migration_failure.sql": "7122119a9e1f1a81f7fbecd1d195d2e2f824d6b034126b06f666acd4dcd418a3",
-    "sql/insert_migration_history.sql": "9781e010fe3b934246881f6377beb7c9ace3c01b27d13d6b2116cbc81e9008f1",
+    "sql/insert_migration_history.sql": "d1ca0ccc6e3075d4743070bbe38914b929a6e7a0fe5ffd0bfd478784616613b4",
     "sql/probe_migration_bookkeeping.sql": "d546d877cc56bea373c34d14978a92fffd5115a108ae052abeaa4670cc22c204",
-    "sql/read_migration_failures.sql": "9d57da51f6cbd9b32b44c15cfe45c41b92a08c1a0f95042cf2e0c00e9de9c3a2",
-    "sql/read_migration_history.sql": "b8bae69bb266e2c458b04a72807f0400d8b2542a10fb362a20509aa95d171ca6",
-    "sql/record_migration_failure.sql": "fc08c9ab716a973f9515ac3f440de42a0c43325c8bfc006048677c16e379a880",
-    "src/generated_bootstrap.rs": "29eac6f07a97d3f8590fe31a588b67a4ba2beb2a28ea7e37f54662c29a518357"
+    "sql/read_migration_failures.sql": "d5b7bf36f8f71f81894ad1f651888e36ab35c46f19e769962faa90852ef8b05d",
+    "sql/read_migration_history.sql": "4c9ee299ced1c8691b53340877508fb02ea68a2a89d4877f9713fe4e231d3908",
+    "sql/record_migration_failure.sql": "21e70218fc45f49d94c6bf255cbcaf1ad86ebcae79cf7205ca6799cdd6a189e7",
+    "src/generated_bootstrap.rs": "201813b304b3dde2b3f6e3aa576addefd51417518508460a3f3dbf038599cdde"
   },
-  "queries_digest": "bdbca7a14e8ed56e46fd6de4f5e6488cfa4b2b0a8749bcf4bb62d63514480aeb",
+  "queries_digest": "83182e7b933716e791123e4b0553876cce08f8a55f879236528dddc0b46b5f52",
   "queries": [
     {
       "name": "initialize_migration_history",
@@ -103,12 +103,54 @@
           "rust_type": "Option<String>",
           "nullable": null,
           "type_source": "driver"
+        },
+        {
+          "name": "created_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "created_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "updated_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "updated_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "applied_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "applied_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
         }
       ]
     },
     {
       "name": "insert_migration_history",
-      "bind_slots": 4,
+      "bind_slots": 5,
       "columns": []
     },
     {
@@ -154,11 +196,46 @@
           "type_source": "driver"
         },
         {
-          "name": "at",
+          "name": "created_at",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
-          "type_source": "driver"
+          "type_source": "cast"
+        },
+        {
+          "name": "created_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "updated_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "updated_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "failed_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "failed_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
         }
       ]
     },

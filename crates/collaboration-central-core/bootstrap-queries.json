@@ -50,6 +50,11 @@
           "name": "checksum",
           "kind": "text",
           "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
         }
       ]
     },
@@ -87,7 +92,7 @@
           "nullable": false
         },
         {
-          "name": "at",
+          "name": "now",
           "kind": "text",
           "nullable": false
         }
