@@ -10,6 +10,17 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.123" }
+collaboration-central-core = { path = "../collaboration-central-core", version = "0.1.123" }
+fleet-admission = { path = "../fleet-admission", version = "0.1.123" }
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+rustix.workspace = true
+tempfile = "3.27.0"
+url.workspace = true
+uuid.workspace = true
 board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.123" }
 fleet-sync-lease.workspace = true
 fleet-sync-writer.workspace = true
@@ -27,7 +38,3 @@ nix.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-chrono.workspace = true
-serde_json.workspace = true
-tempfile = "3.27.0"
-uuid.workspace = true

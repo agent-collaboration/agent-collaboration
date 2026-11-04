@@ -996,10 +996,13 @@ name = "board-staging-cutover"
 version = "0.1.123"
 dependencies = [
  "board-fleet-sync",
+ "board-sync-protocol",
  "chrono",
  "codex-router-host",
+ "collaboration-central-core",
  "collaboration-protocol",
  "collaboration-runtime",
+ "fleet-admission",
  "fleet-sync-lease",
  "fleet-sync-protocol",
  "fleet-sync-writer",
@@ -1007,12 +1010,16 @@ dependencies = [
  "message-board-storage",
  "nix",
  "runtime-primitives",
+ "rustix 1.1.4",
+ "serde",
  "serde_json",
+ "sha2 0.10.9",
  "sqlx",
  "sqlx-turso",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "url",
  "uuid",
 ]
 

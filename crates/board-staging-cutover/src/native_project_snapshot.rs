@@ -9,6 +9,7 @@ use message_board::{
 };
 use message_board_storage::{ProjectStore, StoreSchemaState};
 use runtime_primitives::SystemClock;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeSet,
     os::unix::fs::MetadataExt,
@@ -17,19 +18,23 @@ use std::{
     time::Duration,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SelectedWriterFile {
     pub project: ProjectId,
     pub peer: PeerId,
     pub file_epoch: Epoch,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeSourcePreflight {
     pub selected: SelectedWriterFile,
     pub application_epoch: EpochNumber,
     pub high_water: FeedCursor,
     pub line_two: Option<EpochLine>,
     pub latest_record_at: RecordTime,
+    pub project_scope: message_board::RecordScope,
     pub manifest: SnapshotManifest,
 }
 
@@ -136,7 +141,7 @@ impl<'host> NativeProjectSnapshot<'host> {
     }
 }
 
-fn selected_path(
+pub(crate) fn selected_path(
     host: &OfflineHost,
     selected: &SelectedWriterFile,
 ) -> Result<PathBuf, NativeSourceError> {
@@ -238,7 +243,7 @@ async fn inspect_source(
     if matches!(store.schema_state(), StoreSchemaState::ReadOnly { .. }) {
         return Err(NativeSourceError::InvalidHistory);
     }
-    let (high_water, line_two, latest_record_at) =
+    let (high_water, line_two, latest_record_at, project_scope) =
         project_history(&store, &selected.project, application_epoch).await?;
     drop(store);
     let mut snapshot = database.snapshot().await?;
@@ -256,6 +261,7 @@ async fn inspect_source(
             high_water,
             line_two,
             latest_record_at,
+            project_scope,
             manifest,
         },
     ))
@@ -265,10 +271,18 @@ async fn project_history(
     store: &ProjectStore<BoardProjectSchema>,
     project: &ProjectId,
     application_epoch: EpochNumber,
-) -> Result<(FeedCursor, Option<EpochLine>, RecordTime), NativeSourceError> {
+) -> Result<
+    (
+        FeedCursor,
+        Option<EpochLine>,
+        RecordTime,
+        message_board::RecordScope,
+    ),
+    NativeSourceError,
+> {
     let mut read = store.snapshot().await?;
     let inspected = async {
-        let Some(Record::Project(_)) = read.record(&project.clone().into()).await? else {
+        let Some(Record::Project(state)) = read.record(&project.clone().into()).await? else {
             return Err(NativeSourceError::InvalidHistory);
         };
         let high = read.high_water();
@@ -307,7 +321,7 @@ async fn project_history(
         if covered_through != high {
             return Err(NativeSourceError::InvalidHistory);
         }
-        Ok((high, line_two, latest.time))
+        Ok((high, line_two, latest.time, state.envelope.scope))
     }
     .await;
     let closed = read.finish().await;
