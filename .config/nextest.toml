@@ -3,6 +3,9 @@ retries = 0
 
 [profile.ci]
 fail-fast = false
+# Experiment: twice the runner's 4 CPUs, since many tests mostly wait on I/O and
+# subprocesses. Tests that reserve "num-test-threads" still run alone.
+test-threads = 8
 retries = 0
 status-level = "slow"
 final-status-level = "slow"
