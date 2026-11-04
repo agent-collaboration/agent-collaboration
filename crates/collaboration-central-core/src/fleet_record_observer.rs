@@ -79,6 +79,20 @@ where
         .transpose()
 }
 
+/// Read retained history through the production range decoder in this transaction.
+pub async fn read_fleet_feed_in_scope<S: TransactionScope>(
+    scope: &mut S,
+) -> Result<Vec<fleet_admission::FleetFeedEntry>, StoreError>
+where
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    let state = crate::fleet_feed_store::state(scope).await?;
+    crate::fleet_feed_store::read_range(scope, state.floor, state.head).await
+}
+
 impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:

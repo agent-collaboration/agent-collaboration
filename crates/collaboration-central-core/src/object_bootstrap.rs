@@ -36,6 +36,14 @@ mod repository_columns_tests;
 #[path = "fleet_directory_columns_test.rs"]
 mod directory_columns_tests;
 
+#[cfg(test)]
+#[path = "fleet_feed_columns_test.rs"]
+mod feed_columns_tests;
+
+#[cfg(test)]
+#[path = "fleet_feed_retention_test.rs"]
+mod feed_retention_tests;
+
 #[cfg(feature = "conformance")]
 mod conformance;
 #[cfg(feature = "conformance")]

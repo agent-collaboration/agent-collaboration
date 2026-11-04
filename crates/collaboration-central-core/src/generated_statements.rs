@@ -270,3 +270,38 @@ where
         Ok(())
     }
 }
+pub(crate) fn read_fleet_decisions<S>(
+    scope: &mut S,
+    requests: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredFleetDecision>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/read_fleet_decisions.sql"
+        )))
+        .bind(requests);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredFleetDecision {
+                    request_id: row.try_get("request_id")?,
+                    canonical_hash: row.try_get("canonical_hash")?,
+                    payload: row.try_get("payload")?,
+                    router_time: row.try_get("router_time")?,
+                    time_basis: row.try_get("time_basis")?,
+                    workspace_id: row.try_get("workspace_id")?,
+                    board_id: row.try_get("board_id")?,
+                    origin_installation: row.try_get("origin_installation")?,
+                    origin_machine: row.try_get("origin_machine")?,
+                })
+            })
+            .collect()
+    }
+}

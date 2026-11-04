@@ -193,6 +193,44 @@ where
     }
 }
 
+/// Read a caller's immutable request authorities together in its existing scope.
+pub(crate) async fn read_ledgers<S: TransactionScope>(
+    scope: &mut S,
+    requests: &[RequestId],
+) -> Result<std::collections::BTreeMap<RequestId, RequestLedgerEntry>, StoreError>
+where
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    let expected: std::collections::BTreeSet<_> = requests.iter().cloned().collect();
+    let mut entries = std::collections::BTreeMap::new();
+    if expected.is_empty() {
+        return Ok(entries);
+    }
+    // JSON is only the bound set of typed IDs, never a stored record column.
+    let ids = expected.iter().map(RequestId::as_str).collect::<Vec<_>>();
+    let rows = generated_statements::read_fleet_decisions(
+        scope,
+        serde_json::to_string(&ids).map_err(StoreError::backend)?,
+    )
+    .await
+    .map_err(StoreError::backend)?;
+    for row in rows {
+        let entry = decode(row)?;
+        if !expected.contains(&entry.request_id)
+            || entries.insert(entry.request_id.clone(), entry).is_some()
+        {
+            return Err(corrupt(
+                "request_id",
+                "batch returned a duplicate or unrequested authority",
+            ));
+        }
+    }
+    Ok(entries)
+}
+
 pub(crate) fn decode(
     stored: generated_statements::StoredFleetDecision,
 ) -> Result<RequestLedgerEntry, StoreError> {

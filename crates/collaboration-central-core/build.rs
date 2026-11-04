@@ -13,6 +13,7 @@ fn main() -> Result<(), fleet_sync_query_gen::GenerateError> {
     fleet_sync_query_gen::verify_manifest("fleet-adr-queries.json")?;
     fleet_sync_query_gen::verify_manifest("fleet-repository-queries.json")?;
     fleet_sync_query_gen::verify_manifest("fleet-feed-queries.json")?;
+    fleet_sync_query_gen::verify_manifest("fleet-feed-list-queries.json")?;
     fleet_sync_query_gen::verify_manifest("copy-summary-queries.json")?;
     fleet_sync_query_gen::verify_manifest("fleet-lease-queries.json")?;
     fleet_sync_query_gen::verify_manifest("fleet-archive-queries.json")?;

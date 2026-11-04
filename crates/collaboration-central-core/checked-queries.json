@@ -145,6 +145,19 @@
           "nullable": false
         }
       ]
+    },
+    {
+      "name": "read_fleet_decisions",
+      "sql": "sql/read_fleet_decisions.sql",
+      "row": "StoredFleetDecision",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "requests",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
     }
   ]
 }

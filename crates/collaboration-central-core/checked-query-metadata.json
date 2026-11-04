@@ -1,11 +1,11 @@
 {
   "producer": "owned sqlx-turso / Turso 0.8.1 describe",
   "sources": {
-    "checked-queries.json": "1220eaecf469e771b6c6ec7e964706cbb118b46b7e62017a4495582b64c098dc",
+    "checked-queries.json": "feaaea69971e0cb1ee55f4291ff3a4470efb9a2251d25ba93fb493c38cada0f4",
     "core_migrations/0000_migration_history.sql": "5967bc796201ffc01357c7f30b6986d31c6f97b0f6a4712d8dfee7656d184666",
     "core_migrations/0001_fleet_decisions.sql": "32dbcb0f9130a307c10c0f4be5d0d229a400915ff0a77fc8d1361cf51282e770",
     "core_migrations/0002_fleet_decision_receipts.sql": "4e56a7411eaba1fbd0c20601f38c215c0f73f1fa52a352cdecb400c620216cfb",
-    "core_migrations/0003_fleet_records.sql": "e629362914c583675a291de896ce54eb174932031d3f747c714592fabd00f540",
+    "core_migrations/0003_fleet_records.sql": "fe6f38167f71dfface0a0f11065231f7876137f486e61dad5b07db7e217600b9",
     "core_migrations/0004_directory_copy_summary.sql": "dd552b225e5977df2fedd66f93714c4124ee52d6cc79767a982dcae444cc9bef",
     "core_migrations/0005_claim_lease_projection.sql": "7151d61cd28ae249562322f29854362e027fb68fc8d5ecd92e81c014f2f1cd11",
     "core_migrations/0006_archive_reports.sql": "e20d48929afb4e5b71cdb383115800178cb1866aec72b2664e46c7a8f9da050e",
@@ -70,10 +70,11 @@
     "sql/read_creation_decision.sql": "5213b8222adba590586d19465e9ff2326dfbc271fe5785a6327ebbda1d7c8636",
     "sql/read_fleet_decision.sql": "da5ae64fab5f965708df2556239e3c450d1487b9f7866da7f1d12908dc728ead",
     "sql/read_fleet_decision_receipts.sql": "948970489cc37747ca7b2a01efacfe98a9d203691cde8d5c5a3644e71e3187a0",
+    "sql/read_fleet_decisions.sql": "29ecf8cba2170616e7d2afa3b77225896ce1cd113863eb56d5c495596b99f56d",
     "sql/read_fleet_receipt_page.sql": "d7a172a1933cdb37bcd4ac5db47a8a413ed2a13ee76e8c4100a24bc57d0f9cc3",
-    "src/generated_statements.rs": "d3f1cfa890f3a8130f4e39962ed8be81af0453fe78997e08d8e0368ad213199e"
+    "src/generated_statements.rs": "570360f125b9ca389fdbea07e7c7fed47762876e0c204abbec2500c394a6669d"
   },
-  "queries_digest": "bb1f3937098395448e34ed468735bcc835c3d7d701ce3c7faceb1c9abcfb9fc9",
+  "queries_digest": "c6c4d0d850ce6467c05be983e4f9fbb3e489f62d3448371926583072564bd0d8",
   "queries": [
     {
       "name": "read_fleet_decision",
@@ -344,6 +345,75 @@
       "name": "insert_creation_decision",
       "bind_slots": 4,
       "columns": []
+    },
+    {
+      "name": "read_fleet_decisions",
+      "bind_slots": 1,
+      "columns": [
+        {
+          "name": "request_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "canonical_hash",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "payload",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "router_time",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "time_basis",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "workspace_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "board_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "origin_installation",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "origin_machine",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        }
+      ]
     }
   ]
 }

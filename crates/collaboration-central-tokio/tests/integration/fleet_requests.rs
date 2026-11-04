@@ -31,6 +31,23 @@ const SERVICE: &str = "550e8400-e29b-41d4-a716-4466554400f4";
 const WORKSPACE: &str = "019f0000-0000-7000-8000-000000000f41";
 
 #[tokio::test]
+async fn normal_feed_history_keeps_its_prefix_and_vectors_after_canonical_mutations()
+-> ConformanceResult<()> {
+    let root = tempfile::tempdir()?;
+    let jwks = JwksFixtureServer::start().await?;
+    let server = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let proof = collaboration_central_conformance::run_feed_history_conformance(
+        &ConformanceClient::new(server.base_url())?,
+    )
+    .await;
+    let stopped = server.shutdown().await;
+    let closed = jwks.shutdown().await;
+    stopped?;
+    closed?;
+    proof
+}
+
+#[tokio::test]
 async fn normal_repository_frames_keep_distinct_keys_list_order_and_exact_replay()
 -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;

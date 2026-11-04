@@ -95,6 +95,9 @@ impl Scenario {
             Scenario::FleetAdrColumns => println!(
                 "FLEET_ADR_COLUMNS_RESULT 1 passed; 0 failed; 0 ignored (real normal sessions and typed canonical ADR body, sixteen ordered files, lifecycle and replay; owning reopen is covered by native storage tests)"
             ),
+            Scenario::FleetFeedColumns => println!(
+                "FLEET_FEED_COLUMNS_RESULT 1 passed; 0 failed; 0 ignored (ordinary Fleet writes and historical feed reads, sixteen ordered refs/files, canonical changes beside immutable snapshots, accepted/rejected authority and exact replay; owning reopen and retention rollback are covered by native storage tests)"
+            ),
             Scenario::FleetRepositoryColumns => println!(
                 "FLEET_REPOSITORY_COLUMNS_RESULT 1 passed; 0 failed; 0 ignored (ordinary Fleet sessions, typed origin/local associations, canonical ordered list, attach/detach and replay; first provenance and owning reopen are covered by native storage tests)"
             ),

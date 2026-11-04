@@ -73,17 +73,6 @@ impl FleetRecordHeader {
         }
         .into()
     }
-
-    pub fn check_record(&self, record: &Record) -> Result<(), StoreError> {
-        let expected = Self::for_record(record)?;
-        if self.time != expected.time || self.origin != expected.origin {
-            return Err(corrupt(
-                "headers",
-                "record time or origin disagrees with payload",
-            ));
-        }
-        Ok(())
-    }
 }
 
 pub(crate) struct DecodedFleetRecord {

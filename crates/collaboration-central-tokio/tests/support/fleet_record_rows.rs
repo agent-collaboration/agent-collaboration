@@ -134,3 +134,39 @@ pub fn directory_columns<'scope, S: TransactionScope<Database = sqlx_turso::Turs
         query::<sqlx_turso::Turso>("SELECT json_object('project_id',project_id,'workspace_id',workspace_id,'board_id',board_id,'name',name,'actor_kind',actor_kind,'actor_human_id',actor_human_id,'actor_service_id',actor_service_id,'actor_endpoint_id',actor_endpoint_id,'actor_session_id',actor_session_id,'actor_router_component',actor_router_component,'request_id',request_id,'fleet_position',fleet_position,'router_time',router_time,'time_basis',time_basis,'origin_installation',origin_installation,'origin_machine',origin_machine,'import_digest',import_digest,'created_at',created_at,'updated_at',updated_at,'copy_epoch',copy_epoch,'copy_sequence',copy_sequence,'copy_acked_at',copy_acked_at,'copy_latest_time_basis',copy_latest_time_basis,'copy_latest_record_at',copy_latest_record_at,'lease_epoch',lease_epoch,'lease_change',lease_change,'lease_incarnation',lease_incarnation,'lease_changed_at',lease_changed_at,'lease_lifecycle_kind',lease_lifecycle_kind,'lease_origin_kind',lease_origin_kind,'lease_origin_epoch',lease_origin_epoch,'lease_origin_sequence',lease_origin_sequence,'lease_import_digest',lease_import_digest,'lease_retiring_attempt_id',lease_retiring_attempt_id,'lease_retired_at',lease_retired_at,'lease_holder_machine_id',lease_holder_machine_id,'lease_holder_service_id',lease_holder_service_id,'lease_expires_at',lease_expires_at,'lease_digest',lease_digest) AS state FROM fleet_project_directory ORDER BY project_id").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|row.try_get("state").map_err(StoreError::backend)).collect()
     }
 }
+
+#[expect(
+    clippy::manual_async_fn,
+    reason = "Explicit Send preserves higher-ranked borrowed snapshot scopes."
+)]
+pub fn feed_entries<'scope, S: TransactionScope<Database = sqlx_turso::Turso>>(
+    scope: &'scope mut S,
+) -> impl std::future::Future<Output = Result<Vec<(i64, String)>, StoreError>> + Send + 'scope {
+    async move {
+        collaboration_central_core::read_fleet_feed_in_scope(scope)
+            .await?
+            .into_iter()
+            .map(|entry| {
+                Ok((
+                    i64::try_from(entry.position.get()).map_err(StoreError::backend)?,
+                    serde_json::to_string(&entry).map_err(StoreError::backend)?,
+                ))
+            })
+            .collect()
+    }
+}
+
+#[expect(
+    clippy::manual_async_fn,
+    reason = "Explicit Send preserves higher-ranked borrowed snapshot scopes."
+)]
+pub fn feed_columns<'scope, S: TransactionScope<Database = sqlx_turso::Turso>>(
+    scope: &'scope mut S,
+) -> impl std::future::Future<Output = Result<Vec<String>, StoreError>> + Send + 'scope {
+    async move {
+        let mut rows=query::<sqlx_turso::Turso>("SELECT json_object('entry_id',entry_id,'position',position,'record_kind',record_kind,'record_id',record_id,'workspace_id',workspace_id,'board_id',board_id,'actor_kind',actor_kind,'actor_human_id',actor_human_id,'actor_service_id',actor_service_id,'actor_endpoint_id',actor_endpoint_id,'actor_session_id',actor_session_id,'actor_router_component',actor_router_component,'envelope_request_id',envelope_request_id,'router_time',router_time,'time_basis',time_basis,'origin_installation',origin_installation,'origin_machine',origin_machine,'created_at',created_at,'updated_at',updated_at,'as_of',as_of,'name',name,'description',description,'workspace_state',workspace_state,'repository_count',repository_count,'board_kind',board_kind,'initiative_goal',initiative_goal,'initiative_done_when',initiative_done_when,'board_state',board_state,'project_title',project_title,'adr_title',adr_title,'adr_text',adr_text,'adr_status',adr_status,'supersedes_adr_id',supersedes_adr_id,'made_in_kind',made_in_kind,'made_in_record_id',made_in_record_id,'adr_revision',adr_revision,'repository_file_count',repository_file_count,'ledger_request_id',ledger_request_id) AS state FROM fleet_feed ORDER BY position").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|row.try_get("state").map_err(StoreError::backend)).collect::<Result<Vec<String>,_>>()?;
+        rows.extend(query::<sqlx_turso::Turso>("SELECT json_object('row_id',row_id,'entry_id',entry_id,'ordinal',ordinal,'reference_kind',reference_kind,'normalized_origin',normalized_origin,'service_id',service_id,'common_directory',common_directory,'created_at',created_at,'updated_at',updated_at) AS state FROM fleet_feed_repository_refs ORDER BY entry_id,ordinal").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|row.try_get("state").map_err(StoreError::backend)).collect::<Result<Vec<String>,_>>()?);
+        rows.extend(query::<sqlx_turso::Turso>("SELECT json_object('row_id',row_id,'entry_id',entry_id,'ordinal',ordinal,'repository_origin',repository_origin,'path',path,'commit_sha',commit_sha,'created_at',created_at,'updated_at',updated_at) AS state FROM fleet_feed_adr_repository_files ORDER BY entry_id,ordinal").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|row.try_get("state").map_err(StoreError::backend)).collect::<Result<Vec<String>,_>>()?);
+        Ok(rows)
+    }
+}
