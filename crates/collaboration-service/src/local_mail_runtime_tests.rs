@@ -396,6 +396,18 @@ async fn failed_control_projection_rolls_back_the_local_record_and_sdk_admission
 #[tokio::test]
 async fn sender_mismatch_refuses_only_the_local_control_and_delivers_the_original_once() {
     let runtime = Runtime::new().await;
+    runtime
+        .fixture
+        .owner
+        .remember_installation_peer(&interaction_storage::InstallationPeerBinding {
+            service_id: "00000000-0000-4000-8000-000000000002"
+                .to_owned()
+                .try_into()
+                .unwrap(),
+            peer_id: uuid::Uuid::now_v7().to_string().try_into().unwrap(),
+        })
+        .await
+        .unwrap();
     let mail = runtime.local_mail_runtime();
     let draft = runtime.fixture.draft();
     let original = runtime.fixture.item(&draft);

@@ -175,9 +175,12 @@ async fn an_expired_project_still_returns_the_read_and_never_allocates_a_mark()
     use fleet_sync_protocol::{
         DatabaseId, Epoch, LeaseState, LeaseStatus, RenewAnswer, RenewResult,
     };
-    use runtime_primitives::{Clock, SyncTime, SystemClock};
+    use runtime_primitives::{Clock, SystemClock};
     for scenario in ["pastExpiry", "pastDeadline"] {
-        let fixture = BoardFixture::start().await?;
+        let clock = std::sync::Arc::new(board_fixture::controlled_clock::ControlledClock::at(
+            SystemClock.now(),
+        ));
+        let fixture = BoardFixture::start_with_clock(clock.clone()).await?;
         let (project, workstream) = fixture.project().await?;
         let task = fixture.task(&project, &workstream).await?;
         let store = fixture
@@ -188,8 +191,8 @@ async fn an_expired_project_still_returns_the_read_and_never_allocates_a_mark()
         let snapshot = store.snapshot().await?;
         let high_water = snapshot.high_water();
         snapshot.finish().await?;
-        let now = SystemClock.now();
-        let started = SyncTime::from_unix_millis(now.unix_millis() - 120_000);
+        let started = clock.now().after(std::time::Duration::from_millis(1));
+        clock.set(started);
         let database = fixture._registry.database(&project).await?;
         let lease = LeaseStatus {
             database: DatabaseId::new(uuid::Uuid::parse_str(project.as_str())?)?,
@@ -197,9 +200,9 @@ async fn an_expired_project_still_returns_the_read_and_never_allocates_a_mark()
             holder: board_fixture::fixture_peer()?,
             state: LeaseState::Held,
             expires_at: if scenario == "pastExpiry" {
-                SyncTime::from_unix_millis(started.unix_millis() + 60_000)
+                started.after(std::time::Duration::from_secs(60))
             } else {
-                now.after(std::time::Duration::from_secs(3600))
+                started.after(std::time::Duration::from_secs(3600))
             },
             remaining_ms: 60_000,
         };
@@ -217,6 +220,11 @@ async fn an_expired_project_still_returns_the_read_and_never_allocates_a_mark()
                 started,
             )
             .await?;
+        clock.set(started.after(std::time::Duration::from_secs(120)));
+        assert!(matches!(
+            database.writer_state().await?,
+            fleet_sync_lease::WriterState::Paused { .. }
+        ));
         let view = fixture
             .api
             .call("view_work", json!({"projectId":project}))

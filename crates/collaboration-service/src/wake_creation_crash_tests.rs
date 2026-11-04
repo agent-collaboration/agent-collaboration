@@ -31,23 +31,28 @@ async fn wake_creation_replay_survives_service_exit_before_response() -> TestRes
     for stage in ["before-dispatch", "after-dispatch"] {
         let operation = OperationId::generate();
         let root = PathBuf::from(format!("/tmp/wake-crash-{}", operation.as_str()));
-        std::fs::create_dir(&root)?;
+        std::fs::create_dir(&root)
+            .map_err(|error| format!("{stage}: create crash fixture: {error}"))?;
         let output = tokio::time::timeout(
             Duration::from_secs(15),
-            tokio::process::Command::new(std::env::current_exe()?)
-                .args([
-                    "--exact",
-                    "wake_creation_crash_tests::wake_crash_child",
-                    "--ignored",
-                    "--nocapture",
-                ])
-                .env(STAGE_ENV, stage)
-                .env(ROOT_ENV, &root)
-                .env(OPERATION_ENV, operation.as_str())
-                .kill_on_drop(true)
-                .output(),
+            tokio::process::Command::new(
+                std::env::current_exe()
+                    .map_err(|error| format!("{stage}: locate crash executable: {error}"))?,
+            )
+            .args([
+                "--exact",
+                "wake_creation_crash_tests::wake_crash_child",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env(STAGE_ENV, stage)
+            .env(ROOT_ENV, &root)
+            .env(OPERATION_ENV, operation.as_str())
+            .kill_on_drop(true)
+            .output(),
         )
-        .await??;
+        .await?
+        .map_err(|error| format!("{stage}: spawn crash child: {error}"))?;
         if output.status.code() != Some(CRASH_EXIT) {
             return Err(format!(
                 "{stage}: child did not reach crash boundary: {:?}; {}; {}",
@@ -95,12 +100,19 @@ async fn wake_creation_replay_survives_service_exit_before_response() -> TestRes
             );
         }
         drop(application);
-        for entry in std::fs::read_dir(&root)? {
+        for entry in std::fs::read_dir(&root)
+            .map_err(|error| format!("{stage}: list crash cleanup: {error}"))?
+        {
             let entry = entry?;
             if !entry.file_type()?.is_file() {
                 return Err("unexpected fixture cleanup entry".into());
             }
-            std::fs::remove_file(entry.path())?;
+            std::fs::remove_file(entry.path()).map_err(|error| {
+                format!(
+                    "{stage}: remove crash fixture {}: {error}",
+                    entry.file_name().to_string_lossy()
+                )
+            })?;
         }
         std::fs::remove_dir(root)?;
     }

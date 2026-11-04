@@ -18,7 +18,7 @@ use fleet_sync_protocol::{
 use fleet_sync_writer::{OpenError, WriteRefusal};
 use message_board::*;
 use message_board_storage::ProjectStorageError;
-use runtime_primitives::{Clock, SyncTime, SystemClock};
+use runtime_primitives::{Clock, SystemClock};
 use std::sync::Arc;
 
 fn origin() -> Result<ActorOrigin, TestError> {
@@ -72,8 +72,8 @@ async fn persisted_expiry_is_not_revived_by_the_start_epoch_filename() -> Result
     let target = BoardFixture::start().await?;
     let (inherited, epoch) =
         accepted_snapshot::bootstrap_project(&source, &target, &project).await?;
-    let started = SyncTime::from_unix_millis(SystemClock.now().unix_millis() - 120_000);
-    let expired_at = SyncTime::from_unix_millis(started.unix_millis() + 60_000);
+    let started = SystemClock.now();
+    let expired_at = started;
     target
         ._registry
         .database(&project)
@@ -90,7 +90,7 @@ async fn persisted_expiry_is_not_revived_by_the_start_epoch_filename() -> Result
                     holder: board_fixture::fixture_peer()?,
                     state: LeaseState::Held,
                     expires_at: expired_at,
-                    remaining_ms: 60_000,
+                    remaining_ms: 0,
                 },
                 transfer_in_progress: None,
                 replayed: false,

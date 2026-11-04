@@ -38,6 +38,11 @@ pub enum MailWireEvent {
         frame: FrameId,
         answer: ReportResult,
     },
+    SettleSent {
+        frame: FrameId,
+        item: ItemId,
+        submitter: fleet_sync_protocol::Submitter,
+    },
 }
 
 struct ObservationState {
@@ -99,6 +104,16 @@ impl MailWireObserver {
                 DeliveryRequest::StatusAck { through, .. } => {
                     record(state, MailWireEvent::StatusAcknowledged(through))?
                 }
+                DeliveryRequest::Settle {
+                    item, submitter, ..
+                } => record(
+                    state,
+                    MailWireEvent::SettleSent {
+                        frame,
+                        item,
+                        submitter,
+                    },
+                )?,
                 _ => {}
             },
             _ => {}

@@ -14,12 +14,20 @@ use std::{error::Error, sync::Arc};
 type TestResult = Result<(), Box<dyn Error + Send + Sync>>;
 struct NoCalls;
 impl CallRouter for NoCalls {
+    #[expect(
+        clippy::panic,
+        reason = "Any external dispatch violates the scoped lookup contract."
+    )]
     async fn dispatch(&self, _: CallEnvelope) -> Result<serde_json::Value, CallFailure> {
         panic!("binding lookup must not dispatch under the custody scope")
     }
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; setup errors propagate."
+)]
 async fn self_binding_uses_the_independent_peer_instead_of_service_uuid_bits() -> TestResult {
     // Arrange distinct valid identities, with no directory row.
     let directory = tempfile::tempdir()?;
@@ -47,6 +55,10 @@ async fn self_binding_uses_the_independent_peer_instead_of_service_uuid_bits() -
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; setup errors propagate."
+)]
 async fn directory_binding_reads_the_supplied_uncommitted_custody_scope() -> TestResult {
     // Arrange a directory pair visible only in this transaction.
     let directory = tempfile::tempdir()?;
@@ -78,6 +90,10 @@ async fn directory_binding_reads_the_supplied_uncommitted_custody_scope() -> Tes
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; setup errors propagate."
+)]
 async fn unknown_stays_retryable_and_project_identity_survives_physical_holder_changes()
 -> TestResult {
     let directory = tempfile::tempdir()?;

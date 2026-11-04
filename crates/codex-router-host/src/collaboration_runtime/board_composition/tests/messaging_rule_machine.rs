@@ -17,6 +17,14 @@ pub(in crate::collaboration_runtime::board_composition::tests::messaging_rule_ca
     machine: EnrolledTestMachine,
 }
 impl RuleMachine {
+    pub fn observe_mail_wire(
+        &self,
+    ) -> Result<
+        board_central_test_support::MailWireObservation,
+        Box<dyn std::error::Error + Send + Sync>,
+    > {
+        self.machine.observe_mail_wire(None)
+    }
     pub async fn open(
         holder: &claim_fixture::ClaimFixture,
         origin: &ActorOrigin,

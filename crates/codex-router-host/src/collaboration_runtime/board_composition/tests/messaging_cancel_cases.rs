@@ -168,7 +168,7 @@ async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
     }
 }
 
-async fn arrange_sent_follow(
+pub(super) async fn arrange_sent_follow(
     fixture: &mut RuleFixture,
 ) -> Result<FollowSeed, Box<dyn std::error::Error + Send + Sync>> {
     let (release, task) = fixture

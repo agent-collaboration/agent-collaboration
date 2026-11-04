@@ -5,6 +5,8 @@ use std::path::PathBuf;
 mod cold_sender_binding;
 #[path = "installation_directory_refresh.rs"]
 mod installation_directory_refresh;
+#[path = "mail_settlement_test.rs"]
+mod mail_settlement;
 #[path = "notification_directory.rs"]
 mod notification_directory;
 #[path = "notification_frontier.rs"]

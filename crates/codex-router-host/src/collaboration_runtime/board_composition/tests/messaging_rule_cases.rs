@@ -19,6 +19,8 @@ mod local_cancel_case;
 mod relay_transport;
 #[path = "messaging_rule_fixture.rs"]
 mod rule_fixture;
+#[path = "messaging_settlement_test.rs"]
+mod settlement;
 use rule_fixture::*;
 
 #[tokio::test]

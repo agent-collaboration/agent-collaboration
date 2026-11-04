@@ -428,9 +428,17 @@ async fn a_remote_reply_link_survives_shared_wire_native_receipt_and_owning_reop
         }))
         .unwrap(),
     );
-    let sender = "00000000-0000-4000-8000-000000000002"
+    let sender: message_board::ServiceId = "00000000-0000-4000-8000-000000000002"
         .to_owned()
         .try_into()
+        .unwrap();
+    fixture
+        .owner
+        .remember_installation_peer(&interaction_storage::InstallationPeerBinding {
+            service_id: sender.clone(),
+            peer_id: uuid::Uuid::now_v7().to_string().try_into().unwrap(),
+        })
+        .await
         .unwrap();
     let item = collaboration_runtime::outgoing_mail_message(
         &reply,

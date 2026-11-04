@@ -63,6 +63,10 @@ pub(super) enum WireEvent {
         epoch: Option<u64>,
     },
     GenericSubmit(fleet_sync_protocol::ItemId),
+    Settle {
+        item: fleet_sync_protocol::ItemId,
+        submitter: fleet_sync_protocol::Submitter,
+    },
     Fetch {
         stream: DeliveryStream,
         max_bytes: u64,
@@ -308,6 +312,9 @@ impl WireObserver {
                     DeliveryRequest::Submit { item, .. } => {
                         Some(WireEvent::GenericSubmit(item.id()))
                     }
+                    DeliveryRequest::Settle {
+                        item, submitter, ..
+                    } => Some(WireEvent::Settle { item, submitter }),
                     DeliveryRequest::Fetch {
                         stream,
                         max_bytes,
