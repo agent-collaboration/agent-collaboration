@@ -219,6 +219,32 @@
           "nullable": false
         }
       ]
+    },
+    {
+      "name": "read_adr_batch",
+      "sql": "sql/fleet/read_adr_batch.sql",
+      "row": "StoredFleetAdr",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "ids",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_adr_file_batch",
+      "sql": "sql/fleet/read_adr_file_batch.sql",
+      "row": "StoredAdrRepositoryFile",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "ids",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
     }
   ]
 }

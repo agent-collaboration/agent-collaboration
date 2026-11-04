@@ -148,6 +148,19 @@
           "nullable": false
         }
       ]
+    },
+    {
+      "name": "read_board_batch",
+      "sql": "sql/fleet/read_board_batch.sql",
+      "row": "StoredFleetBoard",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "ids",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
     }
   ]
 }

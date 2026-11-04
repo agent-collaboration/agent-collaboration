@@ -317,3 +317,121 @@ where
         Ok(())
     }
 }
+pub(crate) fn read_adr_batch<S>(
+    scope: &mut S,
+    ids: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredFleetAdr>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/fleet/read_adr_batch.sql"
+        )))
+        .bind(ids);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredFleetAdr {
+                    adr_id: row.try_get("adr_id")?,
+                    adr_id_class: row.try_get("adr_id_class")?,
+                    workspace_id: row.try_get("workspace_id")?,
+                    workspace_id_class: row.try_get("workspace_id_class")?,
+                    title: row.try_get("title")?,
+                    title_class: row.try_get("title_class")?,
+                    text: row.try_get("text")?,
+                    text_class: row.try_get("text_class")?,
+                    status: row.try_get("status")?,
+                    status_class: row.try_get("status_class")?,
+                    supersedes_adr_id: row.try_get("supersedes_adr_id")?,
+                    supersedes_adr_id_class: row.try_get("supersedes_adr_id_class")?,
+                    made_in_kind: row.try_get("made_in_kind")?,
+                    made_in_kind_class: row.try_get("made_in_kind_class")?,
+                    made_in_record_id: row.try_get("made_in_record_id")?,
+                    made_in_record_id_class: row.try_get("made_in_record_id_class")?,
+                    revision: row.try_get("revision")?,
+                    revision_class: row.try_get("revision_class")?,
+                    repository_file_count: row.try_get("repository_file_count")?,
+                    repository_file_count_class: row.try_get("repository_file_count_class")?,
+                    actor_kind: row.try_get("actor_kind")?,
+                    actor_kind_class: row.try_get("actor_kind_class")?,
+                    actor_human_id: row.try_get("actor_human_id")?,
+                    actor_human_id_class: row.try_get("actor_human_id_class")?,
+                    actor_service_id: row.try_get("actor_service_id")?,
+                    actor_service_id_class: row.try_get("actor_service_id_class")?,
+                    actor_endpoint_id: row.try_get("actor_endpoint_id")?,
+                    actor_endpoint_id_class: row.try_get("actor_endpoint_id_class")?,
+                    actor_session_id: row.try_get("actor_session_id")?,
+                    actor_session_id_class: row.try_get("actor_session_id_class")?,
+                    actor_router_component: row.try_get("actor_router_component")?,
+                    actor_router_component_class: row.try_get("actor_router_component_class")?,
+                    request_id: row.try_get("request_id")?,
+                    request_id_class: row.try_get("request_id_class")?,
+                    fleet_position: row.try_get("fleet_position")?,
+                    fleet_position_class: row.try_get("fleet_position_class")?,
+                    router_time: row.try_get("router_time")?,
+                    router_time_class: row.try_get("router_time_class")?,
+                    time_basis: row.try_get("time_basis")?,
+                    time_basis_class: row.try_get("time_basis_class")?,
+                    origin_installation: row.try_get("origin_installation")?,
+                    origin_installation_class: row.try_get("origin_installation_class")?,
+                    origin_machine: row.try_get("origin_machine")?,
+                    origin_machine_class: row.try_get("origin_machine_class")?,
+                    import_digest: row.try_get("import_digest")?,
+                    import_digest_class: row.try_get("import_digest_class")?,
+                    created_at: row.try_get("created_at")?,
+                    created_at_class: row.try_get("created_at_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_at_class: row.try_get("updated_at_class")?,
+                })
+            })
+            .collect()
+    }
+}
+pub(crate) fn read_adr_file_batch<S>(
+    scope: &mut S,
+    ids: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredAdrRepositoryFile>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/fleet/read_adr_file_batch.sql"
+        )))
+        .bind(ids);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredAdrRepositoryFile {
+                    id: row.try_get("id")?,
+                    id_class: row.try_get("id_class")?,
+                    adr_id: row.try_get("adr_id")?,
+                    adr_id_class: row.try_get("adr_id_class")?,
+                    ordinal: row.try_get("ordinal")?,
+                    ordinal_class: row.try_get("ordinal_class")?,
+                    repository_origin: row.try_get("repository_origin")?,
+                    repository_origin_class: row.try_get("repository_origin_class")?,
+                    path: row.try_get("path")?,
+                    path_class: row.try_get("path_class")?,
+                    commit_sha: row.try_get("commit_sha")?,
+                    commit_sha_class: row.try_get("commit_sha_class")?,
+                    created_at: row.try_get("created_at")?,
+                    created_at_class: row.try_get("created_at_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_at_class: row.try_get("updated_at_class")?,
+                })
+            })
+            .collect()
+    }
+}

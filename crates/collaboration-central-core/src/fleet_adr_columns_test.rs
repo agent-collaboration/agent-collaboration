@@ -100,7 +100,7 @@ async fn late_adr_write_failure_rolls_back_parent_and_ordered_repository_files()
     Ok(())
 }
 
-fn adr(revision: u64) -> Result<Record, TestError> {
+pub(crate) fn adr(revision: u64) -> Result<Record, TestError> {
     let Record::Workspace(parent) = workspace(1)? else {
         return Err("wrong fixture kind".into());
     };

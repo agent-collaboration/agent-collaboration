@@ -11,7 +11,7 @@
     "core_migrations/0007_creation_decisions.sql": "0292e6a4f8406b77586d00b876626ad4987e9392381356126503e0c7e5dc1242",
     "core_migrations/0008_feed_readers.sql": "dda67da87b76d2cc87645e4ae7c2119a704ee88603f3bab40c9357019b9d3a47",
     "core_migrations/0009_migration_failures.sql": "1ffdb253f6bd1ec0387bb92e8ff69a2788d7478b1ea8fa333638ae89848c31fa",
-    "fleet-record-read-queries.json": "f6513e5acf83e4980980da27af138c2427a08c5dfb31fea6b34af05632e8a7d4",
+    "fleet-record-read-queries.json": "4956dad6807ce34281b3a4df3480ea97219e8b6324a5e2e649b905ddf5a6f909",
     "generator:fleet-sync-query-gen/Cargo.toml": "01210c567dcbccb4ff127626a0ff7625641edd4c5f0787ea41777757b1eaa3e6",
     "generator:fleet-sync-query-gen/src/expression_classes.rs": "14dc40abaec059e437d3e44bc187b9560812b0ed21ee2ad9d558364032fb097e",
     "generator:fleet-sync-query-gen/src/lib.rs": "df50be1a279adf266fdd12d184637b0113740390c0cef7273d1995dea0475152",
@@ -66,20 +66,21 @@
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
     "sql/fleet/list_board_projects.sql": "b5a515c4fe0d816f17e96ad5a01f72a8aaedbf618ca50373b0b2b14421562690",
     "sql/fleet/read_adr_snapshot_keys.sql": "0a55f33fc051ec5fc01dde3c6df1c97ab7a22ac5841030e15ba15831a516b6b3",
-    "sql/fleet/read_board_name.sql": "2aa6757d8de03b48b7f98de1953d9e7b03b50d7c596195cbaeda48f700ac05db",
+    "sql/fleet/read_board_name_batch.sql": "1cbe1981b8c2d998ba3a4611c89481c6dcedf93bd17824b5e548125f47da19b5",
     "sql/fleet/read_board_snapshot_keys.sql": "261796100526d749cf1868584fe92359ac903919e2185242df6f82d711f518d1",
     "sql/fleet/read_directory_key_page.sql": "903c664fd590cc1ec72d66becc56e4f9ea0d07ecaddb3c76a0caffc422820eca",
     "sql/fleet/read_directory_keys.sql": "55b8e7c2165645bdd13e2ea417737bdf13837a792901fb201784451a2b5d995c",
     "sql/fleet/read_directory_summary.sql": "ea3504114b4d55f183a11416f09cd1b047545d33c464b6c467c741f324fc98cd",
+    "sql/fleet/read_project_batch.sql": "0c229d053571a34ddcb12b503ceb1d4d4ddb5d27dadbdbc4b7219f666b538611",
     "sql/fleet/read_project_columns.sql": "96cd719d50d28ebadb5f5304651bb03a43f0b947b88d18b0f6ff1124ea77d7d4",
-    "sql/fleet/read_project_name.sql": "74b93d7899e9c09c75f79f92d341daae10a5b866e22200b8de933765761ee998",
+    "sql/fleet/read_project_name_batch.sql": "7e0c4efe712b141dca1bb36b67fcf6fd67c245a952a4705403f4a262c5b8d75b",
     "sql/fleet/read_project_snapshot_keys.sql": "5256c76985c9c13d206d80fe3794a55373ccdb9575b13ef4ba7d953ef94447ce",
     "sql/fleet/read_request_snapshot_keys.sql": "f97136d6790fae9594ff5c1f14ce395a6de585fae0f8e0f43014c8e8e5f06ee0",
-    "sql/fleet/read_workspace_name.sql": "5c87523b84cfca070a1e4145e58956c708537040294dcbf970fda9cf63023d34",
+    "sql/fleet/read_workspace_name_batch.sql": "56b475fba0204f0340b93d8099de16d16d6da777d923d834cad6d96465592052",
     "sql/fleet/read_workspace_snapshot_keys.sql": "d2be8f5232c25eb38b9abf2c36cef529d1e15c6ee6f6fd118642c57c0c2abd29",
-    "src/generated_fleet_record_reads.rs": "4ed03dc3388b3943cce2b3d00d22661b7ce28570de906c4b0f32d0fe8e80f8ed"
+    "src/generated_fleet_record_reads.rs": "f4127c7fcca2f94da304b8aed5ea80072c46d30bef6465d93cca666a5cd2689c"
   },
-  "queries_digest": "a8a162a361c14c0ddfef340f23486c6323b42af0ee99dfdea9a24eeeab948564",
+  "queries_digest": "ebd7f8f8b137b0212519f8b6d9273dced9499e7d0fd7da2a162b9d53278307e2",
   "queries": [
     {
       "name": "read_project_columns",
@@ -350,45 +351,6 @@
           "rust_type": "Option<String>",
           "nullable": null,
           "type_source": "typeof"
-        }
-      ]
-    },
-    {
-      "name": "read_workspace_name",
-      "bind_slots": 1,
-      "columns": [
-        {
-          "name": "record_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        }
-      ]
-    },
-    {
-      "name": "read_board_name",
-      "bind_slots": 2,
-      "columns": [
-        {
-          "name": "record_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        }
-      ]
-    },
-    {
-      "name": "read_project_name",
-      "bind_slots": 2,
-      "columns": [
-        {
-          "name": "record_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
         }
       ]
     },
@@ -891,6 +853,359 @@
           "rust_type": "Option<String>",
           "nullable": null,
           "type_source": "driver"
+        }
+      ]
+    },
+    {
+      "name": "read_project_batch",
+      "bind_slots": 1,
+      "columns": [
+        {
+          "name": "project_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "project_id_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "workspace_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "workspace_id_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "board_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "board_id_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "name",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "name_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "actor_kind",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "actor_kind_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "actor_human_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "actor_human_id_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "actor_service_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "actor_service_id_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "actor_endpoint_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "actor_endpoint_id_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "actor_session_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "actor_session_id_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "actor_router_component",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "actor_router_component_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "request_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "request_id_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "fleet_position",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "fleet_position_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "router_time",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "router_time_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "time_basis",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "time_basis_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "origin_installation",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "origin_installation_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "origin_machine",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "origin_machine_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "import_digest",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "import_digest_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "created_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "created_at_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "updated_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "updated_at_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        }
+      ]
+    },
+    {
+      "name": "read_workspace_name_batch",
+      "bind_slots": 1,
+      "columns": [
+        {
+          "name": "record_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "scope_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "name",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        }
+      ]
+    },
+    {
+      "name": "read_board_name_batch",
+      "bind_slots": 1,
+      "columns": [
+        {
+          "name": "record_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "scope_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "name",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        }
+      ]
+    },
+    {
+      "name": "read_project_name_batch",
+      "bind_slots": 1,
+      "columns": [
+        {
+          "name": "record_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "scope_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "name",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
         }
       ]
     }

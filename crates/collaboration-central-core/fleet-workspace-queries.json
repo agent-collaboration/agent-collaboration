@@ -199,6 +199,32 @@
           "nullable": false
         }
       ]
+    },
+    {
+      "name": "read_workspace_batch",
+      "sql": "sql/fleet/read_workspace_batch.sql",
+      "row": "StoredFleetWorkspace",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "ids",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_workspace_repository_batch",
+      "sql": "sql/fleet/read_workspace_repository_batch.sql",
+      "row": "StoredWorkspaceRepositoryRef",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "ids",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
     }
   ]
 }
