@@ -179,6 +179,23 @@ pub(crate) async fn fleet_schema(request: Request, env: Env) -> Result<Response>
     forward_command(Command::FleetSchema, env).await
 }
 
+pub(crate) async fn fleet_mail_custody(mut request: Request, env: Env) -> Result<Response> {
+    if !owner_allowed(&request, &env).await? {
+        return Response::error("owner required", 401);
+    }
+    let input: collaboration_central_core::FleetMailCustodyRequest = match request.json().await {
+        Ok(input) => input,
+        Err(_) => return Response::error("invalid custody item request", 400),
+    };
+    crate::composed_control::forward(
+        &env,
+        &ObjectAddress::Fleet,
+        "/test/fleet-mail-custody",
+        Some(serde_json::to_string(&input)?),
+    )
+    .await
+}
+
 async fn owner_allowed(request: &Request, env: &Env) -> Result<bool> {
     let labels = access_verification::InvocationLabels::for_request(request)?;
     let assertion = request.headers().get("Cf-Access-Jwt-Assertion")?;

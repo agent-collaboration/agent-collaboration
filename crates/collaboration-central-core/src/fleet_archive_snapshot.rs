@@ -1,12 +1,9 @@
 //! Archive predicates use validated Fleet facts from the caller's transaction.
 use crate::{
     ClaimReservationState,
-    fleet_record_codec::{
-        self as codec, check_millis, check_private_id, corrupt, decode_json, required,
-    },
+    fleet_record_codec::{check_millis, check_private_id, corrupt, required},
     fleet_record_store, generated_fleet_archive as reports, generated_fleet_lease as leases,
     generated_fleet_record_reads as records,
-    lease_projection::LeaseProjection,
 };
 use durable_steps::{StoreError, storage::TransactionScope};
 use fleet_admission::{ArchiveReport, FleetSnapshot};
@@ -26,23 +23,7 @@ where
     for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    records::list_workspace_boards(scope, workspace.as_str().into())
-        .await
-        .map_err(StoreError::backend)?
-        .into_iter()
-        .map(|row| {
-            let Record::Board(board) = codec::decode(row)?.record else {
-                return Err(corrupt("archive.board", "wrong indexed record kind"));
-            };
-            if &board.workspace_id != workspace {
-                return Err(corrupt(
-                    "archive.board",
-                    "board belongs to another workspace",
-                ));
-            }
-            Ok(board)
-        })
-        .collect()
+    crate::fleet_board_store::workspace_boards(scope, workspace).await
 }
 
 pub(crate) async fn board_projects<Scope: TransactionScope>(
@@ -60,7 +41,8 @@ where
         .await
         .map_err(StoreError::backend)?
     {
-        let Record::DirectoryEntry(project) = codec::decode(row)?.record else {
+        let Record::DirectoryEntry(project) = crate::fleet_directory_codec::decode(row)?.record
+        else {
             return Err(corrupt("archive.project", "wrong indexed record kind"));
         };
         if &project.board != board {
@@ -73,14 +55,13 @@ where
             .await
             .map_err(StoreError::backend)?
             .ok_or_else(|| corrupt("archive.lease", "directory row is absent"))?;
-        if required(stored.project_id, "archive.project_id")? != project.id.as_str() {
+        if required(stored.project_id.clone(), "archive.project_id")? != project.id.as_str() {
             return Err(corrupt(
                 "archive.project_id",
                 "lease lookup differs from its project",
             ));
         }
-        if let Some(payload) = stored.lease_projection {
-            let projection: LeaseProjection = decode_json(&payload, "archive.lease_projection")?;
+        if let Some(projection) = crate::fleet_lease_columns::decode(stored)? {
             if projection.database().as_uuid().to_string() != project.id.as_str() {
                 return Err(corrupt(
                     "archive.lease_projection",

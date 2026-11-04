@@ -51,15 +51,7 @@ async fn stored(root: &Path) -> TestResult<(Vec<serde_json::Value>, Vec<String>)
             }))
         })
         .collect::<TestResult<Vec<_>>>()?;
-    let rows = query::<sqlx_turso::Turso>(
-        "SELECT payload FROM fleet_request_decisions ORDER BY request_id",
-    )
-    .fetch_all(&mut connection)
-    .await?;
-    let ledgers = rows
-        .into_iter()
-        .map(|row| row.try_get::<String, _>("payload"))
-        .collect::<Result<Vec<_>, _>>()?;
+    let ledgers = crate::fleet_ledger_rows::on_connection(&mut connection).await?;
     connection.close().await?;
     Ok((reports, ledgers))
 }

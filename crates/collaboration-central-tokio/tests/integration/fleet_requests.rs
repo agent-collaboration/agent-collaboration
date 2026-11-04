@@ -9,7 +9,7 @@ use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, JwksFixtureServer, enroll_admitted_peer, fixture_policy,
 };
 use collaboration_central_tokio::{TokioServer, TokioSettings};
-use durable_steps::Uuid;
+use durable_steps::{Uuid, storage::TransactionScope};
 use fleet_admission::{FleetOperation, FleetRequest, FleetRequestResult};
 use fleet_sync_protocol::{ClientFrame, FrameId, OperationAnswer, OperationRequest, ServerFrame};
 use futures_util::{SinkExt, StreamExt};
@@ -29,6 +29,57 @@ mod feed_reads;
 mod snapshot_reads;
 const SERVICE: &str = "550e8400-e29b-41d4-a716-4466554400f4";
 const WORKSPACE: &str = "019f0000-0000-7000-8000-000000000f41";
+
+#[tokio::test]
+async fn normal_feed_history_keeps_its_prefix_and_vectors_after_canonical_mutations()
+-> ConformanceResult<()> {
+    let root = tempfile::tempdir()?;
+    let jwks = JwksFixtureServer::start().await?;
+    let server = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let proof = collaboration_central_conformance::run_feed_history_conformance(
+        &ConformanceClient::new(server.base_url())?,
+    )
+    .await;
+    let stopped = server.shutdown().await;
+    let closed = jwks.shutdown().await;
+    stopped?;
+    closed?;
+    proof
+}
+
+#[tokio::test]
+async fn normal_repository_frames_keep_distinct_keys_list_order_and_exact_replay()
+-> ConformanceResult<()> {
+    let root = tempfile::tempdir()?;
+    let jwks = JwksFixtureServer::start().await?;
+    let server = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let proof = collaboration_central_conformance::run_repository_round_trip_conformance(
+        &ConformanceClient::new(server.base_url())?,
+    )
+    .await;
+    let stopped = server.shutdown().await;
+    let closed = jwks.shutdown().await;
+    stopped?;
+    closed?;
+    proof
+}
+
+#[tokio::test]
+async fn normal_adr_frames_preserve_literal_body_sixteen_files_and_canonical_replay()
+-> ConformanceResult<()> {
+    let root = tempfile::tempdir()?;
+    let jwks = JwksFixtureServer::start().await?;
+    let server = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
+    let proof = collaboration_central_conformance::run_adr_round_trip_conformance(
+        &ConformanceClient::new(server.base_url())?,
+    )
+    .await;
+    let stopped = server.shutdown().await;
+    let closed = jwks.shutdown().await;
+    stopped?;
+    closed?;
+    proof
+}
 
 #[tokio::test]
 async fn archiving_nine_empty_boards_returns_all_ten_exact_effect_identities()
@@ -318,17 +369,20 @@ async fn normal_fleet_request_keeps_its_decision_and_admitted_origin_after_reope
         .connect()
         .await?;
     let proof = async {
-        let row = query::<sqlx_turso::Turso>("SELECT payload, origin_installation, origin_machine, (SELECT count(*) FROM fleet_request_decisions) AS decisions, (SELECT count(*) FROM fleet_decision_receipts) AS receipts, (SELECT count(*) FROM fleet_feed) AS feed FROM workspaces WHERE workspace_id = ?")
-            .bind(WORKSPACE).fetch_one(&mut reader).await?;
-        let payload: String = row.try_get("payload")?;
-        let record: Record = serde_json::from_str(&payload)?;
-        if !matches!(record,Record::Workspace(value) if value.workspace_id.as_str() == WORKSPACE && value.name.as_str() == "Socket fleet")
-            || row.try_get::<String,_>("origin_installation")? != SERVICE
-            || row.try_get::<String,_>("origin_machine")? != "fleet-frame-origin"
-            || row.try_get::<i64,_>("decisions")? != 1 || row.try_get::<i64,_>("receipts")? != 1
-            || row.try_get::<i64,_>("feed")? != 2 {
-            return Err("Fleet reopen lost the canonical record, admitted provenance or exact replay counts".into());
+        let mut transaction = reader.begin().await?;
+        {
+            let mut scope = durable_steps::turso_store::TursoScope::new(&mut transaction, &crate::fleet_record_rows::ReadOnlyHost);
+            let row = query::<sqlx_turso::Turso>("SELECT origin_installation,origin_machine,(SELECT count(*) FROM fleet_request_decisions) AS decisions,(SELECT count(*) FROM fleet_decision_receipts) AS receipts,(SELECT count(*) FROM fleet_feed) AS feed FROM fleet_workspaces WHERE workspace_id=?").bind(WORKSPACE).fetch_one(scope.executor()).await?;
+            let reference = message_board::WorkspaceId::try_from(WORKSPACE.to_owned())?.into();
+            let record = collaboration_central_core::read_fleet_record_in_scope(&mut scope,&reference).await?.ok_or("workspace missing")?;
+            if !matches!(record,Record::Workspace(value) if value.workspace_id.as_str()==WORKSPACE && value.name.as_str()=="Socket fleet")
+                || row.try_get::<String,_>("origin_installation")?!=SERVICE
+                || row.try_get::<String,_>("origin_machine")?!="fleet-frame-origin"
+                || row.try_get::<i64,_>("decisions")?!=1 || row.try_get::<i64,_>("receipts")?!=1 || row.try_get::<i64,_>("feed")?!=2 {
+                return Err("Fleet reopen lost the canonical record, admitted provenance or exact replay counts".into());
+            }
         }
+        transaction.commit().await?;
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
     }.await;
     reader.close().await?;

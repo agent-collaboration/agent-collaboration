@@ -10,7 +10,37 @@ use sqlx_core::{
 #[derive(Debug)]
 pub(crate) struct StoredDirectoryLease {
     pub project_id: Option<String>,
-    pub lease_projection: Option<String>,
+    pub project_id_class: Option<String>,
+    pub lease_epoch: Option<String>,
+    pub lease_epoch_class: Option<String>,
+    pub lease_change: Option<String>,
+    pub lease_change_class: Option<String>,
+    pub lease_incarnation: Option<String>,
+    pub lease_incarnation_class: Option<String>,
+    pub lease_changed_at: Option<String>,
+    pub lease_changed_at_class: Option<String>,
+    pub lease_lifecycle_kind: Option<String>,
+    pub lease_lifecycle_kind_class: Option<String>,
+    pub lease_origin_kind: Option<String>,
+    pub lease_origin_kind_class: Option<String>,
+    pub lease_origin_epoch: Option<String>,
+    pub lease_origin_epoch_class: Option<String>,
+    pub lease_origin_sequence: Option<String>,
+    pub lease_origin_sequence_class: Option<String>,
+    pub lease_import_digest: Option<String>,
+    pub lease_import_digest_class: Option<String>,
+    pub lease_retiring_attempt_id: Option<String>,
+    pub lease_retiring_attempt_id_class: Option<String>,
+    pub lease_retired_at: Option<String>,
+    pub lease_retired_at_class: Option<String>,
+    pub lease_holder_machine_id: Option<String>,
+    pub lease_holder_machine_id_class: Option<String>,
+    pub lease_holder_service_id: Option<String>,
+    pub lease_holder_service_id_class: Option<String>,
+    pub lease_expires_at: Option<String>,
+    pub lease_expires_at_class: Option<String>,
+    pub lease_digest: Option<String>,
+    pub lease_digest_class: Option<String>,
 }
 pub(crate) fn read_directory_lease<S>(
     scope: &mut S,
@@ -34,7 +64,38 @@ where
             .map(|row| {
                 Ok(StoredDirectoryLease {
                     project_id: row.try_get("project_id")?,
-                    lease_projection: row.try_get("lease_projection")?,
+                    project_id_class: row.try_get("project_id_class")?,
+                    lease_epoch: row.try_get("lease_epoch")?,
+                    lease_epoch_class: row.try_get("lease_epoch_class")?,
+                    lease_change: row.try_get("lease_change")?,
+                    lease_change_class: row.try_get("lease_change_class")?,
+                    lease_incarnation: row.try_get("lease_incarnation")?,
+                    lease_incarnation_class: row.try_get("lease_incarnation_class")?,
+                    lease_changed_at: row.try_get("lease_changed_at")?,
+                    lease_changed_at_class: row.try_get("lease_changed_at_class")?,
+                    lease_lifecycle_kind: row.try_get("lease_lifecycle_kind")?,
+                    lease_lifecycle_kind_class: row.try_get("lease_lifecycle_kind_class")?,
+                    lease_origin_kind: row.try_get("lease_origin_kind")?,
+                    lease_origin_kind_class: row.try_get("lease_origin_kind_class")?,
+                    lease_origin_epoch: row.try_get("lease_origin_epoch")?,
+                    lease_origin_epoch_class: row.try_get("lease_origin_epoch_class")?,
+                    lease_origin_sequence: row.try_get("lease_origin_sequence")?,
+                    lease_origin_sequence_class: row.try_get("lease_origin_sequence_class")?,
+                    lease_import_digest: row.try_get("lease_import_digest")?,
+                    lease_import_digest_class: row.try_get("lease_import_digest_class")?,
+                    lease_retiring_attempt_id: row.try_get("lease_retiring_attempt_id")?,
+                    lease_retiring_attempt_id_class: row
+                        .try_get("lease_retiring_attempt_id_class")?,
+                    lease_retired_at: row.try_get("lease_retired_at")?,
+                    lease_retired_at_class: row.try_get("lease_retired_at_class")?,
+                    lease_holder_machine_id: row.try_get("lease_holder_machine_id")?,
+                    lease_holder_machine_id_class: row.try_get("lease_holder_machine_id_class")?,
+                    lease_holder_service_id: row.try_get("lease_holder_service_id")?,
+                    lease_holder_service_id_class: row.try_get("lease_holder_service_id_class")?,
+                    lease_expires_at: row.try_get("lease_expires_at")?,
+                    lease_expires_at_class: row.try_get("lease_expires_at_class")?,
+                    lease_digest: row.try_get("lease_digest")?,
+                    lease_digest_class: row.try_get("lease_digest_class")?,
                 })
             })
             .transpose()
@@ -42,12 +103,28 @@ where
 }
 pub(crate) fn store_directory_lease<S>(
     scope: &mut S,
-    lease_projection: String,
+    lease_epoch: Option<String>,
+    lease_change: Option<String>,
+    lease_incarnation: Option<String>,
+    lease_changed_at: Option<String>,
+    lease_lifecycle_kind: Option<String>,
+    lease_origin_kind: Option<String>,
+    lease_origin_epoch: Option<String>,
+    lease_origin_sequence: Option<String>,
+    lease_import_digest: Option<String>,
+    lease_retiring_attempt_id: Option<String>,
+    lease_retired_at: Option<String>,
+    lease_holder_machine_id: Option<String>,
+    lease_holder_service_id: Option<String>,
+    lease_expires_at: Option<String>,
+    lease_digest: Option<String>,
+    now: String,
     project_id: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
     for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
@@ -55,7 +132,22 @@ where
             env!("CARGO_MANIFEST_DIR"),
             "/sql/fleet/store_directory_lease.sql"
         )))
-        .bind(lease_projection)
+        .bind(lease_epoch)
+        .bind(lease_change)
+        .bind(lease_incarnation)
+        .bind(lease_changed_at)
+        .bind(lease_lifecycle_kind)
+        .bind(lease_origin_kind)
+        .bind(lease_origin_epoch)
+        .bind(lease_origin_sequence)
+        .bind(lease_import_digest)
+        .bind(lease_retiring_attempt_id)
+        .bind(lease_retired_at)
+        .bind(lease_holder_machine_id)
+        .bind(lease_holder_service_id)
+        .bind(lease_expires_at)
+        .bind(lease_digest)
+        .bind(now)
         .bind(project_id);
         statement.execute(scope.executor()).await?;
         Ok(())

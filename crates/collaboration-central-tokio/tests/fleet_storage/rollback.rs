@@ -52,7 +52,7 @@ impl AtomicStore for FaultStore {
                 Box::pin(async move {
                     let output = run(scope).await?;
                     let row = query::<sqlx_turso::Turso>(
-                        "SELECT count(*) AS count FROM project_directory",
+                        "SELECT count(*) AS count FROM fleet_project_directory",
                     )
                     .fetch_one(scope.executor())
                     .await

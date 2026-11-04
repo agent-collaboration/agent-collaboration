@@ -16,6 +16,54 @@ use std::{collections::BTreeMap, convert::Infallible, sync::Arc};
 #[path = "migration_bookkeeping_test.rs"]
 mod tests;
 
+#[cfg(test)]
+#[path = "fleet_workspace_columns_test.rs"]
+mod workspace_columns_tests;
+
+#[cfg(test)]
+#[path = "fleet_board_columns_test.rs"]
+mod board_columns_tests;
+
+#[cfg(test)]
+#[path = "fleet_adr_columns_test.rs"]
+mod adr_columns_tests;
+
+#[cfg(test)]
+#[path = "fleet_repository_columns_test.rs"]
+mod repository_columns_tests;
+
+#[cfg(test)]
+#[path = "fleet_directory_columns_test.rs"]
+mod directory_columns_tests;
+
+#[cfg(test)]
+#[path = "fleet_feed_columns_test.rs"]
+mod feed_columns_tests;
+
+#[cfg(test)]
+#[path = "fleet_feed_retention_test.rs"]
+mod feed_retention_tests;
+
+#[cfg(test)]
+#[path = "fleet_ledger_columns_test.rs"]
+mod ledger_columns_tests;
+
+#[cfg(test)]
+#[path = "fleet_ledger_integrity_test.rs"]
+mod ledger_integrity_tests;
+
+#[cfg(test)]
+#[path = "fleet_receipt_columns_test.rs"]
+mod receipt_columns_tests;
+
+#[cfg(test)]
+#[path = "admin_import_columns_test.rs"]
+mod admin_import_columns_tests;
+
+#[cfg(test)]
+#[path = "admin_import_corruption_test.rs"]
+mod admin_import_corruption_tests;
+
 #[cfg(feature = "conformance")]
 mod conformance;
 #[cfg(feature = "conformance")]
@@ -571,3 +619,7 @@ where
         })
     }
 }
+
+#[cfg(test)]
+#[path = "fleet_directory_projection_test.rs"]
+mod directory_projection_tests;

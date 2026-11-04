@@ -60,6 +60,8 @@ pub struct RevocationEnrollmentSnapshot {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RevocationObservation {
+    /// Read from the actual SDK custody table, including retained records.
+    pub outbox_items: u64,
     pub gate_armed: bool,
     pub gate_reached: bool,
     pub calls: Vec<CallId>,
@@ -233,7 +235,7 @@ where
         if let RevocationControl::Replay { call } = input.control {
             shared_host.replay_lifecycle_call(&call).await?;
         }
-        let ((enrollment, operation, readmission_operation, activation_step), _) =
+        let ((enrollment, operation, readmission_operation, activation_step, outbox_items), _) =
             StepDriver::new(host.clone())
                 .run(ReadRevocation {
                     service: input.service,
@@ -245,6 +247,7 @@ where
             .observation()
             .map_err(|_| CallFailure::AnswerLost)?;
         serde_json::to_vec(&RevocationObservation {
+            outbox_items,
             gate_armed,
             gate_reached,
             calls,
@@ -283,6 +286,7 @@ where
         Option<OperationStatus>,
         Option<OperationStatus>,
         Option<durable_steps::storage::StepRecord>,
+        u64,
     );
     type Effect = Infallible;
     fn run<'scope, 'transaction>(
@@ -290,6 +294,18 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
+            use sqlx_core::{query::query, row::Row};
+            // Conformance inspects the SDK-owned table without cloning its
+            // schema into Central's checked production query corpus.
+            let count: String = query::<Driver>(
+                "SELECT CAST(count(*) AS TEXT) AS items FROM _fleet_sync_outbox_items",
+            )
+            .fetch_one(scope.executor())
+            .await
+            .map_err(StoreError::backend)?
+            .try_get("items")
+            .map_err(StoreError::backend)?;
+            let outbox_items = count.parse().map_err(StoreError::backend)?;
             let mut rows = queries::read_enrollments(
                 scope,
                 Some(self.service.as_str().into()),
@@ -303,7 +319,7 @@ where
                 return Err(corrupt("service_id"));
             }
             let Some(machine) = rows.pop().map(StoredMachine::decode).transpose()? else {
-                return Ok(((None, None, None, None), Vec::new()));
+                return Ok(((None, None, None, None, outbox_items), Vec::new()));
             };
             let fingerprint = format!(
                 "{:x}",
@@ -344,6 +360,7 @@ where
                     operation,
                     readmission_operation,
                     activation_step,
+                    outbox_items,
                 ),
                 Vec::new(),
             ))

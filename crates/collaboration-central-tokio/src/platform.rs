@@ -203,6 +203,16 @@ impl TokioCentralPlatform {
         self.objects.forward_state(service).await
     }
 
+    /// Read-only observation of one committed mail row in the Fleet owner.
+    #[cfg(feature = "conformance")]
+    pub async fn conformance_mail_custody(
+        &self,
+        item: fleet_sync_protocol::ItemId,
+    ) -> Result<collaboration_central_core::FleetMailCustodyObservation, durable_steps::StoreError>
+    {
+        self.objects.mail_custody(item).await
+    }
+
     /// Read-only observation of live holder request correlations.
     #[cfg(feature = "conformance")]
     pub async fn conformance_holder_frames(

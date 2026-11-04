@@ -3,13 +3,18 @@ fn main() -> Result<(), fleet_sync_query_gen::GenerateError> {
     fleet_sync_query_gen::verify_manifest("forward-queries.json")?;
     fleet_sync_query_gen::verify_manifest("admin-import-queries.json")?;
     fleet_sync_query_gen::verify_manifest("checked-queries.json")?;
+    fleet_sync_query_gen::verify_manifest("fleet-reason-queries.json")?;
     fleet_sync_query_gen::verify_manifest("bootstrap-queries.json")?;
     fleet_sync_query_gen::verify_manifest("bootstrap-probe-queries.json")?;
     fleet_sync_query_gen::verify_manifest("enrollment-queries.json")?;
     fleet_sync_query_gen::verify_manifest("fleet-record-read-queries.json")?;
     fleet_sync_query_gen::verify_manifest("fleet-record-write-queries.json")?;
+    fleet_sync_query_gen::verify_manifest("fleet-workspace-queries.json")?;
+    fleet_sync_query_gen::verify_manifest("fleet-board-queries.json")?;
+    fleet_sync_query_gen::verify_manifest("fleet-adr-queries.json")?;
     fleet_sync_query_gen::verify_manifest("fleet-repository-queries.json")?;
     fleet_sync_query_gen::verify_manifest("fleet-feed-queries.json")?;
+    fleet_sync_query_gen::verify_manifest("fleet-feed-list-queries.json")?;
     fleet_sync_query_gen::verify_manifest("copy-summary-queries.json")?;
     fleet_sync_query_gen::verify_manifest("fleet-lease-queries.json")?;
     fleet_sync_query_gen::verify_manifest("fleet-archive-queries.json")?;

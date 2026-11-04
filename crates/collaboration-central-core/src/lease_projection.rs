@@ -87,6 +87,9 @@ impl LeaseProjection {
     pub(crate) fn snapshot(&self) -> &RegistrySnapshot {
         &self.snapshot
     }
+    pub(crate) fn holder(&self) -> Option<&ServiceId> {
+        self.holder.as_ref()
+    }
     pub(crate) fn database(&self) -> DatabaseId {
         self.snapshot.database
     }

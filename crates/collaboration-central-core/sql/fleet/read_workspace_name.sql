@@ -1,1 +1,1 @@
-SELECT workspace_id AS record_id FROM workspaces WHERE name = ?;
+SELECT workspace_id AS record_id FROM fleet_workspaces WHERE name = ?;

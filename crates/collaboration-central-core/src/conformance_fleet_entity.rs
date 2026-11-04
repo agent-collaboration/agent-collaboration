@@ -53,6 +53,7 @@ where
                 scope,
                 &self.record,
                 RecordWriteSource::Live,
+                time,
                 &mut self.row_ids,
             )
             .await?;

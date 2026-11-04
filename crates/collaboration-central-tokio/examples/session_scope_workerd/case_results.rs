@@ -92,6 +92,15 @@ impl Scenario {
             Scenario::FleetNotices => println!(
                 "FLEET_NOTICES_RESULT 1 passed; 0 failed; 0 ignored (three normal admitted sessions; two reader installations with two exact numbered hints each, Fleet mutation and replay, own alarm, real Delivery and positioned notice read; no physical restart claim)"
             ),
+            Scenario::FleetAdrColumns => println!(
+                "FLEET_ADR_COLUMNS_RESULT 1 passed; 0 failed; 0 ignored (real normal sessions and typed canonical ADR body, sixteen ordered files, lifecycle and replay; owning reopen is covered by native storage tests)"
+            ),
+            Scenario::FleetFeedColumns => println!(
+                "FLEET_FEED_COLUMNS_RESULT 1 passed; 0 failed; 0 ignored (ordinary Fleet writes and historical feed reads, sixteen ordered refs/files, canonical changes beside immutable snapshots, accepted/rejected authority and exact replay; owning reopen and retention rollback are covered by native storage tests)"
+            ),
+            Scenario::FleetRepositoryColumns => println!(
+                "FLEET_REPOSITORY_COLUMNS_RESULT 1 passed; 0 failed; 0 ignored (ordinary Fleet sessions, typed origin/local associations, canonical ordered list, attach/detach and replay; first provenance and owning reopen are covered by native storage tests)"
+            ),
             Scenario::DeliveryConfig { .. } => println!(
                 "DELIVERY_CONFIG_RESULT 1 passed; 0 failed; 0 ignored (explicit relay distinct from receiver, exact first/replay/update/readmission answers through real Registry and Mailbox; no Router delivery-call closure claim)"
             ),
@@ -148,6 +157,12 @@ impl Scenario {
             ),
             Scenario::RevocationRace => println!(
                 "REVOCATION_RESULT 2 passed; 0 failed; 0 ignored (normal revoke, held real delivery, unchanged owning enrollment, actual completed journal and late CallId replay; no heap-loss recovery claim)"
+            ),
+            Scenario::SenderRevocation => println!(
+                "SENDER_REVOCATION_RESULT 1 passed; 0 failed; 0 ignored (shared Native/Worker scenario; committed revoked row with live sender, exact item/cancel refusal, unchanged outbox count and no recipient Push)"
+            ),
+            Scenario::FleetMailObserver => println!(
+                "FLEET_MAIL_OBSERVER_RESULT 1 passed; 0 failed; 0 ignored (shared Native/Worker owner-only single-item row/status/version/payload-presence and owning count, absent/refused row with unchanged count; no payload content or hosted proof)"
             ),
             Scenario::ReadmissionActivation => println!(
                 "READMISSION_RESULT 1 passed; 0 failed; 0 ignored (real activation row and saved local receipt, normal credential/session admission, revoke before engine finish, old completion leaves row revoked and credential refused; no mailbox readback or process-crash claim)"

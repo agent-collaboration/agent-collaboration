@@ -2,8 +2,8 @@
 
 use crate::{
     CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
-    admin_import_contract::AdminImportRecord,
-    admin_import_store::{AdminImportCommand, AdminImportRefusal, AdminImportStep},
+    admin_import_contract::{AdminImportRecord, AdminImportRefusal},
+    admin_import_store::{AdminImportCommand, AdminImportStep},
     caller_context::CallAuthority,
     object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork,
@@ -55,11 +55,15 @@ where
         if !allowed {
             return Err(refused());
         }
-        let ObjectWork::Fleet { host, .. } = &self.work else {
+        let ObjectWork::Fleet { host, io, .. } = &self.work else {
             return Err(refused());
         };
         let (answer, _) = StepDriver::new(host.clone())
-            .run(AdminImportStep(command))
+            .run(AdminImportStep {
+                command,
+                now: io.now(),
+                row_ids: crate::fleet_row_ids::FleetRowIds::new(io.clone()),
+            })
             .await
             .map_err(|_| CallFailure::AnswerLost)?;
         serde_json::to_vec(&answer).map_err(|_| CallFailure::AnswerLost)

@@ -539,6 +539,25 @@ impl NativeObjects {
     }
 
     #[cfg(feature = "conformance")]
+    pub(crate) async fn mail_custody(
+        &self,
+        item: fleet_sync_protocol::ItemId,
+    ) -> Result<collaboration_central_core::FleetMailCustodyObservation, StoreError> {
+        // Observation never creates or migrates an owning store.
+        let slot = self.slots.lock().await.get("fleet").cloned();
+        match slot
+            .as_ref()
+            .and_then(|slot| slot.runtime.get())
+            .map(Arc::as_ref)
+        {
+            Some(RuntimeFace::Fleet(runtime)) => runtime.conformance_mail_custody(item).await,
+            _ => Err(StoreError::Aborted {
+                reason: "Fleet owner missing".into(),
+            }),
+        }
+    }
+
+    #[cfg(feature = "conformance")]
     pub(crate) async fn session_connections(
         &self,
         service: Option<&message_board::ServiceId>,

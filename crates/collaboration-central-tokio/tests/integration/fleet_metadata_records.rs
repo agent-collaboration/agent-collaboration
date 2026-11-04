@@ -5,9 +5,8 @@ use crate::fleet_cache_source as source;
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
 use fleet_admission::{FleetOperation, FleetRequest};
 use message_board::*;
-use serde_json::{Value, json};
 use source::{NativeFleetSource, TestResult};
-use sqlx_core::{query::query, row::Row};
+use sqlx_core::query::query;
 
 fn request(workspace: &WorkspaceId, operation: FleetOperation) -> TestResult<FleetRequest> {
     Ok(FleetRequest {
@@ -45,25 +44,14 @@ async fn overwrite_name(
         .object
         .transaction(move |scope| {
             Box::pin(async move {
-                let row = query::<sqlx_turso::Turso>(
-                    "SELECT payload FROM workspaces WHERE workspace_id=?",
+                query::<sqlx_turso::Turso>(
+                    "UPDATE fleet_workspaces SET name=? WHERE workspace_id=?",
                 )
-                .bind(&workspace)
-                .fetch_one(scope.executor())
+                .bind(name)
+                .bind(workspace)
+                .execute(scope.executor())
                 .await
                 .map_err(StoreError::backend)?;
-                let payload: String = row.try_get("payload").map_err(StoreError::backend)?;
-                let mut record: Value =
-                    serde_json::from_str(&payload).map_err(StoreError::backend)?;
-                *record
-                    .pointer_mut("/record/name")
-                    .ok_or_else(|| StoreError::backend("workspace name missing"))? = json!(name);
-                query::<sqlx_turso::Turso>("UPDATE workspaces SET payload=? WHERE workspace_id=?")
-                    .bind(record.to_string())
-                    .bind(workspace)
-                    .execute(scope.executor())
-                    .await
-                    .map_err(StoreError::backend)?;
                 Ok(())
             })
         })
@@ -135,7 +123,7 @@ async fn corrupted_stored_name_is_rejected_by_domain_decoding() -> TestResult {
     assert!(
         matches!(source.0.runtime.conformance_record_read(workspace.clone().into()).await,
         Err(collaboration_central_core::FleetRecordReadFailure {record, error: StoreError::Corrupt {field, ..}})
-        if record == RecordRef::from(workspace) && field == "fleet.payload")
+        if record == RecordRef::from(workspace) && field == "fleet.workspace.name")
     );
     source.close().await
 }
@@ -159,7 +147,7 @@ async fn noncanonical_stored_name_whitespace_is_rejected_instead_of_trimmed() ->
     assert!(
         matches!(source.0.runtime.conformance_record_read(workspace.clone().into()).await,
         Err(collaboration_central_core::FleetRecordReadFailure {record, error: StoreError::Corrupt {field, ..}})
-        if record == RecordRef::from(workspace) && field == "fleet.payload")
+        if record == RecordRef::from(workspace) && field == "fleet.workspace.name")
     );
     source.close().await
 }

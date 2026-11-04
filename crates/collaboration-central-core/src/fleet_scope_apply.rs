@@ -32,6 +32,7 @@ where
             scope,
             &write.record,
             RecordWriteSource::Imported(&write.digest),
+            now,
             row_ids,
         )
         .await?;
@@ -93,7 +94,8 @@ where
                 creation = Some((project, creating_request, carrier_installation));
             }
             FleetWrite::Put(record) => {
-                fleet_record_store::put(scope, &record, RecordWriteSource::Live, row_ids).await?
+                fleet_record_store::put(scope, &record, RecordWriteSource::Live, now, row_ids)
+                    .await?
             }
             FleetWrite::Ledger(_) => {}
             FleetWrite::DecisionReceipt {
@@ -134,6 +136,7 @@ where
                     &header,
                     None,
                     row_ids.next()?,
+                    now,
                 )
                 .await?;
             }
@@ -152,6 +155,8 @@ where
             entry: ledger,
             effects,
             receipt_ids,
+            now: runtime_primitives::SyncTime::from_unix_millis(now.timestamp_millis()),
+            row_ids: row_ids.clone(),
             #[cfg(feature = "conformance")]
             fault: crate::fleet_decision_step::FleetDecisionFault::None,
         },

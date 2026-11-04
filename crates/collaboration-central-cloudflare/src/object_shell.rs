@@ -299,12 +299,25 @@ impl ShellActor {
             .headers()
             .get("x-central-object-address")?
             .ok_or_else(|| error("object address missing"))?;
-        let address = self
-            .address(Some(serde_json::from_str(&requested)?))
-            .await?;
+        let requested: ObjectAddress = serde_json::from_str(&requested)?;
+        #[cfg(feature = "conformance")]
+        let read_only = request.path() == "/test/fleet-mail-custody";
+        #[cfg(feature = "conformance")]
+        let address = if read_only {
+            let stored = self.address(None).await?;
+            if stored != requested {
+                return Err(error("object address mismatch"));
+            }
+            stored
+        } else {
+            self.address(Some(requested)).await?
+        };
+        #[cfg(not(feature = "conformance"))]
+        let address = self.address(Some(requested)).await?;
         #[cfg(feature = "conformance")]
         if request.path() == crate::composed_control::OBJECT_PATH
             || request.path() == "/test/fleet-schema"
+            || request.path() == "/test/fleet-mail-custody"
         {
             self.restore_conformance_state().await?;
             let (host, runtime) = self.runtime_handles(address.clone())?;

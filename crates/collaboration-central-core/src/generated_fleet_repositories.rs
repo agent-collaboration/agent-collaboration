@@ -10,13 +10,31 @@ use sqlx_core::{
 #[derive(Debug)]
 pub(crate) struct StoredRepositoryAttachment {
     pub attachment_id: Option<String>,
+    pub attachment_id_class: Option<String>,
     pub workspace_id: Option<String>,
-    pub repository_reference: Option<String>,
+    pub workspace_id_class: Option<String>,
+    pub reference_kind: Option<String>,
+    pub reference_kind_class: Option<String>,
+    pub normalized_origin: Option<String>,
+    pub normalized_origin_class: Option<String>,
+    pub service_id: Option<String>,
+    pub service_id_class: Option<String>,
+    pub common_directory: Option<String>,
+    pub common_directory_class: Option<String>,
     pub router_time: Option<String>,
+    pub router_time_class: Option<String>,
     pub time_basis: Option<String>,
+    pub time_basis_class: Option<String>,
     pub origin_installation: Option<String>,
+    pub origin_installation_class: Option<String>,
     pub origin_machine: Option<String>,
+    pub origin_machine_class: Option<String>,
     pub import_digest: Option<String>,
+    pub import_digest_class: Option<String>,
+    pub created_at: Option<String>,
+    pub created_at_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_at_class: Option<String>,
 }
 pub(crate) fn read_repository_attachments<S>(
     scope: &mut S,
@@ -40,13 +58,31 @@ where
             .map(|row| {
                 Ok(StoredRepositoryAttachment {
                     attachment_id: row.try_get("attachment_id")?,
+                    attachment_id_class: row.try_get("attachment_id_class")?,
                     workspace_id: row.try_get("workspace_id")?,
-                    repository_reference: row.try_get("repository_reference")?,
+                    workspace_id_class: row.try_get("workspace_id_class")?,
+                    reference_kind: row.try_get("reference_kind")?,
+                    reference_kind_class: row.try_get("reference_kind_class")?,
+                    normalized_origin: row.try_get("normalized_origin")?,
+                    normalized_origin_class: row.try_get("normalized_origin_class")?,
+                    service_id: row.try_get("service_id")?,
+                    service_id_class: row.try_get("service_id_class")?,
+                    common_directory: row.try_get("common_directory")?,
+                    common_directory_class: row.try_get("common_directory_class")?,
                     router_time: row.try_get("router_time")?,
+                    router_time_class: row.try_get("router_time_class")?,
                     time_basis: row.try_get("time_basis")?,
+                    time_basis_class: row.try_get("time_basis_class")?,
                     origin_installation: row.try_get("origin_installation")?,
+                    origin_installation_class: row.try_get("origin_installation_class")?,
                     origin_machine: row.try_get("origin_machine")?,
+                    origin_machine_class: row.try_get("origin_machine_class")?,
                     import_digest: row.try_get("import_digest")?,
+                    import_digest_class: row.try_get("import_digest_class")?,
+                    created_at: row.try_get("created_at")?,
+                    created_at_class: row.try_get("created_at_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_at_class: row.try_get("updated_at_class")?,
                 })
             })
             .collect()
@@ -56,9 +92,16 @@ pub(crate) fn attach_repository<S>(
     scope: &mut S,
     attachment_id: String,
     workspace_id: String,
-    repository_reference: String,
-    record_header: String,
+    reference_kind: String,
+    normalized_origin: Option<String>,
+    service_id: Option<String>,
+    common_directory: Option<String>,
+    router_time: Option<String>,
+    time_basis: String,
+    origin_installation: String,
+    origin_machine: String,
     import_digest: Option<String>,
+    now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -73,9 +116,16 @@ where
         )))
         .bind(attachment_id)
         .bind(workspace_id)
-        .bind(repository_reference)
-        .bind(record_header)
-        .bind(import_digest);
+        .bind(reference_kind)
+        .bind(normalized_origin)
+        .bind(service_id)
+        .bind(common_directory)
+        .bind(router_time)
+        .bind(time_basis)
+        .bind(origin_installation)
+        .bind(origin_machine)
+        .bind(import_digest)
+        .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -83,11 +133,15 @@ where
 pub(crate) fn detach_repository<S>(
     scope: &mut S,
     workspace_id: String,
-    repository_reference: String,
+    reference_kind: String,
+    normalized_origin: Option<String>,
+    service_id: Option<String>,
+    common_directory: Option<String>,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
     for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
@@ -96,7 +150,10 @@ where
             "/sql/fleet/detach_repository.sql"
         )))
         .bind(workspace_id)
-        .bind(repository_reference);
+        .bind(reference_kind)
+        .bind(normalized_origin)
+        .bind(service_id)
+        .bind(common_directory);
         statement.execute(scope.executor()).await?;
         Ok(())
     }

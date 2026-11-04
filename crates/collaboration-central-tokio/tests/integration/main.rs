@@ -1,6 +1,10 @@
 //! One namespace per original central runtime test root.
 
 #[cfg(feature = "conformance")]
+#[path = "../support/fleet_record_rows.rs"]
+mod fleet_record_rows;
+
+#[cfg(feature = "conformance")]
 #[path = "../support/clocked_server.rs"]
 mod clocked_server;
 #[path = "../native_http/support.rs"]
@@ -66,6 +70,7 @@ mod transfer_fixture;
 mod access_carryover;
 mod access_workflow;
 mod admin_import;
+mod admin_import_columns;
 mod admin_import_reservation;
 mod archive_reports;
 mod archived_claim;
@@ -86,6 +91,7 @@ mod fleet_cache_records;
 mod fleet_conflict;
 mod fleet_creation_gap;
 mod fleet_effects;
+mod fleet_mail_observer;
 mod fleet_metadata_records;
 mod fleet_notice_outbox;
 mod fleet_notices_http;
@@ -258,3 +264,7 @@ mod mail_push_inbox;
 )]
 #[path = "../support/mail_push_transport.rs"]
 mod mail_push_transport;
+
+#[path = "../support/fleet_ledger_rows.rs"]
+#[cfg(feature = "conformance")]
+mod fleet_ledger_rows;

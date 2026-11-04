@@ -165,7 +165,7 @@ async fn genuine_unheld_hook_and_archive_completion_roll_back_then_retry_togethe
     assert!(before.incarnations.is_empty());
     let request = import_request()?;
     let operation = admit_import(&fixture, request.clone()).await?;
-    fixture.sql("CREATE TRIGGER reject_archive_board BEFORE UPDATE ON boards BEGIN SELECT RAISE(ABORT,'final archive board fault'); END").await?;
+    fixture.sql("CREATE TRIGGER reject_archive_board BEFORE UPDATE ON fleet_boards BEGIN SELECT RAISE(ABORT,'final archive board fault'); END").await?;
     let report = fixture.runtime.on_alarm().await?;
     assert!(report.failed.is_empty(), "{report:?}");
     assert!(report.retried.contains(&operation), "{report:?}");
@@ -230,7 +230,7 @@ async fn refused_reservation_and_archive_completion_roll_back_then_retry_togethe
     let before = inspect(&fixture, attempt).await?;
     assert_eq!(before.reservation, Some(ClaimReservationState::Active));
     let call = claim_gate_call(durable_steps::Uuid::now_v7(), attempt, true)?;
-    fixture.sql("CREATE TRIGGER reject_archive_board BEFORE UPDATE ON boards BEGIN SELECT RAISE(ABORT,'final archive board fault'); END").await?;
+    fixture.sql("CREATE TRIGGER reject_archive_board BEFORE UPDATE ON fleet_boards BEGIN SELECT RAISE(ABORT,'final archive board fault'); END").await?;
     assert!(matches!(
         fixture.runtime.on_call(call.clone()).await,
         Err(CallFailure::AnswerLost)

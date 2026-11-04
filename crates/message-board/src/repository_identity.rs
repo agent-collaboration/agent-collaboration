@@ -70,7 +70,8 @@ impl TryFrom<String> for CommonDirectory {
                 requirement: "must contain at most 4096 UTF-8 bytes",
             });
         }
-        if value.contains('\0') || !Path::new(&value).is_absolute() {
+        // Validate other machines' Unix paths identically on native and wasm targets.
+        if value.contains('\0') || !Path::new(&value).has_root() {
             return Err(RepositoryValidationError {
                 field: "commonDirectory",
                 requirement: "must be an absolute path without NUL",
@@ -148,3 +149,7 @@ pub fn normalize_git_origin_url(origin: &str) -> Option<String> {
         .unwrap_or(repository_path);
     (!host.is_empty() && !repository_path.is_empty()).then(|| format!("{host}/{repository_path}"))
 }
+
+#[cfg(test)]
+#[path = "repository_identity_test.rs"]
+mod tests;

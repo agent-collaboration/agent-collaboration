@@ -1,13 +1,13 @@
 //! Measure accepted mail in the exact envelope the relay budgets, including JSON escaping.
-use crate::RouterDeliveryTypes;
+use crate::{RouterConsumerProtocol, RouterDeliveryTypes};
 use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::{
     FollowDeliveryPolicy, GenerationGuard, MailDeliveryMode, MailSender, MessageBody,
     NotificationBody, NotificationSource, RecordPointer, RootRange,
 };
 use fleet_sync_protocol::{
-    DeliveryEnvelope, DeliveryItem, DeliverySeq, DeliveryTypes, FetchEntry, ItemId, PeerId,
-    Recipient, unit_budget::TARGET_UNIT_BYTES,
+    DeliveryEnvelope, DeliveryItem, DeliveryTypes, FrameId, ItemId, PeerId, Recipient, ServerCall,
+    ServerFrame, ServerRequest, Submitter, unit_budget::TARGET_UNIT_BYTES,
 };
 use message_board::{
     BatchTiming, FeedCursor, Identity, MAX_SUBSCRIPTION_CAP_SECONDS,
@@ -15,12 +15,12 @@ use message_board::{
     MAX_SUBSCRIPTION_QUIET_SECONDS, ProjectId, RecordKind, RecordRef, SessionRef,
     SubscriptionGeneration, SubscriptionLifetime, SubscriptionMode, WhenIdle,
 };
-use runtime_primitives::SyncTime;
+use runtime_primitives::{CallId, OperationId, StepName, SyncTime};
 use serde_json::json;
 
 fn largest_session() -> SessionRef {
     serde_json::from_value(json!({
-        "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"a".repeat(64)},
+        "endpoint":{"serviceId":uuid::Uuid::now_v7(),"endpointId":"a".repeat(64)},
         "sessionId":"\u{0001}".repeat(4096)
     }))
     .unwrap()
@@ -49,10 +49,7 @@ pub(crate) fn largest_message(peer: PeerId) -> DeliveryItem<RouterDeliveryTypes>
             delivery: MailDeliveryMode::Steer,
             guard: Some(
                 GenerationGuard::new(
-                    "00000000-0000-4000-8000-000000000001"
-                        .to_owned()
-                        .try_into()
-                        .unwrap(),
+                    uuid::Uuid::now_v7().to_string().try_into().unwrap(),
                     9_007_199_254_740_991,
                 )
                 .unwrap(),
@@ -131,22 +128,39 @@ pub(crate) fn largest_notification(peer: PeerId) -> DeliveryItem<RouterDeliveryT
 }
 
 #[test]
-fn maximal_accepted_message_and_twenty_root_notification_fit_the_fetch_unit() {
+fn maximal_accepted_message_and_twenty_root_notification_fit_the_push_unit() {
+    // Arrange the same maximum accepted payloads used by the real Host journey.
     let peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();
     for (kind, item) in [
         ("message", largest_message(peer)),
         ("notification", largest_notification(peer)),
     ] {
-        let entry = FetchEntry::Item {
-            seq: DeliverySeq::new(u64::MAX),
-            item: DeliveryEnvelope::Item(item),
+        let submitter = match item.sender() {
+            MailSender::Project { project } => {
+                Submitter::Project(project.as_str().to_owned().try_into().unwrap())
+            }
+            MailSender::Session(_) | MailSender::HumanUser { .. } => Submitter::Machine(peer),
         };
+        let entry = ServerFrame::<RouterConsumerProtocol>::Request {
+            frame: FrameId::new(uuid::Uuid::now_v7()).unwrap(),
+            body: ServerRequest::Crate(ServerCall::Push {
+                call: CallId {
+                    operation: OperationId::new(uuid::Uuid::now_v7()).unwrap(),
+                    step: StepName::new("push").unwrap(),
+                },
+                submitter,
+                item: DeliveryEnvelope::Item(item),
+            }),
+        };
+        // Act through the complete typed machine-socket frame, including its correlation.
         let encoded = serde_json::to_vec(&entry).unwrap();
         // Real decoding revalidates the item digest and each nested domain value.
-        let decoded: FetchEntry<RouterDeliveryTypes> = serde_json::from_slice(&encoded).unwrap();
+        let decoded: ServerFrame<RouterConsumerProtocol> =
+            serde_json::from_slice(&encoded).unwrap();
+        // Assert unchanged bytes after domain decoding and the existing library unit bound.
         assert_eq!(serde_json::to_vec(&decoded).unwrap(), encoded);
         println!(
-            "maximal {kind} FetchEntry::Item bytes={}, fetch unit={TARGET_UNIT_BYTES}",
+            "maximal {kind} Push frame bytes={}, unit={TARGET_UNIT_BYTES}",
             encoded.len()
         );
         assert!(

@@ -1,9 +1,9 @@
 //! Claim settlement receipts observe the lease hook's committed directory projection.
 use crate::{
     ClaimReservationOutcome, ClaimReservationState,
-    fleet_record_codec::{corrupt, decode_json, required},
+    fleet_record_codec::corrupt,
     generated_fleet_lease as queries,
-    lease_projection::{ClaimGrantedUpdate, LeaseProjection, LeaseProjectionResult},
+    lease_projection::{ClaimGrantedUpdate, LeaseProjectionResult},
     step_driver::{StepCallback, StepResult},
 };
 use durable_steps::{AtomicStore, BoxFuture, CallId, StoreError, storage::TransactionScope};
@@ -64,10 +64,8 @@ where
                 .await
                 .map_err(StoreError::backend)?
                 .ok_or_else(|| corrupt("claim.project", "directory entry is missing"))?;
-            let committed: LeaseProjection = decode_json(
-                &required(row.lease_projection, "claim.lease_projection")?,
-                "claim.lease_projection",
-            )?;
+            let committed = crate::fleet_lease_columns::decode(row)?
+                .ok_or_else(|| corrupt("claim.lease_projection", "missing committed projection"))?;
             if committed.database() != projection.database() {
                 return Err(corrupt(
                     "claim.project",

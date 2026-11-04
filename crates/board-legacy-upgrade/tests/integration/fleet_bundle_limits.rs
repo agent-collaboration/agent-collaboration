@@ -105,7 +105,7 @@ async fn oversized_valid_fleet_bundle_refuses_before_partial_writes_and_a_small_
             .connect()
             .await?;
         let counts = sqlx_turso::sqlx::query::<sqlx_turso::Turso>(
-            "SELECT (SELECT count(*) FROM workspaces) AS workspace_count, (SELECT count(*) FROM fleet_feed) AS feed_count",
+            "SELECT (SELECT count(*) FROM fleet_workspaces) AS workspace_count, (SELECT count(*) FROM fleet_feed) AS feed_count",
         )
         .fetch_one(&mut readback)
         .await?;

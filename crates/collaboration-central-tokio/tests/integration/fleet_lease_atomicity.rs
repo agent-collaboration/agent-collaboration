@@ -64,9 +64,10 @@ fn renew_call(attempt: RequestId) -> TestResult<Vec<u8>> {
 async fn observe(fixture: &Fixture) -> TestResult<(Value, Option<String>, i64, i64)> {
     Ok(fixture.object.transaction(|scope| Box::pin(async move {
         let snapshot = fleet_sync_lease::registry_snapshot(scope, PROJECT.to_owned().try_into().map_err(StoreError::backend)?).await.map_err(StoreError::backend)?;
-        let row = query::<sqlx_turso::Turso>("SELECT lease_projection,(SELECT count(*) FROM lease_incarnation) AS versions,(SELECT count(*) FROM machine_control_notices) AS notices FROM project_directory WHERE project_id=?")
+        let projection = collaboration_central_core::read_fleet_lease_projection_in_scope(scope,PROJECT.parse().map_err(StoreError::backend)?).await?;
+        let row = query::<sqlx_turso::Turso>("SELECT project_id,(SELECT count(*) FROM lease_incarnation) AS versions,(SELECT count(*) FROM machine_control_notices) AS notices FROM fleet_project_directory WHERE project_id=?")
             .bind(PROJECT).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
-        Ok((serde_json::to_value(snapshot).map_err(StoreError::backend)?,row.try_get("lease_projection").map_err(StoreError::backend)?,row.try_get("versions").map_err(StoreError::backend)?,row.try_get("notices").map_err(StoreError::backend)?))
+        Ok((serde_json::to_value(snapshot).map_err(StoreError::backend)?,projection,row.try_get("versions").map_err(StoreError::backend)?,row.try_get("notices").map_err(StoreError::backend)?))
     })).await?)
 }
 
@@ -139,7 +140,7 @@ async fn a_directory_write_failure_rolls_back_the_real_library_renewal_and_retry
     seed_existing_grant(&fixture).await?;
     let before = observe(&fixture).await?;
     fixture.object.transaction(|scope| Box::pin(async move {
-        scope.executor().execute("CREATE TRIGGER reject_projection BEFORE UPDATE OF lease_projection ON project_directory BEGIN SELECT RAISE(ABORT,'injected directory write failure'); END").await.map_err(StoreError::backend)?;
+        scope.executor().execute("CREATE TRIGGER reject_projection BEFORE UPDATE OF lease_epoch ON fleet_project_directory BEGIN SELECT RAISE(ABORT,'injected directory write failure'); END").await.map_err(StoreError::backend)?;
         Ok(())
     })).await?;
     let call = renew_call(RequestId::new(durable_steps::Uuid::now_v7())?)?;

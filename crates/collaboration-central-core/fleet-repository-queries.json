@@ -35,12 +35,42 @@
           "nullable": false
         },
         {
-          "name": "repository_reference",
+          "name": "reference_kind",
           "kind": "text",
           "nullable": false
         },
         {
-          "name": "record_header",
+          "name": "normalized_origin",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "service_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "common_directory",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "router_time",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "time_basis",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_installation",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_machine",
           "kind": "text",
           "nullable": false
         },
@@ -48,6 +78,11 @@
           "name": "import_digest",
           "kind": "text",
           "nullable": true
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
         }
       ]
     },
@@ -63,9 +98,24 @@
           "nullable": false
         },
         {
-          "name": "repository_reference",
+          "name": "reference_kind",
           "kind": "text",
           "nullable": false
+        },
+        {
+          "name": "normalized_origin",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "service_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "common_directory",
+          "kind": "text",
+          "nullable": true
         }
       ]
     }

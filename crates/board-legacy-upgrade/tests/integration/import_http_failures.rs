@@ -184,11 +184,19 @@ async fn pending_copy_import_keeps_the_owner_reason_across_reopen() -> TestResul
     let (header, import_id, seed) = begin(&server, &prepared).await?;
     server.shutdown().await?;
     let object = format!("copy-{}", header.database());
-    let saved=upload_support::read(root.path(),&object,"SELECT json_array(row_id,corpus,version,checksum) AS value FROM central_schema_migrations WHERE corpus='fleet-sync-receiver' AND version='3'").await?;
+    let saved=upload_support::read(root.path(),&object,"SELECT json_array(row_id,corpus,version,checksum,created_at,updated_at,applied_at) AS value FROM central_schema_migrations WHERE corpus='fleet-sync-receiver' AND version='3'").await?;
     let [saved] = saved.as_slice() else {
         return Err("one receiver history stamp required".into());
     };
-    let stamp: Vec<String> = serde_json::from_str(saved)?;
+    let (row_id, corpus, version, checksum, created_at, updated_at, applied_at): (
+        String,
+        String,
+        String,
+        String,
+        i64,
+        i64,
+        i64,
+    ) = serde_json::from_str(saved)?;
     upload_support::execute(
         root.path(),
         &object,
@@ -212,16 +220,26 @@ async fn pending_copy_import_keeps_the_owner_reason_across_reopen() -> TestResul
         .connect()
         .await?;
     let restored = sqlx_turso::sqlx::query::<sqlx_turso::Turso>(
-        "INSERT INTO central_schema_migrations(row_id,corpus,version,checksum) VALUES(?,?,?,?)",
+        "INSERT INTO central_schema_migrations(row_id,corpus,version,checksum,created_at,updated_at,applied_at) VALUES(?,?,?,?,?,?,?)",
     )
-    .bind(&stamp[0])
-    .bind(&stamp[1])
-    .bind(&stamp[2])
-    .bind(&stamp[3])
+    .bind(row_id)
+    .bind(corpus)
+    .bind(version)
+    .bind(checksum)
+    .bind(created_at)
+    .bind(updated_at)
+    .bind(applied_at)
     .execute(&mut connection)
     .await;
     connection.close().await?;
     restored?;
+    assert_eq!(
+        upload_support::read(root.path(), &object,
+            "SELECT json_array(row_id,corpus,version,checksum,created_at,updated_at,applied_at) AS value FROM central_schema_migrations WHERE corpus='fleet-sync-receiver' AND version='3'"
+        ).await?,
+        vec![saved.as_str().to_owned()],
+        "restoration must preserve the original migration identity and all three integer times"
+    );
     let server = central_fixture::start_server(root.path(), &jwks).await?;
     let recovery: TestResult = async {
         let (_, same_import, same_seed) = begin(&server, &prepared).await?;

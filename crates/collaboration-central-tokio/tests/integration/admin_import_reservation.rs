@@ -206,7 +206,7 @@ async fn reservation_and_seed_identity_survive_reopen_without_reporting_completi
         assert_eq!(request(&reopened, &page).await?, staged);
         assert_eq!(request(&reopened, &page).await?, staged);
         let page_sql = "SELECT json_object('seed',seed,'page',page,'digest',digest,'payload',payload) AS snapshot FROM _fleet_sync_seed_pages ORDER BY page";
-        let workflow_sql = "SELECT json_object('importId',import_id,'project',project_id,'digest',digest,'header',header,'phase',phase) AS snapshot FROM admin_imports ORDER BY import_id";
+        let workflow_sql = "SELECT json_array(import_id,project_id,digest,provenance_installation,provenance_machine,declared_owner,manifest_epoch,manifest_sequence,schema_version,schema_fingerprint,pages,manifest_table_count,summary_kind,summary_time_basis,summary_record_at,phase_kind,published_epoch,published_sequence,created_at,updated_at) AS snapshot FROM fleet_admin_imports ORDER BY import_id";
         let copy = format!("copy-{PROJECT}");
         let pages_before = durable_rows(directory.path(), &copy, page_sql).await?;
         let workflow_before = durable_rows(directory.path(), "fleet", workflow_sql).await?;

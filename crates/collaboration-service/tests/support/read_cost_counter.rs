@@ -16,8 +16,16 @@ use sql_cost_classification::StatementTables;
 pub(crate) mod alarm_read_costs;
 // Only operation-cost proof targets consume observations.
 
-const CORE_CANONICAL_INPUT: &str =
-    include_str!("../../../collaboration-central-core/sql/fleet/read_canonical_fleet_record.sql");
+const CORE_TYPED_CANONICAL_INPUTS: &[&str] = &[
+    include_str!("../../../collaboration-central-core/sql/fleet/read_workspace_columns.sql"),
+    include_str!(
+        "../../../collaboration-central-core/sql/fleet/read_workspace_repository_refs.sql"
+    ),
+    include_str!("../../../collaboration-central-core/sql/fleet/read_board_columns.sql"),
+    include_str!("../../../collaboration-central-core/sql/fleet/read_project_columns.sql"),
+    include_str!("../../../collaboration-central-core/sql/fleet/read_adr_columns.sql"),
+    include_str!("../../../collaboration-central-core/sql/fleet/read_adr_repository_files.sql"),
+];
 const CORE_FEED_INPUT: &str =
     include_str!("../../../collaboration-central-core/sql/fleet/read_fleet_feed_page.sql");
 const CORE_EXPIRED_FEED_INPUT: &str =
@@ -252,7 +260,10 @@ where
                 }
                 // These are input rows at the actual Core query boundaries,
                 // not observations of how often serde invokes a decoder.
-                if statement.trim() == CORE_CANONICAL_INPUT.trim() {
+                if CORE_TYPED_CANONICAL_INPUTS
+                    .iter()
+                    .any(|input| statement.trim() == input.trim())
+                {
                     state.cost.core_canonical_input_bodies += query.rows_returned;
                 }
                 if [CORE_FEED_INPUT, CORE_EXPIRED_FEED_INPUT]
@@ -336,3 +347,7 @@ pub fn install() {
         .try_init()
         .unwrap();
 }
+
+#[cfg(test)]
+#[path = "read_cost_counter_test.rs"]
+mod tests;

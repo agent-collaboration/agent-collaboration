@@ -2,7 +2,6 @@
 
 use crate::{
     mail_submit_calls::{MailSubmitReply, MailSubmitRequest},
-    registry_peer_lookup::service_for_peer,
     step_driver::{StepCallback, StepResult},
 };
 use board_sync_protocol::{BoardConsumerRequest, BoardDeliveryTypes, MailSubmitAnswer};
@@ -16,6 +15,10 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 use std::convert::Infallible;
+
+#[cfg(test)]
+#[path = "mail_submit_admission_test.rs"]
+mod tests;
 
 pub(crate) struct AdmitMailSubmit {
     pub source: ServiceId,
@@ -46,8 +49,42 @@ where
                 item,
                 origin_epoch,
             } = self.request;
+            let mut senders = crate::generated_enrollment::read_enrollments(
+                scope,
+                None,
+                None,
+                None,
+                Some(session.peer.to_string()),
+            )
+            .await
+            .map_err(StoreError::backend)?;
+            if senders.len() > 1 {
+                return Err(crate::machine_enrollment_record::corrupt("peer_id"));
+            }
+            let sender = senders
+                .pop()
+                .map(crate::machine_enrollment_record::StoredMachine::decode)
+                .transpose()?;
+            if sender
+                .as_ref()
+                .is_some_and(|sender| sender.peer != session.peer)
+            {
+                return Err(crate::machine_enrollment_record::corrupt("peer_id"));
+            }
+            // Enrollment authority and custody admission share this scope.
+            // Historical sender resolution deliberately keeps revoked rows.
+            let Some(sender) = sender.filter(|sender| {
+                sender.state == crate::machine_enrollment_record::EnrollmentState::Enrolled
+                    && sender.expires_at.timestamp_millis() > self.now.unix_millis()
+            }) else {
+                return reply(MailSubmitReply::Answer(MailSubmitAnswer::Submitted(
+                    SubmitResult::Refused {
+                        reason: DeliveryRefusal::SenderNotEnrolled,
+                    },
+                )));
+            };
             if origin.installation != self.source
-                || service_for_peer(scope, session.peer).await?.as_ref() != Some(&self.source)
+                || sender.origin.installation != self.source
                 || !item
                     .sender()
                     .matches_submitting_installation(&origin.installation)

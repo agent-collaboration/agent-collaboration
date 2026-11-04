@@ -22,8 +22,6 @@ mod owned_ids;
 #[path = "../fleet_storage/rollback.rs"]
 mod rollback;
 use crate::native_fleet as support;
-#[path = "../fleet_storage/upgrade.rs"]
-mod upgrade;
 use fleet_admission::{FleetImportCounts, FleetImportResult};
 use support::{Fixture, TestResult, bundle};
 

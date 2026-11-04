@@ -95,40 +95,35 @@ async fn a_mismatched_request_envelope_id_is_refused_before_write() -> TestResul
     Ok(())
 }
 
-async fn overwrite_payload(fixture: &Fixture, entry: &RequestLedgerEntry) -> TestResult {
+async fn overwrite_decision_header(fixture: &Fixture, entry: &RequestLedgerEntry) -> TestResult {
     let request = entry.request_id.as_str().to_owned();
-    let payload = serde_json::to_string(entry)?;
-    overwrite_encoded_payload(fixture, request, payload).await
-}
-
-async fn overwrite_encoded_payload(
-    fixture: &Fixture,
-    request: String,
-    payload: String,
-) -> TestResult {
-    fixture
-        .object
-        .transaction(move |scope| {
-            Box::pin(async move {
-                query::<sqlx_turso::Turso>(
-                    "UPDATE fleet_request_decisions SET payload=? WHERE request_id=?",
-                )
-                .bind(payload)
-                .bind(request)
-                .execute(scope.executor())
-                .await
-                .map_err(StoreError::backend)?;
-                Ok(())
-            })
-        })
-        .await?;
+    let (kind, change, count, digest, reasons) = match &entry.decision {
+        StoredDecision::Rejected { reasons } => {
+            ("rejected", None, None, None, reasons.len().to_string())
+        }
+        StoredDecision::Accepted { change, effects } => (
+            "accepted",
+            Some(
+                match change {
+                    ChangeOutcome::Changed => "changed",
+                    ChangeOutcome::AlreadySo => "already_so",
+                }
+                .to_owned(),
+            ),
+            Some(effects.count.to_string()),
+            Some(effects.digest.as_str().to_owned()),
+            "0".to_owned(),
+        ),
+    };
+    fixture.object.transaction(move |scope|Box::pin(async move {
+        query::<sqlx_turso::Turso>("UPDATE fleet_request_decisions SET decision_kind=?1,change_kind=?2,effects_count=?3,effects_digest=?4,reason_count=CAST(?5 AS INTEGER) WHERE request_id=?6")
+            .bind(kind).bind(change).bind(count).bind(digest).bind(reasons).bind(request)
+            .execute(scope.executor()).await.map_err(StoreError::backend)?;
+        Ok(())
+    })).await?;
     Ok(())
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions must fail this test while fixture errors propagate through Result."
-)]
 #[tokio::test]
 async fn stored_origin_text_is_refused_instead_of_normalized_on_read_page_and_replay() -> TestResult
 {
@@ -139,10 +134,12 @@ async fn stored_origin_text_is_refused_instead_of_normalized_on_read_page_and_re
         .driver
         .record_fleet_decision(entry.clone(), Vec::new())
         .await?;
-    let encoded = serde_json::to_string(&entry)?;
-    assert_eq!(encoded.matches("\"machine\":\"fixture\"").count(), 1);
-    let corrupted = encoded.replace("\"machine\":\"fixture\"", "\"machine\":\" fixture \"");
-    overwrite_encoded_payload(&fixture, entry.request_id.as_str().to_owned(), corrupted).await?;
+    let request = entry.request_id.as_str().to_owned();
+    fixture.object.transaction(move |scope|Box::pin(async move {
+        query::<sqlx_turso::Turso>("UPDATE fleet_request_decisions SET origin_machine=' fixture ' WHERE request_id=?")
+            .bind(request).execute(scope.executor()).await.map_err(StoreError::backend)?;
+        Ok(())
+    })).await?;
     let result = assert_stored_value_refused(&fixture, entry, Vec::new()).await;
     let closed = fixture.objects.close().await;
     result?;
@@ -200,7 +197,7 @@ async fn a_stored_empty_rejection_is_refused_on_read_page_and_replay() -> TestRe
     corrupt.decision = StoredDecision::Rejected {
         reasons: Vec::new(),
     };
-    overwrite_payload(&fixture, &corrupt).await?;
+    overwrite_decision_header(&fixture, &corrupt).await?;
     let result = assert_stored_value_refused(&fixture, entry, Vec::new()).await;
     let closed = fixture.objects.close().await;
     result?;
@@ -236,17 +233,23 @@ async fn a_stored_post_effect_with_a_matching_digest_is_refused_on_page_and_repl
         return Err("test needs the recomputed header".into());
     };
     assert!(header.matches_full(&bad_effects));
-    overwrite_payload(&fixture, &corrupt).await?;
+    overwrite_decision_header(&fixture, &corrupt).await?;
     let request = entry.request_id.as_str().to_owned();
-    let effect = serde_json::to_string(bad_effects.first().ok_or("one corrupt effect required")?)?;
+    let record_id = bad_effects
+        .first()
+        .ok_or("one corrupt effect required")?
+        .0
+        .id
+        .as_str()
+        .to_owned();
     fixture
         .object
         .transaction(move |scope| {
             Box::pin(async move {
                 query::<sqlx_turso::Turso>(
-                    "UPDATE fleet_decision_receipts SET effect=? WHERE request_id=? AND ordinal=0",
+                    "UPDATE fleet_decision_receipts SET record_kind='post',record_id=? WHERE request_id=? AND ordinal=0",
                 )
-                .bind(effect)
+                .bind(record_id)
                 .bind(request)
                 .execute(scope.executor())
                 .await

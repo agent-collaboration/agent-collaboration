@@ -1,7 +1,7 @@
 //! Lease changes project directory state and ownership notices in their own transaction.
 use crate::{
     RegistryIncarnation,
-    fleet_record_codec::{corrupt, decode_json, required},
+    fleet_record_codec::{corrupt, required},
     generated_fleet_lease as queries,
     lease_projection::{LeaseProjection, LeaseProjectionResult},
 };
@@ -14,6 +14,7 @@ use sqlx_core::{
 pub(crate) async fn apply_projection<Scope: TransactionScope>(
     scope: &mut Scope,
     projection: &LeaseProjection,
+    now: chrono::DateTime<chrono::Utc>,
 ) -> Result<LeaseProjectionResult, StoreError>
 where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
@@ -28,13 +29,10 @@ where
         .await
         .map_err(StoreError::backend)?
         .ok_or_else(|| corrupt("lease.project", "directory entry is missing"))?;
-    if required(row.project_id, "directory.project_id")? != project {
+    if required(row.project_id.clone(), "directory.project_id")? != project {
         return Err(corrupt("directory.project_id", "lookup identity differs"));
     }
-    let previous: Option<LeaseProjection> = row
-        .lease_projection
-        .map(|value| decode_json(&value, "directory.lease_projection"))
-        .transpose()?;
+    let previous = crate::fleet_lease_columns::decode(row)?;
     let result = match previous {
         Some(stored) => {
             if stored.database() != projection.database() {
@@ -62,9 +60,25 @@ where
         None => LeaseProjectionResult::Applied,
     };
     if result == LeaseProjectionResult::Applied {
+        let columns = crate::fleet_lease_columns::LeaseColumns::encode(projection);
         queries::store_directory_lease(
             scope,
-            serde_json::to_string(projection).map_err(StoreError::backend)?,
+            Some(columns.epoch),
+            Some(columns.change),
+            Some(columns.incarnation),
+            Some(columns.changed_at),
+            Some(columns.lifecycle_kind),
+            columns.origin_kind,
+            columns.origin_epoch,
+            columns.origin_sequence,
+            columns.import_digest,
+            columns.retiring_attempt_id,
+            columns.retired_at,
+            columns.holder_machine_id,
+            columns.holder_service_id,
+            columns.expires_at,
+            Some(columns.digest),
+            now.timestamp_millis().to_string(),
             project,
         )
         .await
@@ -183,7 +197,8 @@ where
                     .map_err(|error| corrupt("lease_incarnation.value", error))?,
             )
             .map_err(StoreError::backend)?;
-            if apply_projection(scope, &projection).await? != LeaseProjectionResult::Applied {
+            if apply_projection(scope, &projection, clock).await? != LeaseProjectionResult::Applied
+            {
                 return Err(corrupt(
                     "lease.projection",
                     "a new lease revision did not advance the directory",

@@ -20,6 +20,79 @@ pub struct FleetRecordReadFailure {
     pub error: StoreError,
 }
 
+/// Read through the canonical decoder in the caller's existing conformance scope.
+/// This performs no mutation and never opens a second transaction.
+pub async fn read_fleet_record_in_scope<S: TransactionScope>(
+    scope: &mut S,
+    reference: &RecordRef,
+) -> Result<Option<Record>, StoreError>
+where
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    crate::fleet_record_store::read(scope, reference)
+        .await
+        .map(|stored| stored.map(|value| value.record))
+}
+
+/// Read Fleet's committed Copy summary with its production decoder in this scope.
+pub async fn read_fleet_copy_summary_in_scope<S: TransactionScope>(
+    scope: &mut S,
+    database: fleet_sync_protocol::DatabaseId,
+) -> Result<Option<crate::CopyDirectorySummary>, StoreError>
+where
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    crate::generated_fleet_record_reads::read_directory_summary(scope, database.to_string())
+        .await
+        .map_err(StoreError::backend)?
+        .map(crate::fleet_copy_projection::decode)
+        .transpose()
+        .map(Option::flatten)
+}
+
+/// Observe the existing private lease wire shape through its production decoder.
+pub async fn read_fleet_lease_projection_in_scope<S: TransactionScope>(
+    scope: &mut S,
+    database: fleet_sync_protocol::DatabaseId,
+) -> Result<Option<String>, StoreError>
+where
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    let projection =
+        crate::generated_fleet_lease::read_directory_lease(scope, database.to_string())
+            .await
+            .map_err(StoreError::backend)?
+            .map(crate::fleet_lease_columns::decode)
+            .transpose()?
+            .flatten();
+    projection
+        .map(|value| serde_json::to_string(&value).map_err(StoreError::backend))
+        .transpose()
+}
+
+/// Read retained history through the production range decoder in this transaction.
+pub async fn read_fleet_feed_in_scope<S: TransactionScope>(
+    scope: &mut S,
+) -> Result<Vec<fleet_admission::FleetFeedEntry>, StoreError>
+where
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    let state = crate::fleet_feed_store::state(scope).await?;
+    crate::fleet_feed_store::read_range(scope, state.floor, state.head).await
+}
+
 impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -68,9 +141,7 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
-            let record = crate::fleet_record_store::read(scope, &self.0)
-                .await?
-                .map(|decoded| decoded.record);
+            let record = read_fleet_record_in_scope(scope, &self.0).await?;
             Ok((record, Vec::new()))
         })
     }

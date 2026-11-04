@@ -116,7 +116,7 @@ where
     for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    use crate::fleet_record_codec::{corrupt, decode_json, required};
+    use crate::fleet_record_codec::{corrupt, required};
     let mut snapshot = fleet_admission::FleetSnapshot::empty();
     crate::fleet_archive_snapshot::board_projects(scope, &mut snapshot, board).await?;
     let mut installations = Vec::new();
@@ -126,15 +126,13 @@ where
                 .await
                 .map_err(StoreError::backend)?
                 .ok_or_else(|| corrupt("archive.notice", "directory lease disappeared"))?;
-        if required(row.project_id, "archive.notice.project")? != project.id.as_str() {
+        if required(row.project_id.clone(), "archive.notice.project")? != project.id.as_str() {
             return Err(corrupt(
                 "archive.notice.project",
                 "lookup belongs to another project",
             ));
         }
-        if let Some(payload) = row.lease_projection {
-            let projection: crate::lease_projection::LeaseProjection =
-                decode_json(&payload, "archive.notice.lease")?;
+        if let Some(projection) = crate::fleet_lease_columns::decode(row)? {
             if projection.database().as_uuid().to_string() != project.id.as_str() {
                 return Err(corrupt(
                     "archive.notice.lease",

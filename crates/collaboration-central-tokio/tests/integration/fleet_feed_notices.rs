@@ -149,7 +149,7 @@ async fn post_callback_sql_failure_rolls_back_metadata_feed_notice_debt_and_wake
     assert!(decide(&fixture, &create).await.is_err());
     assert!(fixture.faults.injected.load(Ordering::SeqCst));
     let counts=fixture.store.transaction(|scope|Box::pin(async move {
-        let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM workspaces) AS workspaces,(SELECT count(*) FROM fleet_feed) AS feed,(SELECT count(*) FROM _fleet_sync_operations WHERE kind='central.fleet-notice') AS notices").fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
+        let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM fleet_workspaces) AS workspaces,(SELECT count(*) FROM fleet_feed) AS feed,(SELECT count(*) FROM _fleet_sync_operations WHERE kind='central.fleet-notice') AS notices").fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
         Ok((row.try_get::<i64,_>("workspaces").map_err(StoreError::backend)?,row.try_get::<i64,_>("feed").map_err(StoreError::backend)?,row.try_get::<i64,_>("notices").map_err(StoreError::backend)?))
     })).await?;
     assert_eq!(counts, (0, 0, 0));

@@ -4,6 +4,7 @@ use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, JwksFixtureServer, fixture_policy,
 };
 use collaboration_central_tokio::{TokioServer, TokioSettings};
+use durable_steps::storage::TransactionScope;
 use fleet_admission::{FleetImportBundle, FleetImportCounts, FleetImportResult};
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::sqlx::{ConnectOptions, Connection};
@@ -37,19 +38,26 @@ async fn readback(root: &Path) -> ConformanceResult<FleetReadback> {
         .read_only(true)
         .connect()
         .await?;
-    let record_rows = query::<sqlx_turso::Turso>(
-        "SELECT json_object('id',workspace_id,'name',name,'payload',payload,'time',router_time,'basis',time_basis,'installation',origin_installation,'machine',origin_machine,'digest',import_digest) AS state,payload FROM workspaces UNION ALL SELECT json_object('id',board_id,'name',name,'payload',payload,'time',router_time,'basis',time_basis,'installation',origin_installation,'machine',origin_machine,'digest',import_digest),payload FROM boards UNION ALL SELECT json_object('id',project_id,'name',name,'payload',payload,'time',router_time,'basis',time_basis,'installation',origin_installation,'machine',origin_machine,'digest',import_digest),payload FROM project_directory ORDER BY state"
-    ).fetch_all(&mut connection).await?;
-    let mut records = Vec::new();
-    let mut rows = Vec::new();
-    for row in record_rows {
-        records.push(serde_json::from_str(&row.try_get::<String, _>("payload")?)?);
-        rows.push(row.try_get("state")?);
-    }
-    let feed = query::<sqlx_turso::Turso>("SELECT json_object('id',entry_id,'position',position,'record',record_id,'payload',payload,'time',router_time,'basis',time_basis,'installation',origin_installation,'machine',origin_machine,'asOf',as_of) AS state FROM fleet_feed ORDER BY position")
-        .fetch_all(&mut connection).await?.iter().map(|row| row.try_get("state")).collect::<Result<_,_>>()?;
-    let feed_state = query::<sqlx_turso::Turso>("SELECT json_object('id',state_id,'name',name,'head',last_position,'floor',retained_through) AS state FROM fleet_feed_state ORDER BY name")
-        .fetch_all(&mut connection).await?.iter().map(|row| row.try_get("state")).collect::<Result<_,_>>()?;
+    let mut transaction = connection.begin().await?;
+    let (records, rows, feed, feed_state) = {
+        let mut scope = durable_steps::turso_store::TursoScope::new(
+            &mut transaction,
+            &crate::fleet_record_rows::ReadOnlyHost,
+        );
+        let records = crate::fleet_record_rows::records(&mut scope).await?;
+        let mut rows = crate::fleet_record_rows::workspace_columns(&mut scope).await?;
+        rows.extend(crate::fleet_record_rows::board_columns(&mut scope).await?);
+        rows.extend(crate::fleet_record_rows::directory_columns(&mut scope).await?);
+        let feed = crate::fleet_record_rows::feed_entries(&mut scope)
+            .await?
+            .into_iter()
+            .map(|(_, entry)| entry)
+            .collect::<Vec<_>>();
+        rows.extend(crate::fleet_record_rows::feed_columns(&mut scope).await?);
+        let feed_state = query::<sqlx_turso::Turso>("SELECT json_object('id',state_id,'name',name,'head',last_position,'floor',retained_through) AS state FROM fleet_feed_state ORDER BY name").fetch_all(scope.executor()).await?.into_iter().map(|row|row.try_get("state")).collect::<Result<Vec<String>,_>>()?;
+        (records, rows, feed, feed_state)
+    };
+    transaction.commit().await?;
     connection.close().await?;
     Ok(FleetReadback {
         records,

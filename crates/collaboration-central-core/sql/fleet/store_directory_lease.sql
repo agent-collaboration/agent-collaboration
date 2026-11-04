@@ -1,1 +1,1 @@
-UPDATE project_directory SET lease_projection=? WHERE project_id=?;
+UPDATE fleet_project_directory SET lease_epoch=?1,lease_change=?2,lease_incarnation=?3,lease_changed_at=?4,lease_lifecycle_kind=?5,lease_origin_kind=?6,lease_origin_epoch=?7,lease_origin_sequence=?8,lease_import_digest=?9,lease_retiring_attempt_id=?10,lease_retired_at=?11,lease_holder_machine_id=?12,lease_holder_service_id=?13,lease_expires_at=?14,lease_digest=?15,updated_at=?16 WHERE project_id=?17;

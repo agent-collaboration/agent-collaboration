@@ -19,6 +19,7 @@ pub struct StepConformance<Host: ObjectHost> {
     driver: StepDriver<Host>,
     bootstrap: crate::ObjectBootstrap<Host>,
     ids: Arc<dyn runtime_primitives::IdSource>,
+    now: runtime_primitives::SyncTime,
 }
 
 impl<Host: ObjectHost> StepConformance<Host>
@@ -67,6 +68,7 @@ where
             driver: StepDriver::new(host.clone()),
             bootstrap: crate::ObjectBootstrap::new(host, now),
             ids,
+            now,
         }
     }
 
@@ -85,7 +87,7 @@ where
         let receipt_ids = (0..effects.len()).map(|_| self.ids.new_id()).collect();
         Ok(crate::effect_driver::conformance_effects(
             self.driver
-                .record_fleet_decision(entry, effects, receipt_ids)
+                .record_fleet_decision(entry, effects, receipt_ids, self.now, self.ids.clone())
                 .await?,
         ))
     }
@@ -131,7 +133,14 @@ where
         let receipt_ids = (0..effects.len()).map(|_| self.ids.new_id()).collect();
         Ok(crate::effect_driver::conformance_effects(
             self.driver
-                .conformance_record_fleet_decision(entry, effects, receipt_ids, fault)
+                .conformance_record_fleet_decision(
+                    entry,
+                    effects,
+                    receipt_ids,
+                    fault,
+                    self.now,
+                    self.ids.clone(),
+                )
                 .await?,
         ))
     }
@@ -152,6 +161,8 @@ where
                     entry,
                     effects,
                     receipt_ids,
+                    now: self.now,
+                    row_ids: crate::fleet_row_ids::FleetRowIds::new(self.ids.clone()),
                     fault: FleetDecisionFault::None,
                 },
                 after_write,
