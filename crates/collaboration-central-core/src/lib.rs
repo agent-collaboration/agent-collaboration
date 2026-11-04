@@ -213,6 +213,7 @@ mod fleet_lease_step;
 mod fleet_ledger_codec;
 mod fleet_metadata_calls;
 mod fleet_metadata_step;
+mod fleet_name_batch;
 mod fleet_notice_admission;
 mod fleet_read_calls;
 mod fleet_read_step;
@@ -221,6 +222,7 @@ mod fleet_reason_fields;
 mod fleet_reason_tree;
 mod fleet_reason_write;
 mod fleet_receipt_codec;
+mod fleet_record_batch;
 mod fleet_record_codec;
 #[cfg(feature = "conformance")]
 mod fleet_record_observer;

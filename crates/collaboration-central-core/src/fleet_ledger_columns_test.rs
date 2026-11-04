@@ -433,7 +433,7 @@ pub(super) fn refusals() -> Result<Vec<message_board::Refusal>, TestError> {
     Ok(values)
 }
 
-pub(super) fn entry(
+pub(crate) fn entry(
     index: usize,
     decision: message_board::StoredDecision,
 ) -> Result<message_board::RequestLedgerEntry, TestError> {
@@ -482,7 +482,7 @@ pub(super) fn entry(
         decision,
     })
 }
-pub(super) async fn write(
+pub(crate) async fn write(
     fixture: &crate::fleet_storage_fixture::FleetStorageFixture,
     entry: message_board::RequestLedgerEntry,
     at: i64,

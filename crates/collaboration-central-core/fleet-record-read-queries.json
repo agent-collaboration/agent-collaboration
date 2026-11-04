@@ -19,55 +19,6 @@
       ]
     },
     {
-      "name": "read_workspace_name",
-      "sql": "sql/fleet/read_workspace_name.sql",
-      "row": "FleetNameRecord",
-      "result": "optional",
-      "parameters": [
-        {
-          "name": "name",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "read_board_name",
-      "sql": "sql/fleet/read_board_name.sql",
-      "row": "FleetNameRecord",
-      "result": "optional",
-      "parameters": [
-        {
-          "name": "workspace_id",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "name",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "read_project_name",
-      "sql": "sql/fleet/read_project_name.sql",
-      "row": "FleetNameRecord",
-      "result": "optional",
-      "parameters": [
-        {
-          "name": "board_id",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "name",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
       "name": "read_directory_summary",
       "sql": "sql/fleet/read_directory_summary.sql",
       "row": "StoredDirectorySummary",
@@ -228,6 +179,58 @@
         },
         {
           "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_project_batch",
+      "sql": "sql/fleet/read_project_batch.sql",
+      "row": "StoredFleetProject",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "ids",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_workspace_name_batch",
+      "sql": "sql/fleet/read_workspace_name_batch.sql",
+      "row": "StoredFleetNameOwner",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "names",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_board_name_batch",
+      "sql": "sql/fleet/read_board_name_batch.sql",
+      "row": "StoredFleetNameOwner",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "names",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_project_name_batch",
+      "sql": "sql/fleet/read_project_name_batch.sql",
+      "row": "StoredFleetNameOwner",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "names",
           "kind": "text",
           "nullable": false
         }

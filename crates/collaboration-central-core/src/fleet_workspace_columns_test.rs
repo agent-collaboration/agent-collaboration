@@ -12,7 +12,7 @@ use std::sync::Arc;
 type Store = TokioObject<crate::CoreHost<FixtureIo>>;
 type TestResult<T = ()> = Result<T, TestError>;
 
-pub(super) fn workspace(position: u64) -> TestResult<Record> {
+pub(crate) fn workspace(position: u64) -> TestResult<Record> {
     let id: message_board::WorkspaceId = "019f0000-0000-7000-8000-000000009e01"
         .to_owned()
         .try_into()?;
@@ -63,7 +63,7 @@ pub(super) fn workspace(position: u64) -> TestResult<Record> {
     }))
 }
 
-pub(super) async fn write(
+pub(crate) async fn write(
     fixture: &FleetStorageFixture,
     record: Record,
     millis: i64,
@@ -125,7 +125,7 @@ pub(super) async fn mutate(fixture: &FleetStorageFixture, sql: &'static str) -> 
     Ok(())
 }
 
-pub(super) async fn prepare() -> TestResult<FleetStorageFixture> {
+pub(crate) async fn prepare() -> TestResult<FleetStorageFixture> {
     let fixture = FleetStorageFixture::open().await?;
     fixture
         .object

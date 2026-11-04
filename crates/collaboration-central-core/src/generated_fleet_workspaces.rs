@@ -293,3 +293,113 @@ where
         Ok(())
     }
 }
+pub(crate) fn read_workspace_batch<S>(
+    scope: &mut S,
+    ids: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredFleetWorkspace>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/fleet/read_workspace_batch.sql"
+        )))
+        .bind(ids);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredFleetWorkspace {
+                    workspace_id: row.try_get("workspace_id")?,
+                    workspace_id_class: row.try_get("workspace_id_class")?,
+                    name: row.try_get("name")?,
+                    name_class: row.try_get("name_class")?,
+                    description: row.try_get("description")?,
+                    description_class: row.try_get("description_class")?,
+                    state: row.try_get("state")?,
+                    state_class: row.try_get("state_class")?,
+                    repository_count: row.try_get("repository_count")?,
+                    repository_count_class: row.try_get("repository_count_class")?,
+                    actor_kind: row.try_get("actor_kind")?,
+                    actor_kind_class: row.try_get("actor_kind_class")?,
+                    actor_human_id: row.try_get("actor_human_id")?,
+                    actor_human_id_class: row.try_get("actor_human_id_class")?,
+                    actor_service_id: row.try_get("actor_service_id")?,
+                    actor_service_id_class: row.try_get("actor_service_id_class")?,
+                    actor_endpoint_id: row.try_get("actor_endpoint_id")?,
+                    actor_endpoint_id_class: row.try_get("actor_endpoint_id_class")?,
+                    actor_session_id: row.try_get("actor_session_id")?,
+                    actor_session_id_class: row.try_get("actor_session_id_class")?,
+                    actor_router_component: row.try_get("actor_router_component")?,
+                    actor_router_component_class: row.try_get("actor_router_component_class")?,
+                    request_id: row.try_get("request_id")?,
+                    request_id_class: row.try_get("request_id_class")?,
+                    fleet_position: row.try_get("fleet_position")?,
+                    fleet_position_class: row.try_get("fleet_position_class")?,
+                    router_time: row.try_get("router_time")?,
+                    router_time_class: row.try_get("router_time_class")?,
+                    time_basis: row.try_get("time_basis")?,
+                    time_basis_class: row.try_get("time_basis_class")?,
+                    origin_installation: row.try_get("origin_installation")?,
+                    origin_installation_class: row.try_get("origin_installation_class")?,
+                    origin_machine: row.try_get("origin_machine")?,
+                    origin_machine_class: row.try_get("origin_machine_class")?,
+                    import_digest: row.try_get("import_digest")?,
+                    import_digest_class: row.try_get("import_digest_class")?,
+                    created_at: row.try_get("created_at")?,
+                    created_at_class: row.try_get("created_at_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_at_class: row.try_get("updated_at_class")?,
+                })
+            })
+            .collect()
+    }
+}
+pub(crate) fn read_workspace_repository_batch<S>(
+    scope: &mut S,
+    ids: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredWorkspaceRepositoryRef>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/fleet/read_workspace_repository_batch.sql"
+        )))
+        .bind(ids);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredWorkspaceRepositoryRef {
+                    row_id: row.try_get("row_id")?,
+                    row_id_class: row.try_get("row_id_class")?,
+                    workspace_id: row.try_get("workspace_id")?,
+                    workspace_id_class: row.try_get("workspace_id_class")?,
+                    ordinal: row.try_get("ordinal")?,
+                    ordinal_class: row.try_get("ordinal_class")?,
+                    reference_kind: row.try_get("reference_kind")?,
+                    reference_kind_class: row.try_get("reference_kind_class")?,
+                    normalized_origin: row.try_get("normalized_origin")?,
+                    normalized_origin_class: row.try_get("normalized_origin_class")?,
+                    service_id: row.try_get("service_id")?,
+                    service_id_class: row.try_get("service_id_class")?,
+                    common_directory: row.try_get("common_directory")?,
+                    common_directory_class: row.try_get("common_directory_class")?,
+                    created_at: row.try_get("created_at")?,
+                    created_at_class: row.try_get("created_at_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_at_class: row.try_get("updated_at_class")?,
+                })
+            })
+            .collect()
+    }
+}

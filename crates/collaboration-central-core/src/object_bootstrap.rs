@@ -18,7 +18,7 @@ mod tests;
 
 #[cfg(test)]
 #[path = "fleet_workspace_columns_test.rs"]
-mod workspace_columns_tests;
+pub(crate) mod workspace_columns_tests;
 
 #[cfg(test)]
 #[path = "fleet_board_columns_test.rs"]
@@ -26,7 +26,7 @@ mod board_columns_tests;
 
 #[cfg(test)]
 #[path = "fleet_adr_columns_test.rs"]
-mod adr_columns_tests;
+pub(crate) mod adr_columns_tests;
 
 #[cfg(test)]
 #[path = "fleet_repository_columns_test.rs"]
@@ -46,7 +46,7 @@ mod feed_retention_tests;
 
 #[cfg(test)]
 #[path = "fleet_ledger_columns_test.rs"]
-mod ledger_columns_tests;
+pub(crate) mod ledger_columns_tests;
 
 #[cfg(test)]
 #[path = "fleet_ledger_integrity_test.rs"]

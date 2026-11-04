@@ -114,96 +114,6 @@ where
 }
 
 #[derive(Debug)]
-pub(crate) struct FleetNameRecord {
-    pub record_id: Option<String>,
-}
-pub(crate) fn read_workspace_name<S>(
-    scope: &mut S,
-    name: String,
-) -> impl std::future::Future<Output = Result<Option<FleetNameRecord>, sqlx_core::Error>> + Send
-where
-    S: TransactionScope,
-    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
-    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
-    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
-{
-    async move {
-        let statement = query::<S::Database>(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/sql/fleet/read_workspace_name.sql"
-        )))
-        .bind(name);
-        let row = statement.fetch_optional(scope.executor()).await?;
-        row.as_ref()
-            .map(|row| {
-                Ok(FleetNameRecord {
-                    record_id: row.try_get("record_id")?,
-                })
-            })
-            .transpose()
-    }
-}
-pub(crate) fn read_board_name<S>(
-    scope: &mut S,
-    workspace_id: String,
-    name: String,
-) -> impl std::future::Future<Output = Result<Option<FleetNameRecord>, sqlx_core::Error>> + Send
-where
-    S: TransactionScope,
-    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
-    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
-    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
-{
-    async move {
-        let statement = query::<S::Database>(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/sql/fleet/read_board_name.sql"
-        )))
-        .bind(workspace_id)
-        .bind(name);
-        let row = statement.fetch_optional(scope.executor()).await?;
-        row.as_ref()
-            .map(|row| {
-                Ok(FleetNameRecord {
-                    record_id: row.try_get("record_id")?,
-                })
-            })
-            .transpose()
-    }
-}
-pub(crate) fn read_project_name<S>(
-    scope: &mut S,
-    board_id: String,
-    name: String,
-) -> impl std::future::Future<Output = Result<Option<FleetNameRecord>, sqlx_core::Error>> + Send
-where
-    S: TransactionScope,
-    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
-    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
-    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
-{
-    async move {
-        let statement = query::<S::Database>(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/sql/fleet/read_project_name.sql"
-        )))
-        .bind(board_id)
-        .bind(name);
-        let row = statement.fetch_optional(scope.executor()).await?;
-        row.as_ref()
-            .map(|row| {
-                Ok(FleetNameRecord {
-                    record_id: row.try_get("record_id")?,
-                })
-            })
-            .transpose()
-    }
-}
-
-#[derive(Debug)]
 pub(crate) struct StoredDirectorySummary {
     pub project_id: Option<String>,
     pub project_id_class: Option<String>,
@@ -537,6 +447,164 @@ where
                 Ok(StoredFleetRecordKey {
                     kind: row.try_get("kind")?,
                     record_id: row.try_get("record_id")?,
+                })
+            })
+            .collect()
+    }
+}
+pub(crate) fn read_project_batch<S>(
+    scope: &mut S,
+    ids: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredFleetProject>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/fleet/read_project_batch.sql"
+        )))
+        .bind(ids);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredFleetProject {
+                    project_id: row.try_get("project_id")?,
+                    project_id_class: row.try_get("project_id_class")?,
+                    workspace_id: row.try_get("workspace_id")?,
+                    workspace_id_class: row.try_get("workspace_id_class")?,
+                    board_id: row.try_get("board_id")?,
+                    board_id_class: row.try_get("board_id_class")?,
+                    name: row.try_get("name")?,
+                    name_class: row.try_get("name_class")?,
+                    actor_kind: row.try_get("actor_kind")?,
+                    actor_kind_class: row.try_get("actor_kind_class")?,
+                    actor_human_id: row.try_get("actor_human_id")?,
+                    actor_human_id_class: row.try_get("actor_human_id_class")?,
+                    actor_service_id: row.try_get("actor_service_id")?,
+                    actor_service_id_class: row.try_get("actor_service_id_class")?,
+                    actor_endpoint_id: row.try_get("actor_endpoint_id")?,
+                    actor_endpoint_id_class: row.try_get("actor_endpoint_id_class")?,
+                    actor_session_id: row.try_get("actor_session_id")?,
+                    actor_session_id_class: row.try_get("actor_session_id_class")?,
+                    actor_router_component: row.try_get("actor_router_component")?,
+                    actor_router_component_class: row.try_get("actor_router_component_class")?,
+                    request_id: row.try_get("request_id")?,
+                    request_id_class: row.try_get("request_id_class")?,
+                    fleet_position: row.try_get("fleet_position")?,
+                    fleet_position_class: row.try_get("fleet_position_class")?,
+                    router_time: row.try_get("router_time")?,
+                    router_time_class: row.try_get("router_time_class")?,
+                    time_basis: row.try_get("time_basis")?,
+                    time_basis_class: row.try_get("time_basis_class")?,
+                    origin_installation: row.try_get("origin_installation")?,
+                    origin_installation_class: row.try_get("origin_installation_class")?,
+                    origin_machine: row.try_get("origin_machine")?,
+                    origin_machine_class: row.try_get("origin_machine_class")?,
+                    import_digest: row.try_get("import_digest")?,
+                    import_digest_class: row.try_get("import_digest_class")?,
+                    created_at: row.try_get("created_at")?,
+                    created_at_class: row.try_get("created_at_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_at_class: row.try_get("updated_at_class")?,
+                })
+            })
+            .collect()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct StoredFleetNameOwner {
+    pub record_id: Option<String>,
+    pub scope_id: Option<String>,
+    pub name: Option<String>,
+}
+pub(crate) fn read_workspace_name_batch<S>(
+    scope: &mut S,
+    names: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredFleetNameOwner>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/fleet/read_workspace_name_batch.sql"
+        )))
+        .bind(names);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredFleetNameOwner {
+                    record_id: row.try_get("record_id")?,
+                    scope_id: row.try_get("scope_id")?,
+                    name: row.try_get("name")?,
+                })
+            })
+            .collect()
+    }
+}
+pub(crate) fn read_board_name_batch<S>(
+    scope: &mut S,
+    names: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredFleetNameOwner>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/fleet/read_board_name_batch.sql"
+        )))
+        .bind(names);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredFleetNameOwner {
+                    record_id: row.try_get("record_id")?,
+                    scope_id: row.try_get("scope_id")?,
+                    name: row.try_get("name")?,
+                })
+            })
+            .collect()
+    }
+}
+pub(crate) fn read_project_name_batch<S>(
+    scope: &mut S,
+    names: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredFleetNameOwner>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/fleet/read_project_name_batch.sql"
+        )))
+        .bind(names);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredFleetNameOwner {
+                    record_id: row.try_get("record_id")?,
+                    scope_id: row.try_get("scope_id")?,
+                    name: row.try_get("name")?,
                 })
             })
             .collect()

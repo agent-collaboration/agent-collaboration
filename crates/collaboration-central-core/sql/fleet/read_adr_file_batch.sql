@@ -1,0 +1,17 @@
+SELECT CAST(id AS TEXT) AS id,
+    typeof(id) AS id_class,
+    CAST(adr_id AS TEXT) AS adr_id,
+    typeof(adr_id) AS adr_id_class,
+    CAST(ordinal AS TEXT) AS ordinal,
+    typeof(ordinal) AS ordinal_class,
+    CAST(repository_origin AS TEXT) AS repository_origin,
+    typeof(repository_origin) AS repository_origin_class,
+    CAST(path AS TEXT) AS path,
+    typeof(path) AS path_class,
+    CAST(commit_sha AS TEXT) AS commit_sha,
+    typeof(commit_sha) AS commit_sha_class,
+    CAST(created_at AS TEXT) AS created_at,
+    typeof(created_at) AS created_at_class,
+    CAST(updated_at AS TEXT) AS updated_at,
+    typeof(updated_at) AS updated_at_class
+FROM fleet_adr_repository_files WHERE adr_id IN (SELECT value FROM json_each(?)) ORDER BY fleet_adr_repository_files.ordinal;

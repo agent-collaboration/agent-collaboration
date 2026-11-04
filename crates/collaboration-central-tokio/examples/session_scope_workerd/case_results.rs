@@ -98,6 +98,9 @@ impl Scenario {
             Scenario::FleetFeedColumns => println!(
                 "FLEET_FEED_COLUMNS_RESULT 1 passed; 0 failed; 0 ignored (ordinary Fleet writes and historical feed reads, sixteen ordered refs/files, canonical changes beside immutable snapshots, accepted/rejected authority and exact replay; owning reopen and retention rollback are covered by native storage tests)"
             ),
+            Scenario::FleetSnapshotMerge => println!(
+                "FLEET_SNAPSHOT_MERGE_RESULT 1 passed; 0 failed; 0 ignored (shared Native/Worker normal-session oracle; 261 exact keys, equal-ID board/project/workspace order, 256/5 pages and stable cut; SQL cost measured separately in Core)"
+            ),
             Scenario::FleetRepositoryColumns => println!(
                 "FLEET_REPOSITORY_COLUMNS_RESULT 1 passed; 0 failed; 0 ignored (ordinary Fleet sessions, typed origin/local associations, canonical ordered list, attach/detach and replay; first provenance and owning reopen are covered by native storage tests)"
             ),

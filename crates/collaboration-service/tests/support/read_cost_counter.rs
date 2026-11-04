@@ -25,6 +25,14 @@ const CORE_TYPED_CANONICAL_INPUTS: &[&str] = &[
     include_str!("../../../collaboration-central-core/sql/fleet/read_project_columns.sql"),
     include_str!("../../../collaboration-central-core/sql/fleet/read_adr_columns.sql"),
     include_str!("../../../collaboration-central-core/sql/fleet/read_adr_repository_files.sql"),
+    include_str!("../../../collaboration-central-core/sql/fleet/read_workspace_batch.sql"),
+    include_str!(
+        "../../../collaboration-central-core/sql/fleet/read_workspace_repository_batch.sql"
+    ),
+    include_str!("../../../collaboration-central-core/sql/fleet/read_board_batch.sql"),
+    include_str!("../../../collaboration-central-core/sql/fleet/read_project_batch.sql"),
+    include_str!("../../../collaboration-central-core/sql/fleet/read_adr_batch.sql"),
+    include_str!("../../../collaboration-central-core/sql/fleet/read_adr_file_batch.sql"),
 ];
 const CORE_FEED_INPUT: &str =
     include_str!("../../../collaboration-central-core/sql/fleet/read_fleet_feed_page.sql");
