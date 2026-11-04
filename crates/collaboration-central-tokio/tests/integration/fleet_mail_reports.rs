@@ -69,7 +69,9 @@ async fn sender_statuses(fixture: &Fixture) -> TestResult<Vec<DeliveryStatus<Acc
         .store
         .transaction(|scope| {
             Box::pin(async move {
-                let owner = A.to_owned().try_into().map_err(StoreError::backend)?;
+                let owner = fleet_sync_protocol::Submitter::Machine(
+                    A.to_owned().try_into().map_err(StoreError::backend)?,
+                );
                 let route = SERVICE_A
                     .to_owned()
                     .try_into()

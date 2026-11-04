@@ -74,22 +74,28 @@ async fn replay_and_conflict_preserve_one_fleet_custody_row_and_a_restart_still_
     );
     assert_eq!(admitted_rows(&reopened).await?, (1, 1));
     let mut recipient = Socket::open(&reopened, B, SERVICE_B).await?;
-    let inbox = RecipientInbox::open(&root.path().join("recipient"), reopened.io.clone()).await?;
+    let inbox = RecipientInbox::open(
+        &root.path().join("recipient"),
+        reopened.io.clone(),
+        B.to_owned().try_into()?,
+    )
+    .await?;
     reopened.io.advance(2_000);
     let (drive, ()) = tokio::time::timeout(CAP, async {
         tokio::try_join!(reopened.runtime.on_alarm(), async {
-            let (frame, pushed) = recipient
+            let pushed = recipient
                 .push_envelope(item.id())
                 .await
                 .map_err(StoreError::backend)?;
             assert_eq!(
-                pushed.digest(),
+                pushed.item.digest(),
                 item.digest(),
                 "the conflicting attempt must not replace custody"
             );
             let answer = inbox
                 .accept(
-                    pushed,
+                    pushed.submitter,
+                    pushed.item,
                     collaboration_central_core::fleet_outbox_limits()
                         .map_err(StoreError::backend)?,
                 )
@@ -97,7 +103,7 @@ async fn replay_and_conflict_preserve_one_fleet_custody_row_and_a_restart_still_
                 .map_err(StoreError::backend)?;
             assert!(matches!(answer, PushResult::Accepted { .. }));
             recipient
-                .answer(&reopened, frame, answer)
+                .answer(&reopened, pushed.frame, answer)
                 .await
                 .map_err(StoreError::backend)
         })

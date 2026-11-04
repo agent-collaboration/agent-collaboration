@@ -1,5 +1,5 @@
 use super::session_fixture;
-use board_sync_protocol::{BoardNotice, BoardReadPage};
+use board_sync_protocol::BoardReadPage;
 use collaboration_central_core::{CoreHost, FleetKind, ObjectAddress, ObjectRuntime, PlatformIo};
 use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{
@@ -50,19 +50,9 @@ impl Io {
             wakes: Arc::default(),
         }
     }
-    pub fn advance(&self) {
-        self.time.fetch_add(60_000, Ordering::SeqCst);
-    }
     pub fn age_retention(&self) {
         self.time
             .fetch_add(31 * 24 * 60 * 60 * 1000, Ordering::SeqCst);
-    }
-    pub fn calls(&self) -> TestResult<Vec<Value>> {
-        Ok(self
-            .calls
-            .lock()
-            .map_err(|_| "call mutex poisoned")?
-            .clone())
     }
 }
 impl Clock for Io {
@@ -139,7 +129,6 @@ pub struct Fixture {
     pub objects: ObjectStore<CoreHost<Io>>,
     pub object: Arc<Native>,
     pub runtime: ObjectRuntime<FleetKind, FaultHost, Io>,
-    pub io: Io,
 }
 impl Fixture {
     pub async fn open(root: &Path, io: Io) -> TestResult<Self> {
@@ -184,7 +173,6 @@ impl Fixture {
             objects,
             object,
             runtime,
-            io,
         })
     }
     pub async fn feed(&self, after: u64) -> TestResult<BoardReadPage> {
@@ -205,14 +193,6 @@ impl Fixture {
             .await
             .map_err(|error| format!("mutation failed: {error:?}"))?;
         Ok(serde_json::from_slice(&bytes)?)
-    }
-    pub async fn deliver(&self) -> TestResult {
-        let admitted = self.runtime.on_alarm().await?;
-        assert_eq!(admitted.retried.len(), 1);
-        self.io.delivery.runtime.on_alarm().await?;
-        self.io.advance();
-        assert_eq!(self.runtime.on_alarm().await?.completed.len(), 1);
-        Ok(())
     }
     pub async fn reader_rows(&self) -> TestResult<Vec<(String, String, i64)>> {
         Ok(self.object.transaction(|scope|Box::pin(async move {
@@ -262,28 +242,4 @@ pub fn assert_accepted(answer: &FleetRequestResult) -> TestResult {
         return Err(format!("fixture not accepted: {answer:?}").into());
     }
     Ok(())
-}
-pub async fn notice_rows(fixture: &session_fixture::Fixture) -> TestResult<i64> {
-    Ok(i64::try_from(notice_kinds(fixture).await?.len())?)
-}
-pub async fn notice_kinds(fixture: &session_fixture::Fixture) -> TestResult<Vec<BoardNotice>> {
-    Ok(fixture
-        .host
-        .store
-        .object
-        .transaction(|scope| {
-            Box::pin(async move {
-                query::<sqlx_turso::Turso>("SELECT kind FROM machine_notices ORDER BY position")
-                    .fetch_all(scope.executor())
-                    .await
-                    .map_err(StoreError::backend)?
-                    .into_iter()
-                    .map(|row| {
-                        let payload: String = row.try_get("kind").map_err(StoreError::backend)?;
-                        serde_json::from_str(&payload).map_err(StoreError::backend)
-                    })
-                    .collect()
-            })
-        })
-        .await?)
 }

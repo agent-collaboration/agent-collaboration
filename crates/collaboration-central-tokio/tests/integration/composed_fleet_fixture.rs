@@ -311,6 +311,14 @@ impl Fixture {
         }})).await
     }
     pub async fn arrange_registered(&self) -> TestResult {
+        self.arrange_directory().await?;
+        let answer=self.call("session","central.session-lease",Value::Null,json!({"session":{"peer":A,"sessionId":durable_steps::Uuid::now_v7()},"request":{"kind":"register","value":{"attempt":durable_steps::Uuid::now_v7(),"database":PROJECT,"writer":A,"origin":{"kind":"empty"}}}})).await?;
+        if answer.pointer("/value/kind") != Some(&json!("registered")) {
+            return Err(format!("registration not granted: {answer}").into());
+        }
+        Ok(())
+    }
+    pub async fn arrange_directory(&self) -> TestResult {
         self.announce_schema().await?;
         use fleet_admission::FleetOperation;
         for operation in [
@@ -343,10 +351,6 @@ impl Fixture {
             ) {
                 return Err(format!("metadata not accepted: {answer}").into());
             }
-        }
-        let answer=self.call("session","central.session-lease",Value::Null,json!({"session":{"peer":A,"sessionId":durable_steps::Uuid::now_v7()},"request":{"kind":"register","value":{"attempt":durable_steps::Uuid::now_v7(),"database":PROJECT,"writer":A,"origin":{"kind":"empty"}}}})).await?;
-        if answer.pointer("/value/kind") != Some(&json!("registered")) {
-            return Err(format!("registration not granted: {answer}").into());
         }
         Ok(())
     }

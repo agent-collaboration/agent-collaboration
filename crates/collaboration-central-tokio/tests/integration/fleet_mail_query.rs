@@ -12,7 +12,7 @@ use fleet_sync_protocol::{
 };
 use serde_json::json;
 
-async fn query(
+pub(super) async fn query(
     fixture: &Fixture,
     socket: &mut Socket,
     items: Vec<ItemId>,
@@ -61,7 +61,12 @@ async fn query_preserves_order_and_digest_before_and_after_recipient_commit_and_
     let mut recipient = Socket::open(&fixture, B, SERVICE_B).await?;
     let mut attacker = Socket::open(&fixture, C, SERVICE_C).await?;
     let inbox_root = tempfile::tempdir()?;
-    let inbox = RecipientInbox::open(inbox_root.path(), fixture.io.clone()).await?;
+    let inbox = RecipientInbox::open(
+        inbox_root.path(),
+        fixture.io.clone(),
+        B.to_owned().try_into()?,
+    )
+    .await?;
     let item = envelope(B, SERVICE_B)?;
     let unknown = ItemId::new(durable_steps::Uuid::now_v7())?;
     submit(&fixture, &item).await?;
@@ -95,20 +100,21 @@ async fn query_preserves_order_and_digest_before_and_after_recipient_commit_and_
     assert_eq!(custody(&fixture, item.id()).await?, ("sent".into(), true));
     let (drive, ()) = tokio::time::timeout(CAP, async {
         tokio::try_join!(fixture.runtime.on_alarm(), async {
-            let (frame, pushed) = recipient
+            let pushed = recipient
                 .push_envelope(item.id())
                 .await
                 .map_err(StoreError::backend)?;
             let receipt = inbox
                 .accept(
-                    pushed,
+                    pushed.submitter,
+                    pushed.item,
                     collaboration_central_core::fleet_outbox_limits()
                         .map_err(StoreError::backend)?,
                 )
                 .await
                 .map_err(StoreError::backend)?;
             recipient
-                .answer(&fixture, frame, receipt)
+                .answer(&fixture, pushed.frame, receipt)
                 .await
                 .map_err(StoreError::backend)
         })

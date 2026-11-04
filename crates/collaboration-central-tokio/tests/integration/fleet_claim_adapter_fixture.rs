@@ -12,8 +12,7 @@ use serde_json::{Value, json};
 use sqlx_core::{query::query, row::Row};
 use std::{path::Path, time::Duration};
 
-#[path = "typed_claim_observer.rs"]
-mod claim_observer;
+use super::typed_claim_observer as claim_observer;
 type SettlementStore = TokioObject<CoreHost<Io>>;
 pub const WAIT_BOUND: Duration = Duration::from_secs(5);
 
