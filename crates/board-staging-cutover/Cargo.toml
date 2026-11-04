@@ -1,0 +1,17 @@
+[package]
+name = "board-staging-cutover"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+fleet-sync-protocol.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+uuid.workspace = true

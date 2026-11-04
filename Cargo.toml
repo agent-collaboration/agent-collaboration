@@ -4,6 +4,7 @@ members = [
     "crates/tailnet-verification-host",
     "crates/board-central-test-support",
     "crates/board-legacy-upgrade",
+    "crates/board-staging-cutover",
     "crates/board-fleet-sync",
     "crates/board-sync-protocol",
     "crates/message-board",

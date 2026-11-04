@@ -991,6 +991,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "board-staging-cutover"
+version = "0.1.121"
+dependencies = [
+ "fleet-sync-protocol",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "board-sync-protocol"
 version = "0.1.121"
 dependencies = [
