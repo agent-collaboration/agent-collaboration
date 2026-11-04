@@ -177,8 +177,6 @@ impl MailDeliveryRuntime {
     ) -> Result<Self, StoreError> {
         // PD4 §3's quotas reserve the SDK-computed settlement allowance.
         let limits = DeliveryLimits::new::<RouterDeliveryTypes>(
-            1024 * 1024 * 1024,
-            200_000,
             256 * 1024 * 1024,
             50_000,
             inbox_bytes,

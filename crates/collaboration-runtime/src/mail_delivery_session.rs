@@ -2,7 +2,7 @@
 use board_sync_protocol::BoardConsumerProtocol;
 use durable_steps::StoreError;
 use fleet_sync_delivery::{DeliveryTaskConfig, LocalDeliveryConfig};
-use fleet_sync_protocol::{PeerId, unit_budget::TARGET_UNIT_BYTES};
+use fleet_sync_protocol::PeerId;
 use fleet_sync_tokio_runner::SessionRequests;
 use tokio::sync::watch;
 
@@ -22,8 +22,6 @@ impl MailDeliverySession {
         Ok(DeliveryTaskConfig {
             local,
             relay: self.relay,
-            fetch_items: 100,
-            fetch_bytes: u64::try_from(TARGET_UNIT_BYTES).map_err(StoreError::backend)?,
         })
     }
 }

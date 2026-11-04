@@ -197,8 +197,6 @@ impl PushInbox {
             1_000_000,
             100,
             1_000_000,
-            100,
-            1_000_000,
             fleet_sync_delivery::minimum_settlement_allowance::<BoardDeliveryTypes>()?,
         )?;
         Ok(Self {

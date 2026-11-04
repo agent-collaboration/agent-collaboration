@@ -277,7 +277,7 @@ where
                             .map_err(StoreError::backend)?;
                             let limits =
                                 fleet_sync_delivery::DeliveryLimits::new::<BoardDeliveryTypes>(
-                                    1_000_000, 100, 1_000_000, 100, 1_000_000, allowance,
+                                    1_000_000, 100, 1_000_000, allowance,
                                 )
                                 .map_err(StoreError::backend)?;
                             let item =

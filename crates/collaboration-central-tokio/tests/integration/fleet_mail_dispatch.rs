@@ -308,8 +308,6 @@ async fn no_capacity_keeps_content_and_retries_the_same_item_after_capacity_retu
     .await?;
     let full_limits = collaboration_central_core::fleet_outbox_limits()?;
     let no_room = fleet_sync_delivery::DeliveryLimits::new::<BoardDeliveryTypes>(
-        full_limits.mailbox_payload_bytes(),
-        full_limits.mailbox_items(),
         full_limits.outbox_bytes(),
         full_limits.outbox_items(),
         0,

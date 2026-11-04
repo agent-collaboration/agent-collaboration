@@ -290,8 +290,6 @@ impl Fixture {
         let recipient_limits = match receipt {
             ReceiptPath::LoseAfterCommit => limits,
             ReceiptPath::NoCapacity => DeliveryLimits::new::<BoardDeliveryTypes>(
-                limits.mailbox_payload_bytes(),
-                limits.mailbox_items(),
                 limits.outbox_bytes(),
                 limits.outbox_items(),
                 0,
@@ -328,12 +326,7 @@ impl Fixture {
             binding.clone(),
         ))?;
         recipient_engine.register(Report::new(
-            DeliveryTaskConfig {
-                local,
-                relay,
-                fetch_items: 10,
-                fetch_bytes: 1_000_000,
-            },
+            DeliveryTaskConfig { local, relay },
             host.clone(),
             binding,
         ))?;

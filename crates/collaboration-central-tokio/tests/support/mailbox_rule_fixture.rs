@@ -8,7 +8,6 @@ use serde_json::{Value, json};
 
 pub(super) const ORIGIN: &str = "550e8400-e29b-41d4-a716-446655441081";
 pub(super) const DESTINATION: &str = "550e8400-e29b-41d4-a716-446655441082";
-pub(super) const ORIGINAL: &str = "019f0000-0000-7000-8000-000000011081";
 
 pub(super) struct MailboxPair {
     pub sender: AdmittedPeerSocket,
@@ -58,19 +57,6 @@ impl MailboxPair {
     ) -> ConformanceResult<Value> {
         super::relay_transport::operation(&mut self.sender.socket,
             json!({"kind":"consumer","value":{"kind":"mailSubmit","value":{"item":item,"originEpoch":null}}})).await
-    }
-    pub fn cancel(&self, id: &str) -> ConformanceResult<DeliveryEnvelope<BoardDeliveryTypes>> {
-        use fleet_sync_protocol::{CancelBody, DeliveryCancel};
-        let original = self.item(ORIGINAL, "literal original mailbox body")?;
-        Ok(DeliveryEnvelope::Cancel(DeliveryCancel::new(
-            ItemId::try_from(id.to_owned())?,
-            original.sender().clone(),
-            original.recipient().clone(),
-            None,
-            CancelBody {
-                target: ItemId::try_from(ORIGINAL.to_owned())?,
-            },
-        )?))
     }
     pub async fn close(self) -> ConformanceResult<()> {
         let sender = self

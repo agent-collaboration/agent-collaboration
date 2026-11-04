@@ -177,7 +177,7 @@ async fn current_holder_settles_unknown_project_and_query_preserves_its_owner_af
     for (peer, service) in [(A, SERVICE_A), (C, SERVICE_C)] {
         assert!(matches!(
             answer(&fixture, peer, service, query_request(item)?, NOW).await?,
-            DeliveryAnswer::MailboxUnavailable {
+            DeliveryAnswer::DeliveryUnavailable {
                 reason: DeliveryRefusal::NotSubmitter
             }
         ));
@@ -238,7 +238,7 @@ async fn unauthorized_settlement_claims_never_create_negative_custody_or_removal
                 now
             )
             .await?,
-            DeliveryAnswer::MailboxUnavailable {
+            DeliveryAnswer::DeliveryUnavailable {
                 reason: DeliveryRefusal::NotSubmitter
             }
         ));

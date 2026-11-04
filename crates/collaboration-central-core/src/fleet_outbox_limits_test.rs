@@ -8,8 +8,6 @@ fn fleet_outbox_defaults_reserve_enough_room_to_settle_admitted_items() {
     let minimum = minimum_settlement_allowance::<BoardDeliveryTypes>().unwrap();
     let limits = fleet_outbox_limits().unwrap();
     assert_eq!(limits.settlement_allowance(), minimum);
-    assert_eq!(limits.mailbox_payload_bytes(), 1024 * 1024 * 1024);
-    assert_eq!(limits.mailbox_items(), 200_000);
     assert_eq!(limits.outbox_bytes(), 256 * 1024 * 1024);
     assert_eq!(limits.outbox_items(), 50_000);
     assert_eq!(limits.inbox_bytes(), 256 * 1024 * 1024);
