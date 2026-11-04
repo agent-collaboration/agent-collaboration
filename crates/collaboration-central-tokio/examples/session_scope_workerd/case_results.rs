@@ -92,6 +92,9 @@ impl Scenario {
             Scenario::FleetNotices => println!(
                 "FLEET_NOTICES_RESULT 1 passed; 0 failed; 0 ignored (three normal admitted sessions; two reader installations with two exact numbered hints each, Fleet mutation and replay, own alarm, real Delivery and positioned notice read; no physical restart claim)"
             ),
+            Scenario::FleetAdrColumns => println!(
+                "FLEET_ADR_COLUMNS_RESULT 1 passed; 0 failed; 0 ignored (real normal sessions and typed canonical ADR body, sixteen ordered files, lifecycle and replay; owning reopen is covered by native storage tests)"
+            ),
             Scenario::DeliveryConfig { .. } => println!(
                 "DELIVERY_CONFIG_RESULT 1 passed; 0 failed; 0 ignored (explicit relay distinct from receiver, exact first/replay/update/readmission answers through real Registry and Mailbox; no Router delivery-call closure claim)"
             ),

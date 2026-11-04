@@ -40,6 +40,8 @@ where
         crate::fleet_workspace_store::read(scope, reference.id.as_str()).await?
     } else if reference.kind == RecordKind::Board {
         crate::fleet_board_store::read(scope, reference.id.as_str()).await?
+    } else if reference.kind == RecordKind::Adr {
+        crate::fleet_adr_store::read(scope, reference.id.as_str()).await?
     } else if reference.kind == RecordKind::Request {
         generated_statements::read_fleet_decision(scope, reference.id.as_str().into())
             .await
@@ -108,6 +110,8 @@ where
             .await?;
     } else if let Record::Board(board) = record {
         crate::fleet_board_store::put(scope, board, &header, source.digest(), now).await?;
+    } else if let Record::Adr(adr) = record {
+        crate::fleet_adr_store::put(scope, adr, &header, source.digest(), now, row_ids).await?;
     } else {
         let payload = serde_json::to_string(record).map_err(StoreError::backend)?;
         let time = header.router_time();
@@ -119,9 +123,6 @@ where
             Record::DirectoryEntry(_) => {
                 writes::put_project(scope, payload, time, basis, installation, machine, digest)
                     .await
-            }
-            Record::Adr(_) => {
-                writes::put_adr(scope, payload, time, basis, installation, machine, digest).await
             }
             _ => return Err(corrupt("kind", "ledger writes use the decision owner")),
         }

@@ -4,7 +4,7 @@
     "core_migrations/0000_migration_history.sql": "5967bc796201ffc01357c7f30b6986d31c6f97b0f6a4712d8dfee7656d184666",
     "core_migrations/0001_fleet_decisions.sql": "32dbcb0f9130a307c10c0f4be5d0d229a400915ff0a77fc8d1361cf51282e770",
     "core_migrations/0002_fleet_decision_receipts.sql": "4e56a7411eaba1fbd0c20601f38c215c0f73f1fa52a352cdecb400c620216cfb",
-    "core_migrations/0003_fleet_records.sql": "f619201f8772140bb2da802150f5754e496d42573cd62902c10f5527d11cc10d",
+    "core_migrations/0003_fleet_records.sql": "08c250ea6f5399b0faac3151ff2e2f59e0b7bbf032b67caed91036d51830336f",
     "core_migrations/0004_directory_copy_summary.sql": "0fd0ccb64479650ee17ea2c46c88b12617631bba3c5b18c9533671cd239ee148",
     "core_migrations/0005_claim_lease_projection.sql": "28758a050b06a0e497cc234be802903b421551cfafbd36af2307849f9a8a1a61",
     "core_migrations/0006_archive_reports.sql": "48b06d5340aa78d2940fbed2728bbf9b0931e4485616e9af157425c8ec46351c",

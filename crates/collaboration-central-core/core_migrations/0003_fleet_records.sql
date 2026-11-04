@@ -73,16 +73,43 @@ CREATE TABLE project_directory (
     UNIQUE(board_id, name),
     FOREIGN KEY(board_id, workspace_id) REFERENCES fleet_boards(board_id, workspace_id)
 );
-CREATE TABLE workspace_adrs (
+CREATE TABLE fleet_workspace_adrs (
     adr_id TEXT NOT NULL PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES fleet_workspaces(workspace_id),
     title TEXT NOT NULL,
-    payload TEXT NOT NULL,
+    text TEXT NOT NULL,
+    status TEXT NOT NULL,
+    supersedes_adr_id TEXT REFERENCES fleet_workspace_adrs(adr_id),
+    made_in_kind TEXT,
+    made_in_record_id TEXT,
+    revision TEXT NOT NULL,
+    repository_file_count INTEGER NOT NULL,
+    actor_kind TEXT NOT NULL,
+    actor_human_id TEXT,
+    actor_service_id TEXT,
+    actor_endpoint_id TEXT,
+    actor_session_id TEXT,
+    actor_router_component TEXT,
+    request_id TEXT,
+    fleet_position INTEGER NOT NULL,
     router_time TEXT,
     time_basis TEXT NOT NULL,
     origin_installation TEXT NOT NULL,
     origin_machine TEXT NOT NULL,
-    import_digest TEXT
+    import_digest TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE TABLE fleet_adr_repository_files (
+    id TEXT NOT NULL PRIMARY KEY,
+    adr_id TEXT NOT NULL REFERENCES fleet_workspace_adrs(adr_id),
+    ordinal INTEGER NOT NULL,
+    repository_origin TEXT NOT NULL,
+    path TEXT NOT NULL,
+    commit_sha TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE(adr_id,ordinal)
 );
 CREATE TABLE repository_attachments (
     attachment_id TEXT NOT NULL PRIMARY KEY,
