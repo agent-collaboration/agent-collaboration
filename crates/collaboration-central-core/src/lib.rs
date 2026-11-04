@@ -150,7 +150,14 @@ mod session_store;
 #[cfg(feature = "conformance")]
 pub use session_finalize_fault::{SessionFinalizeFailure, SessionFinalizeFault};
 #[cfg(feature = "conformance")]
+mod fleet_mail_observation;
+#[cfg(feature = "conformance")]
 mod fleet_schema_observation;
+#[cfg(feature = "conformance")]
+pub use fleet_mail_observation::{
+    FLEET_MAIL_CUSTODY_PATH, FleetMailCustodyObservation, FleetMailCustodyRequest,
+    FleetMailCustodyRow, FleetMailStatusKind,
+};
 mod fleet_task_engine;
 #[cfg(feature = "conformance")]
 #[expect(

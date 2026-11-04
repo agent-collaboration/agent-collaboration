@@ -90,6 +90,7 @@ mod fleet_cache_records;
 mod fleet_conflict;
 mod fleet_creation_gap;
 mod fleet_effects;
+mod fleet_mail_observer;
 mod fleet_metadata_records;
 mod fleet_notice_outbox;
 mod fleet_notices_http;

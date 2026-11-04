@@ -161,6 +161,9 @@ impl Scenario {
             Scenario::SenderRevocation => println!(
                 "SENDER_REVOCATION_RESULT 1 passed; 0 failed; 0 ignored (shared Native/Worker scenario; committed revoked row with live sender, exact item/cancel refusal, unchanged outbox count and no recipient Push)"
             ),
+            Scenario::FleetMailObserver => println!(
+                "FLEET_MAIL_OBSERVER_RESULT 1 passed; 0 failed; 0 ignored (shared Native/Worker owner-only single-item row/status/version/payload-presence and owning count, absent/refused row with unchanged count; no payload content or hosted proof)"
+            ),
             Scenario::ReadmissionActivation => println!(
                 "READMISSION_RESULT 1 passed; 0 failed; 0 ignored (real activation row and saved local receipt, normal credential/session admission, revoke before engine finish, old completion leaves row revoked and credential refused; no mailbox readback or process-crash claim)"
             ),

@@ -13,6 +13,9 @@ cargo nextest run --profile ci -p collaboration-central-tokio --features conform
   `revocation_carryover` includes the shared Native/Worker O11(b) case:
   a committed revoked sender with a still-live session cannot admit an item
   or cancellation, change Fleet outbox count, or cause a recipient Push.
+  `fleet_mail_observer` drives the shared owner-only custody observer through
+  real admission and refusal, including payload presence, exact status/version,
+  global count, UUIDv7 input and machine/unauthenticated caller rejection.
 - `e2e/main.rs` aggregates the four roots selected by CI's e2e job:
   `fleet_client_cache`, `forwarded_posts`, `forwarding_real_timer` and
   `mailbox_rules`. This target requires `conformance`.

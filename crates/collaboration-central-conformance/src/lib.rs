@@ -33,11 +33,15 @@ mod conformance_client;
 #[cfg(feature = "client")]
 mod enrollment_scenarios;
 #[cfg(feature = "client")]
+mod fleet_mail_observer_scenario;
+#[cfg(feature = "client")]
 mod holder_reply_scenarios;
 #[cfg(feature = "client")]
 mod lease_session_scenarios;
 #[cfg(feature = "client")]
 mod mail_status_scenarios;
+#[cfg(feature = "client")]
+pub use fleet_mail_observer_scenario::run_fleet_mail_observer_conformance;
 #[cfg(feature = "client")]
 mod native_board_session;
 #[cfg(feature = "client")]

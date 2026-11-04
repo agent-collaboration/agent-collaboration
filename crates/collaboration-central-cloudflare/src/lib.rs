@@ -51,6 +51,10 @@ pub async fn main(request: Request, env: Env, _context: Context) -> Result<Respo
         return conformance_admission::fleet_schema(request.try_into()?, env).await;
     }
     #[cfg(feature = "conformance")]
+    if request.uri().path() == collaboration_central_core::FLEET_MAIL_CUSTODY_PATH {
+        return conformance_admission::fleet_mail_custody(request.try_into()?, env).await;
+    }
+    #[cfg(feature = "conformance")]
     if request.uri().path() == collaboration_central_core::FORWARD_STATE_PATH {
         return conformance_admission::forward_state(request.try_into()?, env).await;
     }

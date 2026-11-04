@@ -62,6 +62,23 @@ Normal session cases use a mode after the four runtime arguments, for example:
 cargo run --locked -p collaboration-central-tokio --features conformance --example session_scope_workerd -- node /path/to/miniflare/dist/src/index.js /absolute/fresh/session-persistence 8957 access-sessions
 ```
 
+The conformance-only `POST /admin/v1/conformance/fleet-mail-custody` route is
+the same on Tokio and Worker. It requires the same owner Access as the schema
+observer and accepts `{"item":"<UUIDv7>"}`. A present response is:
+
+```json
+{"outboxCount":1,"row":{"kind":"present","value":{"statusKind":"sent","statusVersion":1,"payloadPresent":true}}}
+```
+
+An absent item returns `{"outboxCount":1,"row":{"kind":"absent"}}`; the count
+still includes every retained outbox row. The response contains no payload,
+acceptance/refusal contents, machine identities or item listing. All fields
+come from one transaction on the existing Fleet owner. The observation does not
+initialize a store, migrate it, expire mail, publish status or write an address.
+Run `session_scope_workerd` with `fleet-mail-observer` for its shared
+Native/Worker owner-only admission/refusal case. Production builds omit this
+route and its response types.
+
 The harness redirects only the synthetic issuer's certs URL to its owned local
 JWKS fixture. Worker WebCrypto verification remains real. No local run proves
 Google sign-in, deployed Access policies, TLS or cross-machine behavior.
