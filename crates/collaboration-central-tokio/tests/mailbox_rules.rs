@@ -4,10 +4,6 @@
 
 #[path = "native_http/support.rs"]
 mod configuration;
-#[expect(
-    dead_code,
-    reason = "Shared recipient fixture serves targets with different helper subsets."
-)]
 #[path = "support/mail_push_inbox.rs"]
 mod mail_push_inbox;
 #[path = "support/mail_push_transport.rs"]
@@ -44,7 +40,7 @@ async fn lost_custody_answer_keeps_cancel_pending_until_recipient_decides() -> C
     run_case(RuleCase::Cancel).await
 }
 #[tokio::test]
-async fn held_mailbox_payload_survives_history_horizon_and_releases_after_receipt()
+async fn held_recipient_payload_survives_history_horizon_until_local_release()
 -> ConformanceResult<()> {
     run_case(RuleCase::HeldRetention).await
 }

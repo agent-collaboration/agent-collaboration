@@ -64,10 +64,6 @@ mod holder_writer_retry;
 mod http_body_scenarios;
 #[path = "../tests/support/imported_claim_scenarios.rs"]
 mod imported_claim_scenarios;
-#[expect(
-    dead_code,
-    reason = "Shared recipient fixture serves targets with different helper subsets."
-)]
 #[path = "../tests/support/mail_push_inbox.rs"]
 mod mail_push_inbox;
 #[path = "../tests/support/mail_push_transport.rs"]

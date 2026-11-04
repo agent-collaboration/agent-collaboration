@@ -9,7 +9,7 @@ impl Scenario {
                 "MAILBOX_REPORT_TERMINAL_RESULT 1 passed; 0 failed; 0 ignored (real SDK report task and central socket; terminal refusal stops retries)"
             ),
             Scenario::MailboxHeldRetention => println!(
-                "MAILBOX_HELD_RETENTION_RESULT 1 passed; 0 failed; 0 ignored (same Native/Worker oracle, actual held payload across31controlled days and exact receipt release; no physical restart claim)"
+                "MAILBOX_HELD_RETENTION_RESULT 1 passed; 0 failed; 0 ignored (same Native/Worker oracle, real Inbox Held payload across31controlled days, scheduled retention, explicit local release and terminal report; no physical restart claim)"
             ),
             Scenario::MailboxCapacity => println!(
                 "MAILBOX_CAPACITY_RESULT 1 passed; 0 failed; 0 ignored (real recipient Inbox quota refusal, exact original and prepaid cancellation; Fleet retains Sent for retry; no disk-full claim)"

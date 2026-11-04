@@ -20,7 +20,7 @@ use sqlx_core::{query::query, row::Row};
 use std::{
     path::Path,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicI64, Ordering},
     },
 };
@@ -34,10 +34,18 @@ type Report = ReportOutcome<Store, sqlx_turso::Turso, BoardDeliveryTypes, Roster
 type Removal = RemoveDeliveryRecord<Store, sqlx_turso::Turso>;
 const NOW: i64 = 1_792_281_600_000;
 
-struct RecipientHost(AtomicI64);
+#[derive(Clone, Copy)]
+enum LocalSessionInput {
+    Held,
+    Uncertain,
+}
+struct RecipientHost {
+    now: AtomicI64,
+    local_session: Mutex<LocalSessionInput>,
+}
 impl Clock for RecipientHost {
     fn now(&self) -> SyncTime {
-        SyncTime::from_unix_millis(self.0.load(Ordering::SeqCst))
+        SyncTime::from_unix_millis(self.now.load(Ordering::SeqCst))
     }
 }
 impl IdSource for RecipientHost {
@@ -62,11 +70,19 @@ impl Host for RecipientHost {
         }
         // Local session execution is a disclosed component input. Custody,
         // receipt construction and report persistence remain the real SDK.
-        let held = DeliverCall::<BoardDeliveryTypes>::validated_answer(LocalDelivery {
-            outcome: LocalOutcome::Held { until: None },
+        let outcome = match *self
+            .local_session
+            .lock()
+            .map_err(|_| CallFailure::AnswerLost)?
+        {
+            LocalSessionInput::Held => LocalOutcome::Held { until: None },
+            LocalSessionInput::Uncertain => LocalOutcome::Uncertain,
+        };
+        let answer = DeliverCall::<BoardDeliveryTypes>::validated_answer(LocalDelivery {
+            outcome,
             observation: (),
         });
-        serde_json::from_value(serde_json::to_value(held).map_err(|_| CallFailure::AnswerLost)?)
+        serde_json::from_value(serde_json::to_value(answer).map_err(|_| CallFailure::AnswerLost)?)
             .map_err(|_| CallFailure::AnswerLost)
     }
 }
@@ -158,7 +174,10 @@ impl PushInbox {
         owner: PeerId,
         roster: Vec<(ServiceId, PeerId)>,
     ) -> ConformanceResult<Self> {
-        let host = Arc::new(RecipientHost(AtomicI64::new(NOW)));
+        let host = Arc::new(RecipientHost {
+            now: AtomicI64::new(NOW),
+            local_session: Mutex::new(LocalSessionInput::Held),
+        });
         let store = Arc::new(TursoStore::open_and_migrate(path, host.clone()).await?);
         store.transaction(move |scope| Box::pin(async move {
             let mut migrations = sqlx_core::migrate::Migrator::with_migrations(
@@ -228,6 +247,18 @@ impl PushInbox {
         &self,
         item: fleet_sync_protocol::ItemId,
     ) -> ConformanceResult<RecipientReport<BoardDeliveryTypes>> {
+        let input = DeliveryAttempt {
+            item,
+            attempt: 0,
+            not_before: self.host.now(),
+        };
+        self.run_attempt(input).await?;
+        self.report(item).await
+    }
+    async fn run_attempt(
+        &self,
+        input: DeliveryAttempt,
+    ) -> ConformanceResult<durable_steps::OperationStatus> {
         let mut engine = Engine::new(self.store.clone(), self.host.clone());
         engine.register(Attempt::new(
             LocalDeliveryConfig {
@@ -238,16 +269,88 @@ impl PushInbox {
             self.host.clone(),
             Arc::new(RosterBinding),
         ))?;
-        let input = DeliveryAttempt {
-            item,
-            attempt: 0,
-            not_before: self.host.now(),
-        };
         let status = engine
-            .start_and_settle::<Attempt>(&delivery_request_key(&(item, 0_u64))?, input)
+            .start_and_settle::<Attempt>(
+                &delivery_request_key(&(input.item, input.attempt))?,
+                input,
+            )
             .await?;
         if !matches!(status.state, OperationState::Completed { .. }) {
-            return Err(format!("local Held input did not complete: {:?}", status.state).into());
+            return Err(format!("local session input did not complete: {:?}", status.state).into());
+        }
+        Ok(status)
+    }
+    pub(super) fn advance(&self, millis: i64) {
+        self.host.now.fetch_add(millis, Ordering::SeqCst);
+    }
+    pub(super) fn set_time(&self, millis: i64) {
+        self.host.now.store(millis, Ordering::SeqCst);
+    }
+    pub(super) async fn drive_retention_if_due(
+        &self,
+        item: fleet_sync_protocol::ItemId,
+    ) -> ConformanceResult<()> {
+        let kind = <Removal as durable_steps::Task>::KIND;
+        let admitted: i64 = self
+            .store
+            .transaction(move |scope| {
+                Box::pin(async move {
+                    query::<sqlx_turso::Turso>(
+                        "SELECT count(*) AS tasks FROM _fleet_sync_operations WHERE kind=?",
+                    )
+                    .bind(kind)
+                    .fetch_one(scope.executor())
+                    .await
+                    .map_err(StoreError::backend)?
+                    .try_get("tasks")
+                    .map_err(StoreError::backend)
+                })
+            })
+            .await?;
+        if admitted != 1 {
+            return Err("Push did not schedule exactly one real record-retention task".into());
+        }
+        let mut engine = Engine::new(self.store.clone(), self.host.clone());
+        engine.register(Removal::new())?;
+        let status = engine
+            .start_and_settle::<Removal>(&delivery_request_key(&item)?, item)
+            .await?;
+        if !matches!(status.state, OperationState::Running { .. }) {
+            return Err("record retention removed live Held custody before its horizon".into());
+        }
+        Ok(())
+    }
+    pub(super) async fn release_and_report(
+        &self,
+        item: fleet_sync_protocol::ItemId,
+    ) -> ConformanceResult<RecipientReport<BoardDeliveryTypes>> {
+        *self
+            .host
+            .local_session
+            .lock()
+            .map_err(|_| "local session input poisoned")? = LocalSessionInput::Uncertain;
+        let (owner, limits, now) = (self.owner, self.limits, self.host.now());
+        let admitted = self
+            .store
+            .transaction(move |scope| {
+                Box::pin(async move {
+                    Inbox::<_, BoardDeliveryTypes, _>::new(scope, owner, limits, &RosterBinding)
+                        .release_held::<Attempt>(item, now)
+                        .await
+                        .map_err(delivery_rollback)?
+                        .ok_or_else(|| StoreError::backend("the real held record was not released"))
+                })
+            })
+            .await?;
+        let status = self
+            .run_attempt(DeliveryAttempt {
+                item,
+                attempt: 1,
+                not_before: now,
+            })
+            .await?;
+        if status.id != admitted.id() {
+            return Err("release drove another SDK delivery identity".into());
         }
         self.report(item).await
     }
@@ -321,6 +424,12 @@ impl PushInbox {
                 .fetch_one(scope.executor()).await.map_err(StoreError::backend)?.try_get("bytes").map_err(StoreError::backend)
         })).await?;
         Ok(u64::try_from(used)?)
+    }
+    pub(super) async fn payload_bytes(&self) -> ConformanceResult<i64> {
+        Ok(self.store.transaction(|scope|Box::pin(async move {
+            query::<sqlx_turso::Turso>("SELECT coalesce(sum(payload_bytes),0) AS bytes FROM _fleet_sync_inbox_items")
+                .fetch_one(scope.executor()).await.map_err(StoreError::backend)?.try_get("bytes").map_err(StoreError::backend)
+        })).await?)
     }
     pub(super) fn close(self) -> ConformanceResult<()> {
         let store = Arc::try_unwrap(self.store)

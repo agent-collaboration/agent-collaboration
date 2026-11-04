@@ -1,120 +1,74 @@
-//! The same real Mailbox retains a held payload beyond terminal-history retention.
-#![deny(clippy::too_many_lines)]
+//! Recipient Held custody survives the history horizon until explicit local release.
 use super::{
-    mailbox_rule_fixture::{DESTINATION, MailboxPair, ORIGINAL, control},
+    mail_push_inbox::PushInbox,
+    mail_push_transport::{next_push, pushed},
+    mailbox_rule_fixture::{MailboxPair, ORIGIN},
     relay_transport::{operation, relay_request},
 };
 use collaboration_central_conformance::ConformanceResult;
+use fleet_sync_protocol::{
+    DeliveryItemRef, PeerId, PushResult, RecipientOutcome, ServerCall, Submitter,
+};
 use serde_json::{Value, json};
-
 const BODY: &str = "row16 complete held payload across history horizon";
-
+fn require(actual: Value, expected: Value) -> ConformanceResult<()> {
+    if actual != expected {
+        return Err(format!("held retention returned {actual}; expected {expected}").into());
+    }
+    Ok(())
+}
 pub(super) async fn run(base: &str) -> ConformanceResult<()> {
     let mut pair = MailboxPair::open(base).await?;
-    let proof = async {
-        let started = chrono::DateTime::from_timestamp(1_893_456_000, 0)
-            .ok_or("literal retention origin is invalid")?;
-        pin_mailbox_time(base, started).await?;
-        let item = pair.item(ORIGINAL, BODY)?;
-        let expected = json!({"kind":"delivery","value":{"kind":"fetch","value":{
-            "stream":"items","entries":[{"kind":"item","value":{"seq":1,"item":item}}],"through":1}}});
-        prepare_held_payload(&mut pair, &expected).await?;
-        pin_mailbox_time(base, started + chrono::Duration::days(31)).await?;
-        // A fresh CallId reads current custody instead of replaying a prior Fetch answer.
-        require_reply(
-            operation(&mut pair.recipient.socket, fetch_request()).await?,
-            &expected,
-            "held payload after the history horizon",
-        )?;
-        require_reply(
-            pair.submit(&item).await?,
-            &json!({"kind":"consumer","value":{"kind":"mailSubmit","value":{
-                "kind":"submitted","value":{"kind":"replayed","value":{
-                    "status":{"kind":"held"},"version":2,"cancel":null}}}}}),
-            "same held identity replay",
-        )?;
-        release_payload(&mut pair).await?;
-        println!("HELD_RETENTION_CASE actual_held_payload_survives_31_days_and_exact_receipt_releases_it passed");
-        Ok(())
-    }
-    .await;
-    let closed = pair.close().await;
-    match (proof, closed) {
-        (Ok(()), Ok(())) => Ok(()),
-        (Err(error), Ok(())) | (Ok(()), Err(error)) => Err(error),
-        (Err(proof), Err(cleanup)) => {
-            Err(format!("held retention: {proof}; socket cleanup: {cleanup}").into())
-        }
-    }
-}
-
-async fn prepare_held_payload(pair: &mut MailboxPair, expected: &Value) -> ConformanceResult<()> {
-    let item = pair.item(ORIGINAL, BODY)?;
-    let accepted = pair.submit(&item).await?;
-    if accepted.pointer("/value/value/value/kind") != Some(&json!("accepted")) {
-        return Err(format!("original item was not accepted: {accepted}").into());
-    }
-    require_reply(
-        operation(&mut pair.recipient.socket, fetch_request()).await?,
-        expected,
-        "positive current-custody payload",
-    )?;
-    require_reply(
-        operation(
-            &mut pair.recipient.socket,
-            relay_request(
-                "report",
-                json!({"report":{"item":ORIGINAL,"reportSeq":1,
-                "outcome":{"kind":"held"}}}),
-            ),
-        )
-        .await?,
-        &json!({"kind":"delivery","value":{"kind":"report","value":{
-            "kind":"applied","value":{"item":ORIGINAL,"acknowledged":1,
-                "status":{"kind":"held"},"version":2}}}}),
-        "actual Held report",
-    )
-}
-
-async fn release_payload(pair: &mut MailboxPair) -> ConformanceResult<()> {
-    require_reply(
-        operation(
-            &mut pair.recipient.socket,
-            relay_request("received", json!({"stream":"items","through":1})),
-        )
-        .await?,
-        &json!({"kind":"delivery","value":{"kind":"received","value":{
-            "stream":"items","releasedThrough":1}}}),
-        "exact payload receipt",
-    )?;
-    let empty = operation(&mut pair.recipient.socket, fetch_request()).await?;
-    if empty.pointer("/value/value/entries") != Some(&json!([])) {
-        return Err(format!("receipt retained executable payload: {empty}").into());
-    }
-    Ok(())
-}
-
-fn fetch_request() -> Value {
-    relay_request(
-        "fetch",
-        json!({"stream":"items","after":0,
-        "maxItems":10,"maxBytes":1_000_000}),
-    )
-}
-
-async fn pin_mailbox_time(base: &str, now: chrono::DateTime<chrono::Utc>) -> ConformanceResult<()> {
-    control(
-        base,
-        json!({"kind":"mailbox","value":DESTINATION}),
-        json!({"kind":"setTime","value":{"now":now}}),
+    let directory = tempfile::tempdir()?;
+    let owner = PeerId::new(pair.recipient.peer)?;
+    let inbox = PushInbox::open(
+        &directory.path().join("held.db"),
+        owner,
+        vec![(
+            ORIGIN.to_owned().try_into()?,
+            PeerId::new(pair.sender.peer)?,
+        )],
     )
     .await?;
-    Ok(())
-}
-
-fn require_reply(actual: Value, expected: &Value, context: &str) -> ConformanceResult<()> {
-    if &actual != expected {
-        return Err(format!("{context}: expected {expected}; observed {actual}").into());
-    }
+    let proof=async {
+        let item=pair.item(&durable_steps::Uuid::now_v7().to_string(),BODY)?;
+        // Align this injected clock to the immutable UUIDv7 creation input.
+        // The 31-day assertion must cross that item's actual history horizon.
+        let (seconds,nanos)=item.id().as_uuid().get_timestamp().ok_or("item lacks UUIDv7 time")?.to_unix();
+        let created_millis=i64::try_from(seconds.checked_mul(1_000).ok_or("item time overflow")?)?+i64::from(nanos/1_000_000);
+        inbox.set_time(created_millis);
+        if pair.submit(&item).await?.pointer("/value/value/value/kind")!=Some(&json!("accepted")) {return Err("held original not admitted".into());}
+        let (frame,ServerCall::Push {submitter,item:offered,..})=next_push(&mut pair.recipient.socket).await? else {return Err("held original not pushed".into());};
+        if submitter!=Submitter::Machine(PeerId::new(pair.sender.peer)?)||serde_json::to_vec(&offered)?!=serde_json::to_vec(&item)? {return Err("held Push changed sender or body".into());}
+        let receipt=inbox.accept(submitter,offered).await?;
+        if !matches!(receipt,PushResult::Accepted {..}) {return Err("held recipient took no actual custody".into());}
+        pushed(&mut pair.recipient.socket,frame,receipt).await?;
+        let held=inbox.hold_and_report(item.id()).await?;
+        if !matches!(held.outcome,RecipientOutcome::Held) {return Err("real SDK did not retain local Held input".into());}
+        require(operation(&mut pair.recipient.socket,relay_request("report",json!({"report":held}))).await?,json!({"kind":"delivery","value":{"kind":"report","value":{"kind":"ack","value":{"reportSeq":1}}}}))?;
+        let reference=DeliveryItemRef {item:item.id(),digest:item.digest().clone()};
+        let expected=serde_json::to_value(&item)?.get("value").cloned().ok_or("held item value absent")?;
+        require(serde_json::to_value(inbox.payload(reference.clone()).await?)?,expected.clone())?;
+        let bytes=inbox.payload_bytes().await?;
+        if bytes<=0||inbox.count().await?!=1 {return Err("held record lacks its actual payload".into());}
+        inbox.advance(31*24*60*60*1_000);
+        inbox.drive_retention_if_due(item.id()).await?;
+        // A fresh public SDK resolution reads current custody, not a cached
+        // transport receipt. Item identity and every original byte must survive.
+        require(serde_json::to_value(inbox.payload(reference).await?)?,expected)?;
+        if inbox.payload_bytes().await?!=bytes||inbox.count().await?!=1 {return Err("history horizon changed Held custody".into());}
+        let replay=pair.submit(&item).await?;
+        if replay.pointer("/value/value/value/value/status")!=Some(&json!({"kind":"held"})) {return Err(format!("sender forgot its actual Held status: {replay}").into());}
+        let final_report=inbox.release_and_report(item.id()).await?;
+        if !matches!(final_report.outcome,RecipientOutcome::Uncertain)||final_report.report_seq.value()!=2 {return Err("explicit recipient release lost its terminal report".into());}
+        require(operation(&mut pair.recipient.socket,relay_request("report",json!({"report":final_report}))).await?,json!({"kind":"delivery","value":{"kind":"report","value":{"kind":"ack","value":{"reportSeq":2}}}}))?;
+        if inbox.payload_bytes().await?!=0||inbox.count().await?!=1 {return Err("final recipient outcome retained body or forgot identity".into());}
+        println!("HELD_RETENTION_CASE actual_held_payload_survives_31_days_until_explicit_recipient_release passed");
+        Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
+    }.await;
+    inbox.close()?;
+    let closed = pair.close().await;
+    proof?;
+    closed?;
     Ok(())
 }
