@@ -24,7 +24,7 @@ commands do not deploy it. The existing deployment flow uploads that prebuilt
 artifact: `wrangler.config.ts` retains `noBundle`, and the public cf-format
 `cloudflare.config.ts` disables workers.dev and preview URLs. Account, routing
 and real Access values belong to the private ops configuration. The public
-template contains placeholders and five SQLite Durable Object bindings.
+template contains placeholders and two SQLite Durable Object bindings.
 
 Fill `CENTRAL_DELIVERY_CONFIG` with JSON containing the deployment's immutable
 UUIDv7 relay identity, for example `{"relayPeer":"<deployment-relay-uuidv7>"}`.
