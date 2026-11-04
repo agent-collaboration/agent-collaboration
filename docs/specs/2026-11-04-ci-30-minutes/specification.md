@@ -4,12 +4,16 @@ A CI run's required checks finish within 30 minutes. They run the same tests wit
 
 ## Current behavior
 
-Main run 41826050980 at `0f9af21f6` took 55 minutes. Its required jobs on a PR are Static validation (26 min), Test Rust workspace (54), Rust local end-to-end (25) and Central Worker (12). Inside the 54-minute test job, the test step took 39 minutes for 6,518 tests on 4 threads:
+Main run 41826050980 at `0f9af21f6` took 55 minutes. Its required jobs on a PR are Static validation (26 min), Test Rust workspace (54), Rust local end-to-end (25) and Central Worker (12).
 
-- 14.1 minutes had one test running, and 24.2 minutes had four.
-- The tests add up to 112.7 test-minutes.
-- From +21 minutes on, the heavy tests run one at a time, and two of them, `held_queue_depth` (295 s) and `history_growing_records` (189 s), account for 7.8 of the one-test minutes.
-- An 8-thread run (#213) took 34.4 minutes, still had 13.7 one-test minutes, and failed one deadline test.
+The test job runs two nextest invocations on the same machine. The quota-reset harness (60 tests) starts in the background, and the workspace run (6,518 tests) starts about a second later. The quota run finishes after about 2 minutes, while the workspace run continues.
+
+The workspace invocation took 39 minutes on 4 threads:
+- For 14.1 minutes its pool had one test running, and for 24.2 minutes it had four.
+- Its tests' elapsed times add up to 112.7 minutes. Much of that is waiting, not CPU work.
+- From +21 minutes on, its heavy tests ran one at a time. Two of them, `held_queue_depth` (295 s) and `history_growing_records` (189 s), account for 7.8 of the one-test minutes.
+
+An 8-thread run (#213) brought the workspace invocation to 34.4 minutes, with one deadline test failing. Its pool still spent long stretches with one test running. That profile has to be measured again per invocation, because the saved one mixes the quota run's 60 results into the workspace step.
 
 Evidence: `tmp/design-workflows/2026-11-04-ci-30-minutes/` in the design worktree (profiles and compressed logs).
 
@@ -30,7 +34,7 @@ erDiagram
 | E3 | Machine | One GitHub-hosted runner allocated to one job. | serves exactly one required check | counts toward the org's 20 concurrent jobs | allocated → released | U2 |
 | E4 | Test | One test case nextest runs, identified by its binary ID and full test name; a renamed test is a different test. | executed by one required check; judged by its proof input | — | passed, failed, skipped | U3 |
 | E5 | Proof input | Everything a test uses to decide pass or fail: its fixture sizes, limits, assertions and every deadline. | belongs to exactly one test | changes only when its owner approves | — | U3, U4 |
-| E6 | Run-alone test | A test whose CI configuration reserves every test slot on its machine, so nothing else runs beside it. | is a test | — | run-alone or shared | U4 |
+| E6 | Run-alone test | A test whose CI configuration reserves every test slot of its own nextest invocation, so no other test of that invocation runs beside it. It doesn't exclude a separate invocation on the same machine. | is a test | — | run-alone or shared | U4 |
 
 ## Obligations
 

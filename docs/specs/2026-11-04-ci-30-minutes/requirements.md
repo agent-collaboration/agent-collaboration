@@ -21,7 +21,7 @@ flowchart LR
   need --- w
   need --- r
   need --- d
-  m -. "may conflict with U1 (Q1)" .- p
+  m -. "could conflict with U1 if measured runs stay over 30 (Q1)" .- p
 ```
 
 ## Who is affected
@@ -56,5 +56,5 @@ There is no user-facing UI change (`no current UI`).
 
 ## Open owner questions
 
-- **Q1 · U1 against U2 and U3.** After setup and the build, a 30-minute test job leaves about 15 minutes for tests. Today's test work is 113 test-minutes, so on one 4-CPU runner it can't fit in 15 minutes. If scheduling fixes don't close the gap, meeting U1 means relaxing U2 (a second test runner) or U3 (lighter inputs on PRs). Decision brief: [`tmp/presentations/2026-11-04-ci-30-min-design/index.html`](../../../tmp/presentations/2026-11-04-ci-30-min-design/index.html) in the CI Lead's worktree. Status: **not decided**. Work that relaxes neither U2 nor U3 doesn't wait on it.
+- **Q1 · U1 against U2 and U3.** After setup and the build, a 30-minute test job leaves about 15 minutes for the test step. Nobody knows yet whether one runner can reach that. The 113 summed test-minutes are elapsed time, and much of it is spent waiting on processes, sockets and timers rather than using the CPU. The 8-thread run already finished faster (34.4 min) than that sum divided by its slots would allow. So the question is open only if measured runs, after the scheduling work, still exceed 30 minutes. In that case meeting U1 would mean relaxing U2 (a second test runner) or U3 (lighter inputs on PRs). Status: **not decided, and not yet needed**. Work that relaxes neither U2 nor U3 doesn't wait on it.
 - **Q2 · Which jobs U1 covers.** This document reads U1 as the required checks a PR waits on. The main-only Apple Silicon cache job (35 min) runs after merge and gates nothing. Status: assumption, not confirmed.
