@@ -35,5 +35,13 @@ and import on rerun. A held committed Fleet answer checks that the helper
 retains the source Host lock throughout publication. Changing a frozen claim
 request refuses the rerun without changing the bundle or backup.
 
+The installed-content process case starts an actual isolated Host with the
+shared native-protocol and router-health fixtures. Its public Claim installs
+e2. After orderly Host and native-child exit, cold inspection compares the
+actual e2 replicated tables with the prepared snapshot and rejects an altered
+expected digest. The source has the initial project record; richer pending
+mail and notification state still need their own preservation proof. Two
+ignored child entry points are apparatus invoked by this parent test.
+
 Host lifecycle orchestration, the full process-crash matrix, cross-machine
 write and staging corpus remain unverified.

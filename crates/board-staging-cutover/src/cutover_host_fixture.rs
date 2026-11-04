@@ -5,7 +5,7 @@ use fleet_sync_protocol::PeerId;
 use std::{os::unix::fs::PermissionsExt, path::PathBuf};
 
 pub(crate) struct CutoverHostFixture {
-    _area: tempfile::TempDir,
+    pub(crate) _area: tempfile::TempDir,
     pub(crate) root: PathBuf,
     pub(crate) home: PathBuf,
     pub(crate) service: UuidIdentity,
@@ -14,7 +14,23 @@ pub(crate) struct CutoverHostFixture {
 
 impl CutoverHostFixture {
     pub(crate) fn new(protected: Option<&str>) -> Result<Self, Box<dyn std::error::Error>> {
-        let area = tempfile::tempdir()?;
+        match protected {
+            None => Self::new_in(&std::env::temp_dir()),
+            Some(name) => Self::with_area(tempfile::tempdir()?, Some(name)),
+        }
+    }
+
+    pub(crate) fn new_in(parent: &std::path::Path) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::with_area(
+            tempfile::Builder::new().prefix("h-").tempdir_in(parent)?,
+            None,
+        )
+    }
+
+    fn with_area(
+        area: tempfile::TempDir,
+        protected: Option<&str>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let home = area.path().join("home");
         std::fs::create_dir(&home)?;
         let root = protected.map_or_else(|| area.path().join("machine"), |name| home.join(name));

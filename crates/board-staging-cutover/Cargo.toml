@@ -47,6 +47,8 @@ nix.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.123" }
+codex-native-integration.workspace = true
 axum.workspace = true
 collaboration-central-conformance = { path = "../collaboration-central-conformance", version = "0.1.123" }
 board-central-test-support = { path = "../board-central-test-support", version = "0.1.123", features = ["conformance"] }
