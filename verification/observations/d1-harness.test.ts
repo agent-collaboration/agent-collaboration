@@ -39,3 +39,17 @@ test("D1 startup harness cannot enable a model turn or take an unqualified execu
     false,
   );
 });
+
+test("D1 harness accepts an explicit short runtime allocation without widening other roots", (): void => {
+  assert.equal(
+    d1HarnessSchema.parse({ ...declaration, runtimeDirectory: "/private/tmp/d1v-abc123" })
+      .runtimeDirectory,
+    "/private/tmp/d1v-abc123",
+  );
+  for (const runtimeDirectory of [
+    "/private/tmp/other",
+    "/tmp/d1v-abc123",
+    "/private/tmp/d1v-abc123/../escape",
+  ])
+    assert.equal(d1HarnessSchema.safeParse({ ...declaration, runtimeDirectory }).success, false);
+});

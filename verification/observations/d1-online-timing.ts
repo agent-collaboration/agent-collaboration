@@ -130,6 +130,8 @@ export function timingFromD1Readback(
 
 export async function reportD1OnlineTiming(input: {
   repository: string;
+  recipientDirectory?: string | undefined;
+  runtimeDirectory?: string | undefined;
   items: readonly string[];
   receipt: Receipt;
 }): Promise<string | null> {
@@ -137,7 +139,13 @@ export async function reportD1OnlineTiming(input: {
     const output = `${input.receipt.directory}/timing-inbox-readback.json`;
     await readD1Stores({
       repository: input.repository,
-      databases: [{ role: "recipient", path: `${input.repository}/tmp/b/interaction.sqlite` }],
+      databases: [
+        {
+          role: "recipient",
+          path: `${input.recipientDirectory ?? `${input.repository}/tmp/b`}/interaction.sqlite`,
+        },
+      ],
+      runtimeDirectory: input.runtimeDirectory,
       itemIds: [...input.items],
       output,
     });

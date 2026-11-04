@@ -67,3 +67,22 @@ fn d1_plan_rejects_expired_deadline_and_malformed_artifact() {
     plan.native.sha256 = "z".repeat(64);
     assert!(plan.validate().is_err());
 }
+
+#[test]
+fn short_runtime_allocation_requires_private_real_owned_parent_and_named_machine() {
+    use std::os::unix::fs::{PermissionsExt, symlink};
+    let root = tempfile::Builder::new()
+        .prefix("d1v-")
+        .rand_bytes(6)
+        .tempdir_in("/private/tmp")
+        .expect("short private fixture");
+    std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+    let repository = declared_plan().unwrap().repository;
+    require_service_directory(&repository, &root.path().join("a")).unwrap();
+    assert!(require_service_directory(&repository, &root.path().join("other")).is_err());
+    std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(require_service_directory(&repository, &root.path().join("a")).is_err());
+    std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+    symlink(root.path(), root.path().join("b")).unwrap();
+    assert!(require_service_directory(&repository, &root.path().join("b")).is_err());
+}

@@ -181,14 +181,17 @@ pub fn read_d1_plan(path: &Path) -> DriverResult<D1NativeReadinessPlan> {
 }
 
 pub fn require_service_directory(repository: &Path, directory: &Path) -> DriverResult<()> {
-    if directory.parent() != Some(repository.join("tmp").as_path())
+    let parent = directory
+        .parent()
+        .ok_or(DriverError::Invalid("D1 service parent missing"))?;
+    if (parent != repository.join("tmp") && !private_short_runtime(parent)?)
         || !matches!(
             directory.file_name().and_then(|name| name.to_str()),
             Some("a" | "b" | "c")
         )
     {
         return Err(DriverError::Invalid(
-            "D1 service directory must be tmp/a, tmp/b or tmp/c",
+            "D1 service directory must be a, b or c in its declared allocation",
         ));
     }
     require_unaliased_ancestors(directory)?;
@@ -202,6 +205,27 @@ pub fn require_service_directory(repository: &Path, directory: &Path) -> DriverR
         ));
     }
     Ok(())
+}
+
+fn private_short_runtime(directory: &Path) -> DriverResult<bool> {
+    let Some(name) = directory.file_name().and_then(|name| name.to_str()) else {
+        return Ok(false);
+    };
+    let Some(suffix) = name.strip_prefix("d1v-") else {
+        return Ok(false);
+    };
+    if directory.parent() != Some(Path::new("/private/tmp"))
+        || suffix.len() != 6
+        || !suffix.bytes().all(|byte| byte.is_ascii_alphanumeric())
+    {
+        return Ok(false);
+    }
+    require_unaliased_ancestors(directory)?;
+    let metadata = directory.symlink_metadata()?;
+    Ok(metadata.is_dir()
+        && metadata.uid() == rustix::process::getuid().as_raw()
+        && metadata.mode() & 0o077 == 0
+        && directory.canonicalize()? == directory)
 }
 
 #[cfg(test)]

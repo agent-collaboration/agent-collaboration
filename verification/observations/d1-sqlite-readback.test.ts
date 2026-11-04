@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { z } from "zod";
@@ -50,4 +50,38 @@ test("D1 readback refuses a live owner and preserves exact closed schema/metadat
     })
     .parse(decode(raw));
   assert.ok(result.stores[0]?.snapshot.objects.length);
+});
+
+test("D1 readback requires the declared short runtime root and reads it only after its owner closes", async (): Promise<void> => {
+  const repository = fileURLToPath(new URL("../..", import.meta.url)).replace(/\/$/, "");
+  const runtimeDirectory = await mkdtemp("/private/tmp/d1v-");
+  const evidence = await mkdtemp(`${repository}/tmp/d1-verify/short-readback-`);
+  try {
+    await chmod(runtimeDirectory, 0o700);
+    await mkdir(`${runtimeDirectory}/b`, { mode: 0o700 });
+    const path = `${runtimeDirectory}/b/interaction.sqlite`;
+    const owner = new DatabaseSync(path);
+    owner.exec("CREATE TABLE observed_fixture(value INTEGER)");
+    const plan = {
+      repository,
+      runtimeDirectory,
+      databases: [{ role: "recipient", path }] as const,
+      itemIds: [],
+      output: `${evidence}/readback.json`,
+    };
+    try {
+      await assert.rejects(readD1Stores({ ...plan, databases: [...plan.databases] }));
+    } finally {
+      owner.close();
+    }
+    await assert.rejects(
+      readD1Stores({ ...plan, runtimeDirectory: undefined, databases: [...plan.databases] }),
+      /outside its canonical/,
+    );
+    await readD1Stores({ ...plan, databases: [...plan.databases] });
+    assert.match(await readFile(plan.output, "utf8"), /observed_fixture/);
+  } finally {
+    await rm(runtimeDirectory, { recursive: true });
+    await rm(evidence, { recursive: true });
+  }
 });

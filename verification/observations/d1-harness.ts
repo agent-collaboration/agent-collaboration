@@ -1,5 +1,5 @@
 /** Three local native-backed Hosts against a real Tokio central. No model turn is sent. */
-import { lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import { artifactSchema, fileSchema, type Session } from "../declaration.ts";
 import { encode, decode, textField } from "../exact-json.ts";
@@ -21,6 +21,7 @@ import { createD1Project } from "./d1-projects.ts";
 import { requireD1RoutingConfiguration } from "./d1-routing-safety.ts";
 import { nativeTurnStarts } from "./d1-native-activity.ts";
 import { driveD1OnlineTiming, reportD1OnlineTiming } from "./d1-online-timing.ts";
+import { d1RuntimeDirectorySchema, requireD1RuntimeDirectory } from "./d1-runtime-allocation.ts";
 
 export const d1HarnessSchema = z
   .object({
@@ -30,6 +31,7 @@ export const d1HarnessSchema = z
     cli: artifactSchema,
     native: fileSchema.extend({ version: z.string().min(1) }),
     evidenceDirectory: z.string().startsWith("/"),
+    runtimeDirectory: d1RuntimeDirectorySchema.optional(),
     debugProxyOrigin: z.url().refine((value): boolean => {
       const url = new URL(value);
       return (
@@ -281,7 +283,7 @@ async function startMachine(input: {
   lifetime: RunLifetime;
 }): Promise<D1Machine> {
   const { declaration, name, receipt, lifetime, central } = input;
-  const serviceDirectory = `${declaration.repository}/tmp/${name}`;
+  const serviceDirectory = `${declaration.runtimeDirectory ?? `${declaration.repository}/tmp`}/${name}`;
   const fixtureFile = `${input.centralRoot}/${name}.json`;
   const gate = lifetime.own(`gate-${name}`, await SessionGate.start(`${input.origin}/v1/session`));
   central.child.stdin?.write(
@@ -366,7 +368,7 @@ async function startMachine(input: {
   });
 }
 
-export async function runD1Harness(declaration: D1HarnessDeclaration): Promise<void> {
+async function prepareD1Evidence(declaration: D1HarnessDeclaration): Promise<Receipt> {
   if (
     (await realpath(declaration.repository)) !== process.cwd() ||
     Date.parse(declaration.deadline) <= Date.now()
@@ -374,6 +376,11 @@ export async function runD1Harness(declaration: D1HarnessDeclaration): Promise<v
     throw new Error("current canonical worktree and live deadline required");
   if (!declaration.evidenceDirectory.startsWith(`${declaration.repository}/tmp/d1-verify/`))
     throw new Error("D1 evidence must stay inside its granted task root");
+  if (declaration.runtimeDirectory !== undefined) {
+    await requireD1RuntimeDirectory(declaration.runtimeDirectory);
+    if ((await readdir(declaration.runtimeDirectory)).length !== 0)
+      throw new Error("D1 short runtime directory must be fresh and empty");
+  }
   await mkdir(`${declaration.repository}/tmp/d1-verify/allocation`, {
     recursive: true,
     mode: 0o700,
@@ -381,6 +388,11 @@ export async function runD1Harness(declaration: D1HarnessDeclaration): Promise<v
   await mkdir(declaration.evidenceDirectory, { mode: 0o700 });
   const receipt = new Receipt(declaration.evidenceDirectory);
   await receipt.save("declaration.json", declaration);
+  return receipt;
+}
+
+export async function runD1Harness(declaration: D1HarnessDeclaration): Promise<void> {
+  const receipt = await prepareD1Evidence(declaration);
   const lifetime = new RunLifetime(receipt);
   const machines: D1Machine[] = [];
   let failure: string | null = null;
@@ -443,6 +455,8 @@ export async function runD1Harness(declaration: D1HarnessDeclaration): Promise<v
   if (timingItems.length !== 0 && failure === null && cleanupFailures.length === 0) {
     failure = await reportD1OnlineTiming({
       repository: declaration.repository,
+      recipientDirectory: machines[1]?.serviceDirectory,
+      runtimeDirectory: declaration.runtimeDirectory,
       items: timingItems,
       receipt,
     });

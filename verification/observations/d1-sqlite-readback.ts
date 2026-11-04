@@ -5,10 +5,12 @@ import { spawnSync } from "node:child_process";
 import { dirname } from "node:path";
 import { z } from "zod";
 import { encode } from "../exact-json.ts";
+import { d1RuntimeDirectorySchema, requireD1RuntimeDirectory } from "./d1-runtime-allocation.ts";
 
 export const d1ReadbackSchema = z
   .object({
     repository: z.string().startsWith("/"),
+    runtimeDirectory: d1RuntimeDirectorySchema.optional(),
     databases: z
       .array(
         z.object({
@@ -23,8 +25,17 @@ export const d1ReadbackSchema = z
   .strict();
 export type D1ReadbackPlan = z.infer<typeof d1ReadbackSchema>;
 
-async function requireClosedOwnedStore(repository: string, database: string): Promise<void> {
+async function requireClosedOwnedStore(
+  repository: string,
+  database: string,
+  runtimeDirectory: string | undefined,
+): Promise<void> {
+  if (runtimeDirectory !== undefined) await requireD1RuntimeDirectory(runtimeDirectory);
   const allowed =
+    (runtimeDirectory !== undefined &&
+      ["a", "b", "c"].some((name): boolean =>
+        database.startsWith(`${runtimeDirectory}/${name}/`),
+      )) ||
     database.startsWith(`${repository}/tmp/d1-verify/`) ||
     ["a", "b", "c"].some((name): boolean => database.startsWith(`${repository}/tmp/${name}/`));
   if (!allowed || (await realpath(database)) !== database)
@@ -114,7 +125,7 @@ export async function readD1Stores(plan: D1ReadbackPlan): Promise<void> {
     throw new Error("D1 readback output parent is aliased");
   const stores: unknown[] = [];
   for (const database of plan.databases) {
-    await requireClosedOwnedStore(plan.repository, database.path);
+    await requireClosedOwnedStore(plan.repository, database.path, plan.runtimeDirectory);
     stores.push({ role: database.role, snapshot: readDatabase(database.path, plan.itemIds) });
   }
   await writeFile(
