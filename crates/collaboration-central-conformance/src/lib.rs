@@ -1,6 +1,10 @@
 //! Shared scenarios over the one asynchronous application on each runtime.
 #![forbid(unsafe_code)]
 #[cfg(feature = "client")]
+mod admin_import_scenario;
+#[cfg(feature = "client")]
+pub use admin_import_scenario::AdminImportScenario;
+#[cfg(feature = "client")]
 mod adr_runtime;
 #[cfg(feature = "client")]
 pub use adr_runtime::run_adr_round_trip_conformance;

@@ -70,6 +70,7 @@ mod transfer_fixture;
 mod access_carryover;
 mod access_workflow;
 mod admin_import;
+mod admin_import_columns;
 mod admin_import_reservation;
 mod archive_reports;
 mod archived_claim;

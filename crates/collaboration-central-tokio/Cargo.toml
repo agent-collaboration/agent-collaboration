@@ -79,6 +79,10 @@ name = "fleet_effects_workerd"
 required-features = ["conformance"]
 
 [[example]]
+name = "admin_import_workerd"
+required-features = ["conformance"]
+
+[[example]]
 name = "composed_scope_workerd"
 required-features = ["conformance"]
 

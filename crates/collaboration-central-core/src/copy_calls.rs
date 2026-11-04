@@ -289,14 +289,16 @@ where
             }
             // Fleet owns import bookkeeping; the project returns its committed publication evidence.
             let (recorded, _) = crate::step_driver::StepDriver::new(host.clone())
-                .run(crate::admin_import_store::AdminImportStep(
-                    crate::admin_import_store::AdminImportCommand::Published {
+                .run(crate::admin_import_store::AdminImportStep {
+                    now: io.now(),
+                    row_ids: crate::fleet_row_ids::FleetRowIds::new(io.clone()),
+                    command: crate::admin_import_store::AdminImportCommand::Published {
                         database,
                         digest: record.header.digest.clone(),
                         import_id: record.import_id,
                         position,
                     },
-                ))
+                })
                 .await
                 .map_err(|_| CallFailure::AnswerLost)?;
             recorded.map_err(|_| CallFailure::AnswerLost)?;
