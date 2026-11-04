@@ -184,21 +184,55 @@ pub(crate) fn commit_directory(
     partial: &Path,
     final_name: &str,
 ) -> Result<PathBuf, ProjectBundleError> {
-    File::open(partial)?.sync_all()?;
-    let parent_file = File::open(parent)?;
-    let partial_name = partial.file_name().ok_or(ProjectBundleError::UnsafePath)?;
+    let destination = parent.join(final_name);
+    move_directory_no_replace(partial, &destination)?;
+    Ok(destination)
+}
+
+pub(crate) fn move_directory_no_replace(source: &Path, destination: &Path) -> std::io::Result<()> {
+    let invalid = || std::io::Error::from(std::io::ErrorKind::InvalidInput);
+    let source_parent = source.parent().ok_or_else(invalid)?;
+    let destination_parent = destination.parent().ok_or_else(invalid)?;
+    let source_file = File::open(source_parent)?;
+    let destination_file = File::open(destination_parent)?;
+    File::open(source)?.sync_all()?;
     rustix::fs::renameat_with(
-        &parent_file,
-        partial_name,
-        &parent_file,
-        final_name,
+        &source_file,
+        source.file_name().ok_or_else(invalid)?,
+        &destination_file,
+        destination.file_name().ok_or_else(invalid)?,
         rustix::fs::RenameFlags::NOREPLACE,
     )
     .map_err(std::io::Error::from)?;
-    parent_file.sync_all()?;
-    Ok(parent.join(final_name))
+    source_file.sync_all()?;
+    if source_parent != destination_parent {
+        destination_file.sync_all()?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
 #[path = "bundle_files_test.rs"]
 mod tests;
+
+pub(crate) fn backup_directory(
+    router_root: &Path,
+    run_id: uuid::Uuid,
+    project: &message_board::ProjectId,
+) -> Result<PathBuf, ProjectBundleError> {
+    let timestamp = run_id
+        .get_timestamp()
+        .ok_or(ProjectBundleError::InvalidPreparation)?
+        .to_unix();
+    let date = chrono::DateTime::from_timestamp(
+        i64::try_from(timestamp.0).map_err(|_| ProjectBundleError::InvalidPreparation)?,
+        timestamp.1,
+    )
+    .ok_or(ProjectBundleError::InvalidPreparation)?
+    .format("%Y-%m-%d")
+    .to_string();
+    Ok(router_root
+        .join("staging-cutover-backups")
+        .join(format!("{date}-{run_id}"))
+        .join(project.as_str()))
+}

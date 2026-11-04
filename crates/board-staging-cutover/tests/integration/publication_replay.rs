@@ -24,7 +24,7 @@ fn boxed(error: impl std::fmt::Display) -> Box<dyn std::error::Error + Send + Sy
     std::io::Error::other(error.to_string()).into()
 }
 
-fn publisher(endpoint: &str, area: &Path) -> TestResult<StagingPublisher> {
+pub(super) fn publisher(endpoint: &str, area: &Path) -> TestResult<StagingPublisher> {
     let path = area.join(format!("credential-{}.json", uuid::Uuid::now_v7()));
     CentralCredential::Owner {
         endpoint: endpoint.to_owned(),

@@ -139,23 +139,11 @@ impl PreparedProjectBundle {
                 latest_record_at: preflight.latest_record_at,
             },
         };
-        let timestamp = input
-            .run_id
-            .get_timestamp()
-            .ok_or(ProjectBundleError::InvalidPreparation)?
-            .to_unix();
-        let date = chrono::DateTime::from_timestamp(
-            i64::try_from(timestamp.0).map_err(|_| ProjectBundleError::InvalidPreparation)?,
-            timestamp.1,
-        )
-        .ok_or(ProjectBundleError::InvalidPreparation)?
-        .format("%Y-%m-%d")
-        .to_string();
-        let backup_directory = host
-            .router_root()
-            .join("staging-cutover-backups")
-            .join(format!("{date}-{}", input.run_id))
-            .join(preflight.selected.project.as_str());
+        let backup_directory = crate::bundle_files::backup_directory(
+            host.router_root(),
+            input.run_id,
+            &preflight.selected.project,
+        )?;
         let metadata = ProjectBundleManifest {
             run_id: input.run_id,
             target_origin: input.target.origin().ascii_serialization(),

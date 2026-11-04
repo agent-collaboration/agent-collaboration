@@ -22,6 +22,11 @@ Page and Complete exercises reconciliation of the same sealed run and import
 identity. The HTTP edge forwards real requests before withholding one answer;
 these cases do not stand in for the full process-crash matrix.
 
+Archive cases preserve the original directory inode and all native/sibling
+files, reconcile a discarded local result, and refuse changed sources,
+colliding destinations, another run's confirmation and modified backups.
+Sealing and archiving share the tested OS no-overwrite move primitive.
+
 The full cutover CLI, crash matrix, cross-machine write and staging corpus are
 still unverified. Add a nonempty `tests/e2e/main.rs` aggregate when its first
 real-path test is implemented; no empty e2e aggregate is declared.

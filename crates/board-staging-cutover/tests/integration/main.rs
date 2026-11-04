@@ -13,3 +13,4 @@ mod inherited_snapshot_position;
 mod native_snapshot_fixture;
 mod publication;
 mod publication_replay;
+mod source_archive;

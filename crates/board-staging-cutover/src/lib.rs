@@ -1,5 +1,7 @@
 //! One-time staging cutover, separate from the running Router and its stores.
 mod bundle_files;
+mod source_archive;
+pub use source_archive::{SourceArchiveError, SourceArchiveOutcome, archive_confirmed_source};
 mod offline_host;
 mod owner_publication_access;
 mod prepared_project_bundle;
