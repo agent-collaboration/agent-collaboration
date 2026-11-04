@@ -13,7 +13,6 @@ use super::{
 };
 use crate::provider_prompt_content::acp_blocks_from_prompt_content;
 use agent_client_protocol::schema::v1::ContentBlock;
-use session_event_model::PromptContent;
 
 /// Until the Close command enters the connection queue, dropping its caller
 /// must release the admission mark. The connection task clears it afterward.
@@ -76,10 +75,6 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             .cloned()
     }
 
-    pub async fn last_settings_catalog(&self) -> Option<crate::ProviderSettingsCatalog> {
-        self.last_settings_catalog.read().await.clone()
-    }
-
     pub async fn settings_unresolved(&self, provider_session_id: &str) -> bool {
         self.settings_unresolved
             .read()
@@ -111,17 +106,16 @@ impl<P: InteractionPort> AgentSessionClient<P> {
     pub async fn set_setting(
         &self,
         provider_session_id: String,
-        kind: crate::ProviderSettingKind,
-        value: String,
+        request: crate::ProviderSettingRequest,
     ) -> Result<crate::EffectiveProviderSettings, ExternalProviderRuntimeError> {
         let uncertain_session_id = provider_session_id.clone();
-        let uncertain_value = value.clone();
+        let uncertain_value = request.value.clone();
+        let kind = request.kind;
         let (reply, result) = tokio::sync::oneshot::channel();
         self.commands
             .send(ProviderCommand::SetSetting {
                 provider_session_id,
-                kind,
-                value,
+                request,
                 reply,
             })
             .await
@@ -377,12 +371,17 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         &self,
         provider_session_id: String,
         input_id: InputId,
-        contents: Vec<PromptContent>,
+        submission: session_event_model::ProviderSubmission,
     ) -> Result<ProviderSteeringOutcome<P::OperationId>, ExternalProviderRuntimeError> {
+        if !submission.selected.is_empty() {
+            return Err(ExternalProviderRuntimeError::Behavior(
+                crate::ProviderError::Unsupported,
+            ));
+        }
         self.steer_acp_blocks_with_input(
             provider_session_id,
             input_id,
-            acp_blocks_from_prompt_content(contents),
+            acp_blocks_from_prompt_content(submission.content),
         )
         .await
     }

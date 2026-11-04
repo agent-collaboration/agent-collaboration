@@ -53,7 +53,7 @@ pub use session_delivery_contract::{
 };
 pub use session_event_hub::{
     HubEvent, HubFuture, HubSessionSummary, SessionEventAttachment, SessionEventHub,
-    SessionEventHubError,
+    SessionEventHubError, SkillViewAttachment,
 };
 mod router_delivery_types;
 pub use router_delivery_types::{

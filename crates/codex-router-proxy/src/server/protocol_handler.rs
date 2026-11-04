@@ -174,15 +174,26 @@ impl LoopbackProtocolConnectionHandler {
             is_websocket_upgrade(request.headers()),
         ) {
             RouteClass::Supported(crate::routes::RouteKind::ClaudeMessages) => {
+                crate::claude_route_diagnostics::record(
+                    crate::claude_route_diagnostics::ClaudeRouteDiagnostic::Arrival,
+                );
                 self.preflight_claude_edge_local_auth(request)
             }
             RouteClass::Supported(_) | RouteClass::Rejected { .. } => {
+                crate::claude_route_diagnostics::record(
+                    crate::claude_route_diagnostics::ClaudeRouteDiagnostic::UnsupportedRoute,
+                );
                 Some(unsupported_claude_path_response(path))
             }
         }
     }
 
     pub(super) fn emit_claude_edge_local_auth_rejection(&self, reason: LocalAuthError) {
+        crate::claude_route_diagnostics::record(
+            crate::claude_route_diagnostics::ClaudeRouteDiagnostic::LocalFailure(
+                "local_auth_rejected",
+            ),
+        );
         if let Some(audit_sink) = &self.audit_sink {
             let event = local_auth_rejection_audit_event(
                 TransportKind::Http,

@@ -6,6 +6,14 @@ export function decode(text: string): unknown {
     /^[+-]?\d+$/.test(token) ? BigInt(token) : Number(token),
   );
 }
+/**
+ * JSON an author writes by hand, such as a run plan: numbers are ordinary JS numbers, which the
+ * plan schema bounds, and conflicting duplicate keys are still refused. Protocol and Host output
+ * keeps `decode`, whose integers stay exact.
+ */
+export function decodeAuthoredJson(text: string): unknown {
+  return parse(text, undefined, Number);
+}
 export function encode(value: unknown): string {
   const text = stringify(value);
   if (text === undefined) throw new Error("JSON value required");

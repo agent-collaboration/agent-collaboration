@@ -5,36 +5,16 @@ use super::{
     ActiveApprovalContext, AgentSessionClient, ApprovalContextGuard, ExternalProviderPromptOutcome,
     ExternalProviderRuntimeError, ProviderPromptDispatchObservation,
 };
-use crate::provider_prompt_content::acp_blocks_from_prompt_content;
-use agent_client_protocol::schema::v1::ContentBlock;
-use session_event_model::{InputId, PromptContent};
+use session_event_model::InputId;
 use std::sync::Arc;
 
 impl<P: crate::InteractionPort> AgentSessionClient<P> {
     /// Preserve the typed approval context for a multi-block delivery turn.
-    pub async fn prompt_contents_with_approval_dispatch_for_input(
+    pub async fn submit_with_approval_dispatch_for_input(
         &self,
         provider_session_id: String,
         input_id: InputId,
-        contents: Vec<PromptContent>,
-        context: P::Context,
-        dispatch: Option<tokio::sync::oneshot::Sender<ProviderPromptDispatchObservation>>,
-    ) -> Result<ExternalProviderPromptOutcome, ExternalProviderRuntimeError> {
-        self.prompt_with_approval_dispatch_blocks_for_input(
-            provider_session_id,
-            input_id,
-            acp_blocks_from_prompt_content(contents),
-            context,
-            dispatch,
-        )
-        .await
-    }
-
-    async fn prompt_with_approval_dispatch_blocks_for_input(
-        &self,
-        provider_session_id: String,
-        input_id: InputId,
-        blocks: Vec<ContentBlock>,
+        input: crate::ProviderTurnInput,
         context: P::Context,
         dispatch: Option<tokio::sync::oneshot::Sender<ProviderPromptDispatchObservation>>,
     ) -> Result<ExternalProviderPromptOutcome, ExternalProviderRuntimeError> {
@@ -47,6 +27,11 @@ impl<P: crate::InteractionPort> AgentSessionClient<P> {
                 )
             })?;
             if contexts.contains_key(&provider_session_id) {
+                if let Some(dispatch) = dispatch {
+                    let _result = dispatch.send(ProviderPromptDispatchObservation::Refused(
+                        crate::ProviderDispatchRefusal::Busy,
+                    ));
+                }
                 return Err(ExternalProviderRuntimeError::LocalBusy);
             }
             contexts.insert(
@@ -68,7 +53,7 @@ impl<P: crate::InteractionPort> AgentSessionClient<P> {
                 provider_session_id,
                 input_id,
                 Some(operation_id.clone()),
-                blocks,
+                input,
                 dispatch,
             )
             .await;

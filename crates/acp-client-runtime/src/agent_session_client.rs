@@ -16,6 +16,7 @@ mod provider_form_elicitation;
 mod provider_frame_observation;
 mod provider_initialize_request;
 mod provider_lifecycle_requests;
+mod provider_model_discovery;
 mod provider_prompt_dispatch;
 mod provider_request_fallback;
 mod provider_session_admission;
@@ -146,7 +147,7 @@ enum ProviderCommand<P: InteractionPort> {
         provider_session_id: String,
         input_id: InputId,
         operation_id: Option<P::OperationId>,
-        prompt: ProviderPromptContent,
+        prompt: crate::ProviderTurnInput,
         dispatch: Option<tokio::sync::oneshot::Sender<ProviderPromptDispatchObservation>>,
         reply: tokio::sync::oneshot::Sender<
             Result<ExternalProviderPromptOutcome, ExternalProviderRuntimeError>,
@@ -179,8 +180,7 @@ enum ProviderCommand<P: InteractionPort> {
     },
     SetSetting {
         provider_session_id: String,
-        kind: crate::ProviderSettingKind,
-        value: String,
+        request: crate::ProviderSettingRequest,
         reply: tokio::sync::oneshot::Sender<
             Result<crate::EffectiveProviderSettings, ExternalProviderRuntimeError>,
         >,
@@ -228,7 +228,6 @@ pub struct AgentSessionClient<P: InteractionPort> {
     session_capabilities: Arc<tokio::sync::RwLock<HashMap<String, ProviderCapabilityReport>>>,
     auth_status: Arc<tokio::sync::RwLock<session_event_model::ProviderAuthStatus>>,
     session_settings: Arc<tokio::sync::RwLock<HashMap<String, crate::ProviderSettingsCatalog>>>,
-    last_settings_catalog: Arc<tokio::sync::RwLock<Option<crate::ProviderSettingsCatalog>>>,
     settings_unresolved: Arc<
         tokio::sync::RwLock<
             HashMap<
@@ -281,9 +280,9 @@ impl<P: InteractionPort> Drop for AgentSessionClient<P> {
 }
 
 #[cfg(test)]
-#[path = "agent_session_client/turn_admission_tests.rs"]
+#[path = "agent_session_client/turn_admission_test.rs"]
 mod turn_admission_tests;
 
 #[cfg(test)]
-#[path = "agent_session_client/submitted_prompt_tests.rs"]
+#[path = "agent_session_client/submitted_prompt_test.rs"]
 mod submitted_prompt_tests;

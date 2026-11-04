@@ -39,6 +39,7 @@ import {
 	SESSIONS_RECEIPT_DIRECTORY,
 	sessionsReceiptEnvironment,
 } from '../sessions/sessions-receipt-directory.ts';
+import { codexChildLaunch } from './codex-child-launch.ts';
 import {
 	COMPONENT_SCENARIOS,
 	COMPONENT_TEST,
@@ -68,6 +69,7 @@ const capturedTuiSurfaceSchema = z.enum([
 	'public-sessions',
 	'showcase',
 	'quota-effects',
+	'codex-acp',
 ]);
 type CapturedTuiSurface = z.infer<typeof capturedTuiSurfaceSchema>;
 
@@ -273,6 +275,13 @@ export function childLaunchConfiguration(
 	const binary = requiredText(configuration, 'binary');
 	if (surface === 'public-sessions') {
 		return publicSessionsLaunch(configuration, binary);
+	}
+	if (surface === 'codex-acp') {
+		try {
+			return codexChildLaunch(configuration);
+		} catch (error) {
+			throw new FixtureLaunchRejected(error instanceof Error ? error.message : String(error));
+		}
 	}
 	if (surface === 'showcase') return showcaseLaunch(configuration, binary);
 	if (surface === 'quota-effects') return quotaEffectLaunch(configuration);
@@ -490,7 +499,8 @@ async function main(): Promise<number> {
 		surface === 'public-sessions' ||
 		surface === 'quota-component' ||
 		surface === 'showcase' ||
-		surface === 'quota-effects'
+		surface === 'quota-effects' ||
+		surface === 'codex-acp'
 	) {
 		writeFileSync(join(output, 'quota-wrapper.identity'), processIdentityLine(process.pid));
 	}

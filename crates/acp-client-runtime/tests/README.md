@@ -6,13 +6,12 @@ Run with the feature set enabled in workspace CI:
 cargo nextest run --locked --profile ci -p acp-client-runtime --features test-observation
 ```
 
-`integration/main.rs` gathers the 19 former external roots. Cases cover provider
+`integration/main.rs` gathers the external roots, including the bridge behavior cases. Cases cover provider
 lifecycle and transport, prompt boundaries and output, settings and history
 ordering, permissions, questions, cancellation, input and idle events. Library
 unit tests remain colocated.
 
-Case expansions and fixture data retain their existing directories. No shared
-helper implementation needs hoisting, and CI selects no separate e2e category,
+Case expansions and fixture data retain their existing directories. The aggregate declares the shared provider-behavior helper once. CI selects no separate e2e category,
 so only the integration target is declared.
 
 A former binary `<root>` and test `<case>` becomes binary `integration` and

@@ -1,5 +1,12 @@
 use serde::{Deserialize, Serialize};
 
+/// Why a caller is applying a setting; never persisted in Session history.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SettingApplicationIntent {
+    ExplicitChange,
+    TurnContext,
+}
+
 /// Current settings reported for one provider Session.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

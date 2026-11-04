@@ -11,7 +11,7 @@ import { reportHtml } from "./harness-report.ts";
 const fixture = new URL("./baselines/harness-report/", import.meta.url);
 
 test("harness report HTML bytes match the original including escaping and wide integer evidence", (): void => {
-  assert.deepEqual(reportHtml(fixture.pathname), readFileSync(new URL("expected.bin", fixture)));
+  assert.deepEqual(reportHtml(fixture.pathname), readFileSync(new URL("./expected.bin", fixture)));
 });
 
 test(
@@ -45,7 +45,7 @@ test(
     assert.equal(response.status, 200);
     assert.deepEqual(
       Buffer.from(await response.arrayBuffer()),
-      readFileSync(new URL("expected.bin", fixture)),
+      readFileSync(new URL("./expected.bin", fixture)),
     );
     assert.equal((await fetch(`${ready.url}missing`)).status, 404);
   },

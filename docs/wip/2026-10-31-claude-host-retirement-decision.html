@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Claude settings files: give normal shutdown time to clean up</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head><body><ex-document>
+<h1>Give the qualified Claude wrapper five seconds to clean up before forced termination</h1>
+<p><strong>Decision for Sun through Station Chief. Recommendation: A.</strong> The private temporary settings-file approach is approved. A newly checked production path prevents its promised normal cleanup: Router retirement immediately sends SIGKILL to the wrapper and its children. The existing ten-second supervisor timeout only bounds joining the runtime; it gives the provider no grace. Without a correction, valid token-bearing files would remain after ordinary shutdown, not only crashes.</p>
+<h2>Current behavior</h2>
+<ex-mermaid id="current-retirement" label="Normal retirement currently kills the wrapper before cleanup"><script type="text/plain">
+flowchart TD
+  Stop["Host retires provider"] --> Cancel["Existing runtime cancels connection"]
+  Cancel --> Kill["Immediately SIGKILL provider process group"]
+  Kill --> Residue["Wrapper cannot clean private settings files"]
+</script></ex-mermaid>
+<p>Checked at Router <code>7494d362b</code>: <code>provider_connection_task.rs:665–710</code>, <code>provider_client_operations.rs:459–467</code>, <code>external_provider_supervisor.rs:408–418</code>. The ACP child is its own process-group leader. The local Router token is reused across starts, so a leftover file can contain a still-valid credential. No real credential file or new provider run has occurred.</p>
+<h2>A — bounded grace selected by the existing injected provider behavior</h2>
+<ex-mermaid id="grace-retirement" label="Only qualified Claude gets a bounded opportunity to clean up"><script type="text/plain">
+flowchart TD
+  Stop["Host retires provider"] --> Policy["Existing injected ProviderBehavior selects shutdown policy"]
+  Policy -->|qualified Claude| EOF["Release connection and close stdin"]
+  EOF --> Grace["Wait up to five seconds for wrapper exit"]
+  Grace -->|clean exit| Clean["Wrapper and SDK close; owned files removed"]
+  Grace -->|timeout or failure| Kill["Existing process-group kill and explicit failed shutdown"]
+  Policy -->|other providers| Existing["Existing immediate retirement"]
+</script></ex-mermaid>
+<p><strong>Gain:</strong> make the approved cleanup possible on the actual Host path. Keep the connection task as the sole process owner. Add one pure shutdown-policy value to its existing consumer-owned trait; the concrete qualified Claude adapter supplies the bounded grace and other adapters preserve immediate retirement. No provider-name branch, second controller, signal poller, SDK process or store.</p>
+<p><strong>Cost:</strong> a change to the shared runtime's internal lifecycle contract and its trait consumers. Qualified Claude retirement can take up to five seconds, within the existing ten-second supervisor bound. A timeout still invokes the existing forced group kill and leaves the accepted private residue; it is reported as failed cleanup. The supervisor currently returns on the first failure, skipping later bindings and drains. A must also retain the first failure while continuing retirement of every binding and the existing catalog/live-operation drains, then report failure after those attempts settle. This is a further bounded change to its shutdown error handling; a slow Claude child must not skip Cursor cleanup. Maintainers must prove timely cleanup, forced fallback and continued draining after that failure.</p>
+<p><strong>Required proof:</strong> a permanent integration case enters the real provider runtime's <code>shutdown()</code> with the shipped wrapper and a harmless SDK child, then observes actual exit and settings-file removal. A held child proves no premature deletion; a stuck child proves bounded forced termination and an explicit failed-cleanup result. A differing injected implementation proves the unchanged immediate policy. A supervisor case forces one provider's grace failure and proves the other binding and both existing drains still run before the retained error is returned. Existing retirement/admission/native/reverse tests remain required.</p>
+<h2>B — accept private residue on every ordinary Host retirement</h2>
+<ex-mermaid id="residue-retirement" label="Retain immediate termination and explicitly accept ordinary residue"><script type="text/plain">
+flowchart TD
+  Stop["Host retires provider"] --> Kill["Keep immediate process-group kill"]
+  Kill --> Keep["Accept token-bearing private files after ordinary shutdown"]
+  Keep --> Cleanup["Explicit later or OS temporary cleanup"]
+</script></ex-mermaid>
+<p><strong>Gain:</strong> preserve current Host termination timing and avoid the runtime lifecycle change. <strong>Cost:</strong> broaden the accepted storage risk from crash residue to normal residue and accumulation. The token can remain valid. This would require rewriting the cleanup obligation and removing any wrapper-only machinery that no longer earns its cost. No automatic scavenger or token rotation is included.</p>
+<h2>Why this needs a decision</h2>
+<p>The owner approved cleanup after SDK shutdown with residue after abrupt termination. Neither option follows automatically from that: A changes an internal cross-package lifecycle contract; B changes the accepted credential-retention outcome. The owner's AGENTS instructions say to ask before changing agreed behavior, contracts or security boundaries. This is a discovered production-path contradiction, not another request to approve the already chosen temporary file.</p>
+<h2>Positions and consequence of deferral</h2>
+<p>The 🦁 Lead recommends A, confined to qualified Claude through the existing DI trait. The 🔎 Reviewer established the Host kill path and requires this owner choice and a real-runtime retirement case. The 🦉 Advisor established that vendor disposal alone is not child exit; public Node child-close observation can preserve the file lifetime without replacing SDK spawning. The 🔬 Verifier found the file and process observations feasible but has run no new target. No agent accepts implementation or live inference.</p>
+<p>If deferred, no temporary credential-file implementation or new Claude inference run starts. Existing committed verifier work remains valid within its controlled scope. The branch stays unready and there is no fresh debug socket for manual full-flow testing. The old plan remains unchanged; the revised design is explicitly not ready pending this decision.</p>
+</ex-document></body></html>

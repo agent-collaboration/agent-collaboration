@@ -46,3 +46,11 @@ mod public_grid_transport_test;
 
 #[path = "quota_storyboard_capture_test/native_adapter_fixture_support.rs"]
 pub(crate) mod native_adapter_fixture_support;
+
+#[path = "../quota_reset/quota_reset_pty_test/codex_acp_capture.rs"]
+mod codex_acp_capture;
+#[test]
+#[ignore = "requires a declared installed Codex ACP target, fresh owned output and grid observer"]
+fn compiled_codex_acp_grid_observation() -> TestResult<()> {
+    codex_acp_capture::run_codex_acp_grid_observation()
+}

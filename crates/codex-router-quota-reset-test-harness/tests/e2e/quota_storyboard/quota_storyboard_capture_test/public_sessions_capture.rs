@@ -107,7 +107,7 @@ impl TerminalDriver {
         wrapper: &Path,
         configuration: &Path,
         output: &Path,
-    ) -> TestResult<TerminalDriver> {
+    ) -> TestResult<Self> {
         let mut command = CommandBuilder::new(node);
         command.arg(wrapper);
         command.arg(configuration);

@@ -84,6 +84,14 @@ impl InteractionPort for HeldInteractionPort {
 struct NoopEventSink;
 
 impl SessionEventSink for NoopEventSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
@@ -115,6 +123,7 @@ async fn assert_cancelled_reply_precedes_cancel(kind: &str) {
             started: Arc::clone(&started),
         }),
         Arc::new(NoopEventSink),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -123,10 +132,15 @@ async fn assert_cancelled_reply_precedes_cancel(kind: &str) {
         .await
         .expect("session opens");
     let (dispatch_tx, dispatch_rx) = tokio::sync::oneshot::channel();
-    let prompt = client.prompt_contents_with_approval_dispatch_for_input(
+    let prompt = client.submit_with_approval_dispatch_for_input(
         session_id.clone(),
         session_event_model::InputId::generate(),
-        vec![session_event_model::PromptContent::text("Interact".to_owned()).expect("text prompt")],
+        acp_client_runtime::ProviderTurnInput::Prompt(
+            session_event_model::ProviderSubmission::plain(vec![
+                session_event_model::PromptContent::text("Interact".to_owned())
+                    .expect("text prompt"),
+            ]),
+        ),
         (),
         Some(dispatch_tx),
     );

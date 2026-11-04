@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Design documents · Codex CLI with Claude and Cursor ACP</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head><body>
+<ex-nav for="content"><nav slot="pages" aria-label="Pages">
+<a href="index.html">Design documents</a>
+<a href="requirements.html">Requirements</a>
+<a href="specification.html">Specification</a>
+<a href="program-design.html">Program Design</a>
+<a href="verification-design.html">Verification Design</a>
+<a href="implementation-plan.html">Implementation Plan</a>
+</nav></ex-nav>
+<ex-document id="content">
+<h1 id="documents">Codex CLI with Claude and Cursor ACP</h1>
+<p>Open the document that answers your question. The <a href="program-design.html#program--crates-and-injection">Program Design</a> contains the architecture and injected trait. The <a href="implementation-plan.html#plan--order-and-integration-gates">Implementation Plan</a> contains the slices and gates.</p>
+<p>The <a href="plans/2026-10-31-app-server-acp-debug-route-control.source.md">plan source companion</a> travels with this collection. It preserves the route/model corrections and every remaining delivery obligation.</p>
+<p>The <a href="program-design.html#claude-route-binding">private-file route</a> and its <a href="verification-design.html#verification--qualified-claude-routing-through-the-existing-creation-boundary">isolated debug proof</a> may proceed. The <a href="../../wip/2026-10-31-claude-host-retirement-decision.html">normal Host cleanup decision</a> remains follow-up work; it does not block the owner-authorized debug control. No current Claude inference qualification is claimed.</p>
+<div class="ex-table-scroll" data-width="reading"><table><thead><tr><th>Your question</th><th>Document</th></tr></thead><tbody>
+<tr><td>What are we building and why?</td><td><a href="requirements.html">Requirements</a></td></tr>
+<tr><td>What must skills and commands do?</td><td><a href="specification.html">Specification</a></td></tr>
+<tr><td>Which components, traits and flows realize it?</td><td><a href="program-design.html">Program Design</a></td></tr>
+<tr><td>How will each outcome be proved?</td><td><a href="verification-design.html">Verification Design</a></td></tr>
+<tr><td>What changes in what order?</td><td><a href="implementation-plan.html">Implementation Plan</a></td></tr>
+</tbody></table></div>
+</ex-document>
+<ex-presentation id="skills-path" title="Skills, end to end" description="Follow the skill need, native contract, provider adaptation and planned proof.">
+<ex-step to="requirements.html#requirements--what-you-need">Start with the skill needs.</ex-step>
+<ex-step to="specification.html#specification--r1-list-the-right-provider-s-skills-c1-v1">Inspect listing and conversation binding.</ex-step>
+<ex-step to="specification.html#specification--r2-run-the-selected-skill-c2-v2">Read invocation and refusal rules.</ex-step>
+<ex-step to="program-design.html#program--the-metadata-gap-handled-at-the-provider-boundary">Inspect metadata adaptation.</ex-step>
+<ex-step to="program-design.html#program--invocation-and-commands">Follow the invocation path.</ex-step>
+<ex-step to="verification-design.html#verification--target-and-lasting-journeys">Read the planned TUI observations.</ex-step>
+</ex-presentation>
+<ex-presentation id="commands-path" title="Commands, end to end" description="Follow existing command behavior through its owners and planned observations.">
+<ex-step to="requirements.html#requirements--what-you-need">Start with command and preservation needs.</ex-step>
+<ex-step to="specification.html#specification--r3-map-existing-operations-separately-c3-v3">Read existing operations and unsupported cases.</ex-step>
+<ex-step to="specification.html#specification--r4-preserve-conversations-c4-v4">Read preservation obligations.</ex-step>
+<ex-step to="program-design.html#program--invocation-and-commands">Inspect command ownership.</ex-step>
+<ex-step to="program-design.html#model-metadata">Read per-model information, provider-controlled effort and setting intent.</ex-step>
+<ex-step to="program-design.html#claude-route-binding">Inspect the qualified Claude constructor correction.</ex-step>
+<ex-step to="program-design.html#program--state-failure-and-trust">Follow terminal and error behavior.</ex-step>
+<ex-step to="verification-design.html#verification--target-and-lasting-journeys">Read the planned TUI effect observations.</ex-step>
+</ex-presentation>
+<ex-presentation id="injection-path" title="Provider injection" description="Follow the shared constraint to the injected trait and its proof.">
+<ex-step to="requirements.html#requirements--what-you-need">Start with provider isolation needs.</ex-step>
+<ex-step to="specification.html#specification--r5-inject-the-differences-keep-one-bridge-c5-v5">Read the shared constraint.</ex-step>
+<ex-step to="program-design.html#program--provider-routing-and-separate-sockets">See how the connection selects its provider.</ex-step>
+<ex-step to="program-design.html#program--crates-and-injection">Inspect the trait and crate boundaries.</ex-step>
+<ex-step to="program-design.html#program--where-the-dependency-is-constructed-and-passed">Follow constructor injection and lifetime.</ex-step>
+<ex-step to="program-design.html#claude-route-binding">Inspect Host-owned route input and Claude-specific parameter preparation.</ex-step>
+<ex-step to="program-design.html#program--why-this-much-and-no-more">Read the structure tradeoff.</ex-step>
+<ex-step to="verification-design.html#verification--u5-constructor-di-supplies-the-right-implementation">Inspect its planned proof.</ex-step>
+</ex-presentation>
+<ex-presentation id="implementation-path" title="Implementation route" description="Move from components to the canonical plan, parallel work, integration join and proof map.">
+<ex-step to="program-design.html#program--crates-and-injection">Inspect component ownership.</ex-step>
+<ex-step to="implementation-plan.html#plan--canonical-planning-result">Check plan scope and authority.</ex-step>
+<ex-step to="implementation-plan.html#plan--order-and-integration-gates">Inspect dependencies, parallel lanes and the integration join.</ex-step>
+<ex-step to="implementation-plan.html#plan--obligation-to-proof-map">Inspect the proof mapping.</ex-step>
+</ex-presentation>
+</body></html>

@@ -40,6 +40,7 @@ pub(crate) async fn apply_initial_settings(
     session: &ActiveSession<'_, Agent>,
     requested: &RequestedProviderSettings,
     catalog: &mut ProviderSettingsCatalog,
+    behavior: &dyn crate::ProviderBehavior,
 ) -> (Vec<AppliedProviderSetting>, Option<SettingSetupFailure>) {
     let mut applied = Vec::new();
     for (kind, requested_value) in [
@@ -70,7 +71,7 @@ pub(crate) async fn apply_initial_settings(
             );
             match request.to_untyped_message() {
                 Ok(request) => match send_setting_request(session.connection(), request).await {
-                    Ok(response) => apply_config_response(catalog, kind, value, response),
+                    Ok(response) => apply_config_response(catalog, kind, value, response, behavior),
                     Err(failure) => Err(failure),
                 },
                 Err(_) => Err(SettingResponseFailure::Unknown),
@@ -137,6 +138,7 @@ fn apply_config_response(
     kind: ProviderSettingKind,
     value: &str,
     response: serde_json::Value,
+    behavior: &dyn crate::ProviderBehavior,
 ) -> Result<(), SettingResponseFailure> {
     let options = response
         .get("configOptions")
@@ -150,6 +152,11 @@ fn apply_config_response(
         .map_err(|_| SettingResponseFailure::Unknown)?;
     let mut updated = catalog.clone();
     crate::provider_settings_catalog_codec::replace_catalog_config_options(&mut updated, &options);
+    crate::provider_settings_catalog_codec::apply_model_metadata(
+        &mut updated,
+        behavior,
+        response.get("_meta").and_then(serde_json::Value::as_object),
+    );
     let effective = updated.effective_settings();
     let selected = match kind {
         ProviderSettingKind::Mode => effective.mode.as_deref(),

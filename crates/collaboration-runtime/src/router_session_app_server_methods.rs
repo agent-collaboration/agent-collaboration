@@ -3,8 +3,8 @@ use super::{
     Arc, CommandContent, CreateSessionCommand, HubSessionSummary, Identity, Path, PathBuf,
     PromptSessionCommand, ProviderModelEntry, SessionCommandPort, SessionEndpointRef,
     SessionEventHub, SessionEventHubError, SessionSettingsCommand, SessionSteerOutcome,
-    SessionTargetCommand, SetSessionSettingCommand, SteerSessionCommand, ThreadMethodError, Uuid,
-    Value, historical_turns, json, render_model_list,
+    SessionTargetCommand, SteerSessionCommand, ThreadMethodError, Uuid, Value, historical_turns,
+    json, render_model_list,
 };
 
 pub(super) fn handle_app_server_request(
@@ -80,17 +80,50 @@ pub(super) fn handle_app_server_request(
             Some(json!({"config":{"projects":projects},"origins":{},"layers":layers}))
         }
         "config/batchWrite" | "config/write" => {
-            return json!({"id":id,"error":{"code":-32000,"message":"Provider session trust is read-only here; trust this project in Codex itself"}});
+            let trust_only =
+                match method {
+                    "config/batchWrite" => params
+                        .get("edits")
+                        .and_then(Value::as_array)
+                        .is_some_and(|edits| {
+                            !edits.is_empty() && edits.iter().all(is_project_trust_edit)
+                        }),
+                    _ => is_project_trust_edit(params),
+                };
+            let message = if trust_only {
+                "Provider session trust is read-only here; trust this project in Codex itself"
+            } else {
+                "Saving Codex configuration/defaults is not supported on this ACP endpoint"
+            };
+            return json!({"id":id,"error":{"code":-32000,"message":message}});
         }
-        "collaborationMode/list" | "hooks/list" | "skills/list" => {
-            Some(json!({"data":[],"nextCursor":null}))
+        "hooks/list" => {
+            return json!({"id":id,"error":{"code":-32000,"message":"Hook discovery is not supported on this ACP endpoint"}});
         }
+        "permissionProfile/list" => {
+            return json!({"id":id,"error":{"code":-32000,"message":"Permission profile discovery is not supported on this ACP endpoint"}});
+        }
+        "collaborationMode/list" => Some(json!({"data":[],"nextCursor":null})),
         _ => None,
     };
     match result {
         Some(result) => json!({"id":id,"result":result}),
         None => json!({"id":id,"error":{"code":-32601,"message":"Method not found"}}),
     }
+}
+
+fn is_project_trust_edit(edit: &Value) -> bool {
+    let Some(project_key) = edit
+        .get("keyPath")
+        .and_then(Value::as_str)
+        .and_then(|key| key.strip_prefix("projects."))
+        .and_then(|key| key.strip_suffix(".trust_level"))
+    else {
+        return false;
+    };
+    // Codex's trust setter quotes the project path and escapes quotes/backslashes.
+    // Decode that single key, so dots or trust-like text inside it are not fields.
+    serde_json::from_str::<String>(project_key).is_ok_and(|project| !project.is_empty())
 }
 
 pub(super) async fn handle_app_server_thread_request(
@@ -100,7 +133,7 @@ pub(super) async fn handle_app_server_thread_request(
     events: Arc<dyn SessionEventHub>,
     endpoint: SessionEndpointRef,
     actor: Identity,
-    catalog: &[ProviderModelEntry],
+    _catalog: &[ProviderModelEntry],
 ) -> Result<Value, ThreadMethodError> {
     match method {
         "thread/start" => {
@@ -126,8 +159,14 @@ pub(super) async fn handle_app_server_thread_request(
             if !metadata.is_dir() {
                 return Err(ThreadMethodError::InvalidParams);
             }
-            let model_override =
-                provider_model_override(params.get("model").and_then(Value::as_str), catalog);
+            let model_override = match params.get("model") {
+                None | Some(Value::Null) => None,
+                Some(Value::String(value)) if value == "provider-default" => None,
+                Some(Value::String(value)) if !value.is_empty() && !value.contains('\0') => {
+                    Some(value.clone())
+                }
+                Some(_) => return Err(ThreadMethodError::InvalidParams),
+            };
             let session = commands
                 .create(CreateSessionCommand {
                     endpoint: endpoint.clone(),
@@ -139,7 +178,7 @@ pub(super) async fn handle_app_server_thread_request(
                     actor,
                 })
                 .await
-                .map_err(|_| ThreadMethodError::Unavailable)?;
+                .map_err(command_error)?;
             let summary = events
                 .sessions(endpoint)
                 .await
@@ -150,12 +189,37 @@ pub(super) async fn handle_app_server_thread_request(
             Ok(thread_start_response(&summary))
         }
         "thread/list" => {
+            let cwd_filters = thread_list_cwd_filters(&params)?;
             let summaries = events
                 .sessions(endpoint)
                 .await
                 .map_err(|_| ThreadMethodError::Unavailable)?;
+            let data = if let Some(filters) = cwd_filters {
+                // Canonicalization and server-cwd lookup must not block the native I/O task.
+                tokio::task::spawn_blocking(move || {
+                    let filters = filters
+                        .into_iter()
+                        .map(normalize_thread_list_cwd)
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Ok::<_, ThreadMethodError>(
+                        summaries
+                            .iter()
+                            .filter(|summary| {
+                                filters.iter().any(|filter| {
+                                    thread_list_paths_match(&summary.working_directory, filter)
+                                })
+                            })
+                            .map(render_thread)
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .await
+                .map_err(|_| ThreadMethodError::Unavailable)??
+            } else {
+                summaries.iter().map(render_thread).collect()
+            };
             Ok(json!({
-                "data": summaries.iter().map(render_thread).collect::<Vec<_>>(),
+                "data": data,
                 "nextCursor": null, "backwardsCursor": null
             }))
         }
@@ -213,9 +277,14 @@ pub(super) async fn handle_app_server_thread_request(
                 Ok(result)
             } else {
                 let mut thread = render_thread(&summary);
-                if params.get("includeTurns").and_then(Value::as_bool) == Some(true)
-                    && summary.state != session_event_model::SessionState::Unloaded
-                {
+                if params.get("includeTurns").and_then(Value::as_bool) == Some(true) {
+                    if matches!(
+                        summary.state,
+                        session_event_model::SessionState::Unloaded
+                            | session_event_model::SessionState::Closed
+                    ) {
+                        return Err(ThreadMethodError::Unavailable);
+                    }
                     let attachment = events
                         .attach(summary.session.clone())
                         .await
@@ -231,6 +300,60 @@ pub(super) async fn handle_app_server_thread_request(
             }
         }
         _ => Err(ThreadMethodError::InvalidParams),
+    }
+}
+
+fn thread_list_cwd_filters(params: &Value) -> Result<Option<Vec<PathBuf>>, ThreadMethodError> {
+    let paths = match params.get("cwd") {
+        None | Some(Value::Null) => return Ok(None),
+        Some(Value::String(path)) => vec![PathBuf::from(path)],
+        Some(Value::Array(paths)) => paths
+            .iter()
+            .map(|path| {
+                path.as_str()
+                    .map(PathBuf::from)
+                    .ok_or(ThreadMethodError::InvalidParams)
+            })
+            .collect::<Result<Vec<_>, _>>()?,
+        _ => return Err(ThreadMethodError::InvalidParams),
+    };
+    // Some(empty) is the explicit empty match set, not an absent filter.
+    Ok(Some(paths))
+}
+
+fn normalize_thread_list_cwd(path: PathBuf) -> Result<PathBuf, ThreadMethodError> {
+    let path = match (path.to_str(), std::env::home_dir()) {
+        (Some("~"), Some(home)) => home,
+        (Some(value), Some(home)) => value.strip_prefix("~/").map_or_else(
+            || path.clone(),
+            |rest| home.join(rest.trim_start_matches('/')),
+        ),
+        _ => path,
+    };
+    let absolute = if path.is_absolute() {
+        path
+    } else {
+        std::env::current_dir()
+            .map_err(|_| ThreadMethodError::InvalidParams)?
+            .join(path)
+    };
+    let mut normalized = PathBuf::new();
+    for component in absolute.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            other => normalized.push(other.as_os_str()),
+        }
+    }
+    Ok(normalized)
+}
+
+fn thread_list_paths_match(left: &Path, right: &Path) -> bool {
+    match (left.canonicalize(), right.canonicalize()) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => left == right,
     }
 }
 
@@ -326,30 +449,36 @@ pub(super) async fn handle_app_server_turn_request(
         .map(|summary| summary.session)
         .ok_or(ThreadMethodError::NotFound)?;
     match method {
+        "thread/settings/update" => {
+            let settings =
+                parse_native_settings(&params, catalog, NativeSettingsSource::SettingsUpdate)?;
+            apply_native_settings(settings, commands.as_ref(), &session, &actor).await?;
+            Ok(json!({}))
+        }
+        "thread/compact/start" => {
+            commands
+                .compact(SessionTargetCommand {
+                    target: session,
+                    actor,
+                })
+                .await
+                .map_err(command_error)?;
+            Ok(json!({}))
+        }
         "turn/start" => {
-            let content = parse_turn_input(&params).await?;
-            if let Some(model) =
-                provider_model_override(params.get("model").and_then(Value::as_str), catalog)
-            {
-                commands
-                    .set_setting(SetSessionSettingCommand {
-                        target: session.clone(),
-                        setting_id: "model".into(),
-                        value: model,
-                        actor: actor.clone(),
-                    })
-                    .await
-                    .map_err(|_| ThreadMethodError::Unavailable)?;
-            }
+            let settings =
+                parse_native_settings(&params, catalog, NativeSettingsSource::TurnStart)?;
+            let content = parse_turn_input(&params, &session).await?;
+            apply_native_settings(settings, commands.as_ref(), &session, &actor).await?;
             let handle = commands
                 .prompt(PromptSessionCommand {
                     target: session,
                     input_id: session_event_model::InputId::generate(),
-                    content,
+                    submission: content,
                     actor,
                 })
                 .await
-                .map_err(|_| ThreadMethodError::Unavailable)?;
+                .map_err(command_error)?;
             Ok(json!({"turn":{
                 "id":handle.turn_id,"items":[],"status":"inProgress",
                 "error":null,"startedAt":null,"completedAt":null,"durationMs":null
@@ -361,18 +490,18 @@ pub(super) async fn handle_app_server_turn_request(
                 .and_then(Value::as_str)
                 .ok_or(ThreadMethodError::InvalidParams)?
                 .to_owned();
-            let content = parse_turn_input(&params).await?;
+            let content = parse_turn_input(&params, &session).await?;
             let input_id = session_event_model::InputId::generate();
             let outcome = commands
                 .steer(SteerSessionCommand {
                     target: session.clone(),
                     input_id: input_id.clone(),
                     expected_turn_id,
-                    content: content.clone(),
+                    submission: content.clone(),
                     actor: actor.clone(),
                 })
                 .await
-                .map_err(|_| ThreadMethodError::Unavailable)?;
+                .map_err(command_error)?;
             let turn_id = match outcome {
                 SessionSteerOutcome::Injected { turn_id }
                 | SessionSteerOutcome::StartedNewTurn { turn_id } => turn_id,
@@ -381,11 +510,11 @@ pub(super) async fn handle_app_server_turn_request(
                         .prompt(PromptSessionCommand {
                             target: session,
                             input_id,
-                            content,
+                            submission: content,
                             actor,
                         })
                         .await
-                        .map_err(|_| ThreadMethodError::Unavailable)?
+                        .map_err(command_error)?
                         .turn_id
                 }
                 SessionSteerOutcome::Failed { .. } => return Err(ThreadMethodError::Unavailable),
@@ -409,189 +538,55 @@ pub(super) async fn handle_app_server_turn_request(
     }
 }
 
-fn provider_model_override(
-    requested: Option<&str>,
-    catalog: &[ProviderModelEntry],
-) -> Option<String> {
-    let requested = requested?;
-    if requested == "provider-default" {
-        return None;
-    }
-    if catalog.iter().any(|model| model.id() == requested) {
-        return Some(requested.to_owned());
-    }
-    tracing::warn!(
-        model = requested,
-        "model outside provider catalog; using provider default"
-    );
-    None
-}
-
-const MAX_IMAGE_BYTES: usize = 768 * 1024;
-
-async fn parse_turn_input(params: &Value) -> Result<Vec<CommandContent>, ThreadMethodError> {
-    let input = params
-        .get("input")
-        .and_then(Value::as_array)
-        .ok_or(ThreadMethodError::InvalidParams)?;
-    let mut blocks = Vec::with_capacity(input.len());
-    let mut encoded_bytes = 0usize;
-    for entry in input {
-        let block = match entry.get("type").and_then(Value::as_str) {
-            Some("text") => entry
-                .get("text")
-                .and_then(Value::as_str)
-                .ok_or(ThreadMethodError::InvalidParams)
-                .and_then(|text| {
-                    CommandContent::text(text.to_owned())
-                        .map_err(|_| ThreadMethodError::InvalidParams)
-                }),
-            Some("localImage") => {
-                let path = entry
-                    .get("path")
-                    .and_then(Value::as_str)
-                    .map(PathBuf::from)
-                    .ok_or(ThreadMethodError::InvalidParams)?;
-                if !path.is_absolute() {
-                    return Err(ThreadMethodError::InvalidParams);
-                }
-                let mime_type = image_mime_type(&path)?;
-                let metadata = tokio::fs::metadata(&path)
-                    .await
-                    .map_err(|_| ThreadMethodError::ImageUnreadable)?;
-                if metadata.len() > MAX_IMAGE_BYTES as u64 {
-                    return Err(ThreadMethodError::ImageTooLarge);
-                }
-                let bytes = tokio::fs::read(&path)
-                    .await
-                    .map_err(|_| ThreadMethodError::ImageUnreadable)?;
-                if bytes.len() > MAX_IMAGE_BYTES {
-                    return Err(ThreadMethodError::ImageTooLarge);
-                }
-                use base64::Engine as _;
-                CommandContent::image(
-                    mime_type.into(),
-                    base64::engine::general_purpose::STANDARD.encode(bytes),
-                    None,
-                )
-                .map_err(|_| ThreadMethodError::InvalidParams)
-            }
-            Some("image") => {
-                let url = entry
-                    .get("url")
-                    .and_then(Value::as_str)
-                    .ok_or(ThreadMethodError::InvalidParams)?;
-                let (media_type, encoded) = url
-                    .split_once(",")
-                    .ok_or(ThreadMethodError::InvalidParams)?;
-                let mime_type = media_type
-                    .strip_prefix("data:")
-                    .and_then(|value| value.strip_suffix(";base64"))
-                    .filter(|value| value.starts_with("image/"))
-                    .ok_or(ThreadMethodError::ImageUnsupportedType)?;
-                if encoded.len() > collaboration_protocol::MAX_CONTROL_FRAME_BYTES {
-                    return Err(ThreadMethodError::ImageTooLarge);
-                }
-                use base64::Engine as _;
-                let bytes = base64::engine::general_purpose::STANDARD
-                    .decode(encoded)
-                    .map_err(|_| ThreadMethodError::InvalidParams)?;
-                if bytes.len() > MAX_IMAGE_BYTES {
-                    return Err(ThreadMethodError::ImageTooLarge);
-                }
-                CommandContent::image(mime_type.into(), encoded.to_owned(), None)
-                    .map_err(|_| ThreadMethodError::InvalidParams)
-            }
-            _ => Err(ThreadMethodError::InvalidParams),
-        }?;
-        let block_bytes = match &block {
-            CommandContent::Text { text } => text.as_str().len(),
-            CommandContent::Image { data, .. } => data.as_str().len(),
-            _ => 0,
-        };
-        encoded_bytes = encoded_bytes.saturating_add(block_bytes);
-        if encoded_bytes > collaboration_protocol::MAX_CONTROL_FRAME_BYTES {
-            return Err(ThreadMethodError::PromptTooLarge);
+fn command_error(error: collaboration_contracts::CommandFailure) -> ThreadMethodError {
+    use collaboration_contracts::CommandFailure;
+    match error {
+        CommandFailure::InvalidCreateSetting { target, detail } => {
+            ThreadMethodError::InvalidCreateSetting { target, detail }
         }
-        blocks.push(block);
+        CommandFailure::CreatedWithoutSettings {
+            target,
+            applied,
+            failed,
+            not_applied,
+        } => ThreadMethodError::CreatedWithoutSettings {
+            target,
+            applied,
+            failed,
+            not_applied,
+        },
+        CommandFailure::InvalidSelection => ThreadMethodError::InvalidSelection,
+        CommandFailure::Unsupported | CommandFailure::UnsupportedOperation { .. } => {
+            ThreadMethodError::Unsupported
+        }
+        CommandFailure::Busy | CommandFailure::NoActiveTurn => ThreadMethodError::Busy,
+        CommandFailure::SessionNotFound => ThreadMethodError::NotFound,
+        CommandFailure::InvalidSetting { .. } | CommandFailure::UnsupportedContent(_) => {
+            ThreadMethodError::InvalidParams
+        }
+        CommandFailure::SettingsContextChanged => ThreadMethodError::SettingsContextChanged,
+        CommandFailure::SettingsUnresolved => ThreadMethodError::SettingsUnresolved,
+        CommandFailure::UnauthorizedActor | CommandFailure::ProviderFailure => {
+            ThreadMethodError::Unavailable
+        }
     }
-    Ok(blocks)
 }
 
-fn image_mime_type(path: &std::path::Path) -> Result<&'static str, ThreadMethodError> {
-    match path
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .map(str::to_ascii_lowercase)
-        .as_deref()
-    {
-        Some("png") => Ok("image/png"),
-        Some("jpg" | "jpeg") => Ok("image/jpeg"),
-        Some("webp") => Ok("image/webp"),
-        Some("gif") => Ok("image/gif"),
-        _ => Err(ThreadMethodError::ImageUnsupportedType),
-    }
-}
+#[path = "native_turn_input.rs"]
+mod input;
+use input::parse_turn_input;
 
-#[cfg(test)]
-mod input_tests {
-    use super::*;
+#[path = "native_provider_settings.rs"]
+mod settings;
+use settings::{NativeSettingsSource, apply_native_settings, parse_native_settings};
 
-    #[tokio::test]
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "Contract assertions panic on a wrong result; Result propagates fixture and transport failures."
-    )]
-    async fn local_image_is_read_into_one_typed_image_block()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let image_path = directory.path().join("sample.png");
-        std::fs::write(&image_path, [0x89, b'P', b'N', b'G', 1, 2, 3])?;
-        let input = json!({"input":[{"type":"text","text":"look"},
-            {"type":"localImage","path":image_path}]});
-        let blocks = parse_turn_input(&input).await?;
-        assert_eq!(
-            blocks,
-            vec![
-                CommandContent::text("look".into())?,
-                CommandContent::image("image/png".into(), "iVBORwECAw==".into(), None)?,
-            ]
-        );
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "Contract assertions panic on a wrong result; Result propagates fixture and transport failures."
-    )]
-    async fn image_input_reports_unreadable_and_oversized_files()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let missing = directory.path().join("missing.png");
-        let unreadable =
-            parse_turn_input(&json!({"input":[{"type":"localImage","path":missing}]})).await;
-        assert!(matches!(
-            unreadable,
-            Err(ThreadMethodError::ImageUnreadable)
-        ));
-
-        let too_large = directory.path().join("large.png");
-        std::fs::write(&too_large, vec![0u8; MAX_IMAGE_BYTES + 1])?;
-        let oversized =
-            parse_turn_input(&json!({"input":[{"type":"localImage","path":too_large}]})).await;
-        assert!(matches!(oversized, Err(ThreadMethodError::ImageTooLarge)));
-        let inline = parse_turn_input(&json!({"input":[{"type":"image",
-            "url":"data:image/png;base64,AQID"}]}))
-        .await?;
-        assert_eq!(
-            inline,
-            vec![CommandContent::image(
-                "image/png".into(),
-                "AQID".into(),
-                None
-            )?]
-        );
-        Ok(())
-    }
+pub(super) async fn apply_resumed_native_settings(
+    params: &Value,
+    catalog: &[ProviderModelEntry],
+    commands: &dyn SessionCommandPort,
+    target: &message_board::SessionRef,
+    actor: &Identity,
+) -> Result<(), ThreadMethodError> {
+    let settings = parse_native_settings(params, catalog, NativeSettingsSource::Resume)?;
+    apply_native_settings(settings, commands, target, actor).await
 }

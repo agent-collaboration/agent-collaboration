@@ -1,12 +1,10 @@
-//! ACP prompt submission at the provider runtime boundary.
+//! Typed prompt admission at the provider runtime boundary; preparation stays in its actor.
 
 use super::{
     AgentSessionClient, ExternalProviderPromptOutcome, ExternalProviderRuntimeError,
     ProviderCommand, ProviderPromptDispatchObservation,
 };
 use crate::InteractionPort;
-use crate::provider_prompt_content::ProviderPromptContent;
-use agent_client_protocol::schema::v1::ContentBlock;
 use session_event_model::InputId;
 
 impl<P: InteractionPort> AgentSessionClient<P> {
@@ -15,19 +13,31 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         provider_session_id: String,
         input_id: InputId,
         operation_id: Option<P::OperationId>,
-        blocks: Vec<ContentBlock>,
+        prompt: crate::ProviderTurnInput,
         dispatch: Option<tokio::sync::oneshot::Sender<ProviderPromptDispatchObservation>>,
     ) -> Result<ExternalProviderPromptOutcome, ExternalProviderRuntimeError> {
-        let capabilities = self.capability_report(&provider_session_id).await;
-        let prompt = match ProviderPromptContent::new(blocks, &capabilities) {
-            Ok(prompt) => prompt,
-            Err(error) => {
+        if let crate::ProviderTurnInput::Prompt(submission) = &prompt {
+            let capabilities = self.capability_report(&provider_session_id).await;
+            if let Err(error) = crate::ProviderPromptContent::new(
+                crate::provider_prompt_content::acp_blocks_from_prompt_content(
+                    submission.content.clone(),
+                ),
+                &capabilities,
+            ) {
                 if let Some(dispatch) = dispatch {
-                    let _result = dispatch.send(ProviderPromptDispatchObservation::NotSubmitted);
+                    let observation = match &error {
+                        ExternalProviderRuntimeError::UnsupportedContent { content_type } => {
+                            ProviderPromptDispatchObservation::Refused(
+                                crate::ProviderDispatchRefusal::UnsupportedContent(content_type),
+                            )
+                        }
+                        _ => ProviderPromptDispatchObservation::NotSubmitted,
+                    };
+                    let _result = dispatch.send(observation);
                 }
                 return Err(error);
             }
-        };
+        }
         let (reply, result) = tokio::sync::oneshot::channel();
         self.commands
             .send(ProviderCommand::Prompt {

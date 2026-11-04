@@ -35,7 +35,8 @@ export class DispatchFrameIndex {
 			consumed = token.index + token[0].length;
 			if (token[1] === 'h') this.insideFrame = true;
 			else if (token[1] === 'l') {
-				if (!this.insideFrame) throw new Error('frame end without synchronized start');
+				// DECSET/DECRST change a mode; repeated resets do not complete another frame.
+				if (!this.insideFrame) continue;
 				this.insideFrame = false;
 				this.generation += 1;
 				this.frameEnd = end;

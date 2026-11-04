@@ -84,36 +84,8 @@ fn host_prompt_outcome(
 }
 
 #[cfg(test)]
-mod prompt_projection_tests {
-    use super::*;
-
-    #[test]
-    fn unknown_stop_reason_keeps_output_and_safe_value() {
-        let outcome = acp_client_runtime::ExternalProviderPromptOutcome {
-            output: "known output".to_owned(),
-            stop_reason: session_event_model::StopReason::Unknown("future_stop".to_owned()),
-            permission_refusal_reason: None,
-        };
-        let projected = host_prompt_outcome(outcome).expect("unknown reason is a terminal outcome");
-        assert_eq!(projected.output, "known output");
-        assert_eq!(
-            projected.stop_reason,
-            ProviderPromptStopReason::Unknown("future_stop".into())
-        );
-
-        let untrusted = acp_client_runtime::ExternalProviderPromptOutcome {
-            output: String::new(),
-            stop_reason: session_event_model::StopReason::Unknown("../token=value".to_owned()),
-            permission_refusal_reason: None,
-        };
-        assert_eq!(
-            host_prompt_outcome(untrusted)
-                .expect("terminal outcome")
-                .stop_reason,
-            ProviderPromptStopReason::Unknown("unrecognized".into())
-        );
-    }
-}
+#[path = "external_provider_prompt_projection_test.rs"]
+mod prompt_projection_tests;
 
 pub struct ExternalProviderRuntime {
     client: AgentSessionClient<HostInteractionPort>,
@@ -133,12 +105,14 @@ impl std::fmt::Debug for ExternalProviderRuntime {
 impl ExternalProviderRuntime {
     pub async fn initialize(
         launch: ExternalProviderLaunch,
+        behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let interaction_port = Arc::new(HostInteractionPort::default());
         let client = AgentSessionClient::initialize(
             launch,
             Arc::clone(&interaction_port),
             Arc::new(NoopSessionEventSink),
+            behavior,
         )
         .await?;
         Ok(Self {
@@ -153,6 +127,7 @@ impl ExternalProviderRuntime {
         model_picker: acp_client_runtime::ProviderModelPicker,
         server_name: impl Into<String>,
         server_url: impl Into<String>,
+        behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let interaction_port = Arc::new(HostInteractionPort::default());
         let client = AgentSessionClient::initialize_with_mcp_http(
@@ -162,6 +137,7 @@ impl ExternalProviderRuntime {
             server_url,
             Arc::clone(&interaction_port),
             Arc::new(NoopSessionEventSink),
+            behavior,
         )
         .await?;
         Ok(Self {
@@ -178,6 +154,7 @@ impl ExternalProviderRuntime {
         server_url: impl Into<String>,
         hub: Arc<ProviderSessionEventHub>,
         endpoint: SessionEndpointRef,
+        behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let interaction_port = Arc::new(HostInteractionPort::default());
         let event_sink = Arc::new(HubSessionEventSink::new(hub, endpoint));
@@ -192,6 +169,7 @@ impl ExternalProviderRuntime {
             server_url,
             Arc::clone(&interaction_port),
             published_sink,
+            behavior,
         )
         .await;
         let client = match result {
@@ -212,6 +190,7 @@ impl ExternalProviderRuntime {
     async fn initialize_with_timeout(
         launch: ExternalProviderLaunch,
         initialize_timeout: Duration,
+        behavior: Arc<dyn acp_client_runtime::ProviderBehavior>,
     ) -> Result<Self, ExternalProviderRuntimeError> {
         let interaction_port = Arc::new(HostInteractionPort::default());
         let client = AgentSessionClient::initialize_with_timeout(
@@ -219,6 +198,7 @@ impl ExternalProviderRuntime {
             initialize_timeout,
             Arc::clone(&interaction_port),
             Arc::new(NoopSessionEventSink),
+            behavior,
         )
         .await?;
         Ok(Self {
@@ -315,12 +295,9 @@ impl ExternalProviderRuntime {
     pub async fn set_setting(
         &self,
         provider_session_id: String,
-        kind: acp_client_runtime::ProviderSettingKind,
-        value: String,
+        request: acp_client_runtime::ProviderSettingRequest,
     ) -> Result<acp_client_runtime::EffectiveProviderSettings, ExternalProviderRuntimeError> {
-        self.client
-            .set_setting(provider_session_id, kind, value)
-            .await
+        self.client.set_setting(provider_session_id, request).await
     }
 
     pub async fn accept_session_settings(
@@ -431,7 +408,11 @@ impl ExternalProviderRuntime {
         prompt: String,
     ) -> Result<crate::ProviderSteeringOutcome, ExternalProviderRuntimeError> {
         self.client
-            .steer_contents_with_input(provider_session_id, input_id, text_contents(prompt)?)
+            .steer_contents_with_input(
+                provider_session_id,
+                input_id,
+                session_event_model::ProviderSubmission::plain(text_contents(prompt)?),
+            )
             .await
     }
 
@@ -439,7 +420,7 @@ impl ExternalProviderRuntime {
         &self,
         provider_session_id: String,
         input_id: session_event_model::InputId,
-        contents: Vec<session_event_model::PromptContent>,
+        contents: session_event_model::ProviderSubmission,
     ) -> Result<crate::ProviderSteeringOutcome, ExternalProviderRuntimeError> {
         self.client
             .steer_contents_with_input(provider_session_id, input_id, contents)
@@ -566,27 +547,29 @@ impl ExternalProviderRuntime {
         prompt: String,
         context: ExternalProviderApprovalContext,
     ) -> Result<ExternalProviderPromptOutcome, ExternalProviderRuntimeError> {
-        self.prompt_contents_with_approval_dispatch_for_input(
+        self.submit_with_approval_dispatch_for_input(
             provider_session_id,
             input_id,
-            text_contents(prompt)?,
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(text_contents(prompt)?),
+            ),
             context,
             None,
         )
         .await
     }
 
-    pub(crate) async fn prompt_contents_with_approval_dispatch_for_input(
+    pub(crate) async fn submit_with_approval_dispatch_for_input(
         &self,
         provider_session_id: String,
         input_id: session_event_model::InputId,
-        contents: Vec<session_event_model::PromptContent>,
+        contents: acp_client_runtime::ProviderTurnInput,
         context: ExternalProviderApprovalContext,
         dispatch: Option<tokio::sync::oneshot::Sender<ProviderPromptDispatchObservation>>,
     ) -> Result<ExternalProviderPromptOutcome, ExternalProviderRuntimeError> {
         host_prompt_outcome(
             self.client
-                .prompt_contents_with_approval_dispatch_for_input(
+                .submit_with_approval_dispatch_for_input(
                     provider_session_id,
                     input_id,
                     contents,
@@ -605,10 +588,12 @@ impl ExternalProviderRuntime {
         prompt: String,
         dispatch: Option<tokio::sync::oneshot::Sender<ProviderPromptDispatchObservation>>,
     ) -> Result<ExternalProviderPromptOutcome, ExternalProviderRuntimeError> {
-        self.prompt_contents_with_approval_dispatch_for_input(
+        self.submit_with_approval_dispatch_for_input(
             provider_session_id.clone(),
             session_event_model::InputId::generate(),
-            text_contents(prompt)?,
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(text_contents(prompt)?),
+            ),
             test_approval_context(&provider_session_id, operation_id),
             dispatch,
         )
@@ -655,20 +640,20 @@ mod fixture_tests;
 use fixture_tests::*;
 
 #[cfg(test)]
-#[path = "external_provider_runtime/live_tests.rs"]
+#[path = "external_provider_runtime/live_test.rs"]
 mod live_tests;
 #[cfg(test)]
-#[path = "external_provider_runtime/robustness_tests.rs"]
+#[path = "external_provider_runtime/robustness_test.rs"]
 mod robustness_tests;
 #[cfg(test)]
-#[path = "external_provider_runtime/tests.rs"]
+#[path = "external_provider_runtime/runtime_test.rs"]
 mod tests;
 
 #[cfg(test)]
 #[path = "external_provider_runtime/acp_scripted_fixture.rs"]
 pub(crate) mod acp_scripted_fixture;
 #[cfg(test)]
-#[path = "external_provider_runtime/approval_dispatch_tests.rs"]
+#[path = "external_provider_runtime/approval_dispatch_test.rs"]
 mod approval_dispatch_tests;
 #[cfg(test)]
 #[path = "external_provider_runtime/approval_push_fixture.rs"]

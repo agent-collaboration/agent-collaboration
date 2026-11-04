@@ -1,0 +1,28 @@
+{
+  "name": "@codex-router/claude-acp-metadata",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.ts",
+    "build:check": "node build.ts --check",
+    "check": "tsc --noEmit",
+    "lint": "oxlint --deny-warnings .",
+    "format:check": "oxfmt --check .",
+    "format": "oxfmt .",
+    "test": "node --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "esbuild": "0.25.12",
+    "oxfmt": "0.74.0",
+    "oxlint": "1.89.0",
+    "typescript": "7.0.2"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@12.14.0"
+}

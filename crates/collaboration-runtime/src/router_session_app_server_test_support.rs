@@ -27,6 +27,46 @@ use std::{
 };
 use tokio::sync::{Notify, broadcast};
 
+struct WatchedModelCatalog(tokio::sync::watch::Receiver<Vec<ProviderModelEntry>>);
+impl crate::SessionModelCatalog for WatchedModelCatalog {
+    fn read_models(
+        &self,
+        _: SessionRef,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<Vec<ProviderModelEntry>, crate::SessionModelCatalogError>,
+                > + Send
+                + '_,
+        >,
+    > {
+        Box::pin(async { Ok(self.0.borrow().clone()) })
+    }
+}
+pub(super) fn model_catalog(
+    receiver: tokio::sync::watch::Receiver<Vec<ProviderModelEntry>>,
+) -> Arc<dyn crate::SessionModelCatalog> {
+    Arc::new(WatchedModelCatalog(receiver))
+}
+
+pub(super) fn qualified_model(
+    id: &str,
+    label: &str,
+    values: &[&str],
+    default: &str,
+) -> Result<ProviderModelEntry, crate::InvalidProviderModelEntry> {
+    ProviderModelEntry::try_new(id.into(), label.into(), String::new())?.with_reasoning(
+        values
+            .iter()
+            .map(|value| crate::ProviderReasoningChoice {
+                value: (*value).into(),
+                label: (*value).into(),
+            })
+            .collect(),
+        default.into(),
+    )
+}
+
 pub(super) struct ScriptedSessionBackend {
     pub(super) endpoint: SessionEndpointRef,
     pub(super) session: SessionRef,
@@ -34,6 +74,8 @@ pub(super) struct ScriptedSessionBackend {
     pub(super) durable_inventory: Mutex<Vec<HubSessionSummary>>,
     pub(super) live_states: Mutex<HashMap<SessionRef, SessionState>>,
     pub(super) create_commands: Mutex<Vec<CreateSessionCommand>>,
+    pub(super) create_sessions: Mutex<std::collections::VecDeque<SessionRef>>,
+    pub(super) create_gates: Mutex<std::collections::VecDeque<Option<Arc<Notify>>>>,
     pub(super) load_commands: Mutex<Vec<SessionTargetCommand>>,
     pub(super) prompt_commands: Mutex<Vec<PromptSessionCommand>>,
     pub(super) steer_commands: Mutex<Vec<SteerSessionCommand>>,
@@ -41,15 +83,23 @@ pub(super) struct ScriptedSessionBackend {
     pub(super) steer_started: Notify,
     pub(super) turn_command_order: Mutex<Vec<&'static str>>,
     pub(super) cancel_commands: Mutex<Vec<SessionTargetCommand>>,
+    pub(super) compact_commands: Mutex<Vec<SessionTargetCommand>>,
+    pub(super) compact_failure: Mutex<Option<CommandFailure>>,
     pub(super) setting_commands: Mutex<Vec<SetSessionSettingCommand>>,
     pub(super) created: Notify,
     pub(super) events: broadcast::Sender<collaboration_contracts::HubEvent>,
     pub(super) history: Mutex<Vec<collaboration_contracts::HubEvent>>,
     pub(super) effective_model: Mutex<Option<String>>,
+    pub(super) effective_effort: Mutex<Option<String>>,
+    pub(super) setting_failures: Mutex<HashMap<String, CommandFailure>>,
+    pub(super) setting_gate: Mutex<Option<Arc<Notify>>>,
+    pub(super) setting_started: Notify,
     pub(super) attachment_count: AtomicUsize,
     pub(super) attachment_created: Notify,
     pub(super) prompt_gate: Mutex<Option<Arc<Notify>>>,
     pub(super) prompt_submitted: Notify,
+    pub(super) skill_views:
+        Mutex<HashMap<SessionRef, tokio::sync::watch::Sender<session_event_model::SkillView>>>,
 }
 
 impl ScriptedSessionBackend {
@@ -71,6 +121,8 @@ impl ScriptedSessionBackend {
             durable_inventory: Mutex::new(Vec::new()),
             live_states: Mutex::new(HashMap::new()),
             create_commands: Mutex::new(Vec::new()),
+            create_sessions: Mutex::new(std::collections::VecDeque::new()),
+            create_gates: Mutex::new(std::collections::VecDeque::new()),
             load_commands: Mutex::new(Vec::new()),
             prompt_commands: Mutex::new(Vec::new()),
             steer_commands: Mutex::new(Vec::new()),
@@ -78,15 +130,22 @@ impl ScriptedSessionBackend {
             steer_started: Notify::new(),
             turn_command_order: Mutex::new(Vec::new()),
             cancel_commands: Mutex::new(Vec::new()),
+            compact_commands: Mutex::new(Vec::new()),
+            compact_failure: Mutex::new(None),
             setting_commands: Mutex::new(Vec::new()),
             created: Notify::new(),
             events,
             history: Mutex::new(Vec::new()),
             effective_model: Mutex::new(None),
+            effective_effort: Mutex::new(None),
+            setting_failures: Mutex::new(HashMap::new()),
+            setting_gate: Mutex::new(None),
+            setting_started: Notify::new(),
             attachment_count: AtomicUsize::new(0),
             attachment_created: Notify::new(),
             prompt_gate: Mutex::new(None),
             prompt_submitted: Notify::new(),
+            skill_views: Mutex::new(HashMap::new()),
         }))
     }
 
@@ -96,7 +155,34 @@ impl ScriptedSessionBackend {
 }
 
 impl SessionCommandPort for ScriptedSessionBackend {
+    fn compact(&self, command: SessionTargetCommand) -> CommandFuture<'_, SessionTurnHandle> {
+        self.compact_commands
+            .lock()
+            .expect("test lock")
+            .push(command);
+        let failure = self.compact_failure.lock().expect("test lock").clone();
+        Box::pin(async move {
+            if let Some(failure) = failure {
+                return Err(failure);
+            }
+            Ok(SessionTurnHandle {
+                turn_id: "compact-turn".into(),
+            })
+        })
+    }
     fn create(&self, command: CreateSessionCommand) -> CommandFuture<'_, SessionRef> {
+        let session = self
+            .create_sessions
+            .lock()
+            .expect("create sessions")
+            .pop_front()
+            .unwrap_or_else(|| self.session.clone());
+        let gate = self
+            .create_gates
+            .lock()
+            .expect("create gates")
+            .pop_front()
+            .flatten();
         self.create_commands
             .lock()
             .expect("test lock")
@@ -105,7 +191,7 @@ impl SessionCommandPort for ScriptedSessionBackend {
             .lock()
             .expect("test lock")
             .push(HubSessionSummary {
-                session: self.session.clone(),
+                session: session.clone(),
                 approver: self.approver.clone(),
                 working_directory: command.working_directory,
                 updated_at_seconds: 1_700_000_000,
@@ -118,10 +204,14 @@ impl SessionCommandPort for ScriptedSessionBackend {
         self.live_states
             .lock()
             .expect("test lock")
-            .insert(self.session.clone(), SessionState::Idle);
+            .insert(session.clone(), SessionState::Idle);
         self.created.notify_one();
-        let session = self.session.clone();
-        Box::pin(async move { Ok(session) })
+        Box::pin(async move {
+            if let Some(gate) = gate {
+                gate.notified().await;
+            }
+            Ok(session)
+        })
     }
     fn load_session(&self, command: SessionTargetCommand) -> CommandFuture<'_, ()> {
         self.load_commands.lock().expect("test lock").push(command);
@@ -213,15 +303,76 @@ impl SessionCommandPort for ScriptedSessionBackend {
         Box::pin(async { Err(CommandFailure::Unsupported) })
     }
     fn set_setting(&self, command: SetSessionSettingCommand) -> CommandFuture<'_, ()> {
+        let gate = self.setting_gate.lock().expect("setting gate").take();
+        let failure = self
+            .setting_failures
+            .lock()
+            .expect("setting failures")
+            .get(&command.setting_id)
+            .cloned();
         self.setting_commands
             .lock()
             .expect("test lock")
-            .push(command);
-        Box::pin(async { Ok(()) })
+            .push(command.clone());
+        Box::pin(async move {
+            self.setting_started.notify_one();
+            if let Some(gate) = gate {
+                gate.notified().await;
+            }
+            if let Some(failure) = failure {
+                return Err(failure);
+            }
+            match command.setting_id.as_str() {
+                "model" => {
+                    *self.effective_model.lock().expect("effective model") = Some(command.value)
+                }
+                "effort" => {
+                    *self.effective_effort.lock().expect("effective effort") = Some(command.value)
+                }
+                _ => {}
+            }
+            let settings = session_event_model::SessionSettings {
+                model: self.effective_model.lock().expect("model").clone(),
+                effort: self.effective_effort.lock().expect("effort").clone(),
+                ..session_event_model::SessionSettings::default()
+            };
+            if let Some(summary) = self
+                .durable_inventory
+                .lock()
+                .expect("inventory")
+                .iter_mut()
+                .find(|summary| summary.session == command.target)
+            {
+                summary.model = settings.model.clone();
+            }
+            let mut history = self.history.lock().expect("history");
+            let event = collaboration_contracts::HubEvent {
+                sequence: u64::try_from(history.len()).expect("fixture event count") + 1,
+                event: SessionEvent::SettingsChanged { settings },
+            };
+            history.push(event.clone());
+            let _sent = self.events.send(event);
+            Ok(())
+        })
     }
 }
 
 impl SessionEventHub for ScriptedSessionBackend {
+    fn skill_view(
+        &self,
+        session: SessionRef,
+        _cwd: std::path::PathBuf,
+    ) -> HubFuture<'_, collaboration_contracts::SkillViewAttachment> {
+        Box::pin(async move {
+            let mut views = self.skill_views.lock().expect("skill views");
+            let sender = views.entry(session).or_insert_with(|| {
+                tokio::sync::watch::channel(session_event_model::SkillView::Unknown).0
+            });
+            let receiver = sender.subscribe();
+            let snapshot = receiver.borrow().clone();
+            Ok(collaboration_contracts::SkillViewAttachment { snapshot, receiver })
+        })
+    }
     fn attach(&self, _: SessionRef) -> HubFuture<'_, SessionEventAttachment> {
         self.attachment_count.fetch_add(1, Ordering::Relaxed);
         self.attachment_created.notify_one();
@@ -270,5 +421,27 @@ impl SessionEventHub for ScriptedSessionBackend {
             })
             .collect();
         Box::pin(async move { Ok(sessions) })
+    }
+}
+
+/// Turn/history tests retain all their assertions while skills invalidations have dedicated tests.
+pub(super) async fn next_non_skill_frame(
+    client: &mut tokio_tungstenite::WebSocketStream<tokio::net::UnixStream>,
+) -> Option<Result<tokio_tungstenite::tungstenite::Message, tokio_tungstenite::tungstenite::Error>>
+{
+    use futures_util::StreamExt as _;
+    loop {
+        let frame = client.next().await?;
+        if let Ok(tokio_tungstenite::tungstenite::Message::Text(text)) = &frame
+            && serde_json::from_str::<serde_json::Value>(text)
+                .ok()
+                .is_some_and(|value| {
+                    value.get("method").and_then(serde_json::Value::as_str)
+                        == Some("skills/changed")
+                })
+        {
+            continue;
+        }
+        return Some(frame);
     }
 }

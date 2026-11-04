@@ -51,6 +51,8 @@ test('unknown capture option cannot launch the controlled driver', () => {
 test.each(['capture-run.ts', 'public-sessions-run.ts'])(
 	'strict positional CLI rejects unknown missing and extra args before plan read %s',
 	(entry) => {
+		const entryPath =
+			entry === 'capture-run.ts' ? 'capture/capture-run.ts' : 'sessions/public-sessions-run.ts';
 		for (const args of [
 			['unused.json', '--typo'],
 			['unused.json', 'extra.json'],
@@ -59,17 +61,7 @@ test.each(['capture-run.ts', 'public-sessions-run.ts'])(
 		]) {
 			const result = spawnSync(
 				process.execPath,
-				[
-					fileURLToPath(
-						new URL(
-							entry === 'capture-run.ts'
-								? '../capture/capture-run.ts'
-								: '../sessions/public-sessions-run.ts',
-							import.meta.url,
-						),
-					),
-					...args,
-				],
+				[fileURLToPath(new URL(`../${entryPath}`, import.meta.url)), ...args],
 				{ encoding: 'utf8', timeout: 5000 },
 			);
 			expect({ entry, args, status: result.status, stderr: result.stderr }).toMatchObject({

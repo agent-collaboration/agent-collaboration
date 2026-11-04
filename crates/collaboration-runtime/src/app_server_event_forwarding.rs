@@ -129,6 +129,11 @@ pub(crate) fn historical_turns(session: &SessionRef, snapshot: &[HubEvent]) -> V
     let mut turns = group_historical_turns(session, &items)
         .iter()
         .map(render_historical_turn)
+        .filter(|turn| {
+            turn.get("items")
+                .and_then(Value::as_array)
+                .is_some_and(|items| !items.is_empty())
+        })
         .collect::<Vec<_>>();
     if let (Some(turn_id), Some(active_items)) = (active_turn, active_items) {
         let translated_items = active_items
@@ -233,10 +238,30 @@ impl AppServerEventForwarding {
                     };
                 }
                 let mut frames = if matches!(event.event, SessionEvent::ItemStarted { .. }) {
-                    vec![json!({"method":"item/started","params":{
+                    let mut started = vec![json!({"method":"item/started","params":{
                         "threadId":thread_id,"turnId":turn_id,"item":translated.thread_item,
                         "startedAtMs":chrono::Utc::now().timestamp_millis()
-                    }})]
+                    }})];
+                    if let Some(delta) = item.text.as_deref().filter(|text| !text.is_empty()) {
+                        match item.kind {
+                            session_event_model::SessionItemKind::AgentMessage => {
+                                started.push(json!({"method":"item/agentMessage/delta","params":{
+                                    "threadId":thread_id,"turnId":turn_id,"itemId":item.item_id,
+                                    "delta":delta
+                                }}));
+                            }
+                            session_event_model::SessionItemKind::AgentThought => {
+                                started.push(
+                                    json!({"method":"item/reasoning/summaryTextDelta","params":{
+                                        "threadId":thread_id,"turnId":turn_id,"itemId":item.item_id,
+                                        "delta":delta,"summaryIndex":0
+                                    }}),
+                                );
+                            }
+                            _ => {}
+                        }
+                    }
+                    started
                 } else {
                     match &item.kind {
                         session_event_model::SessionItemKind::AgentMessage => {
@@ -276,6 +301,11 @@ impl AppServerEventForwarding {
                                     }})]
                                 })
                                 .unwrap_or_default()
+                        }
+                        session_event_model::SessionItemKind::ToolCall { tool_kind, .. }
+                            if tool_kind == "contextCompaction" =>
+                        {
+                            Vec::new()
                         }
                         session_event_model::SessionItemKind::ToolCall { .. } => item
                             .text
@@ -700,9 +730,9 @@ impl AppServerEventForwarding {
 }
 
 #[cfg(test)]
-#[path = "app_server_event_forwarding_tests.rs"]
+#[path = "app_server_event_forwarding_test.rs"]
 mod notification_wire_tests;
 
 #[cfg(test)]
-#[path = "app_server_metadata_projection_tests.rs"]
+#[path = "app_server_metadata_projection_test.rs"]
 mod metadata_projection_tests;

@@ -76,6 +76,42 @@ function catalogOptions(
   return result;
 }
 
+async function serveSharedSettings(peer: {
+  readonly current: CursorSettings;
+  readonly readRequest: () => Promise<Record<string, unknown> | undefined>;
+  readonly reply: (request: Record<string, unknown>, result: unknown) => void;
+}): Promise<void> {
+  const sessions = new Set<string>();
+  for (;;) {
+    const request = await peer.readRequest();
+    if (request === undefined) return;
+    if (request.method === "session/new") {
+      const sessionId = `shared-session-${sessions.size + 1}`;
+      sessions.add(sessionId);
+      peer.reply(request, {
+        sessionId,
+        configOptions: catalogOptions("shared-settings", peer.current, "effort"),
+      });
+      continue;
+    }
+    assert.equal(request.method, "session/set_config_option");
+    const parameters = requestParameters(request);
+    assert.ok(typeof parameters.sessionId === "string" && sessions.has(parameters.sessionId));
+    if (parameters.configId === "model") {
+      assert.ok(parameters.value === "fixture-a" || parameters.value === "fixture-b");
+      peer.current.model = parameters.value;
+    } else {
+      assert.equal(parameters.configId, "effort");
+      assert.ok(parameters.value === "medium" || parameters.value === "high");
+      peer.current.effort = parameters.value;
+    }
+    // Cursor's shared manager changes the value, without notifying the other session.
+    peer.reply(request, {
+      configOptions: catalogOptions("shared-settings", peer.current, "effort"),
+    });
+  }
+}
+
 export async function main(): Promise<void> {
   const scenario = requireArgument(2);
   const receiptPath = requireArgument(3);
@@ -114,6 +150,8 @@ export async function main(): Promise<void> {
       await io.drain();
       return;
     }
+    if (scenario === "shared-settings")
+      return await serveSharedSettings({ current, readRequest, reply });
     const create = await readRequest();
     assert.ok(create?.method === "session/new" || create?.method === "session/load");
     if (scenario === "fallback" || scenario === "ambiguous") effortId = "budget";

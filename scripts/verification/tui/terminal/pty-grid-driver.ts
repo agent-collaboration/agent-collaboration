@@ -45,7 +45,8 @@ export interface PtyGridTarget {
 		| 'hard'
 		| 'public-sessions'
 		| 'showcase'
-		| 'quota-effects';
+		| 'quota-effects'
+		| 'codex-acp';
 	readonly keys: KeyProtocol;
 	readonly evidence: string;
 	readonly componentBinary?: string;
@@ -75,6 +76,8 @@ export interface PtyGridTarget {
 }
 export function ptyGridDriverEntry(surface: PtyGridTarget['surface']): string {
 	switch (surface) {
+		case 'codex-acp':
+			return 'quota_storyboard::compiled_codex_acp_grid_observation';
 		case 'quota':
 		case 'quota-filters':
 		case 'quota-effects':
@@ -213,7 +216,9 @@ export class PtyGridDriver {
 				...receiptEnvironment,
 				[SESSIONS_PREFERENCES_DIRECTORY]: undefined,
 				...preferencesEnvironment,
-				...(target.surface === 'public-sessions' ? target.publicEnvironment : {}),
+				...(target.surface === 'public-sessions' || target.surface === 'codex-acp'
+					? target.publicEnvironment
+					: {}),
 				...(target.surface === 'showcase' ? target.showcaseEnvironment : {}),
 				...(target.surface === 'quota-effects' ? target.quotaEffectEnvironment : {}),
 				TUI_GRID_CHECK_ONLY: undefined,
@@ -492,8 +497,9 @@ export class PtyGridDriver {
 		name: string,
 		matches: (grid: TerminalGrid) => boolean,
 		after = -1,
+		checkpointMillis = 8_000,
 	): Promise<TerminalGrid> {
-		const deadline = Date.now() + 8_000;
+		const deadline = Date.now() + checkpointMillis;
 		const nextFrame = async (): Promise<TerminalGrid> => {
 			const matched = (): boolean =>
 				!this.core.synchronizedOutput() && this.frameGeneration() > after && matches(this.grid());
@@ -511,6 +517,18 @@ export class PtyGridDriver {
 			return nextFrame();
 		};
 		return nextFrame();
+	}
+	async waitForEof(name: string, waitMillis = 8_000): Promise<void> {
+		const deadline = Date.now() + waitMillis;
+		const nextRead = async (): Promise<void> => {
+			if (this.failure !== null) throw this.failure;
+			if (this.eof) return;
+			const remaining = deadline - Date.now();
+			if (remaining <= 0) throw new Error(`PTY did not end: ${name}`);
+			await this.receive(remaining);
+			return nextRead();
+		};
+		await nextRead();
 	}
 	async running(): Promise<boolean> {
 		return (await this.command('running')) === 'RUNNING';
