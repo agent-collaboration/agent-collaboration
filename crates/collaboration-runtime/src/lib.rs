@@ -81,7 +81,8 @@ pub use provider_acp_session_route::ProviderAcpSessionRoute;
 pub use session_delivery_router::SessionDeliveryRouter;
 mod service_identity_storage;
 pub use service_identity_storage::{
-    load_installation_peer, load_service_identity, new_service_uuid, read_service_identity,
+    load_installation_peer, load_service_identity, new_service_uuid, read_installation_peer,
+    read_service_identity,
 };
 mod manifest_publication;
 pub use manifest_publication::ManifestPublication;

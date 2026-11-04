@@ -248,7 +248,7 @@ fn page_name(index: u32) -> String {
     format!("{index:010}.json")
 }
 
-fn validate_input(input: &ProjectPreparation) -> Result<(), ProjectBundleError> {
+pub(crate) fn validate_input(input: &ProjectPreparation) -> Result<(), ProjectBundleError> {
     if input.run_id.get_version_num() != 7
         || input.target.host_str().is_none()
         || !matches!(input.target.scheme(), "https" | "http")

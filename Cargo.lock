@@ -2054,6 +2054,7 @@ dependencies = [
  "lifecycle-observation",
  "message-board",
  "message-board-storage",
+ "nix",
  "runtime-primitives",
  "serde",
  "serde_json",

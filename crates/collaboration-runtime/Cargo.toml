@@ -39,6 +39,7 @@ codex-native-integration.workspace = true
 chrono.workspace = true
 lifecycle-observation = { path = "../lifecycle-observation", version = "0.1.14" }
 getrandom = "0.3.4"
+nix.workspace = true
 futures-util.workspace = true
 tokio-tungstenite.workspace = true
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.14" }

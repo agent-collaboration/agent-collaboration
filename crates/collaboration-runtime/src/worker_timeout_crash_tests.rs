@@ -73,7 +73,14 @@ async fn worker_timeout_crash_preserves_occupancy_until_exact_cessation() -> Tes
         }
         Box::pin(recover(&root)).await?;
         for entry in std::fs::read_dir(&root)? {
-            std::fs::remove_file(entry?.path())?;
+            // A closing SQLite pool can remove WAL/SHM after the directory listing.
+            std::fs::remove_file(entry?.path()).or_else(|error| {
+                if error.kind() == std::io::ErrorKind::NotFound {
+                    Ok(())
+                } else {
+                    Err(error)
+                }
+            })?;
         }
         std::fs::remove_dir(root)?;
     }

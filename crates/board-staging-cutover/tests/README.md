@@ -27,6 +27,13 @@ files, reconcile a discarded local result, and refuse changed sources,
 colliding destinations, another run's confirmation and modified backups.
 Sealing and archiving share the tested OS no-overwrite move primitive.
 
-The full cutover CLI, crash matrix, cross-machine write and staging corpus are
-still unverified. Add a nonempty `tests/e2e/main.rs` aggregate when its first
-real-path test is implemented; no empty e2e aggregate is declared.
+The `tests/e2e/main.rs` aggregate launches the compiled helper through the
+signing runner. Inspection preserves a running Host's authority and refuses
+another declared service. The offline command publishes through real owner
+HTTP routes, archives the original directory and reconciles the same bundle
+and import on rerun. A held committed Fleet answer checks that the helper
+retains the source Host lock throughout publication. Changing a frozen claim
+request refuses the rerun without changing the bundle or backup.
+
+Host lifecycle orchestration, the full process-crash matrix, cross-machine
+write and staging corpus remain unverified.

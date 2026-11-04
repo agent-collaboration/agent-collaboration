@@ -2,8 +2,7 @@
 use codex_router_host::{HostCoordinationPaths, HostInstanceLock, InstanceAcquireError};
 use collaboration_protocol::UuidIdentity;
 use fleet_sync_protocol::PeerId;
-use std::io::Read;
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, thiserror::Error)]
@@ -85,7 +84,8 @@ impl OfflineHost {
         if &service != expected_service {
             return Err(OfflineHostError::ServiceMismatch);
         }
-        let peer = read_existing_peer(&collaboration)?;
+        let peer = collaboration_runtime::read_installation_peer(&collaboration)?
+            .ok_or(OfflineHostError::MissingPeerIdentity)?;
         if peer != expected_peer {
             return Err(OfflineHostError::PeerMismatch);
         }
@@ -128,57 +128,6 @@ impl OfflineHost {
     pub const fn peer(&self) -> PeerId {
         self.peer
     }
-}
-
-// A read-only adapter for the existing version-one file. The runtime's public
-// loader creates a missing identity, which is forbidden before Host stop too.
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct ExistingPeerIdentity {
-    version: u8,
-    peer_id: PeerId,
-}
-
-fn read_existing_peer(directory: &Path) -> Result<PeerId, OfflineHostError> {
-    let path = directory.join("installation-peer.json");
-    let before = match std::fs::symlink_metadata(&path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Err(OfflineHostError::MissingPeerIdentity);
-        }
-        Err(error) => return Err(error.into()),
-    };
-    if !before.is_file()
-        || before.uid() != nix::unistd::geteuid().as_raw()
-        || before.mode() & 0o077 != 0
-        || before.len() > 1024
-    {
-        return Err(OfflineHostError::UnsafeRoot);
-    }
-    let file = std::fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK)
-        .open(&path)?;
-    let opened = file.metadata()?;
-    if opened.dev() != before.dev() || opened.ino() != before.ino() {
-        return Err(OfflineHostError::UnsafeRoot);
-    }
-    let mut bytes = Vec::new();
-    file.take(1025).read_to_end(&mut bytes)?;
-    let invalid = || {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "invalid existing installation peer",
-        )
-    };
-    if bytes.len() > 1024 {
-        return Err(invalid().into());
-    }
-    let record: ExistingPeerIdentity = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
-    if record.version != 1 {
-        return Err(invalid().into());
-    }
-    Ok(record.peer_id)
 }
 
 fn protected_root(root: &Path, home: &Path) -> bool {
