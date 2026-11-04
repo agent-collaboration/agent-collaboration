@@ -10,6 +10,8 @@ mod fleet_mail_expiry_scenarios;
 mod grants;
 #[path = "mail_submit_http/historical_piece.rs"]
 mod historical_piece;
+#[path = "support/mail_push_inbox.rs"]
+mod mail_push_inbox;
 
 #[tokio::test]
 async fn shared_offline_fleet_mail_alarm_oracle() -> ConformanceResult<()> {

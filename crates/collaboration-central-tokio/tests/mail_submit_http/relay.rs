@@ -1,75 +1,161 @@
-//! Real admitted sessions submit, fetch, receipt and report one immutable item.
+//! Authenticated Push receipts and reports retain one immutable item.
+pub(super) use super::relay_transport::{operation, relay_request};
 use super::*;
-use board_sync_protocol::BoardDeliveryTypes;
+use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use collaboration_central_conformance::{ConformanceClient, enroll_admitted_peer};
 use durable_steps::Uuid;
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, ItemId, PeerId};
-use message_board::ServiceId;
+use fleet_sync_delivery::DeliveryLimits;
+use fleet_sync_protocol::{
+    ClientAnswer, ClientFrame, DeliveryEnvelope, DeliveryItem, DeliveryRefusal, FrameId, ItemId,
+    PeerId, PushResult, ServerCall, ServerCallAnswer, ServerFrame, ServerRequest, Submitter,
+};
+use futures_util::{SinkExt, StreamExt};
+use reqwest_websocket::{Message, WebSocket};
 use serde_json::{Value, json};
-
-pub(super) use super::relay_transport::{operation, relay_request};
-
 pub(super) fn require(actual: Value, expected: Value) -> ConformanceResult<()> {
     if actual != expected {
         return Err(format!("mail relay returned {actual}; expected {expected}").into());
     }
     Ok(())
 }
-
-#[tokio::test]
-async fn normal_recipient_session_fetches_receipts_and_reports_original_mail()
--> ConformanceResult<()> {
-    // A missing Session -> Mailbox route closes the socket before Fetch answers.
-    // A wrong peer/installation route returns empty custody instead of this body.
-    let root = tempfile::tempdir()?;
-    let jwks = JwksFixtureServer::start().await?;
-    let server = TokioServer::start(TokioSettings {
-        delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
-                "019f0000-0000-7000-8000-000000005240".to_owned(),
-            )?,
-        },
-        root: root.path().into(),
-        access_policy: fixture_policy(),
-        jwks_url: jwks.url.clone(),
-        registry: configuration::registry_config()?,
-        holder_answer_timeout: Duration::from_secs(2),
-        copy_ack_wait: Duration::from_secs(2),
+pub(super) async fn next_push(
+    socket: &mut WebSocket,
+) -> ConformanceResult<(FrameId, ServerCall<BoardDeliveryTypes>)> {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let message = socket.next().await.ok_or("Push socket ended")??;
+            let frame: ServerFrame<BoardConsumerProtocol> = match message {
+                Message::Text(text) => serde_json::from_str(&text)?,
+                Message::Binary(bytes) => serde_json::from_slice(&bytes)?,
+                _ => return Err("unexpected physical Push message".into()),
+            };
+            match frame {
+                ServerFrame::Request {
+                    frame,
+                    body: ServerRequest::Crate(call @ ServerCall::Push { .. }),
+                } => return Ok((frame, call)),
+                ServerFrame::Notice { .. }
+                | ServerFrame::Request {
+                    body: ServerRequest::Crate(ServerCall::PublishStatus { .. }),
+                    ..
+                } => {}
+                _ => return Err("Push lost its normal frame correlation".into()),
+            }
+        }
     })
-    .await?;
+    .await?
+}
+pub(super) async fn pushed(
+    socket: &mut WebSocket,
+    frame: FrameId,
+    answer: PushResult<<BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Acceptance>,
+) -> ConformanceResult<()> {
+    socket
+        .send(Message::Binary(
+            serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Answer {
+                frame,
+                body: ClientAnswer::Crate(ServerCallAnswer::Pushed(answer)),
+            })?
+            .into(),
+        ))
+        .await?;
+    Ok(())
+}
+pub(super) fn submitted(item: &DeliveryEnvelope<BoardDeliveryTypes>) -> Value {
+    json!({"kind":"consumer","value":{"kind":"mailSubmit","value":{"item":item,"originEpoch":null}}})
+}
+#[tokio::test]
+async fn normal_recipient_session_pushes_receipts_and_reports_original_mail()
+-> ConformanceResult<()> {
+    let root = tempfile::tempdir()?;
+    let inbox_root = tempfile::tempdir()?;
+    let jwks = JwksFixtureServer::start().await?;
+    let server = grants::start(root.path(), &jwks).await?;
     let proof=async {
+        const ORIGIN:&str="019f0000-0000-7000-8000-000000004017";
+        const DESTINATION:&str="019f0000-0000-7000-8000-000000004018";
         let client=ConformanceClient::new(server.base_url())?;
-        let mut sender=enroll_admitted_peer(&client,"550e8400-e29b-41d4-a716-4466554400e5","019f0000-0000-7000-8000-000000001017","relay-origin","019f0000-0000-7000-8000-000000000e51").await?;
-        let mut recipient=enroll_admitted_peer(&client,"550e8400-e29b-41d4-a716-4466554400e6","019f0000-0000-7000-8000-000000001018","relay-recipient","019f0000-0000-7000-8000-000000000e52").await?;
+        let mut sender=enroll_admitted_peer(&client,ORIGIN,"019f0000-0000-7000-8000-000000001017","relay-origin","019f0000-0000-7000-8000-000000000e51").await?;
+        let mut recipient=enroll_admitted_peer(&client,DESTINATION,"019f0000-0000-7000-8000-000000001018","relay-recipient","019f0000-0000-7000-8000-000000000e52").await?;
+        let owner=PeerId::new(recipient.peer)?;let submitter=Submitter::Machine(PeerId::new(sender.peer)?);
+        let inbox=mail_push_inbox::PushInbox::open(&inbox_root.path().join("inbox.db"),owner,vec![(message_board::ServiceId::try_from(ORIGIN.to_owned())?,PeerId::new(sender.peer)?)]).await?;
         let proof=async {
-            let id=ItemId::new(Uuid::now_v7())?;
-            let peer=PeerId::new(recipient.peer)?;
-            let service=ServiceId::try_from("550e8400-e29b-41d4-a716-4466554400e6".to_owned())?;
-            let item=DeliveryEnvelope::Item(DeliveryItem::<BoardDeliveryTypes>::new(id,
-                serde_json::from_value(json!({"kind":"humanUser","installation":"550e8400-e29b-41d4-a716-4466554400e5"}))?,
-                serde_json::from_value(json!({"peer":peer,"address":{"endpoint":{"serviceId":service,"endpointId":"codex-local"},"sessionId":"recipient"}}))?,None,
-                serde_json::from_value(json!({"kind":"message","text":"normal recipient custody","delivery":"auto","guard":null,"senderDisplayName":null,"replyTo":null}))?,
-            )?);
-            require(operation(&mut sender.socket,json!({"kind":"consumer","value":{"kind":"mailSubmit","value":{"item":item,"originEpoch":null}}})).await?,
-                json!({"kind":"consumer","value":{"kind":"mailSubmit","value":{"kind":"submitted","value":{"kind":"accepted","value":{"seq":1,"status":{"kind":"sent","value":{"seq":1}},"version":1,"cancel":null}}}}}))?;
-            // No receiver room must preserve custody and the fetch prefix.
-            let no_room=operation(&mut recipient.socket,relay_request("fetch",json!({"stream":"items","after":0,"maxItems":10,"maxBytes":1_000_000,"inboxRoomBytes":0}))).await?;
-            require(no_room,json!({"kind":"delivery","value":{"kind":"fetch","value":{"stream":"items","entries":[],"through":0}}}))?;
-            let fetched=operation(&mut recipient.socket,relay_request("fetch",json!({"stream":"items","after":0,"maxItems":10,"maxBytes":1_000_000}))).await?;
-            require(fetched,json!({"kind":"delivery","value":{"kind":"fetch","value":{"stream":"items","entries":[{"kind":"item","value":{"seq":1,"item":item}}],"through":1}}}))?;
-            require(operation(&mut recipient.socket,relay_request("received",json!({"stream":"items","through":1}))).await?,
-                json!({"kind":"delivery","value":{"kind":"received","value":{"stream":"items","releasedThrough":1}}}))?;
-            require(operation(&mut recipient.socket,relay_request("report",json!({"report":{"item":id,"reportSeq":1,"outcome":{"kind":"held"}}}))).await?,
-                json!({"kind":"delivery","value":{"kind":"report","value":{"kind":"applied","value":{"item":id,"acknowledged":1,"status":{"kind":"held"},"version":3}}}}))?;
-            require(operation(&mut recipient.socket,relay_request("report",json!({"report":{"item":id,"reportSeq":2,"outcome":{"kind":"uncertain"}}}))).await?,
-                json!({"kind":"delivery","value":{"kind":"report","value":{"kind":"applied","value":{"item":id,"acknowledged":2,"status":{"kind":"uncertain"},"version":4}}}}))?;
+            let item=DeliveryEnvelope::Item(DeliveryItem::<BoardDeliveryTypes>::new(ItemId::new(Uuid::now_v7())?,
+                serde_json::from_value(json!({"kind":"humanUser","installation":ORIGIN}))?,
+                serde_json::from_value(json!({"peer":owner,"address":{"endpoint":{"serviceId":DESTINATION,"endpointId":"codex-local"},"sessionId":"recipient"}}))?,None,
+                serde_json::from_value(json!({"kind":"message","text":"normal recipient custody","delivery":"auto","guard":null,"senderDisplayName":null,"replyTo":null}))?)?);
+            require(operation(&mut sender.socket,submitted(&item)).await?,json!({"kind":"consumer","value":{"kind":"mailSubmit","value":{"kind":"submitted","value":{"kind":"accepted","value":{"status":{"kind":"sent"},"version":1,"cancel":null}}}}}))?;
+            let (frame,first)=next_push(&mut recipient.socket).await?;let first_bytes=serde_json::to_vec(&first)?;
+            let ServerCall::Push {submitter:actual,item:offered,..}=first else {return Err("expected Push".into());};
+            require(serde_json::to_value(&offered)?,serde_json::to_value(&item)?)?;
+            if actual!=submitter {return Err("Push changed the independently enrolled sender".into());}
+            let no_room=DeliveryLimits::new::<BoardDeliveryTypes>(1_000_000,100,1_000_000,100,0,fleet_sync_delivery::minimum_settlement_allowance::<BoardDeliveryTypes>()?)?;
+            let refused=inbox.accept_with_limits(actual,offered,no_room).await?;
+            if !matches!(refused,PushResult::Refused {reason:DeliveryRefusal::MailboxFull})||inbox.count().await?!=0 {return Err("full real Inbox took custody".into());}
+            pushed(&mut recipient.socket,frame,refused).await?;
+            let (frame,retry)=next_push(&mut recipient.socket).await?;
+            if serde_json::to_vec(&retry)?!=first_bytes {return Err("capacity retry changed its CallId/sender/body".into());}
+            let ServerCall::Push {submitter:actual,item:offered,..}=retry else {return Err("expected retry Push".into());};
+            let receipt=inbox.accept(actual,offered).await?;
+            if !matches!(receipt,PushResult::Accepted {..}) {return Err("real SDK did not accept fresh custody".into());}
+            pushed(&mut recipient.socket,frame,receipt).await?;
+            wait_for_receipt(&mut sender.socket, &item, owner).await?;
+            let reference=fleet_sync_protocol::DeliveryItemRef {item:item.id(),digest:item.digest().clone()};
+            let saved=inbox.payload(reference).await?;
+            require(serde_json::to_value(saved)?,serde_json::to_value(&item)?.get("value").cloned().ok_or("item payload absent")?)?;
+            if inbox.count().await?!=1 {return Err("Push retry duplicated custody".into());}
+            let held=inbox.hold_and_report(item.id()).await?;
+            require(operation(&mut recipient.socket,relay_request("report",json!({"report":held}))).await?,json!({"kind":"delivery","value":{"kind":"report","value":{"kind":"ack","value":{"reportSeq":1}}}}))?;
+            require_known(&mut sender.socket, &item, owner, "held", 3).await?;
+            // The authenticated recipient supplies its later local uncertainty;
+            // the real Fleet validates sequence and advances its stored status.
+            require(operation(&mut recipient.socket,relay_request("report",json!({"report":{"item":item.id(),"reportSeq":2,"outcome":{"kind":"uncertain"}}}))).await?,json!({"kind":"delivery","value":{"kind":"report","value":{"kind":"ack","value":{"reportSeq":2}}}}))?;
+            require_known(&mut sender.socket, &item, owner, "uncertain", 4).await?;
             Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
         }.await;
         let _=sender.socket.close(reqwest_websocket::CloseCode::Normal,None).await;
         let _=recipient.socket.close(reqwest_websocket::CloseCode::Normal,None).await;
-        proof
+        inbox.close()?;proof
     }.await;
-    server.shutdown().await?;
-    jwks.shutdown().await?;
-    proof
+    let stopped = server.shutdown().await;
+    let keys = jwks.shutdown().await;
+    proof?;
+    stopped?;
+    keys?;
+    Ok(())
+}
+
+async fn require_known(
+    socket: &mut WebSocket,
+    item: &DeliveryEnvelope<BoardDeliveryTypes>,
+    owner: PeerId,
+    status: &str,
+    version: u64,
+) -> ConformanceResult<()> {
+    require(
+        operation(
+            socket,
+            relay_request("query", json!({"mailbox":owner,"items":[item.id()]})),
+        )
+        .await?,
+        json!({"kind":"delivery","value":{"kind":"query","value":{"statuses":[{"item":item.id(),"state":{"kind":"known","value":{"digest":item.digest(),"status":{"kind":status},"version":version,"cancel":null}}}]}}}),
+    )
+}
+
+async fn wait_for_receipt(
+    socket: &mut WebSocket,
+    item: &DeliveryEnvelope<BoardDeliveryTypes>,
+    owner: PeerId,
+) -> ConformanceResult<()> {
+    // A socket answer can race a later report. Observe its committed custody
+    // first so this scenario deliberately pins both numbered transitions.
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let actual = operation(socket,relay_request("query",json!({"mailbox":owner,"items":[item.id()]}))).await?;
+            let expected = json!({"kind":"delivery","value":{"kind":"query","value":{"statuses":[{"item":item.id(),"state":{"kind":"known","value":{"digest":item.digest(),"status":{"kind":"atRecipient"},"version":2,"cancel":null}}}]}}});
+            if actual == expected { return Ok::<_,Box<dyn std::error::Error+Send+Sync>>(()); }
+            require(actual,json!({"kind":"delivery","value":{"kind":"query","value":{"statuses":[{"item":item.id(),"state":{"kind":"known","value":{"digest":item.digest(),"status":{"kind":"sent"},"version":1,"cancel":null}}}]}}}))?;
+            tokio::task::yield_now().await;
+        }
+    }).await?
 }
