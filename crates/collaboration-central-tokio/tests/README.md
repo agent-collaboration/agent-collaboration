@@ -10,6 +10,9 @@ cargo nextest run --profile ci -p collaboration-central-tokio --features conform
   object storage, copy/registry/session behavior, process recovery and the
   composed board runtime, plus one-Fleet ownership, project boundaries and
   authenticated Push/status contracts. Each former Cargo root keeps its module namespace.
+  `revocation_carryover` includes the shared Native/Worker O11(b) case:
+  a committed revoked sender with a still-live session cannot admit an item
+  or cancellation, change Fleet outbox count, or cause a recipient Push.
 - `e2e/main.rs` aggregates the four roots selected by CI's e2e job:
   `fleet_client_cache`, `forwarded_posts`, `forwarding_real_timer` and
   `mailbox_rules`. This target requires `conformance`.

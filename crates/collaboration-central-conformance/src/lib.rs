@@ -47,6 +47,10 @@ mod readmission_scenarios;
 #[cfg(feature = "client")]
 mod revocation_race_scenarios;
 #[cfg(feature = "client")]
+mod sender_revocation_scenario;
+#[cfg(feature = "client")]
+pub use sender_revocation_scenario::run_sender_revocation_conformance;
+#[cfg(feature = "client")]
 mod runtime_control_scenarios;
 mod runtime_controls;
 mod runtime_faults;

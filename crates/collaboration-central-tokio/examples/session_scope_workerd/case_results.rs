@@ -158,6 +158,9 @@ impl Scenario {
             Scenario::RevocationRace => println!(
                 "REVOCATION_RESULT 2 passed; 0 failed; 0 ignored (normal revoke, held real delivery, unchanged owning enrollment, actual completed journal and late CallId replay; no heap-loss recovery claim)"
             ),
+            Scenario::SenderRevocation => println!(
+                "SENDER_REVOCATION_RESULT 1 passed; 0 failed; 0 ignored (shared Native/Worker scenario; committed revoked row with live sender, exact item/cancel refusal, unchanged outbox count and no recipient Push)"
+            ),
             Scenario::ReadmissionActivation => println!(
                 "READMISSION_RESULT 1 passed; 0 failed; 0 ignored (real activation row and saved local receipt, normal credential/session admission, revoke before engine finish, old completion leaves row revoked and credential refused; no mailbox readback or process-crash claim)"
             ),

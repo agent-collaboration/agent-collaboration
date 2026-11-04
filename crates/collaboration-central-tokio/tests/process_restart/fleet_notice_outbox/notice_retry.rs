@@ -12,10 +12,11 @@ pub(super) async fn resume_at_committed_retry(
         row::Row,
     };
     let call: Value = serde_json::from_slice(held)?;
-    let operation = call
+    let mut operation = call
         .pointer("/identity/operation")
         .and_then(Value::as_str)
-        .ok_or("held notice omitted its operation")?;
+        .ok_or("held notice omitted its operation")?
+        .to_owned();
     control(
         base,
         ObjectAddress::Fleet,
@@ -34,11 +35,31 @@ pub(super) async fn resume_at_committed_retry(
             .connect()
             .await?;
         let row=query::<sqlx_turso::Turso>("SELECT state,next_attempt_at,drive_until FROM _fleet_sync_operations WHERE operation_id=? AND kind='central.fleet-notice'")
-            .bind(operation).fetch_one(&mut connection).await?;
+            .bind(&operation).fetch_one(&mut connection).await?;
         let state = row.try_get::<String, _>("state")?;
         let drive = row.try_get::<Option<i64>, _>("drive_until")?;
         let deadline = row.try_get::<Option<i64>, _>("next_attempt_at")?;
         connection.close().await?;
+        if state == "completed" {
+            let observed = control(base, ObjectAddress::Fleet, RuntimeControl::Observe).await?;
+            if let ObjectReplyFaultObservation::Dropped { request, .. } = observed.object_reply {
+                let dropped: Value = serde_json::from_slice(&request)?;
+                let lost_operation = dropped
+                    .pointer("/identity/operation")
+                    .and_then(Value::as_str)
+                    .ok_or("dropped notice omitted its operation")?;
+                // A sibling notice can consume the kind-wide reply fault while
+                // this call is held. Its real retry, not this successful call,
+                // must commit before advancing the injected clock.
+                if lost_operation != operation {
+                    eprintln!(
+                        "NOTICE_ACK_LOSS_CASE completed_sibling={operation} following_actual_lost_call={lost_operation}"
+                    );
+                    operation = lost_operation.to_owned();
+                    continue;
+                }
+            }
+        }
         if state != "running" {
             return Err("notice sender completed before its intended reply loss".into());
         }
