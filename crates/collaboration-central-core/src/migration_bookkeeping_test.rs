@@ -176,6 +176,51 @@ async fn read_history(fixture: &FleetStorageFixture) -> TestResult<Vec<HistoryRo
     })).await?)
 }
 
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Fresh owning bootstrap must persist the exact SQLx SHA-384 checksum as lowercase hex, never a JSON byte array."
+)]
+async fn fresh_bootstrap_stores_sqlx_checksums_as_96_lowercase_hex_characters() -> TestResult {
+    for schema in [EngineSchema::Fleet, EngineSchema::Copy] {
+        let fixture = FleetStorageFixture::open().await?;
+        bootstrap(&fixture, schema, NOW).await?;
+
+        let history = read_history(&fixture).await?;
+        let migrations = schema.migrations();
+        let stored = history
+            .iter()
+            .filter(|row| row.corpus == schema.corpus())
+            .collect::<Vec<_>>();
+        assert_eq!(stored.len(), migrations.len());
+        for row in stored {
+            let migration = migrations
+                .iter()
+                .find(|migration| migration.version.to_string() == row.version)
+                .ok_or("stored migration is absent from SQLx corpus")?;
+            assert_eq!(row.checksum.len(), 96, "{schema:?}: {row:?}");
+            assert!(
+                row.checksum
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+                "{schema:?}: {row:?}"
+            );
+            let expected = migration
+                .checksum
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>();
+            assert_eq!(
+                row.checksum, expected,
+                "{schema:?} migration {}",
+                row.version
+            );
+        }
+        fixture.close().await?;
+    }
+    Ok(())
+}
+
 async fn record_failure(
     fixture: &FleetStorageFixture,
     version: u64,

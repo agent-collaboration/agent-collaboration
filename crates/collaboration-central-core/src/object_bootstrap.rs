@@ -549,7 +549,13 @@ where
 }
 
 fn checksum(migration: &sqlx_core::migrate::Migration) -> Result<String, StoreError> {
-    serde_json::to_string(migration.checksum.as_ref()).map_err(StoreError::backend)
+    use std::fmt::Write as _;
+
+    let mut encoded = String::with_capacity(migration.checksum.len() * 2);
+    for byte in migration.checksum.iter() {
+        write!(encoded, "{byte:02x}").map_err(StoreError::backend)?;
+    }
+    Ok(encoded)
 }
 fn corrupt(message: &str) -> StoreError {
     StoreError::Corrupt {
