@@ -34,6 +34,13 @@ export const tursoPreparationTargets: readonly TursoPreparationTarget[] = [
       "cursor_migrations",
     ].map((name) => `crates/message-board-storage/${name}`),
   },
+  {
+    packageName: "board-staging-cutover",
+    migrationSources: [
+      "crates/message-board-storage/project_migrations",
+      "crates/message-board-storage/project_bookkeeping_migrations",
+    ],
+  },
 ];
 
 interface TursoCommandOptions {

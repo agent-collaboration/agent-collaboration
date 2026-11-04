@@ -10,6 +10,15 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.123" }
+fleet-sync-lease.workspace = true
+fleet-sync-writer.workspace = true
+message-board = { path = "../message-board", version = "0.1.123" }
+message-board-storage = { path = "../message-board-storage", version = "0.1.123" }
+runtime-primitives.workspace = true
+sqlx.workspace = true
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "146868e5f024bf9e207755eea953e6803e32ed0e", default-features = false, features = ["macros", "runtime-tokio"] }
+tokio.workspace = true
 codex-router-host.workspace = true
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.121" }
 collaboration-runtime = { path = "../collaboration-runtime", version = "0.1.121" }
@@ -18,6 +27,7 @@ nix.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+chrono.workspace = true
 serde_json.workspace = true
 tempfile = "3.27.0"
 uuid.workspace = true

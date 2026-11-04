@@ -995,14 +995,24 @@ dependencies = [
 name = "board-staging-cutover"
 version = "0.1.123"
 dependencies = [
+ "board-fleet-sync",
+ "chrono",
  "codex-router-host",
  "collaboration-protocol",
  "collaboration-runtime",
+ "fleet-sync-lease",
  "fleet-sync-protocol",
+ "fleet-sync-writer",
+ "message-board",
+ "message-board-storage",
  "nix",
+ "runtime-primitives",
  "serde_json",
+ "sqlx",
+ "sqlx-turso",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
  "uuid",
 ]
 

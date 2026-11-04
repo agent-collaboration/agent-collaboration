@@ -1,64 +1,11 @@
 use super::{OfflineHost, OfflineHostError};
+use crate::cutover_host_fixture::CutoverHostFixture;
 use codex_router_host::{HostCoordinationPaths, HostInstanceLock, InstanceAcquireError};
 use collaboration_protocol::UuidIdentity;
 use fleet_sync_protocol::PeerId;
-use std::{os::unix::fs::PermissionsExt, path::PathBuf};
+use std::os::unix::fs::PermissionsExt;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
-
-struct Fixture {
-    _area: tempfile::TempDir,
-    root: PathBuf,
-    home: PathBuf,
-    service: UuidIdentity,
-    peer: PeerId,
-}
-
-impl Fixture {
-    fn new(protected: Option<&str>) -> Result<Self, Box<dyn std::error::Error>> {
-        let area = tempfile::tempdir()?;
-        let home = area.path().join("home");
-        std::fs::create_dir(&home)?;
-        let root = protected.map_or_else(|| area.path().join("machine"), |name| home.join(name));
-        std::fs::create_dir(&root)?;
-        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))?;
-        let collaboration = codex_router_host::router_collaboration_directory(&root);
-        std::fs::create_dir(&collaboration)?;
-        std::fs::set_permissions(&collaboration, std::fs::Permissions::from_mode(0o700))?;
-        let service = uuid::Uuid::now_v7().to_string().try_into()?;
-        let peer = PeerId::new(uuid::Uuid::now_v7())?;
-        let fixture = Self {
-            _area: area,
-            root,
-            home,
-            service,
-            peer,
-        };
-        for (name, value) in [
-            (
-                "service-identity.json",
-                serde_json::json!({"version":1,"serviceId":fixture.service}),
-            ),
-            (
-                "installation-peer.json",
-                serde_json::json!({"version":1,"peerId":peer}),
-            ),
-        ] {
-            let path = collaboration.join(name);
-            std::fs::write(&path, serde_json::to_vec(&value)?)?;
-            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
-        }
-        Ok(fixture)
-    }
-
-    fn acquire(&self) -> Result<OfflineHost, OfflineHostError> {
-        OfflineHost::acquire(&self.root, &self.service, self.peer, &self.home)
-    }
-
-    fn identity_path(&self, name: &str) -> PathBuf {
-        codex_router_host::router_collaboration_directory(&self.root).join(name)
-    }
-}
 
 #[test]
 #[expect(
@@ -67,7 +14,7 @@ impl Fixture {
 )]
 fn offline_scope_holds_the_existing_host_lock_until_drop() -> TestResult {
     // Arrange / Act: acquire the declared Host's actual offline authority.
-    let fixture = Fixture::new(None)?;
+    let fixture = CutoverHostFixture::new(None)?;
     let offline = fixture.acquire()?;
     // Assert: same public Host acquisition is excluded until the owner drops.
     assert_eq!(offline.router_root(), std::fs::canonicalize(&fixture.root)?);
@@ -91,7 +38,7 @@ fn offline_scope_holds_the_existing_host_lock_until_drop() -> TestResult {
 )]
 fn existing_host_lock_prevents_offline_access() -> TestResult {
     // Arrange: the actual Host lock is already held.
-    let fixture = Fixture::new(None)?;
+    let fixture = CutoverHostFixture::new(None)?;
     let host = HostInstanceLock::acquire(&HostCoordinationPaths::for_router_root(&fixture.root))?;
     // Act / Assert: no second offline capability is admitted.
     assert!(matches!(
@@ -110,7 +57,7 @@ fn existing_host_lock_prevents_offline_access() -> TestResult {
 fn production_and_standing_debug_roots_are_refused_without_side_effects() -> TestResult {
     for name in [".codex", ".codex-router", ".codex-router-debug"] {
         // Arrange: artificial home roots, never the actual user's production directory.
-        let fixture = Fixture::new(Some(name))?;
+        let fixture = CutoverHostFixture::new(Some(name))?;
         // Act / Assert.
         assert!(matches!(
             fixture.acquire(),
@@ -132,7 +79,7 @@ fn production_and_standing_debug_roots_are_refused_without_side_effects() -> Tes
 )]
 fn public_and_symlink_roots_are_refused() -> TestResult {
     // Arrange / Act / Assert: a public directory is rejected.
-    let fixture = Fixture::new(None)?;
+    let fixture = CutoverHostFixture::new(None)?;
     std::fs::set_permissions(&fixture.root, std::fs::Permissions::from_mode(0o755))?;
     assert!(matches!(
         fixture.acquire(),
@@ -156,7 +103,7 @@ fn public_and_symlink_roots_are_refused() -> TestResult {
 )]
 fn source_service_mismatch_keeps_the_original_identity() -> TestResult {
     // Arrange.
-    let fixture = Fixture::new(None)?;
+    let fixture = CutoverHostFixture::new(None)?;
     let path = fixture.identity_path("service-identity.json");
     let before = std::fs::read(&path)?;
     let other: UuidIdentity = uuid::Uuid::now_v7().to_string().try_into()?;
@@ -176,7 +123,7 @@ fn source_service_mismatch_keeps_the_original_identity() -> TestResult {
 )]
 fn source_peer_mismatch_keeps_the_original_identity() -> TestResult {
     // Arrange.
-    let fixture = Fixture::new(None)?;
+    let fixture = CutoverHostFixture::new(None)?;
     let path = fixture.identity_path("installation-peer.json");
     let before = std::fs::read(&path)?;
     let other = PeerId::new(uuid::Uuid::now_v7())?;
@@ -196,7 +143,7 @@ fn source_peer_mismatch_keeps_the_original_identity() -> TestResult {
 )]
 fn missing_peer_identity_is_not_created() -> TestResult {
     // Arrange: retain the service identity, remove only this fixture's peer file.
-    let fixture = Fixture::new(None)?;
+    let fixture = CutoverHostFixture::new(None)?;
     let path = fixture.identity_path("installation-peer.json");
     std::fs::remove_file(&path)?;
     // Act / Assert.
@@ -215,7 +162,7 @@ fn missing_peer_identity_is_not_created() -> TestResult {
 )]
 fn missing_service_identity_is_not_created() -> TestResult {
     // Arrange: retain the peer identity, remove only this fixture's service file.
-    let fixture = Fixture::new(None)?;
+    let fixture = CutoverHostFixture::new(None)?;
     let path = fixture.identity_path("service-identity.json");
     std::fs::remove_file(&path)?;
     // Act / Assert: the read-only identity boundary cannot manufacture a replacement.

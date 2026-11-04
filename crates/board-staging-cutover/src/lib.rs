@@ -7,3 +7,11 @@ pub use offline_host::{OfflineHost, OfflineHostError};
 pub use snapshot_transport::{
     PreparedSnapshotPage, SnapshotTransportError, reframe_import_manifest, reframe_import_page,
 };
+
+mod native_project_snapshot;
+pub use native_project_snapshot::{
+    NativeProjectSnapshot, NativeSourceError, NativeSourcePreflight, SelectedWriterFile,
+};
+
+#[cfg(test)]
+mod cutover_host_fixture;
