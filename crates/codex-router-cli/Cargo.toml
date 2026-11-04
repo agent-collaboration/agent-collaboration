@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "codex-router-cli"
 version.workspace = true
 edition.workspace = true
@@ -91,3 +92,11 @@ tokio-tungstenite.workspace = true
 toml = "1.1.2"
 tungstenite = "0.28.0"
 tokio = { workspace = true, features = ["test-util"] }
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"
+
+[[test]]
+name = "e2e"
+path = "tests/e2e/main.rs"

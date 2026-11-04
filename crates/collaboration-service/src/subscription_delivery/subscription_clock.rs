@@ -24,3 +24,11 @@ impl SubscriptionClock for SystemSubscriptionClock {
         Instant::now()
     }
 }
+
+pub(crate) struct SubscriptionRuntimeClock(pub(crate) std::sync::Arc<dyn SubscriptionClock>);
+
+impl runtime_primitives::Clock for SubscriptionRuntimeClock {
+    fn now(&self) -> runtime_primitives::SyncTime {
+        runtime_primitives::SyncTime::from_unix_millis(self.0.now().timestamp_millis())
+    }
+}

@@ -2,7 +2,7 @@
 
 ## Current entry
 
-The external wrapper retired in 0.1.102. Local publication/replay/restart coverage now lives in `crates/board-legacy-upgrade/tests/upgrade_binary_e2e.rs`; use `cargo test --locked -p board-legacy-upgrade --test upgrade_binary_e2e -- --test-threads=1` after CI-equivalent artifact preparation. `verification/import-run.ts` is the separately commissioned sealed-copy Mac/local-Tokio entry. The current two-machine/Worker entry is `node verification/run.ts "$PRIVATE_DECLARATION"`, governed by `verification/declaration.ts` and `verification/case-registry.ts`. These entries do not establish the entire former external publication matrix; an obligation without a retained mapped case remains unavailable.
+The external wrapper retired in 0.1.102. Local publication/replay/restart coverage now lives in `crates/board-legacy-upgrade/tests/e2e/upgrade_binary_e2e.rs`; use `cargo nextest run --locked --profile ci -p board-legacy-upgrade --test e2e --test-threads 1` after CI-equivalent artifact preparation. `verification/import-run.ts` is the separately commissioned sealed-copy Mac/local-Tokio entry. The current two-machine/Worker entry is `node verification/run.ts "$PRIVATE_DECLARATION"`, governed by `verification/declaration.ts` and `verification/case-registry.ts`. These entries do not establish the entire former external publication matrix; an obligation without a retained mapped case remains unavailable.
 
 ## Retained obligations and historical evidence
 

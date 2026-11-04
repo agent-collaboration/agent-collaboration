@@ -1,5 +1,5 @@
 //! Real remote operations must leave capacity available for the next operation.
-use crate::{
+use crate::mail_retirement_e2e::{
     central_pair::SecondHost,
     fixture::{self, BoardFixture},
     readback,

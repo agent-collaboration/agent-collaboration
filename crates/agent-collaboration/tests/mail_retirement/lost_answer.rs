@@ -1,5 +1,5 @@
 //! A lost post-commit answer keeps the same durable retirement call across restart.
-use crate::{
+use crate::mail_retirement_e2e::{
     central_pair::{self, SecondHost},
     fixture::{self, BoardFixture},
     readback, wake_and_capacity,

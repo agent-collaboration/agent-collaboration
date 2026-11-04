@@ -1,6 +1,6 @@
 //! Explicit live-test admission and fresh-thread helpers; fixture tests never call this module.
 #[path = "native_notification_diagnostics.rs"]
-mod native_notification_diagnostics;
+pub(crate) mod native_notification_diagnostics;
 use codex_native_integration::{
     DEFAULT_ROUTER_PORT, NativeOperation, NativePayloadSchemas, NativeProtocolConnection,
     NativeSchemaExport,

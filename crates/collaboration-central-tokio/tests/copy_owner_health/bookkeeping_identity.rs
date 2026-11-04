@@ -1,6 +1,6 @@
 //! Tolerant owner Health rejects physical identity corruption without repairing it.
 use super::{ConformanceResult, JwksFixtureServer, TokioServer, settings};
-use crate::copy_owner_scenarios::{OwnerClient, bookkeeping};
+use crate::copy_owner_health::copy_owner_scenarios::{OwnerClient, bookkeeping};
 use serde_json::Value;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},

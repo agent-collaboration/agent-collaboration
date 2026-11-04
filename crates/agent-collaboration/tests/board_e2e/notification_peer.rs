@@ -106,10 +106,18 @@ impl NotificationPeer {
             .mode(0o600)
             .open(path.with_extension("stderr"))?;
         let mut command = artifact_command(&std::env::current_exe()?)?;
+        let parent = module_path!()
+            .rsplit_once("::")
+            .ok_or("notification peer parent namespace absent")?
+            .0;
+        let namespace = parent
+            .split_once("::")
+            .map_or(parent, |(_, namespace)| namespace);
+        let child_selector = format!("{namespace}::board_notification_peer_process");
         command
             .args([
                 "--exact",
-                "board_notification_peer_process",
+                &child_selector,
                 "--ignored",
                 "--nocapture",
                 "--test-threads=1",
@@ -233,6 +241,10 @@ impl NotificationPeer {
                 }
                 if let Err(error) = output {
                     failures.push(format!("peer stdout drain: {error}"));
+                }
+                if !String::from_utf8_lossy(&remaining).contains("test result: ok. 1 passed;") {
+                    failures
+                        .push("notification peer selector did not complete one test".to_owned());
                 }
             }
             Err(error) => {

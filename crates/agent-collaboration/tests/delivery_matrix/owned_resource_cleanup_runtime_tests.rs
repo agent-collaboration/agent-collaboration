@@ -1,6 +1,6 @@
 //! L3 normal-prefix and unavailable-socket cases through the real local Runtime and SQLite.
-use crate::owned_resource_cleanup::readback::CleanupReadback;
-use crate::{
+use crate::push_delivery_matrix::owned_resource_cleanup::readback::CleanupReadback;
+use crate::push_delivery_matrix::{
     owned_resource_cleanup::{
         CleanupAction, CleanupObservation, CleanupOutcome, MatrixCleanupReport,
         cleanup_owned_resources,
