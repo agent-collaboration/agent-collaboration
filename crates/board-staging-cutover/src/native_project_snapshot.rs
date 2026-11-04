@@ -155,6 +155,11 @@ impl<'host> NativeProjectSnapshot<'host> {
         self.database.close().await;
         closed.map_err(Into::into)
     }
+
+    pub(crate) fn rewind_pages(&mut self) {
+        // The same pinned SDK snapshot accepts the original cursor again.
+        self.cursor = SourceCursor::Start;
+    }
 }
 
 pub(crate) fn selected_path(

@@ -10,6 +10,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub(crate) const MAX_INDEX_BYTES: u64 = 16 * 1024 * 1024;
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SourceDirectoryFingerprint {
@@ -158,8 +160,10 @@ pub(crate) fn read_small<T: DeserializeOwned>(
     let file = open_regular(path, true)?;
     // Only the manifest/index uses this bound. Snapshot rows stay in separate pages.
     let mut bytes = Vec::new();
-    file.take(16 * 1024 * 1024 + 1).read_to_end(&mut bytes)?;
-    if bytes.len() > 16 * 1024 * 1024 {
+    file.take(MAX_INDEX_BYTES + 1).read_to_end(&mut bytes)?;
+    if u64::try_from(bytes.len()).map_err(|_| ProjectBundleError::InvalidArtifact)?
+        > MAX_INDEX_BYTES
+    {
         return Err(ProjectBundleError::InvalidArtifact);
     }
     Ok((serde_json::from_slice(&bytes)?, bytes))

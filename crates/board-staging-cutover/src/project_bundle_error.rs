@@ -13,6 +13,8 @@ pub enum ProjectBundleError {
     InvalidGraph,
     #[error("cutover identities or target origin are invalid")]
     InvalidPreparation,
+    #[error("insufficient free space for the frozen project bundle")]
+    InsufficientSpace { available: u64, required: u64 },
     #[error("cannot inspect native source")]
     Source(#[from] crate::NativeSourceError),
     #[error("cannot reframe native source")]

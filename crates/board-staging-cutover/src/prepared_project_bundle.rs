@@ -72,6 +72,19 @@ impl PreparedProjectBundle {
         input: ProjectPreparation,
         parent: &Path,
     ) -> Result<Self, ProjectBundleError> {
+        Self::prepare_with_space_probe(host, selected, input, parent, |path| {
+            fs2::available_space(path)
+        })
+        .await
+    }
+
+    async fn prepare_with_space_probe(
+        host: &mut OfflineHost,
+        selected: SelectedWriterFile,
+        input: ProjectPreparation,
+        parent: &Path,
+        available_space: impl Fn(&Path) -> std::io::Result<u64>,
+    ) -> Result<Self, ProjectBundleError> {
         validate_input(&input)?;
         validate_graph(&input.fleet, &selected)?;
         if !parent.is_absolute() {
@@ -92,20 +105,21 @@ impl PreparedProjectBundle {
         if std::fs::symlink_metadata(parent.join(&final_name)).is_ok() {
             return Err(std::io::Error::from(std::io::ErrorKind::AlreadyExists).into());
         }
-        let partial = tempfile::Builder::new()
-            .prefix(".cutover-partial-")
-            .permissions(std::os::unix::fs::PermissionsExt::from_mode(0o700))
-            .tempdir_in(&parent)?;
-        let pages_path = partial.path().join("pages");
-        std::fs::create_dir(&pages_path)?;
-        std::fs::set_permissions(
-            &pages_path,
-            std::os::unix::fs::PermissionsExt::from_mode(0o700),
-        )?;
         let mut source = NativeProjectSnapshot::open(host, selected).await?;
         let preflight = source.preflight().clone();
         let exported = async {
             validate_scope(&input.fleet, &preflight)?;
+            require_bundle_capacity(&mut source, &parent, available_space).await?;
+            let partial = tempfile::Builder::new()
+                .prefix(".cutover-partial-")
+                .permissions(std::os::unix::fs::PermissionsExt::from_mode(0o700))
+                .tempdir_in(&parent)?;
+            let pages_path = partial.path().join("pages");
+            std::fs::create_dir(&pages_path)?;
+            std::fs::set_permissions(
+                &pages_path,
+                std::os::unix::fs::PermissionsExt::from_mode(0o700),
+            )?;
             let mut digests = Vec::new();
             while let Some(page) = source.next_page().await? {
                 let index = u32::try_from(digests.len())
@@ -116,11 +130,11 @@ impl PreparedProjectBundle {
                 )?;
                 digests.push(page.digest);
             }
-            Ok::<_, ProjectBundleError>(digests)
+            Ok::<_, ProjectBundleError>((digests, partial))
         }
         .await;
         let closed = source.close().await;
-        let page_digests = exported?;
+        let (page_digests, partial) = exported?;
         closed?;
         let manifest = reframe_import_manifest(preflight.manifest.clone())?;
         let digest = import_digest(&manifest, &page_digests)?;
@@ -158,6 +172,11 @@ impl PreparedProjectBundle {
             page_digests,
         };
         let bytes = serde_json::to_vec(&metadata)?;
+        if u64::try_from(bytes.len()).map_err(|_| ProjectBundleError::InvalidArtifact)?
+            > crate::bundle_files::MAX_INDEX_BYTES
+        {
+            return Err(ProjectBundleError::InvalidArtifact);
+        }
         write_frozen(&partial.path().join("manifest.json"), &bytes)?;
         write_frozen(
             &partial.path().join("seal.json"),
@@ -165,7 +184,7 @@ impl PreparedProjectBundle {
                 manifest_digest: bytes_digest(&bytes)?,
             })?,
         )?;
-        File::open(&pages_path)?.sync_all()?;
+        File::open(partial.path().join("pages"))?.sync_all()?;
         let directory = commit_directory(&parent, partial.path(), &final_name)?;
         // The temporary path was moved atomically; dropping it has nothing to remove.
         drop(partial);
@@ -231,6 +250,33 @@ impl PreparedProjectBundle {
         }
         Ok((page, bytes))
     }
+}
+
+async fn require_bundle_capacity(
+    source: &mut NativeProjectSnapshot<'_>,
+    parent: &Path,
+    available_space: impl Fn(&Path) -> std::io::Result<u64>,
+) -> Result<(), ProjectBundleError> {
+    // Count the exact encoded pages with bounded memory, then replay the same
+    // pinned snapshot. Reserve the existing format bounds for manifest + seal.
+    // This is a preflight, not a filesystem reservation; later I/O can still fail.
+    let mut required = crate::bundle_files::MAX_INDEX_BYTES * 2;
+    while let Some(page) = source.next_page().await? {
+        let bytes = u64::try_from(serde_json::to_vec(&page.contents)?.len())
+            .map_err(|_| ProjectBundleError::InvalidArtifact)?;
+        required = required
+            .checked_add(bytes)
+            .ok_or(ProjectBundleError::InvalidArtifact)?;
+    }
+    let available = available_space(parent)?;
+    if available < required {
+        return Err(ProjectBundleError::InsufficientSpace {
+            available,
+            required,
+        });
+    }
+    source.rewind_pages();
+    Ok(())
 }
 
 fn import_digest(

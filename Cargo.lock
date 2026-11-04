@@ -1016,6 +1016,7 @@ dependencies = [
  "fleet-sync-session",
  "fleet-sync-tokio-runner",
  "fleet-sync-writer",
+ "fs2",
  "message-board",
  "message-board-storage",
  "nix",

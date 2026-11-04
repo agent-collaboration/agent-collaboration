@@ -87,6 +87,47 @@ struct BundleFixture {
     area: tempfile::TempDir,
 }
 
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Insufficient capacity must refuse before artifact creation."
+)]
+async fn insufficient_capacity_leaves_source_and_preparation_directory_intact() -> TestResult {
+    // Arrange actual native content, a private empty artifact directory and zero available bytes.
+    let fixture = BundleFixture::new().await?;
+    let mut offline = fixture.host.acquire()?;
+    let source_directory = fixture.source.path.parent().ok_or("source parent absent")?;
+    let original_inode = std::os::unix::fs::MetadataExt::ino(&source_directory.metadata()?);
+    // Act through the production preparation owner with only its filesystem probe injected.
+    let refused = PreparedProjectBundle::prepare_with_space_probe(
+        &mut offline,
+        fixture.source.selected.clone(),
+        fixture.input.clone(),
+        fixture.area.path(),
+        |_| Ok(0),
+    )
+    .await;
+    // Assert no prepared or partial artifact and no source or backup move.
+    assert!(
+        matches!(refused, Err(ProjectBundleError::InsufficientSpace { available:0, required }) if required > 0)
+    );
+    assert_eq!(std::fs::read_dir(fixture.area.path())?.count(), 0);
+    assert!(fixture.source.path.is_file());
+    assert_eq!(
+        std::os::unix::fs::MetadataExt::ino(&source_directory.metadata()?),
+        original_inode
+    );
+    assert!(!fixture.host.root.join("staging-cutover-backups").exists());
+    // The same frozen intent can still prepare its exact content with real capacity.
+    let admitted = fixture.prepare(&mut offline).await?;
+    assert_eq!(admitted.manifest().source.manifest, fixture.source.manifest);
+    assert_eq!(
+        admitted.manifest().claim_request,
+        fixture.input.claim_request
+    );
+    Ok(())
+}
+
 impl BundleFixture {
     async fn new() -> TestResult<Self> {
         let host = CutoverHostFixture::new(None)?;
