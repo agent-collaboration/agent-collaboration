@@ -477,3 +477,44 @@ async fn migration_execution_time_uses_the_injected_clock_around_each_execute() 
         .await?;
     fixture.close().await
 }
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "A backwards injected wall-clock step must record zero elapsed without aborting a successfully executed migration."
+)]
+async fn backwards_clock_records_zero_execution_time_and_commits_history() -> TestResult {
+    struct BackwardsClock(std::sync::atomic::AtomicBool);
+    impl runtime_primitives::Clock for BackwardsClock {
+        fn now(&self) -> runtime_primitives::SyncTime {
+            let stepped = self.0.swap(true, std::sync::atomic::Ordering::SeqCst);
+            runtime_primitives::SyncTime::from_unix_millis(
+                NOW.unix_millis() - i64::from(stepped) * 7,
+            )
+        }
+    }
+    let fixture = FleetStorageFixture::open().await?;
+    fixture.object.transaction(|scope| Box::pin(async move {
+        let (applied, _) = <BootstrapStep as StepCallback<Store, sqlx_turso::Turso>>::run(
+            BootstrapStep {
+                schema: EngineSchema::Fleet,
+                now: NOW,
+                clock: Arc::new(BackwardsClock(std::sync::atomic::AtomicBool::new(false))),
+            }, scope,
+        ).await?;
+        let rows = query::<sqlx_turso::Turso>(
+            "SELECT installed_on,success,execution_time FROM central_schema_migrations WHERE corpus='central-fleet'",
+        ).fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
+        assert_eq!(rows.len(), EngineSchema::Fleet.migrations().len());
+        assert_eq!(applied.count, rows.len());
+        for row in rows {
+            assert_eq!(row.try_get::<i64,_>("installed_on").map_err(StoreError::backend)?, NOW.unix_millis() - 7);
+            assert_eq!(row.try_get::<i64,_>("success").map_err(StoreError::backend)?, 1);
+            assert_eq!(row.try_get::<i64,_>("execution_time").map_err(StoreError::backend)?, 0);
+        }
+        Ok(())
+    })).await?;
+    // A separate transaction observes the committed rows, not just an uncommitted INSERT.
+    assert!(!read_history(&fixture).await?.is_empty());
+    fixture.close().await
+}

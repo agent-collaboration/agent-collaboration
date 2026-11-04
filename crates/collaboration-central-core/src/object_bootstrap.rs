@@ -556,10 +556,7 @@ where
                 )
             })?;
         let installed_on = clock.now().unix_millis();
-        let execution_time = installed_on
-            .checked_sub(started)
-            .filter(|elapsed| *elapsed >= 0)
-            .ok_or_else(|| corrupt("migration execution clock moved backwards or overflowed"))?;
+        let execution_time = installed_on.saturating_sub(started).max(0);
         generated_bootstrap::insert_migration_history(
             scope,
             durable_steps::Uuid::now_v7().to_string(),
