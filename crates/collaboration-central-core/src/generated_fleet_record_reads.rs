@@ -150,43 +150,6 @@ where
             .transpose()
     }
 }
-pub(crate) fn list_workspace_boards<S>(
-    scope: &mut S,
-    workspace_id: String,
-) -> impl std::future::Future<Output = Result<Vec<StoredFleetRecord>, sqlx_core::Error>> + Send
-where
-    S: TransactionScope,
-    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
-    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
-    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
-{
-    async move {
-        let statement = query::<S::Database>(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/sql/fleet/list_workspace_boards.sql"
-        )))
-        .bind(workspace_id);
-        let rows = statement.fetch_all(scope.executor()).await?;
-        rows.iter()
-            .map(|row| {
-                Ok(StoredFleetRecord {
-                    kind: row.try_get("kind")?,
-                    record_id: row.try_get("record_id")?,
-                    workspace_id: row.try_get("workspace_id")?,
-                    board_id: row.try_get("board_id")?,
-                    business_name: row.try_get("business_name")?,
-                    payload: row.try_get("payload")?,
-                    router_time: row.try_get("router_time")?,
-                    time_basis: row.try_get("time_basis")?,
-                    origin_installation: row.try_get("origin_installation")?,
-                    origin_machine: row.try_get("origin_machine")?,
-                    import_digest: row.try_get("import_digest")?,
-                })
-            })
-            .collect()
-    }
-}
 
 #[derive(Debug)]
 pub(crate) struct StoredDirectorySummary {

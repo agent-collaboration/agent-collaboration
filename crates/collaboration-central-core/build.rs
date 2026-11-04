@@ -9,6 +9,7 @@ fn main() -> Result<(), fleet_sync_query_gen::GenerateError> {
     fleet_sync_query_gen::verify_manifest("fleet-record-read-queries.json")?;
     fleet_sync_query_gen::verify_manifest("fleet-record-write-queries.json")?;
     fleet_sync_query_gen::verify_manifest("fleet-workspace-queries.json")?;
+    fleet_sync_query_gen::verify_manifest("fleet-board-queries.json")?;
     fleet_sync_query_gen::verify_manifest("fleet-repository-queries.json")?;
     fleet_sync_query_gen::verify_manifest("fleet-feed-queries.json")?;
     fleet_sync_query_gen::verify_manifest("copy-summary-queries.json")?;

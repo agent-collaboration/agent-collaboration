@@ -73,19 +73,6 @@
       ]
     },
     {
-      "name": "list_workspace_boards",
-      "sql": "sql/fleet/list_workspace_boards.sql",
-      "row": "StoredFleetRecord",
-      "result": "many",
-      "parameters": [
-        {
-          "name": "workspace_id",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
       "name": "read_directory_summary",
       "sql": "sql/fleet/read_directory_summary.sql",
       "row": "StoredDirectorySummary",

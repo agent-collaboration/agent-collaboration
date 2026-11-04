@@ -46,7 +46,7 @@ async fn inspect(fixture: &Fixture) -> TestResult<ArchiveState> {
 async fn board_write_fault(fixture: &Fixture, enabled: bool) -> TestResult {
     fixture.object.transaction(move |scope|Box::pin(async move {
         let sql = if enabled {
-            "CREATE TRIGGER reject_archive_board BEFORE UPDATE ON boards BEGIN SELECT RAISE(ABORT,'final archive board fault'); END"
+            "CREATE TRIGGER reject_archive_board BEFORE UPDATE ON fleet_boards BEGIN SELECT RAISE(ABORT,'final archive board fault'); END"
         } else { "DROP TRIGGER reject_archive_board" };
         scope.executor().execute(sql).await.map_err(StoreError::backend)?;
         Ok(())

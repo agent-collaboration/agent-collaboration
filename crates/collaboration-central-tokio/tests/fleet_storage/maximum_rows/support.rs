@@ -265,7 +265,7 @@ pub(super) async fn measure(fixture: &Fixture, kind: &'static str, expected: Rec
     );
     let sql = match reference.kind {
         RecordKind::Workspace => "SELECT * FROM fleet_workspaces WHERE workspace_id=?",
-        RecordKind::Board => "SELECT * FROM boards WHERE board_id=?",
+        RecordKind::Board => "SELECT * FROM fleet_boards WHERE board_id=?",
         RecordKind::Adr => "SELECT * FROM workspace_adrs WHERE adr_id=?",
         RecordKind::Project => "SELECT * FROM project_directory WHERE project_id=?",
         _ => return Err("maximum-row measurement names a non-Fleet family".into()),

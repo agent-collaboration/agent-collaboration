@@ -20,6 +20,10 @@ mod tests;
 #[path = "fleet_workspace_columns_test.rs"]
 mod workspace_columns_tests;
 
+#[cfg(test)]
+#[path = "fleet_board_columns_test.rs"]
+mod board_columns_tests;
+
 #[cfg(feature = "conformance")]
 mod conformance;
 #[cfg(feature = "conformance")]

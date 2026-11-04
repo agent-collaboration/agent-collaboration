@@ -11,7 +11,7 @@ pub fn metadata_records<'scope, S: TransactionScope<Database = sqlx_turso::Turso
 ) -> impl std::future::Future<Output = Result<Vec<Record>, StoreError>> + Send + 'scope {
     read_keys(
         scope,
-        "SELECT 'board' AS kind,board_id AS id FROM boards UNION ALL SELECT 'workspace',workspace_id FROM fleet_workspaces ORDER BY kind,id",
+        "SELECT 'board' AS kind,board_id AS id FROM fleet_boards UNION ALL SELECT 'workspace',workspace_id FROM fleet_workspaces ORDER BY kind,id",
     )
 }
 
@@ -20,7 +20,7 @@ pub fn records<'scope, S: TransactionScope<Database = sqlx_turso::Turso>>(
 ) -> impl std::future::Future<Output = Result<Vec<Record>, StoreError>> + Send + 'scope {
     read_keys(
         scope,
-        "SELECT 'board' AS kind,board_id AS id FROM boards UNION ALL SELECT 'workspace',workspace_id FROM fleet_workspaces UNION ALL SELECT 'project',project_id FROM project_directory ORDER BY kind,id",
+        "SELECT 'board' AS kind,board_id AS id FROM fleet_boards UNION ALL SELECT 'workspace',workspace_id FROM fleet_workspaces UNION ALL SELECT 'project',project_id FROM project_directory ORDER BY kind,id",
     )
 }
 
@@ -77,6 +77,19 @@ pub fn workspace_columns<'scope, S: TransactionScope<Database = sqlx_turso::Turs
     ).fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter()
         .map(|row| row.try_get("state").map_err(StoreError::backend)).collect::<Result<Vec<String>,_>>()?);
         Ok(rows)
+    }
+}
+
+#[expect(
+    clippy::manual_async_fn,
+    reason = "Explicit Send preserves higher-ranked borrowed snapshot scopes."
+)]
+pub fn board_columns<'scope, S: TransactionScope<Database = sqlx_turso::Turso>>(
+    scope: &'scope mut S,
+) -> impl std::future::Future<Output = Result<Vec<String>, StoreError>> + Send + 'scope {
+    async move {
+        query::<sqlx_turso::Turso>("SELECT json_object('id',board_id,'workspace',workspace_id,'name',name,'description',description,'kind',board_kind,'goal',initiative_goal,'doneWhen',initiative_done_when,'state',state,'actorKind',actor_kind,'human',actor_human_id,'service',actor_service_id,'endpoint',actor_endpoint_id,'session',actor_session_id,'component',actor_router_component,'request',request_id,'position',fleet_position,'time',router_time,'basis',time_basis,'installation',origin_installation,'machine',origin_machine,'digest',import_digest,'created',created_at,'updated',updated_at) AS state FROM fleet_boards ORDER BY board_id")
+            .fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|row.try_get("state").map_err(StoreError::backend)).collect()
     }
 }
 

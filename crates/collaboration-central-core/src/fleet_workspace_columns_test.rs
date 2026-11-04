@@ -12,7 +12,7 @@ use std::sync::Arc;
 type Store = TokioObject<crate::CoreHost<FixtureIo>>;
 type TestResult<T = ()> = Result<T, TestError>;
 
-fn workspace(position: u64) -> TestResult<Record> {
+pub(super) fn workspace(position: u64) -> TestResult<Record> {
     let id: message_board::WorkspaceId = "019f0000-0000-7000-8000-000000009e01"
         .to_owned()
         .try_into()?;
@@ -63,7 +63,11 @@ fn workspace(position: u64) -> TestResult<Record> {
     }))
 }
 
-async fn write(fixture: &FleetStorageFixture, record: Record, millis: i64) -> TestResult {
+pub(super) async fn write(
+    fixture: &FleetStorageFixture,
+    record: Record,
+    millis: i64,
+) -> TestResult {
     fixture
         .object
         .transaction(move |scope| {
@@ -105,7 +109,7 @@ async fn read(fixture: &FleetStorageFixture) -> Result<Record, StoreError> {
         .await
 }
 
-async fn mutate(fixture: &FleetStorageFixture, sql: &'static str) -> TestResult {
+pub(super) async fn mutate(fixture: &FleetStorageFixture, sql: &'static str) -> TestResult {
     fixture
         .object
         .transaction(move |scope| {
@@ -121,7 +125,7 @@ async fn mutate(fixture: &FleetStorageFixture, sql: &'static str) -> TestResult 
     Ok(())
 }
 
-async fn prepare() -> TestResult<FleetStorageFixture> {
+pub(super) async fn prepare() -> TestResult<FleetStorageFixture> {
     let fixture = FleetStorageFixture::open().await?;
     fixture
         .object

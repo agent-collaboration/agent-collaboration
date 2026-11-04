@@ -26,23 +26,7 @@ where
     for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    records::list_workspace_boards(scope, workspace.as_str().into())
-        .await
-        .map_err(StoreError::backend)?
-        .into_iter()
-        .map(|row| {
-            let Record::Board(board) = codec::decode(row)?.record else {
-                return Err(corrupt("archive.board", "wrong indexed record kind"));
-            };
-            if &board.workspace_id != workspace {
-                return Err(corrupt(
-                    "archive.board",
-                    "board belongs to another workspace",
-                ));
-            }
-            Ok(board)
-        })
-        .collect()
+    crate::fleet_board_store::workspace_boards(scope, workspace).await
 }
 
 pub(crate) async fn board_projects<Scope: TransactionScope>(

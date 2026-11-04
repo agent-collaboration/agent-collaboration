@@ -38,6 +38,8 @@ where
 {
     let result = if reference.kind == RecordKind::Workspace {
         crate::fleet_workspace_store::read(scope, reference.id.as_str()).await?
+    } else if reference.kind == RecordKind::Board {
+        crate::fleet_board_store::read(scope, reference.id.as_str()).await?
     } else if reference.kind == RecordKind::Request {
         generated_statements::read_fleet_decision(scope, reference.id.as_str().into())
             .await
@@ -104,6 +106,8 @@ where
     if let Record::Workspace(workspace) = record {
         crate::fleet_workspace_store::put(scope, workspace, &header, source.digest(), now, row_ids)
             .await?;
+    } else if let Record::Board(board) = record {
+        crate::fleet_board_store::put(scope, board, &header, source.digest(), now).await?;
     } else {
         let payload = serde_json::to_string(record).map_err(StoreError::backend)?;
         let time = header.router_time();
@@ -112,9 +116,6 @@ where
         let machine = header.origin.machine.as_str().to_owned();
         let digest = source.digest();
         match record {
-            Record::Board(_) => {
-                writes::put_board(scope, payload, time, basis, installation, machine, digest).await
-            }
             Record::DirectoryEntry(_) => {
                 writes::put_project(scope, payload, time, basis, installation, machine, digest)
                     .await

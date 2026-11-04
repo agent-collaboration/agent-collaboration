@@ -42,14 +42,12 @@ async fn workspace_archive_keeps_unknown_lease_blockers_and_writes_more_than_fiv
             let workspace = collaboration_central_core::read_fleet_record_in_scope(scope,&reference).await?.ok_or_else(|| StoreError::backend("workspace missing"))?;
             let ledgers = row.try_get::<i64,_>("ledgers").map_err(StoreError::backend)?;
             let receipts = row.try_get::<i64,_>("receipts").map_err(StoreError::backend)?;
-            let boards = query::<sqlx_turso::Turso>("SELECT payload FROM boards ORDER BY board_id").fetch_all(scope.executor()).await.map_err(StoreError::backend)?
-                .into_iter().map(|row|row.try_get::<String,_>("payload").map_err(StoreError::backend)).collect::<Result<Vec<_>,_>>()?;
+            let boards = crate::fleet_record_rows::metadata_records(scope).await?.into_iter().filter(|record|matches!(record,Record::Board(_))).collect::<Vec<_>>();
             Ok((workspace,boards,ledgers,receipts))
         })).await?;
         let Record::Workspace(workspace) = workspace else { return Err("workspace record absent".into()); };
         assert_eq!(workspace.state, WorkspaceState::Archiving);
         assert_eq!(boards.len(),5);
-        let boards = boards.into_iter().map(|payload|serde_json::from_str::<Record>(&payload)).collect::<Result<Vec<_>,_>>()?;
         for (ordinal, record) in boards.into_iter().enumerate() {
             let Record::Board(board) = record else { return Err("board record absent".into()); };
             assert_eq!(board.state,if ordinal==0 { BoardState::Archiving } else { BoardState::Archived });
