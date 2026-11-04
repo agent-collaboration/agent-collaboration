@@ -1,0 +1,12 @@
+//! Real Central publication and cutover interactions.
+use board_staging_cutover::{OfflineHost, OfflineHostError, SelectedWriterFile};
+mod claim_session;
+#[path = "../../src/cutover_host_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "The shared Host identity fixture also supports unit-only identity refusal cases."
+)]
+mod cutover_host_fixture;
+mod inherited_snapshot_position;
+#[path = "../../src/native_snapshot_fixture.rs"]
+mod native_snapshot_fixture;

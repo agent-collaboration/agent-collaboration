@@ -995,6 +995,7 @@ dependencies = [
 name = "board-staging-cutover"
 version = "0.1.123"
 dependencies = [
+ "board-central-test-support",
  "board-fleet-sync",
  "board-sync-protocol",
  "chrono",
@@ -1005,6 +1006,9 @@ dependencies = [
  "fleet-admission",
  "fleet-sync-lease",
  "fleet-sync-protocol",
+ "fleet-sync-receiver",
+ "fleet-sync-session",
+ "fleet-sync-tokio-runner",
  "fleet-sync-writer",
  "message-board",
  "message-board-storage",

@@ -38,3 +38,11 @@ nix.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+board-central-test-support = { path = "../board-central-test-support", version = "0.1.123", features = ["conformance"] }
+fleet-sync-receiver.workspace = true
+fleet-sync-tokio-runner.workspace = true
+fleet-sync-session.workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

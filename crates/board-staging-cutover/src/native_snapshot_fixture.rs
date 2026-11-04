@@ -1,6 +1,6 @@
 //! Real native genesis shared by cutover component tests.
+use crate::SelectedWriterFile;
 use crate::cutover_host_fixture::CutoverHostFixture;
-use crate::native_project_snapshot::*;
 use board_fleet_sync::{BOARD_LEASE_POLICY, BoardProjectSchema};
 use fleet_sync_lease::LeaseHolder;
 use fleet_sync_protocol::{DatabaseId, Epoch, PeerId, SnapshotManifest};

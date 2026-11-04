@@ -46,6 +46,8 @@ pub enum NativeSourceError {
     UnsafePath,
     #[error("selected native source identity or file epoch differs")]
     FileIdentityMismatch,
+    #[error("installed replicated schema or table hashes differ from the prepared snapshot")]
+    ReplicatedTablesMismatch,
     #[error("source application history exceeds the supported import epoch")]
     UnsupportedApplicationEpoch { epoch: EpochNumber },
     #[error("source project history is invalid")]
@@ -117,6 +119,20 @@ impl<'host> NativeProjectSnapshot<'host> {
 
     pub fn preflight(&self) -> &NativeSourcePreflight {
         &self.preflight
+    }
+
+    pub fn verify_replicated_tables(
+        &self,
+        expected: &SnapshotManifest,
+    ) -> Result<(), NativeSourceError> {
+        let actual = &self.preflight.manifest;
+        if actual.database != expected.database
+            || actual.schema != expected.schema
+            || actual.tables != expected.tables
+        {
+            return Err(NativeSourceError::ReplicatedTablesMismatch);
+        }
+        Ok(())
     }
 
     pub async fn next_page(&mut self) -> Result<Option<PreparedSnapshotPage>, NativeSourceError> {
@@ -248,9 +264,9 @@ async fn inspect_source(
     drop(store);
     let mut snapshot = database.snapshot().await?;
     let manifest = snapshot.manifest().await?;
-    if manifest.database.to_string() != selected.project.as_str()
-        || manifest.position.epoch != selected.file_epoch
-    {
+    // A bootstrapped eN with no captured writes still snapshots its seed's
+    // earlier (r,S). RetainedFile already validated physical epoch N above.
+    if manifest.database.to_string() != selected.project.as_str() {
         return Err(NativeSourceError::FileIdentityMismatch);
     }
     Ok((
