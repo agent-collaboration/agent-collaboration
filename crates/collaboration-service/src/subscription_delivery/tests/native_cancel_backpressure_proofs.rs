@@ -101,8 +101,6 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
         query.release();
         let limits = DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
             32 * 1024 * 1024,
-            100,
-            32 * 1024 * 1024,
             1,
             32 * 1024 * 1024,
             minimum_settlement_allowance::<collaboration_contracts::RouterDeliveryTypes>().unwrap(),

@@ -91,8 +91,6 @@ impl MailOwner {
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,
-            10_000,
-            64 * 1024 * 1024,
             minimum_settlement_allowance::<collaboration_contracts::RouterDeliveryTypes>()?,
         )?;
         let binding = self.binding.clone();
@@ -175,32 +173,6 @@ impl MailOwner {
             automation,
         })
     }
-    pub async fn state(&self) -> Result<Option<Value>, TestError> {
-        let binding = self.binding.clone();
-        Ok(self
-            .store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    let rows = fleet_sync_delivery::test_support::snapshot::<
-                        _,
-                        collaboration_contracts::RouterDeliveryTypes,
-                        _,
-                    >(scope, binding.as_ref())
-                    .await
-                    .map_err(StoreError::backend)?;
-                    rows.into_iter()
-                        .find(|row| row.category == "inboxState")
-                        .map(|row| {
-                            serde_json::from_str(&row.content.ok_or_else(|| {
-                                StoreError::backend("inbox state content missing")
-                            })?)
-                            .map_err(StoreError::backend)
-                        })
-                        .transpose()
-                })
-            })
-            .await?)
-    }
     pub async fn local_outcome(
         &self,
         peer: PeerId,
@@ -212,8 +184,6 @@ impl MailOwner {
         TestError,
     > {
         let limits = DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
-            64 * 1024 * 1024,
-            10_000,
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,
@@ -285,7 +255,11 @@ impl MailOwner {
                         _,
                         collaboration_contracts::RouterDeliveryTypes,
                         _,
-                    >(scope, binding.as_ref())
+                    >(
+                        scope,
+                        fleet_sync_delivery::DeliveryHostRole::Machine,
+                        binding.as_ref(),
+                    )
                     .await
                     .map_err(StoreError::backend)
                 })
@@ -308,8 +282,6 @@ impl MailOwner {
             }
         };
         let limits = DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
-            64 * 1024 * 1024,
-            10_000,
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,
@@ -424,8 +396,6 @@ impl MailOwner {
     }
     pub async fn status_cursor(&self) -> Result<u64, TestError> {
         let limits = DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
-            64 * 1024 * 1024,
-            10_000,
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,

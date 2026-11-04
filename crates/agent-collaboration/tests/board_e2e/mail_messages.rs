@@ -1,6 +1,7 @@
 //! Replay and lost-caller-answer observations over actual Unix CLI/TCP MCP.
 use super::mail_fixture::{MailFixture, at};
 use codex_router_test_support::{FixtureResult, scenario_finalization::run_scenario};
+use collaboration_contracts::RouterDeliveryTypes;
 use serde_json::{Value, json};
 use sqlx_turso::sqlx::{ConnectOptions, Connection};
 use std::time::Duration;
@@ -159,18 +160,16 @@ pub async fn terminal_readback(suite: &MailFixture, item: &str, original: &Value
             .await?;
             assert_eq!(serde_json::from_str::<Value>(&answer)?, *original);
             let mut transaction = connection.begin().await?;
-            let observations = fleet_sync_delivery::test_support::snapshot::<
-                _,
-                collaboration_contracts::RouterDeliveryTypes,
-                _,
-            >(
-                &mut durable_steps::turso_store::TursoScope::new(
-                    &mut transaction,
-                    &crate::native_sql::SqlHost,
-                ),
-                &binding,
-            )
-            .await?;
+            let observations =
+                fleet_sync_delivery::test_support::snapshot::<_, RouterDeliveryTypes, _>(
+                    &mut durable_steps::turso_store::TursoScope::new(
+                        &mut transaction,
+                        &crate::native_sql::SqlHost,
+                    ),
+                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    &binding,
+                )
+                .await?;
             transaction.commit().await?;
             let rows = observations
                 .iter()

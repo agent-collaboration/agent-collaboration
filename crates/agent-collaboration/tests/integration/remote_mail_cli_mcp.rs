@@ -394,8 +394,6 @@ async fn cli_reply_to_a_remote_origin_keeps_the_original_link_in_native_outbox_a
                 64 * 1024 * 1024,
                 10_000,
                 64 * 1024 * 1024,
-                10_000,
-                64 * 1024 * 1024,
                 fleet_sync_delivery::minimum_settlement_allowance::<
                     collaboration_contracts::RouterDeliveryTypes,
                 >()
@@ -409,7 +407,11 @@ async fn cli_reply_to_a_remote_origin_keeps_the_original_link_in_native_outbox_a
                 _,
                 collaboration_contracts::RouterDeliveryTypes,
                 _,
-            >(scope, &binding)
+            >(
+                scope,
+                fleet_sync_delivery::DeliveryHostRole::Machine,
+                &binding,
+            )
             .await
             .map_err(fleet_sync_delivery::delivery_rollback)?;
             let content = rows

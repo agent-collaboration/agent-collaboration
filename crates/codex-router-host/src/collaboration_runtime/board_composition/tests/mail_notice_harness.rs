@@ -222,6 +222,76 @@ impl MailHarness {
         .await?
         .ok_or_else(|| io::Error::other("actual session event stream closed").into())
     }
+    // Recipient outcome is an explicit external setup input. The real relay
+    // validates its authenticated peer and owns status publication/history.
+    pub(super) async fn report_held(
+        &self,
+        item: fleet_sync_protocol::ItemId,
+    ) -> Result<(), TestError> {
+        use fleet_sync_protocol::{
+            DeliveryAnswer, DeliveryRequest, RecipientOutcome, RecipientReport, ReportResult,
+            ReportSeq,
+        };
+        let report_seq = ReportSeq::new(1);
+        let call = runtime_primitives::CallId {
+            operation: runtime_primitives::OperationId::new(durable_steps::Uuid::now_v7())?,
+            step: runtime_primitives::StepName::new("fixture-recipient-held")?,
+        };
+        match self
+            .requests
+            .request(OperationRequest::Delivery(DeliveryRequest::Report {
+                call,
+                report: RecipientReport {
+                    item,
+                    report_seq,
+                    outcome: RecipientOutcome::Held,
+                },
+            }))
+            .await?
+        {
+            OperationAnswer::Delivery(DeliveryAnswer::Report(ReportResult::Ack {
+                report_seq: actual,
+            })) if actual == report_seq => Ok(()),
+            _ => Err(io::Error::other("real relay refused the recipient Held setup report").into()),
+        }
+    }
+
+    // L5 also sends actual Push requests. Route them through the owning Host
+    // handler before selecting the publication whose native commit is tested.
+    pub(super) async fn next_publication(
+        &mut self,
+    ) -> Result<ClientEvent<BoardConsumerProtocol>, TestError> {
+        use fleet_sync_protocol::{ServerCall, ServerRequest};
+        loop {
+            match self.next_manual_event().await? {
+                event @ ClientEvent::Request {
+                    body: ServerRequest::Crate(ServerCall::PublishStatus { .. }),
+                    ..
+                } => return Ok(event),
+                ClientEvent::Request {
+                    frame,
+                    body: body @ ServerRequest::Crate(ServerCall::Push { .. }),
+                } => {
+                    answer_server_call(
+                        self.projects.clone(),
+                        Weak::new(),
+                        Arc::downgrade(&self.mail.mail),
+                        Weak::new(),
+                        self.requests.clone(),
+                        frame,
+                        body,
+                    )
+                    .await?;
+                }
+                _ => {
+                    return Err(io::Error::other(
+                        "unexpected event while awaiting actual publication",
+                    )
+                    .into());
+                }
+            }
+        }
+    }
     async fn resume_events(
         &mut self,
         initial: Vec<ClientEvent<BoardConsumerProtocol>>,

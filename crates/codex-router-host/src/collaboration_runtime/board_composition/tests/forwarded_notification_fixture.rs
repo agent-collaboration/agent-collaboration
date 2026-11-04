@@ -176,7 +176,11 @@ impl HolderNotifications {
                         _,
                         collaboration_contracts::RouterDeliveryTypes,
                         _,
-                    >(scope, binding.as_ref())
+                    >(
+                        scope,
+                        fleet_sync_delivery::DeliveryHostRole::Machine,
+                        binding.as_ref(),
+                    )
                     .await
                     .map_err(StoreError::backend)
                 })

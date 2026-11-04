@@ -49,7 +49,11 @@ async fn observe_ordinary_reserve(surfaces: &Surfaces, item: &PushId) -> TestRes
                 _,
                 collaboration_contracts::RouterDeliveryTypes,
                 _,
-            >(scope, &binding)
+            >(
+                scope,
+                fleet_sync_delivery::DeliveryHostRole::Machine,
+                &binding,
+            )
             .await
             .map_err(StoreError::backend)?
             .into_iter()

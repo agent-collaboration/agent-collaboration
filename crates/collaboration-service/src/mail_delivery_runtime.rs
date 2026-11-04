@@ -177,8 +177,6 @@ impl MailDeliveryRuntime {
     ) -> Result<Self, StoreError> {
         // PD4 §3's quotas reserve the SDK-computed settlement allowance.
         let limits = DeliveryLimits::new::<RouterDeliveryTypes>(
-            1024 * 1024 * 1024,
-            200_000,
             256 * 1024 * 1024,
             50_000,
             inbox_bytes,
@@ -261,7 +259,9 @@ impl MailDeliveryRuntime {
             host.clone(),
             binding.clone(),
         ))?;
-        engine.register(RemoveMailRecord::new())?;
+        engine.register(RemoveMailRecord::new(
+            fleet_sync_delivery::DeliveryHostRole::Machine,
+        ))?;
         if let Some(session) = &session {
             let remote = session.task_config(config)?;
             engine.register(SubmitMailTask::new(

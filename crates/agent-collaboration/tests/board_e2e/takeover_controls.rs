@@ -26,19 +26,68 @@ pub enum EndPrefix {
 pub async fn assert_prevented_push_replayed(
     wire: &mut board_central_test_support::MailWireObservation,
     item: fleet_sync_protocol::ItemId,
+    cancel: fleet_sync_protocol::ItemId,
+    report_seq: fleet_sync_protocol::ReportSeq,
 ) -> FixtureResult {
     use board_central_test_support::MailWireEvent;
-    use fleet_sync_protocol::{DeliveryStatus, PushResult};
-    wire.wait_for(|events| events.iter().any(|event| {
-        let MailWireEvent::PushSent { frame, item: actual } = event else { return false; };
-        *actual == item && events.iter().any(|answer| matches!(answer,
-            MailWireEvent::PushAnswered { frame: answered, result: PushResult::Replayed { status: DeliveryStatus::Cancelled, cancel: None } }
-            if answered == frame))
-    })).await?;
+    use fleet_sync_protocol::{
+        DeliveryFailureKind, DeliveryRefusal, DeliveryStatus, PushResult, RecipientOutcome,
+        ReportResult,
+    };
+    wire.wait_for(|events| {
+        let replayed = events.iter().any(|event| {
+            let MailWireEvent::PushSent {frame,item:actual} = event else {return false;};
+            *actual == item && events.iter().any(|answer| matches!(answer,
+                MailWireEvent::PushAnswered {frame:answered,result:PushResult::Replayed {status:DeliveryStatus::Cancelled,cancel:None}} if answered==frame))
+        });
+        replayed && events.iter().any(|event| {
+            let MailWireEvent::ReportSent {frame,item:actual,..}=event else {return false;};
+            *actual==item && events.iter().any(|answer| matches!(answer,MailWireEvent::ReportAnswered {frame:answered,..} if answered==frame))
+        })
+    }).await?;
+    let events = wire.events();
     assert_eq!(
         report_count(wire, item),
-        0,
-        "local custody invented a recipient Report"
+        1,
+        "promotion must send exactly one preserved outcome Report"
+    );
+    let (frame, sequence, outcome) = events
+        .iter()
+        .find_map(|event| match event {
+            MailWireEvent::ReportSent {
+                frame,
+                item: actual,
+                sequence,
+                outcome,
+            } if *actual == item => Some((frame, sequence, outcome)),
+            _ => None,
+        })
+        .ok_or("promotion Report absent")?;
+    assert_eq!(*sequence, report_seq);
+    assert!(
+        matches!(outcome,RecipientOutcome::Prevented {cancel:actual} if *actual==cancel),
+        "promotion changed preserved outcome: {outcome:?}"
+    );
+    let answer = events
+        .iter()
+        .find_map(|event| match event {
+            MailWireEvent::ReportAnswered {
+                frame: actual,
+                answer,
+            } if actual == frame => Some(answer),
+            _ => None,
+        })
+        .ok_or("promotion Report acknowledgement absent")?;
+    assert!(
+        matches!(
+            answer,
+            ReportResult::Refused {
+                reason: DeliveryRefusal::ProcessingFailed {
+                    kind: DeliveryFailureKind::ExecutionFailed
+                }
+            }
+        ),
+        "Fleet must refuse the local-only cancel with the exact terminal answer: {answer:?}"
     );
     Ok(())
 }
@@ -59,7 +108,7 @@ pub fn report_count(
     report_sends(&wire.events(), item)
 }
 
-pub async fn assert_no_local_reports(
+pub async fn assert_single_promoted_report(
     report_wire: &board_central_test_support::MailWireObservation,
     status_wire: &mut board_central_test_support::MailWireObservation,
     item: fleet_sync_protocol::ItemId,
@@ -67,7 +116,7 @@ pub async fn assert_no_local_reports(
     let barrier = status_wire.events().len();
     let quiet = status_wire
         .wait_for(|events| {
-            report_count(report_wire, item) != 0
+            report_count(report_wire, item) != 1
                 || events
                     .iter()
                     .skip(barrier)
@@ -95,8 +144,8 @@ pub async fn assert_no_local_reports(
     quiet.map_err(|error| format!("post-Push replay status barrier failed: item{item:?}, priorEvents{barrier}, laterStatusFetches{fetched}, reportSends{}: {error}", report_count(report_wire, item)))?;
     assert_eq!(
         report_count(report_wire, item),
-        0,
-        "local custody must not admit recipient Reports"
+        1,
+        "replay or reopen duplicated the promotion Report"
     );
     Ok(())
 }

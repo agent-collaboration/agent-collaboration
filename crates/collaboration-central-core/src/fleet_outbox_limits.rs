@@ -5,8 +5,6 @@ use fleet_sync_delivery::{DeliveryConfigError, DeliveryLimits, minimum_settlemen
 
 pub fn fleet_outbox_limits() -> Result<DeliveryLimits, DeliveryConfigError> {
     DeliveryLimits::new::<BoardDeliveryTypes>(
-        1024 * 1024 * 1024,
-        200_000,
         256 * 1024 * 1024,
         50_000,
         256 * 1024 * 1024,

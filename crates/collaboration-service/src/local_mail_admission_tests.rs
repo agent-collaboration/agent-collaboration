@@ -194,7 +194,11 @@ async fn a_full_real_inbox_refuses_new_projections_but_reserves_space_to_cancel_
                     _,
                     collaboration_contracts::RouterDeliveryTypes,
                     _,
-                >(scope, binding.as_ref())
+                >(
+                    scope,
+                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    binding.as_ref(),
+                )
                 .await
                 .map_err(StoreError::backend)?
                 .into_iter()
@@ -216,8 +220,6 @@ async fn a_full_real_inbox_refuses_new_projections_but_reserves_space_to_cancel_
     .unwrap()
         + u64::from(observed.settlement_bytes);
     let limits = DeliveryLimits::new::<RouterDeliveryTypes>(
-        16 * 1024 * 1024,
-        30,
         16 * 1024 * 1024,
         30,
         budget,

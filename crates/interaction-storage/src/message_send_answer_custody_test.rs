@@ -16,8 +16,6 @@ async fn enqueue_with_answer(
                     16 * 1024 * 1024,
                     20,
                     16 * 1024 * 1024,
-                    20,
-                    16 * 1024 * 1024,
                     minimum_settlement_allowance::<BoardDeliveryTypes>()
                         .map_err(StoreError::backend)?,
                 )

@@ -22,10 +22,10 @@ pub(super) struct ReportHost {
     terminal_refusal: AtomicBool,
 }
 impl ReportHost {
-    pub(super) fn new(pair: SharedPair) -> Self {
+    pub(super) fn new(pair: SharedPair, now: SyncTime) -> Self {
         Self {
             pair,
-            now: AtomicI64::new(1_893_456_000_000),
+            now: AtomicI64::new(now.unix_millis()),
             dispatch_attempts: AtomicUsize::new(0),
             terminal_refusal: AtomicBool::new(false),
         }

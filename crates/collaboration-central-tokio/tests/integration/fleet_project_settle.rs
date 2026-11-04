@@ -81,7 +81,7 @@ async fn genuine_successor_settles_unknown_project_and_query_keeps_its_identity_
             unknown.digest().clone()
         )
         .await?,
-        DeliveryAnswer::MailboxUnavailable {
+        DeliveryAnswer::DeliveryUnavailable {
             reason: DeliveryRefusal::NotSubmitter
         }
     ));
@@ -99,7 +99,7 @@ async fn genuine_successor_settles_unknown_project_and_query_keeps_its_identity_
     );
     assert!(matches!(
         query(&fixture, &mut old, vec![unknown.id()]).await?,
-        DeliveryAnswer::MailboxUnavailable {
+        DeliveryAnswer::DeliveryUnavailable {
             reason: DeliveryRefusal::NotSubmitter
         }
     ));
@@ -148,7 +148,7 @@ async fn unauthorized_machine_and_project_claims_are_refused_before_any_custody_
                 unknown.digest().clone()
             )
             .await?,
-            DeliveryAnswer::MailboxUnavailable {
+            DeliveryAnswer::DeliveryUnavailable {
                 reason: DeliveryRefusal::NotSubmitter
             }
         ));

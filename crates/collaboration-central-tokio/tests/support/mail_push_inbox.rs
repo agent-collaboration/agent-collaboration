@@ -197,8 +197,6 @@ impl PushInbox {
             1_000_000,
             100,
             1_000_000,
-            100,
-            1_000_000,
             fleet_sync_delivery::minimum_settlement_allowance::<BoardDeliveryTypes>()?,
         )?;
         Ok(Self {
@@ -311,7 +309,7 @@ impl PushInbox {
             return Err("Push did not schedule exactly one real record-retention task".into());
         }
         let mut engine = Engine::new(self.store.clone(), self.host.clone());
-        engine.register(Removal::new())?;
+        engine.register(Removal::new(fleet_sync_delivery::DeliveryHostRole::Machine))?;
         let status = engine
             .start_and_settle::<Removal>(&delivery_request_key(&item)?, item)
             .await?;

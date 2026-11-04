@@ -1,11 +1,10 @@
-//! A real SDK pump carries Query and Retire; only remote mailbox answers stand in.
+//! A real SDK pump carries Query; only remote relay answers stand in.
 use board_fleet_sync::{AccessServiceToken, MachineSessionStore, ReqwestSessionTransport};
 use board_sync_protocol::BoardConsumerProtocol;
 use collaboration_mail_protocol::CarrierAcceptance;
 use fleet_sync_protocol::{
     ClientFrame, DeliveryAnswer, DeliveryRequest, ItemId, ItemStatus, ItemStatusState,
-    OperationAnswer, OperationRequest, PeerId, QueryResult, RetireResult, SchemaSupport,
-    ServerFrame,
+    OperationAnswer, OperationRequest, PeerId, QueryResult, SchemaSupport, ServerFrame,
 };
 use fleet_sync_session::{Endpoint, PeerCredential, SessionClient};
 use fleet_sync_tokio_runner::SessionPump;
@@ -26,11 +25,9 @@ use tokio::{
 };
 
 type QueriedItemStatus = (ItemId, ItemStatus<CarrierAcceptance>);
-type RetirementRequest = (PeerId, Vec<ItemId>);
 
 pub(crate) struct FrozenMailQuery {
     answers: Arc<Mutex<Vec<QueriedItemStatus>>>,
-    retire_requests: Arc<Mutex<Vec<RetirementRequest>>>,
     accept_submissions: Arc<AtomicBool>,
     submissions: Arc<Mutex<Vec<fleet_sync_protocol::DeliveryItemRef>>>,
     pub session: collaboration_runtime::MailDeliverySession,
@@ -50,8 +47,6 @@ impl FrozenMailQuery {
             Vec::<(ItemId, ItemStatus<CarrierAcceptance>)>::new(),
         ));
         let scripted = answers.clone();
-        let retire_requests = Arc::new(Mutex::new(Vec::new()));
-        let retiring = retire_requests.clone();
         let accept_submissions = Arc::new(AtomicBool::new(false));
         let accepting = accept_submissions.clone();
         let submissions = Arc::new(Mutex::new(Vec::new()));
@@ -160,27 +155,10 @@ impl FrozenMailQuery {
                             })),
                         }
                     }
-                    ClientFrame::Request {
-                        frame,
-                        body:
-                            OperationRequest::Delivery(DeliveryRequest::Retire {
-                                mailbox, items, ..
-                            }),
-                    } => {
-                        retiring.lock().unwrap().push((mailbox, items.clone()));
-                        ServerFrame::Answer {
-                            frame,
-                            body: OperationAnswer::Delivery(DeliveryAnswer::Retire(RetireResult {
-                                retired: items,
-                                unknown: Vec::new(),
-                                not_current_target: Vec::new(),
-                            })),
-                        }
-                    }
                     ClientFrame::Request { frame, .. } => ServerFrame::Answer {
                         frame,
                         body: OperationAnswer::InvalidShape {
-                            field: "only Query and Retire are scripted".into(),
+                            field: "only Query and enabled MailSubmit are scripted".into(),
                         },
                     },
                     ClientFrame::Answer { .. } => continue,
@@ -238,7 +216,6 @@ impl FrozenMailQuery {
         .unwrap();
         Self {
             answers,
-            retire_requests,
             accept_submissions,
             submissions,
             session: collaboration_runtime::MailDeliverySession {
@@ -267,9 +244,6 @@ impl FrozenMailQuery {
     }
     pub fn submissions(&self) -> Vec<fleet_sync_protocol::DeliveryItemRef> {
         self.submissions.lock().unwrap().clone()
-    }
-    pub fn retirement_requests(&self) -> Vec<(PeerId, Vec<ItemId>)> {
-        self.retire_requests.lock().unwrap().clone()
     }
     pub async fn close(mut self) {
         self.release();

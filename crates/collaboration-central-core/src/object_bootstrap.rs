@@ -172,6 +172,11 @@ where
                 self.now,
             )
             .await?;
+            if self.schema == EngineSchema::Delivery {
+                fleet_sync_delivery::retire_relay_host_tables(scope)
+                    .await
+                    .map_err(fleet_sync_delivery::delivery_rollback)?;
+            }
             let mut count = primary.count;
             if self.schema == EngineSchema::Copy {
                 let rules = crate::CopyReceiverRules::new(

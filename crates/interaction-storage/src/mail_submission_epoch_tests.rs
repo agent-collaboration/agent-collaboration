@@ -56,8 +56,6 @@ async fn admit(
         16 * 1024 * 1024,
         20,
         16 * 1024 * 1024,
-        20,
-        16 * 1024 * 1024,
         minimum_settlement_allowance::<BoardDeliveryTypes>().map_err(StoreError::backend)?,
     )
     .map_err(StoreError::backend)?;
@@ -194,8 +192,6 @@ async fn an_aborted_admission_keeps_neither_custody_nor_the_epoch() {
         .transaction(move |scope| {
             Box::pin(async move {
                 let limits = DeliveryLimits::new::<BoardDeliveryTypes>(
-                    16 * 1024 * 1024,
-                    20,
                     16 * 1024 * 1024,
                     20,
                     16 * 1024 * 1024,

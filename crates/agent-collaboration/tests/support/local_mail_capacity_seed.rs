@@ -114,15 +114,9 @@ pub(super) async fn seed_to_last_slot(
             "fixture requires a positive settlement reserve",
         ));
     }
-    let limits = DeliveryLimits::new::<RouterTypes>(
-        1024 * 1024 * 1024,
-        200_000,
-        256 * 1024 * 1024,
-        50_000,
-        LOCAL_INBOX_BYTES,
-        reserve,
-    )
-    .map_err(StoreError::backend)?;
+    let limits =
+        DeliveryLimits::new::<RouterTypes>(256 * 1024 * 1024, 50_000, LOCAL_INBOX_BYTES, reserve)
+            .map_err(StoreError::backend)?;
     InteractionAtomicStore::new(owner, Arc::new(SqlHost))
         .transaction(move |scope| {
             Box::pin(async move {

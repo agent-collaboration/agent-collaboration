@@ -29,8 +29,6 @@ fn limits() -> DeliveryLimits {
         16 * 1024 * 1024,
         20,
         16 * 1024 * 1024,
-        20,
-        16 * 1024 * 1024,
         minimum_settlement_allowance::<BoardDeliveryTypes>().unwrap(),
     )
     .unwrap()

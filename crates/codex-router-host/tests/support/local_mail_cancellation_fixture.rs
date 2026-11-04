@@ -95,8 +95,6 @@ fn setup_limits() -> TestResult<DeliveryLimits> {
         16 * 1024 * 1024,
         30,
         16 * 1024 * 1024,
-        30,
-        16 * 1024 * 1024,
         minimum_settlement_allowance::<RouterDeliveryTypes>()?,
     )?)
 }

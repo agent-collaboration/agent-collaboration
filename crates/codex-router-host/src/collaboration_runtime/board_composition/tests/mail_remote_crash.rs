@@ -70,7 +70,11 @@ async fn native_rows(
                     _,
                     collaboration_contracts::RouterDeliveryTypes,
                     _,
-                >(scope, &binding)
+                >(
+                    scope,
+                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    &binding,
+                )
                 .await
                 .map_err(StoreError::backend)
             })
@@ -92,7 +96,7 @@ async fn origin_rows(
     let owners = ObjectStore::open(base.join("central")).await?;
     let object = owners
         .object(
-            ObjectKey::new(format!("delivery-status-{}", peer.as_uuid()))?,
+            ObjectKey::new("registry")?,
             ObjectOptions::default(),
             readback_host(),
         )
@@ -110,7 +114,11 @@ async fn origin_rows(
                     _,
                     board_sync_protocol::BoardDeliveryTypes,
                     _,
-                >(scope, &binding)
+                >(
+                    scope,
+                    fleet_sync_delivery::DeliveryHostRole::Relay,
+                    &binding,
+                )
                 .await
                 .map_err(StoreError::backend)
             })
@@ -202,7 +210,7 @@ async fn canonical_publication_stays_owed_until_native_commit_at_sigkill_then_ca
     harness.mail.mail.catch_up_status().await?;
     assert_eq!(harness.mail.status_cursor().await?, 1);
     let repaired = header(&harness.mail.rows().await?, item)?;
-    assert_eq!(repaired["value"]["status"]["kind"], "sent");
+    assert_eq!(repaired["value"]["status"]["kind"], "held");
     let events = harness.transport.observer.events();
     assert!(events.iter().any(|event| matches!(
         event,
@@ -249,6 +257,7 @@ async fn missing_native_publication_owner_never_answers_applied_or_retires_the_o
             .await?,
         fleet_sync_protocol::SubmitResult::Accepted { .. }
     ));
+    harness.report_held(item_id).await?;
     harness.release_welcome()?;
     assert!(matches!(
         harness.next_manual_event().await?,
@@ -257,7 +266,7 @@ async fn missing_native_publication_owner_never_answers_applied_or_retires_the_o
     let ClientEvent::Request {
         frame,
         body: body @ ServerRequest::Crate(ServerCall::PublishStatus { .. }),
-    } = harness.next_manual_event().await?
+    } = harness.next_publication().await?
     else {
         return Err("expected actual central canonical publication".into());
     };
@@ -335,6 +344,9 @@ async fn remote_mail_crash_child_entry() -> Result<(), TestError> {
                 .await?,
             fleet_sync_protocol::SubmitResult::Accepted { .. }
         ));
+        harness
+            .report_held(state.item.ok_or("publication item missing")?)
+            .await?;
     }
     harness.release_welcome()?;
     assert!(matches!(
@@ -342,7 +354,7 @@ async fn remote_mail_crash_child_entry() -> Result<(), TestError> {
         ClientEvent::Welcome { .. }
     ));
     harness.welcomed.send_replace(true);
-    let event = harness.next_manual_event().await?;
+    let event = harness.next_publication().await?;
     let _held_writer = harness.mail.hold_writer().await?;
     let handling = async {
         match (kind, event) {

@@ -17,6 +17,11 @@ use collaboration_protocol::PushDeliveryState;
 use fleet_sync_protocol::{DeliveryItem, ItemId, ReportSeq};
 use serde_json::json;
 
+struct LocalPrevention {
+    held_sequence: ReportSeq,
+    cancel: ItemId,
+}
+
 pub async fn held_local(fixture: &mut BoardFixture, second: &mut SecondHost) -> FixtureResult {
     recipients::scenario(fixture, second, async |fixture, second, peers| {
         Box::pin(controls::scenario(
@@ -74,6 +79,7 @@ async fn prove_local(
         .await?;
     let old = readbacks::handoffs(&stopped, &fixture.project, 1).await?;
     assert_end_groups(&old, &follow, true)?;
+    let expected_cancel = readbacks::local_prevention_cancel(&stopped, item.id()).await?;
     controls::assert_end_cut(
         fixture,
         &stopped,
@@ -107,7 +113,10 @@ async fn prove_local(
         &rejected,
         &mut wire,
         &mut status_wire,
-        held_sequence,
+        LocalPrevention {
+            held_sequence,
+            cancel: expected_cancel,
+        },
     )
     .await?;
     sender_status(
@@ -118,10 +127,10 @@ async fn prove_local(
     .await?;
     assert_final_local_custody(fixture, second, &follow, &item, cancel, held_sequence).await?;
     assert_eq!(peers.first()?.count_after_barrier().await?, 0);
-    assert_eq!(controls::report_count(&wire, item.id()), 0);
+    assert_eq!(controls::report_count(&wire, item.id()), 1);
     eprintln!(
         "T held-local containment evidence: {}",
-        json!({"item":item.id(),"heldOutcomeSequence":held_sequence.value(),"preventedOutcomeSequence":held_sequence.value()+1,"cancel":cancel,"typedReplayedPush":true,"reportSends":0,"minimumFutureStatusScans":6,"recipientReopened":true,"nativeFinal":"prevented","runningReport":false,"senderStatus":"cancelled"})
+        json!({"item":item.id(),"heldOutcomeSequence":held_sequence.value(),"preventedOutcomeSequence":held_sequence.value()+1,"promotionReportSequence":held_sequence.value()+2,"cancel":cancel,"typedReplayedPush":true,"reportSends":1,"minimumFutureStatusScans":6,"recipientReopened":true,"nativeFinal":"prevented","runningReport":false,"senderStatus":"cancelled"})
     );
     Ok(())
 }
@@ -135,6 +144,7 @@ async fn assert_final_local_custody(
     held_sequence: ReportSeq,
 ) -> FixtureResult {
     let stopped = second.stop_for_readback().await?;
+    readbacks::assert_single_cancelled_sender(&stopped, item.id()).await?;
     let inherited = readbacks::handoffs(&stopped, &fixture.project, 2).await?;
     readbacks::assert_ongoing_membership(&stopped, &fixture.project, 2, &follow.membership).await?;
     assert_end_groups(&inherited, follow, false)?;
@@ -162,10 +172,19 @@ async fn assert_local_prevention(
     rejected: &collaboration_protocol::PushRecordShowResult,
     wire: &mut board_central_test_support::MailWireObservation,
     status_wire: &mut board_central_test_support::MailWireObservation,
-    held_sequence: fleet_sync_protocol::ReportSeq,
+    prevention: LocalPrevention,
 ) -> FixtureResult<fleet_sync_protocol::ItemId> {
-    controls::assert_prevented_push_replayed(wire, item.id()).await?;
-    controls::assert_no_local_reports(wire, status_wire, item.id())
+    let LocalPrevention {
+        held_sequence,
+        cancel: expected_cancel,
+    } = prevention;
+    let promoted_sequence = held_sequence
+        .next()
+        .and_then(|sequence| sequence.next())
+        .ok_or("promotion report sequence exhausted")?;
+    controls::assert_prevented_push_replayed(wire, item.id(), expected_cancel, promoted_sequence)
+        .await?;
+    controls::assert_single_promoted_report(wire, status_wire, item.id())
         .await
         .map_err(|error| format!("before recipient reopen: {error}"))?;
     let stopped = fixture
@@ -190,7 +209,7 @@ async fn assert_local_prevention(
         serde_json::to_value(retained.record.last_outcome)?,
         serde_json::to_value(&rejected.record.last_outcome)?
     );
-    controls::assert_no_local_reports(wire, status_wire, item.id())
+    controls::assert_single_promoted_report(wire, status_wire, item.id())
         .await
         .map_err(|error| format!("after recipient reopen: {error}"))?;
     Ok(cancel)

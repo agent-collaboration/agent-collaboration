@@ -1,7 +1,7 @@
 //! SDK-generated hints cross the real pump and the Host's existing event owner.
 use super::super::fleet_service::{BOUND, TestFleet};
 use super::*;
-use fleet_sync_protocol::{DeliveryStream, GateAnswer, OperationAnswer, OperationRequest};
+use fleet_sync_protocol::{GateAnswer, OperationAnswer, OperationRequest};
 use fleet_sync_session::{
     Bytes, ConnectFailure, ConnectionClosed, PeerCredential, SessionClientStore, SessionTransport,
     TransportConnection,

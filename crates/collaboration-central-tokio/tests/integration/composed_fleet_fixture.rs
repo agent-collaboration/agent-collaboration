@@ -186,6 +186,7 @@ type Copy = ObjectRuntime<CopyKind, NativeHost, Io>;
 pub struct Fixture {
     objects: ObjectStore<CoreHost<Io>>,
     pub store: Arc<Native>,
+    pub project_store: Arc<Native>,
     pub host: Arc<NativeHost>,
     pub faults: Arc<fault_store::FaultStore<Io>>,
     pub runtime: Arc<Fleet>,
@@ -245,7 +246,7 @@ impl Fixture {
             )
             .await?;
         let project = Arc::new(ObjectRuntime::copy(
-            Arc::new(NativeHost::new(project_store)),
+            Arc::new(NativeHost::new(project_store.clone())),
             io.clone(),
             receiver,
             database,
@@ -274,6 +275,7 @@ impl Fixture {
         Ok(Self {
             objects,
             store,
+            project_store,
             host,
             faults,
             runtime,

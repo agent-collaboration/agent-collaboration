@@ -5,24 +5,19 @@ mod report_host;
 #[path = "mailbox_report_task_store.rs"]
 mod report_store;
 use super::{
-    mailbox_rule_fixture::{MailboxPair, ORIGINAL},
-    relay_transport::{operation, relay_request},
+    mail_push_transport::{next_push, pushed},
+    mailbox_rule_fixture::MailboxPair,
 };
-use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use collaboration_central_conformance::ConformanceResult;
 use durable_steps::{Engine, OperationFailure, OperationState};
-use fleet_sync_delivery::{
-    DeliveryTaskConfig, LocalDeliveryConfig, ReportOutcome, delivery_request_key,
+use fleet_sync_delivery::{DeliveryTaskConfig, LocalDeliveryConfig, delivery_request_key};
+use fleet_sync_protocol::{
+    CancelBody, DeliveryCancel, DeliveryEnvelope, ItemId, PeerId, ServerCall,
 };
-use fleet_sync_protocol::{DeliveryAnswer, DeliveryEnvelope, OperationAnswer, PeerId};
 use report_host::{ReportHost, SharedPair};
-use report_store::{ReportSenderBinding, ReportStore, limits, open_store, prepare_report};
+use report_store::{ReportSenderBinding, ReportTask, limits, open_store, prepare_report};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-
-type ReportTask =
-    ReportOutcome<ReportStore, sqlx_turso::Turso, BoardDeliveryTypes, ReportSenderBinding>;
-const CANCEL: &str = "019f0000-0000-7000-8000-000000011085";
 
 pub(super) async fn run(base: &str) -> ConformanceResult<()> {
     let pair = Arc::new(Mutex::new(MailboxPair::open(base).await?));
@@ -40,48 +35,60 @@ pub(super) async fn run(base: &str) -> ConformanceResult<()> {
     }
 }
 async fn run_report(pair: SharedPair) -> ConformanceResult<()> {
-    let (item, cancel, batch, owner, relay) = {
+    let (item, cancel, submitter, frame, owner, relay, now) = {
         let mut pair = pair.lock().await;
-        let item = pair.item(ORIGINAL, "literal original mailbox body")?;
+        let identity = durable_steps::Uuid::now_v7();
+        let now = item_creation_time(identity)?;
+        let item = pair.item(&identity.to_string(), "literal original mailbox body")?;
         let accepted = pair.submit(&item).await?;
         if accepted.pointer("/value/value/value/kind") != Some(&serde_json::json!("accepted")) {
             return Err(format!("original admission failed: {accepted}").into());
         }
         // The cancel stays Local; it is deliberately never submitted to central.
-        let cancel = pair.cancel(CANCEL)?;
-        let fetched = operation(
-            &mut pair.recipient.socket,
-            relay_request(
-                "fetch",
-                serde_json::json!({
-                    "stream":"items","after":0,"maxItems":10,"maxBytes":1_000_000
-                }),
-            ),
-        )
-        .await?;
-        let fetched: OperationAnswer<BoardConsumerProtocol> = serde_json::from_value(fetched)?;
-        let OperationAnswer::Delivery(DeliveryAnswer::Fetch(batch)) = fetched else {
-            return Err("expected real original Fetch".into());
+        let cancel = DeliveryCancel::new(
+            ItemId::new(durable_steps::Uuid::now_v7())?,
+            item.sender().clone(),
+            item.recipient().clone(),
+            None,
+            CancelBody { target: item.id() },
+        )?;
+        let (
+            frame,
+            ServerCall::Push {
+                submitter,
+                item: received,
+                ..
+            },
+        ) = next_push(&mut pair.recipient.socket).await?
+        else {
+            return Err("expected real original Push".into());
         };
+        if serde_json::to_vec(&received)? != serde_json::to_vec(&item)? {
+            return Err("Push changed the original sealed bytes".into());
+        }
         let DeliveryEnvelope::Item(item) = item else {
             return Err("original must be an item".into());
-        };
-        let DeliveryEnvelope::Cancel(cancel) = cancel else {
-            return Err("control must be a cancel".into());
         };
         (
             item,
             cancel,
-            batch,
+            submitter,
+            frame,
             PeerId::new(pair.recipient.peer)?,
-            PeerId::new(pair.sender.peer)?,
+            PeerId::try_from("019f0000-0000-7000-8000-000000005240".to_owned())?,
+            now,
         )
     };
     let directory = tempfile::tempdir()?;
-    let host = Arc::new(ReportHost::new(pair));
+    let host = Arc::new(ReportHost::new(pair.clone(), now));
     let store = open_store(&directory.path().join("recipient-report.db"), host.clone()).await?;
-    let report = prepare_report(&store, &host, item, cancel, batch).await?;
+    let (report, receipt) = prepare_report(&store, &host, item, cancel, submitter, relay).await?;
+    pushed(&mut pair.lock().await.recipient.socket, frame, receipt).await?;
     let mut engine = Engine::new(store, host.clone());
+    engine.register(fleet_sync_delivery::RemoveDeliveryRecord::<
+        report_store::ReportStore,
+        sqlx_turso::Turso,
+    >::new(fleet_sync_delivery::DeliveryHostRole::Machine))?;
     engine.register(ReportTask::new(
         DeliveryTaskConfig {
             local: LocalDeliveryConfig {
@@ -89,8 +96,6 @@ async fn run_report(pair: SharedPair) -> ConformanceResult<()> {
                 limits: limits()?,
             },
             relay,
-            fetch_items: 10,
-            fetch_bytes: 1_000_000,
         },
         host.clone(),
         Arc::new(ReportSenderBinding),
@@ -124,4 +129,17 @@ async fn run_report(pair: SharedPair) -> ConformanceResult<()> {
         "MAILBOX_REPORT_TERMINAL_CASE preserved_local_prevention_refused; report_dispatch_attempts=1; future_due_scans=3; terminal=failed"
     );
     Ok(())
+}
+
+fn item_creation_time(
+    identity: durable_steps::Uuid,
+) -> ConformanceResult<runtime_primitives::SyncTime> {
+    let seconds = identity
+        .get_timestamp()
+        .ok_or("UUIDv7 timestamp missing")?
+        .to_unix()
+        .0;
+    Ok(runtime_primitives::SyncTime::from_unix_millis(
+        i64::try_from(seconds)? * 1_000,
+    ))
 }

@@ -8,8 +8,8 @@ use collaboration_runtime::{
     project_cancelled_after_delivery, project_mail_outcome, project_received_mail,
 };
 use durable_steps::{
-    AtomicStore, CallFailure, CallId, CallTarget, Engine, Host, JournalScope, NotSentReason,
-    StoreError, storage::TransactionScope, turso_store::TursoScope,
+    AtomicStore, CallFailure, CallId, CallTarget, Engine, Host, NotSentReason, StoreError,
+    storage::TransactionScope, turso_store::TursoScope,
 };
 use fleet_sync_delivery::DeliveryError;
 use fleet_sync_delivery::{
@@ -18,8 +18,7 @@ use fleet_sync_delivery::{
     minimum_settlement_allowance,
 };
 use fleet_sync_protocol::{
-    DeliveryEnvelope, DeliveryHeader, DeliveryItemRef, DeliverySeq, DeliveryStream, FetchEntry,
-    FetchResult, PeerId, SyncTime,
+    DeliveryEnvelope, DeliveryHeader, DeliveryItemRef, PeerId, PushResult, SyncTime,
 };
 use fleet_sync_protocol::{DeliveryItem, ItemId, RecipientOutcome};
 use interaction_storage::{
@@ -46,6 +45,12 @@ pub type ProjectionTask = DeliverLocally<
     ProjectionDatabase,
     RouterDeliveryTypes,
     ProjectionConsumer,
+    crate::MachineSenderBinding,
+>;
+type ProjectionReport = fleet_sync_delivery::ReportOutcome<
+    ProjectionStore,
+    ProjectionDatabase,
+    RouterDeliveryTypes,
     crate::MachineSenderBinding,
 >;
 
@@ -250,8 +255,6 @@ impl Fixture {
             16 * 1024 * 1024,
             30,
             16 * 1024 * 1024,
-            30,
-            16 * 1024 * 1024,
             minimum_settlement_allowance::<RouterDeliveryTypes>().unwrap(),
         )
         .unwrap();
@@ -279,8 +282,6 @@ impl Fixture {
                     limits,
                 },
                 relay: PeerId::new(uuid::Uuid::now_v7()).unwrap(),
-                fetch_items: 10,
-                fetch_bytes: 1024 * 1024,
             },
         });
         let store = Arc::new(InteractionAtomicStore::new(owner.clone(), host.clone()));
@@ -294,11 +295,22 @@ impl Fixture {
     }
     pub fn engine(&self) -> Engine<ProjectionStore, ProjectionHost> {
         let mut engine = Engine::new(self.store.clone(), self.host.clone());
-        engine.register(ProjectionRetention::new()).unwrap();
+        engine
+            .register(ProjectionRetention::new(
+                fleet_sync_delivery::DeliveryHostRole::Machine,
+            ))
+            .unwrap();
         engine
             .register(ProjectionTask::new(
                 self.host.config.local,
                 self.host.consumer.clone(),
+                self.host.clone(),
+                self.host.binding.clone(),
+            ))
+            .unwrap();
+        engine
+            .register(ProjectionReport::new(
+                self.host.config,
                 self.host.clone(),
                 self.host.binding.clone(),
             ))
@@ -390,216 +402,6 @@ impl Fixture {
             })
             .await
     }
-    pub async fn receive(&self, draft: PushRecordDraft) -> Result<(), StoreError> {
-        let item = self.item(&draft);
-        self.receive_items(vec![item]).await
-    }
-    pub async fn receive_items(
-        &self,
-        items: Vec<DeliveryItem<RouterDeliveryTypes>>,
-    ) -> Result<(), StoreError> {
-        let config = self.host.config;
-        let binding = self.host.binding.clone();
-        let now = self.host.now();
-        let consumer = self.host.consumer.clone();
-        self.store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    let mut inbox = Inbox::<_, RouterDeliveryTypes, _>::new(
-                        scope,
-                        config.local.owner,
-                        config.local.limits,
-                        binding.as_ref(),
-                    );
-                    let input = inbox
-                        .begin_receive(DeliveryStream::Items, now)
-                        .await
-                        .map_err(StoreError::backend)?
-                        .ok_or_else(|| StoreError::backend("receive fixture cycle absent"))?;
-                    let effects = inbox
-                        .store_batch(
-                            input,
-                            FetchResult {
-                                stream: DeliveryStream::Items,
-                                through: DeliverySeq::new(
-                                    u64::try_from(items.len()).map_err(StoreError::backend)?,
-                                ),
-                                entries: items
-                                    .into_iter()
-                                    .enumerate()
-                                    .map(|(index, item)| {
-                                        Ok(FetchEntry::Item {
-                                            seq: DeliverySeq::new(
-                                                u64::try_from(index)
-                                                    .map_err(StoreError::backend)?
-                                                    + 1,
-                                            ),
-                                            item: DeliveryEnvelope::Item(item),
-                                        })
-                                    })
-                                    .collect::<Result<Vec<_>, StoreError>>()?,
-                            },
-                            consumer.as_ref(),
-                            now,
-                        )
-                        .await
-                        .map_err(StoreError::backend)?;
-                    for attempt in effects.attempts {
-                        let key = fleet_sync_delivery::delivery_request_key(&(
-                            attempt.item,
-                            attempt.attempt,
-                        ))
-                        .map_err(StoreError::backend)?;
-                        scope
-                            .admit::<ProjectionTask>(&key, &attempt)
-                            .await
-                            .map_err(StoreError::backend)?;
-                    }
-                    Ok(())
-                })
-            })
-            .await
-    }
-    pub async fn receive_cancel(&self, draft: &PushRecordDraft) -> ItemId {
-        let original = self.item(draft);
-        let control = ItemId::new(uuid::Uuid::now_v7()).unwrap();
-        let cancel = fleet_sync_protocol::DeliveryCancel::<RouterDeliveryTypes>::new(
-            control,
-            original.sender().clone(),
-            original.recipient().clone(),
-            None,
-            fleet_sync_protocol::CancelBody {
-                target: original.id(),
-            },
-        )
-        .unwrap();
-        let config = self.host.config;
-        let binding = self.host.binding.clone();
-        let now = self.host.now();
-        let consumer = self.host.consumer.clone();
-        self.store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    let mut inbox = Inbox::<_, RouterDeliveryTypes, _>::new(
-                        scope,
-                        config.local.owner,
-                        config.local.limits,
-                        binding.as_ref(),
-                    );
-                    let input = inbox
-                        .begin_receive(DeliveryStream::Controls, now)
-                        .await
-                        .map_err(StoreError::backend)?
-                        .ok_or_else(|| StoreError::backend("control fixture cycle absent"))?;
-                    inbox
-                        .store_batch(
-                            input,
-                            FetchResult {
-                                stream: DeliveryStream::Controls,
-                                through: DeliverySeq::new(1),
-                                entries: vec![FetchEntry::Item {
-                                    seq: DeliverySeq::new(1),
-                                    item: DeliveryEnvelope::Cancel(cancel),
-                                }],
-                            },
-                            consumer.as_ref(),
-                            now,
-                        )
-                        .await
-                        .map_err(StoreError::backend)?;
-                    Ok(())
-                })
-            })
-            .await
-            .unwrap();
-        control
-    }
-    pub async fn report(&self, item: ItemId) -> Option<RecipientOutcome<CarrierAcceptance>> {
-        let config = self.host.config;
-        let binding = self.host.binding.clone();
-        self.store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    let mut inbox = Inbox::<_, RouterDeliveryTypes, _>::new(
-                        scope,
-                        config.local.owner,
-                        config.local.limits,
-                        binding.as_ref(),
-                    );
-                    let Some(reference) = inbox
-                        .pending_report(item)
-                        .await
-                        .map_err(StoreError::backend)?
-                    else {
-                        return Ok(None);
-                    };
-                    Ok(Some(
-                        inbox
-                            .resolve_report(reference)
-                            .await
-                            .map_err(StoreError::backend)?
-                            .outcome,
-                    ))
-                })
-            })
-            .await
-            .unwrap()
-    }
-    pub async fn sql(&self, statement: &'static str) {
-        self.store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    sqlx::raw_sql(statement).execute(scope.executor()).await?;
-                    Ok(())
-                })
-            })
-            .await
-            .unwrap();
-    }
-    pub async fn counts(&self) -> Vec<i64> {
-        self.store
-            .transaction(|scope| {
-                Box::pin(async move {
-                    let mut counts = Vec::new();
-                    for statement in [
-                        "SELECT COUNT(*) AS count FROM _fleet_sync_inbox_items",
-                        "SELECT COUNT(*) AS count FROM router_pushes",
-                        "SELECT COUNT(*) AS count FROM _fleet_sync_reports",
-                        "SELECT COUNT(*) AS count FROM message_send_answers",
-                    ] {
-                        counts.push(
-                            sqlx::query::<ProjectionDatabase>(statement)
-                                .fetch_one(scope.executor())
-                                .await?
-                                .try_get("count")?,
-                        );
-                    }
-                    Ok(counts)
-                })
-            })
-            .await
-            .unwrap()
-    }
-    pub async fn local_outcome(&self, item: ItemId) -> Option<RecipientOutcome<CarrierAcceptance>> {
-        let config = self.host.config;
-        let binding = self.host.binding.clone();
-        self.store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    Inbox::<_, RouterDeliveryTypes, _>::new(
-                        scope,
-                        config.local.owner,
-                        config.local.limits,
-                        binding.as_ref(),
-                    )
-                    .local_outcome(item)
-                    .await
-                    .map_err(StoreError::backend)
-                })
-            })
-            .await
-            .unwrap()
-    }
     pub fn push_answer(&self, outcome: LocalOutcome<CarrierAcceptance>, receipt: DeliveryReceipt) {
         let scheduled_retry_at = match &outcome {
             LocalOutcome::Held { until } => *until,
@@ -660,3 +462,6 @@ impl Fixture {
         directory
     }
 }
+
+#[path = "mail_delivery_projection_intake.rs"]
+mod intake;

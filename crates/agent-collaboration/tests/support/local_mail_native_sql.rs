@@ -116,8 +116,6 @@ pub async fn local_is_compacted(
     // This read context uses PD4's limits and only the SDK's public observation methods.
     let limits =
         fleet_sync_delivery::DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
-            1024 * 1024 * 1024,
-            200_000,
             256 * 1024 * 1024,
             50_000,
             256 * 1024 * 1024,

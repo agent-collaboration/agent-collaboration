@@ -2,8 +2,92 @@ use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, JwksFixtureServer, enroll_admitted_peer, fixture_policy,
 };
 use collaboration_central_tokio::{TokioServer, TokioSettings};
+use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
 use fleet_sync_lease::{LeasePolicy, RegistryConfig};
+use sqlx_core::{query::query, row::Row};
 use std::{collections::BTreeSet, time::Duration};
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Schema assertions fail the test; storage errors propagate."
+)]
+#[tokio::test]
+async fn normal_fleet_and_copy_bootstrap_omit_retired_delivery_tables_after_reopen()
+-> ConformanceResult<()> {
+    // Literal role contract: the relay never owns these ten tables.
+    const RETIRED: [&str; 10] = [
+        "_fleet_sync_mail_cancel_links",
+        "_fleet_sync_mail_controls",
+        "_fleet_sync_mail_items",
+        "_fleet_sync_mail_state",
+        "_fleet_sync_delivery_receipts",
+        "_fleet_sync_inbox_state",
+        "_fleet_sync_outbox_status",
+        "_fleet_sync_reports",
+        "_fleet_sync_inbox_cancel_links",
+        "_fleet_sync_inbox_items",
+    ];
+    let directory = tempfile::tempdir()?;
+    for _ in 0..2 {
+        // The second iteration reopens these exact owning stores and runs the
+        // normal Fleet and Copy initializers again, with existing history.
+        let fixture = super::composed_fleet_fixture::Fixture::open(
+            directory.path(),
+            super::composed_fleet_fixture::NOW,
+        )
+        .await?;
+        let proof = async {
+            for (store, required, forbidden) in [
+                (
+                    &fixture.store,
+                    "_fleet_sync_outbox_items",
+                    "_fleet_sync_copy",
+                ),
+                (
+                    &fixture.project_store,
+                    "_fleet_sync_copy",
+                    "_fleet_sync_outbox_items",
+                ),
+            ] {
+                let tables: BTreeSet<String> = store
+                    .transaction(|scope| {
+                        Box::pin(async move {
+                            query::<sqlx_turso::Turso>(
+                                "SELECT name FROM sqlite_master WHERE type='table'",
+                            )
+                            .fetch_all(scope.executor())
+                            .await
+                            .map_err(StoreError::backend)?
+                            .into_iter()
+                            .map(|row| row.try_get("name").map_err(StoreError::backend))
+                            .collect()
+                        })
+                    })
+                    .await?;
+                assert!(
+                    tables.contains(required),
+                    "normal role bootstrap omitted {required}"
+                );
+                assert!(
+                    !tables.contains(forbidden),
+                    "role installed another owner's corpus: {forbidden}"
+                );
+                for name in RETIRED {
+                    assert!(
+                        !tables.contains(name),
+                        "retired table survived bootstrap: {name}"
+                    );
+                }
+            }
+            Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
+        }
+        .await;
+        let closed = fixture.close().await;
+        closed?;
+        proof?;
+    }
+    Ok(())
+}
 
 #[tokio::test]
 async fn three_machine_sockets_share_the_fleet_store() -> ConformanceResult<()> {

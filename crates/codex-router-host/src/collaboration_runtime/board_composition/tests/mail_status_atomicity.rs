@@ -12,8 +12,6 @@ async fn native_status_cursor(root: &Path, peer: PeerId) -> Result<u64, TestErro
         64 * 1024 * 1024,
         10_000,
         64 * 1024 * 1024,
-        10_000,
-        64 * 1024 * 1024,
         minimum_settlement_allowance::<RouterDeliveryTypes>()?,
     )?;
     let binding = collaboration_service::MachineSenderBinding::new(
@@ -78,7 +76,7 @@ async fn status_prefix_ack_never_precedes_batch_and_cursor_commit_at_sigkill()
     );
     assert_eq!(
         header(&resumed.mail.rows().await?, item)?["value"]["status"]["kind"],
-        "sent"
+        "held"
     );
     assert!(
         resumed
@@ -104,13 +102,14 @@ pub(super) async fn status_batch_child(base: &Path) -> Result<(), TestError> {
             .await?,
         fleet_sync_protocol::SubmitResult::Accepted { .. }
     ));
+    harness.report_held(item_id).await?;
     harness.release_welcome()?;
     assert!(matches!(
         harness.next_manual_event().await?,
         ClientEvent::Welcome { .. }
     ));
     assert!(matches!(
-        harness.next_manual_event().await?,
+        harness.next_publication().await?,
         ClientEvent::Request {
             body: ServerRequest::Crate(ServerCall::PublishStatus { .. }),
             ..

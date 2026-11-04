@@ -52,7 +52,11 @@ pub async fn delivery_rows(stopped: &StoppedHost) -> FixtureResult<Vec<DeliveryO
             _,
             collaboration_contracts::RouterDeliveryTypes,
             _,
-        >(&mut TursoScope::new(&mut transaction, &SqlHost), &binding)
+        >(
+            &mut TursoScope::new(&mut transaction, &SqlHost),
+            fleet_sync_delivery::DeliveryHostRole::Machine,
+            &binding,
+        )
         .await?;
         transaction.commit().await?;
         Ok(rows)

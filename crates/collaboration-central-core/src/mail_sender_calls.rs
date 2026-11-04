@@ -77,7 +77,7 @@ where
                     .await?
                     else {
                         return Ok((
-                            SenderRoute::Answered(DeliveryAnswer::MailboxUnavailable {
+                            SenderRoute::Answered(DeliveryAnswer::DeliveryUnavailable {
                                 reason: fleet_sync_protocol::DeliveryRefusal::NotSubmitter,
                             }),
                             Vec::new(),
@@ -94,7 +94,7 @@ where
                         Ok(status) => statuses.push(status),
                         Err(fleet_sync_delivery::DeliveryError::Refused { reason }) => {
                             return Ok((
-                                SenderRoute::Answered(DeliveryAnswer::MailboxUnavailable {
+                                SenderRoute::Answered(DeliveryAnswer::DeliveryUnavailable {
                                     reason,
                                 }),
                                 Vec::new(),
@@ -126,7 +126,7 @@ where
                 .await?
                 {
                     return Ok((
-                        SenderRoute::Answered(DeliveryAnswer::MailboxUnavailable {
+                        SenderRoute::Answered(DeliveryAnswer::DeliveryUnavailable {
                             reason: fleet_sync_protocol::DeliveryRefusal::NotSubmitter,
                         }),
                         Vec::new(),
@@ -147,7 +147,7 @@ where
                 let answer = match answer {
                     Ok(result) => DeliveryAnswer::Settle(result),
                     Err(fleet_sync_delivery::DeliveryError::Refused { reason }) => {
-                        DeliveryAnswer::MailboxUnavailable { reason }
+                        DeliveryAnswer::DeliveryUnavailable { reason }
                     }
                     Err(error) => return Err(fleet_sync_delivery::delivery_rollback(error)),
                 };

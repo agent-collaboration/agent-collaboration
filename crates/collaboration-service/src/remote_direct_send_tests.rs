@@ -166,7 +166,11 @@ async fn configured_application_send_queues_offline_replays_and_rejects_conflict
                     _,
                     collaboration_contracts::RouterDeliveryTypes,
                     _,
-                >(scope, binding.as_ref())
+                >(
+                    scope,
+                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    binding.as_ref(),
+                )
                 .await
                 .map_err(StoreError::backend)
             })
@@ -226,7 +230,11 @@ async fn unconfigured_remote_application_send_has_no_custody_answer_or_epoch() {
                     _,
                     collaboration_contracts::RouterDeliveryTypes,
                     _,
-                >(scope, binding.as_ref())
+                >(
+                    scope,
+                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    binding.as_ref(),
+                )
                 .await
                 .map_err(StoreError::backend)
             })

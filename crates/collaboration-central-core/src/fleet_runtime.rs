@@ -133,7 +133,7 @@ where
         engine.register(crate::fleet_mail_tasks::FleetMailRemoval::<
             crate::session_store::CoreSessionStore<Host, Io>,
             Host::Database,
-        >::new())?;
+        >::new(fleet_sync_delivery::DeliveryHostRole::Relay))?;
         let engine =
             crate::fleet_task_engine::own_engine::<_, _, Host::Database, LeaseHook<Host, Io>>(
                 engine,

@@ -131,7 +131,7 @@ async fn one_reaction_owner_defers_y_while_x_waits_on_notice_catch_up_and_reques
     )
     .await?;
     assert_eq!(harness.ack().await?, NoticePosition::new(2));
-    assert!(harness.mail.state().await?.is_none());
+
     assert_eq!(
         board_fleet_sync::MachineNoticeProgressStore::open(&harness.root)
             .await?
@@ -163,8 +163,6 @@ async fn stale_generation_completion_returns_the_owner_without_acknowledging_new
     queue_notice(&mut reactions, &mut receipts, 1, position, body);
     reactions.dispatch_next(&mut handlers, &owners, &harness.requests);
     let completed = completion(&mut handlers).await?;
-    let state = harness.mail.state().await?;
-    assert!(state.is_none());
     // Model the exact completion boundary after connection generation changes:
     // the new generation has received this coordinate, but has not handled it.
     receipts = NoticeReceipts::default();
@@ -196,11 +194,6 @@ async fn stale_generation_completion_returns_the_owner_without_acknowledging_new
     )
     .await?;
     assert_eq!(harness.ack().await?, position);
-    assert_eq!(
-        harness.mail.state().await?,
-        state,
-        "replayed legacy notice admitted obsolete Fetch work"
-    );
     println!(
         "NOTICE_DISPATCH_CASE stale_completion_restores_owner_without_ack_new_generation_replay_idempotent"
     );

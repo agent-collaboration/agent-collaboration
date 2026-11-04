@@ -17,7 +17,7 @@ pub(super) struct NoticeConnection {
     receiver: Arc<Mutex<mpsc::Receiver<Bytes>>>,
     initial_notice: Arc<AtomicBool>,
     observer: Arc<WireObserver>,
-    held: Option<HeldFetchReply>,
+    held: Option<HeldReply>,
 }
 impl NoticeTransport {
     pub fn new(
@@ -67,17 +67,6 @@ pub(super) enum WireEvent {
         item: fleet_sync_protocol::ItemId,
         submitter: fleet_sync_protocol::Submitter,
     },
-    Fetch {
-        stream: DeliveryStream,
-        max_bytes: u64,
-        inbox_room_bytes: Option<u64>,
-    },
-    Fetched {
-        stream: DeliveryStream,
-        items: Vec<fleet_sync_protocol::ItemId>,
-        entry_bytes: Vec<usize>,
-    },
-    Received(DeliveryStream),
     Report(fleet_sync_protocol::ItemId),
     StatusFetch {
         after: u64,
@@ -110,7 +99,7 @@ pub(super) struct WireObserver {
     push_receipt_path: std::sync::Mutex<Option<std::path::PathBuf>>,
     events: std::sync::Mutex<Vec<WireEvent>>,
     changed: watch::Sender<()>,
-    next_hold: std::sync::Mutex<Option<FetchReplyPlan>>,
+    next_hold: std::sync::Mutex<Option<ReplyHoldPlan>>,
     lose_status_ack: AtomicBool,
 }
 impl Default for WireObserver {
@@ -152,15 +141,6 @@ impl WireObserver {
         false
     }
 
-    pub fn hold_next_fetch(
-        &self,
-        stream: DeliveryStream,
-    ) -> (
-        tokio::sync::oneshot::Receiver<()>,
-        tokio::sync::oneshot::Sender<()>,
-    ) {
-        self.hold_reply(ReplyKind::Receive(stream))
-    }
     pub fn hold_next_notice_read(
         &self,
     ) -> (
@@ -203,15 +183,15 @@ impl WireObserver {
     ) {
         let (entered, observed) = tokio::sync::oneshot::channel();
         let (release, released) = tokio::sync::oneshot::channel();
-        let previous = self.next_hold.lock().unwrap().replace(FetchReplyPlan {
+        let previous = self.next_hold.lock().unwrap().replace(ReplyHoldPlan {
             kind,
             entered,
             released,
         });
-        assert!(previous.is_none(), "one next-Fetch reply gate at a time");
+        assert!(previous.is_none(), "one reply gate at a time");
         (observed, release)
     }
-    fn take_hold(&self, bytes: &[u8]) -> Option<HeldFetchReply> {
+    fn take_hold(&self, bytes: &[u8]) -> Option<HeldReply> {
         let frame =
             serde_json::from_slice::<fleet_sync_protocol::ClientFrame<BoardConsumerProtocol>>(
                 bytes,
@@ -225,10 +205,6 @@ impl WireObserver {
                 scope: board_sync_protocol::BoardReadScope::Notices,
                 ..
             }) => ReplyKind::NoticeRead,
-            OperationRequest::Delivery(fleet_sync_protocol::DeliveryRequest::Fetch {
-                stream,
-                ..
-            }) => ReplyKind::Receive(stream),
             OperationRequest::Delivery(fleet_sync_protocol::DeliveryRequest::StatusFetch {
                 ..
             }) => ReplyKind::Status,
@@ -244,7 +220,7 @@ impl WireObserver {
         let mut planned = self.next_hold.lock().unwrap();
         if planned.as_ref().is_some_and(|plan| plan.kind == kind) {
             let plan = planned.take()?;
-            Some(HeldFetchReply {
+            Some(HeldReply {
                 frame,
                 entered: Some(plan.entered),
                 released: plan.released,
@@ -315,17 +291,6 @@ impl WireObserver {
                     DeliveryRequest::Settle {
                         item, submitter, ..
                     } => Some(WireEvent::Settle { item, submitter }),
-                    DeliveryRequest::Fetch {
-                        stream,
-                        max_bytes,
-                        inbox_room_bytes,
-                        ..
-                    } => Some(WireEvent::Fetch {
-                        stream,
-                        max_bytes,
-                        inbox_room_bytes,
-                    }),
-                    DeliveryRequest::Received { stream, .. } => Some(WireEvent::Received(stream)),
                     DeliveryRequest::Report { report, .. } => Some(WireEvent::Report(report.item)),
                     DeliveryRequest::StatusFetch { after, limit, .. } => {
                         Some(WireEvent::StatusFetch {
@@ -336,7 +301,7 @@ impl WireObserver {
                     DeliveryRequest::StatusAck { through, .. } => Some(WireEvent::StatusAck {
                         through: through.value(),
                     }),
-                    _ => None,
+                    DeliveryRequest::Query { .. } => None,
                 },
                 ClientFrame::Answer {
                     frame,
@@ -363,9 +328,7 @@ impl WireObserver {
         }
     }
     fn received(&self, bytes: &[u8]) {
-        use fleet_sync_protocol::{
-            DeliveryAnswer, DeliveryEnvelope, FetchEntry, ServerCall, ServerFrame, ServerRequest,
-        };
+        use fleet_sync_protocol::{DeliveryAnswer, ServerCall, ServerFrame, ServerRequest};
         if let Ok(frame) = serde_json::from_slice::<ServerFrame<BoardConsumerProtocol>>(bytes) {
             match frame {
                 ServerFrame::Notice { position, .. } => {
@@ -387,32 +350,6 @@ impl WireObserver {
                 } => self.record(WireEvent::StatusAcked {
                     floor: floor.value(),
                 }),
-                ServerFrame::Answer {
-                    body: OperationAnswer::Delivery(DeliveryAnswer::Fetch(result)),
-                    ..
-                } => {
-                    let entry_bytes = result
-                        .entries
-                        .iter()
-                        .map(|entry| serde_json::to_vec(entry).unwrap().len())
-                        .collect();
-                    let items = result
-                        .entries
-                        .iter()
-                        .filter_map(|entry| match entry {
-                            FetchEntry::Item {
-                                item: DeliveryEnvelope::Item(item),
-                                ..
-                            } => Some(item.id()),
-                            _ => None,
-                        })
-                        .collect();
-                    self.record(WireEvent::Fetched {
-                        stream: result.stream,
-                        items,
-                        entry_bytes,
-                    });
-                }
                 ServerFrame::Request {
                     frame,
                     body: ServerRequest::Crate(ServerCall::PublishStatus { publication, .. }),
@@ -533,7 +470,7 @@ impl TransportConnection for NoticeConnection {
     }
 }
 
-struct FetchReplyPlan {
+struct ReplyHoldPlan {
     kind: ReplyKind,
     entered: tokio::sync::oneshot::Sender<()>,
     released: tokio::sync::oneshot::Receiver<()>,
@@ -541,12 +478,11 @@ struct FetchReplyPlan {
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum ReplyKind {
     NoticeRead,
-    Receive(DeliveryStream),
     Status,
     Renewal,
     MailSubmit(fleet_sync_protocol::ItemId),
 }
-struct HeldFetchReply {
+struct HeldReply {
     frame: fleet_sync_protocol::FrameId,
     entered: Option<tokio::sync::oneshot::Sender<()>>,
     released: tokio::sync::oneshot::Receiver<()>,

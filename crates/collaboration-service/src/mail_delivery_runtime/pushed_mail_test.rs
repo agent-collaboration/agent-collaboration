@@ -73,8 +73,6 @@ async fn full_push_inbox_returns_wire_capacity_refusal_without_admitting_custody
     let limits = DeliveryLimits::new::<RouterDeliveryTypes>(
         8 * 1024 * 1024,
         100,
-        8 * 1024 * 1024,
-        100,
         1,
         minimum_settlement_allowance::<RouterDeliveryTypes>()?,
     )?;
@@ -143,6 +141,7 @@ async fn full_push_inbox_returns_wire_capacity_refusal_without_admitting_custody
             Box::pin(async move {
                 fleet_sync_delivery::test_support::snapshot::<_, RouterDeliveryTypes, _>(
                     scope,
+                    fleet_sync_delivery::DeliveryHostRole::Machine,
                     binding.as_ref(),
                 )
                 .await

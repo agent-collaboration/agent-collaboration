@@ -290,8 +290,6 @@ impl Fixture {
         let recipient_limits = match receipt {
             ReceiptPath::LoseAfterCommit => limits,
             ReceiptPath::NoCapacity => DeliveryLimits::new::<BoardDeliveryTypes>(
-                limits.mailbox_payload_bytes(),
-                limits.mailbox_items(),
                 limits.outbox_bytes(),
                 limits.outbox_items(),
                 0,
@@ -318,7 +316,7 @@ impl Fixture {
         let mut fleet_engine = Engine::new(fleet.object.clone(), host.clone());
         fleet_engine.register(Push::new(limits, host.clone(), binding.clone()))?;
         fleet_engine.register(Publication::new())?;
-        fleet_engine.register(Removal::new())?;
+        fleet_engine.register(Removal::new(fleet_sync_delivery::DeliveryHostRole::Relay))?;
         let local = LocalDeliveryConfig { owner, limits };
         let mut recipient_engine = Engine::new(recipient.object.clone(), host.clone());
         recipient_engine.register(Attempt::new(
@@ -328,16 +326,11 @@ impl Fixture {
             binding.clone(),
         ))?;
         recipient_engine.register(Report::new(
-            DeliveryTaskConfig {
-                local,
-                relay,
-                fetch_items: 10,
-                fetch_bytes: 1_000_000,
-            },
+            DeliveryTaskConfig { local, relay },
             host.clone(),
             binding,
         ))?;
-        recipient_engine.register(Removal::new())?;
+        recipient_engine.register(Removal::new(fleet_sync_delivery::DeliveryHostRole::Machine))?;
         let item = DeliveryEnvelope::Item(DeliveryItem::new(
             fleet_sync_protocol::ItemId::new(durable_steps::Uuid::now_v7())?,
             serde_json::from_value(json!({"kind":"humanUser","installation":SERVICE_A}))?,

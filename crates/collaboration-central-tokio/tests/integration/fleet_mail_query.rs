@@ -6,9 +6,8 @@ use super::{
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use durable_steps::StoreError;
 use fleet_sync_protocol::{
-    ClientFrame, DeliveryAnswer, DeliveryRefusal, DeliveryRequest, DeliverySeq, DeliveryStatus,
-    DeliveryStream, FrameId, ItemId, ItemStatusState, OperationAnswer, OperationRequest,
-    ServerFrame,
+    ClientFrame, DeliveryAnswer, DeliveryRefusal, DeliveryRequest, DeliveryStatus, FrameId, ItemId,
+    ItemStatusState, OperationAnswer, OperationRequest, ServerFrame,
 };
 use serde_json::json;
 
@@ -93,7 +92,7 @@ async fn query_preserves_order_and_digest_before_and_after_recipient_commit_and_
     assert!(matches!(absent.state, ItemStatusState::Unknown));
     assert!(matches!(
         query(&fixture, &mut attacker, vec![unknown, item.id()]).await?,
-        DeliveryAnswer::MailboxUnavailable {
+        DeliveryAnswer::DeliveryUnavailable {
             reason: DeliveryRefusal::NotSubmitter
         }
     ));
@@ -137,7 +136,7 @@ async fn query_preserves_order_and_digest_before_and_after_recipient_commit_and_
     );
     assert!(matches!(
         query(&fixture, &mut attacker, vec![item.id()]).await?,
-        DeliveryAnswer::MailboxUnavailable {
+        DeliveryAnswer::DeliveryUnavailable {
             reason: DeliveryRefusal::NotSubmitter
         }
     ));
@@ -176,7 +175,7 @@ async fn compacted_settlement_query_keeps_its_digest_and_sender_after_the_fleet_
     );
     assert!(matches!(
         query(&reopened, &mut attacker, vec![item.id()]).await?,
-        DeliveryAnswer::MailboxUnavailable {
+        DeliveryAnswer::DeliveryUnavailable {
             reason: DeliveryRefusal::NotSubmitter
         }
     ));
@@ -206,25 +205,12 @@ async fn retired_fetch_received_and_retire_requests_are_invalid_and_leave_custod
     let call: durable_steps::CallId = serde_json::from_value(
         json!({"operation":durable_steps::Uuid::now_v7(),"step":"retired_operation"}),
     )?;
-    let requests: [DeliveryRequest<BoardDeliveryTypes>; 3] = [
-        DeliveryRequest::Fetch {
-            call: call.clone(),
-            stream: DeliveryStream::Items,
-            after: DeliverySeq::new(0),
-            max_items: 1,
-            max_bytes: 1_024,
-            inbox_room_bytes: Some(1_024),
-        },
-        DeliveryRequest::Received {
-            call: call.clone(),
-            stream: DeliveryStream::Items,
-            through: DeliverySeq::new(1),
-        },
-        DeliveryRequest::Retire {
-            call,
-            mailbox: B.to_owned().try_into()?,
-            items: vec![item.id()],
-        },
+    // Retired variants cannot be constructed at the new typed API. Preserve
+    // their literal old wire inputs and assert refusal at the real decoder.
+    let requests = [
+        json!({"kind":"fetch","value":{"call":call,"stream":"items","after":0,"maxItems":1,"maxBytes":1024,"inboxRoomBytes":1024}}),
+        json!({"kind":"received","value":{"call":call,"stream":"items","through":1}}),
+        json!({"kind":"retire","value":{"call":call,"mailbox":B,"items":[item.id()]}}),
     ];
     for request in requests {
         let frame = FrameId::new(durable_steps::Uuid::now_v7())?;
@@ -232,10 +218,7 @@ async fn retired_fetch_received_and_retire_requests_are_invalid_and_leave_custod
             .runtime
             .on_frame(
                 sender.binding,
-                serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Request {
-                    frame,
-                    body: OperationRequest::Delivery(request),
-                })?,
+                serde_json::to_vec(&json!({"kind":"request","value":{"frame":frame,"body":{"kind":"delivery","value":request}}}))?,
             )
             .await?;
         loop {
@@ -245,7 +228,7 @@ async fn retired_fetch_received_and_retire_requests_are_invalid_and_leave_custod
             } = sender.next().await?
             {
                 assert_eq!(answered, frame);
-                assert!(matches!(body,OperationAnswer::InvalidShape {field} if field=="operation"));
+                assert!(matches!(body,OperationAnswer::InvalidShape {field} if field=="body"));
                 break;
             }
         }
