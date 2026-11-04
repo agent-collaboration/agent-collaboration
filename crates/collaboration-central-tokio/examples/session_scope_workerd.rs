@@ -30,6 +30,8 @@ mod copy_wait_scenarios;
 mod creation_scenarios;
 #[path = "../tests/support/delivery_config_scenarios.rs"]
 mod delivery_config_scenarios;
+#[path = "../tests/support/fleet_mail_expiry_scenarios.rs"]
+mod fleet_mail_expiry_scenarios;
 #[path = "../tests/support/fleet_notice_scenarios.rs"]
 mod fleet_notice_scenarios;
 #[path = "session_scope_workerd/forward_reopen.rs"]
@@ -68,8 +70,6 @@ mod mail_submit_scenarios;
 mod mailbox_cancel_scenarios;
 #[path = "../tests/support/mailbox_capacity_scenarios.rs"]
 mod mailbox_capacity_scenarios;
-#[path = "../tests/support/mailbox_deadline_scenarios.rs"]
-mod mailbox_deadline_scenarios;
 #[path = "../tests/support/mailbox_held_retention_scenario.rs"]
 mod mailbox_held_retention_scenario;
 #[path = "../tests/support/mailbox_identity_scenarios.rs"]
@@ -108,7 +108,7 @@ enum Scenario {
     MailboxIdentity,
     MailboxCapacity,
     MailboxCancel,
-    MailboxDeadline,
+    FleetMailExpiry,
     DeliveryConfigRefusals,
     ForwardReopen,
     ForwardPost(forwarded_post_scenarios::ForwardCase),
@@ -225,7 +225,7 @@ async fn main() -> ConformanceResult<()> {
         Some("readmission-activation") => Scenario::ReadmissionActivation,
         Some("readmission-open") => Scenario::ReadmissionOpen,
         Some("mail-status") => Scenario::MailStatus,
-        Some("mailbox-deadline") => Scenario::MailboxDeadline,
+        Some("fleet-mail-expiry") => Scenario::FleetMailExpiry,
         Some("mailbox-report-terminal") => Scenario::MailboxReportTerminal,
         Some("mailbox-held-retention") => Scenario::MailboxHeldRetention,
         Some("mailbox-identity") => Scenario::MailboxIdentity,
@@ -323,7 +323,15 @@ async fn main() -> ConformanceResult<()> {
     let result = std::panic::AssertUnwindSafe(async { match scenario {
         Scenario::MailboxReportTerminal => mailbox_report_terminal_scenario::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::MailboxHeldRetention => mailbox_held_retention_scenario::run(&format!("http://127.0.0.1:{port}")).await,
-        Scenario::MailboxDeadline => mailbox_deadline_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
+        Scenario::FleetMailExpiry => {
+            let base = format!("http://127.0.0.1:{port}");
+            fleet_mail_expiry_scenarios::run(&base, || async {
+                Ok(client.http.post(format!("{base}/__conformance/admission"))
+                    .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
+                    .json(&json!({"kind":"holderFrames","value":{"service":fleet_mail_expiry_scenarios::RECIPIENT_SERVICE}}))
+                    .send().await?.error_for_status()?.json::<Vec<fleet_sync_protocol::FrameId>>().await?)
+            }).await
+        },
         Scenario::MailboxIdentity => mailbox_identity_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::MailboxCapacity => mailbox_capacity_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::MailboxCancel => mailbox_cancel_scenarios::run(&format!("http://127.0.0.1:{port}")).await,

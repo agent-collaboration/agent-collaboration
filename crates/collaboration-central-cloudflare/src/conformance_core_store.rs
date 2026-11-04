@@ -36,7 +36,7 @@ impl PlatformIo for ControlIo {
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
-        worker::send::SendFuture::new(worker::Delay::from(remaining))
+        worker::send::SendFuture::new(crate::reply_deadline::ReplyDeadline::new(remaining))
     }
 
     async fn object_call(

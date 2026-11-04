@@ -4,25 +4,33 @@
 #[path = "native_http/support.rs"]
 mod configuration;
 
+#[path = "support/fleet_mail_expiry_scenarios.rs"]
+mod fleet_mail_expiry_scenarios;
 #[path = "mail_submit_http/grants.rs"]
 mod grants;
 #[path = "mail_submit_http/historical_piece.rs"]
 mod historical_piece;
-#[path = "support/mailbox_deadline_scenarios.rs"]
-mod mailbox_deadline_scenarios;
-#[path = "mail_submit_http/offline_deadlines.rs"]
-mod offline_deadlines;
 
 #[tokio::test]
-async fn shared_offline_mailbox_alarm_oracle() -> ConformanceResult<()> {
+async fn shared_offline_fleet_mail_alarm_oracle() -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
     let server = grants::start(root.path(), &jwks).await?;
-    let result = mailbox_deadline_scenarios::run(server.base_url()).await;
+    let service = message_board::ServiceId::try_from(
+        fleet_mail_expiry_scenarios::RECIPIENT_SERVICE.to_owned(),
+    )?;
+    let result = fleet_mail_expiry_scenarios::run(server.base_url(), || async {
+        Ok(server
+            .conformance_platform()
+            .conformance_holder_frames(&service)
+            .await?)
+    })
+    .await;
     server.shutdown().await?;
     jwks.shutdown().await?;
     result
 }
+
 #[expect(
     dead_code,
     reason = "shared fixture module serves separate integration targets with different helper subsets"

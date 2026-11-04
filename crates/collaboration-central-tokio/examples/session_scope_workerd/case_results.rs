@@ -20,8 +20,8 @@ impl Scenario {
             Scenario::MailboxIdentity => println!(
                 "MAILBOX_IDENTITY_RESULT 1 passed; 0 failed; 0 ignored (shared native/workerd oracle, real mailbox replay/conflict and exact single original payload; no Router end-to-end claim)"
             ),
-            Scenario::MailboxDeadline => println!(
-                "MAILBOX_DEADLINE_RESULT 1 passed; 0 failed; 0 ignored (shared normal session, offline recipient, real alarm, newer status and released payload; no physical restart claim)"
+            Scenario::FleetMailExpiry => println!(
+                "FLEET_MAIL_EXPIRY_RESULT 1 passed; 0 failed; 0 ignored (shared normal session, injected Fleet clock, unsolicited expiry before recipient reconnect, exact later sentinel Push; owning reopen proven by native component cases)"
             ),
             Scenario::DeliveryConfigRefusals => println!(
                 "DELIVERY_TEMPLATE_REFUSALS_RESULT 2 passed; 0 failed; 0 ignored (real Worker missing relay field and malformed peer refusal)"
