@@ -101,6 +101,9 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
             durable_steps::storage::TransactionScope<Database = Host::Database>,
         <Host::Database as sqlx_core::database::Database>::Arguments:
             sqlx_core::arguments::IntoArguments<Host::Database>,
+        for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+            + sqlx_core::encode::Encode<'scalar, Host::Database>
+            + sqlx_core::decode::Decode<'scalar, Host::Database>,
         for<'value> String: sqlx_core::types::Type<Host::Database>
             + sqlx_core::encode::Encode<'value, Host::Database>
             + sqlx_core::decode::Decode<'value, Host::Database>,

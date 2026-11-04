@@ -56,8 +56,8 @@ async fn retire_at_literal_copy_time(base: &str) -> ConformanceResult<()> {
 #[derive(Debug, Eq, PartialEq)]
 struct HistoryStamp {
     corpus: String,
-    version: String,
-    checksum: String,
+    version: i64,
+    checksum: Vec<u8>,
 }
 async fn history_stamps(root: &Path) -> ConformanceResult<Vec<HistoryStamp>> {
     let mut store = sqlx_turso::TursoConnectOptions::new()
@@ -90,8 +90,8 @@ async fn make_history_unsupported(root: &Path) -> ConformanceResult<Vec<HistoryS
     let mut expected = history_stamps(root).await?;
     let mut changed = 0_u64;
     for stamp in &mut expected {
-        if stamp.corpus == "fleet-sync-receiver" && stamp.version == "3" {
-            stamp.version = "999".into();
+        if stamp.corpus == "fleet-sync-receiver" && stamp.version == 3 {
+            stamp.version = 999;
             changed += 1;
         }
     }

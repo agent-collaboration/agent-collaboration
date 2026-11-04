@@ -135,6 +135,7 @@ pub(crate) async fn prepare() -> TestResult<FleetStorageFixture> {
                     BootstrapStep {
                         schema: EngineSchema::Fleet,
                         now: NOW,
+                        clock: Arc::new(FixtureIo),
                     },
                     scope,
                 )

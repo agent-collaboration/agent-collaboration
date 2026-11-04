@@ -27,7 +27,7 @@
       "parameters": [
         {
           "name": "value",
-          "kind": "text",
+          "kind": "blob",
           "nullable": false
         },
         {
@@ -45,7 +45,7 @@
       "parameters": [
         {
           "name": "value",
-          "kind": "text",
+          "kind": "integer",
           "nullable": false
         },
         {

@@ -15,10 +15,38 @@ pub(crate) fn validate_history_times(row: &StoredMigrationHistory) -> Result<(),
         "central_schema_migrations.updated_at",
     )?;
     integer_millis(
-        row.applied_at.as_deref(),
-        row.applied_class.as_deref(),
-        "central_schema_migrations.applied_at",
+        row.installed_on.as_deref(),
+        row.installed_class.as_deref(),
+        "central_schema_migrations.installed_on",
     )?;
+    for (field, valid) in [
+        (
+            "version",
+            row.version_class.as_deref() == Some("integer") && row.version.is_some(),
+        ),
+        (
+            "description",
+            row.description
+                .as_ref()
+                .is_some_and(|value| !value.is_empty()),
+        ),
+        (
+            "success",
+            row.success_class.as_deref() == Some("integer") && row.success == Some(1),
+        ),
+        (
+            "execution_time",
+            row.execution_class.as_deref() == Some("integer")
+                && row.execution_time.is_some_and(|elapsed| elapsed >= 0),
+        ),
+    ] {
+        if !valid {
+            return Err(StoreError::Corrupt {
+                field: format!("central_schema_migrations.{field}"),
+                message: "invalid migration bookkeeping".into(),
+            });
+        }
+    }
     Ok(())
 }
 

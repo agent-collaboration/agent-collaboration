@@ -5,6 +5,7 @@ use crate::{
     step_driver::{StepCallback, StepDriver, StepResult},
 };
 use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScope};
+use runtime_primitives::Clock;
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -105,6 +106,7 @@ impl EngineSchema {
 }
 
 pub struct ObjectBootstrap<Host: ObjectHost> {
+    clock: Arc<dyn Clock>,
     driver: StepDriver<Host>,
     now: runtime_primitives::SyncTime,
 }
@@ -113,14 +115,26 @@ where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'blob, Host::Database>
+        + sqlx_core::decode::Decode<'blob, Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Host::Database> + sqlx_core::decode::Decode<'blob, Host::Database>,
+    for<'scalar> Option<i64>:
+        sqlx_core::types::Type<Host::Database> + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
 {
-    pub fn new(host: Arc<Host>, now: runtime_primitives::SyncTime) -> Self {
+    pub fn new(host: Arc<Host>, clock: Arc<dyn Clock>) -> Self {
+        let now = clock.now();
         Self {
+            clock,
             driver: StepDriver::new(host),
             now,
         }
@@ -131,6 +145,7 @@ where
             .run(BootstrapStep {
                 schema,
                 now: self.now,
+                clock: self.clock.clone(),
             })
             .await?;
         Ok(applied.count)
@@ -138,7 +153,14 @@ where
 
     pub(crate) async fn migrate_copy(&self) -> crate::owner_operation_calls::CopyMigrationResult {
         use crate::owner_operation_calls::CopyMigrationResult;
-        match self.driver.run(MigrateCopyStep { now: self.now }).await {
+        match self
+            .driver
+            .run(MigrateCopyStep {
+                now: self.now,
+                clock: self.clock.clone(),
+            })
+            .await
+        {
             Ok((result, _effects)) => result,
             Err(error) => match crate::migration_failure::MigrationFailure::from_rollback(&error) {
                 Some(failure) => {
@@ -168,7 +190,12 @@ where
                 None => CopyMigrationResult::Failed {
                     corpus: EngineSchema::Copy.corpus().into(),
                     version: None,
-                    reason: error.to_string(),
+                    reason: match fleet_sync_receiver::classify_copy_store_error(error.clone()) {
+                        fleet_sync_receiver::CopyTransactionFailure::Unavailable(
+                            fleet_sync_protocol::CopyUnavailableReason::Damaged { detail },
+                        ) => detail,
+                        _ => error.to_string(),
+                    },
                 },
             },
         }
@@ -187,6 +214,7 @@ struct BootstrapApplied {
 }
 
 struct BootstrapStep {
+    clock: Arc<dyn Clock>,
     schema: EngineSchema,
     now: runtime_primitives::SyncTime,
 }
@@ -196,6 +224,16 @@ where
     Driver: Database,
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
     Driver::Arguments: IntoArguments<Driver>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Driver>
+        + sqlx_core::encode::Encode<'blob, Driver>
+        + sqlx_core::decode::Decode<'blob, Driver>,
+    for<'scalar> i64: sqlx_core::types::Type<Driver>
+        + sqlx_core::encode::Encode<'scalar, Driver>
+        + sqlx_core::decode::Decode<'scalar, Driver>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Driver> + sqlx_core::decode::Decode<'blob, Driver>,
+    for<'scalar> Option<i64>:
+        sqlx_core::types::Type<Driver> + sqlx_core::decode::Decode<'scalar, Driver>,
     for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'row> &'row str: ColumnIndex<Driver::Row>,
@@ -218,6 +256,7 @@ where
                 self.schema.corpus(),
                 self.schema.migrations(),
                 self.now,
+                self.clock.as_ref(),
             )
             .await?;
             if self.schema == EngineSchema::Delivery {
@@ -261,6 +300,7 @@ where
                     "central-registry",
                     REGISTRY_MIGRATIONS.iter().collect(),
                     self.now,
+                    self.clock.as_ref(),
                 )
                 .await?
                 .count;
@@ -271,6 +311,7 @@ where
                     "central-session",
                     SESSION_MIGRATIONS.iter().collect(),
                     self.now,
+                    self.clock.as_ref(),
                 )
                 .await?
                 .count;
@@ -414,10 +455,21 @@ async fn apply_corpus<Scope>(
     corpus: &'static str,
     migrations: Vec<&'static sqlx_core::migrate::Migration>,
     now: runtime_primitives::SyncTime,
+    clock: &dyn Clock,
 ) -> Result<CorpusProgress, StoreError>
 where
     Scope: TransactionScope,
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::encode::Encode<'blob, Scope::Database>
+        + sqlx_core::decode::Decode<'blob, Scope::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::encode::Encode<'scalar, Scope::Database>
+        + sqlx_core::decode::Decode<'scalar, Scope::Database>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Scope::Database> + sqlx_core::decode::Decode<'blob, Scope::Database>,
+    for<'scalar> Option<i64>: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::decode::Decode<'scalar, Scope::Database>,
     for<'value> String:
         Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
     for<'value> Option<String>:
@@ -435,13 +487,7 @@ where
                 .ok_or_else(|| corrupt("missing physical row identity"))?,
             "migration row identity",
         )?;
-        let text = row.version.ok_or_else(|| corrupt("missing version"))?;
-        let version = text
-            .parse::<i64>()
-            .map_err(|_| corrupt("invalid version"))?;
-        if version.to_string() != text {
-            return Err(corrupt("noncanonical version"));
-        }
+        let version = row.version.ok_or_else(|| corrupt("missing version"))?;
         let checksum = row.checksum.ok_or_else(|| corrupt("missing checksum"))?;
         if applied.insert(version, checksum).is_some() {
             return Err(corrupt("duplicate version"));
@@ -454,7 +500,7 @@ where
                 migration.version == *version && migration.migration_type.is_up_migration()
             })
             .ok_or_else(|| corrupt("applied migration is absent from the corpus"))?;
-        if &checksum(migration)? != saved {
+        if &checksum(migration) != saved {
             return Err(corrupt("migration checksum changed"));
         }
     }
@@ -496,6 +542,7 @@ where
                 },
             )
         })?;
+        let started = clock.now().unix_millis();
         scope
             .executor()
             .execute(migration.sql.as_ref())
@@ -508,13 +555,21 @@ where
                     bootstrap_sql_error(error),
                 )
             })?;
+        let installed_on = clock.now().unix_millis();
+        let execution_time = installed_on
+            .checked_sub(started)
+            .filter(|elapsed| *elapsed >= 0)
+            .ok_or_else(|| corrupt("migration execution clock moved backwards or overflowed"))?;
         generated_bootstrap::insert_migration_history(
             scope,
             durable_steps::Uuid::now_v7().to_string(),
             corpus.into(),
-            migration.version.to_string(),
-            checksum(migration)?,
-            now.unix_millis().to_string(),
+            migration.version,
+            migration.description.to_string(),
+            installed_on,
+            checksum(migration),
+            execution_time,
+            now.unix_millis(),
         )
         .await
         .map_err(|error| {
@@ -548,15 +603,10 @@ where
     })
 }
 
-fn checksum(migration: &sqlx_core::migrate::Migration) -> Result<String, StoreError> {
-    use std::fmt::Write as _;
-
-    let mut encoded = String::with_capacity(migration.checksum.len() * 2);
-    for byte in migration.checksum.iter() {
-        write!(encoded, "{byte:02x}").map_err(StoreError::backend)?;
-    }
-    Ok(encoded)
+fn checksum(migration: &sqlx_core::migrate::Migration) -> Vec<u8> {
+    migration.checksum.to_vec()
 }
+
 fn corrupt(message: &str) -> StoreError {
     StoreError::Corrupt {
         field: "schema.migration".into(),
@@ -571,6 +621,7 @@ fn bootstrap_sql_error(error: sqlx_core::Error) -> StoreError {
 }
 
 struct MigrateCopyStep {
+    clock: Arc<dyn Clock>,
     now: runtime_primitives::SyncTime,
 }
 impl<Store, Driver> StepCallback<Store, Driver> for MigrateCopyStep
@@ -579,6 +630,16 @@ where
     Driver: Database,
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
     Driver::Arguments: IntoArguments<Driver>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Driver>
+        + sqlx_core::encode::Encode<'blob, Driver>
+        + sqlx_core::decode::Decode<'blob, Driver>,
+    for<'scalar> i64: sqlx_core::types::Type<Driver>
+        + sqlx_core::encode::Encode<'scalar, Driver>
+        + sqlx_core::decode::Decode<'scalar, Driver>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Driver> + sqlx_core::decode::Decode<'blob, Driver>,
+    for<'scalar> Option<i64>:
+        sqlx_core::types::Type<Driver> + sqlx_core::decode::Decode<'scalar, Driver>,
     for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'row> &'row str: ColumnIndex<Driver::Row>,
@@ -603,6 +664,7 @@ where
                 BootstrapStep {
                     schema: EngineSchema::Copy,
                     now: self.now,
+                    clock: self.clock,
                 },
                 scope,
             )
@@ -629,3 +691,12 @@ where
 #[cfg(test)]
 #[path = "fleet_directory_projection_test.rs"]
 mod directory_projection_tests;
+
+#[cfg(any(test, feature = "conformance"))]
+pub(crate) struct FixedBootstrapClock(pub runtime_primitives::SyncTime);
+#[cfg(any(test, feature = "conformance"))]
+impl Clock for FixedBootstrapClock {
+    fn now(&self) -> runtime_primitives::SyncTime {
+        self.0
+    }
+}

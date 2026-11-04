@@ -111,7 +111,7 @@ async fn exported_engine_corpora_initialize_once_and_reopen_without_reapplying_t
     ] {
         let directory = tempfile::tempdir()?;
         let fixture = Fixture::open(directory.path()).await?;
-        let bootstrap = ObjectBootstrap::new(fixture.host.clone(), ProbeIo.now());
+        let bootstrap = ObjectBootstrap::new(fixture.host.clone(), Arc::new(ProbeIo));
         assert_eq!(bootstrap.initialize(schema).await?, expected);
         assert_eq!(bootstrap.initialize(schema).await?, 0);
         let probe = match schema {
@@ -169,7 +169,7 @@ async fn exported_engine_corpora_initialize_once_and_reopen_without_reapplying_t
 
         let reopened = Fixture::open(directory.path()).await?;
         assert_eq!(
-            ObjectBootstrap::new(reopened.host.clone(), ProbeIo.now())
+            ObjectBootstrap::new(reopened.host.clone(), Arc::new(ProbeIo))
                 .initialize(schema)
                 .await?,
             0
@@ -211,7 +211,7 @@ async fn a_real_late_sql_error_rolls_back_all_earlier_migrations_and_history()
         .await?;
     let before = fixture.tables().await?;
 
-    let result = ObjectBootstrap::new(fixture.host.clone(), ProbeIo.now())
+    let result = ObjectBootstrap::new(fixture.host.clone(), Arc::new(ProbeIo))
         .initialize(EngineSchema::Copy)
         .await;
     let after = fixture.tables().await?;
@@ -230,7 +230,7 @@ async fn a_real_late_sql_error_rolls_back_all_earlier_migrations_and_history()
                     Ok((
                         row.try_get::<String, _>("corpus")
                             .map_err(StoreError::backend)?,
-                        row.try_get::<String, _>("version")
+                        row.try_get::<i64, _>("version")
                             .map_err(StoreError::backend)?,
                         row.try_get::<String, _>("reason")
                             .map_err(StoreError::backend)?,
@@ -257,7 +257,7 @@ async fn a_real_late_sql_error_rolls_back_all_earlier_migrations_and_history()
     );
     assert_eq!(failures.len(), 1);
     assert_eq!(failures[0].0, "fleet-sync-receiver");
-    assert_eq!(failures[0].1, "3");
+    assert_eq!(failures[0].1, 3);
     assert!(failures[0].2.contains("_fleet_sync_install"));
     assert_eq!(failures[0].3, ProbeIo.now().unix_millis());
     Ok(())
@@ -265,11 +265,11 @@ async fn a_real_late_sql_error_rolls_back_all_earlier_migrations_and_history()
 
 #[tokio::test]
 async fn a_changed_migration_checksum_is_refused_on_reopen() -> Result<(), TestError> {
-    corrupt_history("UPDATE central_schema_migrations SET checksum='[]' WHERE version='1'").await
+    corrupt_history("UPDATE central_schema_migrations SET checksum=x'000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000' WHERE version=1").await
 }
 #[tokio::test]
-async fn a_noncanonical_stored_version_is_refused_on_reopen() -> Result<(), TestError> {
-    corrupt_history("UPDATE central_schema_migrations SET version='01' WHERE version='1'").await
+async fn an_invalid_stored_version_is_refused_on_reopen() -> Result<(), TestError> {
+    corrupt_history("UPDATE central_schema_migrations SET version=0 WHERE version=1").await
 }
 #[tokio::test]
 async fn an_unknown_stored_version_is_refused_on_reopen() -> Result<(), TestError> {
@@ -278,7 +278,7 @@ async fn an_unknown_stored_version_is_refused_on_reopen() -> Result<(), TestErro
 async fn corrupt_history(sql: &'static str) -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
     let fixture = Fixture::open(directory.path()).await?;
-    ObjectBootstrap::new(fixture.host.clone(), ProbeIo.now())
+    ObjectBootstrap::new(fixture.host.clone(), Arc::new(ProbeIo))
         .initialize(EngineSchema::Registry)
         .await?;
     fixture
@@ -298,7 +298,7 @@ async fn corrupt_history(sql: &'static str) -> Result<(), TestError> {
     drop(fixture);
     let fixture = Fixture::open(directory.path()).await?;
 
-    let result = ObjectBootstrap::new(fixture.host.clone(), ProbeIo.now())
+    let result = ObjectBootstrap::new(fixture.host.clone(), Arc::new(ProbeIo))
         .initialize(EngineSchema::Registry)
         .await;
     fixture.objects.close().await?;
@@ -341,7 +341,7 @@ async fn receiver_rollback_is_unavailable_but_a_failed_store_boundary_is_unknown
             reason: CopyUnavailableReason::Damaged { .. }
         }
     ));
-    ObjectBootstrap::new(fixture.host.clone(), ProbeIo.now())
+    ObjectBootstrap::new(fixture.host.clone(), Arc::new(ProbeIo))
         .initialize(EngineSchema::Copy)
         .await?;
     assert_eq!(
@@ -377,7 +377,7 @@ mod owner_migrate;
 async fn central_migration_metadata_has_physical_uuid_primary_keys() -> Result<(), TestError> {
     let root = tempfile::tempdir()?;
     let fixture = Fixture::open(root.path()).await?;
-    ObjectBootstrap::new(fixture.host.clone(), ProbeIo.now())
+    ObjectBootstrap::new(fixture.host.clone(), Arc::new(ProbeIo))
         .initialize(EngineSchema::Copy)
         .await?;
     let identities = history_ids(&fixture).await?;
@@ -389,7 +389,7 @@ async fn central_migration_metadata_has_physical_uuid_primary_keys() -> Result<(
     }
     assert!(!identities.is_empty());
     assert_eq!(
-        ObjectBootstrap::new(fixture.host.clone(), ProbeIo.now())
+        ObjectBootstrap::new(fixture.host.clone(), Arc::new(ProbeIo))
             .initialize(EngineSchema::Copy)
             .await?,
         0
@@ -409,7 +409,7 @@ async fn central_migration_metadata_has_physical_uuid_primary_keys() -> Result<(
     drop(fixture);
     let reopened = Fixture::open(root.path()).await?;
     assert_eq!(
-        ObjectBootstrap::new(reopened.host.clone(), ProbeIo.now())
+        ObjectBootstrap::new(reopened.host.clone(), Arc::new(ProbeIo))
             .initialize(EngineSchema::Copy)
             .await?,
         0
@@ -478,7 +478,7 @@ async fn repeated_migration_failure_upsert_preserves_its_uuid_across_reopen()
             })
         })
         .await?;
-    let bootstrap = ObjectBootstrap::new(fixture.host.clone(), ProbeIo.now());
+    let bootstrap = ObjectBootstrap::new(fixture.host.clone(), Arc::new(ProbeIo));
     assert!(bootstrap.initialize(EngineSchema::Copy).await.is_err());
     let original = failure_id(&fixture).await?;
     assert_eq!(
@@ -492,7 +492,7 @@ async fn repeated_migration_failure_upsert_preserves_its_uuid_across_reopen()
     drop(fixture);
     let reopened = Fixture::open(root.path()).await?;
     assert!(
-        ObjectBootstrap::new(reopened.host.clone(), ProbeIo.now())
+        ObjectBootstrap::new(reopened.host.clone(), Arc::new(ProbeIo))
             .initialize(EngineSchema::Copy)
             .await
             .is_err()

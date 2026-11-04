@@ -8,7 +8,7 @@ use sqlx_core::{
     row::Row,
 };
 
-type HistoryRows = Vec<(String, String, String, String)>;
+type HistoryRows = Vec<(String, String, i64, Vec<u8>)>;
 
 async fn history(connection: &mut sqlx_turso::TursoConnection) -> ConformanceResult<HistoryRows> {
     query::<sqlx_turso::Turso>(
@@ -50,7 +50,7 @@ async fn read_health_with_identity(invalid_id: Option<&str>) -> ConformanceResul
             .connect().await?;
         let observed = async {
             let healthy = history(&mut reader).await?;
-            let original = healthy.iter().find(|row| row.1 == "fleet-sync-receiver" && row.2 == "3")
+            let original = healthy.iter().find(|row| row.1 == "fleet-sync-receiver" && row.2 == 3)
                 .ok_or("real receiver migration stamp missing")?;
             let original_id = durable_steps::Uuid::parse_str(&original.0)?;
             if original_id.get_version_num() != 7 {
