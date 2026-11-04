@@ -50,4 +50,4 @@ jsonschema.workspace = true
 fleet-sync-tokio-runner.workspace = true
 tokio.workspace = true
 tempfile = "3.27.0"
-sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "cdcd83b0e0a21ab518cc45acf4783dfbf1775f74", default-features = false }
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "277d6cb45a4a3eaa1156412a899788d71b901bc6", default-features = false }
