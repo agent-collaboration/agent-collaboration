@@ -9,6 +9,7 @@ mod host_process;
 mod inspect_cli;
 mod installed_claim;
 mod intent_recovery_proof;
+mod native_epoch_admission;
 #[path = "../../src/native_snapshot_fixture.rs"]
 mod native_snapshot_fixture;
 mod offline_cli;

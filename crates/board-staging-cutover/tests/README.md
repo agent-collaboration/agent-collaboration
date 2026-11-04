@@ -51,5 +51,13 @@ recovery decision fails the proof. A second Host lifetime replays Claim,
 appends and replays a public trail canary, and reads one intact canary record
 at the head after recovery plus one. Cold counts reject duplicate effects.
 
+The native-epoch cases use a real owner takeover to a second enrolled Host.
+An actual e3 file with unchanged application epoch-one history must retain every
+table hash and remain an admissible source. A public write on that holder is
+read back through the original application cursor; the resulting application
+epoch-three source must refuse before writable admission, even while another
+retained reader holds the file. Takeover assigns its recipient directly, so
+these cases await its public writer view rather than issuing another Claim.
+
 Host lifecycle orchestration, the full process-crash matrix, cross-machine
 write, richer frozen mail/cancel state and staging corpus remain unverified.
