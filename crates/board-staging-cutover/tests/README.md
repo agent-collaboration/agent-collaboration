@@ -39,9 +39,17 @@ The installed-content process case starts an actual isolated Host with the
 shared native-protocol and router-health fixtures. Its public Claim installs
 e2. After orderly Host and native-child exit, cold inspection compares the
 actual e2 replicated tables with the prepared snapshot and rejects an altered
-expected digest. The source has the initial project record; richer pending
-mail and notification state still need their own preservation proof. Two
+expected digest for a source containing the initial project record. Two
 ignored child entry points are apparatus invoked by this parent test.
 
+For an emitted notification intent, the SDK component case proves exact table
+hashes before application activation. The actual Host case checks normal
+recovery separately: one handoff, one request decision, two appended feed
+entries, the inherited epoch boundary and the subscription-delivery actor.
+Prior rows remain exact and every other table digest is unchanged. An extra
+recovery decision fails the proof. A second Host lifetime replays Claim,
+appends and replays a public trail canary, and reads one intact canary record
+at the head after recovery plus one. Cold counts reject duplicate effects.
+
 Host lifecycle orchestration, the full process-crash matrix, cross-machine
-write and staging corpus remain unverified.
+write, richer frozen mail/cancel state and staging corpus remain unverified.

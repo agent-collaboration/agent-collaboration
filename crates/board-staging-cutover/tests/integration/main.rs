@@ -11,6 +11,8 @@ mod cutover_host_fixture;
 mod inherited_snapshot_position;
 #[path = "../../src/native_snapshot_fixture.rs"]
 mod native_snapshot_fixture;
+#[path = "../../src/pending_intent_fixture.rs"]
+mod pending_intent_fixture;
 mod publication;
 mod publication_replay;
 mod source_archive;

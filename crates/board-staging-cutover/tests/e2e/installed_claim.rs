@@ -15,11 +15,21 @@ use message_board::{ActorOrigin, BoardFailureKind, ProtocolVersion};
 use std::{os::unix::fs::PermissionsExt, time::Duration};
 
 #[tokio::test]
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assert normal installed e2 and exact cold content before a new write."
-)]
 async fn ordinary_host_claim_installs_e2_with_exact_cold_replicated_tables() -> TestResult {
+    cold_claim_case(SourceContents::ProjectOnly).await
+}
+
+#[tokio::test]
+async fn ordinary_host_claim_preserves_an_emitted_intent_before_any_public_write() -> TestResult {
+    cold_claim_case(SourceContents::EmittedIntent).await
+}
+
+enum SourceContents {
+    ProjectOnly,
+    EmittedIntent,
+}
+
+async fn cold_claim_case(contents: SourceContents) -> TestResult {
     // Arrange existing native source, real central and an explicit short private runtime area.
     let base = tempfile::Builder::new()
         .prefix(HOST_BASE_PREFIX)
@@ -28,17 +38,22 @@ async fn ordinary_host_claim_installs_e2_with_exact_cold_replicated_tables() -> 
     let root = std::fs::canonicalize(base.path())?;
     let fixture =
         CutoverHostFixture::new_in(&root).map_err(|e| std::io::Error::other(e.to_string()))?;
-    let source = native_fixture(&fixture)
+    let mut source = native_fixture(&fixture)
         .await
         .map_err(|e| std::io::Error::other(e.to_string()))?;
+    let pending = if matches!(contents, SourceContents::EmittedIntent) {
+        Some(super::pending_intent_fixture::add_pending_intent(&fixture, &mut source).await?)
+    } else {
+        None
+    };
     let origin = ActorOrigin {
         installation: String::from(fixture.service.clone()).try_into()?,
         machine: "compiled cutover source".to_owned().try_into()?,
     };
     let central_area = tempfile::tempdir()?;
     let central = TestCentral::start_with_peer(central_area.path(), &origin, fixture.peer).await?;
+    let artifacts = tempfile::tempdir()?;
     let result = async {
-        let artifacts = tempfile::tempdir()?;
         let run = RunFixture::new(&fixture, &source, central.base_url(), artifacts.path())?;
         let published = run.execute().await?;
         assert!(
@@ -105,37 +120,101 @@ async fn ordinary_host_claim_installs_e2_with_exact_cold_replicated_tables() -> 
         )
         .await?;
         let checked = async {
+            std::fs::write(
+                fixture.root.join("cold-preflight.json"),
+                serde_json::to_vec(installed.preflight())?,
+            )?;
             assert_eq!(installed.preflight().selected.file_epoch.value(), 2);
-            assert_eq!(installed.preflight().application_epoch.get(), 1);
-            assert_eq!(installed.preflight().high_water, source.cursor);
-            installed.verify_replicated_tables(&bundle.manifest().header.manifest)?;
-            let mut altered = bundle.manifest().header.manifest.clone();
-            altered
-                .tables
-                .first_mut()
-                .ok_or("source tables absent")?
-                .digest = fleet_sync_protocol::TableDigest::new("0".repeat(64))?;
-            assert!(matches!(
-                installed.verify_replicated_tables(&altered),
-                Err(NativeSourceError::ReplicatedTablesMismatch)
-            ));
-            let page = installed
-                .next_page()
-                .await?
-                .ok_or("installed snapshot page missing")?;
-            assert_eq!(page.contents.database, source.manifest.database);
+            let recovered = if let Some(before) = &pending {
+                Some(
+                    super::intent_recovery_proof::verify_recovered_intent(
+                        &bundle,
+                        &mut installed,
+                        before,
+                        fixture.peer,
+                    )
+                    .await?,
+                )
+            } else {
+                assert_eq!(installed.preflight().application_epoch.get(), 1);
+                assert_eq!(installed.preflight().high_water, source.cursor);
+                installed.verify_replicated_tables(&bundle.manifest().header.manifest)?;
+                let mut altered = bundle.manifest().header.manifest.clone();
+                altered
+                    .tables
+                    .first_mut()
+                    .ok_or("source tables absent")?
+                    .digest = fleet_sync_protocol::TableDigest::new("0".repeat(64))?;
+                assert!(matches!(
+                    installed.verify_replicated_tables(&altered),
+                    Err(NativeSourceError::ReplicatedTablesMismatch)
+                ));
+                let page = installed
+                    .next_page()
+                    .await?
+                    .ok_or("installed snapshot page missing")?;
+                assert_eq!(page.contents.database, source.manifest.database);
+                None
+            };
             assert!(
                 bundle
                     .manifest()
                     .source_fingerprint
                     .matches(&bundle.manifest().backup_directory)?
             );
-            Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
+            Ok::<_, Box<dyn std::error::Error + Send + Sync>>(recovered)
         }
         .await;
         let closed = installed.close().await;
-        checked?;
+        let recovered = checked?;
         closed?;
+        drop(offline);
+        if let Some(recovered) = recovered {
+            let head = recovered.head;
+            let before = pending.as_ref().ok_or("recovery source missing")?;
+            super::canary_proof::append_and_read(&fixture, &bundle, before, recovered).await?;
+            let mut offline = fixture
+                .acquire()
+                .map_err(|e| std::io::Error::other(e.to_string()))?;
+            let installed = NativeProjectSnapshot::open(
+                &mut offline,
+                SelectedWriterFile {
+                    project: source.selected.project.clone(),
+                    peer: fixture.peer,
+                    file_epoch: fleet_sync_protocol::Epoch::new(2)?,
+                },
+            )
+            .await?;
+            let counts = async {
+                for (table, expected) in [
+                    ("mail_handoffs", 1),
+                    ("notify_intents", 1),
+                    ("request_decisions", 2),
+                    ("work_trail_rows", 1),
+                ] {
+                    let count = installed
+                        .preflight()
+                        .manifest
+                        .tables
+                        .iter()
+                        .find(|item| item.table.as_str() == table)
+                        .ok_or("post-canary table missing")?
+                        .row_count;
+                    super::recovery_rows::require(
+                        count == expected,
+                        "restart or canary added duplicate effects",
+                    )?;
+                }
+                super::recovery_rows::require(
+                    installed.preflight().high_water.position.get() == head.position.get() + 2,
+                    "canary replay appended duplicate history",
+                )
+            }
+            .await;
+            let closed = installed.close().await;
+            counts?;
+            closed?;
+        }
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }
     .await;
@@ -143,7 +222,13 @@ async fn ordinary_host_claim_installs_e2_with_exact_cold_replicated_tables() -> 
     if let Err(error) = result {
         let retained = fixture._area.keep();
         let _parent = base.keep();
-        return Err(format!("{error}; owned fixture retained at {}", retained.display()).into());
+        let prepared = artifacts.keep();
+        return Err(format!(
+            "{error}; owned fixture retained at {}; prepared artifacts at {}",
+            retained.display(),
+            prepared.display()
+        )
+        .into());
     }
     stopped?;
     Ok(())

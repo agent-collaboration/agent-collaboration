@@ -1009,6 +1009,7 @@ dependencies = [
  "collaboration-central-conformance",
  "collaboration-central-core",
  "collaboration-client",
+ "collaboration-mail-protocol",
  "collaboration-protocol",
  "collaboration-runtime",
  "fleet-admission",

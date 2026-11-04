@@ -18,15 +18,34 @@ fn boxed(error: impl std::fmt::Display) -> Box<dyn std::error::Error + Send + Sy
 }
 
 #[tokio::test]
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Physical e2 and its unchanged e1 seed position must both remain true."
-)]
 async fn a_real_bootstrapped_e2_without_new_writes_keeps_its_e1_snapshot_and_exact_table_hashes()
 -> TestResult {
+    installed_before_activation(false).await
+}
+
+#[tokio::test]
+async fn a_pending_intent_keeps_exact_native_table_hashes_before_application_activation()
+-> TestResult {
+    installed_before_activation(true).await
+}
+
+async fn installed_before_activation(with_pending_intent: bool) -> TestResult {
     // Arrange a real e1 source, then import it and obtain e2 from the actual registry.
     let fixture = CutoverHostFixture::new(None).map_err(boxed)?;
-    let source = native_fixture(&fixture).await.map_err(boxed)?;
+    let mut source = native_fixture(&fixture).await.map_err(boxed)?;
+    if with_pending_intent {
+        crate::pending_intent_fixture::add_pending_intent(&fixture, &mut source).await?;
+        assert_eq!(
+            source
+                .manifest
+                .tables
+                .iter()
+                .find(|table| table.table.as_str() == "notify_intents")
+                .ok_or("intent table absent")?
+                .row_count,
+            1
+        );
+    }
     let origin = ActorOrigin {
         installation: String::from(fixture.service.clone()).try_into()?,
         machine: "bootstrap position regression".to_owned().try_into()?,
