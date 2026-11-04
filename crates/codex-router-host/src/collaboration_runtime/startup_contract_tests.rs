@@ -10,6 +10,9 @@ const BOUND: Duration = Duration::from_secs(20);
 mod broker_context_tests;
 #[path = "startup_contract_tests/follow_attachment_tests.rs"]
 mod follow_attachment_tests;
+#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+#[path = "startup_mail_retention_test.rs"]
+mod mail_retention;
 #[path = "../../tests/support/registered_route_project.rs"]
 mod registered_route_project;
 #[path = "../../tests/support/session_follow_fixture.rs"]
@@ -28,6 +31,10 @@ async fn start_host(enrolled: bool) -> StartupFixture {
         .prefix("host-contract-")
         .tempdir_in("/tmp")
         .expect("private Host root");
+    start_host_in(enrolled, directory).await
+}
+
+async fn start_host_in(enrolled: bool, directory: tempfile::TempDir) -> StartupFixture {
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private permissions");
     std::fs::create_dir(directory.path().join("peers")).expect("peer registry");
