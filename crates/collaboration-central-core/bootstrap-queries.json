@@ -43,17 +43,32 @@
         },
         {
           "name": "version",
+          "kind": "integer",
+          "nullable": false
+        },
+        {
+          "name": "description",
           "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "installed_on",
+          "kind": "integer",
           "nullable": false
         },
         {
           "name": "checksum",
-          "kind": "text",
+          "kind": "blob",
+          "nullable": false
+        },
+        {
+          "name": "execution_time",
+          "kind": "integer",
           "nullable": false
         },
         {
           "name": "now",
-          "kind": "text",
+          "kind": "integer",
           "nullable": false
         }
       ]
@@ -83,7 +98,7 @@
         },
         {
           "name": "version",
-          "kind": "text",
+          "kind": "integer",
           "nullable": false
         },
         {

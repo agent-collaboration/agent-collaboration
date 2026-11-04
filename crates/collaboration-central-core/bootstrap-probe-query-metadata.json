@@ -1,8 +1,8 @@
 {
   "producer": "owned sqlx-turso / Turso 0.8.1 describe",
   "sources": {
-    "bootstrap-probe-queries.json": "8292a22168b765111b2bdb9eaf845f839e31a172602877b8ec9b76bd4bfb69de",
-    "core_migrations/0000_migration_history.sql": "5967bc796201ffc01357c7f30b6986d31c6f97b0f6a4712d8dfee7656d184666",
+    "bootstrap-probe-queries.json": "7128534cc0d4c394ca086478977ad3a67355edc7e26ae78af93c0e4d95793e64",
+    "core_migrations/0000_migration_history.sql": "badc108861ed9aff10b5da4383ecb7a62387c677f8ae28ab67a77d0d878bd68b",
     "core_migrations/0001_fleet_decisions.sql": "88b68c4557b378f3b6757c93243543de05dfc375d4d3c23d7cf5b6a1598343a5",
     "core_migrations/0002_fleet_decision_receipts.sql": "07da9a4fce8c160b30fec2133c1130171f901c1ecc9dfb2a15d35f32a0511fb3",
     "core_migrations/0003_fleet_records.sql": "708ac76292741e43deb96bec00cd32dcca4834ffc171289e330bc3e9e68a726c",
@@ -11,7 +11,7 @@
     "core_migrations/0006_archive_reports.sql": "e20d48929afb4e5b71cdb383115800178cb1866aec72b2664e46c7a8f9da050e",
     "core_migrations/0007_creation_decisions.sql": "0292e6a4f8406b77586d00b876626ad4987e9392381356126503e0c7e5dc1242",
     "core_migrations/0008_feed_readers.sql": "dda67da87b76d2cc87645e4ae7c2119a704ee88603f3bab40c9357019b9d3a47",
-    "core_migrations/0009_migration_failures.sql": "1ffdb253f6bd1ec0387bb92e8ff69a2788d7478b1ea8fa333638ae89848c31fa",
+    "core_migrations/0009_migration_failures.sql": "73536abea3f72253fb6d7c5118e2059eae0cbb58e5c8ce79a48ec098e781e227",
     "generator:fleet-sync-query-gen/Cargo.toml": "01210c567dcbccb4ff127626a0ff7625641edd4c5f0787ea41777757b1eaa3e6",
     "generator:fleet-sync-query-gen/src/expression_classes.rs": "14dc40abaec059e437d3e44bc187b9560812b0ed21ee2ad9d558364032fb097e",
     "generator:fleet-sync-query-gen/src/lib.rs": "df50be1a279adf266fdd12d184637b0113740390c0cef7273d1995dea0475152",
@@ -64,13 +64,13 @@
     "generator:sqlx-turso/src/lib.rs": "32ec3ac4ca4d0d703a452496262928a3a00ddfdf71eac8cbbe4ce1a3da69d9b5",
     "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
-    "sql/bootstrap_probe_checksum.sql": "c495d47723d7ff743d69f6d64b476408c094a40c10bceede9b41a7ded2c6b1bd",
-    "sql/bootstrap_probe_history.sql": "31d1c6da91d32a4e3e0919aab7b3eb77be6cd6dcc8a395a0ae15e84637313c9a",
+    "sql/bootstrap_probe_checksum.sql": "5a9a0125eea2925e457eac3b43fa090833062803e0982315d962c8a9f2bb3fc1",
+    "sql/bootstrap_probe_history.sql": "800a11d383c0ae1d9560b24aff231ec7214bbfe09f67a103e0edae5add148fbd",
     "sql/bootstrap_probe_tables.sql": "519903a94c731b528c2f27e95330ca35f4c83c20cde277d29592fe2fe126a1b8",
-    "sql/bootstrap_probe_version.sql": "1f876f9ea9cd0416d9f5d0032d56195a5e94e722b139316e5bb78c8817fdac17",
-    "src/generated_bootstrap_probes.rs": "42c4fa899715641aef3ef6dd1772ee2537d29b288b9561722509e5029e618139"
+    "sql/bootstrap_probe_version.sql": "7eb21407286ab9689713d2b7e7b26c82dcb1f4be3c18d7c352a8c518a4d9a492",
+    "src/generated_bootstrap_probes.rs": "ad132f8e66acd685c4aec85b3d52138b875af7074825a6f0027f816a1a2c51df"
   },
-  "queries_digest": "a6a304a1c8a5f01259c990c7ffd9a8bebbb2adc9573438d64d6cc5c408586037",
+  "queries_digest": "db54238d8b720499fc947d26c7d38bfdde3d6ded73d6a4b0e58dd9302484cf92",
   "queries": [
     {
       "name": "bootstrap_probe_tables",
@@ -98,17 +98,73 @@
         },
         {
           "name": "version",
+          "sql_type": "INTEGER",
+          "rust_type": "Option<i64>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "description",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
           "type_source": "driver"
         },
         {
+          "name": "installed_on",
+          "sql_type": "INTEGER",
+          "rust_type": "Option<i64>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "success",
+          "sql_type": "INTEGER",
+          "rust_type": "Option<i64>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
           "name": "checksum",
+          "sql_type": "BLOB",
+          "rust_type": "Option<Vec<u8>>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "execution_time",
+          "sql_type": "INTEGER",
+          "rust_type": "Option<i64>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "version_class",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
-          "type_source": "driver"
+          "type_source": "typeof"
+        },
+        {
+          "name": "checksum_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "installed_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "execution_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
         }
       ]
     },

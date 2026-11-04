@@ -31,7 +31,7 @@ enum Fixture {
     Delivery,
     LateConflict,
     Checksum,
-    Noncanonical,
+    InvalidVersion,
     Unknown,
     Damaged,
     Uncertain,
@@ -47,7 +47,7 @@ impl Fixture {
             Self::Delivery => "delivery",
             Self::LateConflict => "lateConflict",
             Self::Checksum => "checksum",
-            Self::Noncanonical => "noncanonical",
+            Self::InvalidVersion => "invalidVersion",
             Self::Unknown => "unknown",
             Self::Damaged => "damaged",
             Self::Uncertain => "uncertain",
@@ -201,14 +201,15 @@ impl DurableObject for BootstrapObject {
             #[cfg(not(feature = "conformance-faults"))]
             return Response::error("store faults unavailable", 404);
         }
-        let now = runtime_primitives::Clock::now(&ControlIo::new(host.wake().clone()));
         let result = match body.command {
-            Command::Bootstrap(command) => ObjectBootstrap::new(host.clone(), now)
-                .execute(command)
-                .await
-                .and_then(|reply| {
-                    serde_json::to_value(reply).map_err(durable_steps::StoreError::backend)
-                }),
+            Command::Bootstrap(command) => {
+                ObjectBootstrap::new(host.clone(), Arc::new(ControlIo::new(host.wake().clone())))
+                    .execute(command)
+                    .await
+                    .and_then(|reply| {
+                        serde_json::to_value(reply).map_err(durable_steps::StoreError::backend)
+                    })
+            }
             Command::ImportedUnheld { .. } => Err(durable_steps::StoreError::backend(
                 "import fixture must use the composed Registry",
             )),

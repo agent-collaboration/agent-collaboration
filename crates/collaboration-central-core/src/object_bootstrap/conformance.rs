@@ -16,7 +16,7 @@ use fleet_sync_protocol::{
 #[serde(rename_all = "camelCase")]
 pub enum HistoryCorruption {
     Checksum,
-    NoncanonicalVersion,
+    InvalidVersion,
     UnknownVersion,
 }
 
@@ -57,8 +57,16 @@ pub enum BootstrapCommand {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BootstrapHistory {
     pub corpus: String,
-    pub version: String,
-    pub checksum: String,
+    pub version: i64,
+    pub description: String,
+    pub installed_on: i64,
+    pub success: i64,
+    pub execution_time: i64,
+    pub checksum: Vec<u8>,
+    pub version_class: String,
+    pub checksum_class: String,
+    pub installed_class: String,
+    pub execution_class: String,
 }
 
 type Acceptance = <BoardDeliveryTypes as DeliveryTypes>::Acceptance;
@@ -101,6 +109,16 @@ where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'blob, Host::Database>
+        + sqlx_core::decode::Decode<'blob, Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Host::Database> + sqlx_core::decode::Decode<'blob, Host::Database>,
+    for<'scalar> Option<i64>:
+        sqlx_core::types::Type<Host::Database> + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -143,6 +161,16 @@ where
     Driver: Database,
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
     Driver::Arguments: IntoArguments<Driver>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Driver>
+        + sqlx_core::encode::Encode<'blob, Driver>
+        + sqlx_core::decode::Decode<'blob, Driver>,
+    for<'scalar> i64: sqlx_core::types::Type<Driver>
+        + sqlx_core::encode::Encode<'scalar, Driver>
+        + sqlx_core::decode::Decode<'scalar, Driver>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Driver> + sqlx_core::decode::Decode<'blob, Driver>,
+    for<'scalar> Option<i64>:
+        sqlx_core::types::Type<Driver> + sqlx_core::decode::Decode<'scalar, Driver>,
     for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'row> &'row str: ColumnIndex<Driver::Row>,
@@ -174,6 +202,28 @@ where
                             history.push(BootstrapHistory {
                                 corpus: row.corpus.ok_or_else(|| corrupt("missing corpus"))?,
                                 version: row.version.ok_or_else(|| corrupt("missing version"))?,
+                                version_class: row
+                                    .version_class
+                                    .ok_or_else(|| corrupt("missing version_class"))?,
+                                checksum_class: row
+                                    .checksum_class
+                                    .ok_or_else(|| corrupt("missing checksum_class"))?,
+                                installed_class: row
+                                    .installed_class
+                                    .ok_or_else(|| corrupt("missing installed_class"))?,
+                                execution_class: row
+                                    .execution_class
+                                    .ok_or_else(|| corrupt("missing execution_class"))?,
+                                description: row
+                                    .description
+                                    .ok_or_else(|| corrupt("missing description"))?,
+                                installed_on: row
+                                    .installed_on
+                                    .ok_or_else(|| corrupt("missing installed_on"))?,
+                                success: row.success.ok_or_else(|| corrupt("missing success"))?,
+                                execution_time: row
+                                    .execution_time
+                                    .ok_or_else(|| corrupt("missing execution_time"))?,
                                 checksum: row
                                     .checksum
                                     .ok_or_else(|| corrupt("missing checksum"))?,
@@ -202,26 +252,17 @@ where
                         HistoryCorruption::Checksum => {
                             queries::bootstrap_probe_checksum(
                                 scope,
-                                "[]".into(),
+                                vec![0; 48],
                                 schema.corpus().into(),
                             )
                             .await
                         }
-                        HistoryCorruption::NoncanonicalVersion => {
-                            queries::bootstrap_probe_version(
-                                scope,
-                                "01".into(),
-                                schema.corpus().into(),
-                            )
-                            .await
+                        HistoryCorruption::InvalidVersion => {
+                            queries::bootstrap_probe_version(scope, 0, schema.corpus().into()).await
                         }
                         HistoryCorruption::UnknownVersion => {
-                            queries::bootstrap_probe_version(
-                                scope,
-                                "999".into(),
-                                schema.corpus().into(),
-                            )
-                            .await
+                            queries::bootstrap_probe_version(scope, 999, schema.corpus().into())
+                                .await
                         }
                     }
                     .map_err(StoreError::backend)?;

@@ -16,6 +16,9 @@ use serde_json::{Value, json};
 use std::{num::NonZeroU64, time::Duration};
 use support::*;
 
+// JSON cannot carry SQLite BLOBs; hex is only this fixture's lossless readback encoding.
+const RECEIVER_MIGRATION_STAMP: &str = "SELECT json_array(row_id,corpus,version,description,installed_on,success,hex(checksum),execution_time,created_at,updated_at) AS value FROM central_schema_migrations WHERE corpus='fleet-sync-receiver' AND version=3";
+
 async fn request(
     http: &reqwest::Client,
     base: &str,
@@ -184,23 +187,34 @@ async fn pending_copy_import_keeps_the_owner_reason_across_reopen() -> TestResul
     let (header, import_id, seed) = begin(&server, &prepared).await?;
     server.shutdown().await?;
     let object = format!("copy-{}", header.database());
-    let saved=upload_support::read(root.path(),&object,"SELECT json_array(row_id,corpus,version,checksum,created_at,updated_at,applied_at) AS value FROM central_schema_migrations WHERE corpus='fleet-sync-receiver' AND version='3'").await?;
+    let saved = upload_support::read(root.path(), &object, RECEIVER_MIGRATION_STAMP).await?;
     let [saved] = saved.as_slice() else {
         return Err("one receiver history stamp required".into());
     };
-    let (row_id, corpus, version, checksum, created_at, updated_at, applied_at): (
-        String,
-        String,
-        String,
-        String,
-        i64,
-        i64,
-        i64,
-    ) = serde_json::from_str(saved)?;
+    let (
+        row_id,
+        corpus,
+        version,
+        description,
+        installed_on,
+        success,
+        checksum_hex,
+        execution_time,
+        created_at,
+        updated_at,
+    ): (String, String, i64, String, i64, i64, String, i64, i64, i64) =
+        serde_json::from_str(saved)?;
+    if checksum_hex.len() != 96 {
+        return Err("one raw SHA-384 checksum required".into());
+    }
+    let mut checksum = Vec::new();
+    for pair in checksum_hex.as_bytes().as_chunks::<2>().0 {
+        checksum.push(u8::from_str_radix(std::str::from_utf8(pair)?, 16)?);
+    }
     upload_support::execute(
         root.path(),
         &object,
-        "DELETE FROM central_schema_migrations WHERE corpus='fleet-sync-receiver' AND version='3'",
+        "DELETE FROM central_schema_migrations WHERE corpus='fleet-sync-receiver' AND version=3",
     )
     .await?;
     let server = central_fixture::start_server(root.path(), &jwks).await?;
@@ -220,25 +234,26 @@ async fn pending_copy_import_keeps_the_owner_reason_across_reopen() -> TestResul
         .connect()
         .await?;
     let restored = sqlx_turso::sqlx::query::<sqlx_turso::Turso>(
-        "INSERT INTO central_schema_migrations(row_id,corpus,version,checksum,created_at,updated_at,applied_at) VALUES(?,?,?,?,?,?,?)",
+        "INSERT INTO central_schema_migrations(row_id,corpus,version,description,installed_on,success,checksum,execution_time,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
     )
     .bind(row_id)
     .bind(corpus)
     .bind(version)
+    .bind(description)
+    .bind(installed_on)
+    .bind(success)
     .bind(checksum)
+    .bind(execution_time)
     .bind(created_at)
     .bind(updated_at)
-    .bind(applied_at)
     .execute(&mut connection)
     .await;
     connection.close().await?;
     restored?;
     assert_eq!(
-        upload_support::read(root.path(), &object,
-            "SELECT json_array(row_id,corpus,version,checksum,created_at,updated_at,applied_at) AS value FROM central_schema_migrations WHERE corpus='fleet-sync-receiver' AND version='3'"
-        ).await?,
+        upload_support::read(root.path(), &object, RECEIVER_MIGRATION_STAMP).await?,
         vec![saved.as_str().to_owned()],
-        "restoration must preserve the original migration identity and all three integer times"
+        "restoration must preserve all sqlx-shaped migration fields and original checksum bytes"
     );
     let server = central_fixture::start_server(root.path(), &jwks).await?;
     let recovery: TestResult = async {

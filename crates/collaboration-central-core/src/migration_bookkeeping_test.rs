@@ -17,7 +17,11 @@ async fn bootstrap(
         .transaction(move |scope| {
             Box::pin(async move {
                 let (applied, _) = <BootstrapStep as StepCallback<Store, sqlx_turso::Turso>>::run(
-                    BootstrapStep { schema, now },
+                    BootstrapStep {
+                        schema,
+                        now,
+                        clock: Arc::new(FixedBootstrapClock(now)),
+                    },
                     scope,
                 )
                 .await?;
@@ -76,11 +80,14 @@ async fn fleet_and_copy_bootstrap_create_final_bookkeeping_with_integer_injected
             vec![
                 ("row_id".into(), "TEXT".into(), 1),
                 ("corpus".into(), "TEXT".into(), 0),
-                ("version".into(), "TEXT".into(), 0),
-                ("checksum".into(), "TEXT".into(), 0),
+                ("version".into(), "INTEGER".into(), 0),
+                ("description".into(), "TEXT".into(), 0),
+                ("installed_on".into(), "INTEGER".into(), 0),
+                ("success".into(), "INTEGER".into(), 0),
+                ("checksum".into(), "BLOB".into(), 0),
+                ("execution_time".into(), "INTEGER".into(), 0),
                 ("created_at".into(), "INTEGER".into(), 0),
                 ("updated_at".into(), "INTEGER".into(), 0),
-                ("applied_at".into(), "INTEGER".into(), 0),
             ],
             "{schema:?}"
         );
@@ -90,7 +97,7 @@ async fn fleet_and_copy_bootstrap_create_final_bookkeeping_with_integer_injected
             vec![
                 ("row_id".into(), "TEXT".into(), 1),
                 ("corpus".into(), "TEXT".into(), 0),
-                ("version".into(), "TEXT".into(), 0),
+                ("version".into(), "INTEGER".into(), 0),
                 ("reason".into(), "TEXT".into(), 0),
                 ("created_at".into(), "INTEGER".into(), 0),
                 ("updated_at".into(), "INTEGER".into(), 0),
@@ -109,17 +116,17 @@ async fn fleet_and_copy_bootstrap_create_final_bookkeeping_with_integer_injected
                 row.row_id
             );
             assert!(!row.corpus.is_empty());
-            assert_eq!(row.version.parse::<u64>()?.to_string(), row.version);
+            assert!(row.version > 0);
             assert!(!row.checksum.is_empty());
             assert_eq!(
-                (row.created_at, row.updated_at, row.applied_at),
+                (row.created_at, row.updated_at, row.installed_on),
                 (NOW.unix_millis(), NOW.unix_millis(), NOW.unix_millis())
             );
             assert_eq!(
                 (
                     row.created_class.as_str(),
                     row.updated_class.as_str(),
-                    row.applied_class.as_str()
+                    row.installed_class.as_str()
                 ),
                 ("integer", "integer", "integer")
             );
@@ -148,18 +155,18 @@ async fn fleet_and_copy_bootstrap_create_final_bookkeeping_with_integer_injected
 struct HistoryRow {
     row_id: String,
     corpus: String,
-    version: String,
-    checksum: String,
+    version: i64,
+    checksum: Vec<u8>,
     created_at: i64,
     updated_at: i64,
-    applied_at: i64,
+    installed_on: i64,
     created_class: String,
     updated_class: String,
-    applied_class: String,
+    installed_class: String,
 }
 async fn read_history(fixture: &FleetStorageFixture) -> TestResult<Vec<HistoryRow>> {
     Ok(fixture.object.transaction(|scope|Box::pin(async move {
-        let rows=query::<sqlx_turso::Turso>("SELECT row_id,corpus,version,checksum,created_at,updated_at,applied_at,typeof(created_at) AS created_class,typeof(updated_at) AS updated_class,typeof(applied_at) AS applied_class FROM central_schema_migrations ORDER BY corpus,version")
+        let rows=query::<sqlx_turso::Turso>("SELECT row_id,corpus,version,checksum,created_at,updated_at,installed_on,typeof(created_at) AS created_class,typeof(updated_at) AS updated_class,typeof(installed_on) AS installed_class FROM central_schema_migrations ORDER BY corpus,version")
             .fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
         rows.into_iter().map(|row|Ok(HistoryRow {
             row_id:row.try_get("row_id").map_err(StoreError::backend)?,
@@ -168,12 +175,65 @@ async fn read_history(fixture: &FleetStorageFixture) -> TestResult<Vec<HistoryRo
             checksum:row.try_get("checksum").map_err(StoreError::backend)?,
             created_at:row.try_get("created_at").map_err(StoreError::backend)?,
             updated_at:row.try_get("updated_at").map_err(StoreError::backend)?,
-            applied_at:row.try_get("applied_at").map_err(StoreError::backend)?,
+            installed_on:row.try_get("installed_on").map_err(StoreError::backend)?,
             created_class:row.try_get("created_class").map_err(StoreError::backend)?,
             updated_class:row.try_get("updated_class").map_err(StoreError::backend)?,
-            applied_class:row.try_get("applied_class").map_err(StoreError::backend)?,
+            installed_class:row.try_get("installed_class").map_err(StoreError::backend)?,
         })).collect::<Result<Vec<_>,StoreError>>()
     })).await?)
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Fresh owning bootstrap must persist the exact 48 SQLx SHA-384 bytes as a SQLite blob."
+)]
+async fn fresh_bootstrap_matches_sqlx_migration_column_types_and_checksum_bytes() -> TestResult {
+    for schema in [EngineSchema::Fleet, EngineSchema::Copy] {
+        let fixture = FleetStorageFixture::open().await?;
+        bootstrap(&fixture, schema, NOW).await?;
+
+        fixture.object.transaction(move |scope|Box::pin(async move {
+            let rows=query::<sqlx_turso::Turso>("SELECT typeof(version) AS version_class,typeof(checksum) AS checksum_class FROM central_schema_migrations WHERE corpus=?1").bind(schema.corpus()).fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
+            assert!(!rows.is_empty());
+            for row in rows {
+                assert_eq!(row.try_get::<String,_>("version_class").map_err(StoreError::backend)?,"integer");
+                assert_eq!(row.try_get::<String,_>("checksum_class").map_err(StoreError::backend)?,"blob");
+            }
+            Ok(())
+        })).await?;
+        let stored: Vec<(i64, Vec<u8>)> = fixture.object.transaction(move |scope| Box::pin(async move {
+            let rows = query::<sqlx_turso::Turso>(
+                "SELECT version,typeof(checksum) AS checksum_class,checksum,description,success,typeof(success) AS success_class,installed_on,typeof(installed_on) AS installed_class,execution_time,typeof(execution_time) AS execution_class FROM central_schema_migrations WHERE corpus=?1",
+            ).bind(schema.corpus()).fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
+            rows.into_iter().map(|row| {
+                let class: String = row.try_get("checksum_class").map_err(StoreError::backend)?;
+                assert_eq!(class, "blob", "{schema:?} checksum storage class");
+                assert!(!row.try_get::<String,_>("description").map_err(StoreError::backend)?.is_empty());
+                assert_eq!(row.try_get::<i64,_>("success").map_err(StoreError::backend)?,1);
+                assert_eq!(row.try_get::<i64,_>("installed_on").map_err(StoreError::backend)?, NOW.unix_millis());
+                assert_eq!(row.try_get::<i64,_>("execution_time").map_err(StoreError::backend)?,0);
+                for field in ["success_class","installed_class","execution_class"] {assert_eq!(row.try_get::<String,_>(field).map_err(StoreError::backend)?,"integer");}
+                Ok((row.try_get("version").map_err(StoreError::backend)?,row.try_get("checksum").map_err(StoreError::backend)?))
+            }).collect::<Result<Vec<_>,StoreError>>()
+        })).await?;
+        let migrations = schema.migrations();
+        assert_eq!(stored.len(), migrations.len());
+        for (version, checksum) in stored {
+            let migration = migrations
+                .iter()
+                .find(|migration| migration.version == version)
+                .ok_or("stored migration is absent from SQLx corpus")?;
+            assert_eq!(checksum.len(), 48, "{schema:?} migration {version}");
+            assert_eq!(
+                checksum,
+                migration.checksum.as_ref(),
+                "{schema:?} migration {version}"
+            );
+        }
+        fixture.close().await?;
+    }
+    Ok(())
 }
 
 async fn record_failure(
@@ -207,7 +267,7 @@ async fn record_failure(
 #[derive(Debug, PartialEq)]
 struct FailureRow {
     row_id: String,
-    version: String,
+    version: i64,
     reason: String,
     created_at: i64,
     updated_at: i64,
@@ -242,7 +302,7 @@ async fn latest_failure_keeps_identity_and_creation_but_advances_its_injected_fa
     )?));
     assert_eq!(
         (&first.version, &first.reason),
-        (&"1".to_owned(), &"migration 1 refused".to_owned())
+        (&1, &"migration 1 refused".to_owned())
     );
     assert_eq!(
         (first.created_at, first.updated_at, first.failed_at),
@@ -265,7 +325,7 @@ async fn latest_failure_keeps_identity_and_creation_but_advances_its_injected_fa
     );
     assert_eq!(
         (&second.version, &second.reason),
-        (&"2".to_owned(), &"migration 2 refused".to_owned())
+        (&2, &"migration 2 refused".to_owned())
     );
     assert_eq!(second.classes, first.classes);
     let fixture = fixture.reopen().await?;
@@ -307,8 +367,8 @@ async fn corrupt_native_bookkeeping_times_refuse_bootstrap_or_make_health_explic
             "central_schema_migrations.updated_at",
         ),
         (
-            "UPDATE central_schema_migrations SET applied_at=1.5",
-            "central_schema_migrations.applied_at",
+            "UPDATE central_schema_migrations SET installed_on=1.5",
+            "central_schema_migrations.installed_on",
         ),
     ] {
         let fixture = FleetStorageFixture::open().await?;
@@ -367,4 +427,94 @@ async fn corrupt_native_bookkeeping_times_refuse_bootstrap_or_make_health_explic
         fixture.close().await?;
     }
     Ok(())
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Migration execution time must be the actual difference between two injected clock samples around SQL execution."
+)]
+async fn migration_execution_time_uses_the_injected_clock_around_each_execute() -> TestResult {
+    struct TickingClock(std::sync::atomic::AtomicI64);
+    impl runtime_primitives::Clock for TickingClock {
+        fn now(&self) -> runtime_primitives::SyncTime {
+            runtime_primitives::SyncTime::from_unix_millis(
+                self.0.fetch_add(7, std::sync::atomic::Ordering::SeqCst),
+            )
+        }
+    }
+    let fixture = FleetStorageFixture::open().await?;
+    fixture
+        .object
+        .transaction(|scope| {
+            Box::pin(async move {
+                <BootstrapStep as StepCallback<Store, sqlx_turso::Turso>>::run(
+                    BootstrapStep {
+                        schema: EngineSchema::Fleet,
+                        now: NOW,
+                        clock: Arc::new(TickingClock(std::sync::atomic::AtomicI64::new(
+                            NOW.unix_millis(),
+                        ))),
+                    },
+                    scope,
+                )
+                .await?;
+                let rows = query::<sqlx_turso::Turso>(
+                    "SELECT installed_on,execution_time FROM central_schema_migrations ORDER BY version",
+                )
+                .fetch_all(scope.executor())
+                .await
+                .map_err(StoreError::backend)?;
+                assert!(!rows.is_empty());
+                for (index, row) in rows.into_iter().enumerate() {
+                    assert_eq!(row.try_get::<i64, _>("execution_time").map_err(StoreError::backend)?, 7);
+                    let offset = i64::try_from(index).map_err(StoreError::backend)? * 14 + 7;
+                    assert_eq!(row.try_get::<i64, _>("installed_on").map_err(StoreError::backend)?, NOW.unix_millis() + offset);
+                }
+                Ok(())
+            })
+        })
+        .await?;
+    fixture.close().await
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "A backwards injected wall-clock step must record zero elapsed without aborting a successfully executed migration."
+)]
+async fn backwards_clock_records_zero_execution_time_and_commits_history() -> TestResult {
+    struct BackwardsClock(std::sync::atomic::AtomicBool);
+    impl runtime_primitives::Clock for BackwardsClock {
+        fn now(&self) -> runtime_primitives::SyncTime {
+            let stepped = self.0.swap(true, std::sync::atomic::Ordering::SeqCst);
+            runtime_primitives::SyncTime::from_unix_millis(
+                NOW.unix_millis() - i64::from(stepped) * 7,
+            )
+        }
+    }
+    let fixture = FleetStorageFixture::open().await?;
+    fixture.object.transaction(|scope| Box::pin(async move {
+        let (applied, _) = <BootstrapStep as StepCallback<Store, sqlx_turso::Turso>>::run(
+            BootstrapStep {
+                schema: EngineSchema::Fleet,
+                now: NOW,
+                clock: Arc::new(BackwardsClock(std::sync::atomic::AtomicBool::new(false))),
+            }, scope,
+        ).await?;
+        let rows = query::<sqlx_turso::Turso>(
+            "SELECT installed_on,success,execution_time FROM central_schema_migrations WHERE corpus='central-fleet'",
+        ).fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
+        assert_eq!(rows.len(), EngineSchema::Fleet.migrations().len());
+        assert_eq!(applied.count, rows.len());
+        for row in rows {
+            assert_eq!(row.try_get::<i64,_>("installed_on").map_err(StoreError::backend)?, NOW.unix_millis() - 7);
+            assert_eq!(row.try_get::<i64,_>("success").map_err(StoreError::backend)?, 1);
+            assert_eq!(row.try_get::<i64,_>("execution_time").map_err(StoreError::backend)?, 0);
+        }
+        Ok(())
+    })).await?;
+    // A separate transaction observes the committed rows, not just an uncommitted INSERT.
+    assert!(!read_history(&fixture).await?.is_empty());
+    fixture.close().await
 }

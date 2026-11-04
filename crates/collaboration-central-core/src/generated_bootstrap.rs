@@ -26,14 +26,20 @@ where
 #[derive(Debug)]
 pub(crate) struct StoredMigrationHistory {
     pub row_id: Option<String>,
-    pub version: Option<String>,
-    pub checksum: Option<String>,
+    pub version: Option<i64>,
+    pub description: Option<String>,
+    pub success: Option<i64>,
+    pub checksum: Option<Vec<u8>>,
+    pub execution_time: Option<i64>,
+    pub version_class: Option<String>,
+    pub success_class: Option<String>,
+    pub execution_class: Option<String>,
     pub created_at: Option<String>,
     pub created_class: Option<String>,
     pub updated_at: Option<String>,
     pub updated_class: Option<String>,
-    pub applied_at: Option<String>,
-    pub applied_class: Option<String>,
+    pub installed_on: Option<String>,
+    pub installed_class: Option<String>,
 }
 pub(crate) fn read_migration_history<S>(
     scope: &mut S,
@@ -44,6 +50,8 @@ where
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
     for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
     for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> Option<Vec<u8>>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> Option<i64>: Type<S::Database> + Decode<'value, S::Database>,
     for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
@@ -58,13 +66,19 @@ where
                 Ok(StoredMigrationHistory {
                     row_id: row.try_get("row_id")?,
                     version: row.try_get("version")?,
+                    description: row.try_get("description")?,
+                    success: row.try_get("success")?,
                     checksum: row.try_get("checksum")?,
+                    execution_time: row.try_get("execution_time")?,
+                    version_class: row.try_get("version_class")?,
+                    success_class: row.try_get("success_class")?,
+                    execution_class: row.try_get("execution_class")?,
                     created_at: row.try_get("created_at")?,
                     created_class: row.try_get("created_class")?,
                     updated_at: row.try_get("updated_at")?,
                     updated_class: row.try_get("updated_class")?,
-                    applied_at: row.try_get("applied_at")?,
-                    applied_class: row.try_get("applied_class")?,
+                    installed_on: row.try_get("installed_on")?,
+                    installed_class: row.try_get("installed_class")?,
                 })
             })
             .collect()
@@ -74,14 +88,19 @@ pub(crate) fn insert_migration_history<S>(
     scope: &mut S,
     row_id: String,
     corpus: String,
-    version: String,
-    checksum: String,
-    now: String,
+    version: i64,
+    description: String,
+    installed_on: i64,
+    checksum: Vec<u8>,
+    execution_time: i64,
+    now: i64,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
     for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> Vec<u8>: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> i64: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
         let statement = query::<S::Database>(include_str!(concat!(
@@ -91,7 +110,10 @@ where
         .bind(row_id)
         .bind(corpus)
         .bind(version)
+        .bind(description)
+        .bind(installed_on)
         .bind(checksum)
+        .bind(execution_time)
         .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
@@ -117,7 +139,7 @@ pub(crate) fn record_migration_failure<S>(
     scope: &mut S,
     row_id: String,
     corpus: String,
-    version: String,
+    version: i64,
     reason: String,
     now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
@@ -125,6 +147,7 @@ where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
     for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> i64: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
         let statement = query::<S::Database>(include_str!(concat!(
@@ -145,7 +168,7 @@ where
 pub(crate) struct StoredMigrationFailure {
     pub row_id: Option<String>,
     pub corpus: Option<String>,
-    pub version: Option<String>,
+    pub version: Option<i64>,
     pub reason: Option<String>,
     pub created_at: Option<String>,
     pub created_class: Option<String>,
@@ -162,6 +185,7 @@ where
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
     for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
     for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> Option<i64>: Type<S::Database> + Decode<'value, S::Database>,
 {
     async move {
         let statement = query::<S::Database>(include_str!(concat!(
