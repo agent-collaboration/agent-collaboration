@@ -88,7 +88,7 @@ async fn run_report(pair: SharedPair) -> ConformanceResult<()> {
     engine.register(fleet_sync_delivery::RemoveDeliveryRecord::<
         report_store::ReportStore,
         sqlx_turso::Turso,
-    >::new())?;
+    >::new(fleet_sync_delivery::DeliveryHostRole::Machine))?;
     engine.register(ReportTask::new(
         DeliveryTaskConfig {
             local: LocalDeliveryConfig {

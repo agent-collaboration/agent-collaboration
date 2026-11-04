@@ -34,13 +34,14 @@ impl MailDeliveryRuntime {
         self.store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    let rows = fleet_sync_delivery::test_support::snapshot::<
-                        _,
-                        RouterDeliveryTypes,
-                        _,
-                    >(scope, binding.as_ref())
-                    .await
-                    .map_err(StoreError::backend)?;
+                    let rows =
+                        fleet_sync_delivery::test_support::snapshot::<_, RouterDeliveryTypes, _>(
+                            scope,
+                            fleet_sync_delivery::DeliveryHostRole::Machine,
+                            binding.as_ref(),
+                        )
+                        .await
+                        .map_err(StoreError::backend)?;
                     Ok(!rows.iter().any(|row| {
                         row.category == "inbox"
                             && row.identity == reference.item.as_uuid().to_string()

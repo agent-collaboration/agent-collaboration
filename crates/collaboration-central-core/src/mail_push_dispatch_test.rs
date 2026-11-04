@@ -316,7 +316,7 @@ impl Fixture {
         let mut fleet_engine = Engine::new(fleet.object.clone(), host.clone());
         fleet_engine.register(Push::new(limits, host.clone(), binding.clone()))?;
         fleet_engine.register(Publication::new())?;
-        fleet_engine.register(Removal::new())?;
+        fleet_engine.register(Removal::new(fleet_sync_delivery::DeliveryHostRole::Relay))?;
         let local = LocalDeliveryConfig { owner, limits };
         let mut recipient_engine = Engine::new(recipient.object.clone(), host.clone());
         recipient_engine.register(Attempt::new(
@@ -330,7 +330,7 @@ impl Fixture {
             host.clone(),
             binding,
         ))?;
-        recipient_engine.register(Removal::new())?;
+        recipient_engine.register(Removal::new(fleet_sync_delivery::DeliveryHostRole::Machine))?;
         let item = DeliveryEnvelope::Item(DeliveryItem::new(
             fleet_sync_protocol::ItemId::new(durable_steps::Uuid::now_v7())?,
             serde_json::from_value(json!({"kind":"humanUser","installation":SERVICE_A}))?,

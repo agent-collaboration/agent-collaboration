@@ -259,7 +259,9 @@ impl MailDeliveryRuntime {
             host.clone(),
             binding.clone(),
         ))?;
-        engine.register(RemoveMailRecord::new())?;
+        engine.register(RemoveMailRecord::new(
+            fleet_sync_delivery::DeliveryHostRole::Machine,
+        ))?;
         if let Some(session) = &session {
             let remote = session.task_config(config)?;
             engine.register(SubmitMailTask::new(

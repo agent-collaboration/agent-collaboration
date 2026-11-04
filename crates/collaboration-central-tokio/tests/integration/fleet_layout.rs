@@ -14,8 +14,8 @@ use std::{collections::BTreeSet, time::Duration};
 #[tokio::test]
 async fn normal_fleet_and_copy_bootstrap_omit_retired_delivery_tables_after_reopen()
 -> ConformanceResult<()> {
-    // Literal role contract at SDK 2be7372: seven obsolete relay tables.
-    const RETIRED: [&str; 7] = [
+    // Literal role contract: the relay never owns these ten tables.
+    const RETIRED: [&str; 10] = [
         "_fleet_sync_mail_cancel_links",
         "_fleet_sync_mail_controls",
         "_fleet_sync_mail_items",
@@ -23,6 +23,9 @@ async fn normal_fleet_and_copy_bootstrap_omit_retired_delivery_tables_after_reop
         "_fleet_sync_delivery_receipts",
         "_fleet_sync_inbox_state",
         "_fleet_sync_outbox_status",
+        "_fleet_sync_reports",
+        "_fleet_sync_inbox_cancel_links",
+        "_fleet_sync_inbox_items",
     ];
     let directory = tempfile::tempdir()?;
     for _ in 0..2 {

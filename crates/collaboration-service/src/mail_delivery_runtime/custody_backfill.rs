@@ -11,10 +11,13 @@ impl MailDeliveryRuntime {
         self.store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    let admitted =
-                        admit_existing_record_removals::<_, RemoveMailRecord>(scope, now)
-                            .await
-                            .map_err(delivery_rollback)?;
+                    let admitted = admit_existing_record_removals::<_, RemoveMailRecord>(
+                        scope,
+                        fleet_sync_delivery::DeliveryHostRole::Machine,
+                        now,
+                    )
+                    .await
+                    .map_err(delivery_rollback)?;
                     #[cfg(test)]
                     if let Some(socket) = probe {
                         super::project_admission::pause_project_admission(&socket).await?;
@@ -35,6 +38,7 @@ impl MailDeliveryRuntime {
                     Box::pin(async move {
                         backfill_submitters::<RouterDeliveryTypes, _, _>(
                             scope,
+                            fleet_sync_delivery::DeliveryHostRole::Machine,
                             binding.as_ref(),
                             now,
                         )
