@@ -1,0 +1,360 @@
+//! Central's import workflow owns publication identity and completion.
+use crate::owner_publication_access::{
+    OwnerPublicationAccessError, build_owner_client, headers_from_private_file, owner_access_client,
+};
+use crate::{OfflineHost, PreparedProjectBundle, ProjectBundleError};
+use collaboration_central_admin_protocol::OwnerOperationFailure;
+use collaboration_central_core::{
+    AdminImportPhase, AdminImportRecord, AdminImportRefusal, AdminProjectImportAnswer,
+    AdminProjectImportRequest,
+};
+use fleet_admission::FleetImportResult;
+use fleet_sync_protocol::{ReplicationPosition, RequestId};
+use message_board::CanonicalHash;
+use runtime_primitives::SystemClock;
+use serde::{Serialize, de::DeserializeOwned};
+use std::path::Path;
+use url::Url;
+
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum PublicationStage {
+    Fleet,
+    Status,
+    Begin,
+    Page { index: u32 },
+    Complete,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum PublicationError {
+    #[error("publisher and prepared bundle have different central origins")]
+    TargetMismatch,
+    #[error("the prepared source belongs to another offline Host")]
+    SourceHostMismatch,
+    #[error("central status differs from the prepared import")]
+    StatusMismatch,
+    #[error("central did not finish project publication")]
+    Incomplete {
+        answer: Box<AdminProjectImportAnswer>,
+    },
+    #[error("central refused the preserved Fleet graph")]
+    FleetRefused { answer: Box<FleetImportResult> },
+    #[error("the owner route failed")]
+    OwnerFailure { failure: Box<OwnerOperationFailure> },
+    #[error("publication request outcome is unknown; reconcile the same immutable bundle")]
+    OutcomeUnknown {
+        stage: PublicationStage,
+        source: reqwest::Error,
+    },
+    #[error("owner publication access is unavailable")]
+    Access(#[from] OwnerPublicationAccessError),
+    #[error("prepared bundle is invalid")]
+    Bundle(#[from] ProjectBundleError),
+    #[error("cannot encode the prepared request")]
+    Json(#[from] serde_json::Error),
+}
+
+/// Only a reconciled complete import can authorize the subsequent archive step.
+pub struct PublishedProject {
+    bundle_digest: CanonicalHash,
+    import_id: RequestId,
+    head: ReplicationPosition,
+}
+impl PublishedProject {
+    pub fn import_id(&self) -> RequestId {
+        self.import_id
+    }
+    pub fn head(&self) -> ReplicationPosition {
+        self.head
+    }
+    pub fn matches_bundle(
+        &self,
+        bundle: &PreparedProjectBundle,
+    ) -> Result<bool, ProjectBundleError> {
+        Ok(self.bundle_digest
+            == crate::bundle_files::bytes_digest(&serde_json::to_vec(bundle.manifest())?)?)
+    }
+}
+
+pub struct StagingPublisher {
+    endpoint: Url,
+    client: reqwest::Client,
+}
+
+impl StagingPublisher {
+    pub fn from_owner_file(endpoint: Url, path: &Path) -> Result<Self, PublicationError> {
+        validate_endpoint(&endpoint)?;
+        let headers = headers_from_private_file(&endpoint, path, &SystemClock)?;
+        let client = build_owner_client(headers)?;
+        Ok(Self { endpoint, client })
+    }
+
+    pub async fn from_owner_access(endpoint: Url) -> Result<Self, PublicationError> {
+        validate_endpoint(&endpoint)?;
+        let client = owner_access_client(&endpoint).await?;
+        Ok(Self { endpoint, client })
+    }
+
+    pub async fn publish(
+        &self,
+        host: &mut OfflineHost,
+        bundle: &PreparedProjectBundle,
+    ) -> Result<PublishedProject, PublicationError> {
+        if bundle.manifest().target_origin != self.endpoint.origin().ascii_serialization() {
+            return Err(PublicationError::TargetMismatch);
+        }
+        let selected = &bundle.manifest().source.selected;
+        if selected.peer != host.peer()
+            || bundle.manifest().source_directory
+                != host
+                    .collaboration_directory()
+                    .join("projects")
+                    .join(selected.project.as_str())
+        {
+            return Err(PublicationError::SourceHostMismatch);
+        }
+        // Reopen validates every sealed page before the first external effect.
+        let checked = PreparedProjectBundle::open(bundle.directory())?;
+        if serde_json::to_vec(checked.manifest())? != serde_json::to_vec(bundle.manifest())? {
+            return Err(PublicationError::StatusMismatch);
+        }
+        let fleet: FleetImportResult = self
+            .post(
+                "/admin/v1/import/fleet",
+                &bundle.manifest().fleet,
+                PublicationStage::Fleet,
+            )
+            .await?;
+        match fleet {
+            FleetImportResult::Imported { .. } | FleetImportResult::AlreadyImported => {}
+            FleetImportResult::Refused { .. } => {
+                return Err(PublicationError::FleetRefused {
+                    answer: Box::new(fleet),
+                });
+            }
+        }
+        let previous = self.status(bundle).await?;
+        let header = bundle.manifest().header.clone();
+        // Begin also checks current retirement/reservation state for completed runs.
+        let begin = self
+            .project(
+                bundle,
+                &AdminProjectImportRequest::Begin { header },
+                PublicationStage::Begin,
+            )
+            .await?;
+        let import_id = match begin {
+            AdminProjectImportAnswer::Ready { import_id, .. } => {
+                if previous
+                    .as_ref()
+                    .is_some_and(|record| record.import_id != import_id)
+                {
+                    return Err(PublicationError::StatusMismatch);
+                }
+                import_id
+            }
+            AdminProjectImportAnswer::AlreadyImported => {
+                return self
+                    .confirmed(bundle, previous.as_ref().map(|record| record.import_id))
+                    .await;
+            }
+            AdminProjectImportAnswer::Imported { head }
+                if head == bundle.manifest().header.manifest.position =>
+            {
+                return self
+                    .confirmed(bundle, previous.as_ref().map(|record| record.import_id))
+                    .await;
+            }
+            answer => {
+                return Err(PublicationError::Incomplete {
+                    answer: Box::new(answer),
+                });
+            }
+        };
+        for index in 0..bundle.manifest().header.pages {
+            let contents = bundle.page(index)?;
+            // Refuse any decode/re-encode drift; the frozen bytes own the payload.
+            if serde_json::to_vec(&contents)? != bundle.page_bytes(index)? {
+                return Err(ProjectBundleError::InvalidArtifact.into());
+            }
+            let page_digest = bundle
+                .manifest()
+                .page_digests
+                .get(usize::try_from(index).map_err(|_| ProjectBundleError::InvalidArtifact)?)
+                .ok_or(ProjectBundleError::InvalidArtifact)?
+                .clone();
+            let request = AdminProjectImportRequest::Page {
+                digest: bundle.manifest().header.digest.clone(),
+                import_id,
+                page: index,
+                contents,
+                page_digest,
+            };
+            let answer = self
+                .project(bundle, &request, PublicationStage::Page { index })
+                .await?;
+            if answer
+                != (AdminProjectImportAnswer::Staged {
+                    import_id,
+                    page: index,
+                })
+            {
+                return Err(PublicationError::Incomplete {
+                    answer: Box::new(answer),
+                });
+            }
+        }
+        let answer = self
+            .project(
+                bundle,
+                &AdminProjectImportRequest::Complete {
+                    digest: bundle.manifest().header.digest.clone(),
+                    import_id,
+                },
+                PublicationStage::Complete,
+            )
+            .await?;
+        match answer {
+            AdminProjectImportAnswer::Imported { head }
+                if head == bundle.manifest().header.manifest.position => {}
+            AdminProjectImportAnswer::AlreadyImported => {}
+            answer => {
+                return Err(PublicationError::Incomplete {
+                    answer: Box::new(answer),
+                });
+            }
+        }
+        self.confirmed(bundle, Some(import_id)).await
+    }
+
+    async fn confirmed(
+        &self,
+        bundle: &PreparedProjectBundle,
+        expected_id: Option<RequestId>,
+    ) -> Result<PublishedProject, PublicationError> {
+        let record = self
+            .status(bundle)
+            .await?
+            .ok_or(PublicationError::StatusMismatch)?;
+        if expected_id.is_some_and(|id| record.import_id != id)
+            || record.phase
+                != (AdminImportPhase::Complete {
+                    position: bundle.manifest().header.manifest.position,
+                })
+        {
+            return Err(PublicationError::StatusMismatch);
+        }
+        Ok(PublishedProject {
+            bundle_digest: crate::bundle_files::bytes_digest(&serde_json::to_vec(
+                bundle.manifest(),
+            )?)?,
+            import_id: record.import_id,
+            head: record.header.manifest.position,
+        })
+    }
+
+    async fn status(
+        &self,
+        bundle: &PreparedProjectBundle,
+    ) -> Result<Option<AdminImportRecord>, PublicationError> {
+        let answer = self
+            .project(
+                bundle,
+                &AdminProjectImportRequest::Status {
+                    digest: bundle.manifest().header.digest.clone(),
+                },
+                PublicationStage::Status,
+            )
+            .await?;
+        match answer {
+            AdminProjectImportAnswer::Progress(record) => {
+                if record.header != bundle.manifest().header {
+                    return Err(PublicationError::StatusMismatch);
+                }
+                match record.phase {
+                    AdminImportPhase::Reserved => {}
+                    AdminImportPhase::Published { position }
+                    | AdminImportPhase::Complete { position }
+                        if position == record.header.manifest.position => {}
+                    AdminImportPhase::Published { .. } | AdminImportPhase::Complete { .. } => {
+                        return Err(PublicationError::StatusMismatch);
+                    }
+                }
+                Ok(Some(record))
+            }
+            AdminProjectImportAnswer::Refused(AdminImportRefusal::NotFound) => Ok(None),
+            answer => Err(PublicationError::Incomplete {
+                answer: Box::new(answer),
+            }),
+        }
+    }
+
+    async fn project(
+        &self,
+        bundle: &PreparedProjectBundle,
+        request: &AdminProjectImportRequest,
+        stage: PublicationStage,
+    ) -> Result<AdminProjectImportAnswer, PublicationError> {
+        self.post(
+            &format!(
+                "/admin/v1/import/projects/{}",
+                bundle.manifest().source.selected.project.as_str()
+            ),
+            request,
+            stage,
+        )
+        .await
+    }
+
+    async fn post<Input: Serialize + ?Sized, Output: DeserializeOwned>(
+        &self,
+        path: &str,
+        input: &Input,
+        stage: PublicationStage,
+    ) -> Result<Output, PublicationError> {
+        let mut endpoint = self.endpoint.clone();
+        endpoint.set_path(path);
+        let response = self
+            .client
+            .post(endpoint)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(serde_json::to_vec(input)?)
+            .send()
+            .await
+            .map_err(|source| PublicationError::OutcomeUnknown { stage, source })?;
+        if matches!(
+            response.status(),
+            reqwest::StatusCode::GONE | reqwest::StatusCode::SERVICE_UNAVAILABLE
+        ) {
+            let failure = response
+                .json()
+                .await
+                .map_err(|source| PublicationError::OutcomeUnknown { stage, source })?;
+            return Err(PublicationError::OwnerFailure {
+                failure: Box::new(failure),
+            });
+        }
+        let response = response
+            .error_for_status()
+            .map_err(|source| PublicationError::OutcomeUnknown { stage, source })?;
+        response
+            .json()
+            .await
+            .map_err(|source| PublicationError::OutcomeUnknown { stage, source })
+    }
+}
+
+fn validate_endpoint(endpoint: &Url) -> Result<(), PublicationError> {
+    if !matches!(endpoint.scheme(), "https" | "http")
+        || endpoint.host_str().is_none()
+        || !endpoint.username().is_empty()
+        || endpoint.password().is_some()
+        || endpoint.query().is_some()
+        || endpoint.fragment().is_some()
+        || endpoint.path() != "/"
+    {
+        return Err(PublicationError::TargetMismatch);
+    }
+    Ok(())
+}

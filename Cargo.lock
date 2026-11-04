@@ -995,12 +995,17 @@ dependencies = [
 name = "board-staging-cutover"
 version = "0.1.123"
 dependencies = [
+ "axum",
  "board-central-test-support",
  "board-fleet-sync",
  "board-sync-protocol",
  "chrono",
  "codex-router-host",
+ "codex-router-secret-store",
+ "collaboration-central-admin-protocol",
+ "collaboration-central-conformance",
  "collaboration-central-core",
+ "collaboration-client",
  "collaboration-protocol",
  "collaboration-runtime",
  "fleet-admission",
@@ -1013,6 +1018,7 @@ dependencies = [
  "message-board",
  "message-board-storage",
  "nix",
+ "reqwest 0.12.28",
  "runtime-primitives",
  "rustix 1.1.4",
  "serde",

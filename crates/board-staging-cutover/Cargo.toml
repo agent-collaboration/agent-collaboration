@@ -10,6 +10,10 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+collaboration-client = { path = "../collaboration-client", version = "0.1.123" }
+collaboration-central-admin-protocol = { path = "../collaboration-central-admin-protocol", version = "0.1.123" }
+codex-router-secret-store = { path = "../codex-router-secret-store", version = "0.1.123" }
+reqwest = { workspace = true, features = ["json"] }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.123" }
 collaboration-central-core = { path = "../collaboration-central-core", version = "0.1.123" }
 fleet-admission = { path = "../fleet-admission", version = "0.1.123" }
@@ -38,6 +42,8 @@ nix.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+axum.workspace = true
+collaboration-central-conformance = { path = "../collaboration-central-conformance", version = "0.1.123" }
 board-central-test-support = { path = "../board-central-test-support", version = "0.1.123", features = ["conformance"] }
 fleet-sync-receiver.workspace = true
 fleet-sync-tokio-runner.workspace = true

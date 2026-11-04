@@ -16,6 +16,12 @@ whose unchanged snapshot still has its e1 seed position. It checks offline
 preflight, paging and exact installed replicated-table hashes before any new
 application write. The retained-origin mismatch unit case remains separate.
 
+Owner publication tests use the existing private Owner credential format and
+actual authenticated HTTP routes. Successful response suppression at Begin,
+Page and Complete exercises reconciliation of the same sealed run and import
+identity. The HTTP edge forwards real requests before withholding one answer;
+these cases do not stand in for the full process-crash matrix.
+
 The full cutover CLI, crash matrix, cross-machine write and staging corpus are
 still unverified. Add a nonempty `tests/e2e/main.rs` aggregate when its first
 real-path test is implemented; no empty e2e aggregate is declared.
