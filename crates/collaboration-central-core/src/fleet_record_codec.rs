@@ -107,13 +107,35 @@ pub(crate) fn validate_record(record: &Record) -> Result<(), StoreError> {
             value.workspace == envelope.scope.workspace && envelope.scope.board.is_none()
         }
         Record::Request(value) => {
-            crate::fleet_decision_step::validate_ledger(value)?;
+            validate_ledger(value)?;
             true
         }
         _ => false,
     };
     if !coherent {
         return Err(corrupt("scope", "record violates Fleet scope"));
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_ledger(entry: &message_board::RequestLedgerEntry) -> Result<(), StoreError> {
+    let invalid = |field: &str, message: String| StoreError::Corrupt {
+        field: format!("fleet_request_decisions.{field}"),
+        message,
+    };
+    message_board::Record::Request(entry.clone())
+        .validate_bounds()
+        .map_err(|error| invalid("payload", error.to_string()))?;
+    let envelope = &entry.envelope;
+    if envelope.id.as_str() != entry.request_id.as_str()
+        || !matches!(envelope.position, RecordPlacement::Fleet(_))
+        || envelope.scope.project.is_some()
+        || entry.accepted_in.is_some()
+    {
+        return Err(invalid(
+            "envelope",
+            "request ledger violates Fleet record invariants".into(),
+        ));
     }
     Ok(())
 }

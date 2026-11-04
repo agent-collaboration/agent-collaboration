@@ -1,0 +1,346 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_fleet_reasons.rs",
+  "metadata": "fleet-reason-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_decision_reasons",
+      "sql": "sql/read_decision_reasons.sql",
+      "row": "StoredDecisionReason",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "requests",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_decision_reasons",
+      "sql": "sql/insert_decision_reasons.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "reason_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "request_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "parent_reason_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "ordinal",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "refusal_group",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "refusal_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "record_kind",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "record_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "name",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "field",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "current_revision",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "retry_after_seconds",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "workstream_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "task_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "thread_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "requirement_kind",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "requirement_role",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "role_subject_kind",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "role_subject_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "authority_role",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_kind",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_human_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_service_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_endpoint_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_session_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "holder_kind",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "holder_human_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "holder_service_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "holder_endpoint_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "holder_session_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "target_kind",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "target_human_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "target_service_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "target_endpoint_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "target_session_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "named_holder_kind",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "named_holder_human_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "named_holder_service_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "named_holder_endpoint_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "named_holder_session_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "last_seen_epoch",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "last_seen_position",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "evidence_kind",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "evidence_returned_count",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "evidence_total_count",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "evidence_digest",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "evidence_abridged",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_decision_evidence",
+      "sql": "sql/read_decision_evidence.sql",
+      "row": "StoredReasonEvidence",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "requests",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_decision_evidence",
+      "sql": "sql/insert_decision_evidence.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "row_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "reason_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "ordinal",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "entry_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "task_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "assignment_kind",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "assignment_project_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "assignment_workstream_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

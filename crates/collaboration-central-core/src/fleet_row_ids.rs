@@ -4,6 +4,7 @@ use durable_steps::{StoreError, Uuid};
 use runtime_primitives::IdSource;
 use std::sync::Arc;
 
+#[derive(Clone)]
 pub(crate) struct FleetRowIds(Arc<dyn IdSource>);
 
 impl FleetRowIds {

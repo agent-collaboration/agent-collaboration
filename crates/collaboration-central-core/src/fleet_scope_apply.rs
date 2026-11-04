@@ -155,6 +155,8 @@ where
             entry: ledger,
             effects,
             receipt_ids,
+            now: runtime_primitives::SyncTime::from_unix_millis(now.timestamp_millis()),
+            row_ids: row_ids.clone(),
             #[cfg(feature = "conformance")]
             fault: crate::fleet_decision_step::FleetDecisionFault::None,
         },

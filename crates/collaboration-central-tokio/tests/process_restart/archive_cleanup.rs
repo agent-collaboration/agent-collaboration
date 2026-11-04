@@ -262,19 +262,7 @@ async fn read_ledger(root: &std::path::Path) -> ConformanceResult<Vec<String>> {
         .read_only(true)
         .connect()
         .await?;
-    let result = async {
-        let rows = query::<sqlx_turso::Turso>(
-            "SELECT payload FROM fleet_request_decisions ORDER BY request_id",
-        )
-        .fetch_all(&mut connection)
-        .await?;
-        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(
-            rows.into_iter()
-                .map(|row| row.try_get("payload"))
-                .collect::<Result<Vec<_>, _>>()?,
-        )
-    }
-    .await;
+    let result = crate::fleet_ledger_rows::on_connection(&mut connection).await;
     let closed = connection.close().await;
     let rows = result?;
     closed?;

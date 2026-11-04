@@ -6,19 +6,6 @@
   "metadata": "checked-query-metadata.json",
   "queries": [
     {
-      "name": "read_fleet_decision",
-      "sql": "sql/read_fleet_decision.sql",
-      "row": "StoredFleetDecision",
-      "result": "optional",
-      "parameters": [
-        {
-          "name": "request_id",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
       "name": "insert_fleet_decision",
       "sql": "sql/insert_fleet_decision.sql",
       "row": null,
@@ -35,12 +22,102 @@
           "nullable": false
         },
         {
-          "name": "payload",
+          "name": "workspace_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "board_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "actor_human_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_service_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_endpoint_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_session_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_router_component",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "envelope_request_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "fleet_position",
           "kind": "text",
           "nullable": false
         },
         {
           "name": "router_time",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "time_basis",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_installation",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_machine",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "decision_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "change_kind",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "effects_count",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "effects_digest",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "reason_count",
           "kind": "text",
           "nullable": false
         }

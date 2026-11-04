@@ -49,17 +49,9 @@ where
     let raw_carrier = required(row.carrier_installation, "carrier_installation")?;
     let carrier_installation =
         ServiceId::try_from(raw_carrier.clone()).map_err(|e| corrupt("carrier_installation", e))?;
-    let ledger = fleet_decision_step::decode(queries::StoredFleetDecision {
-        request_id: row.request_id,
-        canonical_hash: row.canonical_hash,
-        payload: row.payload,
-        router_time: row.router_time,
-        time_basis: row.time_basis,
-        workspace_id: row.workspace_id,
-        board_id: row.board_id,
-        origin_installation: row.origin_installation,
-        origin_machine: row.origin_machine,
-    })?;
+    let ledger = fleet_decision_step::read_ledger(scope, &creating_request)
+        .await?
+        .ok_or_else(|| corrupt("creating_request", "immutable creation ledger is missing"))?;
     if stored_project != *project
         || stored_project.as_str() != raw_project
         || creating_request.as_str() != raw_request

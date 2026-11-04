@@ -208,26 +208,3 @@ CREATE TABLE fleet_feed_state (
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
-
-CREATE TABLE fleet_request_decisions_with_origin (
-    request_id TEXT NOT NULL PRIMARY KEY,
-    canonical_hash TEXT NOT NULL,
-    payload TEXT NOT NULL,
-    router_time TEXT NOT NULL,
-    time_basis TEXT NOT NULL,
-    workspace_id TEXT NOT NULL,
-    board_id TEXT,
-    origin_installation TEXT NOT NULL,
-    origin_machine TEXT NOT NULL
-);
-INSERT INTO fleet_request_decisions_with_origin
-    (request_id, canonical_hash, payload, router_time, time_basis, workspace_id,
-     board_id, origin_installation, origin_machine)
-SELECT request_id, canonical_hash, payload, router_time, time_basis,
-       json_extract(payload, '$.envelope.scope.workspace'),
-       json_extract(payload, '$.envelope.scope.board'),
-       json_extract(payload, '$.envelope.position.position.origin.installation'),
-       json_extract(payload, '$.envelope.position.position.origin.machine')
-FROM fleet_request_decisions;
-DROP TABLE fleet_request_decisions;
-ALTER TABLE fleet_request_decisions_with_origin RENAME TO fleet_request_decisions;

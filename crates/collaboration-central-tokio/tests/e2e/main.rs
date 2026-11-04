@@ -1,6 +1,14 @@
 //! One namespace per original central runtime test root.
 
 #[cfg(feature = "conformance")]
+#[path = "../support/fleet_ledger_rows.rs"]
+#[expect(
+    dead_code,
+    reason = "This aggregate only needs the connection snapshot; integration also uses the borrowed scope."
+)]
+mod fleet_ledger_rows;
+
+#[cfg(feature = "conformance")]
 #[path = "../native_http/support.rs"]
 mod configuration;
 #[cfg(feature = "conformance")]

@@ -87,6 +87,7 @@ struct RecordedCases {
     empty: RequestLedgerEntry,
     nonempty: RequestLedgerEntry,
     nonempty_answer: StepControlReply,
+    typed: Vec<RequestLedgerEntry>,
 }
 
 async fn invalid_first_decisions(client: &StepClient) -> ConformanceResult<()> {
@@ -299,10 +300,48 @@ async fn cases(client: &StepClient) -> ConformanceResult<RecordedCases> {
         )?;
         println!("STEP_CASE rollback_{fault:?}_then_same_identity passed");
     }
+    let typed = collaboration_central_conformance::typed_ledger_fixtures()?;
+    for entry in &typed {
+        // A real late SQL constraint fault reaches all reason/evidence writes.
+        let failed = client
+            .record(entry.clone(), FleetDecisionFault::SqlAfterWrite)
+            .await?;
+        if !matches!(failed, Err(StoreError::Backend { .. })) {
+            return Err(format!("typed tree late fault missed: {failed:?}").into());
+        }
+        require(
+            client.read(entry.request_id.clone()).await?,
+            StepControlReply::Read(None),
+        )?;
+        let answer = client
+            .record(entry.clone(), FleetDecisionFault::None)
+            .await??;
+        require(
+            client.read(entry.request_id.clone()).await?,
+            StepControlReply::Read(Some(Box::new(entry.clone()))),
+        )?;
+        let mut replay = entry.clone();
+        replay.decision = StoredDecision::accepted(Vec::new(), ChangeOutcome::AlreadySo);
+        require(
+            client
+                .record(replay.clone(), FleetDecisionFault::None)
+                .await??,
+            answer,
+        )?;
+        replay.canonical_hash = "ef".repeat(32).try_into()?;
+        require(
+            client.record(replay, FleetDecisionFault::None).await??,
+            StepControlReply::Recorded(vec![FleetRequestResult::ConflictingRequest]),
+        )?;
+    }
+    println!(
+        "STEP_LEDGER_CASE typed_roots_children_complete_and_abridged_evidence_rollback_replay passed"
+    );
     Ok(RecordedCases {
         empty: first,
         nonempty: with_effects,
         nonempty_answer: recorded,
+        typed,
     })
 }
 
@@ -369,6 +408,24 @@ async fn main() -> ConformanceResult<()> {
         }
     };
     let reopened = async {
+        for entry in recorded.typed {
+            require(
+                client.read(entry.request_id.clone()).await?,
+                StepControlReply::Read(Some(Box::new(entry.clone()))),
+            )?;
+            let first = client
+                .record(entry.clone(), FleetDecisionFault::None)
+                .await??;
+            let mut changed = entry;
+            changed.decision = StoredDecision::accepted(Vec::new(), ChangeOutcome::Changed);
+            require(
+                client.record(changed, FleetDecisionFault::None).await??,
+                first,
+            )?;
+        }
+        println!(
+            "STEP_LEDGER_CASE real_worker_restart_retains_exact_typed_trees_and_replay passed"
+        );
         let first = recorded.empty;
         require(
             client.read(first.request_id.clone()).await?,

@@ -6,64 +6,35 @@ use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, query::query, row::Row, types::Type,
 };
-
-#[derive(Debug)]
-pub(crate) struct StoredFleetDecision {
-    pub request_id: Option<String>,
-    pub canonical_hash: Option<String>,
-    pub payload: Option<String>,
-    pub router_time: Option<String>,
-    pub time_basis: Option<String>,
-    pub workspace_id: Option<String>,
-    pub board_id: Option<String>,
-    pub origin_installation: Option<String>,
-    pub origin_machine: Option<String>,
-}
-pub(crate) fn read_fleet_decision<S>(
-    scope: &mut S,
-    request_id: String,
-) -> impl std::future::Future<Output = Result<Option<StoredFleetDecision>, sqlx_core::Error>> + Send
-where
-    S: TransactionScope,
-    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
-    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
-    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
-{
-    async move {
-        let statement = query::<S::Database>(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/sql/read_fleet_decision.sql"
-        )))
-        .bind(request_id);
-        let row = statement.fetch_optional(scope.executor()).await?;
-        row.as_ref()
-            .map(|row| {
-                Ok(StoredFleetDecision {
-                    request_id: row.try_get("request_id")?,
-                    canonical_hash: row.try_get("canonical_hash")?,
-                    payload: row.try_get("payload")?,
-                    router_time: row.try_get("router_time")?,
-                    time_basis: row.try_get("time_basis")?,
-                    workspace_id: row.try_get("workspace_id")?,
-                    board_id: row.try_get("board_id")?,
-                    origin_installation: row.try_get("origin_installation")?,
-                    origin_machine: row.try_get("origin_machine")?,
-                })
-            })
-            .transpose()
-    }
-}
 pub(crate) fn insert_fleet_decision<S>(
     scope: &mut S,
     request_id: String,
     canonical_hash: String,
-    payload: String,
-    router_time: String,
+    workspace_id: String,
+    board_id: Option<String>,
+    actor_kind: String,
+    actor_human_id: Option<String>,
+    actor_service_id: Option<String>,
+    actor_endpoint_id: Option<String>,
+    actor_session_id: Option<String>,
+    actor_router_component: Option<String>,
+    envelope_request_id: Option<String>,
+    fleet_position: String,
+    router_time: Option<String>,
+    time_basis: String,
+    origin_installation: String,
+    origin_machine: String,
+    created_at: String,
+    decision_kind: String,
+    change_kind: Option<String>,
+    effects_count: Option<String>,
+    effects_digest: Option<String>,
+    reason_count: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
     for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
@@ -73,8 +44,26 @@ where
         )))
         .bind(request_id)
         .bind(canonical_hash)
-        .bind(payload)
-        .bind(router_time);
+        .bind(workspace_id)
+        .bind(board_id)
+        .bind(actor_kind)
+        .bind(actor_human_id)
+        .bind(actor_service_id)
+        .bind(actor_endpoint_id)
+        .bind(actor_session_id)
+        .bind(actor_router_component)
+        .bind(envelope_request_id)
+        .bind(fleet_position)
+        .bind(router_time)
+        .bind(time_basis)
+        .bind(origin_installation)
+        .bind(origin_machine)
+        .bind(created_at)
+        .bind(decision_kind)
+        .bind(change_kind)
+        .bind(effects_count)
+        .bind(effects_digest)
+        .bind(reason_count);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -192,15 +181,6 @@ pub(crate) struct StoredProjectCreationDecision {
     pub created_class: Option<String>,
     pub updated_at: Option<String>,
     pub updated_class: Option<String>,
-    pub request_id: Option<String>,
-    pub canonical_hash: Option<String>,
-    pub payload: Option<String>,
-    pub router_time: Option<String>,
-    pub time_basis: Option<String>,
-    pub workspace_id: Option<String>,
-    pub board_id: Option<String>,
-    pub origin_installation: Option<String>,
-    pub origin_machine: Option<String>,
 }
 pub(crate) fn read_creation_decision<S>(
     scope: &mut S,
@@ -231,15 +211,6 @@ where
                     created_class: row.try_get("created_class")?,
                     updated_at: row.try_get("updated_at")?,
                     updated_class: row.try_get("updated_class")?,
-                    request_id: row.try_get("request_id")?,
-                    canonical_hash: row.try_get("canonical_hash")?,
-                    payload: row.try_get("payload")?,
-                    router_time: row.try_get("router_time")?,
-                    time_basis: row.try_get("time_basis")?,
-                    workspace_id: row.try_get("workspace_id")?,
-                    board_id: row.try_get("board_id")?,
-                    origin_installation: row.try_get("origin_installation")?,
-                    origin_machine: row.try_get("origin_machine")?,
                 })
             })
             .transpose()
@@ -270,6 +241,58 @@ where
         Ok(())
     }
 }
+
+#[derive(Debug)]
+pub(crate) struct StoredFleetDecision {
+    pub request_id: Option<String>,
+    pub request_id_class: Option<String>,
+    pub canonical_hash: Option<String>,
+    pub canonical_hash_class: Option<String>,
+    pub workspace_id: Option<String>,
+    pub workspace_id_class: Option<String>,
+    pub board_id: Option<String>,
+    pub board_id_class: Option<String>,
+    pub actor_kind: Option<String>,
+    pub actor_kind_class: Option<String>,
+    pub actor_human_id: Option<String>,
+    pub actor_human_id_class: Option<String>,
+    pub actor_service_id: Option<String>,
+    pub actor_service_id_class: Option<String>,
+    pub actor_endpoint_id: Option<String>,
+    pub actor_endpoint_id_class: Option<String>,
+    pub actor_session_id: Option<String>,
+    pub actor_session_id_class: Option<String>,
+    pub actor_router_component: Option<String>,
+    pub actor_router_component_class: Option<String>,
+    pub envelope_request_id: Option<String>,
+    pub envelope_request_id_class: Option<String>,
+    pub fleet_position: Option<String>,
+    pub fleet_position_class: Option<String>,
+    pub router_time: Option<String>,
+    pub router_time_class: Option<String>,
+    pub time_basis: Option<String>,
+    pub time_basis_class: Option<String>,
+    pub origin_installation: Option<String>,
+    pub origin_installation_class: Option<String>,
+    pub origin_machine: Option<String>,
+    pub origin_machine_class: Option<String>,
+    pub created_at: Option<String>,
+    pub created_at_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_at_class: Option<String>,
+    pub decision_kind: Option<String>,
+    pub decision_kind_class: Option<String>,
+    pub change_kind: Option<String>,
+    pub change_kind_class: Option<String>,
+    pub effects_count: Option<String>,
+    pub effects_count_class: Option<String>,
+    pub effects_digest: Option<String>,
+    pub effects_digest_class: Option<String>,
+    pub reason_count: Option<String>,
+    pub reason_count_class: Option<String>,
+    pub stored_reason_nodes: Option<String>,
+    pub stored_reason_nodes_class: Option<String>,
+}
 pub(crate) fn read_fleet_decisions<S>(
     scope: &mut S,
     requests: String,
@@ -292,14 +315,53 @@ where
             .map(|row| {
                 Ok(StoredFleetDecision {
                     request_id: row.try_get("request_id")?,
+                    request_id_class: row.try_get("request_id_class")?,
                     canonical_hash: row.try_get("canonical_hash")?,
-                    payload: row.try_get("payload")?,
-                    router_time: row.try_get("router_time")?,
-                    time_basis: row.try_get("time_basis")?,
+                    canonical_hash_class: row.try_get("canonical_hash_class")?,
                     workspace_id: row.try_get("workspace_id")?,
+                    workspace_id_class: row.try_get("workspace_id_class")?,
                     board_id: row.try_get("board_id")?,
+                    board_id_class: row.try_get("board_id_class")?,
+                    actor_kind: row.try_get("actor_kind")?,
+                    actor_kind_class: row.try_get("actor_kind_class")?,
+                    actor_human_id: row.try_get("actor_human_id")?,
+                    actor_human_id_class: row.try_get("actor_human_id_class")?,
+                    actor_service_id: row.try_get("actor_service_id")?,
+                    actor_service_id_class: row.try_get("actor_service_id_class")?,
+                    actor_endpoint_id: row.try_get("actor_endpoint_id")?,
+                    actor_endpoint_id_class: row.try_get("actor_endpoint_id_class")?,
+                    actor_session_id: row.try_get("actor_session_id")?,
+                    actor_session_id_class: row.try_get("actor_session_id_class")?,
+                    actor_router_component: row.try_get("actor_router_component")?,
+                    actor_router_component_class: row.try_get("actor_router_component_class")?,
+                    envelope_request_id: row.try_get("envelope_request_id")?,
+                    envelope_request_id_class: row.try_get("envelope_request_id_class")?,
+                    fleet_position: row.try_get("fleet_position")?,
+                    fleet_position_class: row.try_get("fleet_position_class")?,
+                    router_time: row.try_get("router_time")?,
+                    router_time_class: row.try_get("router_time_class")?,
+                    time_basis: row.try_get("time_basis")?,
+                    time_basis_class: row.try_get("time_basis_class")?,
                     origin_installation: row.try_get("origin_installation")?,
+                    origin_installation_class: row.try_get("origin_installation_class")?,
                     origin_machine: row.try_get("origin_machine")?,
+                    origin_machine_class: row.try_get("origin_machine_class")?,
+                    created_at: row.try_get("created_at")?,
+                    created_at_class: row.try_get("created_at_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_at_class: row.try_get("updated_at_class")?,
+                    decision_kind: row.try_get("decision_kind")?,
+                    decision_kind_class: row.try_get("decision_kind_class")?,
+                    change_kind: row.try_get("change_kind")?,
+                    change_kind_class: row.try_get("change_kind_class")?,
+                    effects_count: row.try_get("effects_count")?,
+                    effects_count_class: row.try_get("effects_count_class")?,
+                    effects_digest: row.try_get("effects_digest")?,
+                    effects_digest_class: row.try_get("effects_digest_class")?,
+                    reason_count: row.try_get("reason_count")?,
+                    reason_count_class: row.try_get("reason_count_class")?,
+                    stored_reason_nodes: row.try_get("stored_reason_nodes")?,
+                    stored_reason_nodes_class: row.try_get("stored_reason_nodes_class")?,
                 })
             })
             .collect()

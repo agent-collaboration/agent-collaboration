@@ -7,6 +7,10 @@ pub use adr_runtime::run_adr_round_trip_conformance;
 #[cfg(feature = "client")]
 mod feed_history_scenario;
 #[cfg(feature = "client")]
+mod ledger_fixture;
+#[cfg(feature = "client")]
+pub use ledger_fixture::typed_ledger_fixtures;
+#[cfg(feature = "client")]
 mod repository_runtime;
 #[cfg(feature = "client")]
 pub use feed_history_scenario::run_feed_history_conformance;

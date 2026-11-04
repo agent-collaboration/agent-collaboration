@@ -10,9 +10,7 @@ use crate::{
 use durable_steps::{AtomicStore, BoxFuture};
 use durable_steps::{StoreError, storage::TransactionScope};
 use fleet_admission::FleetRequestResult;
-use message_board::{
-    CanonicalHash, DecisionEffect, RecordPlacement, RequestId, RequestLedgerEntry, StoredDecision,
-};
+use message_board::{DecisionEffect, RequestId, RequestLedgerEntry, StoredDecision};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -22,6 +20,8 @@ pub(crate) struct FleetDecisionStep {
     pub entry: RequestLedgerEntry,
     pub effects: Vec<DecisionEffect>,
     pub receipt_ids: Vec<durable_steps::Uuid>,
+    pub now: runtime_primitives::SyncTime,
+    pub row_ids: crate::fleet_row_ids::FleetRowIds,
     #[cfg(feature = "conformance")]
     pub fault: FleetDecisionFault,
 }
@@ -68,7 +68,7 @@ where
 
 pub(crate) async fn persist_decision<Scope: TransactionScope>(
     scope: &mut Scope,
-    write: FleetDecisionStep,
+    mut write: FleetDecisionStep,
 ) -> Result<FleetRequestResult, StoreError>
 where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
@@ -78,12 +78,7 @@ where
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
     let request_id = write.entry.request_id.as_str().to_owned();
-    let canonical_hash = write.entry.canonical_hash.as_str().to_owned();
-    if let Some(stored) = generated_statements::read_fleet_decision(scope, request_id.clone())
-        .await
-        .map_err(StoreError::backend)?
-    {
-        let entry = decode(stored)?;
+    if let Some(entry) = read_ledger(scope, &write.entry.request_id).await? {
         let answer = if entry.canonical_hash == write.entry.canonical_hash {
             FleetRequestResult::Decided(checked_reply(
                 &entry,
@@ -94,7 +89,7 @@ where
         };
         return Ok(answer);
     }
-    validate_ledger(&write.entry)?;
+    crate::fleet_record_codec::validate_ledger(&write.entry)?;
     let reply = checked_reply(&write.entry, write.effects.clone())?;
     if write.receipt_ids.len() != write.effects.len() {
         return Err(StoreError::Aborted {
@@ -104,23 +99,21 @@ where
     for id in &write.receipt_ids {
         crate::fleet_row_ids::validate_row_id(*id)?;
     }
-    let payload = serde_json::to_string(&write.entry).map_err(StoreError::backend)?;
-    let router_time = write
-        .entry
-        .envelope
-        .time
-        .as_router_time()
-        .ok_or_else(|| corrupt("time_basis", "live decisions require Router time"))?
-        .to_rfc3339();
-    generated_statements::insert_fleet_decision(
+    let nodes = match &write.entry.decision {
+        StoredDecision::Rejected { reasons } => {
+            crate::fleet_reason_tree::encode(reasons, &mut write.row_ids)?
+        }
+        StoredDecision::Accepted { .. } => Vec::new(),
+    };
+    crate::fleet_ledger_codec::insert(scope, &write.entry, write.now).await?;
+    crate::fleet_reason_write::insert(
         scope,
-        request_id.clone(),
-        canonical_hash.clone(),
-        payload.clone(),
-        router_time.clone(),
+        &write.entry.request_id,
+        nodes,
+        write.now,
+        &mut write.row_ids,
     )
-    .await
-    .map_err(StoreError::backend)?;
+    .await?;
     for (ordinal, (effect, receipt_id)) in write.effects.iter().zip(&write.receipt_ids).enumerate()
     {
         let ordinal = i64::try_from(ordinal).map_err(StoreError::backend)?;
@@ -145,15 +138,7 @@ where
         }
         FleetDecisionFault::SqlAfterWrite => {
             // The real primary-key violation must roll the first write back.
-            generated_statements::insert_fleet_decision(
-                scope,
-                request_id,
-                canonical_hash,
-                payload,
-                router_time,
-            )
-            .await
-            .map_err(StoreError::backend)?;
+            crate::fleet_ledger_codec::insert(scope, &write.entry, write.now).await?;
         }
     }
     Ok(FleetRequestResult::Decided(reply))
@@ -178,13 +163,7 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
-            let stored = generated_statements::read_fleet_decision(
-                scope,
-                self.request_id.as_str().to_owned(),
-            )
-            .await
-            .map_err(StoreError::backend)?;
-            let entry = stored.map(decode).transpose()?;
+            let entry = read_ledger(scope, &self.request_id).await?;
             if let Some(entry) = &entry {
                 let _reply = checked_reply(entry, read_receipts(scope, &entry.request_id).await?)?;
             }
@@ -217,101 +196,44 @@ where
     )
     .await
     .map_err(StoreError::backend)?;
-    for row in rows {
-        let entry = decode(row)?;
+    let headers = rows
+        .into_iter()
+        .map(crate::fleet_ledger_codec::decode)
+        .collect::<Result<Vec<_>, _>>()?;
+    let rejected = headers
+        .iter()
+        .filter(|header| header.rejected())
+        .map(|header| header.request.clone())
+        .collect::<Vec<_>>();
+    let mut trees = crate::fleet_reason_tree::ReasonTrees::read(scope, &rejected).await?;
+    for header in headers {
+        let entry = header.record(&mut trees)?;
         if !expected.contains(&entry.request_id)
             || entries.insert(entry.request_id.clone(), entry).is_some()
         {
             return Err(corrupt(
                 "request_id",
-                "batch returned a duplicate or unrequested authority",
+                "batch returned duplicate or unrequested authority",
             ));
         }
     }
+    trees.finish()?;
     Ok(entries)
 }
 
-pub(crate) fn decode(
-    stored: generated_statements::StoredFleetDecision,
-) -> Result<RequestLedgerEntry, StoreError> {
-    let stored_request = RequestId::try_from(required(stored.request_id, "request_id")?)
-        .map_err(|error| corrupt("request_id", error))?;
-    let stored_hash = CanonicalHash::try_from(required(stored.canonical_hash, "canonical_hash")?)
-        .map_err(|error| corrupt("canonical_hash", error))?;
-    let payload = required(stored.payload, "payload")?;
-    let entry: RequestLedgerEntry =
-        serde_json::from_str(&payload).map_err(|error| corrupt("payload", error))?;
-    let original: serde_json::Value =
-        serde_json::from_str(&payload).map_err(|error| corrupt("payload", error))?;
-    if serde_json::to_value(&entry).map_err(StoreError::backend)? != original {
-        return Err(corrupt(
-            "payload",
-            "stored receipt text would be normalized",
-        ));
-    }
-    if entry.request_id != stored_request || entry.canonical_hash != stored_hash {
-        return Err(corrupt(
-            "payload",
-            "receipt identity disagrees with its row",
-        ));
-    }
-    if required(stored.time_basis, "time_basis")? != "router" {
-        return Err(corrupt(
-            "time_basis",
-            "a live request decision needs router time",
-        ));
-    }
-    let router_time: chrono::DateTime<chrono::Utc> = required(stored.router_time, "router_time")?
-        .parse()
-        .map_err(|error| corrupt("router_time", error))?;
-    if Some(router_time) != entry.envelope.time.as_router_time() {
-        return Err(corrupt(
-            "router_time",
-            "receipt time disagrees with its payload",
-        ));
-    }
-    validate_ledger(&entry)?;
-    let origin = entry
-        .envelope
-        .position
-        .origin()
-        .ok_or_else(|| corrupt("origin", "Fleet decision has no origin"))?;
-    if required(stored.workspace_id, "workspace_id")? != entry.envelope.scope.workspace.as_str()
-        || stored.board_id.as_deref()
-            != entry
-                .envelope
-                .scope
-                .board
-                .as_ref()
-                .map(|board| board.as_str())
-        || required(stored.origin_installation, "origin_installation")?
-            != origin.installation.as_str()
-        || required(stored.origin_machine, "origin_machine")? != origin.machine.as_str()
-    {
-        return Err(corrupt(
-            "origin or scope",
-            "decision headers disagree with their payload",
-        ));
-    }
-    Ok(entry)
-}
-
-pub(crate) fn validate_ledger(entry: &RequestLedgerEntry) -> Result<(), StoreError> {
-    message_board::Record::Request(entry.clone())
-        .validate_bounds()
-        .map_err(|error| corrupt("payload", error))?;
-    let envelope = &entry.envelope;
-    if envelope.id.as_str() != entry.request_id.as_str()
-        || !matches!(envelope.position, RecordPlacement::Fleet(_))
-        || envelope.scope.project.is_some()
-        || entry.accepted_in.is_some()
-    {
-        return Err(corrupt(
-            "envelope",
-            "request ledger violates Fleet record invariants",
-        ));
-    }
-    Ok(())
+pub(crate) async fn read_ledger<S: TransactionScope>(
+    scope: &mut S,
+    request: &RequestId,
+) -> Result<Option<RequestLedgerEntry>, StoreError>
+where
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'v> String: Type<S::Database> + Encode<'v, S::Database>,
+    for<'v> Option<String>: Type<S::Database> + Decode<'v, S::Database>,
+    for<'r> &'r str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    Ok(read_ledgers(scope, std::slice::from_ref(request))
+        .await?
+        .remove(request))
 }
 
 pub(crate) fn checked_reply(
@@ -404,12 +326,16 @@ where
         entry: message_board::RequestLedgerEntry,
         effects: Vec<DecisionEffect>,
         receipt_ids: Vec<durable_steps::Uuid>,
+        now: runtime_primitives::SyncTime,
+        ids: std::sync::Arc<dyn runtime_primitives::IdSource>,
     ) -> Result<CommittedEffects<fleet_admission::FleetRequestResult>, StoreError> {
         let (_, effects) = self
             .run(crate::fleet_decision_step::FleetDecisionStep {
                 entry,
                 effects,
                 receipt_ids,
+                now,
+                row_ids: crate::fleet_row_ids::FleetRowIds::new(ids),
                 #[cfg(feature = "conformance")]
                 fault: crate::fleet_decision_step::FleetDecisionFault::None,
             })
@@ -434,12 +360,16 @@ where
         effects: Vec<DecisionEffect>,
         receipt_ids: Vec<durable_steps::Uuid>,
         fault: crate::fleet_decision_step::FleetDecisionFault,
+        now: runtime_primitives::SyncTime,
+        ids: std::sync::Arc<dyn runtime_primitives::IdSource>,
     ) -> Result<CommittedEffects<fleet_admission::FleetRequestResult>, StoreError> {
         let (_, effects) = self
             .run(crate::fleet_decision_step::FleetDecisionStep {
                 entry,
                 effects,
                 receipt_ids,
+                now,
+                row_ids: crate::fleet_row_ids::FleetRowIds::new(ids),
                 fault,
             })
             .await?;

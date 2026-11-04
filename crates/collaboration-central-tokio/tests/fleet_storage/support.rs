@@ -103,18 +103,12 @@ impl Fixture {
         Ok(serde_json::from_slice(&bytes)?)
     }
     pub async fn open(root: &Path) -> TestResult<Self> {
-        Self::open_with(root, true, Io::default()).await
+        Self::open_with(root, Io::default()).await
     }
     pub async fn open_at(root: &Path, now: SyncTime) -> TestResult<Self> {
-        Self::open_with(root, true, Io(now)).await
+        Self::open_with(root, Io(now)).await
     }
-    pub async fn before_fleet_migrations(root: &Path) -> TestResult<Self> {
-        Self::open_with(root, false, Io::default()).await
-    }
-    pub async fn initialize(&self) -> TestResult<usize> {
-        Ok(self.runtime.initialize().await?)
-    }
-    async fn open_with(root: &Path, initialize: bool, io: Io) -> TestResult<Self> {
+    async fn open_with(root: &Path, io: Io) -> TestResult<Self> {
         let objects = ObjectStore::open(root).await?;
         let receiver = ReceiverId::new(durable_steps::Uuid::now_v7())?;
         let object = objects
@@ -143,9 +137,7 @@ impl Fixture {
             },
             std::time::Duration::from_secs(2),
         )?;
-        if initialize {
-            runtime.initialize().await?;
-        }
+        runtime.initialize().await?;
         Ok(Self {
             receiver,
             objects,

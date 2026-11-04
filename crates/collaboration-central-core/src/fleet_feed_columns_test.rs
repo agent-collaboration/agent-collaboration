@@ -299,6 +299,12 @@ pub(super) async fn append(
                                 entry: entry.clone(),
                                 effects: Vec::new(),
                                 receipt_ids: Vec::new(),
+                                now: runtime_primitives::SyncTime::from_unix_millis(
+                                    now.timestamp_millis(),
+                                ),
+                                row_ids: crate::fleet_row_ids::FleetRowIds::new(
+                                    std::sync::Arc::new(crate::fleet_storage_fixture::FixtureIo),
+                                ),
                                 #[cfg(feature = "conformance")]
                                 fault: crate::fleet_decision_step::FleetDecisionFault::None,
                             },

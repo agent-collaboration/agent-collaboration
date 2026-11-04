@@ -1,9 +1,6 @@
 //! Canonical Fleet records share the caller's already-open SQL transaction.
 
-use crate::{
-    fleet_record_codec::{DecodedFleetRecord, FleetRecordHeader, corrupt},
-    generated_statements,
-};
+use crate::fleet_record_codec::{DecodedFleetRecord, FleetRecordHeader, corrupt};
 use durable_steps::{StoreError, storage::TransactionScope};
 use fleet_admission::FleetImportDigest;
 use message_board::{Record, RecordKind, RecordRef, RecordTime};
@@ -42,11 +39,10 @@ where
     } else if reference.kind == RecordKind::Adr {
         crate::fleet_adr_store::read(scope, reference.id.as_str()).await?
     } else if reference.kind == RecordKind::Request {
-        generated_statements::read_fleet_decision(scope, reference.id.as_str().into())
-            .await
-            .map_err(StoreError::backend)?
-            .map(crate::fleet_decision_step::decode)
-            .transpose()?
+        let request = message_board::RequestId::try_from(reference.id.as_str().to_owned())
+            .map_err(StoreError::backend)?;
+        crate::fleet_decision_step::read_ledger(scope, &request)
+            .await?
             .map(|entry| DecodedFleetRecord {
                 record: Record::Request(entry),
                 import_digest: None,

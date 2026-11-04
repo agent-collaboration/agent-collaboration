@@ -44,6 +44,14 @@ mod feed_columns_tests;
 #[path = "fleet_feed_retention_test.rs"]
 mod feed_retention_tests;
 
+#[cfg(test)]
+#[path = "fleet_ledger_columns_test.rs"]
+mod ledger_columns_tests;
+
+#[cfg(test)]
+#[path = "fleet_ledger_integrity_test.rs"]
+mod ledger_integrity_tests;
+
 #[cfg(feature = "conformance")]
 mod conformance;
 #[cfg(feature = "conformance")]

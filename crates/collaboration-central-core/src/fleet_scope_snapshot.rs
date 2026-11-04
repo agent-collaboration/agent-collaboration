@@ -2,7 +2,7 @@
 
 use crate::{
     fleet_record_codec::{corrupt, required},
-    fleet_record_store, generated_fleet_record_reads as queries, generated_statements,
+    fleet_record_store, generated_fleet_record_reads as queries,
 };
 use durable_steps::{StoreError, storage::TransactionScope};
 use fleet_admission::{
@@ -46,12 +46,9 @@ where
                 }
             }
             FleetReadKey::Ledger { request } => {
-                if let Some(stored) =
-                    generated_statements::read_fleet_decision(scope, request.as_str().into())
-                        .await
-                        .map_err(StoreError::backend)?
+                if let Some(entry) =
+                    crate::fleet_decision_step::read_ledger(scope, &request).await?
                 {
-                    let entry = crate::fleet_decision_step::decode(stored)?;
                     let effects =
                         crate::fleet_decision_step::read_receipts(scope, &request).await?;
                     crate::fleet_decision_step::checked_reply(&entry, effects.clone())?;

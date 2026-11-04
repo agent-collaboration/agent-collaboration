@@ -47,14 +47,9 @@ where
     let RequestEffectsScope::Fleet { workspace_id } = request.scope else {
         return Ok(refused(RequestEffectsRefusal::RequestNotInScope));
     };
-    let Some(stored) =
-        generated_statements::read_fleet_decision(scope, request.request.as_str().into())
-            .await
-            .map_err(StoreError::backend)?
-    else {
+    let Some(entry) = fleet_decision_step::read_ledger(scope, &request.request).await? else {
         return Ok(refused(RequestEffectsRefusal::UnknownRequest));
     };
-    let entry = fleet_decision_step::decode(stored)?;
     if entry.envelope.scope.workspace != workspace_id {
         return Ok(refused(RequestEffectsRefusal::RequestNotInScope));
     }

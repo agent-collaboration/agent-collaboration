@@ -262,3 +262,7 @@ mod mail_push_inbox;
 )]
 #[path = "../support/mail_push_transport.rs"]
 mod mail_push_transport;
+
+#[path = "../support/fleet_ledger_rows.rs"]
+#[cfg(feature = "conformance")]
+mod fleet_ledger_rows;
