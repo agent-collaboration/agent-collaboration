@@ -161,7 +161,7 @@ impl PendingLocalCancelFixture {
         let store = InteractionAtomicStore::new(owner.clone(), host);
         let limits = setup_limits()?;
         let binding = collaboration_service::MachineSenderBinding::new(
-            target.endpoint.service_id.to_string().try_into()?,
+            String::from(target.endpoint.service_id.clone()).try_into()?,
             peer,
         );
         let reference = store
@@ -265,7 +265,7 @@ impl PendingLocalCancelFixture {
         let item = ItemId::new(uuid::Uuid::parse_str(self.item.as_str())?)?;
         let limits = setup_limits()?;
         let binding = collaboration_service::MachineSenderBinding::new(
-            self.target.endpoint.service_id.to_string().try_into()?,
+            String::from(self.target.endpoint.service_id.clone()).try_into()?,
             peer,
         );
         let outcome = store

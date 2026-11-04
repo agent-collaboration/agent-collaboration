@@ -248,6 +248,14 @@ async fn public_remote_send_and_pushed_recipient_report_canonical_status_across_
     )
     .await?;
     assert!(*recipient.ready.borrow());
+    recipient
+        .mail
+        .owner
+        .remember_installation_peer(&interaction_storage::InstallationPeerBinding {
+            service_id: SOURCE.to_owned().try_into()?,
+            peer_id: source.peer().as_uuid().to_string().try_into()?,
+        })
+        .await?;
     source
         .mail
         .owner

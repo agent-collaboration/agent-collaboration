@@ -298,7 +298,15 @@ impl MailOwner {
         relay: PeerId,
     ) -> Result<(ItemId, runtime_primitives::OperationId), TestError> {
         let id = item.id();
-        let submitter = fleet_sync_protocol::Submitter::Machine(self.peer);
+        let submitter = match item.sender() {
+            collaboration_mail_protocol::MailSender::Project { project } => {
+                fleet_sync_protocol::Submitter::Project(project.as_str().to_owned().try_into()?)
+            }
+            collaboration_mail_protocol::MailSender::Session(_)
+            | collaboration_mail_protocol::MailSender::HumanUser { .. } => {
+                fleet_sync_protocol::Submitter::Machine(self.peer)
+            }
+        };
         let limits = DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
             64 * 1024 * 1024,
             10_000,

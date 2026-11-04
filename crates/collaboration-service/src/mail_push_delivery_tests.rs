@@ -75,6 +75,8 @@ mod custody_retention;
 mod direct;
 #[path = "local_mail_runtime_tests.rs"]
 mod local_runtime;
+#[path = "mail_materialized_session_test.rs"]
+mod materialized_session;
 #[path = "remote_mail_assembly_tests.rs"]
 mod remote_assembly;
 #[path = "remote_wake_replay_tests.rs"]

@@ -34,7 +34,7 @@ threads-required = "num-test-threads"
 # These Host fixtures require an actual child initialize/terminal response.
 # Keep their unchanged deadlines apart from unrelated process startup load.
 [[profile.ci.overrides]]
-filter = "package(=codex-router-host) & (binary(=external_provider_composition) | binary(=auth_file_reload))"
+filter = "package(=codex-router-host) & (binary(=external_provider_composition) | binary(=auth_file_reload) | binary(=production_enrollment) | binary(=native_claude_catalogue))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 

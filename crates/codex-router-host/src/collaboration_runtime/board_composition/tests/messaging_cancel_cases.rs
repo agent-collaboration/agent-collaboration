@@ -130,27 +130,7 @@ async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
                 .await
                 .map_err(|error| format!("decide and replay: {error}"))?;
         }
-        let store = fixture
-            .successor
-            .registry
-            .existing_project(&fixture.project)
-            .await?
-            .ok_or("successor store")?;
-        let mut read = store.snapshot().await?;
-        assert_eq!(
-            read.mail_handoff(&group.id).await?.is_some(),
-            !matches!(case, CancelPrefix::Discarded)
-        );
-        assert_eq!(
-            read.mail_cancel_expansion_for_target(
-                &group.id,
-                &seed.item.id().as_uuid().to_string().try_into()?
-            )
-            .await?
-            .is_some(),
-            !matches!(case, CancelPrefix::Discarded)
-        );
-        read.finish().await?;
+        assert_successor_cancel_records(&fixture, &group.id, seed.item.id(), case).await?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     })
     .await;
@@ -166,6 +146,33 @@ async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
         (Ok(()), Err(error)) => Err(format!("close rule fixture: {error}").into()),
         (Err(error), Err(close)) => Err(format!("scenario: {error}; close: {close}").into()),
     }
+}
+
+async fn assert_successor_cancel_records(
+    fixture: &RuleFixture,
+    group: &message_board::MailItemRef,
+    item: ItemId,
+    case: CancelPrefix,
+) -> TestResult {
+    let store = fixture
+        .successor
+        .registry
+        .existing_project(&fixture.project)
+        .await?
+        .ok_or("successor store")?;
+    let mut read = store.snapshot().await?;
+    assert_eq!(
+        read.mail_handoff(group).await?.is_some(),
+        !matches!(case, CancelPrefix::Discarded)
+    );
+    assert_eq!(
+        read.mail_cancel_expansion_for_target(group, &item.as_uuid().to_string().try_into()?)
+            .await?
+            .is_some(),
+        !matches!(case, CancelPrefix::Discarded)
+    );
+    read.finish().await?;
+    Ok(())
 }
 
 pub(super) async fn arrange_sent_follow(

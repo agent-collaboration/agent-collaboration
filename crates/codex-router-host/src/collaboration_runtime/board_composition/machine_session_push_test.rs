@@ -43,9 +43,17 @@ fn message(
 }
 
 pub(super) fn push_frame(
-    submitter: PeerId,
+    machine: PeerId,
     item: DeliveryEnvelope<BoardDeliveryTypes>,
 ) -> Result<(FrameId, Vec<u8>), TestError> {
+    let submitter = match item.sender() {
+        MailSender::Project { project } => {
+            fleet_sync_protocol::Submitter::Project(project.as_str().to_owned().try_into()?)
+        }
+        MailSender::Session(_) | MailSender::HumanUser { .. } => {
+            fleet_sync_protocol::Submitter::Machine(machine)
+        }
+    };
     let frame = FrameId::new(durable_steps::Uuid::now_v7())?;
     let call = CallId {
         operation: runtime_primitives::OperationId::new(durable_steps::Uuid::now_v7())?,
@@ -57,7 +65,7 @@ pub(super) fn push_frame(
             frame,
             body: ServerRequest::Crate(ServerCall::Push {
                 call,
-                submitter: fleet_sync_protocol::Submitter::Machine(submitter),
+                submitter,
                 item,
             }),
         })?,
