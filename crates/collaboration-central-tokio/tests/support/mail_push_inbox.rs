@@ -249,6 +249,12 @@ impl PushInbox {
         if !matches!(status.state, OperationState::Completed { .. }) {
             return Err(format!("local Held input did not complete: {:?}", status.state).into());
         }
+        self.report(item).await
+    }
+    pub(super) async fn report(
+        &self,
+        item: fleet_sync_protocol::ItemId,
+    ) -> ConformanceResult<RecipientReport<BoardDeliveryTypes>> {
         let (owner, limits) = (self.owner, self.limits);
         Ok(self
             .store
@@ -265,7 +271,7 @@ impl PushInbox {
                         .await
                         .map_err(delivery_rollback)?
                         .ok_or_else(|| {
-                            StoreError::backend("actual SDK Held attempt produced no report")
+                            StoreError::backend("actual SDK custody produced no pending report")
                         })?;
                     inbox
                         .resolve_report(reference)
@@ -308,6 +314,13 @@ impl PushInbox {
                 })
             })
             .await?)
+    }
+    pub(super) async fn used_bytes(&self) -> ConformanceResult<u64> {
+        let used: i64 = self.store.transaction(|scope|Box::pin(async move {
+            query::<sqlx_turso::Turso>("SELECT coalesce(sum(payload_bytes+settlement_charge_bytes),0) AS bytes FROM _fleet_sync_inbox_items WHERE live=1")
+                .fetch_one(scope.executor()).await.map_err(StoreError::backend)?.try_get("bytes").map_err(StoreError::backend)
+        })).await?;
+        Ok(u64::try_from(used)?)
     }
     pub(super) fn close(self) -> ConformanceResult<()> {
         let store = Arc::try_unwrap(self.store)

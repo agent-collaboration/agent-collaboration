@@ -70,10 +70,6 @@ mod imported_claim_scenarios;
 )]
 #[path = "../tests/support/mail_push_inbox.rs"]
 mod mail_push_inbox;
-#[expect(
-    dead_code,
-    reason = "Shared Push transport serves targets with different helper subsets."
-)]
 #[path = "../tests/support/mail_push_transport.rs"]
 mod mail_push_transport;
 #[path = "../tests/support/mail_submit_scenarios.rs"]

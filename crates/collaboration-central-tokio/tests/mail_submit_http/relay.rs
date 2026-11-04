@@ -60,7 +60,7 @@ async fn normal_recipient_session_pushes_receipts_and_reports_original_mail()
             let reference=fleet_sync_protocol::DeliveryItemRef {item:item.id(),digest:item.digest().clone()};
             let saved=inbox.payload(reference).await?;
             require(serde_json::to_value(saved)?,serde_json::to_value(&item)?.get("value").cloned().ok_or("item payload absent")?)?;
-            if inbox.count().await?!=1 {return Err("Push retry duplicated custody".into());}
+            if inbox.count().await?!=1 || inbox.used_bytes().await?==0 {return Err("Push retry duplicated custody or lost its quota accounting".into());}
             let held=inbox.hold_and_report(item.id()).await?;
             require(operation(&mut recipient.socket,relay_request("report",json!({"report":held}))).await?,json!({"kind":"delivery","value":{"kind":"report","value":{"kind":"ack","value":{"reportSeq":1}}}}))?;
             require_known(&mut sender.socket, &item, owner, "held", 3).await?;

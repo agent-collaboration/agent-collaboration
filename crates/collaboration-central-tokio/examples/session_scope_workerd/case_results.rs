@@ -12,7 +12,7 @@ impl Scenario {
                 "MAILBOX_HELD_RETENTION_RESULT 1 passed; 0 failed; 0 ignored (same Native/Worker oracle, actual held payload across31controlled days and exact receipt release; no physical restart claim)"
             ),
             Scenario::MailboxCapacity => println!(
-                "MAILBOX_CAPACITY_RESULT 1 passed; 0 failed; 0 ignored (shared one-item quota, unknown rejected item, exact original and reserved cancel; no disk-full claim)"
+                "MAILBOX_CAPACITY_RESULT 1 passed; 0 failed; 0 ignored (real recipient Inbox quota refusal, exact original and prepaid cancellation; Fleet retains Sent for retry; no disk-full claim)"
             ),
             Scenario::MailboxCancel => println!(
                 "MAILBOX_CANCEL_RESULT 1 passed; 0 failed; 0 ignored (real dropped custody answer, pending cancel readback, recipient decision and final original status; no Router end-to-end claim)"
