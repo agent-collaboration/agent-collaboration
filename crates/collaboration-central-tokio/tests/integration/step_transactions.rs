@@ -20,6 +20,8 @@ type ReceiptDriver = StepConformance<TokioStorageHost<FixtureHost>>;
 mod native_unwind;
 #[path = "../step_transactions/typed_ledger.rs"]
 mod typed_ledger;
+#[path = "../step_transactions/typed_receipts.rs"]
+mod typed_receipts;
 #[path = "../step_transactions/validation.rs"]
 mod validation;
 

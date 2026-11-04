@@ -52,6 +52,10 @@ mod ledger_columns_tests;
 #[path = "fleet_ledger_integrity_test.rs"]
 mod ledger_integrity_tests;
 
+#[cfg(test)]
+#[path = "fleet_receipt_columns_test.rs"]
+mod receipt_columns_tests;
+
 #[cfg(feature = "conformance")]
 mod conformance;
 #[cfg(feature = "conformance")]

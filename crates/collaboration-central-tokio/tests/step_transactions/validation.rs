@@ -235,15 +235,21 @@ async fn a_stored_post_effect_with_a_matching_digest_is_refused_on_page_and_repl
     assert!(header.matches_full(&bad_effects));
     overwrite_decision_header(&fixture, &corrupt).await?;
     let request = entry.request_id.as_str().to_owned();
-    let effect = serde_json::to_string(bad_effects.first().ok_or("one corrupt effect required")?)?;
+    let record_id = bad_effects
+        .first()
+        .ok_or("one corrupt effect required")?
+        .0
+        .id
+        .as_str()
+        .to_owned();
     fixture
         .object
         .transaction(move |scope| {
             Box::pin(async move {
                 query::<sqlx_turso::Turso>(
-                    "UPDATE fleet_decision_receipts SET effect=? WHERE request_id=? AND ordinal=0",
+                    "UPDATE fleet_decision_receipts SET record_kind='post',record_id=? WHERE request_id=? AND ordinal=0",
                 )
-                .bind(effect)
+                .bind(record_id)
                 .bind(request)
                 .execute(scope.executor())
                 .await

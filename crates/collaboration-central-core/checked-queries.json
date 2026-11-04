@@ -145,7 +145,32 @@
           "nullable": false
         },
         {
-          "name": "effect",
+          "name": "record_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "record_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "fleet_position",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_installation",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_machine",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
           "kind": "text",
           "nullable": false
         }
@@ -167,7 +192,7 @@
     {
       "name": "read_fleet_receipt_page",
       "sql": "sql/read_fleet_receipt_page.sql",
-      "row": "FleetReceiptPageRow",
+      "row": "StoredFleetDecisionReceipt",
       "result": "many",
       "parameters": [
         {

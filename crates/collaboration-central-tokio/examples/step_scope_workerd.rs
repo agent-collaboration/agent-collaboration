@@ -88,6 +88,8 @@ struct RecordedCases {
     nonempty: RequestLedgerEntry,
     nonempty_answer: StepControlReply,
     typed: Vec<RequestLedgerEntry>,
+    four_kind_entry: RequestLedgerEntry,
+    four_kind_answer: StepControlReply,
 }
 
 async fn invalid_first_decisions(client: &StepClient) -> ConformanceResult<()> {
@@ -337,11 +339,51 @@ async fn cases(client: &StepClient) -> ConformanceResult<RecordedCases> {
     println!(
         "STEP_LEDGER_CASE typed_roots_children_complete_and_abridged_evidence_rollback_replay passed"
     );
+    let (four_kind_entry, pairs) = collaboration_central_conformance::typed_receipt_fixture(
+        "019f0000-0000-7000-8000-00000000cf01"
+            .to_owned()
+            .try_into()?,
+    )?;
+    let failed = client
+        .record_effects(
+            four_kind_entry.clone(),
+            pairs.clone(),
+            FleetDecisionFault::SqlAfterWrite,
+        )
+        .await?;
+    if !matches!(failed, Err(StoreError::Backend { .. })) {
+        return Err(format!("typed receipt fault missed: {failed:?}").into());
+    }
+    require(
+        client.read(four_kind_entry.request_id.clone()).await?,
+        StepControlReply::Read(None),
+    )?;
+    let four_kind_answer = client
+        .record_effects(
+            four_kind_entry.clone(),
+            pairs.clone(),
+            FleetDecisionFault::None,
+        )
+        .await??;
+    let StepControlReply::Recorded(answers) = &four_kind_answer else {
+        return Err("typed receipt answers missing".into());
+    };
+    let [FleetRequestResult::Decided(RequestDecision::Accepted { effects, .. })] =
+        answers.as_slice()
+    else {
+        return Err("typed receipt Accepted missing".into());
+    };
+    if effects.entries() != pairs.as_slice() || effects.total_count() != 4 {
+        return Err("typed four-kind receipt order/placement changed".into());
+    }
+    println!("STEP_RECEIPT_COLUMNS_CASE four_kinds_large_positions_and_late_fault passed");
     Ok(RecordedCases {
         empty: first,
         nonempty: with_effects,
         nonempty_answer: recorded,
         typed,
+        four_kind_entry,
+        four_kind_answer,
     })
 }
 
@@ -408,6 +450,23 @@ async fn main() -> ConformanceResult<()> {
         }
     };
     let reopened = async {
+        require(
+            client
+                .read(recorded.four_kind_entry.request_id.clone())
+                .await?,
+            StepControlReply::Read(Some(Box::new(recorded.four_kind_entry.clone()))),
+        )?;
+        let mut changed = recorded.four_kind_entry;
+        changed.decision = StoredDecision::Rejected {
+            reasons: vec![message_board::Refusal::Archived],
+        };
+        require(
+            client.record(changed, FleetDecisionFault::None).await??,
+            recorded.four_kind_answer,
+        )?;
+        println!(
+            "STEP_RECEIPT_COLUMNS_CASE worker_restart_replays_original_four_kind_effects passed"
+        );
         for entry in recorded.typed {
             require(
                 client.read(entry.request_id.clone()).await?,

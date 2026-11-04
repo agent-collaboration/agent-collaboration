@@ -77,7 +77,6 @@ where
         Type<Scope::Database> + Decode<'value, Scope::Database> + Encode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    let request_id = write.entry.request_id.as_str().to_owned();
     if let Some(entry) = read_ledger(scope, &write.entry.request_id).await? {
         let answer = if entry.canonical_hash == write.entry.canonical_hash {
             FleetRequestResult::Decided(checked_reply(
@@ -116,16 +115,15 @@ where
     .await?;
     for (ordinal, (effect, receipt_id)) in write.effects.iter().zip(&write.receipt_ids).enumerate()
     {
-        let ordinal = i64::try_from(ordinal).map_err(StoreError::backend)?;
-        generated_statements::insert_fleet_decision_receipt(
+        crate::fleet_receipt_codec::insert(
             scope,
-            receipt_id.to_string(),
-            request_id.clone(),
-            ordinal.to_string(),
-            serde_json::to_string(effect).map_err(StoreError::backend)?,
+            &write.entry.request_id,
+            *receipt_id,
+            ordinal,
+            effect,
+            write.now,
         )
-        .await
-        .map_err(StoreError::backend)?;
+        .await?;
     }
 
     #[cfg(feature = "conformance")]
@@ -272,33 +270,14 @@ where
         .map_err(StoreError::backend)?;
     rows.into_iter()
         .enumerate()
-        .map(|(expected, row)| {
-            let id = required(row.receipt_id, "receipt_id")?;
-            let parsed = durable_steps::Uuid::parse_str(&id)
-                .map_err(|error| corrupt("receipt_id", error))?;
-            let ordinal = required(row.ordinal, "ordinal")?;
-            if parsed.get_version_num() != 7
-                || parsed.to_string() != id
-                || required(row.ordinal_class, "ordinal_class")? != "integer"
-                || ordinal != expected.to_string()
-            {
-                return Err(corrupt("receipt", "noncanonical identity or ordinal"));
-            }
-            let payload = required(row.effect, "effect")?;
-            let effect: DecisionEffect =
-                serde_json::from_str(&payload).map_err(|error| corrupt("effect", error))?;
-            message_board::validate_fleet_decision_effect(&effect)
-                .map_err(|error| corrupt("effect", error))?;
-            if serde_json::to_string(&effect).map_err(StoreError::backend)? != payload {
-                return Err(corrupt("effect", "noncanonical effect"));
-            }
-            Ok(effect)
+        .map(|(ordinal, row)| {
+            crate::fleet_receipt_codec::decode(
+                row,
+                request,
+                u64::try_from(ordinal).map_err(StoreError::backend)?,
+            )
         })
         .collect()
-}
-
-fn required(value: Option<String>, field: &str) -> Result<String, StoreError> {
-    value.ok_or_else(|| corrupt(field, "required receipt column is NULL"))
 }
 
 fn corrupt(field: &str, message: impl std::fmt::Display) -> StoreError {

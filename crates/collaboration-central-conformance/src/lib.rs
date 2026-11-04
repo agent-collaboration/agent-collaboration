@@ -116,7 +116,7 @@ pub use snapshot_merge::run_fleet_snapshot_merge_conformance;
 #[cfg(feature = "client")]
 pub use staging_access::{StagingAccess, StagingInstallation};
 #[cfg(feature = "client")]
-pub use step_fixture::{receipt_fixture, receipt_with_effects_fixture};
+pub use step_fixture::{receipt_fixture, receipt_with_effects_fixture, typed_receipt_fixture};
 #[cfg(feature = "client")]
 pub use transaction_reopen::ComposedTransactionScenario;
 #[cfg(feature = "client")]

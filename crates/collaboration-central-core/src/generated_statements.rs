@@ -73,7 +73,12 @@ pub(crate) fn insert_fleet_decision_receipt<S>(
     receipt_id: String,
     request_id: String,
     ordinal: String,
-    effect: String,
+    record_kind: String,
+    record_id: String,
+    fleet_position: String,
+    origin_installation: String,
+    origin_machine: String,
+    created_at: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -88,7 +93,12 @@ where
         .bind(receipt_id)
         .bind(request_id)
         .bind(ordinal)
-        .bind(effect);
+        .bind(record_kind)
+        .bind(record_id)
+        .bind(fleet_position)
+        .bind(origin_installation)
+        .bind(origin_machine)
+        .bind(created_at);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -97,9 +107,25 @@ where
 #[derive(Debug)]
 pub(crate) struct StoredFleetDecisionReceipt {
     pub receipt_id: Option<String>,
+    pub receipt_id_class: Option<String>,
+    pub request_id: Option<String>,
+    pub request_id_class: Option<String>,
     pub ordinal: Option<String>,
     pub ordinal_class: Option<String>,
-    pub effect: Option<String>,
+    pub record_kind: Option<String>,
+    pub record_kind_class: Option<String>,
+    pub record_id: Option<String>,
+    pub record_id_class: Option<String>,
+    pub fleet_position: Option<String>,
+    pub fleet_position_class: Option<String>,
+    pub origin_installation: Option<String>,
+    pub origin_installation_class: Option<String>,
+    pub origin_machine: Option<String>,
+    pub origin_machine_class: Option<String>,
+    pub created_at: Option<String>,
+    pub created_at_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_at_class: Option<String>,
 }
 pub(crate) fn read_fleet_decision_receipts<S>(
     scope: &mut S,
@@ -123,27 +149,35 @@ where
             .map(|row| {
                 Ok(StoredFleetDecisionReceipt {
                     receipt_id: row.try_get("receipt_id")?,
+                    receipt_id_class: row.try_get("receipt_id_class")?,
+                    request_id: row.try_get("request_id")?,
+                    request_id_class: row.try_get("request_id_class")?,
                     ordinal: row.try_get("ordinal")?,
                     ordinal_class: row.try_get("ordinal_class")?,
-                    effect: row.try_get("effect")?,
+                    record_kind: row.try_get("record_kind")?,
+                    record_kind_class: row.try_get("record_kind_class")?,
+                    record_id: row.try_get("record_id")?,
+                    record_id_class: row.try_get("record_id_class")?,
+                    fleet_position: row.try_get("fleet_position")?,
+                    fleet_position_class: row.try_get("fleet_position_class")?,
+                    origin_installation: row.try_get("origin_installation")?,
+                    origin_installation_class: row.try_get("origin_installation_class")?,
+                    origin_machine: row.try_get("origin_machine")?,
+                    origin_machine_class: row.try_get("origin_machine_class")?,
+                    created_at: row.try_get("created_at")?,
+                    created_at_class: row.try_get("created_at_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_at_class: row.try_get("updated_at_class")?,
                 })
             })
             .collect()
     }
 }
-
-#[derive(Debug)]
-pub(crate) struct FleetReceiptPageRow {
-    pub receipt_id: Option<String>,
-    pub ordinal: Option<String>,
-    pub ordinal_class: Option<String>,
-    pub effect: Option<String>,
-}
 pub(crate) fn read_fleet_receipt_page<S>(
     scope: &mut S,
     request_id: String,
     after_ordinal: String,
-) -> impl std::future::Future<Output = Result<Vec<FleetReceiptPageRow>, sqlx_core::Error>> + Send
+) -> impl std::future::Future<Output = Result<Vec<StoredFleetDecisionReceipt>, sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
@@ -161,11 +195,27 @@ where
         let rows = statement.fetch_all(scope.executor()).await?;
         rows.iter()
             .map(|row| {
-                Ok(FleetReceiptPageRow {
+                Ok(StoredFleetDecisionReceipt {
                     receipt_id: row.try_get("receipt_id")?,
+                    receipt_id_class: row.try_get("receipt_id_class")?,
+                    request_id: row.try_get("request_id")?,
+                    request_id_class: row.try_get("request_id_class")?,
                     ordinal: row.try_get("ordinal")?,
                     ordinal_class: row.try_get("ordinal_class")?,
-                    effect: row.try_get("effect")?,
+                    record_kind: row.try_get("record_kind")?,
+                    record_kind_class: row.try_get("record_kind_class")?,
+                    record_id: row.try_get("record_id")?,
+                    record_id_class: row.try_get("record_id_class")?,
+                    fleet_position: row.try_get("fleet_position")?,
+                    fleet_position_class: row.try_get("fleet_position_class")?,
+                    origin_installation: row.try_get("origin_installation")?,
+                    origin_installation_class: row.try_get("origin_installation_class")?,
+                    origin_machine: row.try_get("origin_machine")?,
+                    origin_machine_class: row.try_get("origin_machine_class")?,
+                    created_at: row.try_get("created_at")?,
+                    created_at_class: row.try_get("created_at_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_at_class: row.try_get("updated_at_class")?,
                 })
             })
             .collect()

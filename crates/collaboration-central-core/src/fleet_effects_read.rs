@@ -6,7 +6,7 @@ use crate::{
 };
 use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScope};
 use message_board::{
-    DecisionEffect, DecisionEffectsPage, RequestDecision, RequestEffectsCursor, RequestEffectsRead,
+    DecisionEffectsPage, RequestDecision, RequestEffectsCursor, RequestEffectsRead,
     RequestEffectsRefusal, RequestEffectsRequest, RequestEffectsScope, StoredDecision,
 };
 use sqlx_core::{
@@ -92,30 +92,7 @@ where
             let ordinal = start
                 .checked_add(u64::try_from(offset).map_err(StoreError::backend)?)
                 .ok_or_else(|| corrupt("receipt ordinal overflow"))?;
-            let id = required(row.receipt_id)?;
-            let parsed = durable_steps::Uuid::parse_str(&id)
-                .map_err(|error| corrupt(format!("invalid receipt identity: {error}")))?;
-            if parsed.get_version_num() != 7 || parsed.to_string() != id {
-                return Err(corrupt("noncanonical receipt identity"));
-            }
-            if required(row.ordinal_class)? != "integer" {
-                return Err(corrupt("receipt ordinal is not stored as an integer"));
-            }
-            let stored_ordinal = required(row.ordinal)?;
-            if stored_ordinal != ordinal.to_string() {
-                return Err(corrupt(format!(
-                    "expected ordinal {ordinal}, found {stored_ordinal}"
-                )));
-            }
-            let encoded = required(row.effect)?;
-            let effect: DecisionEffect =
-                serde_json::from_str(&encoded).map_err(|error| corrupt(error.to_string()))?;
-            message_board::validate_fleet_decision_effect(&effect)
-                .map_err(|error| corrupt(error.to_string()))?;
-            if serde_json::to_string(&effect).map_err(StoreError::backend)? != encoded {
-                return Err(corrupt("noncanonical Fleet effect"));
-            }
-            Ok(effect)
+            crate::fleet_receipt_codec::decode(row, &request.request, ordinal)
         })
         .collect::<Result<Vec<_>, StoreError>>()?;
     let next = (end < header.count).then(|| RequestEffectsCursor::Fleet {
@@ -129,9 +106,6 @@ where
 }
 fn refused(reason: RequestEffectsRefusal) -> RequestEffectsRead {
     RequestEffectsRead::Refused { reason }
-}
-fn required(value: Option<String>) -> Result<String, StoreError> {
-    value.ok_or_else(|| corrupt("required receipt column is NULL"))
 }
 fn corrupt(message: impl Into<String>) -> StoreError {
     StoreError::Corrupt {

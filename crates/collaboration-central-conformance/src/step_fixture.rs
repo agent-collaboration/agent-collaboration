@@ -72,3 +72,40 @@ pub fn receipt_with_effects_fixture(
     entry.decision = StoredDecision::accepted(effects.clone(), ChangeOutcome::Changed);
     Ok((entry, effects))
 }
+
+/// All allowed historical Fleet references carry their own original placement.
+pub fn typed_receipt_fixture(
+    request_id: RequestId,
+) -> ConformanceResult<(RequestLedgerEntry, Vec<DecisionEffect>)> {
+    let mut entry = receipt_fixture(request_id)?;
+    let effects = [
+        message_board::RecordKind::Project,
+        message_board::RecordKind::Adr,
+        message_board::RecordKind::Board,
+        message_board::RecordKind::Workspace,
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(index, kind)| {
+        Ok((
+            message_board::RecordRef {
+                kind,
+                id: format!("019f0000-0000-7000-8000-00000000ce{index:02x}").try_into()?,
+            },
+            RecordPlacement::Fleet(FleetFeedEntry {
+                position: FleetPosition::try_from(
+                    9_007_199_254_740_993_u64 + u64::try_from(index)?,
+                )?,
+                origin: ActorOrigin {
+                    installation: "550e8400-e29b-41d4-a716-4466554400a9"
+                        .to_owned()
+                        .try_into()?,
+                    machine: format!("literal historical effect {index} λ").try_into()?,
+                },
+            }),
+        ))
+    })
+    .collect::<ConformanceResult<Vec<_>>>()?;
+    entry.decision = StoredDecision::accepted(effects.clone(), ChangeOutcome::Changed);
+    Ok((entry, effects))
+}

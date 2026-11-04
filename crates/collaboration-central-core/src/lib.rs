@@ -207,6 +207,7 @@ mod fleet_reason_evidence;
 mod fleet_reason_fields;
 mod fleet_reason_tree;
 mod fleet_reason_write;
+mod fleet_receipt_codec;
 mod fleet_record_codec;
 #[cfg(feature = "conformance")]
 mod fleet_record_observer;
