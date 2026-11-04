@@ -53,3 +53,25 @@ test("D1 harness accepts an explicit short runtime allocation without widening o
   ])
     assert.equal(d1HarnessSchema.safeParse({ ...declaration, runtimeDirectory }).success, false);
 });
+
+test("materialization cannot release twenty queued messages or select a different proxy or journey", (): void => {
+  const materialization = {
+    kind: "materialized-luna-recipient",
+    budgetFile: "/declared/worktree/tmp/d1-verify/budget.json",
+    reloadHeld: false,
+  };
+  const valid = {
+    ...declaration,
+    queueScenario: "online-timing",
+    debugProxyOrigin: "http://127.0.0.1:43127",
+    materialization,
+  };
+  assert.equal(d1HarnessSchema.safeParse(valid).success, true);
+  for (const invalid of [
+    { ...valid, materialization: { ...materialization, reloadHeld: true } },
+    { ...valid, debugProxyOrigin: "http://127.0.0.1:28787" },
+    { ...valid, queueScenario: "offline-reopen" },
+    { ...valid, twoProjects: true },
+  ])
+    assert.equal(d1HarnessSchema.safeParse(invalid).success, false);
+});

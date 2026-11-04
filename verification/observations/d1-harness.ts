@@ -22,6 +22,8 @@ import { requireD1RoutingConfiguration } from "./d1-routing-safety.ts";
 import { nativeTurnStarts } from "./d1-native-activity.ts";
 import { driveD1OnlineTiming, reportD1OnlineTiming } from "./d1-online-timing.ts";
 import { d1RuntimeDirectorySchema, requireD1RuntimeDirectory } from "./d1-runtime-allocation.ts";
+import { d1TurnGrantSchema } from "./d1-turn-budget.ts";
+import { driveMaterializedD1Mail } from "./d1-materialized-mail.ts";
 
 export const d1HarnessSchema = z
   .object({
@@ -32,6 +34,7 @@ export const d1HarnessSchema = z
     native: fileSchema.extend({ version: z.string().min(1) }),
     evidenceDirectory: z.string().startsWith("/"),
     runtimeDirectory: d1RuntimeDirectorySchema.optional(),
+    materialization: d1TurnGrantSchema.optional(),
     debugProxyOrigin: z.url().refine((value): boolean => {
       const url = new URL(value);
       return (
@@ -52,7 +55,16 @@ export const d1HarnessSchema = z
       .default("none"),
     twoProjects: z.boolean().default(false),
   })
-  .strict();
+  .strict()
+  .refine(
+    (declaration): boolean =>
+      declaration.materialization === undefined ||
+      (!declaration.twoProjects &&
+        ["online-held", "online-timing"].includes(declaration.queueScenario) &&
+        declaration.debugProxyOrigin === "http://127.0.0.1:43127" &&
+        !(declaration.queueScenario === "online-timing" && declaration.materialization.reloadHeld)),
+    "materialization is restricted to the declared Luna held/timing journeys",
+  );
 export type D1HarnessDeclaration = z.infer<typeof d1HarnessSchema>;
 
 export interface D1Machine {
@@ -92,6 +104,7 @@ async function recipientWithoutInput(
   z.object({
     model: z.literal("gpt-6-luna"),
     modelProvider: z.literal("codex-router-debug"),
+    reasoningEffort: z.literal("low"),
   }).parse(started);
   const recipient = {
     endpoint: { serviceId, endpointId: "codex-local" },
@@ -259,6 +272,8 @@ async function driveSelected(
     recipient = machines[1];
   if (sender === undefined || recipient === undefined)
     throw new Error("D1 message participants absent");
+  if (declaration.materialization !== undefined)
+    return driveMaterializedD1Mail({ declaration, machines, receipt });
   if (declaration.twoProjects) {
     await createD1Project(sender, "P1", receipt);
     await createD1Project(recipient, "P2", receipt);
@@ -465,7 +480,9 @@ export async function runD1Harness(declaration: D1HarnessDeclaration): Promise<v
     (sum, machine): number => sum + observedD1Turns(machine),
     0,
   );
-  if (actualTurnsStarted !== 0 && failure === null)
+  const permittedTurns =
+    declaration.materialization === undefined ? 0 : declaration.materialization.reloadHeld ? 2 : 1;
+  if (actualTurnsStarted !== permittedTurns && failure === null)
     failure = "unexpected native turn started from a side effect";
   await receipt.save("result.json", {
     kind: "d1Harness",

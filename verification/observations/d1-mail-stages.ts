@@ -29,8 +29,9 @@ export async function senderStage(input: {
   kinds: readonly string[];
   receipt: Receipt;
   stage: string;
+  timeoutMilliseconds?: number;
 }): Promise<unknown> {
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + (input.timeoutMilliseconds ?? 30_000);
   let lastKind: string | undefined;
   let lastShown: unknown;
   while (Date.now() < deadline) {
