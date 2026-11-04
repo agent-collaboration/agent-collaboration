@@ -49,8 +49,8 @@ async fn cleanup_refuses_live_wal_connection_without_unlinking_database() {
 }
 
 #[tokio::test]
-async fn cleanup_after_owner_drop_leaves_no_database_or_wal_sidecars() {
-    // Arrange: the same real WAL owner that the broker releases on stop.
+async fn cleanup_after_owner_closes_leaves_no_database_or_wal_sidecars() {
+    // Arrange: join the SQLx WAL owner's close before cleanup.
     let directory = tempfile::tempdir().expect("owned cleanup directory");
     let database_path = directory.path().join("interaction.sqlite");
     let mut writer = SqliteConnection::connect_with(
@@ -65,9 +65,9 @@ async fn cleanup_after_owner_drop_leaves_no_database_or_wal_sidecars() {
         .execute(&mut writer)
         .await
         .expect("create WAL state");
-    drop(writer);
+    writer.close().await.expect("join original SQLite worker");
 
-    // Act: cleanup must finish the SQLite transition before file removal.
+    // Act: after the joined owner close, finish the transition before file removal.
     remove_closed_interaction_database(&database_path)
         .await
         .expect("closed-owner cleanup");

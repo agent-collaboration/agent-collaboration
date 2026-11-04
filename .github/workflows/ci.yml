@@ -38,6 +38,16 @@ jobs:
       CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v5
+      # Clippy, SQLx metadata checks, native/wasm builds and feature variants
+      # share target/ and outgrow runner disk. Remove preinstalled SDKs unused here.
+      - name: Free runner disk space
+        background: true
+        shell: bash
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/microsoft /opt/google
+          sudo docker image prune --all --force > /dev/null
+          df -h /
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -107,6 +117,8 @@ jobs:
           pnpm --dir scripts/verification/tui test
       - name: Test main cache pruning
         run: bash scripts/tests/test_main_cache_pruning.sh
+      - name: Wait for runner disk cleanup
+        wait-all:
       - name: Check Rust formatting
         id: format
         background: true
@@ -159,6 +171,7 @@ jobs:
           test -x "${install_root}/bin/codex-router"
           test "$(find "${install_root}/bin" -maxdepth 1 -type f | wc -l | tr -d ' ')" = "1"
           cargo build -p codex-router-quota-reset-test-harness --bin codex-router-quota-reset-test-harness
+          df -h /
       - name: Measure pinned tool cache footprint
         run: du -sb tmp/rust-tools
       - name: Wait for checks
