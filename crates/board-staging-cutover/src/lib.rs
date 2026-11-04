@@ -2,9 +2,11 @@
 mod bundle_files;
 mod source_archive;
 pub use source_archive::{SourceArchiveError, SourceArchiveOutcome, archive_confirmed_source};
+mod imported_project_claims;
 mod offline_host;
 mod offline_run;
 mod offline_run_plan;
+pub use imported_project_claims::{ClaimRunError, ClaimRunReport};
 pub use offline_run::{OfflineRunError, OfflineRunReport};
 pub use offline_run_plan::{OfflineRunPlan, OwnerAuthentication};
 mod owner_publication_access;

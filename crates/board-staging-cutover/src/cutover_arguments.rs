@@ -11,6 +11,10 @@ pub(super) enum CutoverCommand {
         plan: PathBuf,
         authentication: OwnerAuthentication,
     },
+    Claim {
+        plan: PathBuf,
+        authentication: OwnerAuthentication,
+    },
 }
 
 pub(super) struct InspectRequest {
@@ -31,7 +35,20 @@ impl CutoverCommand {
         match arguments.next().as_deref().and_then(|value| value.to_str()) {
             Some("--help" | "-h") if arguments.next().is_none() => return Ok(Self::Help),
             Some("inspect") => {}
-            Some("offline") => return Self::parse_offline(arguments),
+            Some("offline") => {
+                let (plan, authentication) = Self::parse_authenticated_plan(arguments)?;
+                return Ok(Self::Offline {
+                    plan,
+                    authentication,
+                });
+            }
+            Some("claim") => {
+                let (plan, authentication) = Self::parse_authenticated_plan(arguments)?;
+                return Ok(Self::Claim {
+                    plan,
+                    authentication,
+                });
+            }
             _ => return Err(ArgumentError),
         }
         let mut router_root = None;
@@ -71,7 +88,9 @@ impl CutoverCommand {
         }))
     }
 
-    fn parse_offline(mut arguments: impl Iterator<Item = OsString>) -> Result<Self, ArgumentError> {
+    fn parse_authenticated_plan(
+        mut arguments: impl Iterator<Item = OsString>,
+    ) -> Result<(PathBuf, OwnerAuthentication), ArgumentError> {
         let mut plan = None;
         let mut authentication = None;
         while let Some(flag) = arguments.next() {
@@ -90,9 +109,9 @@ impl CutoverCommand {
                 _ => return Err(ArgumentError),
             }
         }
-        Ok(Self::Offline {
-            plan: plan.ok_or(ArgumentError)?,
-            authentication: authentication.ok_or(ArgumentError)?,
-        })
+        Ok((
+            plan.ok_or(ArgumentError)?,
+            authentication.ok_or(ArgumentError)?,
+        ))
     }
 }

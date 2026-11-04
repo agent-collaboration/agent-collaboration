@@ -29,11 +29,17 @@ async fn ordinary_host_cutover_canary_reaches_a_distinct_enrolled_host() -> Test
     cold_claim_case(SourceContents::EmittedIntentWithRemoteReadback).await
 }
 
+#[tokio::test]
+async fn compiled_claim_command_replays_the_sealed_request_and_installs_actual_e2() -> TestResult {
+    cold_claim_case(SourceContents::ProjectOnlyViaHelperClaim).await
+}
+
 #[derive(Clone, Copy)]
 enum SourceContents {
     ProjectOnly,
     EmittedIntent,
     EmittedIntentWithRemoteReadback,
+    ProjectOnlyViaHelperClaim,
 }
 
 async fn cold_claim_case(contents: SourceContents) -> TestResult {
@@ -72,13 +78,65 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
             String::from_utf8_lossy(&published.stderr)
         );
         let bundle = PreparedProjectBundle::open(&run.bundle)?;
-        std::fs::create_dir_all(fixture.root.join("fleet"))?;
-        let enrollment = central.write_host_session(&fixture.root)?;
-        std::fs::rename(enrollment, fixture.root.join("fleet/enrollment.json"))?;
+        if matches!(contents, SourceContents::ProjectOnlyViaHelperClaim) {
+            super::direct_central_enrollment::install(&central, &fixture)?;
+        } else {
+            std::fs::create_dir_all(fixture.root.join("fleet"))?;
+            let enrollment = central.write_host_session(&fixture.root)?;
+            std::fs::rename(enrollment, fixture.root.join("fleet/enrollment.json"))?;
+        }
         let host =
             OwnedHost::start(&fixture.root, &bundle.manifest().header.declared_owner).await?;
         let claimed = async {
             host.await_ready().await?;
+            if matches!(contents, SourceContents::ProjectOnlyViaHelperClaim) {
+                run.renew_owner(central.base_url())?;
+                let claimed = run.execute_claim().await?;
+                super::recovery_rows::require(
+                    claimed.status.success(),
+                    &format!(
+                        "compiled Claim refused: {} {}",
+                        String::from_utf8_lossy(&claimed.stdout),
+                        String::from_utf8_lossy(&claimed.stderr)
+                    ),
+                )?;
+                let first: serde_json::Value = serde_json::from_slice(&claimed.stdout)?;
+                let projects = first
+                    .get("projects")
+                    .and_then(serde_json::Value::as_array)
+                    .ok_or("compiled Claim project report missing")?;
+                let [project] = projects.as_slice() else {
+                    return Err("one compiled Claim project report required".into());
+                };
+                super::recovery_rows::require(
+                    first.get("kind").and_then(serde_json::Value::as_str)
+                        == Some("projectsClaimed")
+                        && project.get("kind").and_then(serde_json::Value::as_str)
+                            == Some("claimed")
+                        && first.get("runId")
+                            == Some(&serde_json::to_value(bundle.manifest().run_id)?)
+                        && project.get("project")
+                            == Some(&serde_json::to_value(&source.selected.project)?)
+                        && project.get("request") == Some(&serde_json::to_value(&run.claim)?)
+                        && project.get("epoch").and_then(serde_json::Value::as_u64) == Some(2)
+                        && project.get("start")
+                            == Some(&serde_json::to_value(
+                                bundle.manifest().header.manifest.position,
+                            )?),
+                    "compiled Claim did not preserve the sealed request and expected e2 seed",
+                )?;
+                run.renew_owner(central.base_url())?;
+                let replayed = run.execute_claim().await?;
+                super::recovery_rows::require(
+                    replayed.status.success(),
+                    "compiled Claim replay failed",
+                )?;
+                super::recovery_rows::require(
+                    serde_json::from_slice::<serde_json::Value>(&replayed.stdout)? == first,
+                    "compiled Claim replay changed request or authority",
+                )?;
+                return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
+            }
             let directory = codex_router_host::router_collaboration_directory(&fixture.root);
             let client =
                 CollaborationClient::connect(&directory, "cutover-cold-readback", "1").await?;

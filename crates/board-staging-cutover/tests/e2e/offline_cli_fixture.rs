@@ -98,6 +98,22 @@ impl RunFixture {
         self.command().output().await
     }
 
+    pub async fn execute_claim(&self) -> std::io::Result<std::process::Output> {
+        tokio::process::Command::new(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../scripts/cargo_debug_signing_runner.sh"),
+        )
+        .arg(env!("CARGO_BIN_EXE_codex-router-board-staging-cutover"))
+        .arg("claim")
+        .arg("--plan")
+        .arg(&self.plan)
+        .arg("--owner-credential-file")
+        .arg(&self.owner)
+        .kill_on_drop(true)
+        .output()
+        .await
+    }
+
     pub fn command(&self) -> tokio::process::Command {
         let mut command = tokio::process::Command::new(
             Path::new(env!("CARGO_MANIFEST_DIR"))

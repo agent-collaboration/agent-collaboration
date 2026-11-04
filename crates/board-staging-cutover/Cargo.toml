@@ -47,6 +47,7 @@ nix.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+codex-router-core.workspace = true
 collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.123" }
 codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.123" }
 codex-native-integration.workspace = true

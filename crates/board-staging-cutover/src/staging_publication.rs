@@ -115,10 +115,7 @@ impl StagingPublisher {
             return Err(PublicationError::SourceHostMismatch);
         }
         // Reopen validates every sealed page before the first external effect.
-        let checked = PreparedProjectBundle::open(bundle.directory())?;
-        if serde_json::to_vec(checked.manifest())? != serde_json::to_vec(bundle.manifest())? {
-            return Err(PublicationError::StatusMismatch);
-        }
+        require_unchanged_bundle(bundle)?;
         let fleet: FleetImportResult = self
             .post(
                 "/admin/v1/import/fleet",
@@ -233,6 +230,34 @@ impl StagingPublisher {
         bundle: &PreparedProjectBundle,
         expected_id: Option<RequestId>,
     ) -> Result<PublishedProject, PublicationError> {
+        let record = self.completed_record(bundle, expected_id).await?;
+        Ok(PublishedProject {
+            bundle_digest: crate::bundle_files::bytes_digest(&serde_json::to_vec(
+                bundle.manifest(),
+            )?)?,
+            import_id: record.import_id,
+            head: record.header.manifest.position,
+        })
+    }
+
+    /// Observe completion before Claim; this grants no authority to archive a source.
+    pub(crate) async fn require_complete_import(
+        &self,
+        bundle: &PreparedProjectBundle,
+    ) -> Result<(), PublicationError> {
+        if bundle.manifest().target_origin != self.endpoint.origin().ascii_serialization() {
+            return Err(PublicationError::TargetMismatch);
+        }
+        require_unchanged_bundle(bundle)?;
+        self.completed_record(bundle, None).await?;
+        Ok(())
+    }
+
+    async fn completed_record(
+        &self,
+        bundle: &PreparedProjectBundle,
+        expected_id: Option<RequestId>,
+    ) -> Result<AdminImportRecord, PublicationError> {
         let record = self
             .status(bundle)
             .await?
@@ -245,13 +270,7 @@ impl StagingPublisher {
         {
             return Err(PublicationError::StatusMismatch);
         }
-        Ok(PublishedProject {
-            bundle_digest: crate::bundle_files::bytes_digest(&serde_json::to_vec(
-                bundle.manifest(),
-            )?)?,
-            import_id: record.import_id,
-            head: record.header.manifest.position,
-        })
+        Ok(record)
     }
 
     async fn status(
@@ -343,6 +362,14 @@ impl StagingPublisher {
             .await
             .map_err(|source| PublicationError::OutcomeUnknown { stage, source })
     }
+}
+
+fn require_unchanged_bundle(bundle: &PreparedProjectBundle) -> Result<(), PublicationError> {
+    let checked = PreparedProjectBundle::open(bundle.directory())?;
+    if serde_json::to_vec(checked.manifest())? != serde_json::to_vec(bundle.manifest())? {
+        return Err(PublicationError::StatusMismatch);
+    }
+    Ok(())
 }
 
 fn validate_endpoint(endpoint: &Url) -> Result<(), PublicationError> {

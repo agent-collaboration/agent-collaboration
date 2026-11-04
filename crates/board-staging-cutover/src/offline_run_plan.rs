@@ -1,5 +1,5 @@
 //! Explicit machine and preserved source inventory for one offline helper lifetime.
-use crate::{ProjectBundleError, ProjectPreparation, SelectedWriterFile};
+use crate::{PreparedProjectBundle, ProjectBundleError, ProjectPreparation, SelectedWriterFile};
 use collaboration_protocol::UuidIdentity;
 use fleet_admission::FleetImportBundle;
 use fleet_sync_protocol::PeerId;
@@ -72,6 +72,44 @@ impl OfflineRunPlan {
             claim_request: project.claim_request.clone(),
             canary_request: project.canary_request.clone(),
         }
+    }
+
+    pub(crate) fn planned_bundle_path(
+        &self,
+        project: &PlannedProject,
+    ) -> Result<PathBuf, ProjectBundleError> {
+        crate::bundle_files::owned_directory(&self.bundle_parent, true)?;
+        Ok(std::fs::canonicalize(&self.bundle_parent)?.join(format!(
+            "{}-{}",
+            self.run_id,
+            project.selected.project.as_str()
+        )))
+    }
+
+    pub(crate) fn reopen_planned_bundle(
+        &self,
+        project: &PlannedProject,
+        collaboration_directory: &Path,
+    ) -> Result<PreparedProjectBundle, ProjectBundleError> {
+        let bundle = PreparedProjectBundle::open(&self.planned_bundle_path(project)?)?;
+        let manifest = bundle.manifest();
+        let selected = &manifest.source.selected;
+        if manifest.run_id != self.run_id
+            || manifest.target_origin != self.target.origin().ascii_serialization()
+            || manifest.fleet != project.fleet
+            || manifest.claim_request != project.claim_request
+            || manifest.canary_request != project.canary_request
+            || selected.project != project.selected.project
+            || selected.peer != project.selected.peer
+            || selected.file_epoch != project.selected.file_epoch
+            || manifest.source_directory
+                != collaboration_directory
+                    .join("projects")
+                    .join(selected.project.as_str())
+        {
+            return Err(ProjectBundleError::InvalidArtifact);
+        }
+        Ok(bundle)
     }
 }
 

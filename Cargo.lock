@@ -1002,6 +1002,7 @@ dependencies = [
  "board-sync-protocol",
  "chrono",
  "codex-native-integration",
+ "codex-router-core",
  "codex-router-host",
  "codex-router-secret-store",
  "codex-router-test-support",

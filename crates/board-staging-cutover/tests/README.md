@@ -66,5 +66,17 @@ Central read copy while e2 remains the writer. Selecting the live producer
 instead fails the identity check. Both Host/native lifecycles are joined. This
 is a local two-Host proof, with separate enrollments on one physical machine.
 
+The compiled `claim` command reopens the same sealed plan and validates the
+running Host's enrollment origin, preserved source backup and Central's exact
+completed import. It submits and replays the frozen ordinary Claim, then the
+process test checks the actual cold e2 tables. Its report covers the Claim phase
+only. A false success without that RPC fails the missing-install assertion.
+Separate tests reject an absent backup, a local bundle without completed
+publication, and a wrong origin before consuming Owner authentication.
+
+Claim CLI proof uses the existing SelfHosted assertion transport directly to
+TestCentral as a local stand-in. Cloudflare Access transport for the Claim phase
+remains unverified until declared staging execution exercises it end to end.
+
 Host lifecycle orchestration, the full process-crash matrix, richer frozen
 mail/cancel state, remote hardware and staging corpus remain unverified.

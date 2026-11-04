@@ -1,12 +1,14 @@
 //! Operator entry point; inspection never takes the running Host's authority.
-use board_staging_cutover::{HostInspection, OfflineHost, OfflineRunPlan, OfflineRunReport};
+use board_staging_cutover::{
+    ClaimRunReport, HostInspection, OfflineHost, OfflineRunPlan, OfflineRunReport,
+};
 use std::io::Write;
 use std::process::ExitCode;
 
 mod cutover_arguments;
 use cutover_arguments::CutoverCommand;
 
-const USAGE: &str = "codex-router-board-staging-cutover inspect --router-root <absolute-path> --service-id <uuid> --peer-id <uuid>\ncodex-router-board-staging-cutover offline --plan <private-file> (--owner-credential-file <private-file> | --owner-access)\n";
+const USAGE: &str = "codex-router-board-staging-cutover inspect --router-root <absolute-path> --service-id <uuid> --peer-id <uuid>\ncodex-router-board-staging-cutover offline --plan <private-file> (--owner-credential-file <private-file> | --owner-access)\ncodex-router-board-staging-cutover claim --plan <private-file> (--owner-credential-file <private-file> | --owner-access)\n";
 
 #[derive(serde::Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -22,6 +24,14 @@ enum HelperOutput {
     OfflineIncomplete {
         #[serde(flatten)]
         report: OfflineRunReport,
+    },
+    ProjectsClaimed {
+        #[serde(flatten)]
+        report: ClaimRunReport,
+    },
+    ClaimsIncomplete {
+        #[serde(flatten)]
+        report: ClaimRunReport,
     },
 }
 
@@ -55,6 +65,31 @@ async fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
                 HelperOutput::OfflineCompleted { report }
             } else {
                 HelperOutput::OfflineIncomplete { report }
+            };
+            let mut stdout = std::io::stdout().lock();
+            serde_json::to_writer(&mut stdout, &output)?;
+            stdout.write_all(b"\n")?;
+            return Ok(if complete {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            });
+        }
+        CutoverCommand::Claim {
+            plan,
+            authentication,
+        } => {
+            let plan = OfflineRunPlan::read(&plan)?;
+            let owner = nix::unistd::User::from_uid(nix::unistd::geteuid())?
+                .ok_or("cannot determine the Host owner's home directory")?;
+            let report = plan
+                .claim_imported_projects(&owner.dir, authentication)
+                .await?;
+            let complete = report.all_claimed();
+            let output = if complete {
+                HelperOutput::ProjectsClaimed { report }
+            } else {
+                HelperOutput::ClaimsIncomplete { report }
             };
             let mut stdout = std::io::stdout().lock();
             serde_json::to_writer(&mut stdout, &output)?;

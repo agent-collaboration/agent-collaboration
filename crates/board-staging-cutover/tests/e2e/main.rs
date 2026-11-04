@@ -4,6 +4,7 @@ mod canary_proof;
 mod cross_machine_canary;
 #[path = "../../src/cutover_host_fixture.rs"]
 mod cutover_host_fixture;
+mod direct_central_enrollment;
 mod host_entrypoints;
 mod host_operator;
 mod host_process;

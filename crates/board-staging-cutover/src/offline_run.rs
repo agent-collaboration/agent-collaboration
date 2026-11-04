@@ -133,41 +133,16 @@ impl OfflineRunPlan {
         host: &mut OfflineHost,
         project: &PlannedProject,
     ) -> Result<PreparedProjectBundle, ProjectBundleError> {
-        crate::bundle_files::owned_directory(&self.bundle_parent, true)?;
-        let parent = std::fs::canonicalize(&self.bundle_parent)?;
-        let path = parent.join(format!(
-            "{}-{}",
-            self.run_id,
-            project.selected.project.as_str()
-        ));
+        let path = self.planned_bundle_path(project)?;
         if !path.try_exists()? {
             return PreparedProjectBundle::prepare(
                 host,
                 project.selected.clone(),
                 self.preparation(project),
-                &parent,
+                path.parent().ok_or(ProjectBundleError::InvalidArtifact)?,
             )
             .await;
         }
-        let bundle = PreparedProjectBundle::open(&path)?;
-        let manifest = bundle.manifest();
-        let selected = &manifest.source.selected;
-        if manifest.run_id != self.run_id
-            || manifest.target_origin != self.target.origin().ascii_serialization()
-            || manifest.fleet != project.fleet
-            || manifest.claim_request != project.claim_request
-            || manifest.canary_request != project.canary_request
-            || selected.project != project.selected.project
-            || selected.peer != project.selected.peer
-            || selected.file_epoch != project.selected.file_epoch
-            || manifest.source_directory
-                != host
-                    .collaboration_directory()
-                    .join("projects")
-                    .join(selected.project.as_str())
-        {
-            return Err(ProjectBundleError::InvalidArtifact);
-        }
-        Ok(bundle)
+        self.reopen_planned_bundle(project, host.collaboration_directory())
     }
 }
