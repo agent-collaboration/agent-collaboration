@@ -7,6 +7,11 @@ use session_event_model::{PromptContent, ProviderSubmission, SkillSourceError, S
 pub struct StandardAcpBehavior;
 
 impl ProviderBehavior for StandardAcpBehavior {
+    fn initialization_authentication(
+        &self,
+    ) -> acp_client_runtime::ProviderInitializationAuthentication {
+        acp_client_runtime::ProviderInitializationAuthentication::NotRequested
+    }
     fn can_reuse_setting_confirmation(
         &self,
         _kind: acp_client_runtime::ProviderSettingKind,

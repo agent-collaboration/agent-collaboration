@@ -6,6 +6,14 @@ use session_event_model::{
 };
 
 #[test]
+fn initialization_authentication_standard_runtime_does_not_guess_a_method() {
+    assert_eq!(
+        StandardAcpBehavior.initialization_authentication(),
+        acp_client_runtime::ProviderInitializationAuthentication::NotRequested
+    );
+}
+
+#[test]
 fn standard_preserves_ordinary_content_and_refuses_unestablished_effects() {
     let behavior: &dyn ProviderBehavior = &StandardAcpBehavior;
     let content = vec![

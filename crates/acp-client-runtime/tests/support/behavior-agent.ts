@@ -1,9 +1,20 @@
 import { appendFileSync, writeFileSync } from "node:fs";
 import { AcpExchange } from "../../../../verification/fixtures/acp-exchange.ts";
 import { field } from "../../../../verification/exact-json.ts";
+import { requireArgument } from "../../../../verification/fixtures/acp-stdio.ts";
 const receipt = process.argv[2];
 if (!receipt) throw new Error("receipt path required");
 const compactCase = process.argv[3] ?? "manual";
+const primaryEnter = [
+  "primary-enter",
+  "primary-enter-select",
+  "primary-enter-select-offered",
+].includes(compactCase);
+// Host fixtures explicitly select Cursor authentication; direct runtime behaviors retain theirs.
+const authenticationMethod = process.argv[4] === undefined ? undefined : requireArgument(4);
+if (authenticationMethod !== undefined && authenticationMethod !== "cursor_login")
+  throw new Error("unsupported fixture authentication method");
+const requiresConnectionAuthentication = authenticationMethod !== undefined;
 writeFileSync(receipt, "");
 const agent = new AcpExchange();
 await agent.initialize("behavior-fixture", {
@@ -12,23 +23,32 @@ await agent.initialize("behavior-fixture", {
     promptCapabilities: { image: true },
     _meta: { steering: { supported: true } },
   },
+  ...(requiresConnectionAuthentication
+    ? { authMethods: [{ id: "cursor_login", name: "Cursor login" }] }
+    : {}),
 });
+if (requiresConnectionAuthentication) {
+  const authentication = await agent.read("authenticate");
+  if (field(authentication.params, "methodId") !== "cursor_login")
+    throw new Error("unexpected initialization authentication method");
+  agent.respond(authentication, {});
+}
 let sequence = 0;
 let held: Record<string, unknown> | undefined;
 let currentModel = "old";
-let currentEffort = compactCase === "primary-enter" ? "high" : "low";
+let currentEffort = primaryEnter ? "high" : "low";
 const savedEfforts = new Map([
   ["old", "high"],
   ["new", "low"],
 ]);
 function restoreSavedModelEffort(modelId: string): void {
-  if (compactCase !== "primary-enter") return;
+  if (!primaryEnter) return;
   const saved = savedEfforts.get(modelId);
   if (saved === undefined) throw new Error("saved model effort missing");
   currentEffort = saved;
 }
 function savePrimaryEnterState(): void {
-  if (compactCase === "primary-enter")
+  if (primaryEnter)
     writeFileSync(
       `${receipt}.state.json`,
       JSON.stringify({
@@ -56,9 +76,11 @@ function settingsOptions(): unknown[] {
       category: "thought_level",
       type: "select",
       currentValue: currentEffort,
-      options: (compactCase === "primary-enter" || currentModel === "new"
-        ? ["low", "high"]
-        : ["low"]
+      options: (compactCase === "primary-enter-select" && currentModel === "new"
+        ? ["low"]
+        : primaryEnter || currentModel === "new"
+          ? ["low", "high"]
+          : ["low"]
       ).map((value) => ({
         value,
         name: value,
@@ -93,9 +115,28 @@ for (;;) {
       });
       continue;
     }
-    if (compactCase === "primary-enter") {
+    if (primaryEnter) {
       agent.respond(request, {
-        models: ["old", "new"].map((value) => ({ value, name: value, configOptions: [] })),
+        models: ["old", "new"].map((value) => ({
+          value,
+          name: value,
+          configOptions:
+            compactCase === "primary-enter"
+              ? []
+              : [
+                  {
+                    id: "effort",
+                    name: "Effort",
+                    category: "thought_level",
+                    type: "select",
+                    currentValue: value === "old" ? "high" : "low",
+                    options: (value === "new" && compactCase === "primary-enter-select"
+                      ? ["low"]
+                      : ["low", "high"]
+                    ).map((effort) => ({ value: effort, name: effort })),
+                  },
+                ],
+        })),
       });
       continue;
     }
@@ -133,9 +174,10 @@ for (;;) {
   } else if (request.method === "session/new") {
     sequence += 1;
     const sessionId = `session-${sequence}`;
+    savePrimaryEnterState();
     agent.respond(request, {
       sessionId,
-      ...(["settings", "model-catalog", "held-model-catalog", "primary-enter"].includes(compactCase)
+      ...(["settings", "model-catalog", "held-model-catalog"].includes(compactCase) || primaryEnter
         ? { configOptions: settingsOptions() }
         : {}),
     });
@@ -148,7 +190,7 @@ for (;;) {
     );
   } else if (
     request.method === "session/set_config_option" &&
-    ["settings", "model-catalog", "held-model-catalog", "primary-enter"].includes(compactCase)
+    (["settings", "model-catalog", "held-model-catalog"].includes(compactCase) || primaryEnter)
   ) {
     appendFileSync(receipt, `${JSON.stringify(request)}\n`);
     const configId = field(params, "configId");
@@ -166,10 +208,11 @@ for (;;) {
       restoreSavedModelEffort(value);
     } else if (
       configId === "effort" &&
-      (value === "low" || (value === "high" && currentModel === "new"))
+      (value === "low" ||
+        (value === "high" && currentModel === "new" && compactCase !== "primary-enter-select"))
     ) {
       currentEffort = value;
-      if (compactCase === "primary-enter") savedEfforts.set(currentModel, value);
+      if (primaryEnter) savedEfforts.set(currentModel, value);
     } else throw new Error("unexpected or stale setting write");
     savePrimaryEnterState();
     agent.respond(request, { configOptions: settingsOptions() });

@@ -4,6 +4,9 @@ use super::{
     ThreadMethodError, Value, handle_app_server_request, handle_app_server_thread_request,
     handle_app_server_turn_request, historical_turns, json, thread_alias,
 };
+
+#[path = "native_settings_diagnostics.rs"]
+mod settings_diagnostics;
 pub(super) async fn handle_app_server_rpc(
     context: Arc<RouterSessionAppServerContext>,
     request: Value,
@@ -21,7 +24,14 @@ pub(super) async fn handle_app_server_rpc(
             .events
             .sessions(context.endpoint.clone())
             .await
-            .map_err(|_| AppServerConnectionError::HubUnavailable)?
+            .map_err(|_| {
+                settings_diagnostics::emit(
+                    &request,
+                    settings_diagnostics::Reply::DispatchUnavailable,
+                    &[],
+                );
+                AppServerConnectionError::HubUnavailable
+            })?
             .into_iter()
             .find(|summary| thread_alias(&summary.session) == thread_id)
             .map(|summary| summary.session);
@@ -29,10 +39,17 @@ pub(super) async fn handle_app_server_rpc(
             Some(session) => match context.model_catalog.read_models(session).await {
                 Ok(catalog) => catalog,
                 Err(error) => {
+                    let response =
+                        json!({"id":id,"error":{"code":-32000,"message":error.to_string()}});
+                    settings_diagnostics::emit(
+                        &request,
+                        settings_diagnostics::Reply::CatalogUnavailable(&response),
+                        &[],
+                    );
                     return Ok(HandledAppServerRequest {
                         binding_attempt: None,
                         method,
-                        response: json!({"id":id,"error":{"code":-32000,"message":error.to_string()}}),
+                        response,
                         post_response_frames: Vec::new(),
                         session_attachment: None,
                     });
@@ -111,13 +128,8 @@ pub(super) async fn handle_app_server_rpc(
         let trust_lookup = context.project_trust.clone();
         let id = id.clone();
         tokio::task::spawn_blocking(move || {
-            handle_app_server_request(
-                id,
-                "config/read",
-                &params,
-                &catalog,
-                trust_lookup.as_deref(),
-            )
+            // config/read never resolves a Session catalogue above.
+            handle_app_server_request(id, "config/read", &params, &[], trust_lookup.as_deref())
         })
         .await
         .map_err(|_| AppServerConnectionError::RequestWorkerUnavailable)?
@@ -223,6 +235,11 @@ pub(super) async fn handle_app_server_rpc(
         }
         session_attachment = Some((session, attachment));
     }
+    settings_diagnostics::emit(
+        &request,
+        settings_diagnostics::Reply::Response(&response),
+        &catalog,
+    );
     Ok(HandledAppServerRequest {
         binding_attempt: None,
         method,

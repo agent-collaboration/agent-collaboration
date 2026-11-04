@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { field } from "../exact-json.ts";
 import { AcpExchange } from "./acp-exchange.ts";
 import { requireArgument } from "./acp-stdio.ts";
 
@@ -8,7 +9,11 @@ agent.respond(await agent.read(), {
   protocolVersion: 1,
   agentCapabilities: { loadSession: true },
   agentInfo: { name: "error-fixture", version: "1" },
+  authMethods: [{ id: "cursor_login", name: "Cursor login" }],
 });
+const authentication = await agent.read("authenticate");
+assert.equal(field(authentication.params, "methodId"), "cursor_login");
+agent.respond(authentication, {});
 for (;;) {
   const request = await agent.readRequest();
   if (request === undefined || request.method === "exit") break;

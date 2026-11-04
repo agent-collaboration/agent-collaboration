@@ -8,6 +8,9 @@ struct LiteralBehavior {
 }
 
 impl ProviderBehavior for LiteralBehavior {
+    fn initialization_authentication(&self) -> super::ProviderInitializationAuthentication {
+        super::ProviderInitializationAuthentication::NotRequested
+    }
     fn can_reuse_setting_confirmation(&self, _kind: crate::ProviderSettingKind) -> bool {
         false
     }

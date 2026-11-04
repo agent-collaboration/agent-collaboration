@@ -31,6 +31,8 @@ const baselineSchema = z.object({
     files: z.record(z.string(), z.string()).optional(),
   }),
 });
+// original/originalSHA256 retain historical port provenance; expected is the
+// reviewed current wire contract, including explicitly adopted protocol changes.
 const packedRows = new TextDecoder("utf-8", { fatal: true })
   .decode(readFileSync(new URL("./baselines/embedded-acp.jsonl", import.meta.url)))
   .trimEnd()
@@ -56,7 +58,7 @@ for (const { name, source } of packedRows.toSorted((left, right) =>
   } catch (error) {
     throw new Error(`Invalid fixture ${name}`, { cause: error });
   }
-  test(`embedded ACP port matches original wire and receipt bytes: ${name} ${fixture.target}`, (): void => {
+  test(`embedded ACP fixture matches declared wire and receipt bytes: ${name} ${fixture.target}`, (): void => {
     const root = createFixtureDirectory("embedded-acp");
     const receipt = join(root, "receipt.json");
     try {

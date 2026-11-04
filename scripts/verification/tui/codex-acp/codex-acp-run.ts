@@ -31,14 +31,20 @@ import { gridLines } from '../terminal/terminal-grid.ts';
 import type { TerminalGrid } from '../terminal/terminal-grid.ts';
 import { renderOriginal } from '../terminal/terminal-original.ts';
 import { qualifyTerminal } from '../terminal/terminal-qualification.ts';
+import { settleWholeRunFrames } from './codex-acp-frame-observation.ts';
 import {
 	codexInformationCommandSchema,
 	informationJourney,
 } from './codex-acp-information-scenes.ts';
-import { codexMenuKeySchema, modelJourney } from './codex-acp-model-scenes.ts';
+import {
+	codexMenuKeySchema,
+	codexSavedDefaultMessage,
+	modelJourney,
+} from './codex-acp-model-scenes.ts';
 import { codexOrdinaryPromptSchema, promptJourney } from './codex-acp-prompt-scenes.ts';
 import { refreshJourney } from './codex-acp-refresh-scenes.ts';
 import {
+	CODEX_0_165_TEXT,
 	CODEX_QUIT_STEP,
 	UI_CHECKPOINT_MS,
 	codexFixtureTitleSchema,
@@ -117,30 +123,44 @@ export const codexAcpRunPlanSchema = z
 			}),
 			// The refreshed catalogue page and stale bootstrap rows from the actual bound and unbound
 			// model/list, the selected model row and optional effort row, the apply, and its text.
-			z.strictObject({
-				kind: z.literal('model'),
-				provider: providerSchema,
-				catalogue_page: z.array(z.string().min(1)).min(1).max(8),
-				stale_rows: z.array(z.string().min(1)),
-				model_navigation: z.array(codexMenuKeySchema),
-				target: z.strictObject({
-					display_name: z.string().min(1),
-					number: z.number().int().positive(),
-					is_current: z.boolean(),
-				}),
-				effort: z
-					.strictObject({
-						navigation: z.array(codexMenuKeySchema),
-						value: z.string().min(1),
+			z
+				.strictObject({
+					kind: z.literal('model'),
+					provider: providerSchema,
+					catalogue_page: z.array(z.string().min(1)).min(1).max(8),
+					stale_rows: z.array(z.string().min(1)),
+					model_navigation: z.array(codexMenuKeySchema),
+					target: z.strictObject({
+						display_name: z.string().min(1),
 						number: z.number().int().positive(),
-						is_default: z.boolean(),
 						is_current: z.boolean(),
-					})
-					.nullable(),
-				apply: z.enum(['session', 'default']),
-				expected_outcome: z.array(z.string().min(1)).min(1),
-				outcome_deadline_ms: z.number().int().positive().max(600_000),
-			}),
+					}),
+					effort: z
+						.strictObject({
+							navigation: z.array(codexMenuKeySchema),
+							value: z.string().min(1),
+							number: z.number().int().positive(),
+							is_default: z.boolean(),
+							is_current: z.boolean(),
+						})
+						.nullable(),
+					apply: z.enum(['session', 'default']),
+					// `session`: the declared outcome fragments. `default`: none; the outcome is the
+					// regular success cell for `saved_default`, the values the action saves.
+					expected_outcome: z.array(z.string().min(1)).default([]),
+					saved_default: z
+						.strictObject({ model: z.string().min(1), effort: z.string().min(1) })
+						.nullable()
+						.default(null),
+					outcome_deadline_ms: z.number().int().positive().max(600_000),
+				})
+				.refine(
+					(model) =>
+						model.apply === 'session'
+							? model.expected_outcome.length > 0 && model.saved_default === null
+							: model.expected_outcome.length === 0 && model.saved_default !== null,
+					'a session apply declares its outcome; a default apply declares only what it saves',
+				),
 			// Diagnostic rename probe, not a delivery gate: a harmless fixture title and the endpoint's
 			// declared refusal text (first entry is the error cell's leading text; each fits one row).
 			z.strictObject({
@@ -244,6 +264,13 @@ export function codexJourneyFor(plan: CodexAcpRunPlan): CodexJourney {
 			completion: journey.completion,
 			replyDeadlineMs: journey.reply_deadline_ms,
 		});
+	// The success cell must fit one grid row at this viewport, or its whole line cannot be read.
+	if (
+		journey.saved_default !== null &&
+		`${CODEX_0_165_TEXT.infoPrefix}${codexSavedDefaultMessage(journey.saved_default)}`.length >
+			plan.target.viewport.columns
+	)
+		throw new Error('the saved-default success cell would wrap at this viewport');
 	return modelJourney({
 		provider: journey.provider,
 		cataloguePage: journey.catalogue_page,
@@ -266,6 +293,7 @@ export function codexJourneyFor(plan: CodexAcpRunPlan): CodexJourney {
 					},
 		apply: journey.apply,
 		expectedOutcome: journey.expected_outcome,
+		savedDefault: journey.saved_default,
 		outcomeDeadlineMs: journey.outcome_deadline_ms,
 	});
 }
@@ -471,7 +499,17 @@ export async function runCodexAcp(plan: CodexAcpRunPlan): Promise<void> {
 		observed = await driveCodexJourney(driver, journey, plan.keys, record, routeBaseline);
 		requireCheckpointSequence(observed, journey);
 		await exitCodex(driver, plan.keys);
+		// The PTY has ended: every byte of the run is retained, so every completed frame can be
+		// inspected, not only the checkpoint frames.
+		const liveLines = gridLines(driver.grid());
 		if ((await driver.finish()) !== 0) throw new Error('Codex ACP driver failed');
+		await settleWholeRunFrames({
+			bytes: driver.bytes(),
+			resizes: driver.resizeHistory(),
+			liveLines,
+			policy: journey.whole_run_errors ?? 'record',
+			output: plan.output,
+		});
 	} finally {
 		await driver.stop();
 	}

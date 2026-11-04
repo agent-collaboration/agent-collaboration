@@ -15,11 +15,38 @@ const MODEL_APPLY_ACTION: Record<CodexModelApply, CodexAction> = {
 	// session and writes no config ("Model changed to … for this session only",
 	// app/model_defaults.rs:19-118; a refusal is "Failed to update thread settings: …").
 	session: { kind: 'text', text: 's' },
-	// The row's primary action also saves a default: "Model changed to … for this conversation",
-	// or "Failed to save default model: …" with the endpoint's refusal
-	// (app/event_dispatch.rs:2337-2357).
+	// A plain row's primary action updates the model and effort, then PersistModelSelection saves
+	// them as a default (model_popups.rs:323-333). Success alone shows the regular info cell
+	// codexSavedDefaultMessage builds; a refusal is "Failed to save default model: …"
+	// (app/event_dispatch.rs:2563-2595). "… for this conversation" belongs only to the advanced
+	// Max/Ultra path (event_dispatch.rs:2308-2358), which this journey refuses.
 	default: { kind: 'key', key: 'Enter' },
 };
+
+/** The native model and effort values PersistModelSelection saves on a plain row's Enter. */
+export interface CodexSavedDefault {
+	// The native model/list row's model ID (model_popups.rs model_for_action), not its display name.
+	readonly model: string;
+	// The native effort value the action carries: the chosen popup row, or the model's only plain
+	// effort (or its default when it lists none) when no popup opens (model_popups.rs:478-530).
+	readonly effort: string;
+}
+
+// Printable ASCII without spaces: the info cell's width is then its length, so the viewport check
+// is exact, and no value can smuggle a second word or a suffix into the message.
+const NATIVE_VALUE = /^[\x21-\x7e]+$/u;
+
+/**
+ * The regular success cell after a saved default, as Codex 0.165 formats it
+ * (app/event_dispatch.rs:2575-2584 with config_persistence.rs:1036-1047): the model ID, then the
+ * effort's wire value, "default" for `none`, and no effort at all for a `codex-auto-` model.
+ */
+export function codexSavedDefaultMessage(saved: CodexSavedDefault): string {
+	if (!NATIVE_VALUE.test(saved.model) || !NATIVE_VALUE.test(saved.effort))
+		throw new Error('saved model and effort must be native printable values');
+	if (saved.model.startsWith('codex-auto-')) return `Model changed to ${saved.model}`;
+	return `Model changed to ${saved.model} ${saved.effort === 'none' ? 'default' : saved.effort}`;
+}
 
 /** Keys that only move a menu selection; the journey sends no other key while choosing. */
 export const codexMenuKeySchema = z.strictObject({
@@ -78,7 +105,10 @@ export interface ModelJourneyInput {
 	// Null when the model has one plain effort choice or none, which applies without a popup.
 	readonly effort: CodexEffortStep | null;
 	readonly apply: CodexModelApply;
+	// `session` only: the declared outcome fragments, success or refusal.
 	readonly expectedOutcome: readonly string[];
+	// `default` only: what the action saves; its success cell is the whole outcome.
+	readonly savedDefault: CodexSavedDefault | null;
 	readonly outcomeDeadlineMs: number;
 }
 
@@ -93,15 +123,36 @@ function selectedRow(row: CodexMenuRow): NonNullable<CodexCheckpoint['selected_m
  * After each declared batch of menu keys, its final selection is proved by the selected numbered
  * row (list_selection_view.rs:742-791) before the next step's key; rows passed on the way are not
  * observed. A model with several plain efforts opens "Select Reasoning Level for <name>"; one
- * plain effort or none applies directly (model_popups.rs open_reasoning_popup). The outcome is the
- * declared text with no model or reasoning popup left open. The effective model and effort are
- * decided by the same-session observer.
+ * plain effort or none applies directly (model_popups.rs open_reasoning_popup). A session apply
+ * ends on the declared text; a default apply ends on exactly one regular success cell for the
+ * saved values, with no error cell, and no earlier step may already show that text. Either way no
+ * model or reasoning popup is left open. The effective model and effort are decided by the
+ * same-session observer, never by this cell.
  */
 export function modelJourney(input: ModelJourneyInput): CodexJourney {
 	if (input.cataloguePage.length === 0)
 		throw new Error('model journey needs the declared catalogue page');
 	if (input.effort !== null && ['max', 'ultra'].includes(input.effort.value))
 		throw new Error('advanced efforts sit behind "More reasoning…" and are outside this journey');
+	if (
+		input.apply === 'session' &&
+		(input.savedDefault !== null || input.expectedOutcome.length === 0)
+	)
+		throw new Error('a session apply declares its outcome text and saves no default');
+	if (
+		input.apply === 'default' &&
+		(input.savedDefault === null || input.expectedOutcome.length > 0)
+	)
+		throw new Error('a default apply declares only the saved model and effort');
+	if (
+		input.savedDefault !== null &&
+		input.effort !== null &&
+		input.savedDefault.effort !== input.effort.value
+	)
+		throw new Error('the saved effort must be the chosen effort row');
+	const saved = input.savedDefault === null ? null : codexSavedDefaultMessage(input.savedDefault);
+	// Before the apply key, the success text must not already be on screen.
+	const stale = saved === null ? [] : [saved];
 	const header = CODEX_0_165_TEXT.modelPopupHeader;
 	const targetRow = selectedRow({
 		...input.target,
@@ -111,7 +162,7 @@ export function modelJourney(input: ModelJourneyInput): CodexJourney {
 	const catalogueReady: CodexCheckpoint = {
 		scene: 'model-catalogue-ready',
 		require: [header, ...input.cataloguePage],
-		forbid: [...input.staleRows],
+		forbid: [...input.staleRows, ...stale],
 		deadline_ms: UI_CHECKPOINT_MS,
 		...(input.modelNavigation.length === 0 ? { selected_menu_row: targetRow } : {}),
 	};
@@ -121,7 +172,7 @@ export function modelJourney(input: ModelJourneyInput): CodexJourney {
 			checkpoint: {
 				scene: 'model-command-ready',
 				require: [CODEX_0_165_TEXT.modelCommandRow],
-				forbid: [],
+				forbid: [...stale],
 				deadline_ms: UI_CHECKPOINT_MS,
 			},
 		},
@@ -133,7 +184,7 @@ export function modelJourney(input: ModelJourneyInput): CodexJourney {
 			checkpoint: {
 				scene: 'model-row-selected',
 				require: [header],
-				forbid: [...input.staleRows],
+				forbid: [...input.staleRows, ...stale],
 				deadline_ms: UI_CHECKPOINT_MS,
 				selected_menu_row: targetRow,
 			},
@@ -146,7 +197,7 @@ export function modelJourney(input: ModelJourneyInput): CodexJourney {
 			checkpoint: {
 				scene: 'reasoning-popup-open',
 				require: [effortHeader],
-				forbid: [],
+				forbid: [...stale],
 				deadline_ms: UI_CHECKPOINT_MS,
 				...(input.effort.navigation.length === 0 ? { selected_menu_row: effortRow } : {}),
 			},
@@ -157,23 +208,34 @@ export function modelJourney(input: ModelJourneyInput): CodexJourney {
 				checkpoint: {
 					scene: 'effort-selected',
 					require: [effortHeader],
-					forbid: [],
+					forbid: [...stale],
 					deadline_ms: UI_CHECKPOINT_MS,
 					selected_menu_row: effortRow,
 				},
 			});
 	}
+	const popups = [CODEX_0_165_TEXT.modelPopupHeader, CODEX_0_165_TEXT.effortPopupTitle];
 	steps.push({
 		actions: [MODEL_APPLY_ACTION[input.apply]],
-		checkpoint: {
-			scene: 'model-applied',
-			require: [...input.expectedOutcome],
-			forbid: [CODEX_0_165_TEXT.modelPopupHeader, CODEX_0_165_TEXT.effortPopupTitle],
-			deadline_ms: input.outcomeDeadlineMs,
-		},
+		checkpoint:
+			saved === null
+				? {
+						scene: 'model-applied',
+						require: [...input.expectedOutcome],
+						forbid: popups,
+						deadline_ms: input.outcomeDeadlineMs,
+					}
+				: {
+						scene: 'model-applied',
+						require: [saved],
+						forbid: [...popups, CODEX_0_165_TEXT.errorPrefix],
+						deadline_ms: input.outcomeDeadlineMs,
+						info_line: saved,
+					},
 	});
 	return codexJourneySchema.parse({
 		name: `codex-acp-j2-${input.provider}-model-${input.apply}`,
 		steps,
+		...(saved === null ? {} : { whole_run_errors: 'forbid' }),
 	});
 }

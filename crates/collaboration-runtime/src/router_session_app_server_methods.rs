@@ -80,6 +80,11 @@ pub(super) fn handle_app_server_request(
             Some(json!({"config":{"projects":projects},"origins":{},"layers":layers}))
         }
         "config/batchWrite" | "config/write" => {
+            if method == "config/batchWrite"
+                && let Some(receipt) = model_defaults::model_default_save_receipt(params)
+            {
+                return json!({"id":id,"result":receipt});
+            }
             let trust_only =
                 match method {
                     "config/batchWrite" => params
@@ -111,6 +116,9 @@ pub(super) fn handle_app_server_request(
         None => json!({"id":id,"error":{"code":-32601,"message":"Method not found"}}),
     }
 }
+
+#[path = "native_model_defaults.rs"]
+mod model_defaults;
 
 fn is_project_trust_edit(edit: &Value) -> bool {
     let Some(project_key) = edit

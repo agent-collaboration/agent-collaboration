@@ -14,6 +14,13 @@ use std::collections::{HashMap, HashSet};
 pub struct CursorAcpBehavior;
 
 impl ProviderBehavior for CursorAcpBehavior {
+    fn initialization_authentication(
+        &self,
+    ) -> acp_client_runtime::ProviderInitializationAuthentication {
+        acp_client_runtime::ProviderInitializationAuthentication::RequiredAgentMethod {
+            method_id: "cursor_login",
+        }
+    }
     fn can_reuse_setting_confirmation(
         &self,
         kind: acp_client_runtime::ProviderSettingKind,
