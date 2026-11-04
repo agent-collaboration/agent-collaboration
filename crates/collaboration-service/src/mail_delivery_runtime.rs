@@ -104,6 +104,60 @@ pub struct MailDeliveryRuntime {
 }
 
 impl MailDeliveryRuntime {
+    /// Join due library removal tasks before acknowledging a debug Host clock step.
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    pub async fn runtime_test_run_due_record_removals(&self) -> Result<(), StoreError> {
+        use durable_steps::{
+            Task,
+            storage::{JournalStorage, OperationExecution},
+        };
+        let now = self.host.now();
+        let removals = self
+            .store
+            .transaction(move |scope| {
+                Box::pin(async move {
+                    let mut removals = Vec::new();
+                    // Include leased operations: another runner may already own a due
+                    // removal. Its real completion, rather than a yielded pass, is owed.
+                    for operation in scope.due(SyncTime::from_unix_millis(i64::MAX)).await? {
+                        let Some(record) = scope.operation(operation).await? else {
+                            continue;
+                        };
+                        if record.kind != RemoveMailRecord::KIND {
+                            continue;
+                        }
+                        if let OperationExecution::Running {
+                            input,
+                            next_attempt_at,
+                            ..
+                        } = record.execution
+                            && next_attempt_at <= now
+                        {
+                            let item: ItemId =
+                                serde_json::from_slice(&input).map_err(StoreError::backend)?;
+                            removals.push((record.request_key, item));
+                        }
+                    }
+                    Ok(removals)
+                })
+            })
+            .await?;
+        for (request, item) in removals {
+            let status = self
+                .engine
+                .start_and_settle::<RemoveMailRecord>(&request, item)
+                .await
+                .map_err(StoreError::backend)?;
+            if !matches!(status.state, OperationState::Completed { .. }) {
+                return Err(StoreError::backend(
+                    "due mail record removal did not complete",
+                ));
+            }
+        }
+        // The same Host clock also determines every other mail task's due time.
+        self.host.wake_at(now).await.map_err(StoreError::backend)
+    }
+
     #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
     pub async fn runtime_test_has_local_cancel_delivery(
         &self,

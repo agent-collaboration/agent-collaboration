@@ -46,6 +46,8 @@ pub use external_provider_supervisor::{
 #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
 mod debug_inbox_limit;
 #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+mod debug_mail_clock;
+#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
 mod debug_runtime_barrier;
 mod enrollment_reset;
 mod enrollment_session_transport;
