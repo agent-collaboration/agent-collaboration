@@ -15,14 +15,9 @@ permissions:
   contents: read
   actions: read
 
-# Four independent Linux jobs feed the existing validation gate. Light static
-# checks overlap serial Cargo work; feature-specific E2E binaries keep their
-# own target and runner instead of competing with workspace tests.
-#
-#   static ─┐
-#   wasm ───┤
-#   test ───┼─► validated
-#   e2e ────┘
+# Static checks, Worker conformance, workspace tests and E2E each report
+# their result. Light static checks overlap serial Cargo work; feature-specific
+# E2E binaries keep their own runner instead of competing with workspace tests.
 #
 # Every job installs all rust-toolchain.toml components up front: otherwise
 # parallel background cargo steps race rustup's on-demand component download.
@@ -43,6 +38,16 @@ jobs:
       CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v5
+      # Clippy, SQLx metadata checks, native/wasm builds and feature variants
+      # share target/ and outgrow runner disk. Remove preinstalled SDKs unused here.
+      - name: Free runner disk space
+        background: true
+        shell: bash
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/microsoft /opt/google
+          sudo docker image prune --all --force > /dev/null
+          df -h /
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -110,10 +115,10 @@ jobs:
           pnpm --dir scripts/verification/tui lint
           pnpm --dir scripts/verification/tui format:check
           pnpm --dir scripts/verification/tui test
-      - name: Test workflow timing parser
-        run: bash scripts/tests/test_workflow_timing.sh
       - name: Test main cache pruning
         run: bash scripts/tests/test_main_cache_pruning.sh
+      - name: Wait for runner disk cleanup
+        wait-all:
       - name: Check Rust formatting
         id: format
         background: true
@@ -162,10 +167,11 @@ jobs:
           install_root="${RUNNER_TEMP}/codex-router-cli-all-features-install"
           # Keep installation-shape assertions on the dev build. The release
           # workflow owns optimized production builds, signing and packaging.
-          cargo install --debug --path crates/codex-router-cli --all-features --root "${install_root}"
+          cargo install --debug --target-dir target --path crates/codex-router-cli --all-features --root "${install_root}"
           test -x "${install_root}/bin/codex-router"
           test "$(find "${install_root}/bin" -maxdepth 1 -type f | wc -l | tr -d ' ')" = "1"
           cargo build -p codex-router-quota-reset-test-harness --bin codex-router-quota-reset-test-harness
+          df -h /
       - name: Measure pinned tool cache footprint
         run: du -sb tmp/rust-tools
       - name: Wait for checks
@@ -204,6 +210,7 @@ jobs:
       # feature sets, which together outgrow the runner's free disk. Remove
       # preinstalled SDKs this job never uses.
       - name: Free runner disk space
+        background: true
         shell: bash
         run: |
           df -h /
@@ -266,15 +273,16 @@ jobs:
         uses: ./.github/actions/install-ci-tools
         with:
           cache-hit: ${{ steps.rust_tools.outputs.cache-hit }}
-      # Compile every test binary once, then run the suites in parallel from
-      # the built artifacts so they don't contend for cargo's build lock. Each
-      # build uses exactly its run step's package selection and features, so
-      # the run reuses these artifacts instead of relinking them.
+      - name: Wait for runner disk cleanup
+        wait-all:
+      # Compile every test binary once, then run workspace and quota tests from
+      # the built artifacts so they do not contend for Cargo's build lock.
+      # Keep each build selection and feature set identical to its run.
       # Real Host, importer and forwarding-timer roots run in e2e below.
       # Keep the build/run exclusions and slower-job inventory identical.
       - name: Build test binaries
         run: |
-          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))' --no-run
+          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not((package(=agent-collaboration) & binary(=e2e)) | (package(=board-legacy-upgrade) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/)))' --no-run
           df -h /
       - name: Build quota-reset test binaries
         if: github.event_name != 'pull_request' || steps.quota_scope.outputs.changed == 'true'
@@ -289,13 +297,13 @@ jobs:
         run: |
           # Exercise private fixture setup under the ordinary Unix mask.
           umask 022
-          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))'
+          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not((package(=agent-collaboration) & binary(=e2e)) | (package(=board-legacy-upgrade) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/)))'
       - name: Wait for tests
         wait-all:
       - name: Test isolated default Router port cutover
         # Keep the same opt-in case, with a per-test elapsed status as well as
         # its uncaptured CLI proof. The default profile adds no CI deadline.
-        run: cargo nextest run --locked --profile default --status-level all --final-status-level all -p codex-router-cli --features keychain-test-support --test default_router_port_cutover --run-ignored only --no-capture
+        run: cargo nextest run --locked --profile default --status-level all --final-status-level all -p codex-router-cli --features keychain-test-support --test e2e --run-ignored only --no-capture
       - name: Save pinned Rust tools
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.rust_tools.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
@@ -362,15 +370,15 @@ jobs:
           cargo build --locked -p board-legacy-upgrade --bin codex-router-board-upgrade
       - name: Build E2E test binaries
         run: |
-          cargo nextest run --locked --profile ci --success-output final -p agent-collaboration --all-features --test board_records_e2e --test board_central_e2e --test local_mail_e2e --test board_takeover_e2e --test messaging_rules_e2e --test installation_directory_e2e --test mail_reconcile_e2e --test mail_retirement_e2e --test-threads 1 --color never --status-level all --final-status-level all --no-run
-          cargo nextest run --locked --profile ci -p board-legacy-upgrade --test upgrade_binary_e2e --test-threads 1 --color never --status-level all --final-status-level all --no-run
-          cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test fleet_client_cache --test forwarded_posts --test forwarding_real_timer --test mailbox_rules --test-threads 1 --color never --status-level all --final-status-level all --no-run
+          cargo nextest run --locked --profile ci --success-output final -p agent-collaboration --all-features --test e2e --test-threads 1 --color never --status-level all --final-status-level all --no-run
+          cargo nextest run --locked --profile ci -p board-legacy-upgrade --test e2e --test-threads 1 --color never --status-level all --final-status-level all --no-run
+          cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test e2e --test-threads 1 --color never --status-level all --final-status-level all --no-run
       - name: Run the deterministic local process journeys
         run: |
           set -o pipefail
-          cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test fleet_client_cache --test forwarded_posts --test forwarding_real_timer --test mailbox_rules --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee "$CODEX_ROUTER_E2E_PARENT/nextest.log"
-          cargo nextest run --locked --profile ci --success-output final -p agent-collaboration --all-features --test board_records_e2e --test board_central_e2e --test local_mail_e2e --test board_takeover_e2e --test messaging_rules_e2e --test installation_directory_e2e --test mail_reconcile_e2e --test mail_retirement_e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee -a "$CODEX_ROUTER_E2E_PARENT/nextest.log"
-          cargo nextest run --locked --profile ci -p board-legacy-upgrade --test upgrade_binary_e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee -a "$CODEX_ROUTER_E2E_PARENT/nextest.log"
+          cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee "$CODEX_ROUTER_E2E_PARENT/nextest.log"
+          cargo nextest run --locked --profile ci --success-output final -p agent-collaboration --all-features --test e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee -a "$CODEX_ROUTER_E2E_PARENT/nextest.log"
+          cargo nextest run --locked --profile ci -p board-legacy-upgrade --test e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee -a "$CODEX_ROUTER_E2E_PARENT/nextest.log"
           if grep -Eq '^[[:space:]]*LEAK[[:space:]]' "$CODEX_ROUTER_E2E_PARENT/nextest.log"; then
             echo "End-to-end child lifecycle leak detected" >&2
             exit 1
@@ -516,7 +524,7 @@ jobs:
         working-directory: release-source
         run: |
           set -euo pipefail
-          cargo test --locked --release -p acp-client-runtime --test provider_transport_idle \
+          cargo test --locked --release -p acp-client-runtime --test integration \
             --no-run --message-format=json --timings > "$RUNNER_TEMP/transport-build.jsonl"
           cargo build --locked --release -p collaboration-protocol --example export_protocol_types --timings
       - name: Build release binaries
@@ -550,30 +558,3 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/tooling/prune-main-caches.sh --apply
-
-  validated:
-    name: Validate Rust workspace
-    if: always()
-    needs: [static, wasm, test, e2e]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - name: Report workflow step and test timings
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: scripts/tooling/report-workflow-timings.sh "$GITHUB_RUN_ID" "$RUNNER_TEMP/workflow-report"
-      - name: Retain workflow timing inventory
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ci-timing-inventory
-          path: |
-            ${{ runner.temp }}/workflow-report/*.tsv
-            ${{ runner.temp }}/workflow-report/jobs.json
-            ${{ runner.temp }}/workflow-report/summary.md
-      - name: Require every validation job
-        run: |
-          for result in "${{ needs.static.result }}" "${{ needs.wasm.result }}" "${{ needs.test.result }}" "${{ needs.e2e.result }}"; do
-            test "${result}" = "success"
-          done

@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "collaboration-central-tokio"
 version.workspace = true
 edition.workspace = true
@@ -79,4 +80,13 @@ required-features = ["conformance"]
 
 [[example]]
 name = "composed_scope_workerd"
+required-features = ["conformance"]
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"
+
+[[test]]
+name = "e2e"
+path = "tests/e2e/main.rs"
 required-features = ["conformance"]

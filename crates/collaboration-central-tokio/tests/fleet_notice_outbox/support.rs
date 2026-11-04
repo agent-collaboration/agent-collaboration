@@ -19,9 +19,8 @@ use std::{
         atomic::{AtomicBool, AtomicI64, Ordering},
     },
 };
-#[path = "fault_store.rs"]
-mod fault_store;
-pub use fault_store::{FaultHost, FaultStore};
+pub type FaultHost = crate::fleet_fault_store::FaultHost<Io>;
+pub type FaultStore = crate::fleet_fault_store::FaultStore<Io>;
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 pub type Native = TokioObject<CoreHost<Io>>;
 pub const SERVICE: &str = "550e8400-e29b-41d4-a716-446655440497";

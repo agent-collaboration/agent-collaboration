@@ -209,7 +209,10 @@ pub(super) async fn run_update_with_blocked_installer_case()
     let updater_command = ChildCommandSpec::new(current_executable)
         .with_arguments([
             "--exact",
-            "changed_update_installer_barrier_entrypoint",
+            &crate::child_test_selector(
+                module_path!(),
+                "changed_update_installer_barrier_entrypoint",
+            ),
             "--nocapture",
         ])
         .with_environment("CODEX_HOST_UPDATE_INSTALLER_STARTED", &installer_started)
@@ -370,6 +373,8 @@ pub(super) fn install_updater_fixture(
     executable: &Path,
     mode: UpdateFixtureMode,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let child_selector =
+        crate::child_test_selector(module_path!(), "update_matrix_app_server_child_entrypoint");
     let action = match mode {
         UpdateFixtureMode::NoChange => "exit 0",
         UpdateFixtureMode::Failure => "exit 9",
@@ -378,14 +383,16 @@ pub(super) fn install_updater_fixture(
     std::fs::write(
         executable,
         format!(
-            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'codex-cli 1.2.3'; exit 0; fi\nprintf '%s %s\\n' \"$0\" \"$1\" > \"$0.log\"\nif [ \"$1\" = \"update\" ]; then {action}; fi\nexec \"$CODEX_HOST_UPDATE_TEST_BINARY\" --exact update_matrix_app_server_child_entrypoint --nocapture\n"
+            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'codex-cli 1.2.3'; exit 0; fi\nprintf '%s %s\\n' \"$0\" \"$1\" > \"$0.log\"\nif [ \"$1\" = \"update\" ]; then {action}; fi\nexec \"$CODEX_HOST_UPDATE_TEST_BINARY\" --exact {child_selector} --nocapture\n"
         ),
     )?;
     std::fs::set_permissions(executable, std::fs::Permissions::from_mode(0o700))?;
     if matches!(mode, UpdateFixtureMode::Changed) {
         std::fs::write(
             executable.with_extension("replacement"),
-            b"#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'codex-cli 1.2.3'; exit 0; fi\nexec \"$CODEX_HOST_UPDATE_TEST_BINARY\" --exact update_matrix_app_server_child_entrypoint --nocapture\nchanged-content\n",
+            format!(
+                "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'codex-cli 1.2.3'; exit 0; fi\nexec \"$CODEX_HOST_UPDATE_TEST_BINARY\" --exact {child_selector} --nocapture\nchanged-content\n"
+            ),
         )?;
     }
     Ok(())

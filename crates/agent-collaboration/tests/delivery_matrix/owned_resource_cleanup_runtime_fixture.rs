@@ -1,7 +1,7 @@
 //! Real local Runtime/client/store fixture; the existing PeerFixture owns its own lifetime.
-use crate::owned_resource_cleanup::readback::CleanupReadback;
-use crate::settled_creation::settled_creation;
-use crate::{
+use crate::push_delivery_matrix::owned_resource_cleanup::readback::CleanupReadback;
+use crate::push_delivery_matrix::settled_creation::settled_creation;
+use crate::push_delivery_matrix::{
     owned_resources::OwnedMatrixResources, peer_fixture::PeerFixture, proof_context::ProofResult,
 };
 use automation_storage::AutomationStore;

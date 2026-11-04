@@ -28,7 +28,12 @@ const HOST_ROOT_ENV: &str = "CODEX_HOST_PRIVATE_REGISTRY_TEST_ROOT";
 const ROUTER_ADDRESS_ENV: &str = "CODEX_HOST_PRIVATE_REGISTRY_ROUTER_ADDRESS";
 const PEER_SESSION: &str = "runtime-private-registry-peer";
 const PEER_TOKEN: &str = "0123456789abcdef0123456789abcdef";
-const HOST_TEST: &str = "runtime_peer_registry::private_registry_host_child_entrypoint";
+fn host_test_selector() -> String {
+    crate::child_test_selector(
+        module_path!(),
+        "runtime_peer_registry::private_registry_host_child_entrypoint",
+    )
+}
 const WAIT: Duration = Duration::from_secs(20);
 
 #[derive(Debug)]
@@ -80,7 +85,10 @@ async fn private_registry_host_child_entrypoint() -> TestResult {
     let command = ChildCommandSpec::new(managed.clone())
         .with_arguments([
             "--exact",
-            "runtime_native_app_server_child_entrypoint",
+            &crate::child_test_selector(
+                module_path!(),
+                "runtime_native_app_server_child_entrypoint",
+            ),
             "--nocapture",
         ])
         .with_environment(
@@ -274,7 +282,7 @@ impl RegistryCase {
             .address();
         self.host = Some(
             Command::new(std::env::current_exe()?)
-                .args(["--exact", HOST_TEST, "--nocapture"])
+                .args(["--exact", &host_test_selector(), "--nocapture"])
                 .env(HOST_ROOT_ENV, &root)
                 .env(ROUTER_ADDRESS_ENV, address.to_string())
                 .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))

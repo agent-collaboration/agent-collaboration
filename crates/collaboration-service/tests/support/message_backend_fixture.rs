@@ -1,0 +1,619 @@
+//! Real API fixture with scripted native responses; never a live model backend.
+use automation_storage::AutomationStore;
+use codex_acp_adapter::{ApprovalBroker, ApprovalRoute};
+use collaboration_client::{
+    ClientError, MessageSendError, MessageSendRequest, PublicMessageContent,
+};
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_protocol::{
+    CodexGeneration, DeliveryReceipt, EndpointDescription, MessageDelivery, PushMessageSendResult,
+    PushRecord, SessionRef,
+};
+use collaboration_runtime::CodexAppServerDeliveryRoute;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::ServiceInteractionBroker;
+use collaboration_service::ApplicationFixture;
+
+use collaboration_runtime::SessionDeliveryRouter;
+
+use crate::native_mail_owner;
+use crate::served_api;
+use futures_util::{SinkExt, StreamExt};
+use serde_json::{Value, json};
+use std::{collections::BTreeMap, path::Path, sync::Arc, time::Duration};
+use tokio::sync::Mutex;
+use tokio_tungstenite::tungstenite::Message;
+
+pub enum NativeReply {
+    Result(Value),
+    NotificationThenResult { notification: Value, result: Value },
+    Reject,
+    RejectWith { code: i64, message: &'static str },
+    Disconnect,
+}
+pub struct NativeStep {
+    pub method: &'static str,
+    pub reply: NativeReply,
+}
+pub struct MessageScenario {
+    pub delivery: MessageDelivery,
+    pub steps: Vec<NativeStep>,
+}
+type FixtureError = Box<dyn std::error::Error + Send + Sync>;
+pub struct RecordedMessageObservation {
+    pub result: Result<PushMessageSendResult, MessageSendError>,
+    pub requests: Vec<Value>,
+    pub stored: Option<PushRecord>,
+    pub target: SessionRef,
+    pub generation: CodexGeneration,
+    pub shown: Value,
+}
+
+pub async fn exercise(
+    scenario: MessageScenario,
+) -> Result<(Result<DeliveryReceipt, ClientError>, Vec<Value>), FixtureError> {
+    let observation = exercise_message(scenario, FixtureTarget::Running).await?;
+    let result = observation
+        .result
+        .map(|push| push.receipt)
+        .map_err(|error| match error {
+            MessageSendError::Preparation(source) | MessageSendError::Submission { source, .. } => {
+                *source
+            }
+        });
+    Ok((result, observation.requests))
+}
+
+pub async fn exercise_recorded_loaded(
+    delivery: MessageDelivery,
+) -> Result<RecordedMessageObservation, FixtureError> {
+    exercise_message(
+        MessageScenario {
+            delivery,
+            steps: Vec::new(),
+        },
+        FixtureTarget::Recorded,
+    )
+    .await
+}
+
+pub async fn exercise_unloaded(
+    scenario: MessageScenario,
+) -> Result<RecordedMessageObservation, FixtureError> {
+    exercise_message(scenario, FixtureTarget::Unloaded).await
+}
+
+pub async fn exercise_recorded_extra_root(
+    delivery: MessageDelivery,
+    unloaded: bool,
+) -> Result<RecordedMessageObservation, FixtureError> {
+    exercise_message(
+        MessageScenario {
+            delivery,
+            steps: Vec::new(),
+        },
+        FixtureTarget::RecordedExtraRoot { unloaded },
+    )
+    .await
+}
+
+pub async fn exercise_rejected(
+    scenario: MessageScenario,
+) -> Result<RecordedMessageObservation, FixtureError> {
+    exercise_message(scenario, FixtureTarget::Running).await
+}
+
+pub async fn exercise_invalid_recorded_resume() -> Result<RecordedMessageObservation, FixtureError>
+{
+    exercise_message(
+        MessageScenario {
+            delivery: MessageDelivery::Auto,
+            steps: Vec::new(),
+        },
+        FixtureTarget::InvalidRecordedResume,
+    )
+    .await
+}
+
+pub async fn exercise_missing_recorded_cwd() -> Result<RecordedMessageObservation, FixtureError> {
+    exercise_message(
+        MessageScenario {
+            delivery: MessageDelivery::Auto,
+            steps: Vec::new(),
+        },
+        FixtureTarget::MissingRecordedCwd,
+    )
+    .await
+}
+
+enum FixtureTarget {
+    Running,
+    Unloaded,
+    Recorded,
+    RecordedExtraRoot { unloaded: bool },
+    InvalidRecordedResume,
+    MissingRecordedCwd,
+}
+
+async fn exercise_message(
+    mut scenario: MessageScenario,
+    fixture_target: FixtureTarget,
+) -> Result<RecordedMessageObservation, FixtureError> {
+    let unloaded = matches!(
+        fixture_target,
+        FixtureTarget::Unloaded | FixtureTarget::RecordedExtraRoot { unloaded: true }
+    );
+    let recorded = matches!(
+        fixture_target,
+        FixtureTarget::Recorded
+            | FixtureTarget::RecordedExtraRoot { .. }
+            | FixtureTarget::InvalidRecordedResume
+            | FixtureTarget::MissingRecordedCwd
+    );
+    let report_early_refusal = matches!(fixture_target, FixtureTarget::RecordedExtraRoot { .. });
+    // Private RAII ownership keeps the native socket short and cleans broker/store sidecars too.
+    let directory = tempfile::Builder::new().prefix("mf-").tempdir()?;
+    let root = directory.path().to_path_buf();
+    let socket_path = root.join("n.sock");
+    let listener = tokio::net::UnixListener::bind(&socket_path)?;
+    let service_id = "00000000-0000-4000-8000-000000000001";
+    let generation: CodexGeneration =
+        serde_json::from_value(json!({"serviceEpoch":service_id,"generation":1}))?;
+    let target: SessionRef = serde_json::from_value(
+        json!({"endpoint":{"serviceId":service_id,"endpointId":"codex-local"},"sessionId":"target"}),
+    )?;
+    let mut definitions = serde_json::Map::new();
+    for name in [
+        "ThreadRead",
+        "ThreadResume",
+        "ThreadStart",
+        "ThreadTurnsList",
+        "ThreadLoadedList",
+        "TurnStart",
+        "TurnSteer",
+        "TurnInterrupt",
+        "ThreadQueueAdd",
+    ] {
+        definitions.insert(format!("{name}Params"), json!({"type":"object"}));
+        definitions.insert(format!("{name}Response"), json!({"type":"object"}));
+    }
+    let bundle = codex_native_integration::NativeSchemaBundle::from_documents(BTreeMap::from([(
+        "codex_app_server_protocol.schemas.json".to_owned(),
+        serde_json::to_vec(&json!({"definitions":{"v2":definitions}}))?,
+    )]))?;
+    let schemas = Arc::new(codex_native_integration::NativePayloadSchemas::from_bundle(
+        &bundle,
+    )?);
+    let description: EndpointDescription = serde_json::from_value(
+        json!({"endpoint":target.endpoint,"label":"Fixture","availability":{"state":"available","observedAt":"2026-09-06T00:00:00Z"},"channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"codex-native.sock","schemaDigest":schemas.schema_digest(),"generation":generation}]}),
+    )?;
+    let gate = NativeGenerationGate::default();
+    gate.activate(generation.clone(), socket_path.clone(), Some(schemas))?;
+    let native_backend = NativeControlBackend {
+        codex_home: root.clone(),
+        endpoint: target.endpoint.clone(),
+        gate,
+    };
+    let automation_store = Arc::new(Mutex::new(
+        AutomationStore::open(&root.join("automation.sqlite")).await?,
+    ));
+    let broker = if recorded {
+        let scratch = root.join("scratch");
+        tokio::fs::create_dir(&scratch).await?;
+        let interaction_store = Arc::new(
+            interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
+        );
+        let broker = ServiceInteractionBroker::load(
+            service_id.to_owned().try_into()?,
+            native_backend.clone(),
+            Arc::clone(&interaction_store),
+        )
+        .await?;
+        broker
+            .register_route(ApprovalRoute {
+                thread_id: "target".into(),
+                created_by: target.clone(),
+                approver: target.clone(),
+                access: collaboration_protocol::RouterAccess::WorkspaceWrite,
+                scratch_path: scratch.to_string_lossy().into_owned(),
+                root_message_id: None,
+            })
+            .await?;
+        drop(broker);
+        drop(interaction_store);
+        let interaction_store = Arc::new(
+            interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
+        );
+        let broker = ServiceInteractionBroker::load(
+            service_id.to_owned().try_into()?,
+            native_backend.clone(),
+            interaction_store,
+        )
+        .await?;
+        let fixture_mode = if matches!(
+            fixture_target,
+            FixtureTarget::Recorded | FixtureTarget::RecordedExtraRoot { .. }
+        ) {
+            scenario.delivery
+        } else {
+            MessageDelivery::Queue
+        };
+        scenario.steps = recorded_loaded_steps(fixture_mode, &root, &scratch)?;
+        match fixture_target {
+            FixtureTarget::RecordedExtraRoot { unloaded } => {
+                if let NativeReply::Result(response) = &mut scenario
+                    .steps
+                    .get_mut(1)
+                    .ok_or("recorded fixture omitted resume")?
+                    .reply
+                {
+                    response
+                        .pointer_mut("/sandbox/writableRoots")
+                        .and_then(Value::as_array_mut)
+                        .ok_or("roots missing")?
+                        .push(json!("/desktop/visualizations/thread"));
+                }
+                if unloaded
+                    && let NativeReply::Result(response) = &mut scenario
+                        .steps
+                        .first_mut()
+                        .ok_or("recorded fixture omitted read")?
+                        .reply
+                {
+                    *response
+                        .pointer_mut("/thread/status/type")
+                        .ok_or("recorded fixture omitted status")? = json!("notLoaded");
+                }
+            }
+            FixtureTarget::InvalidRecordedResume => {
+                scenario.steps.truncate(2);
+                scenario
+                    .steps
+                    .get_mut(1)
+                    .ok_or("recorded fixture omitted resume")?
+                    .reply = NativeReply::Result(
+                    json!({"thread":{"id":"target","cwd":"/wrong/project"},"cwd":root,"sandbox":{"type":"readOnly"}}),
+                );
+            }
+            FixtureTarget::MissingRecordedCwd => {
+                scenario.steps.truncate(1);
+                *scenario
+                    .steps
+                    .first_mut()
+                    .ok_or("recorded fixture omitted read")? = read("idle");
+            }
+            _ => {}
+        }
+        Some(broker)
+    } else {
+        None
+    };
+    let identity = ApplicationFixture::new(service_id, service_id)?
+        .with_automation_store(Arc::clone(&automation_store))
+        .with_endpoints(vec![description])?
+        .with_native_backend(native_backend.clone())?;
+    let route = CodexAppServerDeliveryRoute::new(
+        service_id.to_owned().try_into()?,
+        identity.endpoint_directory(),
+        native_backend,
+        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
+    );
+    let route: Arc<dyn SessionDeliveryRoute> = Arc::new(match &broker {
+        Some(broker) => route.with_approval_broker(broker),
+        None => route,
+    });
+    let delivery: Arc<dyn SessionMessageDelivery> =
+        Arc::new(SessionDeliveryRouter::new(vec![route]));
+    let presence = Arc::new(FixturePresence(if unloaded {
+        collaboration_contracts::TargetPresence::Wakeable
+    } else {
+        collaboration_contracts::TargetPresence::Running
+    }));
+    let machine_identity = collaboration_contracts::MachineIdentity::new(
+        service_id.to_owned().try_into()?,
+        Some("message-backend-fixture"),
+    )?;
+    let clock: Arc<dyn collaboration_service::SubscriptionClock> =
+        Arc::new(collaboration_service::SystemSubscriptionClock);
+    let interactions = match &broker {
+        Some(broker) => broker.interaction_store(),
+        None => Arc::new(
+            interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
+        ),
+    };
+    let owner = collaboration_service::SubscriptionDeliveryService::new(
+        collaboration_service::SubscriptionDeliveryServiceProps {
+            board_availability: collaboration_service::BoardAvailability::Unavailable,
+            push_store: interactions.clone(),
+            delivery: delivery.clone(),
+            presence: presence.clone(),
+            machine_identity: machine_identity.clone(),
+            clock: clock.clone(),
+        },
+    );
+    owner.start().await?;
+    let identity = identity
+        .with_session_delivery(delivery)
+        .with_subscription_delivery_service(owner.clone(), presence.clone());
+
+    let (identity, native_mail) = native_mail_owner::NativeMailOwner::start(
+        identity,
+        fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,
+        collaboration_service::MailPushDeliveryProps {
+            interactions,
+            actors: owner.clone(),
+            presence,
+            machine: machine_identity,
+            clock,
+        },
+    )?;
+    let served = served_api::ServedApi::start(identity)?;
+    let backend = tokio::spawn(async move {
+        let (stream, _) = tokio::time::timeout(Duration::from_secs(3), listener.accept()).await??;
+        let mut socket = tokio_tungstenite::accept_async(stream).await?;
+        let init: Value = serde_json::from_str(
+            socket
+                .next()
+                .await
+                .ok_or("missing native frame")??
+                .to_text()?,
+        )?;
+        assert_eq!(
+            init.get("method").and_then(Value::as_str),
+            Some("initialize")
+        );
+        socket
+            .send(Message::Text(
+                json!({"id":init.get("id").ok_or("missing initialization ID")?,"result":{}})
+                    .to_string()
+                    .into(),
+            ))
+            .await?;
+        let initialized: Value = serde_json::from_str(
+            socket
+                .next()
+                .await
+                .ok_or("missing native frame")??
+                .to_text()?,
+        )?;
+        assert_eq!(
+            initialized.get("method").and_then(Value::as_str),
+            Some("initialized")
+        );
+        let mut requests = Vec::new();
+        for step in scenario.steps {
+            let frame = match tokio::time::timeout(Duration::from_secs(2), socket.next()).await? {
+                Some(Ok(frame)) => frame,
+                _ if report_early_refusal => return Ok(requests),
+                _ => return Err("native socket closed before expected operation".into()),
+            };
+            if report_early_refusal && frame.is_close() {
+                return Ok(requests);
+            }
+            let request: Value = serde_json::from_str(frame.to_text()?)?;
+            assert_eq!(
+                request.get("method").and_then(Value::as_str),
+                Some(step.method)
+            );
+            let response = match step.reply {
+                NativeReply::Result(result) => {
+                    json!({"id":request.get("id").ok_or("missing request ID")?,"result":result})
+                }
+                NativeReply::NotificationThenResult {
+                    notification,
+                    result,
+                } => {
+                    socket
+                        .send(Message::Text(notification.to_string().into()))
+                        .await?;
+                    json!({"id":request.get("id").ok_or("missing request ID")?,"result":result})
+                }
+                NativeReply::Reject => {
+                    json!({"id":request.get("id").ok_or("missing request ID")?,"error":{"code":-32602,"message":"Fixture rejection"}})
+                }
+                NativeReply::RejectWith { code, message } => {
+                    json!({"id":request.get("id").ok_or("missing request ID")?,"error":{"code":code,"message":message}})
+                }
+                NativeReply::Disconnect => {
+                    requests.push(request);
+                    return Ok::<_, FixtureError>(requests);
+                }
+            };
+            requests.push(request);
+            socket
+                .send(Message::Text(response.to_string().into()))
+                .await?;
+        }
+        // No fallback, extra mutation or retry may follow the scripted terminal response.
+        if let Some(Ok(frame)) = tokio::time::timeout(Duration::from_secs(2), socket.next()).await?
+        {
+            assert!(frame.is_close(), "unexpected extra native frame: {frame}");
+        }
+        Ok::<_, FixtureError>(requests)
+    });
+    let client = served.client("message-proof").await?;
+    let result = tokio::time::timeout(
+        Duration::from_secs(3),
+        client.send_message(MessageSendRequest {
+            item_id: None,
+            target: target.clone(),
+            generation_guard: (!unloaded).then(|| generation.clone()),
+            message: PublicMessageContent::Agent {
+                sender: target.clone(),
+                text: "A finding".to_owned().try_into()?,
+            },
+            delivery: scenario.delivery,
+        }),
+    )
+    .await?;
+    let result: Result<Result<PushMessageSendResult, MessageSendError>, FixtureError> = match result
+    {
+        Ok(collaboration_protocol::MessageSendResult::Local(push)) => Ok(Ok(push)),
+        Ok(collaboration_protocol::MessageSendResult::Queued { .. }) => {
+            Err("local native fixture returned remote custody".into())
+        }
+        Err(error) => Ok(Err(error)),
+    };
+    let push_id = native_mail
+        .interactions
+        .list_direct_message_inbox(&interaction_storage::PushInboxQuery {
+            target: target.clone(),
+            limit: 1,
+        })
+        .await?
+        .first()
+        .map(|record| record.push_id.clone());
+    let shown = match &push_id {
+        Some(push_id) => {
+            served
+                .call(
+                    "router_show",
+                    json!({"caller":target,"reference":push_id.as_str()}),
+                )
+                .await?
+        }
+        None => Value::Null,
+    };
+    drop(client);
+    served.stop().await?;
+    owner.shutdown().await;
+    drop(owner);
+    let requests = tokio::time::timeout(Duration::from_secs(5), backend).await??;
+    let stored = match push_id {
+        Some(push_id) => native_mail.interactions.get_push_record(&push_id).await,
+        None => Ok(None),
+    };
+    drop(broker);
+    native_mail.close().await?;
+    let automation_store = Arc::try_unwrap(automation_store)
+        .map_err(|_| std::io::Error::other("service retained automation store"))?
+        .into_inner();
+    automation_store.close().await?;
+    drop(directory);
+    Ok(RecordedMessageObservation {
+        result: result?,
+        requests: requests?,
+        stored: stored?,
+        target,
+        generation,
+        shown,
+    })
+}
+
+struct FixturePresence(collaboration_contracts::TargetPresence);
+
+impl collaboration_contracts::TargetPresenceProbe for FixturePresence {
+    fn presence(
+        &self,
+        _: &SessionRef,
+    ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::TargetPresence> {
+        Box::pin(async { Ok(self.0.clone()) })
+    }
+}
+
+pub fn read(status: &str) -> NativeStep {
+    NativeStep {
+        method: "thread/read",
+        reply: NativeReply::Result(json!({"thread":{"id":"target","status":{"type":status}}})),
+    }
+}
+pub fn outcome_data(result: Result<DeliveryReceipt, ClientError>) -> Result<Value, &'static str> {
+    match result {
+        Ok(receipt) => serde_json::to_value(receipt.outcome).map_err(|_| "invalid outcome"),
+        Err(_) => Err("expected a typed delivery outcome"),
+    }
+}
+
+/// Independent upstream-shaped reply: literal grants, never projected from production or RPC input.
+fn recorded_loaded_steps(
+    delivery: MessageDelivery,
+    root: &Path,
+    scratch: &Path,
+) -> Result<Vec<NativeStep>, FixtureError> {
+    let home = std::env::var("HOME")?;
+    let mut roots = vec![
+        std::fs::canonicalize(scratch)?
+            .to_string_lossy()
+            .into_owned(),
+    ];
+    for location in [
+        "Library/Caches",
+        ".cache",
+        "Library/pnpm",
+        ".local/share/pnpm",
+        ".local/state/pnpm",
+        ".pnpm-store",
+        ".npm",
+        ".yarn",
+        ".bun/install/cache",
+        ".cargo",
+        ".rustup",
+        "go/pkg",
+        ".gradle",
+        ".m2",
+        "Library/org.swift.swiftpm",
+        ".swiftpm",
+        "Library/Developer",
+        ".local/share/uv",
+        "Library/Application Support/uv",
+        ".local/share/mise",
+        ".local/state/mise",
+    ] {
+        let symlinked = Path::new(location)
+            .ancestors()
+            .filter(|part| !part.as_os_str().is_empty())
+            .any(|part| {
+                std::fs::symlink_metadata(Path::new(&home).join(part))
+                    .is_ok_and(|metadata| metadata.file_type().is_symlink())
+            });
+        if !symlinked {
+            roots.push(format!("{home}/{location}"));
+        }
+    }
+    let cwd = std::fs::canonicalize(root)?.to_string_lossy().into_owned();
+    let status = if delivery == MessageDelivery::Steer {
+        "active"
+    } else {
+        "idle"
+    };
+    let mut steps = vec![
+        NativeStep {
+            method: "thread/read",
+            reply: NativeReply::Result(json!({"thread":{
+            "id":"target","cwd":cwd,"status":{"type":status}}})),
+        },
+        NativeStep {
+            method: "thread/resume",
+            reply: NativeReply::Result(json!({
+                "thread":{"id":"target","cwd":cwd},"cwd":cwd,
+                "activePermissionProfile":{"id":"router-workspace-write"},
+                "sandbox":{"type":"workspaceWrite","networkAccess":true,"writableRoots":roots}
+            })),
+        },
+    ];
+    match delivery {
+        MessageDelivery::Queue => steps.push(NativeStep {
+            method: "thread/queue/add",
+            reply: NativeReply::Result(json!({"queuedSubmission":{"id":"recorded-queue-1"}})),
+        }),
+        MessageDelivery::Steer => steps.extend([
+            NativeStep {
+                method: "thread/turns/list",
+                reply: NativeReply::Result(json!({
+                "data":[{"id":"recorded-turn-1","status":"inProgress"}],
+                "nextCursor":null,"backwardsCursor":null})),
+            },
+            NativeStep {
+                method: "turn/steer",
+                reply: NativeReply::Result(json!({"turnId":"recorded-turn-1"})),
+            },
+        ]),
+        MessageDelivery::Auto => steps.push(NativeStep {
+            method: "turn/start",
+            reply: NativeReply::Result(json!({"turn":{"id":"recorded-auto-1"}})),
+        }),
+    }
+    Ok(steps)
+}

@@ -1,6 +1,6 @@
 //! Real native migration rollback, independent metadata reads and recovery.
 use super::{ConformanceResult, JwksFixtureServer, TokioServer, settings};
-use crate::copy_owner_scenarios::{OwnerClient, bookkeeping, no_failures};
+use crate::copy_owner_health::copy_owner_scenarios::{OwnerClient, bookkeeping, no_failures};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use sqlx_core::{

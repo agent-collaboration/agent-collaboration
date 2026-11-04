@@ -34,12 +34,7 @@ type Runtime = ObjectRuntime<
     NoObjectCalls,
 >;
 
-#[expect(
-    dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)]
-#[path = "../session_publication/support.rs"]
-mod session_fixture;
+use crate::session_publication_fixture as session_fixture;
 
 #[derive(Clone, Default)]
 struct NoObjectCalls(Arc<AtomicUsize>);

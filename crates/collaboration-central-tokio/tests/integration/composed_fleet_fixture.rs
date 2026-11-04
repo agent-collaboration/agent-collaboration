@@ -1,4 +1,5 @@
 //! Real Fleet and project owners with a manual injected clock and explicit alarm driving.
+use crate::fleet_fault_store as fault_store;
 use collaboration_central_core::{
     CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectRuntime, PlatformIo,
 };
@@ -19,8 +20,6 @@ use std::{
     },
     time::Duration,
 };
-#[path = "../fleet_notice_outbox/fault_store.rs"]
-mod fault_store;
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 pub const PROJECT: &str = "019f0000-0000-7000-8000-000000008199";
 pub const A: &str = "019f0000-0000-7000-8000-000000008111";
@@ -181,14 +180,14 @@ fn no_route() -> CallFailure {
 }
 type Native = TokioObject<CoreHost<Io>>;
 type NativeHost = TokioStorageHost<CoreHost<Io>>;
-type Host = fault_store::FaultHost;
+type Host = fault_store::FaultHost<Io>;
 type Fleet = ObjectRuntime<FleetKind, Host, Io>;
 type Copy = ObjectRuntime<CopyKind, NativeHost, Io>;
 pub struct Fixture {
     objects: ObjectStore<CoreHost<Io>>,
     pub store: Arc<Native>,
     pub host: Arc<NativeHost>,
-    pub faults: Arc<fault_store::FaultStore>,
+    pub faults: Arc<fault_store::FaultStore<Io>>,
     pub runtime: Arc<Fleet>,
     _project: Arc<Copy>,
     pub io: Io,

@@ -1,8 +1,8 @@
 //! `agent-sessions --provider claude` list and launch commands.
 
 use super::claude_terminal_launch::{
-    ClaudeTerminalAction, ClaudeTerminalRequest, RESUME_OVERRIDES_MESSAGE, prepare_claude_terminal,
-    run_claude_terminal,
+    ClaudeTerminalAction, ClaudeTerminalRequest, RESUME_OVERRIDES_MESSAGE, plan_claude_resume,
+    prepare_claude_terminal, run_claude_terminal,
 };
 use super::{
     SessionsCommand, SessionsCommandError, SessionsFormat, claude_launch_target::ClaudeLaunchTarget,
@@ -15,6 +15,8 @@ pub fn run_claude_sessions_command<W: Write>(
     service_directory: std::path::PathBuf,
     home_directory: Option<&std::path::Path>,
 ) -> Result<(), SessionsCommandError> {
+    super::session_command_options::validate_claude_command(&command)
+        .map_err(SessionsCommandError::ResumeSelection)?;
     let launch_target = ClaudeLaunchTarget::resolve_for_service(home_directory, service_directory)?;
     if command.list {
         return write_claude_session_listing(stdout, command, &launch_target);
@@ -25,18 +27,19 @@ pub fn run_claude_sessions_command<W: Write>(
             RESUME_OVERRIDES_MESSAGE.to_owned(),
         ));
     }
-    if command.dry_run {
-        let arguments = session_id.map_or_else(
-            || command.codex_args.clone(),
-            |session_id| launch_target.launch_arguments(Some(session_id), &[]),
-        );
-        return write_claude_dry_run(stdout, arguments.as_slice());
-    }
-
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .map_err(SessionsCommandError::Runtime)?;
+    if command.dry_run {
+        let arguments = match session_id {
+            Some(session_id) => runtime
+                .block_on(plan_claude_resume(&launch_target, session_id))?
+                .arguments(),
+            None => command.codex_args.clone(),
+        };
+        return write_claude_dry_run(stdout, &arguments);
+    }
     let environment = runtime.block_on(launch_target.routed_environment())?;
     let action = session_id.map_or(
         ClaudeTerminalAction::New {

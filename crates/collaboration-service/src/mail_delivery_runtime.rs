@@ -2,6 +2,7 @@
 use crate::MailPushDelivery;
 use crate::MailPushDeliveryProps;
 use crate::SubscriptionClock;
+use crate::subscription_delivery::SubscriptionRuntimeClock;
 use collaboration_contracts::LoadPolicy;
 use collaboration_contracts::RouterConsumerProtocol;
 use collaboration_contracts::RouterDeliveryTypes;
@@ -62,7 +63,7 @@ mod remote_status;
 pub(crate) use installation_directory::InstallationPeerResolutionError;
 pub use local_cancellation::LocalCancelReference;
 
-type MailHost = TokioHost<MailCallRouter, MailClock>;
+type MailHost = TokioHost<MailCallRouter, SubscriptionRuntimeClock>;
 type MailStore = InteractionAtomicStore<MailHost>;
 type MailDatabase = <TursoScope<'static, MailHost> as TransactionScope>::Database;
 type LocalMailTask = DeliverLocally<
@@ -100,13 +101,6 @@ pub struct MailDeliveryRuntime {
     service: message_board::ServiceId,
     clock: Arc<dyn SubscriptionClock>,
     session: Option<MailDeliverySession>,
-}
-
-struct MailClock(Arc<dyn SubscriptionClock>);
-impl Clock for MailClock {
-    fn now(&self) -> SyncTime {
-        SyncTime::from_unix_millis(self.0.now().timestamp_millis())
-    }
 }
 
 impl MailDeliveryRuntime {
@@ -251,7 +245,10 @@ impl MailDeliveryRuntime {
             config,
             session: session.clone(),
         });
-        let host = Arc::new(TokioHost::new(router.clone(), MailClock(clock.clone())));
+        let host = Arc::new(TokioHost::new(
+            router.clone(),
+            SubscriptionRuntimeClock(clock.clone()),
+        ));
         let store = Arc::new(InteractionAtomicStore::new(owner.clone(), host.clone()));
         router
             .store

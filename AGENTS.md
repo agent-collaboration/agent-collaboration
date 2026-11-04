@@ -15,6 +15,21 @@ After reducing cycles or their edges, update `architecture/module-cycle-baseline
 - Every identifier we generate is UUIDv7. Never UUIDv4.
 - Every table has a UUIDv7 primary key and `created_at` / `updated_at` timestamps, unless a really good reason is written next to the table. A key that is already UUIDv7 stays the key; any other key becomes a UNIQUE constraint; counters are ordinary columns.
 
+## Rust Test Layout
+
+- Colocate unit tests with their implementation in `*_test.rs` files.
+- Set `autotests = false`. Declare one nonempty integration target at
+  `tests/integration/main.rs` and one nonempty e2e target at `tests/e2e/main.rs`
+  when that kind of test exists. Do not add loose `tests/*.rs` targets or empty
+  aggregates.
+- Keep `tests/README.md` describing what each test folder covers.
+- Run integration tests under nextest, with one process per test.
+- Declare shared helpers once per aggregate; give each former test root its
+  own module namespace.
+- Derive self-reexec child selectors from `module_path!`.
+- A relaunched child test must fail loudly when its selector matches nothing,
+  using the child's actual success signal.
+
 ## Verification Tooling
 
 - Install tooling dependencies with `pnpm --dir verification install --frozen-lockfile`.

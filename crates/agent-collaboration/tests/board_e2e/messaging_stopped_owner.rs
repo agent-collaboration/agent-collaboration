@@ -39,6 +39,7 @@ pub async fn remove_faults(stopped: &StoppedHost) -> FixtureResult {
 }
 
 pub async fn delivery_rows(stopped: &StoppedHost) -> FixtureResult<Vec<DeliveryObservation>> {
+    let binding = sender_binding(stopped.directory())?;
     let mut connection = sqlx_turso::TursoConnectOptions::new()
         .filename(stopped.directory().join("interaction.sqlite"))
         .create_if_missing(false)
@@ -50,7 +51,8 @@ pub async fn delivery_rows(stopped: &StoppedHost) -> FixtureResult<Vec<DeliveryO
         let rows = fleet_sync_delivery::test_support::snapshot::<
             _,
             collaboration_contracts::RouterDeliveryTypes,
-        >(&mut TursoScope::new(&mut transaction, &SqlHost))
+            _,
+        >(&mut TursoScope::new(&mut transaction, &SqlHost), &binding)
         .await?;
         transaction.commit().await?;
         Ok(rows)
@@ -77,4 +79,21 @@ pub fn header(
     Ok(serde_json::from_str(
         row.content.as_deref().ok_or("custody header absent")?,
     )?)
+}
+
+pub fn sender_binding(
+    directory: &std::path::Path,
+) -> std::io::Result<collaboration_service::MachineSenderBinding> {
+    let service = collaboration_runtime::read_service_identity(directory)?
+        .ok_or_else(|| std::io::Error::other("stopped owner has no service identity"))?;
+    // The public peer loader creates only when absent. Require the existing file
+    // before calling it on this stopped owner so observation never mints an identity.
+    std::fs::symlink_metadata(directory.join("installation-peer.json"))?;
+    let peer = collaboration_runtime::load_installation_peer(directory)?;
+    Ok(collaboration_service::MachineSenderBinding::new(
+        String::from(service)
+            .try_into()
+            .map_err(std::io::Error::other)?,
+        peer,
+    ))
 }
