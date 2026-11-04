@@ -1,6 +1,7 @@
 //! The compiled staging helper's public process boundary.
 use board_staging_cutover::{OfflineHost, OfflineHostError, SelectedWriterFile};
 mod canary_proof;
+mod cross_machine_canary;
 #[path = "../../src/cutover_host_fixture.rs"]
 mod cutover_host_fixture;
 mod host_entrypoints;

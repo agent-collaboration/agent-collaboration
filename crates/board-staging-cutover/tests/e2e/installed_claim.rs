@@ -24,9 +24,16 @@ async fn ordinary_host_claim_preserves_an_emitted_intent_before_any_public_write
     cold_claim_case(SourceContents::EmittedIntent).await
 }
 
+#[tokio::test]
+async fn ordinary_host_cutover_canary_reaches_a_distinct_enrolled_host() -> TestResult {
+    cold_claim_case(SourceContents::EmittedIntentWithRemoteReadback).await
+}
+
+#[derive(Clone, Copy)]
 enum SourceContents {
     ProjectOnly,
     EmittedIntent,
+    EmittedIntentWithRemoteReadback,
 }
 
 async fn cold_claim_case(contents: SourceContents) -> TestResult {
@@ -41,7 +48,10 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
     let mut source = native_fixture(&fixture)
         .await
         .map_err(|e| std::io::Error::other(e.to_string()))?;
-    let pending = if matches!(contents, SourceContents::EmittedIntent) {
+    let pending = if matches!(
+        contents,
+        SourceContents::EmittedIntent | SourceContents::EmittedIntentWithRemoteReadback
+    ) {
         Some(super::pending_intent_fixture::add_pending_intent(&fixture, &mut source).await?)
     } else {
         None
@@ -214,6 +224,13 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
             let closed = installed.close().await;
             counts?;
             closed?;
+            drop(offline);
+            if matches!(contents, SourceContents::EmittedIntentWithRemoteReadback) {
+                super::cross_machine_canary::read_on_another_machine(
+                    &root, &fixture, &central, &bundle, head,
+                )
+                .await?;
+            }
         }
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }

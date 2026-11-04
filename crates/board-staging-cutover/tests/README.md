@@ -59,5 +59,12 @@ epoch-three source must refuse before writable admission, even while another
 retained reader holds the file. Takeover assigns its recipient directly, so
 these cases await its public writer view rather than issuing another Claim.
 
-Host lifecycle orchestration, the full process-crash matrix, cross-machine
-write, richer frozen mail/cancel state and staging corpus remain unverified.
+The canary readback case enrolls another actual isolated Host with no local
+project source. It checks that Host's distinct service identity, reads the same
+frozen canary body/request/cursor through the public protocol, and requires a
+Central read copy while e2 remains the writer. Selecting the live producer
+instead fails the identity check. Both Host/native lifecycles are joined. This
+is a local two-Host proof, with separate enrollments on one physical machine.
+
+Host lifecycle orchestration, the full process-crash matrix, richer frozen
+mail/cancel state, remote hardware and staging corpus remain unverified.
