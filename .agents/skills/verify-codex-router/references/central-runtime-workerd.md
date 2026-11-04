@@ -2,7 +2,7 @@
 
 This section retains the former wrapper’s Worker selectors, qualification evidence and coverage obligations. The wrapper retired in0.1.102; these selectors are historical, not current CLI flags. Use the retained Rust `composed_scope_workerd` and `session_scope_workerd` examples with CI’s pinned tools and explicit scenarios. Current TypeScript target declarations are in `verification/declaration.ts`. An obligation without a mapped retained case remains unavailable. See [central runtime](central-runtime.md) for current entries, native coverage and shared cleanup rules.
 
-D1 source mapping: Central `ad34f727f28d1e573fd7be74e8366cf88eb382e3` (including the retirement removal at `381326da8`). Fleet owns machine sessions, admission, lease state and mail outbox custody; Copy owns project storage. Historical selector names such as `owner-registry` do not name another physical object. Typed Submitter and D1 mail expiry/retention remain pending their combined library/Central pin; retained pre-cutover results do not qualify them.
+D1 source mapping: Central `ad34f727f28d1e573fd7be74e8366cf88eb382e3` (including the retirement removal at `381326da8`), with Fleet mail expiry built at `77957e00d828ea70ff22a603669630513777188f`. Fleet owns machine sessions, admission, lease state and mail outbox custody; Copy owns project storage. Historical selector names such as `owner-registry` do not name another physical object. Typed Submitter and D1 retention remain pending their combined library/Central pin; retained pre-cutover results do not qualify them.
 
 The default Worker selection is `composed-transactions` plus `composed-numeric`.
 Use repeated `--workerd-mode` flags for another explicit selection:
@@ -30,7 +30,7 @@ Use repeated `--workerd-mode` flags for another explicit selection:
 | `creation-gates` | The same entry; normal enrolled sessions, four creation-gate outcomes, same-attempt replay/reconnect/retry, first Copy piece and held Claim refusal; one grouped scenario |
 | `delivery-config` | The same entry with an explicit UUIDv7 relay after the mode; first/replay/update/completed readmission/replay return that relay; one grouped scenario |
 | `delivery-config-refusals` | The same entry without a relay argument; actual Worker missing relay field and malformed peer refusals; two groups |
-| `mailbox-deadline` | Retained selector spelling only; its helper still uses retired Fetch and sequence-bearing Sent. D1 expiry coverage is pending its pin; do not select this as Fleet Push expiry proof |
+| `fleet-mail-expiry` | The same normal-session entry, built at `77957e00d`; shared Native/Worker Fleet-clock oracle observes unsolicited Expired before recipient reconnect, exact later sentinel Push, and release of an unanswered Push waiter at its real reply deadline; one grouped result |
 | `installation-directory` | The same entry; multi-page normal-session ordering/cursor refusals and immutable revoked bindings with Submit refusal; three groups |
 | `fleet-notices` | The same entry; three admitted sessions, two reader installations, journaled Fleet hints through the real alarm/Delivery path and exact positioned notice readback; one grouped scenario |
 | `copy-owner` | The same entry; actual owner HTTP Health before initialization, shell storage bytes, empty Page, Repair response, machine refusal and minimal retired receipt; one grouped scenario |
@@ -68,6 +68,16 @@ claim inbox custody, payload release, Report or terminal status publication.
 sender Retire is a retired operation. Its surviving refusal/custody obligations
 are `integration::fleet_mail_query::retired_fetch_received_and_retire_requests_are_invalid_and_leave_custody_queryable`
 and the Fleet Query/Settle cases above; there is no `SENDER_RETIREMENT_RESULT` to require.
+
+`fleet-mail-expiry` hard-cuts the old `mailbox-deadline` selector; there is no alias.
+Require `FLEET_MAIL_EXPIRY_RESULT 1 passed; 0 failed; 0 ignored` and both case markers:
+`FLEET_MAIL_EXPIRY_CASE offline_Push_wait_Expired_before_recipient_reconnect passed`
+and `FLEET_MAIL_EXPIRY_CASE unanswered_Push_deadline_releases_its_waiter passed`.
+These come from `tests/support/fleet_mail_expiry_scenarios.rs` and the retained
+`session_scope_workerd` example's case-results module, not the compiled Worker
+bundle. This is one grouped scenario with two subcases. Its own result explicitly
+leaves owning reopen to Native component cases; source availability is not a
+new execution result or 60-day retention proof.
 
 For the seven session and five holder obligations, explicitly select
 `session-capabilities`, `session-failures` and `holder-lifecycle`. Decisions 604,
