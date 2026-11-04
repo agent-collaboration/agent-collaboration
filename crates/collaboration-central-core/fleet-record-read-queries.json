@@ -6,16 +6,11 @@
   "metadata": "fleet-record-read-query-metadata.json",
   "queries": [
     {
-      "name": "read_canonical_fleet_record",
-      "sql": "sql/fleet/read_canonical_fleet_record.sql",
-      "row": "StoredFleetRecord",
+      "name": "read_project_columns",
+      "sql": "sql/fleet/read_project_columns.sql",
+      "row": "StoredFleetProject",
       "result": "optional",
       "parameters": [
-        {
-          "name": "kind",
-          "kind": "text",
-          "nullable": false
-        },
         {
           "name": "record_id",
           "kind": "text",
@@ -203,7 +198,7 @@
     {
       "name": "list_board_projects",
       "sql": "sql/fleet/list_board_projects.sql",
-      "row": "StoredFleetRecord",
+      "row": "StoredFleetProject",
       "result": "many",
       "parameters": [
         {

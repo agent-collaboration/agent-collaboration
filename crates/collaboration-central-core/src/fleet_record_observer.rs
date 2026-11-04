@@ -37,6 +37,48 @@ where
         .map(|stored| stored.map(|value| value.record))
 }
 
+/// Read Fleet's committed Copy summary with its production decoder in this scope.
+pub async fn read_fleet_copy_summary_in_scope<S: TransactionScope>(
+    scope: &mut S,
+    database: fleet_sync_protocol::DatabaseId,
+) -> Result<Option<crate::CopyDirectorySummary>, StoreError>
+where
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    crate::generated_fleet_record_reads::read_directory_summary(scope, database.to_string())
+        .await
+        .map_err(StoreError::backend)?
+        .map(crate::fleet_copy_projection::decode)
+        .transpose()
+        .map(Option::flatten)
+}
+
+/// Observe the existing private lease wire shape through its production decoder.
+pub async fn read_fleet_lease_projection_in_scope<S: TransactionScope>(
+    scope: &mut S,
+    database: fleet_sync_protocol::DatabaseId,
+) -> Result<Option<String>, StoreError>
+where
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    let projection =
+        crate::generated_fleet_lease::read_directory_lease(scope, database.to_string())
+            .await
+            .map_err(StoreError::backend)?
+            .map(crate::fleet_lease_columns::decode)
+            .transpose()?
+            .flatten();
+    projection
+        .map(|value| serde_json::to_string(&value).map_err(StoreError::backend))
+        .transpose()
+}
+
 impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:

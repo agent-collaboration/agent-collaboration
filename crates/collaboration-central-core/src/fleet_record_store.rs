@@ -1,8 +1,7 @@
 //! Canonical Fleet records share the caller's already-open SQL transaction.
 
 use crate::{
-    fleet_record_codec::{self as codec, DecodedFleetRecord, FleetRecordHeader, corrupt},
-    generated_fleet_record_reads as reads, generated_fleet_record_writes as writes,
+    fleet_record_codec::{DecodedFleetRecord, FleetRecordHeader, corrupt},
     generated_statements,
 };
 use durable_steps::{StoreError, storage::TransactionScope};
@@ -52,16 +51,10 @@ where
                 record: Record::Request(entry),
                 import_digest: None,
             })
+    } else if reference.kind == RecordKind::Project {
+        crate::fleet_directory_store::read(scope, reference.id.as_str()).await?
     } else {
-        reads::read_canonical_fleet_record(
-            scope,
-            codec::kind_tag(reference.kind)?.into(),
-            reference.id.as_str().into(),
-        )
-        .await
-        .map_err(StoreError::backend)?
-        .map(codec::decode)
-        .transpose()?
+        return Err(corrupt("kind", "project-only record requested from Fleet"));
     };
     if result
         .as_ref()
@@ -113,20 +106,10 @@ where
     } else if let Record::Adr(adr) = record {
         crate::fleet_adr_store::put(scope, adr, &header, source.digest(), now, row_ids).await?;
     } else {
-        let payload = serde_json::to_string(record).map_err(StoreError::backend)?;
-        let time = header.router_time();
-        let basis = header.time_basis();
-        let installation = header.origin.installation.as_str().to_owned();
-        let machine = header.origin.machine.as_str().to_owned();
-        let digest = source.digest();
-        match record {
-            Record::DirectoryEntry(_) => {
-                writes::put_project(scope, payload, time, basis, installation, machine, digest)
-                    .await
-            }
-            _ => return Err(corrupt("kind", "ledger writes use the decision owner")),
-        }
-        .map_err(StoreError::backend)?;
+        let Record::DirectoryEntry(project) = record else {
+            return Err(corrupt("kind", "ledger writes use the decision owner"));
+        };
+        crate::fleet_directory_store::put(scope, project, &header, source.digest(), now).await?;
     }
     if let (RecordWriteSource::Imported(digest), Record::Workspace(value)) = (source, record) {
         for repository in &value.repositories {

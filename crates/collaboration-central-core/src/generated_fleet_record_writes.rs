@@ -7,12 +7,24 @@ use sqlx_core::{
 };
 pub(crate) fn put_project<S>(
     scope: &mut S,
-    payload: String,
+    project_id: String,
+    workspace_id: String,
+    board_id: String,
+    name: String,
+    actor_kind: String,
+    actor_human_id: Option<String>,
+    actor_service_id: Option<String>,
+    actor_endpoint_id: Option<String>,
+    actor_session_id: Option<String>,
+    actor_router_component: Option<String>,
+    request_id: Option<String>,
+    fleet_position: String,
     router_time: Option<String>,
     time_basis: String,
     origin_installation: String,
     origin_machine: String,
     import_digest: Option<String>,
+    created_at: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -25,24 +37,42 @@ where
             env!("CARGO_MANIFEST_DIR"),
             "/sql/fleet/put_project.sql"
         )))
-        .bind(payload)
+        .bind(project_id)
+        .bind(workspace_id)
+        .bind(board_id)
+        .bind(name)
+        .bind(actor_kind)
+        .bind(actor_human_id)
+        .bind(actor_service_id)
+        .bind(actor_endpoint_id)
+        .bind(actor_session_id)
+        .bind(actor_router_component)
+        .bind(request_id)
+        .bind(fleet_position)
         .bind(router_time)
         .bind(time_basis)
         .bind(origin_installation)
         .bind(origin_machine)
-        .bind(import_digest);
+        .bind(import_digest)
+        .bind(created_at);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
 }
 pub(crate) fn store_directory_summary<S>(
     scope: &mut S,
-    record: String,
+    copy_epoch: Option<String>,
+    copy_sequence: Option<String>,
+    copy_acked_at: Option<String>,
+    copy_latest_time_basis: Option<String>,
+    copy_latest_record_at: Option<String>,
+    now: String,
     project_id: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
     for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
@@ -50,7 +80,12 @@ where
             env!("CARGO_MANIFEST_DIR"),
             "/sql/fleet/store_directory_summary.sql"
         )))
-        .bind(record)
+        .bind(copy_epoch)
+        .bind(copy_sequence)
+        .bind(copy_acked_at)
+        .bind(copy_latest_time_basis)
+        .bind(copy_latest_record_at)
+        .bind(now)
         .bind(project_id);
         statement.execute(scope.executor()).await?;
         Ok(())

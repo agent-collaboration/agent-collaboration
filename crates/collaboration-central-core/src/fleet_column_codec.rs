@@ -59,6 +59,31 @@ where
     Ok(decoded)
 }
 
+pub(crate) fn decimal(value: &str, field: &str) -> Result<u64, StoreError> {
+    let decoded = value
+        .parse::<u64>()
+        .map_err(|error| corrupt(field, error))?;
+    if decoded.to_string() != value {
+        return Err(corrupt(field, "expected canonical unsigned decimal TEXT"));
+    }
+    Ok(decoded)
+}
+
+pub(crate) fn optional_millis(
+    value: Option<String>,
+    class: Option<String>,
+    field: &str,
+) -> Result<Option<i64>, StoreError> {
+    if value.is_none() && class.as_deref() == Some("null") {
+        return Ok(None);
+    }
+    crate::fleet_row_codec::check_millis(value.clone(), class, field)?;
+    required(value, field)?
+        .parse()
+        .map(Some)
+        .map_err(|error| corrupt(field, error))
+}
+
 /// The flat SQL representation is classified into RecordedActor before use.
 pub(crate) struct ActorColumns {
     pub kind: String,

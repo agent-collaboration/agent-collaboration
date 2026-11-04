@@ -12,7 +12,62 @@
       "result": "execute",
       "parameters": [
         {
-          "name": "payload",
+          "name": "project_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "workspace_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "board_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "actor_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "actor_human_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_service_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_endpoint_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_session_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_router_component",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "request_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "fleet_position",
           "kind": "text",
           "nullable": false
         },
@@ -40,6 +95,11 @@
           "name": "import_digest",
           "kind": "text",
           "nullable": true
+        },
+        {
+          "name": "created_at",
+          "kind": "text",
+          "nullable": false
         }
       ]
     },
@@ -49,7 +109,32 @@
       "result": "execute",
       "parameters": [
         {
-          "name": "record",
+          "name": "copy_epoch",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "copy_sequence",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "copy_acked_at",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "copy_latest_time_basis",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "copy_latest_record_at",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "now",
           "kind": "text",
           "nullable": false
         },

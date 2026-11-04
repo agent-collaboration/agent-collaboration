@@ -25,7 +25,82 @@
       "result": "execute",
       "parameters": [
         {
-          "name": "lease_projection",
+          "name": "lease_epoch",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_change",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_incarnation",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_changed_at",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_lifecycle_kind",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_origin_kind",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_origin_epoch",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_origin_sequence",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_import_digest",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_retiring_attempt_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_retired_at",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_holder_machine_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_holder_service_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_expires_at",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_digest",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "now",
           "kind": "text",
           "nullable": false
         },

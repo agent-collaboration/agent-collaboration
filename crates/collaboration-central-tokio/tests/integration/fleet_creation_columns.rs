@@ -89,7 +89,7 @@ async fn rejected_creation_has_no_directory_row_and_both_creation_bindings_survi
         .transaction(move |scope| {
             Box::pin(async move {
                 let row = query::<sqlx_turso::Turso>(
-                    "SELECT count(*) AS count FROM project_directory WHERE project_id=?",
+                    "SELECT count(*) AS count FROM fleet_project_directory WHERE project_id=?",
                 )
                 .bind(rejected_project.as_str())
                 .fetch_one(scope.executor())

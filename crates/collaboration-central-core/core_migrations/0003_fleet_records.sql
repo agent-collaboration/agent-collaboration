@@ -59,19 +59,28 @@ CREATE TABLE fleet_boards (
     UNIQUE(workspace_id,name),
     UNIQUE(board_id,workspace_id)
 );
-CREATE TABLE project_directory (
+CREATE TABLE fleet_project_directory (
     project_id TEXT NOT NULL PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES fleet_workspaces(workspace_id),
     board_id TEXT NOT NULL,
     name TEXT NOT NULL,
-    payload TEXT NOT NULL,
+    actor_kind TEXT NOT NULL,
+    actor_human_id TEXT,
+    actor_service_id TEXT,
+    actor_endpoint_id TEXT,
+    actor_session_id TEXT,
+    actor_router_component TEXT,
+    request_id TEXT,
+    fleet_position INTEGER NOT NULL,
     router_time TEXT,
     time_basis TEXT NOT NULL,
     origin_installation TEXT NOT NULL,
     origin_machine TEXT NOT NULL,
     import_digest TEXT,
-    UNIQUE(board_id, name),
-    FOREIGN KEY(board_id, workspace_id) REFERENCES fleet_boards(board_id, workspace_id)
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE(board_id,name),
+    FOREIGN KEY(board_id,workspace_id) REFERENCES fleet_boards(board_id,workspace_id)
 );
 CREATE TABLE fleet_workspace_adrs (
     adr_id TEXT NOT NULL PRIMARY KEY,

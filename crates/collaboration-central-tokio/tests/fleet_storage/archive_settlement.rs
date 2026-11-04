@@ -38,9 +38,10 @@ async fn inspect(fixture: &Fixture) -> TestResult<ArchiveState> {
             "created_at":row.try_get::<i64,_>("created_at").map_err(StoreError::backend)?,
             "updated_at":row.try_get::<i64,_>("updated_at").map_err(StoreError::backend)?,
         }))).collect::<Result<Vec<_>,_>>()?;
-        let row = query::<sqlx_turso::Turso>("SELECT d.lease_projection,r.state_kind,r.outcome FROM project_directory d LEFT JOIN lease_claim_reservations r ON r.project_id=d.project_id AND r.attempt_id=? WHERE d.project_id=?").bind(ATTEMPT).bind(PROJECT).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
+        let projection = collaboration_central_core::read_fleet_lease_projection_in_scope(scope,PROJECT.parse().map_err(StoreError::backend)?).await?;
+        let row = query::<sqlx_turso::Turso>("SELECT d.project_id,r.state_kind,r.outcome FROM fleet_project_directory d LEFT JOIN lease_claim_reservations r ON r.project_id=d.project_id AND r.attempt_id=? WHERE d.project_id=?").bind(ATTEMPT).bind(PROJECT).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
         let reservation = crate::typed_claim_observer::reservation_state(&row)?.map(|value|serde_json::from_value(value).map_err(StoreError::backend)).transpose()?;
-        Ok(ArchiveState { records, feed, ledgers, reports, projection:row.try_get("lease_projection").map_err(StoreError::backend)?,reservation })
+        Ok(ArchiveState { records, feed, ledgers, reports, projection,reservation })
     })).await?)
 }
 async fn board_write_fault(fixture: &Fixture, enabled: bool) -> TestResult {

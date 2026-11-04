@@ -1,7 +1,7 @@
 //! Read the directory projection that the Fleet's lease hook committed atomically.
 use crate::{
     ObjectHost,
-    fleet_record_codec::{corrupt, decode_json, required},
+    fleet_record_codec::corrupt,
     lease_projection::LeaseProjection,
     step_driver::{StepCallback, StepDriver, StepResult},
 };
@@ -90,10 +90,8 @@ where
             .await
             .map_err(StoreError::backend)?
             .ok_or_else(|| corrupt("lease.project", "directory entry is missing"))?;
-            let projection: LeaseProjection = decode_json(
-                &required(row.lease_projection, "lease.projection")?,
-                "lease.projection",
-            )?;
+            let projection = crate::fleet_lease_columns::decode(row)?
+                .ok_or_else(|| corrupt("lease.projection", "missing committed projection"))?;
             if projection.database() != self.database {
                 return Err(corrupt(
                     "lease.project",

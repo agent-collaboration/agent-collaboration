@@ -80,14 +80,19 @@ pub(super) async fn run(base_url: &str) -> ConformanceResult<()> {
         println!("CREATION_PUBLICATION_CASE normal_registration_reaches_directory_without_forced_alarm passed");
         let epoch=Epoch::new(1)?;
         let through=ReplicationPosition::new(epoch,CommitSequence::new(1));
+        let copy_now=RegistryTime("2026-10-19T23:59:59.123Z".parse()?);
+        pin_object_clock(base_url,ObjectAddress::Copy(database),copy_now).await?;
+        let latest_record_at=message_board::RecordTime::Router("2026-10-19T12:13:14.123456789Z".parse()?);
         let first_piece=Piece::<BoardAnnotation>::new(PieceContents {
             database,epoch,continues_from:ReplicationPosition::new(epoch,CommitSequence::new(0)),through,
-            transactions:vec![ReplicatedTransaction::SchemaStep {commit_id:CommitSequence::new(1),migration_version:1,statements:vec!["CREATE TABLE records(id TEXT NOT NULL PRIMARY KEY,label TEXT NOT NULL)".to_owned()]}],part:None,annotation:None,
+            transactions:vec![ReplicatedTransaction::SchemaStep {commit_id:CommitSequence::new(1),migration_version:1,statements:vec!["CREATE TABLE records(id TEXT NOT NULL PRIMARY KEY,label TEXT NOT NULL)".to_owned()]}],part:None,annotation:Some(BoardAnnotation::ProjectSummary {latest_record_at}),
         })?;
         if !matches!(operation_answer(&mut creator.socket,OperationRequest::Replication(ReplicationRequest::Piece(first_piece))).await?,OperationAnswer::Replication(ReplicationAnswer::Applied {through:actual}) if actual==through) {
             return Err("normal Fleet then Register did not admit the first real Copy piece".into());
         }
         println!("CREATION_PIECE_CASE registered_first_epoch_accepts_its_first_piece passed");
+        await_directory_copy(&mut creator.socket,database,fleet_admission::CopyMetadata {latest_record_at,as_of:fleet_admission::CopyMetadataAsOf {position:through,acked_at:fleet_sync_protocol::SyncTime::from_unix_millis(copy_now.0.timestamp_millis())}}).await?;
+        println!("CREATION_COPY_PROJECTION_CASE exact_precise_summary_position_and_own_copy_ack_clock passed");
         match operation_answer(&mut other.socket,OperationRequest::Lease(LeaseRequest::Claim {
             attempt:RequestId::new(Uuid::now_v7())?,database,
         })).await? {
@@ -253,11 +258,18 @@ pub(super) async fn register(
     }
 }
 pub(super) async fn pin_registry_clock(base_url: &str, now: RegistryTime) -> ConformanceResult<()> {
+    pin_object_clock(base_url, ObjectAddress::Fleet, now).await
+}
+async fn pin_object_clock(
+    base_url: &str,
+    address: ObjectAddress,
+    now: RegistryTime,
+) -> ConformanceResult<()> {
     let answer: RuntimeFaultObservation = reqwest::Client::new()
         .post(format!("{base_url}/admin/v1/conformance/runtime"))
         .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
         .json(&RuntimeControlRequest {
-            address: ObjectAddress::Fleet,
+            address,
             command: RuntimeControl::SetTime { now },
         })
         .send()
@@ -266,7 +278,7 @@ pub(super) async fn pin_registry_clock(base_url: &str, now: RegistryTime) -> Con
         .json()
         .await?;
     if !matches!(answer.clock,ClockObservation::Pinned {now:actual} if actual==now) {
-        return Err("Registry clock control did not reach its owning object".into());
+        return Err("Clock control did not reach its owning object".into());
     }
     Ok(())
 }
@@ -363,6 +375,57 @@ async fn await_registration_publication(
                 other @ DirectorySide::Known(_) => {
                     return Err(format!(
                         "normal registration published another holder or lease: {other:?}"
+                    )
+                    .into());
+                }
+            }
+        }
+    })
+    .await??;
+    Ok(())
+}
+
+async fn await_directory_copy(
+    socket: &mut WebSocket,
+    database: DatabaseId,
+    expected: fleet_admission::CopyMetadata,
+) -> ConformanceResult<()> {
+    use board_sync_protocol::{BoardReadPage, BoardReadScope};
+    use fleet_admission::{DirectoryEntry, DirectoryQuery, DirectorySide};
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let OperationAnswer::Consumer(BoardConsumerAnswer::Read(BoardReadPage::Directory {
+                entries,
+                ..
+            })) = operation_answer(
+                socket,
+                OperationRequest::Consumer(BoardConsumerRequest::Read {
+                    scope: BoardReadScope::Directory {
+                        query: BoardPayload::encode(&DirectoryQuery::default())?,
+                    },
+                    cursor: None,
+                }),
+            )
+            .await?
+            else {
+                return Err("Copy publication read returned another family".into());
+            };
+            let entries = entries
+                .into_iter()
+                .map(|entry| entry.decode::<DirectoryEntry>())
+                .collect::<Result<Vec<_>, _>>()?;
+            let entry = entries
+                .into_iter()
+                .find(|entry| entry.project.as_str() == database.to_string())
+                .ok_or("Copy publication omitted its directory identity")?;
+            match entry.copy_side {
+                DirectorySide::NotYetReported => tokio::task::yield_now().await,
+                DirectorySide::Known(actual) if actual == expected => {
+                    return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
+                }
+                DirectorySide::Known(actual) => {
+                    return Err(format!(
+                        "Copy projection differs: expected {expected:?}, actual {actual:?}"
                     )
                     .into());
                 }

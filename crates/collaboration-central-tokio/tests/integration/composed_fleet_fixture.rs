@@ -425,9 +425,10 @@ impl Fixture {
     ) -> TestResult<(Value, Option<String>, i64, Vec<(String, String, String)>)> {
         Ok(self.store.transaction(|scope|Box::pin(async move {
             let snapshot=fleet_sync_lease::registry_snapshot(scope,PROJECT.to_owned().try_into().map_err(StoreError::backend)?).await.map_err(StoreError::backend)?;
-            let row=query::<sqlx_turso::Turso>("SELECT lease_projection,(SELECT incarnation FROM lease_incarnation WHERE name='fleet') AS incarnation FROM project_directory WHERE project_id=?").bind(PROJECT).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
+            let projection = collaboration_central_core::read_fleet_lease_projection_in_scope(scope,PROJECT.parse().map_err(StoreError::backend)?).await?;
+        let row=query::<sqlx_turso::Turso>("SELECT project_id,(SELECT incarnation FROM lease_incarnation WHERE name='fleet') AS incarnation FROM fleet_project_directory WHERE project_id=?").bind(PROJECT).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
             let notices=query::<sqlx_turso::Turso>("SELECT machine_id,kind,CAST(epoch AS TEXT) AS epoch FROM machine_control_notices WHERE project_id=? ORDER BY machine_id,position").bind(PROJECT).fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
-            Ok((serde_json::to_value(snapshot).map_err(StoreError::backend)?,row.try_get("lease_projection").map_err(StoreError::backend)?,row.try_get("incarnation").map_err(StoreError::backend)?,notices.into_iter().map(|row|Ok((row.try_get("machine_id").map_err(StoreError::backend)?,row.try_get("kind").map_err(StoreError::backend)?,row.try_get("epoch").map_err(StoreError::backend)?))).collect::<Result<_,StoreError>>()?))
+            Ok((serde_json::to_value(snapshot).map_err(StoreError::backend)?,projection,row.try_get("incarnation").map_err(StoreError::backend)?,notices.into_iter().map(|row|Ok((row.try_get("machine_id").map_err(StoreError::backend)?,row.try_get("kind").map_err(StoreError::backend)?,row.try_get("epoch").map_err(StoreError::backend)?))).collect::<Result<_,StoreError>>()?))
         })).await?)
     }
     pub async fn close(self) -> TestResult {

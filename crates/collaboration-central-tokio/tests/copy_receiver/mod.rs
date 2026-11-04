@@ -339,14 +339,19 @@ impl Fixture {
     }
     pub async fn summary(&self, directory: bool) -> TestResult<Option<Value>> {
         let object = if directory { &self.fleet } else { &self.copy };
+        let database = self.database;
         let result = object
             .transaction(move |scope| {
                 Box::pin(async move {
-                    let sql = if directory {
-                        "SELECT copy_summary AS summary FROM project_directory"
-                    } else {
-                        "SELECT record AS summary FROM _copy_summary"
-                    };
+                    if directory {
+                        return collaboration_central_core::read_fleet_copy_summary_in_scope(
+                            scope, database,
+                        )
+                        .await?
+                        .map(|summary| serde_json::to_string(&summary).map_err(StoreError::backend))
+                        .transpose();
+                    }
+                    let sql = "SELECT record AS summary FROM _copy_summary";
                     let row = query::<sqlx_turso::Turso>(sql)
                         .fetch_optional(scope.executor())
                         .await

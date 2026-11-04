@@ -47,7 +47,7 @@ async fn readback(root: &Path) -> ConformanceResult<FleetReadback> {
         let records = crate::fleet_record_rows::records(&mut scope).await?;
         let mut rows = crate::fleet_record_rows::workspace_columns(&mut scope).await?;
         rows.extend(crate::fleet_record_rows::board_columns(&mut scope).await?);
-        rows.extend(query::<sqlx_turso::Turso>("SELECT json_object('id',project_id,'name',name,'payload',payload,'time',router_time,'basis',time_basis,'installation',origin_installation,'machine',origin_machine,'digest',import_digest) AS state FROM project_directory ORDER BY state").fetch_all(scope.executor()).await?.into_iter().map(|row|row.try_get("state")).collect::<Result<Vec<String>,_>>()?);
+        rows.extend(crate::fleet_record_rows::directory_columns(&mut scope).await?);
         let feed = query::<sqlx_turso::Turso>("SELECT json_object('id',entry_id,'position',position,'record',record_id,'payload',payload,'time',router_time,'basis',time_basis,'installation',origin_installation,'machine',origin_machine,'asOf',as_of) AS state FROM fleet_feed ORDER BY position").fetch_all(scope.executor()).await?.into_iter().map(|row|row.try_get("state")).collect::<Result<Vec<String>,_>>()?;
         let feed_state = query::<sqlx_turso::Turso>("SELECT json_object('id',state_id,'name',name,'head',last_position,'floor',retained_through) AS state FROM fleet_feed_state ORDER BY name").fetch_all(scope.executor()).await?.into_iter().map(|row|row.try_get("state")).collect::<Result<Vec<String>,_>>()?;
         (records, rows, feed, feed_state)

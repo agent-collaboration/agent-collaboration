@@ -20,7 +20,7 @@ pub fn records<'scope, S: TransactionScope<Database = sqlx_turso::Turso>>(
 ) -> impl std::future::Future<Output = Result<Vec<Record>, StoreError>> + Send + 'scope {
     read_keys(
         scope,
-        "SELECT 'board' AS kind,board_id AS id FROM fleet_boards UNION ALL SELECT 'workspace',workspace_id FROM fleet_workspaces UNION ALL SELECT 'project',project_id FROM project_directory ORDER BY kind,id",
+        "SELECT 'board' AS kind,board_id AS id FROM fleet_boards UNION ALL SELECT 'workspace',workspace_id FROM fleet_workspaces UNION ALL SELECT 'project',project_id FROM fleet_project_directory ORDER BY kind,id",
     )
 }
 
@@ -120,5 +120,17 @@ impl Host for ReadOnlyHost {
         Err(CallFailure::NotSent {
             reason: NotSentReason::Overloaded,
         })
+    }
+}
+
+#[expect(
+    clippy::manual_async_fn,
+    reason = "Explicit Send preserves higher-ranked borrowed snapshot scopes."
+)]
+pub fn directory_columns<'scope, S: TransactionScope<Database = sqlx_turso::Turso>>(
+    scope: &'scope mut S,
+) -> impl std::future::Future<Output = Result<Vec<String>, StoreError>> + Send + 'scope {
+    async move {
+        query::<sqlx_turso::Turso>("SELECT json_object('project_id',project_id,'workspace_id',workspace_id,'board_id',board_id,'name',name,'actor_kind',actor_kind,'actor_human_id',actor_human_id,'actor_service_id',actor_service_id,'actor_endpoint_id',actor_endpoint_id,'actor_session_id',actor_session_id,'actor_router_component',actor_router_component,'request_id',request_id,'fleet_position',fleet_position,'router_time',router_time,'time_basis',time_basis,'origin_installation',origin_installation,'origin_machine',origin_machine,'import_digest',import_digest,'created_at',created_at,'updated_at',updated_at,'copy_epoch',copy_epoch,'copy_sequence',copy_sequence,'copy_acked_at',copy_acked_at,'copy_latest_time_basis',copy_latest_time_basis,'copy_latest_record_at',copy_latest_record_at,'lease_epoch',lease_epoch,'lease_change',lease_change,'lease_incarnation',lease_incarnation,'lease_changed_at',lease_changed_at,'lease_lifecycle_kind',lease_lifecycle_kind,'lease_origin_kind',lease_origin_kind,'lease_origin_epoch',lease_origin_epoch,'lease_origin_sequence',lease_origin_sequence,'lease_import_digest',lease_import_digest,'lease_retiring_attempt_id',lease_retiring_attempt_id,'lease_retired_at',lease_retired_at,'lease_holder_machine_id',lease_holder_machine_id,'lease_holder_service_id',lease_holder_service_id,'lease_expires_at',lease_expires_at,'lease_digest',lease_digest) AS state FROM fleet_project_directory ORDER BY project_id").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|row.try_get("state").map_err(StoreError::backend)).collect()
     }
 }

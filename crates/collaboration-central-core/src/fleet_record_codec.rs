@@ -1,6 +1,5 @@
 //! Validate Fleet payloads and their physical headers at the SQL boundary.
 
-use crate::generated_fleet_record_reads::StoredFleetRecord;
 use durable_steps::StoreError;
 use fleet_admission::FleetImportDigest;
 use message_board::{
@@ -92,43 +91,6 @@ pub(crate) struct DecodedFleetRecord {
     pub import_digest: Option<FleetImportDigest>,
 }
 
-pub(crate) fn decode(stored: StoredFleetRecord) -> Result<DecodedFleetRecord, StoreError> {
-    let record: Record = decode_json(&required(stored.payload, "payload")?, "payload")?;
-    validate_record(&record)?;
-    let reference = record.reference();
-    let envelope = record.envelope();
-    let name = business_name(&record)?;
-    if required(stored.kind, "kind")? != kind_tag(reference.kind)?
-        || required(stored.record_id, "record_id")? != reference.id.as_str()
-        || required(stored.workspace_id, "workspace_id")? != envelope.scope.workspace.as_str()
-        || stored.board_id.as_deref() != envelope.scope.board.as_ref().map(|id| id.as_str())
-        || stored.business_name.as_deref() != Some(name)
-    {
-        return Err(corrupt(
-            "index",
-            "physical identity, scope or business key disagrees with payload",
-        ));
-    }
-    FleetRecordHeader::decode(
-        stored.router_time,
-        stored.time_basis,
-        stored.origin_installation,
-        stored.origin_machine,
-    )?
-    .check_record(&record)?;
-    let import_digest = decode_digest(stored.import_digest)?;
-    if envelope.time == RecordTime::LegacyUnknown && import_digest.is_none() {
-        return Err(corrupt(
-            "import_digest",
-            "unknown time requires imported provenance",
-        ));
-    }
-    Ok(DecodedFleetRecord {
-        record,
-        import_digest,
-    })
-}
-
 pub(crate) fn validate_record(record: &Record) -> Result<(), StoreError> {
     record
         .validate_bounds()
@@ -175,19 +137,6 @@ pub(crate) fn kind_tag(kind: RecordKind) -> Result<&'static str, StoreError> {
         RecordKind::Adr => Ok("adr"),
         RecordKind::Request => Ok("request"),
         _ => Err(corrupt("kind", "project-only record requested from Fleet")),
-    }
-}
-
-fn business_name(record: &Record) -> Result<&str, StoreError> {
-    match record {
-        Record::Workspace(value) => Ok(value.name.as_str()),
-        Record::Board(value) => Ok(value.name.as_str()),
-        Record::DirectoryEntry(value) => Ok(value.title.as_str()),
-        Record::Adr(value) => Ok(value.title.as_str()),
-        _ => Err(corrupt(
-            "kind",
-            "record does not belong in a metadata table",
-        )),
     }
 }
 

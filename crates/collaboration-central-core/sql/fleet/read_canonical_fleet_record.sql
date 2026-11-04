@@ -1,4 +1,0 @@
--- Workerd permits five compound terms; scripts/tooling/measure-central-workerd-sql.mjs checks this boundary.
-SELECT * FROM (
-SELECT CAST('project' AS TEXT) AS kind, project_id AS record_id, workspace_id AS workspace_id, board_id AS board_id, name AS business_name, payload AS payload, router_time AS router_time, time_basis AS time_basis, origin_installation AS origin_installation, origin_machine AS origin_machine, import_digest AS import_digest FROM project_directory
-) WHERE kind = ? AND record_id = ?;

@@ -17,7 +17,7 @@ board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
 collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.96" }
 fleet-admission = { path = "../fleet-admission", version = "0.1.93" }
 sqlx = { workspace = true, features = ["macros", "migrate", "sqlite"] }
-sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "146868e5f024bf9e207755eea953e6803e32ed0e" }
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "e73e20079c2e5dad64d1cf5c8a8dc038232afe7c" }
 fleet-sync-writer.workspace = true
 fleet-sync-receiver.workspace = true
 durable-steps.workspace = true

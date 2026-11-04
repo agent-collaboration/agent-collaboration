@@ -55,18 +55,24 @@ where
                 reason: durable_steps::NotSentReason::Unreachable { last_seen: None },
             });
         }
-        let ObjectWork::Fleet { host, .. } = &self.work else {
+        let ObjectWork::Fleet { host, io, .. } = &self.work else {
             return Err(CallFailure::AnswerLost);
         };
         StepDriver::new(host.clone())
-            .run(StoreDirectorySummary(request))
+            .run(StoreDirectorySummary {
+                summary: request,
+                now: io.now(),
+            })
             .await
             .map_err(|_| CallFailure::AnswerLost)?;
         serde_json::to_vec(&()).map_err(|_| CallFailure::AnswerLost)
     }
 }
 
-struct StoreDirectorySummary(CopyDirectorySummary);
+struct StoreDirectorySummary {
+    summary: CopyDirectorySummary,
+    now: runtime_primitives::SyncTime,
+}
 impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for StoreDirectorySummary
 where
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
@@ -82,31 +88,50 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<(), Infallible>> {
         Box::pin(async move {
-            let id = self.0.database.as_uuid().to_string();
+            let id = self.summary.database.as_uuid().to_string();
             let row =
                 crate::generated_fleet_record_reads::read_directory_summary(scope, id.clone())
                     .await
                     .map_err(StoreError::backend)?
                     .ok_or_else(|| corrupt("directory entry has not been created"))?;
-            if required(row.project_id, "directory.project_id")? != id {
+            if required(row.project_id.clone(), "directory.project_id")? != id {
                 return Err(corrupt("directory identity differs"));
             }
-            if let Some(record) = row.copy_summary {
-                let previous: CopyDirectorySummary =
-                    decode_json(&record, "directory.copy_summary")?;
-                if previous.database != self.0.database {
+            if let Some(previous) = crate::fleet_copy_projection::decode(row)? {
+                if previous.database != self.summary.database {
                     return Err(corrupt("stored summary database differs"));
                 }
-                if previous.position > self.0.position || previous == self.0 {
+                if previous.position > self.summary.position || previous == self.summary {
                     return Ok(((), Vec::new()));
                 }
-                if previous.position == self.0.position {
+                if previous.position == self.summary.position {
                     return Err(corrupt("one copy position has conflicting summaries"));
                 }
             }
             crate::generated_fleet_record_writes::store_directory_summary(
                 scope,
-                serde_json::to_string(&self.0).map_err(StoreError::backend)?,
+                Some(self.summary.position.epoch.value().to_string()),
+                Some(self.summary.position.sequence.value().to_string()),
+                Some(self.summary.acked_at.unix_millis().to_string()),
+                Some(
+                    match &self.summary.summary {
+                        board_sync_protocol::BoardAnnotation::ProjectSummary {
+                            latest_record_at,
+                        } => match latest_record_at {
+                            message_board::RecordTime::Router(_) => "router",
+                            message_board::RecordTime::LegacyUnknown => "legacy_unknown",
+                        },
+                    }
+                    .into(),
+                ),
+                match &self.summary.summary {
+                    board_sync_protocol::BoardAnnotation::ProjectSummary { latest_record_at } => {
+                        latest_record_at
+                            .as_router_time()
+                            .map(|time| time.to_rfc3339())
+                    }
+                },
+                self.now.unix_millis().to_string(),
                 id,
             )
             .await

@@ -32,6 +32,10 @@ mod adr_columns_tests;
 #[path = "fleet_repository_columns_test.rs"]
 mod repository_columns_tests;
 
+#[cfg(test)]
+#[path = "fleet_directory_columns_test.rs"]
+mod directory_columns_tests;
+
 #[cfg(feature = "conformance")]
 mod conformance;
 #[cfg(feature = "conformance")]
@@ -587,3 +591,7 @@ where
         })
     }
 }
+
+#[cfg(test)]
+#[path = "fleet_directory_projection_test.rs"]
+mod directory_projection_tests;
