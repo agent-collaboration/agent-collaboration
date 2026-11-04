@@ -94,11 +94,9 @@ pub mod source_action_transport;
 pub mod source_client_action;
 
 #[cfg(test)]
-#[path = "../tests/configured_inventory_faults.rs"]
-pub mod configured_inventory_fault_tests;
+pub mod configured_inventory_fault_test;
 #[cfg(test)]
-#[path = "../tests/configured_inventory_read.rs"]
-pub mod configured_inventory_read_tests;
+pub mod configured_inventory_read_test;
 
 #[path = "session_commands/native_process_runner.rs"]
 pub mod native_process_runner;

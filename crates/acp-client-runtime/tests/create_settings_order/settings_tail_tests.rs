@@ -150,22 +150,22 @@ impl ProviderBehavior for NonReusableTestBehavior {
         false
     }
     fn model_metadata_source(&self) -> acp_client_runtime::ModelMetadataSource {
-        test_behavior::TestProviderBehavior.model_metadata_source()
+        crate::test_behavior::TestProviderBehavior.model_metadata_source()
     }
     fn decode_model_metadata(
         &self,
         value: &serde_json::Value,
     ) -> acp_client_runtime::ModelReasoningMetadata {
-        test_behavior::TestProviderBehavior.decode_model_metadata(value)
+        crate::test_behavior::TestProviderBehavior.decode_model_metadata(value)
     }
     fn observe(&self, update: ProviderUpdate) -> Result<ProviderFacts, ProviderError> {
-        test_behavior::TestProviderBehavior.observe(update)
+        crate::test_behavior::TestProviderBehavior.observe(update)
     }
     fn prepare(&self, submission: ProviderSubmission) -> Result<Vec<PromptContent>, ProviderError> {
-        test_behavior::TestProviderBehavior.prepare(submission)
+        crate::test_behavior::TestProviderBehavior.prepare(submission)
     }
     fn compact(&self) -> Result<PreparedCompact, ProviderError> {
-        test_behavior::TestProviderBehavior.compact()
+        crate::test_behavior::TestProviderBehavior.compact()
     }
 }
 
@@ -341,7 +341,7 @@ async fn silent_setting_response_expires_to_unknown_and_gates_session() {
 #[tokio::test]
 async fn malformed_post_send_setting_response_gates_existing_session() {
     let behaviors: [Arc<dyn ProviderBehavior>; 2] = [
-        Arc::new(test_behavior::TestProviderBehavior),
+        Arc::new(crate::test_behavior::TestProviderBehavior),
         Arc::new(NonReusableTestBehavior),
     ];
     for behavior in behaviors {

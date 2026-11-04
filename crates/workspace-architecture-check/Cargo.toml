@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "workspace-architecture-check"
 version.workspace = true
 edition.workspace = true
@@ -12,3 +13,7 @@ workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

@@ -11,21 +11,21 @@ use std::{
 };
 
 #[path = "peer_registry.rs"]
-mod peer_registry;
+pub(crate) mod peer_registry;
 
 const DELIVERY_MATRIX_DEBUG_PROFILE: &str = "model = \"gpt-5.6-luna\"\nmodel_reasoning_effort = \"high\"\nmodel_provider = \"codex-router-debug\"\n\n[features]\nenable_request_compression = false\n\n[model_providers.codex-router-debug]\nname = \"OpenAI\"\nbase_url = \"http://127.0.0.1:43127/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = false\nsupports_websockets = true\n";
 
 enum ProviderFixtureMode {
     CodexAndPeerRecipients,
-    AcpTarget,
+    AcpTarget(usize),
 }
 
 pub(super) fn prepare_provider_fixture() -> ProofResult<()> {
     prepare_fixture(ProviderFixtureMode::CodexAndPeerRecipients)
 }
 
-pub(super) fn prepare_acp_target_fixture() -> ProofResult<()> {
-    prepare_fixture(ProviderFixtureMode::AcpTarget)
+pub(super) fn prepare_acp_target_fixture(expected_prompts: usize) -> ProofResult<()> {
+    prepare_fixture(ProviderFixtureMode::AcpTarget(expected_prompts))
 }
 
 fn prepare_fixture(mode: ProviderFixtureMode) -> ProofResult<()> {
@@ -103,7 +103,7 @@ fn prepare_fixture(mode: ProviderFixtureMode) -> ProofResult<()> {
             json!({"action":"respond","requestName":prompt_name,"result":{"stopReason":"end_turn"}}),
         ]);
     }
-    let config = if matches!(mode, ProviderFixtureMode::AcpTarget) {
+    let config = if let ProviderFixtureMode::AcpTarget(expected_prompts) = mode {
         let receipt_path = root.join("provider-prompt-receipts.jsonl");
         let gate_path = root.join("busy-prompt-gate.sock");
         let mut target_steps = vec![
@@ -114,7 +114,7 @@ fn prepare_fixture(mode: ProviderFixtureMode) -> ProofResult<()> {
         ];
         // Board subscriptions emit one neutral notice, with no lifecycle heartbeat.
         const HELD_PROMPT_INDEX: usize = 6;
-        for index in 0..super::ACP_TARGET_EXPECTED_PROMPTS {
+        for index in 0..expected_prompts {
             let request_name = format!("target-prompt-{index}");
             target_steps.push(json!({"action":"expect_request","requestName":request_name,"method":"session/prompt","params":{"sessionId":"matrix-acp-target"},"recordPath":receipt_path}));
             if index == HELD_PROMPT_INDEX {
@@ -292,9 +292,6 @@ pub(super) fn selected_peer_registry(root: &Path) -> ProofResult<PathBuf> {
     peer_registry::selected_directory(root)
 }
 
-#[test]
-fn delivery_matrix_debug_profile_passes_strict_parser()
--> Result<(), codex_native_integration::DebugProfileError> {
-    codex_native_integration::DebugCodexProfile::parse(DELIVERY_MATRIX_DEBUG_PROFILE, 43127)?;
-    Ok(())
-}
+#[cfg(test)]
+#[path = "support_test.rs"]
+pub(crate) mod tests;

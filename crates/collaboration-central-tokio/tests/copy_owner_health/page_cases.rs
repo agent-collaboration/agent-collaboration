@@ -1,6 +1,6 @@
 //! Page crosses HTTP and reads the canonical Fleet directory after store reopen.
 use super::{ConformanceResult, JwksFixtureServer, TokioServer, settings};
-use crate::{
+use crate::copy_owner_health::{
     copy_owner_scenarios::OwnerClient,
     fleet_setup::{Fixture, bundle},
 };

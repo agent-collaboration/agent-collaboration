@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "collaboration-central-core"
 version.workspace = true
 edition.workspace = true
@@ -46,3 +47,7 @@ fleet-sync-query-gen.workspace = true
 
 [dev-dependencies]
 jsonschema.workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

@@ -19,7 +19,7 @@ process-runtime = { max-threads = 1 }
 heavy-tests = { max-threads = 1 }
 
 [[profile.ci.overrides]]
-filter = "binary(update_reexec) | binary(runtime_restart) | binary(compiled_cli_host_acceptance) | (package(=codex-router-quota-reset-test-harness) & binary(=e2e)) | (package(=codex-router-auth) & test(=claude_oauth::tests::refresh_timeout_is_ambiguous_and_never_returns_the_old_token)) | (package(=codex-router-proxy) & test(=tests::tunnel_affinity_tests::async_websocket_tunnel_does_not_gate_forwarding_on_slow_affinity_recorder))"
+filter = "(package(=codex-router-host) & binary(=integration) & test(/^update_reexec::/)) | (package(=codex-router-host) & binary(=integration) & test(/^runtime_restart::/)) | (package(=codex-router-cli) & binary(=integration) & test(/^compiled_cli_host_acceptance::/)) | (package(=codex-router-quota-reset-test-harness) & binary(=e2e)) | (package(=codex-router-auth) & test(=claude_oauth::tests::refresh_timeout_is_ambiguous_and_never_returns_the_old_token)) | (package(=codex-router-proxy) & test(=tests::tunnel_affinity_tests::async_websocket_tunnel_does_not_gate_forwarding_on_slow_affinity_recorder))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
@@ -27,29 +27,23 @@ threads-required = "num-test-threads"
 # starving the archive or Serve child crosses their unchanged request and
 # shutdown deadlines. The renewal proof gates its NotWriter reply explicitly.
 [[profile.ci.overrides]]
-filter = "binary(=board_request_effects_cli) | (package(=codex-router-host) & (test(=collaboration_runtime::board_composition::machine_session::mail_notice_events::harness::notification_owner::authority_recovery::real_renewal_republishes_after_paused_pass_and_not_writer_reports_confirmed_and_lost_authority) | test(tailscale_exposure::) | test(tailscale_process::) | test(collaboration_runtime::startup_contract_tests::)))"
+filter = "(package(=agent-collaboration) & binary(=integration) & test(/^board_request_effects_cli::/)) | (package(=codex-router-host) & (test(=collaboration_runtime::board_composition::machine_session::mail_notice_events::harness::notification_owner::authority_recovery::real_renewal_republishes_after_paused_pass_and_not_writer_reports_confirmed_and_lost_authority) | test(tailscale_exposure::) | test(tailscale_process::) | test(collaboration_runtime::startup_contract_tests::)))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
 # Native catalogue fixtures launch a bounded read-only CLI. Keep their five-second
 # contract apart from unrelated process/IO load, as with the other process fixtures.
 [[profile.ci.overrides]]
-filter = "binary(=native_claude_catalogue)"
+filter = "package(=codex-router-host) & binary(=integration) & test(/^native_claude_catalogue::/)"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
 # Keep the exact TERM recorder grace and compiled WebSocket frame/count proof
 # in the existing process-runtime window, apart from unrelated fixture load.
 [[profile.ci.overrides]]
-filter = "binary(=proxy_overload_passthrough) | (binary(=process_lifecycle) & test(=app_server_force_escalation_signals_and_reaps_once))"
+filter = "(package(=codex-router-cli) & binary(=integration) & test(/^proxy_overload_passthrough::/)) | (package(=codex-router-host) & binary(=integration) & test(=process_lifecycle::app_server_force_escalation_signals_and_reaps_once))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
-
-# U66 / MS-10 requires a five-minute minimum repeat gap. This retained real-timer
-# protocol proof observes both firings; its own receive deadlines remain bounded.
-[[profile.ci.overrides]]
-filter = "binary(wakeup_repeating_delivery) & test(=recurring_wake_stores_and_dispatches_two_distinct_pushes)"
-slow-timeout = { period = "60s", terminate-after = 6 }
 
 # The real ACP child emits FIFO receipts over a Unix socket within two seconds.
 # Give it the existing process reservation while keeping that deadline intact.
@@ -63,7 +57,7 @@ threads-required = "num-test-threads"
 # deadlines intact, but allow only one heavy case while ordinary tests retain
 # the remaining scheduler slots. Process-runtime cases still require every slot.
 [[profile.ci.overrides]]
-filter = "binary(=held_queue_depth) | binary(=project_description_encoded_sizes) | (package(=message-board-storage) & test(=project_record_size_tests::history_growing_records_are_measured_without_capping_or_truncating))"
+filter = "(package(=collaboration-service) & binary(=integration) & test(/^held_queue_depth::/)) | (package(=collaboration-service) & binary(=integration) & test(/^project_description_encoded_sizes::/)) | (package(=message-board-storage) & test(=project_record_size_tests::history_growing_records_are_measured_without_capping_or_truncating))"
 test-group = "heavy-tests"
 threads-required = 1
 slow-timeout = { period = "60s", terminate-after = 15 }
@@ -71,12 +65,12 @@ slow-timeout = { period = "60s", terminate-after = 15 }
 # These branch-added fixture workloads were also slow in the retained Linux CI
 # run. Bound concurrent heavy work instead of adding another timing exception.
 [[profile.ci.overrides]]
-filter = "(package(=collaboration-service) & (test(=subscription_delivery::subscription_service::intent_progress_tests::deferred_history_does_not_grow_the_next_intent_pass) | (binary(=board_control_path) & test(=control_thread_list_pages_escape_heavy_holders_without_skips_or_repeats)) | (binary(=board_metadata_records) & test(=large_metadata_lists_continue_before_the_control_frame_limit)) | binary(=board_write_scale) | binary(=bounded_fleet_reads) | (binary(=bounded_post_lookup) & test(=post_lookup_costs_ignore_unopened_project_files))))"
+filter = "(package(=collaboration-service) & (test(=subscription_delivery::subscription_service::intent_progress_tests::deferred_history_does_not_grow_the_next_intent_pass) | (package(=collaboration-service) & binary(=integration) & test(=board_control_path::control_thread_list_pages_escape_heavy_holders_without_skips_or_repeats)) | (package(=collaboration-service) & binary(=integration) & test(=board_metadata_records::large_metadata_lists_continue_before_the_control_frame_limit)) | (package(=collaboration-service) & binary(=integration) & test(/^board_write_scale::/)) | (package(=collaboration-service) & binary(=integration) & test(/^bounded_fleet_reads::/)) | (package(=collaboration-service) & binary(=integration) & test(=bounded_post_lookup::post_lookup_costs_ignore_unopened_project_files))))"
 test-group = "heavy-tests"
 threads-required = 1
 
 [[profile.ci.overrides]]
-filter = "binary(=request_effects_public) & test(=a_large_fleet_write_returns_a_signed_public_continuation)"
+filter = "(package(=collaboration-service) & binary(=integration) & test(=request_effects_public::a_large_fleet_write_returns_a_signed_public_continuation))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
@@ -96,6 +90,6 @@ threads-required = "num-test-threads"
 
 # Real local Host/central journeys run in the required slower CI job.
 [[profile.ci.overrides]]
-filter = "binary(/^(board_records_e2e|board_central_e2e|local_mail_e2e|board_takeover_e2e|messaging_rules_e2e|installation_directory_e2e|mail_reconcile_e2e|mail_retirement_e2e|upgrade_binary_e2e|forwarding_real_timer)$/)"
+filter = "(package(=agent-collaboration) & binary(=e2e)) | (package(=board-legacy-upgrade) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"

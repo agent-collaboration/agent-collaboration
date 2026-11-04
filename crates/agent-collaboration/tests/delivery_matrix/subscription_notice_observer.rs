@@ -1,5 +1,6 @@
 //! Recipient-observed subscription line and stored activity range expansion.
-use super::{ProofContext, ProofResult, SUBSCRIPTION_NOTICE_LABEL};
+use crate::delivery_matrix_debug_acceptance::SUBSCRIPTION_NOTICE_LABEL;
+use crate::proof_context::{ProofContext, ProofResult};
 use collaboration_client::protocol::{
     PushKind, PushRecordShowParams, PushRecordShowResult, SessionRef,
 };

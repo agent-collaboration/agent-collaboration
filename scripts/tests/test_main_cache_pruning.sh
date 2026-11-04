@@ -95,7 +95,6 @@ GH
 chmod +x "$fixture_root/gh"
 export GH_CALLS="$fixture_root/calls" GH_FIXTURE="$fixture_root/inventory.json"
 printf '%s\n' '{"createdAt":"2026-10-26T01:00:00Z","jobs":[
-  {"name":"Validate Rust workspace","startedAt":"0001-01-01T00:00:00Z","conclusion":null},
   {"name":"Prune superseded main caches","startedAt":"2026-10-27T02:00:00Z","conclusion":null},
   {"name":"Static validation","startedAt":"2026-10-27T01:00:00Z","conclusion":"success"},
   {"name":"Test Rust workspace","startedAt":"2026-10-27T01:00:03Z","conclusion":"failure"},

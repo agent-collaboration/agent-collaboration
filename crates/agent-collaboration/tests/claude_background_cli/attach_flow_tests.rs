@@ -8,6 +8,9 @@ use serde_json::json;
 const SESSION: &str = "00000000-0000-4000-8000-000000000042";
 const RECEIPT: &str = include_str!("claude_bg_2_1_312.txt");
 
+#[path = "child_execution.rs"]
+mod child_execution;
+
 #[path = "resume_read_safety_tests.rs"]
 mod resume_read_safety_tests;
 
@@ -44,6 +47,7 @@ async fn local_background_new_starts_once_then_attaches_supported_receipts() {
             .output()
             .await
             .unwrap();
+        child_execution::assert_one_test_executed(&output);
         assert!(
             output.status.success(),
             "{}",
@@ -85,6 +89,7 @@ async fn local_background_new_does_not_retry_or_attach_an_unparseable_receipt() 
             .output()
             .await
             .unwrap();
+        child_execution::assert_one_test_executed(&output);
         assert!(!output.status.success());
         let calls = invocations(&fixture).unwrap();
         assert_eq!(

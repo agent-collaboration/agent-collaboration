@@ -12,8 +12,7 @@ use std::sync::{
 };
 use tokio_util::sync::CancellationToken;
 
-#[path = "../native_http/support.rs"]
-pub(super) mod configuration;
+use crate::configuration;
 
 #[derive(Clone)]
 pub struct SuppliedClock(Arc<AtomicI64>);

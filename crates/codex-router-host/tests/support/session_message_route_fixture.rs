@@ -321,8 +321,7 @@ pub(super) async fn send_and_wait_wake(client: &CollaborationClient, target: Ses
     .expect("wake delivery deadline");
 }
 
-#[path = "provider_conversation_submission.rs"]
-mod provider_conversation_submission;
+use crate::provider_conversation_submission;
 use provider_conversation_submission::{
     spawn_provider_prompt, submit_provider_create, submit_provider_load,
 };
