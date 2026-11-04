@@ -136,6 +136,7 @@ where
                     &header,
                     None,
                     row_ids.next()?,
+                    now,
                 )
                 .await?;
             }

@@ -137,6 +137,7 @@ where
                 &header,
                 Some(digest),
                 row_ids.next()?,
+                now,
             )
             .await?;
         }

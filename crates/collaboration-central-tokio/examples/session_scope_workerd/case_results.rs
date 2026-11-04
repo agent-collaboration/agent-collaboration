@@ -95,6 +95,9 @@ impl Scenario {
             Scenario::FleetAdrColumns => println!(
                 "FLEET_ADR_COLUMNS_RESULT 1 passed; 0 failed; 0 ignored (real normal sessions and typed canonical ADR body, sixteen ordered files, lifecycle and replay; owning reopen is covered by native storage tests)"
             ),
+            Scenario::FleetRepositoryColumns => println!(
+                "FLEET_REPOSITORY_COLUMNS_RESULT 1 passed; 0 failed; 0 ignored (ordinary Fleet sessions, typed origin/local associations, canonical ordered list, attach/detach and replay; first provenance and owning reopen are covered by native storage tests)"
+            ),
             Scenario::DeliveryConfig { .. } => println!(
                 "DELIVERY_CONFIG_RESULT 1 passed; 0 failed; 0 ignored (explicit relay distinct from receiver, exact first/replay/update/readmission answers through real Registry and Mailbox; no Router delivery-call closure claim)"
             ),

@@ -271,7 +271,7 @@ async fn workspace_preserves_bounded_position_extremes_repository_order_and_crea
         write(&fixture, renamed.clone(), NOW.unix_millis() + 17).await?;
         assert_eq!(read(&fixture).await?, renamed);
         let times = fixture.object.transaction(|scope| Box::pin(async move {
-            let row = query::<sqlx_turso::Turso>("SELECT created_at,updated_at,(SELECT count(*) FROM fleet_workspace_repository_refs) AS refs,(SELECT count(*) FROM repository_attachments) AS associations FROM fleet_workspaces").fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
+            let row = query::<sqlx_turso::Turso>("SELECT created_at,updated_at,(SELECT count(*) FROM fleet_workspace_repository_refs) AS refs,(SELECT count(*) FROM fleet_repository_attachments) AS associations FROM fleet_workspaces").fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
             Ok((row.try_get::<i64,_>("created_at").map_err(StoreError::backend)?, row.try_get::<i64,_>("updated_at").map_err(StoreError::backend)?, row.try_get::<i64,_>("refs").map_err(StoreError::backend)?, row.try_get::<i64,_>("associations").map_err(StoreError::backend)?))
         })).await?;
         assert_eq!(times, (NOW.unix_millis(), NOW.unix_millis() + 17, 3, 2));

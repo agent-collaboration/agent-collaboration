@@ -31,7 +31,7 @@ async fn repository_associations_and_workspace_payload_change_together_and_repla
         assert_eq!(fixture.fleet_request(&attach).await?, attached);
         assert_eq!(fixture.counts().await?,vec![1,1,1,1,7]);
         let (payload, origin, basis) = fixture.object.transaction(|scope| Box::pin(async move {
-            let row=query::<sqlx_turso::Turso>("SELECT fleet_workspaces.workspace_id,repository_attachments.origin_installation,repository_attachments.time_basis FROM fleet_workspaces JOIN repository_attachments USING(workspace_id)").fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
+            let row=query::<sqlx_turso::Turso>("SELECT fleet_workspaces.workspace_id,fleet_repository_attachments.origin_installation,fleet_repository_attachments.time_basis FROM fleet_workspaces JOIN fleet_repository_attachments USING(workspace_id)").fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
             let reference = message_board::WorkspaceId::try_from(row.try_get::<String,_>("workspace_id").map_err(StoreError::backend)?).map_err(StoreError::backend)?.into();
             let workspace = collaboration_central_core::read_fleet_record_in_scope(scope,&reference).await?.ok_or_else(|| StoreError::backend("workspace missing"))?;
             Ok((workspace,row.try_get::<String,_>("origin_installation").map_err(StoreError::backend)?,row.try_get::<String,_>("time_basis").map_err(StoreError::backend)?))

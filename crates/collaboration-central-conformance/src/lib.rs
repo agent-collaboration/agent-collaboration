@@ -5,6 +5,10 @@ mod adr_runtime;
 #[cfg(feature = "client")]
 pub use adr_runtime::run_adr_round_trip_conformance;
 #[cfg(feature = "client")]
+mod repository_runtime;
+#[cfg(feature = "client")]
+pub use repository_runtime::run_repository_round_trip_conformance;
+#[cfg(feature = "client")]
 mod access_expiry_scenario;
 #[cfg(feature = "client")]
 mod access_fixture;

@@ -28,6 +28,10 @@ mod board_columns_tests;
 #[path = "fleet_adr_columns_test.rs"]
 mod adr_columns_tests;
 
+#[cfg(test)]
+#[path = "fleet_repository_columns_test.rs"]
+mod repository_columns_tests;
+
 #[cfg(feature = "conformance")]
 mod conformance;
 #[cfg(feature = "conformance")]

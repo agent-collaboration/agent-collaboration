@@ -165,7 +165,7 @@ impl Fixture {
     }
     pub async fn counts(&self) -> TestResult<Vec<i64>> {
         Ok(self.object.transaction(|scope| Box::pin(async move {
-            let row = query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM fleet_workspaces) AS workspaces,(SELECT count(*) FROM fleet_boards) AS boards,(SELECT count(*) FROM project_directory) AS directory,(SELECT count(*) FROM repository_attachments) AS repositories,(SELECT count(*) FROM fleet_feed) AS feed")
+            let row = query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM fleet_workspaces) AS workspaces,(SELECT count(*) FROM fleet_boards) AS boards,(SELECT count(*) FROM project_directory) AS directory,(SELECT count(*) FROM fleet_repository_attachments) AS repositories,(SELECT count(*) FROM fleet_feed) AS feed")
                 .fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
             ["workspaces","boards","directory","repositories","feed"].into_iter()
                 .map(|name| row.try_get(name).map_err(StoreError::backend)).collect::<Result<Vec<i64>,_>>()

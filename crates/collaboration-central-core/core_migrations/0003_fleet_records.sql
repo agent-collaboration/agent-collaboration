@@ -111,17 +111,23 @@ CREATE TABLE fleet_adr_repository_files (
     updated_at INTEGER NOT NULL,
     UNIQUE(adr_id,ordinal)
 );
-CREATE TABLE repository_attachments (
+CREATE TABLE fleet_repository_attachments (
     attachment_id TEXT NOT NULL PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES fleet_workspaces(workspace_id),
-    repository_reference TEXT NOT NULL,
+    reference_kind TEXT NOT NULL,
+    normalized_origin TEXT,
+    service_id TEXT,
+    common_directory TEXT,
     router_time TEXT,
     time_basis TEXT NOT NULL,
     origin_installation TEXT NOT NULL,
     origin_machine TEXT NOT NULL,
     import_digest TEXT,
-    UNIQUE(workspace_id, repository_reference)
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
 );
+CREATE UNIQUE INDEX fleet_repository_origin_unique ON fleet_repository_attachments(workspace_id,normalized_origin) WHERE reference_kind='origin';
+CREATE UNIQUE INDEX fleet_repository_local_unique ON fleet_repository_attachments(workspace_id,service_id,common_directory) WHERE reference_kind='local';
 CREATE TABLE fleet_feed (
     entry_id TEXT NOT NULL PRIMARY KEY,
     position INTEGER NOT NULL UNIQUE,

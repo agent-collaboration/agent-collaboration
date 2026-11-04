@@ -155,6 +155,7 @@ enum Scenario {
     CreationGates,
     FleetNotices,
     FleetAdrColumns,
+    FleetRepositoryColumns,
     DeliveryConfig {
         relay_peer: fleet_sync_protocol::PeerId,
     },
@@ -244,6 +245,7 @@ async fn main() -> ConformanceResult<()> {
         Some("creation-gates") => Scenario::CreationGates,
         Some("fleet-notices") => Scenario::FleetNotices,
         Some("fleet-adr-columns") => Scenario::FleetAdrColumns,
+        Some("fleet-repository-columns") => Scenario::FleetRepositoryColumns,
         Some("delivery-config") => Scenario::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 args.next().ok_or("explicit configured relay peer")?,
@@ -353,6 +355,7 @@ async fn main() -> ConformanceResult<()> {
         Scenario::OwnerRegistry => owner_registry_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::FleetNotices => fleet_notice_scenarios::feed_advancement_reaches_reader_once(&format!("http://127.0.0.1:{port}")).await,
         Scenario::FleetAdrColumns => collaboration_central_conformance::run_adr_round_trip_conformance(&collaboration_central_conformance::ConformanceClient::new(&format!("http://127.0.0.1:{port}"))?).await,
+        Scenario::FleetRepositoryColumns => collaboration_central_conformance::run_repository_round_trip_conformance(&collaboration_central_conformance::ConformanceClient::new(&format!("http://127.0.0.1:{port}"))?).await,
         Scenario::InstallationDirectory => installation_peer_directory_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::DeliveryConfig { relay_peer } => delivery_config_scenarios::run(&format!("http://127.0.0.1:{port}"),relay_peer).await,
         Scenario::CreationGates => creation_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
