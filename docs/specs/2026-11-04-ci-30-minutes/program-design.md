@@ -87,7 +87,7 @@ Each inventory is checked against its own nextest `Summary` line. A mismatch is 
 | --- | --- | --- | --- |
 | nextest `ci` profile (`.config/nextest.toml`) | decides start order and slot count within each invocation | priority bands, `test-threads`, and run-alone and heavy membership | a test's duration or isolation need changes |
 | Tests that wait on the clock | prove their behavior without depending on timing on a shared machine | their own waits and fixture signals | their behavior's signal changes |
-| `ci-test-profile` (TypeScript, `scripts/tooling/`) | turns a test job log into per-invocation inventories and profiles | nothing persistent | the nextest log format changes |
+| `ci-test-profile` (TypeScript, `verification/tooling/`, beside the other TS tooling and its `*.test.ts`) | turns a test job log into per-invocation inventories and profiles | nothing persistent | the nextest log format changes |
 | `ci.yml` `test` job | builds and runs both invocations | job and step order | **unchanged under S** |
 
 - **Thread count:** `test-threads = 8` in `profile.ci` applies to both invocations. The quota invocation also runs at 8 slots during its roughly 2 minutes beside the workspace run. That's accepted, because it is part of the measured load.
