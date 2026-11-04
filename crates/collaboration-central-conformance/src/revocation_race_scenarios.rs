@@ -144,7 +144,7 @@ pub async fn run_revocation_race_conformance(client: &ConformanceClient) -> Conf
     proof
 }
 
-async fn control(
+pub(crate) async fn control(
     client: &ConformanceClient,
     command: RevocationControl,
 ) -> ConformanceResult<RevocationObservation> {
@@ -163,7 +163,7 @@ async fn control(
         .json()
         .await?)
 }
-async fn observed(
+pub(crate) async fn observed(
     client: &ConformanceClient,
     ready: impl Fn(&RevocationObservation) -> bool,
 ) -> ConformanceResult<RevocationObservation> {

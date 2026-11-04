@@ -41,11 +41,15 @@ mod conformance_client;
 #[cfg(feature = "client")]
 mod enrollment_scenarios;
 #[cfg(feature = "client")]
+mod fleet_mail_observer_scenario;
+#[cfg(feature = "client")]
 mod holder_reply_scenarios;
 #[cfg(feature = "client")]
 mod lease_session_scenarios;
 #[cfg(feature = "client")]
 mod mail_status_scenarios;
+#[cfg(feature = "client")]
+pub use fleet_mail_observer_scenario::run_fleet_mail_observer_conformance;
 #[cfg(feature = "client")]
 mod native_board_session;
 #[cfg(feature = "client")]
@@ -54,6 +58,10 @@ mod normal_access_scenarios;
 mod readmission_scenarios;
 #[cfg(feature = "client")]
 mod revocation_race_scenarios;
+#[cfg(feature = "client")]
+mod sender_revocation_scenario;
+#[cfg(feature = "client")]
+pub use sender_revocation_scenario::run_sender_revocation_conformance;
 #[cfg(feature = "client")]
 mod runtime_control_scenarios;
 mod runtime_controls;

@@ -11,6 +11,19 @@ impl ShellActor {
         host: &StoreHost,
         runtime: &RuntimeFace,
     ) -> Result<Option<Response>> {
+        if request.path() == "/test/fleet-mail-custody" {
+            let RuntimeFace::Fleet(runtime) = runtime else {
+                return Err(error("custody observation requires Fleet"));
+            };
+            let input: collaboration_central_core::FleetMailCustodyRequest = request.json().await?;
+            return Response::from_json(
+                &runtime
+                    .conformance_mail_custody(input.item)
+                    .await
+                    .map_err(error)?,
+            )
+            .map(Some);
+        }
         if request.path() == "/test/fleet-schema" {
             let RuntimeFace::Fleet(runtime) = runtime else {
                 return Err(error("schema observation requires the Fleet owner"));

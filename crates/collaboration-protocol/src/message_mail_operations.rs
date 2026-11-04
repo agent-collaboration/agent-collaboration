@@ -135,6 +135,7 @@ pub enum RemoteDeliveryRefusal {
     TooOld,
     RecipientUnknown,
     RecipientRevoked,
+    SenderNotEnrolled,
     DroppedByPolicy,
     CancelSenderMismatch,
 }

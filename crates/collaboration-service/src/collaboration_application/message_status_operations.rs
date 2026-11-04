@@ -423,6 +423,7 @@ fn public_status(
                 DeliveryRefusal::TooOld => RemoteDeliveryRefusal::TooOld,
                 DeliveryRefusal::RecipientUnknown => RemoteDeliveryRefusal::RecipientUnknown,
                 DeliveryRefusal::RecipientRevoked => RemoteDeliveryRefusal::RecipientRevoked,
+                DeliveryRefusal::SenderNotEnrolled => RemoteDeliveryRefusal::SenderNotEnrolled,
                 DeliveryRefusal::DroppedByPolicy => RemoteDeliveryRefusal::DroppedByPolicy,
                 DeliveryRefusal::CancelSenderMismatch => {
                     RemoteDeliveryRefusal::CancelSenderMismatch

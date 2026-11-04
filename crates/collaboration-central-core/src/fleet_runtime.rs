@@ -242,6 +242,22 @@ where
             })
             .await
     }
+    #[cfg(feature = "conformance")]
+    pub async fn conformance_mail_custody(
+        &self,
+        item: fleet_sync_protocol::ItemId,
+    ) -> Result<crate::FleetMailCustodyObservation, StoreError> {
+        let ObjectWork::Fleet { host, .. } = &self.work else {
+            return Err(wrong_face());
+        };
+        host.store()
+            .transaction(move |scope| {
+                Box::pin(
+                    async move { crate::fleet_mail_observation::read_custody(scope, item).await },
+                )
+            })
+            .await
+    }
     async fn prune_feed(&self) -> Result<(), StoreError> {
         let ObjectWork::Fleet { host, io, .. } = &self.work else {
             return Err(wrong_face());
