@@ -994,8 +994,13 @@ dependencies = [
 name = "board-staging-cutover"
 version = "0.1.121"
 dependencies = [
+ "codex-router-host",
+ "collaboration-protocol",
+ "collaboration-runtime",
  "fleet-sync-protocol",
+ "nix",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
  "uuid",
 ]

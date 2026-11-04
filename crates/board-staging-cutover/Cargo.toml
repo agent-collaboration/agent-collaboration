@@ -9,9 +9,14 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+codex-router-host.workspace = true
+collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.121" }
+collaboration-runtime = { path = "../collaboration-runtime", version = "0.1.121" }
 fleet-sync-protocol.workspace = true
+nix.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+tempfile = "3.27.0"
 uuid.workspace = true
