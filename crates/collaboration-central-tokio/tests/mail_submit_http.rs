@@ -16,6 +16,10 @@ mod historical_piece;
 )]
 #[path = "support/mail_push_inbox.rs"]
 mod mail_push_inbox;
+#[expect(
+    dead_code,
+    reason = "Shared recipient transport serves targets with different helper subsets."
+)]
 #[path = "support/mail_push_transport.rs"]
 mod mail_push_transport;
 

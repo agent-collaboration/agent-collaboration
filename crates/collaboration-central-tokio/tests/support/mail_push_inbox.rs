@@ -431,6 +431,16 @@ impl PushInbox {
                 .fetch_one(scope.executor()).await.map_err(StoreError::backend)?.try_get("bytes").map_err(StoreError::backend)
         })).await?)
     }
+    pub(super) async fn payload_bytes_for(
+        &self,
+        item: fleet_sync_protocol::ItemId,
+    ) -> ConformanceResult<i64> {
+        Ok(self.store.transaction(move |scope|Box::pin(async move {
+            query::<sqlx_turso::Turso>("SELECT payload_bytes AS bytes FROM _fleet_sync_inbox_items WHERE item_id=?")
+                .bind(item.as_uuid().to_string()).fetch_one(scope.executor()).await.map_err(StoreError::backend)?
+                .try_get("bytes").map_err(StoreError::backend)
+        })).await?)
+    }
     pub(super) fn close(self) -> ConformanceResult<()> {
         let store = Arc::try_unwrap(self.store)
             .map_err(|_| "a task still owns the recipient connection")?;
