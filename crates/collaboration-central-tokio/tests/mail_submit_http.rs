@@ -12,6 +12,8 @@ mod grants;
 mod historical_piece;
 #[path = "support/mail_push_inbox.rs"]
 mod mail_push_inbox;
+#[path = "support/mail_push_transport.rs"]
+mod mail_push_transport;
 
 #[tokio::test]
 async fn shared_offline_fleet_mail_alarm_oracle() -> ConformanceResult<()> {

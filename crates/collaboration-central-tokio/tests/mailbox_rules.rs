@@ -4,6 +4,18 @@
 
 #[path = "native_http/support.rs"]
 mod configuration;
+#[expect(
+    dead_code,
+    reason = "Shared recipient fixture serves targets with different helper subsets."
+)]
+#[path = "support/mail_push_inbox.rs"]
+mod mail_push_inbox;
+#[expect(
+    dead_code,
+    reason = "Shared Push transport serves targets with different helper subsets."
+)]
+#[path = "support/mail_push_transport.rs"]
+mod mail_push_transport;
 #[path = "support/mailbox_cancel_scenarios.rs"]
 mod mailbox_cancel_scenarios;
 #[path = "support/mailbox_capacity_scenarios.rs"]
