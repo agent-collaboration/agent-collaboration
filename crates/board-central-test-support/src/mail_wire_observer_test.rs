@@ -28,10 +28,7 @@ fn push_wire_observation_keeps_item_frame_and_capacity_refusal() -> FixtureResul
         serde_json::from_value(
             json!({"kind":"humanUser","installation":"019f0000-0000-7000-8000-000000001104"}),
         )?,
-        Recipient {
-            peer,
-            address,
-        },
+        Recipient { peer, address },
         None,
         CancelBody {
             target: serde_json::from_value(json!("019f0000-0000-7000-8000-000000001106"))?,
