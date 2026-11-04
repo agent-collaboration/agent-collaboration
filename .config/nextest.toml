@@ -34,7 +34,7 @@ threads-required = "num-test-threads"
 # Native catalogue fixtures launch a bounded read-only CLI. Keep their five-second
 # contract apart from unrelated process/IO load, as with the other process fixtures.
 [[profile.ci.overrides]]
-filter = "package(=codex-router-host) & binary(=integration) & test(/^native_claude_catalogue::/)"
+filter = "(package(=codex-router-host) | package(=collaboration-service)) & binary(=integration) & test(/^native_claude_catalogue::/)"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
