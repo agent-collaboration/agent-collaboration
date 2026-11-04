@@ -18,11 +18,7 @@ macro_rules! thread_refusal_shapes {
                 let refusal = match ThreadRefusalWire::deserialize(deserializer)? {
                     $(ThreadRefusalWire::$kind { $($field),* } => Self::$kind { $($field),* }),*
                 };
-                if let Self::StaleOrchestrator { holder, last_seen, .. } | Self::StaleImplementer { holder, last_seen, .. } = &refusal
-                    && holder.is_some() != last_seen.is_some()
-                {
-                    return Err(serde::de::Error::custom("lastSeen must describe the current holder, or both must be absent for a vacant seat"));
-                }
+                refusal.validate().map_err(serde::de::Error::custom)?;
                 Ok(refusal)
             }
         }
@@ -41,3 +37,28 @@ thread_refusal_shapes! {
     SelfReplace { thread_id: ThreadId, actor: Identity },
     OrchestratorRoleChange { thread_id: ThreadId, actor: Identity },
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("lastSeen must describe the current holder, or both must be absent for a vacant seat")]
+pub struct ThreadRefusalValidationError;
+
+impl ThreadRefusal {
+    /// A stale-seat cursor describes its current holder; other variants keep their own rules.
+    pub fn validate(&self) -> Result<(), ThreadRefusalValidationError> {
+        if let Self::StaleOrchestrator {
+            holder, last_seen, ..
+        }
+        | Self::StaleImplementer {
+            holder, last_seen, ..
+        } = self
+            && holder.is_some() != last_seen.is_some()
+        {
+            return Err(ThreadRefusalValidationError);
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+#[path = "thread_refusals_test.rs"]
+mod tests;
