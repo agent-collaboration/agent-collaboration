@@ -245,6 +245,7 @@ fn is_reply_pre_dispatch_rejection(error: &ClientError) -> bool {
                     | "ownerReplyUnsupported"
                     | "invalidField"
                     | "mailboxFull"
+                    | "tooOld"
             )
         ),
         ClientError::Rejected { data: None, .. } => false,
@@ -257,5 +258,9 @@ fn is_reply_pre_dispatch_rejection(error: &ClientError) -> bool {
 }
 
 #[cfg(test)]
-#[path = "message_operation_tests.rs"]
+#[path = "message_operation_test.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "message_reply_refusal_test.rs"]
+mod reply_refusal_tests;
