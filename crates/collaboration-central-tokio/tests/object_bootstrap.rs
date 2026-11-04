@@ -106,7 +106,7 @@ async fn exported_engine_corpora_initialize_once_and_reopen_without_reapplying_t
         (EngineSchema::Registry, 8),
         (EngineSchema::Copy, 3),
         (EngineSchema::Session, 5),
-        (EngineSchema::Delivery, 10),
+        (EngineSchema::Delivery, 11),
         (EngineSchema::Fleet, 10),
     ] {
         let directory = tempfile::tempdir()?;
@@ -220,7 +220,7 @@ async fn a_real_late_sql_error_rolls_back_all_earlier_migrations_and_history()
         .transaction(|scope| {
             Box::pin(async move {
                 query::<sqlx_turso::Turso>(
-                    "SELECT corpus,version,reason,at FROM central_schema_migration_failures",
+                    "SELECT corpus,version,reason,failed_at FROM central_schema_migration_failures",
                 )
                 .fetch_all(scope.executor())
                 .await
@@ -234,7 +234,7 @@ async fn a_real_late_sql_error_rolls_back_all_earlier_migrations_and_history()
                             .map_err(StoreError::backend)?,
                         row.try_get::<String, _>("reason")
                             .map_err(StoreError::backend)?,
-                        row.try_get::<String, _>("at")
+                        row.try_get::<i64, _>("failed_at")
                             .map_err(StoreError::backend)?,
                     ))
                 })
@@ -259,7 +259,7 @@ async fn a_real_late_sql_error_rolls_back_all_earlier_migrations_and_history()
     assert_eq!(failures[0].0, "fleet-sync-receiver");
     assert_eq!(failures[0].1, "3");
     assert!(failures[0].2.contains("_fleet_sync_install"));
-    assert_eq!(failures[0].3, ProbeIo.now().unix_millis().to_string());
+    assert_eq!(failures[0].3, ProbeIo.now().unix_millis());
     Ok(())
 }
 

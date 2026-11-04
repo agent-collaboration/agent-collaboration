@@ -43,7 +43,7 @@ async fn populated_v2_ledger_migrates_origin_headers_and_replays_after_store_reo
         ] {
             let migration=Migration::new(version,name.into(),MigrationType::Simple,sql.into_sql_str(),false);
             scope.executor().execute(sql).await.map_err(StoreError::backend)?;
-            query::<sqlx_turso::Turso>("INSERT INTO central_schema_migrations(row_id,corpus,version,checksum) VALUES(?,'central-fleet',?,?)").bind(durable_steps::Uuid::now_v7().to_string()).bind(version.to_string()).bind(serde_json::to_string(migration.checksum.as_ref()).map_err(StoreError::backend)?).execute(scope.executor()).await.map_err(StoreError::backend)?;
+            query::<sqlx_turso::Turso>("INSERT INTO central_schema_migrations(row_id,corpus,version,checksum,created_at,updated_at,applied_at) VALUES(?1,'central-fleet',?2,?3,?4,?4,?4)").bind(durable_steps::Uuid::now_v7().to_string()).bind(version.to_string()).bind(serde_json::to_string(migration.checksum.as_ref()).map_err(StoreError::backend)?).bind(runtime_primitives::Clock::now(&super::support::Io::default()).unix_millis()).execute(scope.executor()).await.map_err(StoreError::backend)?;
         }
         query::<sqlx_turso::Turso>("INSERT INTO fleet_request_decisions(request_id,canonical_hash,payload,router_time,time_basis) VALUES(?,?,?,?,'router')")
             .bind(original.request_id.as_str()).bind(original.canonical_hash.as_str()).bind(payload).bind(original.envelope.time.as_router_time().ok_or_else(|| StoreError::Aborted { reason:"fixture needs Router time".into() })?.to_rfc3339()).execute(scope.executor()).await.map_err(StoreError::backend)?;
