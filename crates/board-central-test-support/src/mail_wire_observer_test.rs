@@ -22,13 +22,14 @@ fn push_wire_observation_keeps_item_frame_and_capacity_refusal() -> FixtureResul
         "endpoint":{"serviceId":"019f0000-0000-7000-8000-000000001104","endpointId":"codex-local"},
         "sessionId":"capacity-recipient"
     }))?;
+    let peer = serde_json::from_value(json!("019f0000-0000-7000-8000-000000001105"))?;
     let cancel = DeliveryCancel::<BoardDeliveryTypes>::new(
         item,
         serde_json::from_value(
             json!({"kind":"humanUser","installation":"019f0000-0000-7000-8000-000000001104"}),
         )?,
         Recipient {
-            peer: serde_json::from_value(json!("019f0000-0000-7000-8000-000000001105"))?,
+            peer,
             address,
         },
         None,
@@ -43,6 +44,7 @@ fn push_wire_observation_keeps_item_frame_and_capacity_refusal() -> FixtureResul
         frame,
         body: ServerRequest::Crate(ServerCall::Push {
             call,
+            submitter: fleet_sync_protocol::Submitter::Machine(peer),
             item: DeliveryEnvelope::Cancel(cancel),
         }),
     };
