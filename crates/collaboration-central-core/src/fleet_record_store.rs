@@ -36,7 +36,9 @@ where
     for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    let result = if reference.kind == RecordKind::Request {
+    let result = if reference.kind == RecordKind::Workspace {
+        crate::fleet_workspace_store::read(scope, reference.id.as_str()).await?
+    } else if reference.kind == RecordKind::Request {
         generated_statements::read_fleet_decision(scope, reference.id.as_str().into())
             .await
             .map_err(StoreError::backend)?
@@ -70,6 +72,7 @@ pub(crate) async fn put<Scope: TransactionScope>(
     scope: &mut Scope,
     record: &Record,
     source: RecordWriteSource<'_>,
+    now: chrono::DateTime<chrono::Utc>,
     row_ids: &mut crate::fleet_row_ids::FleetRowIds,
 ) -> Result<(), StoreError>
 where
@@ -98,28 +101,31 @@ where
             _ => {}
         }
     }
-    let payload = serde_json::to_string(record).map_err(StoreError::backend)?;
-    let time = header.router_time();
-    let basis = header.time_basis();
-    let installation = header.origin.installation.as_str().to_owned();
-    let machine = header.origin.machine.as_str().to_owned();
-    let digest = source.digest();
-    match record {
-        Record::Workspace(_) => {
-            writes::put_workspace(scope, payload, time, basis, installation, machine, digest).await
+    if let Record::Workspace(workspace) = record {
+        crate::fleet_workspace_store::put(scope, workspace, &header, source.digest(), now, row_ids)
+            .await?;
+    } else {
+        let payload = serde_json::to_string(record).map_err(StoreError::backend)?;
+        let time = header.router_time();
+        let basis = header.time_basis();
+        let installation = header.origin.installation.as_str().to_owned();
+        let machine = header.origin.machine.as_str().to_owned();
+        let digest = source.digest();
+        match record {
+            Record::Board(_) => {
+                writes::put_board(scope, payload, time, basis, installation, machine, digest).await
+            }
+            Record::DirectoryEntry(_) => {
+                writes::put_project(scope, payload, time, basis, installation, machine, digest)
+                    .await
+            }
+            Record::Adr(_) => {
+                writes::put_adr(scope, payload, time, basis, installation, machine, digest).await
+            }
+            _ => return Err(corrupt("kind", "ledger writes use the decision owner")),
         }
-        Record::Board(_) => {
-            writes::put_board(scope, payload, time, basis, installation, machine, digest).await
-        }
-        Record::DirectoryEntry(_) => {
-            writes::put_project(scope, payload, time, basis, installation, machine, digest).await
-        }
-        Record::Adr(_) => {
-            writes::put_adr(scope, payload, time, basis, installation, machine, digest).await
-        }
-        _ => return Err(corrupt("kind", "ledger writes use the decision owner")),
+        .map_err(StoreError::backend)?;
     }
-    .map_err(StoreError::backend)?;
     if let (RecordWriteSource::Imported(digest), Record::Workspace(value)) = (source, record) {
         for repository in &value.repositories {
             crate::fleet_repository_store::attach(

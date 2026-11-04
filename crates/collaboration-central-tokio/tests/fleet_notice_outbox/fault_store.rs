@@ -44,7 +44,7 @@ impl<Io: PlatformIo> AtomicStore for FaultStore<Io> {
         self.object.transaction(move |scope|Box::pin(async move {
             let result=run(scope).await?;
             if armed.load(Ordering::SeqCst) {
-                let row=query::<sqlx_turso::Turso>("SELECT count(*) AS count FROM workspaces").fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
+                let row=query::<sqlx_turso::Turso>("SELECT count(*) AS count FROM fleet_workspaces").fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
                 let count:i64=row.try_get("count").map_err(StoreError::backend)?;
                 if count>0 && armed.swap(false,Ordering::SeqCst) {
                     injected.store(true,Ordering::SeqCst);

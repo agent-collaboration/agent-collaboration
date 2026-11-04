@@ -1,0 +1,204 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_fleet_workspaces.rs",
+  "metadata": "fleet-workspace-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_workspace_columns",
+      "sql": "sql/fleet/read_workspace_columns.sql",
+      "row": "StoredFleetWorkspace",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "workspace_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_workspace_repository_refs",
+      "sql": "sql/fleet/read_workspace_repository_refs.sql",
+      "row": "StoredWorkspaceRepositoryRef",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "workspace_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "put_workspace",
+      "sql": "sql/fleet/put_workspace.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "workspace_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "description",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "state",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "repository_count",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "actor_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "actor_human_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_service_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_endpoint_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_session_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_router_component",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "request_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "fleet_position",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "router_time",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "time_basis",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_installation",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_machine",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "import_digest",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "put_workspace_repository_ref",
+      "sql": "sql/fleet/put_workspace_repository_ref.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "row_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "workspace_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "ordinal",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "reference_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "normalized_origin",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "service_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "common_directory",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "prune_workspace_repository_refs",
+      "sql": "sql/fleet/prune_workspace_repository_refs.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "workspace_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "count",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

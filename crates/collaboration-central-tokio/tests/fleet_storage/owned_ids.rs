@@ -77,15 +77,15 @@ async fn injected_id_source_owns_the_repository_feed_state_and_feed_entry_ids() 
     let proof=async {
         runtime.on_call(import_bytes(&bundle()?)?).await.map_err(|error|format!("import did not answer: {error:?}"))?;
         let ids=fixture.object.transaction(|scope|Box::pin(async move {
-            query::<sqlx_turso::Turso>("SELECT attachment_id AS id, 0 AS ordering FROM repository_attachments UNION ALL SELECT state_id AS id, 1 AS ordering FROM fleet_feed_state UNION ALL SELECT entry_id AS id, position + 1 AS ordering FROM fleet_feed ORDER BY ordering")
+            query::<sqlx_turso::Turso>("SELECT row_id AS id,0 AS ordering FROM fleet_workspace_repository_refs UNION ALL SELECT attachment_id AS id,1 AS ordering FROM repository_attachments UNION ALL SELECT state_id AS id,2 AS ordering FROM fleet_feed_state UNION ALL SELECT entry_id AS id,position+2 AS ordering FROM fleet_feed ORDER BY ordering")
                 .fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|row.try_get::<String,_>("id").map_err(StoreError::backend)).collect::<Result<Vec<_>,_>>()
         })).await?;
         assert_eq!(ids, vec![
             "019f0000-0000-7000-8000-000000000a90", "019f0000-0000-7000-8000-000000000a91",
             "019f0000-0000-7000-8000-000000000a92", "019f0000-0000-7000-8000-000000000a93",
-            "019f0000-0000-7000-8000-000000000a94",
+            "019f0000-0000-7000-8000-000000000a94", "019f0000-0000-7000-8000-000000000a95",
         ]);
-        assert_eq!(next.load(Ordering::SeqCst),0xa95);
+        assert_eq!(next.load(Ordering::SeqCst),0xa96);
         assert_eq!(fixture.counts().await?,vec![1,1,1,1,3]);
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
     }.await;

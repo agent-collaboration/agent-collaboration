@@ -65,7 +65,7 @@ async fn live_update_keeps_original_import_digest_and_replays_one_ledger_and_fee
         assert_eq!(fixture.import(&offered).await?, FleetImportResult::AlreadyImported);
         assert_eq!(fixture.counts().await?, vec![1,1,1,1,5]);
         let (stored_digest, basis, installation, ledgers, receipts) = fixture.object.transaction(|scope| Box::pin(async move {
-            let row = query::<sqlx_turso::Turso>("SELECT import_digest,time_basis,origin_installation,(SELECT count(*) FROM fleet_request_decisions) AS ledgers,(SELECT count(*) FROM fleet_decision_receipts) AS receipts FROM workspaces").fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
+            let row = query::<sqlx_turso::Turso>("SELECT import_digest,time_basis,origin_installation,(SELECT count(*) FROM fleet_request_decisions) AS ledgers,(SELECT count(*) FROM fleet_decision_receipts) AS receipts FROM fleet_workspaces").fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
             Ok((row.try_get::<String,_>("import_digest").map_err(StoreError::backend)?, row.try_get::<String,_>("time_basis").map_err(StoreError::backend)?, row.try_get::<String,_>("origin_installation").map_err(StoreError::backend)?, row.try_get::<i64,_>("ledgers").map_err(StoreError::backend)?, row.try_get::<i64,_>("receipts").map_err(StoreError::backend)?))
         })).await?;
         assert_eq!(stored_digest, digest.as_str());
@@ -97,7 +97,7 @@ async fn corrupt_origin_header_refuses_import_replay_without_writes() -> TestRes
             .transaction(|scope| {
                 Box::pin(async move {
                     query::<sqlx_turso::Turso>(
-                        "UPDATE workspaces SET origin_machine='different machine'",
+                        "UPDATE fleet_workspaces SET origin_machine=' padded machine '",
                     )
                     .execute(scope.executor())
                     .await

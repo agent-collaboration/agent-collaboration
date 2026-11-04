@@ -165,29 +165,28 @@ impl Fixture {
     }
     pub async fn counts(&self) -> TestResult<Vec<i64>> {
         Ok(self.object.transaction(|scope| Box::pin(async move {
-            let row = query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM workspaces) AS workspaces,(SELECT count(*) FROM boards) AS boards,(SELECT count(*) FROM project_directory) AS directory,(SELECT count(*) FROM repository_attachments) AS repositories,(SELECT count(*) FROM fleet_feed) AS feed")
+            let row = query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM fleet_workspaces) AS workspaces,(SELECT count(*) FROM boards) AS boards,(SELECT count(*) FROM project_directory) AS directory,(SELECT count(*) FROM repository_attachments) AS repositories,(SELECT count(*) FROM fleet_feed) AS feed")
                 .fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
             ["workspaces","boards","directory","repositories","feed"].into_iter()
                 .map(|name| row.try_get(name).map_err(StoreError::backend)).collect::<Result<Vec<i64>,_>>()
         })).await?)
     }
     pub async fn assert_import_headers(&self) -> TestResult {
-        let (time, basis, origin, machine, digest, payload) = self.object.transaction(|scope| Box::pin(async move {
-            let row = query::<sqlx_turso::Turso>("SELECT router_time,time_basis,origin_installation,origin_machine,import_digest,payload FROM workspaces")
+        let (time, basis, origin, machine, digest, record) = self.object.transaction(|scope| Box::pin(async move {
+            let row = query::<sqlx_turso::Turso>("SELECT router_time,time_basis,origin_installation,origin_machine,import_digest,workspace_id FROM fleet_workspaces")
                 .fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
             Ok((row.try_get::<Option<String>,_>("router_time").map_err(StoreError::backend)?,
                 row.try_get::<String,_>("time_basis").map_err(StoreError::backend)?,
                 row.try_get::<String,_>("origin_installation").map_err(StoreError::backend)?,
                 row.try_get::<String,_>("origin_machine").map_err(StoreError::backend)?,
                 row.try_get::<Option<String>,_>("import_digest").map_err(StoreError::backend)?,
-                row.try_get::<String,_>("payload").map_err(StoreError::backend)?))
+                collaboration_central_core::read_fleet_record_in_scope(scope, &message_board::WorkspaceId::try_from(row.try_get::<String,_>("workspace_id").map_err(StoreError::backend)?).map_err(StoreError::backend)?.into()).await?.ok_or_else(|| StoreError::backend("workspace missing"))?))
         })).await?;
         assert_eq!(time, None);
         assert_eq!(basis, "legacy_unknown");
         assert_eq!(origin, "550e8400-e29b-41d4-a716-4466554400a8");
         assert_eq!(machine, "legacy importer");
         assert!(digest.is_some_and(|digest| digest.len() == 64));
-        let record: message_board::Record = serde_json::from_str(&payload)?;
         assert_eq!(
             record.envelope().time,
             message_board::RecordTime::LegacyUnknown

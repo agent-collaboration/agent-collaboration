@@ -32,6 +32,7 @@ where
             scope,
             &write.record,
             RecordWriteSource::Imported(&write.digest),
+            now,
             row_ids,
         )
         .await?;
@@ -93,7 +94,8 @@ where
                 creation = Some((project, creating_request, carrier_installation));
             }
             FleetWrite::Put(record) => {
-                fleet_record_store::put(scope, &record, RecordWriteSource::Live, row_ids).await?
+                fleet_record_store::put(scope, &record, RecordWriteSource::Live, now, row_ids)
+                    .await?
             }
             FleetWrite::Ledger(_) => {}
             FleetWrite::DecisionReceipt {

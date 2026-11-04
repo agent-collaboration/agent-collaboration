@@ -264,7 +264,7 @@ pub(super) async fn measure(fixture: &Fixture, kind: &'static str, expected: Rec
         expected
     );
     let sql = match reference.kind {
-        RecordKind::Workspace => "SELECT * FROM workspaces WHERE workspace_id=?",
+        RecordKind::Workspace => "SELECT * FROM fleet_workspaces WHERE workspace_id=?",
         RecordKind::Board => "SELECT * FROM boards WHERE board_id=?",
         RecordKind::Adr => "SELECT * FROM workspace_adrs WHERE adr_id=?",
         RecordKind::Project => "SELECT * FROM project_directory WHERE project_id=?",
@@ -296,7 +296,14 @@ pub(super) async fn measure(fixture: &Fixture, kind: &'static str, expected: Rec
                         row.columns()
                             .iter()
                             .map(|column| {
-                                if column.name() == "position" {
+                                if matches!(
+                                    column.name(),
+                                    "position"
+                                        | "repository_count"
+                                        | "fleet_position"
+                                        | "created_at"
+                                        | "updated_at"
+                                ) {
                                     row.try_get::<i64, _>(column.name())
                                         .map(SqlValue::Integer)
                                         .map_err(StoreError::backend)

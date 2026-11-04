@@ -257,7 +257,11 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
         1
     );
     assert_eq!(
-        read_count(&fleet_path, "SELECT COUNT(*) AS count FROM workspaces").await?,
+        read_count(
+            &fleet_path,
+            "SELECT COUNT(*) AS count FROM fleet_workspaces"
+        )
+        .await?,
         1
     );
     assert_eq!(

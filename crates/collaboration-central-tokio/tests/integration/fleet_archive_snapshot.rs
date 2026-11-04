@@ -24,11 +24,7 @@ pub(super) async fn inspect(
     attempt: durable_steps::Uuid,
 ) -> TestResult<ArchiveState> {
     Ok(fixture.store.transaction(move |scope|Box::pin(async move {
-        let rows = query::<sqlx_turso::Turso>("SELECT 'board' AS kind,payload FROM boards UNION ALL SELECT 'workspace' AS kind,payload FROM workspaces ORDER BY kind").fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
-        let records = rows.into_iter().map(|row|{
-            let payload=row.try_get::<String,_>("payload").map_err(StoreError::backend)?;
-            serde_json::from_str(&payload).map_err(StoreError::backend)
-        }).collect::<Result<Vec<_>,_>>()?;
+        let records = crate::fleet_record_rows::metadata_records(scope).await?;
         let feed = query::<sqlx_turso::Turso>("SELECT position,payload FROM fleet_feed ORDER BY position").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|Ok((row.try_get::<i64,_>("position").map_err(StoreError::backend)?,row.try_get::<String,_>("payload").map_err(StoreError::backend)?))).collect::<Result<Vec<_>,StoreError>>()?;
         let ledgers = query::<sqlx_turso::Turso>("SELECT payload FROM fleet_request_decisions ORDER BY request_id").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|row.try_get::<String,_>("payload").map_err(StoreError::backend)).collect::<Result<Vec<_>,_>>()?;
         let reports = query::<sqlx_turso::Turso>("SELECT report_id,board_id,project_id,epoch,commit_sequence,installation,reported_at,created_at,updated_at FROM fleet_archive_reports ORDER BY board_id,project_id").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|Ok::<_,StoreError>(json!({

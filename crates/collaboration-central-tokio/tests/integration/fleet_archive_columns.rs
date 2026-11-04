@@ -69,7 +69,8 @@ struct ArchiveSnapshot {
 async fn snapshot(fixture: &Fixture) -> TestResult<ArchiveSnapshot> {
     Ok(fixture.store.transaction(|scope|Box::pin(async move {
         let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM fleet_archive_reports) AS reports,(SELECT last_position FROM fleet_feed_state WHERE name='fleet') AS feed,(SELECT count(*) FROM machine_control_notices) AS notices").fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
-        let records=query::<sqlx_turso::Turso>("SELECT payload FROM boards UNION ALL SELECT payload FROM workspaces ORDER BY payload").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|row.try_get::<String,_>("payload").map_err(StoreError::backend)).collect::<Result<Vec<_>,_>>()?;
+        let mut records=crate::fleet_record_rows::metadata_records(scope).await?.into_iter().map(|record|serde_json::to_string(&record).map_err(StoreError::backend)).collect::<Result<Vec<_>,_>>()?;
+        records.sort();
         Ok(ArchiveSnapshot {reports:row.try_get("reports").map_err(StoreError::backend)?,feed:row.try_get("feed").map_err(StoreError::backend)?,notices:row.try_get("notices").map_err(StoreError::backend)?,records,wake_at:scope.earliest().await?})
     })).await?)
 }

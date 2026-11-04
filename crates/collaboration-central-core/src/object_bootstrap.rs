@@ -16,6 +16,10 @@ use std::{collections::BTreeMap, convert::Infallible, sync::Arc};
 #[path = "migration_bookkeeping_test.rs"]
 mod tests;
 
+#[cfg(test)]
+#[path = "fleet_workspace_columns_test.rs"]
+mod workspace_columns_tests;
+
 #[cfg(feature = "conformance")]
 mod conformance;
 #[cfg(feature = "conformance")]

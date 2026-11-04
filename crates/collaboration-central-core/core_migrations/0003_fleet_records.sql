@@ -1,16 +1,40 @@
-CREATE TABLE workspaces (
+CREATE TABLE fleet_workspaces (
     workspace_id TEXT NOT NULL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
-    payload TEXT NOT NULL,
+    description TEXT NOT NULL,
+    state TEXT NOT NULL,
+    repository_count INTEGER NOT NULL,
+    actor_kind TEXT NOT NULL,
+    actor_human_id TEXT,
+    actor_service_id TEXT,
+    actor_endpoint_id TEXT,
+    actor_session_id TEXT,
+    actor_router_component TEXT,
+    request_id TEXT,
+    fleet_position INTEGER NOT NULL,
     router_time TEXT,
     time_basis TEXT NOT NULL,
     origin_installation TEXT NOT NULL,
     origin_machine TEXT NOT NULL,
-    import_digest TEXT
+    import_digest TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE TABLE fleet_workspace_repository_refs (
+    row_id TEXT NOT NULL PRIMARY KEY,
+    workspace_id TEXT NOT NULL REFERENCES fleet_workspaces(workspace_id),
+    ordinal INTEGER NOT NULL,
+    reference_kind TEXT NOT NULL,
+    normalized_origin TEXT,
+    service_id TEXT,
+    common_directory TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE(workspace_id, ordinal)
 );
 CREATE TABLE boards (
     board_id TEXT NOT NULL PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id),
+    workspace_id TEXT NOT NULL REFERENCES fleet_workspaces(workspace_id),
     name TEXT NOT NULL,
     payload TEXT NOT NULL,
     router_time TEXT,
@@ -23,7 +47,7 @@ CREATE TABLE boards (
 );
 CREATE TABLE project_directory (
     project_id TEXT NOT NULL PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id),
+    workspace_id TEXT NOT NULL REFERENCES fleet_workspaces(workspace_id),
     board_id TEXT NOT NULL,
     name TEXT NOT NULL,
     payload TEXT NOT NULL,
@@ -37,7 +61,7 @@ CREATE TABLE project_directory (
 );
 CREATE TABLE workspace_adrs (
     adr_id TEXT NOT NULL PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id),
+    workspace_id TEXT NOT NULL REFERENCES fleet_workspaces(workspace_id),
     title TEXT NOT NULL,
     payload TEXT NOT NULL,
     router_time TEXT,
@@ -48,7 +72,7 @@ CREATE TABLE workspace_adrs (
 );
 CREATE TABLE repository_attachments (
     attachment_id TEXT NOT NULL PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id),
+    workspace_id TEXT NOT NULL REFERENCES fleet_workspaces(workspace_id),
     repository_reference TEXT NOT NULL,
     router_time TEXT,
     time_basis TEXT NOT NULL,
