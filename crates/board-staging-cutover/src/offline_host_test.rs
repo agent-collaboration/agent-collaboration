@@ -10,6 +10,54 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 #[test]
 #[expect(
     clippy::panic_in_result_fn,
+    reason = "Read-only inspection cannot create even an inert Host lock file."
+)]
+fn read_only_inspection_of_a_stopped_host_creates_no_lock_artifact() -> TestResult {
+    // Arrange an existing private identity with no Host coordination artifact.
+    let fixture = CutoverHostFixture::new(None)?;
+    let paths = HostCoordinationPaths::for_router_root(&fixture.root);
+    assert!(!paths.instance_lock().exists());
+    // Act through the same pre-stop inspection boundary.
+    OfflineHost::inspect(&fixture.root, &fixture.service, fixture.peer, &fixture.home)?;
+    // Assert a read creates no authority or filesystem state.
+    assert!(!paths.instance_lock().exists());
+    Ok(())
+}
+
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Pre-stop inspection must keep the live Host's lock and identities untouched."
+)]
+fn read_only_inspection_validates_a_live_host_without_acquiring_its_lock() -> TestResult {
+    // Arrange the same lock held by an already running declared Host.
+    let fixture = CutoverHostFixture::new(None)?;
+    let paths = HostCoordinationPaths::for_router_root(&fixture.root);
+    let host = HostInstanceLock::acquire(&paths)?;
+    let peer_path = fixture.identity_path("installation-peer.json");
+    let before = std::fs::read(&peer_path)?;
+    // Act through the pre-stop boundary the TypeScript orchestrator will use.
+    let inspected =
+        OfflineHost::inspect(&fixture.root, &fixture.service, fixture.peer, &fixture.home)?;
+    // Assert the exact declared identity and that the running authority remains held.
+    assert_eq!(
+        inspected.router_root(),
+        std::fs::canonicalize(&fixture.root)?
+    );
+    assert_eq!(inspected.service_id(), &fixture.service);
+    assert_eq!(inspected.peer(), fixture.peer);
+    assert_eq!(std::fs::read(peer_path)?, before);
+    assert!(matches!(
+        HostInstanceLock::acquire(&paths),
+        Err(InstanceAcquireError::AlreadyRunning)
+    ));
+    drop(host);
+    Ok(())
+}
+
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
     reason = "The real singleton lock must span the offline scope."
 )]
 fn offline_scope_holds_the_existing_host_lock_until_drop() -> TestResult {

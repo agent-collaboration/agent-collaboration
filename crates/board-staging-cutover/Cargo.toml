@@ -9,6 +9,10 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[[bin]]
+name = "codex-router-board-staging-cutover"
+path = "src/main.rs"
+
 [dependencies]
 collaboration-client = { path = "../collaboration-client", version = "0.1.123" }
 collaboration-central-admin-protocol = { path = "../collaboration-central-admin-protocol", version = "0.1.123" }
@@ -52,3 +56,7 @@ fleet-sync-session.workspace = true
 [[test]]
 name = "integration"
 path = "tests/integration/main.rs"
+
+[[test]]
+name = "e2e"
+path = "tests/e2e/main.rs"

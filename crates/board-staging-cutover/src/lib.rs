@@ -18,7 +18,7 @@ pub use staging_publication::{
     PublicationError, PublicationStage, PublishedProject, StagingPublisher,
 };
 
-pub use offline_host::{OfflineHost, OfflineHostError};
+pub use offline_host::{HostInspection, OfflineHost, OfflineHostError};
 
 pub use snapshot_transport::{
     PreparedSnapshotPage, SnapshotTransportError, reframe_import_manifest, reframe_import_page,
