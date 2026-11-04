@@ -142,7 +142,7 @@ async fn require_known(
     )
 }
 
-async fn wait_for_receipt(
+pub(super) async fn wait_for_receipt(
     socket: &mut WebSocket,
     item: &DeliveryEnvelope<BoardDeliveryTypes>,
     owner: PeerId,

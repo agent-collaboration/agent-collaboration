@@ -63,6 +63,11 @@ pub(super) async fn connect(
             .to_string(),
         ))
         .await?;
+    ConformanceClient::new(base)?
+        .wake_due_after_hello(fleet_sync_protocol::SessionId::new(Uuid::parse_str(
+            session,
+        )?)?)
+        .await?;
     let welcome = scenarios::receive(&mut socket).await?;
     if welcome.get("kind").and_then(Value::as_str) != Some("welcome")
         || welcome.pointer("/value/sessionId").and_then(Value::as_str) != Some(session)
