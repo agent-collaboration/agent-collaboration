@@ -23,8 +23,7 @@ use std::time::Duration;
 type Acceptance = <BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Acceptance;
 
 const CAP: Duration = Duration::from_secs(5);
-#[path = "../native_http/support.rs"]
-pub(super) mod configuration;
+pub(super) use crate::configuration;
 
 pub(super) async fn send_client_frame(
     socket: &mut WebSocket,

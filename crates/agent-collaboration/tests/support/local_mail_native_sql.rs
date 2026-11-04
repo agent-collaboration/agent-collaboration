@@ -111,6 +111,7 @@ pub async fn local_is_compacted(
     owner: Arc<InteractionStore>,
     peer: fleet_sync_protocol::PeerId,
     reference: fleet_sync_protocol::DeliveryItemRef,
+    binding: collaboration_service::MachineSenderBinding,
 ) -> Result<bool, StoreError> {
     // This read context uses PD4's limits and only the SDK's public observation methods.
     let limits =
@@ -132,7 +133,8 @@ pub async fn local_is_compacted(
                 let mut inbox = fleet_sync_delivery::Inbox::<
                     _,
                     collaboration_contracts::RouterDeliveryTypes,
-                >::new(scope, peer, limits);
+                    _,
+                >::new(scope, peer, limits, &binding);
                 if !matches!(
                     inbox
                         .local_outcome(reference.item)

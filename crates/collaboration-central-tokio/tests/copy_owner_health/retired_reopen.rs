@@ -1,6 +1,6 @@
 //! Retired owner operations retain the minimal receipt without admitting future history.
 use super::{ConformanceResult, JwksFixtureServer, TokioServer, settings};
-use crate::{
+use crate::copy_owner_health::{
     copy_owner_scenarios::OwnerClient,
     imported_board_fixture::arrange_imported_unheld_board,
     owner_registry_scenarios::{complete, post},

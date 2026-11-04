@@ -1,7 +1,6 @@
 //! Shared real Registry/Fleet storage; each case selects its explicit transport fault.
 
-#[path = "../fleet_storage/support.rs"]
-mod fleet_fixture;
+use crate::native_fleet as fleet_fixture;
 pub(super) use fleet_fixture::Fixture as FleetFixture;
 
 use collaboration_central_core::{CoreHost, ObjectAddress, ObjectRuntime, PlatformIo};

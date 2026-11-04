@@ -1,5 +1,6 @@
 [package]
 name = "board-staging-cutover"
+autotests = false
 version.workspace = true
 edition.workspace = true
 license.workspace = true

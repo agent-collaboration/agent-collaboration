@@ -84,6 +84,12 @@ pub(super) struct Surfaces {
     pub(super) carrier: Arc<CarrierStandIn>,
 }
 impl Surfaces {
+    pub(super) fn sender_binding(&self) -> TestResult<collaboration_service::MachineSenderBinding> {
+        Ok(collaboration_service::MachineSenderBinding::new(
+            SERVICE.to_owned().try_into()?,
+            self.peer,
+        ))
+    }
     // Only the companion compaction target needs the frozen reference.
     pub(super) async fn delivery_reference(
         &self,

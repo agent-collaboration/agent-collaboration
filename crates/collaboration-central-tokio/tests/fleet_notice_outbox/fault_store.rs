@@ -1,12 +1,12 @@
 //! Inject a real uniqueness error after the Fleet callback, inside its transaction.
-use super::{Io, Native};
 use collaboration_central_core::{
-    CoreHost, ObjectHost, RegistrationEdits, RegistrationSnapshot, SocketFailure,
+    CoreHost, ObjectHost, PlatformIo, RegistrationEdits, RegistrationSnapshot, SocketFailure,
 };
 use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScope};
 use fleet_sync_protocol::{CloseReason, ConnectionId};
 use fleet_sync_session::Bytes;
+use fleet_sync_tokio_runner::TokioObject;
 use sqlx_core::{query::query, row::Row};
 use std::{
     future::Future,
@@ -15,20 +15,20 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
 };
-pub struct FaultStore {
-    pub object: Arc<Native>,
+pub struct FaultStore<Io: PlatformIo> {
+    pub object: Arc<TokioObject<CoreHost<Io>>>,
     pub armed: Arc<AtomicBool>,
     pub injected: Arc<AtomicBool>,
 }
-impl durable_steps::ReborrowScope for FaultStore {
+impl<Io: PlatformIo> durable_steps::ReborrowScope for FaultStore<Io> {
     fn reborrow<'scope, 'transaction: 'scope>(
         scope: &'scope mut Self::Scope<'transaction>,
     ) -> Self::Scope<'scope> {
-        Native::reborrow(scope)
+        TokioObject::<CoreHost<Io>>::reborrow(scope)
     }
 }
-impl AtomicStore for FaultStore {
-    type Scope<'transaction> = <Native as AtomicStore>::Scope<'transaction>;
+impl<Io: PlatformIo> AtomicStore for FaultStore<Io> {
+    type Scope<'transaction> = <TokioObject<CoreHost<Io>> as AtomicStore>::Scope<'transaction>;
     async fn transaction<Output, Callback>(&self, run: Callback) -> Result<Output, StoreError>
     where
         Output: Send + 'static,
@@ -56,13 +56,13 @@ impl AtomicStore for FaultStore {
         })).await
     }
 }
-pub struct FaultHost {
+pub struct FaultHost<Io: PlatformIo> {
     pub native: Arc<TokioStorageHost<CoreHost<Io>>>,
-    pub store: Arc<FaultStore>,
+    pub store: Arc<FaultStore<Io>>,
 }
-impl ObjectHost for FaultHost {
+impl<Io: PlatformIo> ObjectHost for FaultHost<Io> {
     type Database = sqlx_turso::Turso;
-    type Store = FaultStore;
+    type Store = FaultStore<Io>;
     type Wake = CoreHost<Io>;
     fn store(&self) -> &Arc<Self::Store> {
         &self.store

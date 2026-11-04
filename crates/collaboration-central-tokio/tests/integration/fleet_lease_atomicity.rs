@@ -1,10 +1,5 @@
 //! Exercise the production Fleet renew entry, library hook and actual owning SQLite transaction.
-#[expect(
-    dead_code,
-    reason = "The existing Fleet fixture also serves other integration targets."
-)]
-#[path = "../fleet_storage/support.rs"]
-mod fleet_fixture;
+use crate::native_fleet as fleet_fixture;
 
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
 use fleet_fixture::{Fixture, TestResult};

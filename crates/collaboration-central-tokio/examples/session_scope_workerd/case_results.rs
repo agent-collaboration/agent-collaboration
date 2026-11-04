@@ -9,10 +9,10 @@ impl Scenario {
                 "MAILBOX_REPORT_TERMINAL_RESULT 1 passed; 0 failed; 0 ignored (real SDK report task and central socket; terminal refusal stops retries)"
             ),
             Scenario::MailboxHeldRetention => println!(
-                "MAILBOX_HELD_RETENTION_RESULT 1 passed; 0 failed; 0 ignored (same Native/Worker oracle, actual held payload across31controlled days and exact receipt release; no physical restart claim)"
+                "MAILBOX_HELD_RETENTION_RESULT 1 passed; 0 failed; 0 ignored (same Native/Worker oracle, real Inbox Held payload across31controlled days, scheduled retention, explicit local release and terminal report; no physical restart claim)"
             ),
             Scenario::MailboxCapacity => println!(
-                "MAILBOX_CAPACITY_RESULT 1 passed; 0 failed; 0 ignored (shared one-item quota, unknown rejected item, exact original and reserved cancel; no disk-full claim)"
+                "MAILBOX_CAPACITY_RESULT 1 passed; 0 failed; 0 ignored (real recipient Inbox quota refusal, exact original and prepaid cancellation; Fleet retains Sent for retry; no disk-full claim)"
             ),
             Scenario::MailboxCancel => println!(
                 "MAILBOX_CANCEL_RESULT 1 passed; 0 failed; 0 ignored (real dropped custody answer, pending cancel readback, recipient decision and final original status; no Router end-to-end claim)"
@@ -20,8 +20,8 @@ impl Scenario {
             Scenario::MailboxIdentity => println!(
                 "MAILBOX_IDENTITY_RESULT 1 passed; 0 failed; 0 ignored (shared native/workerd oracle, real mailbox replay/conflict and exact single original payload; no Router end-to-end claim)"
             ),
-            Scenario::MailboxDeadline => println!(
-                "MAILBOX_DEADLINE_RESULT 1 passed; 0 failed; 0 ignored (shared normal session, offline recipient, real alarm, newer status and released payload; no physical restart claim)"
+            Scenario::FleetMailExpiry => println!(
+                "FLEET_MAIL_EXPIRY_RESULT 1 passed; 0 failed; 0 ignored (shared normal session, injected Fleet clock, unsolicited expiry before recipient reconnect, exact later sentinel Push; owning reopen proven by native component cases)"
             ),
             Scenario::DeliveryConfigRefusals => println!(
                 "DELIVERY_TEMPLATE_REFUSALS_RESULT 2 passed; 0 failed; 0 ignored (real Worker missing relay field and malformed peer refusal)"

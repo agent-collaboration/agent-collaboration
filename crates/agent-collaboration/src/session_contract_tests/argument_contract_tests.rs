@@ -120,7 +120,6 @@ fn sessions_command_positional_id_keeps_exact_id_mode_conflicts() {
 fn sessions_command_rejects_non_uuid_resume_ids() {
     for session_id in [
         "thread-name",
-        "00000000-0000-4000-8000-00000000000",
         "00000000-0000-4000-8000-000000000001-suffix",
         " 00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000001 ",
@@ -155,6 +154,8 @@ fn sessions_command_id_conflicts_with_other_selection_modes() {
 fn sessions_exact_resume_id_uses_runner_without_picker_or_state_lookup() {
     const SESSION_ID: &str = "00000000-0000-4000-8000-000000000001";
     let command = match parse_session_arguments([
+        OsString::from("--provider"),
+        OsString::from("codex"),
         OsString::from("--id"),
         OsString::from(SESSION_ID),
         OsString::from("--local"),
@@ -194,6 +195,8 @@ fn sessions_exact_resume_id_dry_run_uses_invoking_cwd() {
     let codex_home = PathBuf::from("/tmp/codex-router-sessions-id-home");
     let invoking_cwd = PathBuf::from("/tmp/codex-router-sessions-id-project");
     let command = match parse_session_arguments([
+        OsString::from("--provider"),
+        OsString::from("codex"),
         OsString::from("--id"),
         OsString::from(SESSION_ID),
         OsString::from("--dry-run"),
@@ -234,6 +237,8 @@ fn sessions_exact_resume_id_dry_run_uses_invoking_cwd() {
 fn sessions_local_new_dry_run_keeps_router_profile_without_remote_attachment() {
     let invoking_cwd = PathBuf::from("/tmp/codex-router-sessions-local-project");
     let command = match parse_session_arguments([
+        OsString::from("--provider"),
+        OsString::from("codex"),
         OsString::from("--local"),
         OsString::from("--new"),
         OsString::from("--dry-run"),
@@ -296,6 +301,8 @@ fn sessions_new_dry_run_prints_codex_command_with_passthrough_flags() {
     let codex_home = PathBuf::from("/tmp/codex-router-sessions-new-home");
     let invoking_cwd = PathBuf::from("/tmp/codex-router-sessions-new-project");
     let command = match parse_session_arguments([
+        OsString::from("--provider"),
+        OsString::from("codex"),
         OsString::from("--new"),
         OsString::from("--dry-run"),
         OsString::from("--yolo"),

@@ -17,12 +17,18 @@ async fn status(fixture: &Fixture, item: ItemId) -> TestResult<ItemStatus<Accept
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::Outbox::<_, board_sync_protocol::BoardDeliveryTypes>::new(
+                fleet_sync_delivery::Outbox::<_, board_sync_protocol::BoardDeliveryTypes, _>::new(
                     scope,
                     collaboration_central_core::fleet_outbox_limits()
                         .map_err(StoreError::backend)?,
+                    &collaboration_central_core::FleetSenderBinding,
                 )
-                .relay_query(A.to_owned().try_into().map_err(StoreError::backend)?, item)
+                .relay_query(
+                    fleet_sync_protocol::Submitter::Machine(
+                        A.to_owned().try_into().map_err(StoreError::backend)?,
+                    ),
+                    item,
+                )
                 .await
                 .map_err(fleet_sync_delivery::delivery_rollback)
             })

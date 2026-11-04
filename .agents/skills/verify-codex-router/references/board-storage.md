@@ -4,10 +4,10 @@ For central-storage-reset D1 project isolation, use [D1 central mail](d1-central
 
 ## Current entry
 
-The wrapper retired in 0.1.102. Current local model-free process journeys are the Rust `board_records_e2e` and `board_central_e2e` targets, backed by `crates/agent-collaboration/tests/board_e2e/`. After the CI local-end-to-end job’s artifact preparation, run:
+The wrapper retired in 0.1.102. Current local model-free process journeys are the Rust `board_records_e2e` and `board_central_e2e` modules in the `e2e` aggregate, backed by `crates/agent-collaboration/tests/board_e2e/`. After the CI local-end-to-end job’s artifact preparation, run:
 
 ```sh
-cargo test --locked -p agent-collaboration --all-features --test board_records_e2e --test board_central_e2e -- --test-threads=1
+cargo nextest run --locked --profile ci -p agent-collaboration --all-features --test e2e -E 'test(/^(board_records_e2e|board_central_e2e)::/)' --test-threads 1
 ```
 
 These cover retained record/reopen and BC01–BC06 replication, holders, archive, forwarding, import and lease cases. They grant no hosted or separate-machine credit.

@@ -7,8 +7,7 @@ use collaboration_central_conformance::{
 use collaboration_central_core::{ObjectAddress, RegistryTime};
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 
-#[path = "../native_http/support.rs"]
-pub(super) mod configuration;
+use crate::configuration;
 
 pub struct SuppliedClock {
     base: String,

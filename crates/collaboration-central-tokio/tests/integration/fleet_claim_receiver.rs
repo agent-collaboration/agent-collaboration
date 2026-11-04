@@ -11,12 +11,25 @@ use fleet_sync_protocol::{
 use serde_json::{Value, json};
 use sqlx_core::{query::query, row::Row};
 
-async fn claim_gate(
+pub(super) async fn claim_gate(
     fixture: &Fixture,
     operation: durable_steps::Uuid,
     attempt: durable_steps::Uuid,
     cancelled: bool,
 ) -> TestResult<Value> {
+    let reply = fixture
+        .runtime
+        .on_call(claim_gate_call(operation, attempt, cancelled)?)
+        .await
+        .map_err(|failure| format!("real claim gate: {failure:?}"))?;
+    Ok(serde_json::from_slice(&reply)?)
+}
+
+pub(super) fn claim_gate_call(
+    operation: durable_steps::Uuid,
+    attempt: durable_steps::Uuid,
+    cancelled: bool,
+) -> TestResult<Vec<u8>> {
     let change = HolderChangeRequest::Claim {
         attempt: fleet_sync_protocol::TransferId::new(attempt)?,
         database: PROJECT.to_owned().try_into()?,
@@ -36,12 +49,11 @@ async fn claim_gate(
             serde_json::to_value(ClaimReservation { change })?,
         )
     };
-    let reply = fixture.runtime.on_call(serde_json::to_vec(&json!({
+    Ok(serde_json::to_vec(&json!({
         "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
         "destination":{"kind":"fleet"},"destinationFace":"fleet",
         "identity":{"operation":operation,"step":"claim_gate"},"kind":kind,"target":null,"request":request
-    }))?).await.map_err(|failure|format!("real claim gate: {failure:?}"))?;
-    Ok(serde_json::from_slice(&reply)?)
+    }))?)
 }
 
 async fn reservation(

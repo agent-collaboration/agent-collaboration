@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "claude-code-peer-messaging"
 version.workspace = true
 edition.workspace = true
@@ -21,3 +22,7 @@ tokio.workspace = true
 [dev-dependencies]
 node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
 tempfile = "3.27.0"
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

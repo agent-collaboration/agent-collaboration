@@ -3,7 +3,7 @@ use super::{composed_fleet_fixture::*, fleet_mail_dispatch::*};
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use fleet_sync_protocol::{
     ClientFrame, DeliveryAnswer, DeliveryRequest, DeliveryStatus, FrameId, ItemDigest, ItemId,
-    OperationAnswer, OperationRequest, ServerFrame, SettleResult, StatusVersion,
+    OperationAnswer, OperationRequest, ServerFrame, SettleResult, StatusVersion, Submitter,
 };
 use serde_json::json;
 
@@ -14,6 +14,24 @@ pub(super) async fn settle(
     digest: ItemDigest,
 ) -> TestResult<SettleResult<<BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Acceptance>>
 {
+    let claim = Submitter::Machine(socket.binding.peer);
+    match settle_answer(fixture, socket, claim, item, digest).await? {
+        DeliveryAnswer::Settle(answer) => Ok(answer),
+        answer => Err(format!(
+            "settlement returned another answer: {}",
+            serde_json::to_string(&answer)?
+        )
+        .into()),
+    }
+}
+
+pub(super) async fn settle_answer(
+    fixture: &Fixture,
+    socket: &mut Socket,
+    submitter: Submitter,
+    item: ItemId,
+    digest: ItemDigest,
+) -> TestResult<DeliveryAnswer<BoardDeliveryTypes>> {
     let frame = FrameId::new(durable_steps::Uuid::now_v7())?;
     fixture
         .runtime
@@ -26,6 +44,7 @@ pub(super) async fn settle(
                         json!({"operation":durable_steps::Uuid::now_v7(),"step":"sender_settle"}),
                     )?,
                     mailbox: B.to_owned().try_into()?,
+                    submitter,
                     item,
                     digest,
                 }),
@@ -35,7 +54,7 @@ pub(super) async fn settle(
     loop {
         if let ServerFrame::Answer {
             frame: answered,
-            body: OperationAnswer::Delivery(DeliveryAnswer::Settle(answer)),
+            body: OperationAnswer::Delivery(answer),
         } = socket.next().await?
         {
             if answered != frame {

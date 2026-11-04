@@ -36,6 +36,7 @@ struct StoredOrdinaryReserve {
 
 async fn observe_ordinary_reserve(surfaces: &Surfaces, item: &PushId) -> TestResult<u32> {
     let identity = item.as_str().to_owned();
+    let binding = surfaces.sender_binding()?;
     // This fixture projects the public snapshot's acceptanceBound/settlementBytes
     // JSON fields; the SDK still owns the reserve formula and private queries.
     let observed = interaction_storage::InteractionAtomicStore::new(
@@ -47,7 +48,8 @@ async fn observe_ordinary_reserve(surfaces: &Surfaces, item: &PushId) -> TestRes
             let row = fleet_sync_delivery::test_support::snapshot::<
                 _,
                 collaboration_contracts::RouterDeliveryTypes,
-            >(scope)
+                _,
+            >(scope, &binding)
             .await
             .map_err(StoreError::backend)?
             .into_iter()

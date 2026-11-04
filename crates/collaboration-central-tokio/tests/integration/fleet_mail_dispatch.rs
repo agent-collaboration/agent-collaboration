@@ -6,11 +6,11 @@ use super::fleet_mail_inbox_fixture::RecipientInbox;
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use collaboration_central_core::AdmissionOrigin;
 use collaboration_central_tokio::SocketCommand;
-use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
+use durable_steps::{AtomicStore, CallId, StoreError, storage::TransactionScope};
 use fleet_sync_protocol::{
     ClientAnswer, ClientFrame, ConnectionId, DeliveryEnvelope, DeliveryItem, DeliveryRefusal,
     FrameId, ItemId, PushResult, Recipient, SchemaSupport, ServerCall, ServerCallAnswer,
-    ServerFrame, ServerRequest, SessionId,
+    ServerFrame, ServerRequest, SessionId, Submitter,
 };
 use fleet_sync_session::{ConnectionBinding, VerifiedPeer};
 use runtime_primitives::{Clock, SyncTime};
@@ -20,6 +20,12 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 pub(super) const CAP: Duration = Duration::from_secs(3);
+pub(super) struct ReceivedPush {
+    pub frame: FrameId,
+    pub call: CallId,
+    pub submitter: Submitter,
+    pub item: DeliveryEnvelope<BoardDeliveryTypes>,
+}
 pub(super) struct Socket {
     pub(super) binding: ConnectionBinding,
     session_id: SessionId,
@@ -100,23 +106,30 @@ impl Socket {
             .ok_or("socket ended")?)
     }
     pub(super) async fn push(&mut self, expected: ItemId) -> TestResult<FrameId> {
-        Ok(self.push_envelope(expected).await?.0)
+        Ok(self.push_envelope(expected).await?.frame)
     }
     pub(super) fn queued_commands(&self) -> usize {
         self.frames.len()
     }
-    pub(super) async fn push_envelope(
-        &mut self,
-        expected: ItemId,
-    ) -> TestResult<(FrameId, DeliveryEnvelope<BoardDeliveryTypes>)> {
+    pub(super) async fn push_envelope(&mut self, expected: ItemId) -> TestResult<ReceivedPush> {
         loop {
             if let ServerFrame::Request {
                 frame,
-                body: ServerRequest::Crate(ServerCall::Push { item, .. }),
+                body:
+                    ServerRequest::Crate(ServerCall::Push {
+                        call,
+                        submitter,
+                        item,
+                    }),
             } = self.next().await?
             {
                 assert_eq!(item.id(), expected);
-                return Ok((frame, item));
+                return Ok(ReceivedPush {
+                    frame,
+                    call,
+                    submitter,
+                    item,
+                });
             }
         }
     }
@@ -211,12 +224,20 @@ async fn silent_recipient_retries_at_injected_deadline_while_another_recipient_c
     let fixture = Fixture::open(root.path(), NOW).await?;
     let mut silent = Socket::open(&fixture, B, SERVICE_B).await?;
     let mut responsive = Socket::open(&fixture, C, SERVICE_C).await?;
+    let responsive_inbox = RecipientInbox::open(
+        &root.path().join("responsive"),
+        fixture.io.clone(),
+        C.to_owned().try_into()?,
+    )
+    .await?;
     let first = envelope(B, SERVICE_B)?;
     let second = envelope(C, SERVICE_C)?;
     submit(&fixture, &first).await?;
     submit(&fixture, &second).await?;
     let proof = async {
         let silent_frame = silent.push(first.id()).await?;
+        // Adversarial input: C's claimed acceptance for B's frame must be
+        // ignored. This is not a positive custody receipt.
         responsive
             .answer(
                 &fixture,
@@ -226,16 +247,17 @@ async fn silent_recipient_retries_at_injected_deadline_while_another_recipient_c
                 },
             )
             .await?;
-        let frame = responsive.push(second.id()).await?;
-        responsive
-            .answer(
-                &fixture,
-                frame,
-                PushResult::Accepted {
-                    accepted_at: fixture.io.now(),
-                },
+        let pushed = responsive.push_envelope(second.id()).await?;
+        let receipt = responsive_inbox
+            .accept(
+                pushed.submitter,
+                pushed.item,
+                collaboration_central_core::fleet_outbox_limits()?,
             )
             .await?;
+        assert!(matches!(receipt, PushResult::Accepted { .. }));
+        assert_eq!(responsive_inbox.count().await?, 1);
+        responsive.answer(&fixture, pushed.frame, receipt).await?;
         let mut deadlines = fixture.io.reply_deadlines.subscribe();
         tokio::time::timeout(CAP, deadlines.wait_for(|count| *count >= 2)).await??;
         tokio::time::timeout(CAP, async {
@@ -264,6 +286,7 @@ async fn silent_recipient_retries_at_injected_deadline_while_another_recipient_c
         custody(&fixture, second.id()).await?,
         ("atRecipient".into(), false)
     );
+    responsive_inbox.close().await?;
     fixture.close().await
 }
 
@@ -277,7 +300,12 @@ async fn no_capacity_keeps_content_and_retries_the_same_item_after_capacity_retu
     let root = tempfile::tempdir()?;
     let fixture = Fixture::open(root.path(), NOW).await?;
     let mut recipient = Socket::open(&fixture, B, SERVICE_B).await?;
-    let inbox = RecipientInbox::open(&root.path().join("recipient"), fixture.io.clone()).await?;
+    let inbox = RecipientInbox::open(
+        &root.path().join("recipient"),
+        fixture.io.clone(),
+        B.to_owned().try_into()?,
+    )
+    .await?;
     let full_limits = collaboration_central_core::fleet_outbox_limits()?;
     let no_room = fleet_sync_delivery::DeliveryLimits::new::<BoardDeliveryTypes>(
         full_limits.mailbox_payload_bytes(),
@@ -291,12 +319,12 @@ async fn no_capacity_keeps_content_and_retries_the_same_item_after_capacity_retu
     submit(&fixture, &item).await?;
     let (report, ()) = tokio::time::timeout(CAP, async {
         tokio::try_join!(fixture.runtime.on_alarm(), async {
-            let (frame, pushed) = recipient
+            let pushed = recipient
                 .push_envelope(item.id())
                 .await
                 .map_err(StoreError::backend)?;
             let answer = inbox
-                .accept(pushed, no_room)
+                .accept(pushed.submitter, pushed.item, no_room)
                 .await
                 .map_err(StoreError::backend)?;
             assert!(matches!(
@@ -306,7 +334,7 @@ async fn no_capacity_keeps_content_and_retries_the_same_item_after_capacity_retu
                 }
             ));
             recipient
-                .answer(&fixture, frame, answer)
+                .answer(&fixture, pushed.frame, answer)
                 .await
                 .map_err(StoreError::backend)
         })
@@ -319,17 +347,17 @@ async fn no_capacity_keeps_content_and_retries_the_same_item_after_capacity_retu
     fixture.io.advance(60_000);
     let (report, ()) = tokio::time::timeout(CAP, async {
         tokio::try_join!(fixture.runtime.on_alarm(), async {
-            let (frame, pushed) = recipient
+            let pushed = recipient
                 .push_envelope(item.id())
                 .await
                 .map_err(StoreError::backend)?;
             let answer = inbox
-                .accept(pushed, full_limits)
+                .accept(pushed.submitter, pushed.item, full_limits)
                 .await
                 .map_err(StoreError::backend)?;
             assert!(matches!(answer, PushResult::Accepted { .. }));
             recipient
-                .answer(&fixture, frame, answer)
+                .answer(&fixture, pushed.frame, answer)
                 .await
                 .map_err(StoreError::backend)
         })

@@ -15,19 +15,20 @@ async fn committed_inbox_replays_one_item_after_its_receipt_is_lost_and_the_owne
     let root = tempfile::tempdir()?;
     let fixture = Fixture::open(root.path(), NOW).await?;
     let inbox_path = root.path().join("recipient");
-    let inbox = RecipientInbox::open(&inbox_path, fixture.io.clone()).await?;
+    let inbox =
+        RecipientInbox::open(&inbox_path, fixture.io.clone(), B.to_owned().try_into()?).await?;
     let mut recipient = Socket::open(&fixture, B, SERVICE_B).await?;
     let item = envelope(B, SERVICE_B)?;
     let limits = collaboration_central_core::fleet_outbox_limits()?;
     submit(&fixture, &item).await?;
-    let (drive, ()) = tokio::time::timeout(CAP, async {
+    let (drive, original_call) = tokio::time::timeout(CAP, async {
         tokio::try_join!(fixture.runtime.on_alarm(), async {
-            let (_, pushed) = recipient
+            let pushed = recipient
                 .push_envelope(item.id())
                 .await
                 .map_err(StoreError::backend)?;
             let answer = inbox
-                .accept(pushed, limits)
+                .accept(pushed.submitter, pushed.item, limits)
                 .await
                 .map_err(StoreError::backend)?;
             assert!(matches!(answer, PushResult::Accepted { .. }));
@@ -39,7 +40,7 @@ async fn committed_inbox_replays_one_item_after_its_receipt_is_lost_and_the_owne
                 .map_err(StoreError::backend)?
                 .map_err(StoreError::backend)?;
             fixture.io.advance(2_000);
-            Ok::<_, StoreError>(())
+            Ok::<_, StoreError>(pushed.call)
         })
     })
     .await??;
@@ -48,17 +49,22 @@ async fn committed_inbox_replays_one_item_after_its_receipt_is_lost_and_the_owne
     assert_eq!(custody(&fixture, item.id()).await?, ("sent".into(), true));
     inbox.close().await?;
 
-    let reopened = RecipientInbox::open(&inbox_path, fixture.io.clone()).await?;
+    let reopened =
+        RecipientInbox::open(&inbox_path, fixture.io.clone(), B.to_owned().try_into()?).await?;
     assert_eq!(reopened.count().await?, 1);
     fixture.io.advance(60_000);
     let (drive, ()) = tokio::time::timeout(CAP, async {
         tokio::try_join!(fixture.runtime.on_alarm(), async {
-            let (frame, pushed) = recipient
+            let pushed = recipient
                 .push_envelope(item.id())
                 .await
                 .map_err(StoreError::backend)?;
+            assert_eq!(
+                pushed.call, original_call,
+                "the owning reopen changed the original durable Push CallId"
+            );
             let answer = reopened
-                .accept(pushed, limits)
+                .accept(pushed.submitter, pushed.item, limits)
                 .await
                 .map_err(StoreError::backend)?;
             assert!(matches!(
@@ -69,7 +75,7 @@ async fn committed_inbox_replays_one_item_after_its_receipt_is_lost_and_the_owne
                 }
             ));
             recipient
-                .answer(&fixture, frame, answer)
+                .answer(&fixture, pushed.frame, answer)
                 .await
                 .map_err(StoreError::backend)
         })

@@ -45,8 +45,8 @@ async fn version_one(fixture: &Fixture) -> Result<(), TestError> {
         scope.executor().execute(include_str!("../../../collaboration-central-core/core_migrations/0000_migration_history.sql"))
             .await.map_err(StoreError::backend)?;
         let checksum = serde_json::to_string(migration.checksum.as_ref()).map_err(StoreError::backend)?;
-        query::<sqlx_turso::Turso>("INSERT INTO central_schema_migrations(row_id,corpus,version,checksum) VALUES (?,'fleet-sync-receiver','1',?)")
-            .bind(durable_steps::Uuid::now_v7().to_string()).bind(checksum).execute(scope.executor()).await.map_err(StoreError::backend)?;
+        query::<sqlx_turso::Turso>("INSERT INTO central_schema_migrations(row_id,corpus,version,checksum,created_at,updated_at,applied_at) VALUES (?1,'fleet-sync-receiver','1',?2,?3,?3,?3)")
+            .bind(durable_steps::Uuid::now_v7().to_string()).bind(checksum).bind(ProbeIo.now().unix_millis()).execute(scope.executor()).await.map_err(StoreError::backend)?;
         scope.executor().execute("CREATE TABLE retained_project_rows(id TEXT NOT NULL PRIMARY KEY,value TEXT NOT NULL); INSERT INTO retained_project_rows VALUES ('row','retained')")
             .await.map_err(StoreError::backend)?;
         Ok(())

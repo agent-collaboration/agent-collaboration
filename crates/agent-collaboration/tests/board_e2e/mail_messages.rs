@@ -141,6 +141,7 @@ async fn check_refusals(suite: &MailFixture, original: &Value, replay_id: &str) 
 }
 
 pub async fn terminal_readback(suite: &MailFixture, item: &str, original: &Value) -> FixtureResult {
+    let binding = crate::messaging_stopped_owner::sender_binding(suite.stopped_directory()?)?;
     let connection = sqlx_turso::TursoConnectOptions::new()
         .filename(suite.stopped_directory()?.join("interaction.sqlite"))
         .create_if_missing(false)
@@ -161,10 +162,14 @@ pub async fn terminal_readback(suite: &MailFixture, item: &str, original: &Value
             let observations = fleet_sync_delivery::test_support::snapshot::<
                 _,
                 collaboration_contracts::RouterDeliveryTypes,
-            >(&mut durable_steps::turso_store::TursoScope::new(
-                &mut transaction,
-                &crate::native_sql::SqlHost,
-            ))
+                _,
+            >(
+                &mut durable_steps::turso_store::TursoScope::new(
+                    &mut transaction,
+                    &crate::native_sql::SqlHost,
+                ),
+                &binding,
+            )
             .await?;
             transaction.commit().await?;
             let rows = observations
@@ -226,12 +231,7 @@ pub async fn terminal_readback(suite: &MailFixture, item: &str, original: &Value
             assert_eq!(payload, None);
             let record: Value =
                 serde_json::from_str(row.content.as_deref().ok_or("terminal SDK header absent")?)?;
-            assert_eq!(at(&record, "/route")?, &json!("local"));
-            assert_eq!(record.pointer("/progress/kind"), Some(&json!("final")));
-            assert_eq!(
-                record.pointer("/progress/value/outcome/kind"),
-                Some(&json!("delivered"))
-            );
+            assert_terminal_header(&record)?;
             Ok(())
         },
         async |connection| {
@@ -241,6 +241,20 @@ pub async fn terminal_readback(suite: &MailFixture, item: &str, original: &Value
         || Ok(()),
     )
     .await
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong stored header; parsing errors propagate."
+)]
+fn assert_terminal_header(record: &Value) -> FixtureResult {
+    assert_eq!(at(record, "/route")?, &json!("local"));
+    assert_eq!(record.pointer("/progress/kind"), Some(&json!("final")));
+    assert_eq!(
+        record.pointer("/progress/value/outcome/kind"),
+        Some(&json!("delivered"))
+    );
+    Ok(())
 }
 
 async fn discard_response(

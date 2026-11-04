@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "collaboration-central-admin-protocol"
 version.workspace = true
 edition.workspace = true
@@ -18,3 +19,7 @@ chrono = { version = "=0.4.45", default-features = false, features = ["std", "se
 
 [dev-dependencies]
 serde_json.workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

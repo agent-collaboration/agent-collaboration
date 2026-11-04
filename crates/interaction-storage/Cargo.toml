@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "interaction-storage"
 version.workspace = true
 edition.workspace = true
@@ -36,3 +37,7 @@ board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
 runtime-primitives.workspace = true
 tempfile = "3.27.0"
 sqlx = { workspace = true, features = ["sqlite"] }
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

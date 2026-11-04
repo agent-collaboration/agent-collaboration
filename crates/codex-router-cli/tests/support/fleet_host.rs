@@ -19,6 +19,13 @@ type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 const BOUND: Duration = Duration::from_secs(20);
 const ROOT_ENV: &str = "CODEX_FLEET_PRODUCER_HOST_ROOT";
 const ROUTER_ENV: &str = "CODEX_FLEET_PRODUCER_ROUTER_ADDRESS";
+fn child_test_selector(case_name: &str) -> String {
+    let namespace = module_path!()
+        .split_once("::")
+        .map_or(module_path!(), |(_, namespace)| namespace);
+    format!("{namespace}::{case_name}")
+}
+
 pub fn fixture_root() -> TestResult<tempfile::TempDir> {
     let root = tempfile::Builder::new()
         .prefix("fleet-producer-debug-")
@@ -92,7 +99,7 @@ impl OwnedHost {
         let child = tokio::process::Command::new(std::env::current_exe()?)
             .args([
                 "--exact",
-                "fleet_host::host_child",
+                &child_test_selector("host_child"),
                 "--ignored",
                 "--nocapture",
             ])
@@ -168,7 +175,7 @@ async fn host_child() -> TestResult {
     let command = ChildCommandSpec::new(managed.clone())
         .with_arguments([
             "--exact",
-            "fleet_host::native_child",
+            &child_test_selector("native_child"),
             "--ignored",
             "--nocapture",
         ])

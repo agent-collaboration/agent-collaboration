@@ -162,7 +162,12 @@ async fn same_peer_readmission_pushes_and_receipts_the_pre_revoke_item_once() ->
         .no_proxy()
         .timeout(CAP)
         .build()?;
-    let inbox = RecipientInbox::open(&root.path().join("recipient"), Io::new(NOW)).await?;
+    let inbox = RecipientInbox::open(
+        &root.path().join("recipient"),
+        Io::new(NOW),
+        B.to_owned().try_into()?,
+    )
+    .await?;
     let proof = Box::pin(async {
         let mut now = NOW;
         let client = ConformanceClient::new(server.base_url())?;
@@ -185,17 +190,17 @@ async fn same_peer_readmission_pushes_and_receipts_the_pre_revoke_item_once() ->
         advance(&http,server.base_url(),&mut now).await?;
         let pushed = loop {
             match read_server_frame(&mut recipient.socket).await? {
-                ServerFrame::Request {frame,body:ServerRequest::Crate(ServerCall::Push {item,..})}=>break (frame,item),
+                ServerFrame::Request {frame,body:ServerRequest::Crate(ServerCall::Push {call,submitter,item})}=>break super::fleet_mail_dispatch::ReceivedPush {frame,call,submitter,item},
                 ServerFrame::Notice {..}=>{},
                 other=>return Err(format!("readmitted recipient expected retained Push: {}",serde_json::to_string(&other)?).into()),
             }
         };
-        assert_eq!(pushed.1.id(),item_id);
-        assert_eq!(pushed.1.digest(),&digest);
-        assert_eq!(serde_json::to_vec(&pushed.1)?,frozen);
-        let receipt = inbox.accept(pushed.1,collaboration_central_core::fleet_outbox_limits()?).await?;
+        assert_eq!(pushed.item.id(),item_id);
+        assert_eq!(pushed.item.digest(),&digest);
+        assert_eq!(serde_json::to_vec(&pushed.item)?,frozen);
+        let receipt = inbox.accept(pushed.submitter,pushed.item,collaboration_central_core::fleet_outbox_limits()?).await?;
         assert!(matches!(receipt,PushResult::Accepted {..}));
-        send_client_frame(&mut recipient.socket,ClientFrame::Answer {frame:pushed.0,body:ClientAnswer::Crate(ServerCallAnswer::Pushed(receipt))}).await?;
+        send_client_frame(&mut recipient.socket,ClientFrame::Answer {frame:pushed.frame,body:ClientAnswer::Crate(ServerCallAnswer::Pushed(receipt))}).await?;
         let publication = receive_and_ack_publication(&mut sender.socket).await?;
         assert_eq!(publication.item,item_id);
         assert_eq!(publication.status,DeliveryStatus::AtRecipient);

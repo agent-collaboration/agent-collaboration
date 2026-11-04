@@ -1,6 +1,6 @@
 //! A missing central migration stamp keeps owner diagnostics available until recovery.
 use super::{ConformanceResult, JwksFixtureServer, PROJECT, TokioServer, measured_files, settings};
-use crate::{
+use crate::copy_owner_health::{
     copy_owner_scenarios::{OwnerClient, bookkeeping, no_failures},
     creation_scenarios as creation,
 };
@@ -189,6 +189,9 @@ struct MigrationStamp {
     corpus: String,
     version: String,
     checksum: String,
+    created_at: i64,
+    updated_at: i64,
+    applied_at: i64,
 }
 
 // The caller has stopped the owning server. Only central's own stamp is changed.
@@ -198,9 +201,9 @@ async fn remove_stamp(root: &Path) -> ConformanceResult<MigrationStamp> {
         .connect()
         .await?;
     let result = async {
-        let rows = query::<sqlx_turso::Turso>("SELECT row_id, corpus, version, checksum FROM central_schema_migrations WHERE corpus='fleet-sync-receiver' AND version='3'").fetch_all(&mut store).await?;
+        let rows = query::<sqlx_turso::Turso>("SELECT row_id,corpus,version,checksum,created_at,updated_at,applied_at FROM central_schema_migrations WHERE corpus='fleet-sync-receiver' AND version='3'").fetch_all(&mut store).await?;
         let [row] = rows.as_slice() else { return Err("fixture did not have exactly one receiver version3 stamp".into()); };
-        let stamp = MigrationStamp { row_id: row.try_get("row_id")?, corpus: row.try_get("corpus")?, version: row.try_get("version")?, checksum: row.try_get("checksum")? };
+        let stamp = MigrationStamp { row_id: row.try_get("row_id")?, corpus: row.try_get("corpus")?, version: row.try_get("version")?, checksum: row.try_get("checksum")?,created_at:row.try_get("created_at")?,updated_at:row.try_get("updated_at")?,applied_at:row.try_get("applied_at")? };
         query::<sqlx_turso::Turso>("DELETE FROM central_schema_migrations WHERE corpus=? AND version=? AND checksum=?").bind(&stamp.corpus).bind(&stamp.version).bind(&stamp.checksum).execute(&mut store).await?;
         Ok(stamp)
     }.await;
@@ -214,9 +217,9 @@ async fn restore_stamp(root: &Path, stamp: &MigrationStamp) -> ConformanceResult
         .connect()
         .await?;
     let result = async {
-        query::<sqlx_turso::Turso>("INSERT INTO central_schema_migrations(row_id,corpus,version,checksum) VALUES(?,?,?,?)").bind(&stamp.row_id).bind(&stamp.corpus).bind(&stamp.version).bind(&stamp.checksum).execute(&mut store).await?;
-        let row = query::<sqlx_turso::Turso>("SELECT row_id,corpus,version,checksum FROM central_schema_migrations WHERE corpus=? AND version=?").bind(&stamp.corpus).bind(&stamp.version).fetch_one(&mut store).await?;
-        let restored = MigrationStamp { row_id: row.try_get("row_id")?, corpus: row.try_get("corpus")?, version: row.try_get("version")?, checksum: row.try_get("checksum")? };
+        query::<sqlx_turso::Turso>("INSERT INTO central_schema_migrations(row_id,corpus,version,checksum,created_at,updated_at,applied_at) VALUES(?,?,?,?,?,?,?)").bind(&stamp.row_id).bind(&stamp.corpus).bind(&stamp.version).bind(&stamp.checksum).bind(stamp.created_at).bind(stamp.updated_at).bind(stamp.applied_at).execute(&mut store).await?;
+        let row = query::<sqlx_turso::Turso>("SELECT row_id,corpus,version,checksum,created_at,updated_at,applied_at FROM central_schema_migrations WHERE corpus=? AND version=?").bind(&stamp.corpus).bind(&stamp.version).fetch_one(&mut store).await?;
+        let restored = MigrationStamp { row_id: row.try_get("row_id")?, corpus: row.try_get("corpus")?, version: row.try_get("version")?, checksum: row.try_get("checksum")?,created_at:row.try_get("created_at")?,updated_at:row.try_get("updated_at")?,applied_at:row.try_get("applied_at")? };
         if restored != *stamp { return Err("fixture did not restore the exact saved migration stamp".into()); }
         Ok(())
     }.await;
@@ -232,7 +235,7 @@ async fn stored_failure(root: &Path) -> ConformanceResult<Value> {
         .await?;
     let result = async {
         let rows = query::<sqlx_turso::Turso>(
-            "SELECT corpus,version,reason,at FROM central_schema_migration_failures",
+            "SELECT corpus,version,reason,failed_at FROM central_schema_migration_failures",
         )
         .fetch_all(&mut store)
         .await?;
@@ -242,13 +245,13 @@ async fn stored_failure(root: &Path) -> ConformanceResult<Value> {
         let corpus: String = row.try_get("corpus")?;
         let version: String = row.try_get("version")?;
         let reason: String = row.try_get("reason")?;
-        let at: String = row.try_get("at")?;
+        let at: i64 = row.try_get("failed_at")?;
         if corpus != "fleet-sync-receiver" || version != "3" || !reason.contains("already exists") {
             return Err(
                 format!("unexpected actual migration cause: {corpus}/{version}: {reason}").into(),
             );
         }
-        let at = chrono::DateTime::from_timestamp_millis(at.parse()?)
+        let at = chrono::DateTime::from_timestamp_millis(at)
             .ok_or("stored migration failure time is outside the fixture range")?;
         Ok(json!({"kind":"known","value":[{"corpus":corpus,"version":3,"reason":reason,"at":at}]}))
     }
@@ -481,9 +484,9 @@ async fn pending_session_refusals(base: &str) -> ConformanceResult<()> {
         let frame:ServerFrame<BoardConsumerProtocol> = serde_json::from_value(welcome)?;
         assert!(matches!(frame,ServerFrame::Welcome {session_id,databases} if session_id==session && databases.iter().any(|database|matches!(database,DatabaseStatus::Unavailable {database,lease:Some(_),reason:CopyUnavailableReason::MigrationPending {version:3}} if database.to_string()==PROJECT))),"Welcome lost pending Copy reason");
         let control = DatabaseId::new(Uuid::now_v7())?;
-        let copies=crate::copy_wait_scenarios::CopyClient::new(base)?;
+        let copies=crate::copy_owner_health::copy_wait_scenarios::CopyClient::new(base)?;
         let created=copies.invoke(json!({"kind":"create","value":{"database":control,"epoch":1,"holder":PEER,"origin":{"kind":"empty"}}})).await?;
-        copies.completed(created,crate::copy_wait_scenarios::expected("created",fleet_sync_protocol::CreateCopyAnswer::CopyCreated)).await?;
+        copies.completed(created,crate::copy_owner_health::copy_wait_scenarios::expected("created",fleet_sync_protocol::CreateCopyAnswer::CopyCreated)).await?;
         let control_piece = |sequence,statement: &str| -> ConformanceResult<Piece<BoardAnnotation>> {
             Ok(Piece::new(PieceContents {database:control,epoch:Epoch::new(1)?,continues_from:ReplicationPosition::new(Epoch::new(1)?,CommitSequence::new(sequence-1)),through:ReplicationPosition::new(Epoch::new(1)?,CommitSequence::new(sequence)),transactions:vec![ReplicatedTransaction::SchemaStep {commit_id:CommitSequence::new(sequence),migration_version:sequence,statements:vec![statement.into()]}],part:None,annotation:None})?)
         };

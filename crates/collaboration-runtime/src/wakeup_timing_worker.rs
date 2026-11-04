@@ -8,6 +8,8 @@ use tokio_util::sync::CancellationToken;
 pub struct WakeTimingWorker {
     store: Arc<Mutex<AutomationStore>>,
     native: crate::wakeup_delivery_sender::WakeDeliverySender,
+    #[cfg(any(test, feature = "test-support"))]
+    accepted_observer: Option<tokio::sync::mpsc::UnboundedSender<agent_automation::DeliveryId>>,
 }
 impl WakeTimingWorker {
     pub fn new(
@@ -16,14 +18,29 @@ impl WakeTimingWorker {
         configuration: crate::AutomationConfigurationHandle,
         machine_identity: collaboration_contracts::MachineIdentity,
         interactions: Arc<interaction_storage::InteractionStore>,
+        clock: Arc<dyn runtime_primitives::Clock>,
     ) -> Self {
         let native = crate::wakeup_delivery_sender::WakeDeliverySender {
             delivery,
             configuration,
             machine_identity,
             interactions,
+            clock,
         };
-        Self { store, native }
+        Self {
+            store,
+            native,
+            #[cfg(any(test, feature = "test-support"))]
+            accepted_observer: None,
+        }
+    }
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn observe_accepted_deliveries(
+        &mut self,
+    ) -> tokio::sync::mpsc::UnboundedReceiver<agent_automation::DeliveryId> {
+        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+        self.accepted_observer = Some(sender);
+        receiver
     }
     /// Start only after the Host owns its listeners and previous workers have retired.
     pub async fn run(self, shutdown: CancellationToken) {
@@ -46,7 +63,7 @@ impl WakeTimingWorker {
                 }
                 _=interval.tick()=>{}
             }
-            let now = chrono::Utc::now().timestamp_millis();
+            let now = self.native.clock.now().unix_millis();
             let result = if recovered {
                 if self.native.configuration.current().await.is_none() {
                     continue;
@@ -104,7 +121,34 @@ impl WakeTimingWorker {
         for id in ids {
             let store = Arc::clone(&self.store);
             let native = self.native.clone();
-            tasks.spawn(async move { native.dispatch(store, id).await });
+            #[cfg(any(test, feature = "test-support"))]
+            let observer = self.accepted_observer.clone();
+            tasks.spawn(async move {
+                #[cfg(any(test, feature = "test-support"))]
+                let observed = (Arc::clone(&store), id.clone());
+                let result = native.dispatch(store, id).await;
+                #[cfg(any(test, feature = "test-support"))]
+                if result.is_ok()
+                    && let Some(observer) = observer
+                {
+                    // A dispatch can return without claiming an unadmitted push.
+                    // Read once after it returns; only a committed acceptance is a fence.
+                    let record = observed
+                        .0
+                        .lock()
+                        .await
+                        .read_delivery::<
+                            collaboration_protocol::SessionRef,
+                            collaboration_protocol::CodexGeneration,
+                            serde_json::Value,
+                        >(&observed.1)
+                        .await?;
+                    if record.status == agent_automation::DeliveryStatus::Accepted {
+                        let _ = observer.send(observed.1);
+                    }
+                }
+                result
+            });
         }
         Ok(())
     }

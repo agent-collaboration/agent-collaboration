@@ -30,7 +30,7 @@ pub const RECOVERY_BOUND: Duration = Duration::from_secs(40);
 pub struct ServerProcess {
     pub base: String,
     child: Child,
-    output: tokio::task::JoinHandle<()>,
+    output: tokio::task::JoinHandle<bool>,
 }
 impl ServerProcess {
     pub async fn start(root: &Path, jwks: &str) -> ConformanceResult<Self> {
@@ -42,13 +42,15 @@ impl ServerProcess {
         jwks: &str,
         controls: &[RuntimeControlRequest],
     ) -> ConformanceResult<Self> {
+        let relative_module = module_path!()
+            .strip_prefix(concat!(env!("CARGO_CRATE_NAME"), "::"))
+            .ok_or("restart support must belong to its libtest crate")?;
+        let (parent_module, _) = relative_module
+            .rsplit_once("::")
+            .ok_or("restart support must belong to its case module")?;
+        let child_test_name = format!("{parent_module}::native_central_process");
         let mut child = Command::new(std::env::current_exe()?)
-            .args([
-                "--ignored",
-                "--exact",
-                "native_central_process",
-                "--nocapture",
-            ])
+            .args(["--ignored", "--exact", &child_test_name, "--nocapture"])
             .env("CENTRAL_RESTART_ROOT", root)
             .env("CENTRAL_RESTART_JWKS", jwks)
             .env("CENTRAL_RESTART_CONTROLS", serde_json::to_string(controls)?)
@@ -69,8 +71,13 @@ impl ServerProcess {
         })
         .await??;
         // Drain the test runner's small terminal output until the child exits.
-        let output =
-            tokio::spawn(async move { while matches!(lines.next_line().await, Ok(Some(_))) {} });
+        let output = tokio::spawn(async move {
+            let mut one_test_passed = false;
+            while let Ok(Some(line)) = lines.next_line().await {
+                one_test_passed |= line.starts_with("test result: ok. 1 passed; 0 failed;");
+            }
+            one_test_passed
+        });
         eprintln!("CENTRAL_PROCESS_STARTED pid={:?} base={base}", child.id());
         Ok(Self {
             base,
@@ -98,9 +105,12 @@ impl ServerProcess {
             .write_all(b"stop\n")
             .await?;
         let status = tokio::time::timeout(Duration::from_secs(10), self.child.wait()).await??;
-        self.output.await?;
+        let one_test_passed = self.output.await?;
         if !status.success() {
             return Err(format!("native server shutdown failed: {status}").into());
+        }
+        if !one_test_passed {
+            return Err("native server child did not report exactly one successful test".into());
         }
         Ok(())
     }

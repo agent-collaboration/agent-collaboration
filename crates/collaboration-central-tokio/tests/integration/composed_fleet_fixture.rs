@@ -1,4 +1,5 @@
 //! Real Fleet and project owners with a manual injected clock and explicit alarm driving.
+use crate::fleet_fault_store as fault_store;
 use collaboration_central_core::{
     CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectRuntime, PlatformIo,
 };
@@ -19,8 +20,6 @@ use std::{
     },
     time::Duration,
 };
-#[path = "../fleet_notice_outbox/fault_store.rs"]
-mod fault_store;
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 pub const PROJECT: &str = "019f0000-0000-7000-8000-000000008199";
 pub const A: &str = "019f0000-0000-7000-8000-000000008111";
@@ -181,14 +180,14 @@ fn no_route() -> CallFailure {
 }
 type Native = TokioObject<CoreHost<Io>>;
 type NativeHost = TokioStorageHost<CoreHost<Io>>;
-type Host = fault_store::FaultHost;
+type Host = fault_store::FaultHost<Io>;
 type Fleet = ObjectRuntime<FleetKind, Host, Io>;
 type Copy = ObjectRuntime<CopyKind, NativeHost, Io>;
 pub struct Fixture {
     objects: ObjectStore<CoreHost<Io>>,
     pub store: Arc<Native>,
     pub host: Arc<NativeHost>,
-    pub faults: Arc<fault_store::FaultStore>,
+    pub faults: Arc<fault_store::FaultStore<Io>>,
     pub runtime: Arc<Fleet>,
     _project: Arc<Copy>,
     pub io: Io,
@@ -311,6 +310,14 @@ impl Fixture {
         }})).await
     }
     pub async fn arrange_registered(&self) -> TestResult {
+        self.arrange_directory().await?;
+        let answer=self.call("session","central.session-lease",Value::Null,json!({"session":{"peer":A,"sessionId":durable_steps::Uuid::now_v7()},"request":{"kind":"register","value":{"attempt":durable_steps::Uuid::now_v7(),"database":PROJECT,"writer":A,"origin":{"kind":"empty"}}}})).await?;
+        if answer.pointer("/value/kind") != Some(&json!("registered")) {
+            return Err(format!("registration not granted: {answer}").into());
+        }
+        Ok(())
+    }
+    pub async fn arrange_directory(&self) -> TestResult {
         self.announce_schema().await?;
         use fleet_admission::FleetOperation;
         for operation in [
@@ -343,10 +350,6 @@ impl Fixture {
             ) {
                 return Err(format!("metadata not accepted: {answer}").into());
             }
-        }
-        let answer=self.call("session","central.session-lease",Value::Null,json!({"session":{"peer":A,"sessionId":durable_steps::Uuid::now_v7()},"request":{"kind":"register","value":{"attempt":durable_steps::Uuid::now_v7(),"database":PROJECT,"writer":A,"origin":{"kind":"empty"}}}})).await?;
-        if answer.pointer("/value/kind") != Some(&json!("registered")) {
-            return Err(format!("registration not granted: {answer}").into());
         }
         Ok(())
     }

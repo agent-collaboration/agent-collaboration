@@ -9,7 +9,7 @@ use durable_steps::Uuid;
 use fleet_sync_protocol::{
     DeliveryAnswer, DeliveryEnvelope, DeliveryFailureKind, DeliveryItem, DeliveryRefusal,
     DeliveryStatus, ItemId, ItemStatusState, OperationAnswer, PeerId, ServerCall, ServerFrame,
-    ServerRequest, SettleResult, SubmitResult,
+    ServerRequest, SettleResult, SubmitResult, Submitter,
 };
 use futures_util::StreamExt;
 use reqwest_websocket::{Message, WebSocket};
@@ -162,6 +162,7 @@ pub(super) async fn sender_query_and_settlement_preserve_existing_custody_and_pi
     let proof = async {
         let recipient_peer = PeerId::new(recipient.peer)?;
         let existing = item(recipient_peer, "550e8400-e29b-41d4-a716-446655440526")?;
+        let submitter=Submitter::Machine(PeerId::new(sender.peer)?);
         let unknown = item(recipient_peer, "550e8400-e29b-41d4-a716-446655440526")?;
         if !matches!(submit(&mut sender.socket, &existing).await?, OperationAnswer::Consumer(BoardConsumerAnswer::MailSubmit(MailSubmitAnswer::Submitted(SubmitResult::Accepted { .. })))) {
             return Err("valid board submit did not establish real custody".into());
@@ -175,10 +176,10 @@ pub(super) async fn sender_query_and_settlement_preserve_existing_custody_and_pi
             && absent.item == unknown.id() && matches!(absent.state, ItemStatusState::Unknown)) {
             return Err("Query changed existing custody or fabricated unknown custody".into());
         }
-        if !matches!(request(&mut sender.socket, "settle", json!({"mailbox":recipient_peer,"item":existing.id(),"digest":existing.digest()})).await?, OperationAnswer::Delivery(DeliveryAnswer::Settle(SettleResult::Replayed {status:DeliveryStatus::Sent,..}))) {
+        if !matches!(request(&mut sender.socket, "settle", json!({"mailbox":recipient_peer,"submitter":submitter,"item":existing.id(),"digest":existing.digest()})).await?, OperationAnswer::Delivery(DeliveryAnswer::Settle(SettleResult::Replayed {status:DeliveryStatus::Sent,..}))) {
             return Err("Settle replaced known custody with a tombstone".into());
         }
-        if !matches!(request(&mut sender.socket, "settle", json!({"mailbox":recipient_peer,"item":unknown.id(),"digest":unknown.digest()})).await?, OperationAnswer::Delivery(DeliveryAnswer::Settle(SettleResult::Settled {reason:DeliveryFailureKind::CustodyUnresolvable,..}))) {
+        if !matches!(request(&mut sender.socket, "settle", json!({"mailbox":recipient_peer,"submitter":submitter,"item":unknown.id(),"digest":unknown.digest()})).await?, OperationAnswer::Delivery(DeliveryAnswer::Settle(SettleResult::Settled {reason:DeliveryFailureKind::CustodyUnresolvable,..}))) {
             return Err("Settle did not establish the relay-owned unknown outcome".into());
         }
         if !matches!(submit(&mut sender.socket, &unknown).await?, OperationAnswer::Consumer(BoardConsumerAnswer::MailSubmit(MailSubmitAnswer::Submitted(SubmitResult::Replayed {status:DeliveryStatus::Refused {reason:DeliveryRefusal::ProcessingFailed {kind:DeliveryFailureKind::CustodyUnresolvable}},..})))) {

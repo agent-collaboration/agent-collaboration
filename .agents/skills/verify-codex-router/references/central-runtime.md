@@ -9,7 +9,7 @@ This mapping is pinned to Central `ad34f727f28d1e573fd7be74e8366cf88eb382e3`. Fl
 The wrapper retired in 0.1.102. Current native conformance belongs to `crates/collaboration-central-tokio/tests/`; the retained local-process CI selection is:
 
 ```sh
-cargo test --locked -p collaboration-central-tokio --features conformance --test forwarded_posts --test forwarding_real_timer --test mailbox_rules -- --test-threads=1
+cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test e2e -E 'test(/^(forwarded_posts|forwarding_real_timer|mailbox_rules)::/)' --test-threads 1
 ```
 
 That retained legacy selection does not qualify D1 mail. Current Fleet mail

@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "automation-storage"
 version.workspace = true
 edition.workspace = true
@@ -25,3 +26,7 @@ sqlite-storage-maintenance = { path = "../sqlite-storage-maintenance", version =
 
 [dev-dependencies]
 tempfile = "3.27.0"
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

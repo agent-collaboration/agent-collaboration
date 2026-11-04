@@ -34,12 +34,7 @@ type Runtime = ObjectRuntime<
     NoObjectCalls,
 >;
 
-#[expect(
-    dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)]
-#[path = "../session_publication/support.rs"]
-mod session_fixture;
+use crate::session_publication_fixture as session_fixture;
 
 #[derive(Clone, Default)]
 struct NoObjectCalls(Arc<AtomicUsize>);
@@ -128,7 +123,7 @@ impl Fixture {
             query::<sqlx_turso::Turso>("INSERT INTO machine_enrollments(machine_id,service_id,machine_label,access_client_id,credential_hash,state,expires_at,created_at,updated_at) VALUES(?,?,'status fixture',?,?,'enrolled','2033-05-18T03:33:20+00:00','2026-10-18T00:00:00+00:00','2026-10-18T00:00:00+00:00') ON CONFLICT(machine_id) DO NOTHING")
                 .bind(peer.to_string()).bind(installation.as_str()).bind(format!("status-client-{peer}")).bind(format!("status-credential-{peer}"))
                 .execute(scope.executor()).await.map_err(StoreError::backend)?;
-            StatusStream::<_, BoardDeliveryTypes>::new(scope, peer, route)
+            StatusStream::<_, BoardDeliveryTypes>::new(scope, fleet_sync_protocol::Submitter::Machine(peer), route)
                 .append_and_admit::<PublishStatus<TokioObject<CoreHost<NoObjectCalls>>, sqlx_turso::Turso, BoardDeliveryTypes>>(
                     &StatusPublication { item, status: DeliveryStatus::Sent, version: StatusVersion::new(1), cancel: None },
                     now,
@@ -144,10 +139,18 @@ impl Fixture {
             .object
             .transaction(move |scope| {
                 Box::pin(async move {
-                    StatusStream::<_, BoardDeliveryTypes>::new(scope, peer, route)
-                        .fetch(peer, StatusCursor::new(0), 100)
-                        .await
-                        .map_err(StoreError::backend)
+                    StatusStream::<_, BoardDeliveryTypes>::new(
+                        scope,
+                        fleet_sync_protocol::Submitter::Machine(peer),
+                        route,
+                    )
+                    .fetch(
+                        fleet_sync_protocol::Submitter::Machine(peer),
+                        StatusCursor::new(0),
+                        100,
+                    )
+                    .await
+                    .map_err(StoreError::backend)
                 })
             })
             .await?)
@@ -309,7 +312,7 @@ async fn a_live_status_attempt_never_waits_for_the_router_and_session_fetch_keep
     let publication_for_store = publication.clone();
     let now = fixture.io.now();
     fixture.host.store().transaction(move |scope| Box::pin(async move {
-        StatusStream::<_, BoardDeliveryTypes>::new(scope, binding.peer, route)
+        StatusStream::<_, BoardDeliveryTypes>::new(scope, fleet_sync_protocol::Submitter::Machine(binding.peer), route)
             .append_and_admit::<PublishStatus<session_fixture::TestStore, sqlx_turso::Turso, BoardDeliveryTypes>>(&publication_for_store, now)
             .await.map_err(fleet_sync_delivery::delivery_rollback)?;
         Ok(())

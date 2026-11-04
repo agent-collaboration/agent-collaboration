@@ -52,7 +52,7 @@ impl PlatformIo for CloudflareObjectIo {
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
-        worker::send::SendFuture::new(worker::Delay::from(remaining))
+        worker::send::SendFuture::new(crate::reply_deadline::ReplyDeadline::new(remaining))
     }
 
     #[cfg(feature = "conformance")]

@@ -16,11 +16,12 @@ use fleet_sync_delivery::{
 };
 use fleet_sync_protocol::{DeliveryAnswer, DeliveryEnvelope, OperationAnswer, PeerId};
 use report_host::{ReportHost, SharedPair};
-use report_store::{ReportStore, limits, open_store, prepare_report};
+use report_store::{ReportSenderBinding, ReportStore, limits, open_store, prepare_report};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-type ReportTask = ReportOutcome<ReportStore, sqlx_turso::Turso, BoardDeliveryTypes>;
+type ReportTask =
+    ReportOutcome<ReportStore, sqlx_turso::Turso, BoardDeliveryTypes, ReportSenderBinding>;
 const CANCEL: &str = "019f0000-0000-7000-8000-000000011085";
 
 pub(super) async fn run(base: &str) -> ConformanceResult<()> {
@@ -92,6 +93,7 @@ async fn run_report(pair: SharedPair) -> ConformanceResult<()> {
             fetch_bytes: 1_000_000,
         },
         host.clone(),
+        Arc::new(ReportSenderBinding),
     ))?;
     let status = engine
         .start_and_settle::<ReportTask>(
