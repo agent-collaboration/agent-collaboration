@@ -3,9 +3,9 @@
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { test } from "node:test";
-import type { ControlPlan } from "./control-plan.ts";
 import type { CaseResult } from "./journey-cases.ts";
-import { standInPlan, startStandIn, type StandInOptions } from "./journey-stand-in.ts";
+import { startStandIn, type StandInOptions } from "./journey-stand-in.ts";
+import { standInPlan } from "./journey-stand-in-plan.ts";
 import { ProviderStoreReadback } from "./role-readback.ts";
 import { runCases } from "./run.ts";
 import { StreamingMcpClient } from "./streaming-mcp-client.ts";
@@ -95,7 +95,7 @@ async function loadResume(
 ): Promise<{ readonly result: CaseResult; readonly calls: readonly string[] }> {
   const standIn = await startStandIn(options);
   try {
-    const plan = standInPlan(standIn, ["loadResume"]) as unknown as ControlPlan;
+    const plan = standInPlan(standIn, ["loadResume"]);
     mkdirSync(plan.evidence);
     const store = new ProviderStoreReadback(standIn.store);
     try {
@@ -145,11 +145,19 @@ test("loadResume refuses history after resume and a resume settlement that repor
   assert.equal((await loadResume({ resumeHistory: "available" })).result.verdict.kind, "failed");
 });
 
-test("loadResume refuses a reattach settled as another kind and an unretained settlement", async () => {
+test("loadResume refuses a reattach settled as another kind", async () => {
   assert.equal(
     (await loadResume({ reattachSettlementKind: "closed" })).result.verdict.kind,
     "failed",
   );
+});
+
+test("an unretained reattach settlement is inconclusive, never a pass", async () => {
+  const { result } = await loadResume({ settlementUnretained: true });
+  assert.deepEqual(result.verdict, {
+    kind: "inconclusive",
+    reason: "the resumed settlement is outputUnavailable",
+  });
 });
 
 test("after load, an old terminal is not new work and an injected input is not isolated", async () => {

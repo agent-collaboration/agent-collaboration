@@ -10,7 +10,7 @@ import { dirname, isAbsolute, join, sep } from "node:path";
 import { z } from "zod";
 import { decode } from "../../exact-json.ts";
 import {
-  providerLaunchBinding,
+  preparedContextBinding,
   readKeptRecord,
   reloadContinuityProblem,
 } from "./continuation-record.ts";
@@ -269,7 +269,7 @@ function checkContinuationDeclaration(plan: ControlPlan): void {
 /** The retain record's exclusive place, or the kept record's continuity, before any effect. */
 function checkContinuationRecord(plan: ControlPlan): void {
   if (plan.continuation === null) return;
-  const launch = providerLaunchBinding(plan);
+  const binding = preparedContextBinding(plan);
   if (plan.continuation.phase === "retain") {
     if (dirname(plan.continuation.record) !== plan.evidence)
       throw new Error("the continuation record must be written inside the evidence directory");
@@ -279,7 +279,7 @@ function checkContinuationRecord(plan: ControlPlan): void {
   }
   if (dirname(plan.continuation.record) === plan.evidence)
     throw new Error("the kept continuation record cannot live in the new evidence directory");
-  const problem = reloadContinuityProblem(plan, readKeptRecord(plan), launch);
+  const problem = reloadContinuityProblem(plan, readKeptRecord(plan), binding);
   if (problem !== null) throw new Error(problem);
 }
 

@@ -6,18 +6,20 @@
 //   before dispatch (unsupportedCapability, binding stage, effect none, its own operation and
 //   target, no owning-store record), then the exclusive record of everything the next lifetime
 //   must find again.
-// - continuationReload: the kept record and every continuity binding checked before any
-//   effect, the Session still unloaded, a real load settled as Loaded with the recorded history
+// - continuationReload: before any effect, the kept record and every continuity binding (the
+//   same prepared context, launch, Host and Router build, caller and stored roles, a new
+//   service epoch), the exact Session still unloaded, and the live endpoint binding in this
+//   epoch; then a real load settled as Loaded on that same binding with the recorded history
 //   replayed in order, then one new isolated prompt. No new Session.
 import { existsSync, writeFileSync } from "node:fs";
 import { encode } from "../../exact-json.ts";
 import {
-  providerLaunchBinding,
+  preparedContextBinding,
   readKeptRecord,
   reloadContinuityProblem,
   type ContinuationRecord,
 } from "./continuation-record.ts";
-import { sameSession, type SessionRef } from "./observation-models.ts";
+import { sameSession, sessionRefSchema, type SessionRef } from "./observation-models.ts";
 import * as requests from "./journey-requests.ts";
 import { answered, callTool, operationShow } from "./journey-steps.ts";
 import {
@@ -81,8 +83,9 @@ export async function continuationRetainCase(inputs: CaseInputs): Promise<CaseRe
   const continuation = inputs.plan.continuation;
   if (continuation?.phase !== "retain")
     throw new Error("continuationRetain needs its retain declaration");
-  // The launch this lifetime runs is bound before any effect; it is what reload must match.
-  const launch = providerLaunchBinding(inputs.plan);
+  // The prepared context and launch this lifetime runs are bound before any effect; they are
+  // what reload must find again.
+  const { context, launch } = preparedContextBinding(inputs.plan);
   if (existsSync(continuation.record)) throw new Error("the continuation record already exists");
   const target = await createSession(inputs, "retain-create");
   const verdict = await attachedPrompt(inputs, target, "retain");
@@ -108,6 +111,7 @@ export async function continuationRetainCase(inputs: CaseInputs): Promise<CaseRe
       sha256: inputs.plan.host.sha256,
     },
     router: inputs.plan.router,
+    context,
     launch,
     actor: inputs.plan.actor,
     approver: inputs.plan.approver,
@@ -125,11 +129,75 @@ export async function continuationRetainCase(inputs: CaseInputs): Promise<CaseRe
   return { name: "continuationRetain", target, verdict };
 }
 
-const bindingSchema = z.looseObject({
+const exactInteger = z.union([z.bigint(), z.number().int()]).transform(BigInt);
+// endpoints_list (collaboration-protocol endpoint_inventory.rs, endpoint_description.rs).
+const inventorySchema = z.looseObject({
+  serviceEpoch: z.string(),
+  endpoints: z.array(
+    z.looseObject({
+      endpoint: z.object({ serviceId: z.string(), endpointId: z.string() }),
+      availability: z.looseObject({ state: z.string() }),
+      channels: z.array(
+        z.looseObject({
+          kind: z.string(),
+          bindingId: z.string().optional(),
+          bindingGeneration: exactInteger.optional(),
+        }),
+      ),
+    }),
+  ),
+});
+// conversation_operation_show's external-provider binding (ConversationBindingIdentity).
+const operationBindingSchema = z.looseObject({
   binding: z.looseObject({
-    binding: z.looseObject({ generation: z.looseObject({ serviceEpoch: z.string() }) }),
+    binding: z.looseObject({
+      bindingId: z.string(),
+      generation: z.looseObject({ serviceEpoch: z.string(), generation: exactInteger }),
+    }),
   }),
 });
+
+interface LiveBinding {
+  readonly bindingId: string;
+  readonly generation: bigint;
+}
+
+/** The endpoint's live provider binding in this lifetime's epoch, or why there is none. */
+async function liveProviderBinding(
+  inputs: CaseInputs,
+  target: SessionRef,
+): Promise<LiveBinding | string> {
+  const inventory = inventorySchema.parse(
+    answered(
+      await callTool(
+        inputs.context,
+        "reload-endpoints",
+        "endpoints_list",
+        {},
+        { timeoutMs: 15_000 },
+      ),
+      "reload endpoints",
+    ),
+  );
+  if (inventory.serviceEpoch !== inputs.plan.expectedServiceEpoch)
+    return "the live endpoint inventory is not this lifetime's service epoch";
+  const endpoint = inventory.endpoints.find(
+    (candidate) =>
+      candidate.endpoint.serviceId === target.endpoint.serviceId &&
+      candidate.endpoint.endpointId === target.endpoint.endpointId,
+  );
+  if (endpoint === undefined) return "the live endpoint inventory lacks the kept endpoint";
+  if (endpoint.availability.state !== "available")
+    return `the kept endpoint is ${endpoint.availability.state}, not available`;
+  const channel = endpoint.channels.find((candidate) => candidate.kind === "externalProvider");
+  if (
+    channel?.bindingId === undefined ||
+    channel.bindingGeneration === undefined ||
+    channel.bindingGeneration <= 0n
+  )
+    return "the kept endpoint has no actual external-provider binding";
+  return { bindingId: channel.bindingId, generation: channel.bindingGeneration };
+}
 
 export async function continuationReloadCase(inputs: CaseInputs): Promise<CaseResult> {
   const record = readKeptRecord(inputs.plan);
@@ -141,7 +209,7 @@ export async function continuationReloadCase(inputs: CaseInputs): Promise<CaseRe
     verdict: failed(reason),
   });
   // Every continuity binding holds before any effect.
-  const problem = reloadContinuityProblem(inputs.plan, record, providerLaunchBinding(inputs.plan));
+  const problem = reloadContinuityProblem(inputs.plan, record, preparedContextBinding(inputs.plan));
   if (problem !== null) return stop(problem);
   const roles = inputs.store.sessionRoles(target);
   if (roles === null) return stop("the owning store has no record of the kept Session");
@@ -149,7 +217,7 @@ export async function continuationReloadCase(inputs: CaseInputs): Promise<CaseRe
     encode({ createdBy: roles.createdBy, approver: roles.approver }) !== encode(record.storedRoles)
   )
     return stop("the kept Session's stored creator or Approver changed");
-  const inspected = z.looseObject({ state: z.string() }).parse(
+  const inspected = z.looseObject({ target: sessionRefSchema, state: z.string() }).parse(
     answered(
       await callTool(
         inputs.context,
@@ -163,22 +231,24 @@ export async function continuationReloadCase(inputs: CaseInputs): Promise<CaseRe
       "reload inspect",
     ),
   );
+  if (!sameSession(inspected.target, target))
+    return stop("the inspected Session is not the kept Session");
   if (inspected.state !== "unloaded")
     return stop(
       `the kept Session is ${inspected.state} before the load; recovery already attached it`,
     );
+  const live = await liveProviderBinding(inputs, target);
+  if (typeof live === "string") return stop(live);
   const unsettled = await reattach(inputs, target, "conversation_load");
   if (unsettled !== null) return { name: "continuationReload", target, verdict: unsettled };
-  const loads = inputs.store
-    .operations(target)
-    .filter((row) => row.operationKind === "conversationLoad");
-  const load = loads.at(-1);
-  if (load === undefined) return stop("the settled load has no owning-store record");
-  const bound = bindingSchema.parse(
-    await operationShow(inputs.context, "reload-binding", load.operationId),
-  );
-  if (bound.binding.binding.generation.serviceEpoch !== inputs.plan.expectedServiceEpoch)
-    return stop("the load is not bound in the second lifetime's service epoch");
+  const load = lastOperation(inputs, target, "conversationLoad");
+  const bound = operationBindingSchema.parse(
+    await operationShow(inputs.context, "reload-binding", load),
+  ).binding.binding;
+  if (bound.generation.serviceEpoch !== inputs.plan.expectedServiceEpoch)
+    return stop("the load's binding is not in the second lifetime's service epoch");
+  if (bound.bindingId !== live.bindingId || bound.generation.generation !== live.generation)
+    return stop("the load's binding is not the live endpoint binding read before it");
   const history = await reattachedHistory(inputs, target, "conversation_load", record.history);
   if (history.kind === "verdict")
     return { name: "continuationReload", target, verdict: history.verdict };

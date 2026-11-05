@@ -57,16 +57,33 @@ export interface StandInOptions {
   readonly recordRefused?: boolean;
   /** provider_session_inspect state; the real reopened Host reports unloaded before load. */
   readonly sessionState?: string;
+  /** provider_session_inspect names this Session instead of the one asked about. */
+  readonly inspectSessionId?: string;
   /** The serviceEpoch every binding snapshot names. */
   readonly bindingEpoch?: string;
+  /** The live endpoint inventory (endpoints_list): its epoch, availability and provider channel. */
+  readonly inventory?: {
+    readonly epoch?: string;
+    readonly unavailable?: boolean;
+    readonly withoutProviderChannel?: boolean;
+  };
+  /** The binding the load operation's snapshot names, when it differs from the live one. */
+  readonly loadBinding?: { readonly epoch?: string; readonly bindingId?: string };
+  /** An operation wait finds no retained settlement, as after Host restart or eviction. */
+  readonly settlementUnretained?: boolean;
   /** The prompt after a load: a live turn, no new turn (a stale terminal) or one with an injected input. */
   readonly afterLoadPrompt?: "live" | "stale" | "injected";
   /** Sessions that already exist, as after a settled first Host lifetime. */
   readonly existing?: readonly {
     readonly sessionId: string;
     readonly history: RecordedExchange[];
+    /** The stored creator, when it no longer matches what the first lifetime recorded. */
+    readonly createdBy?: string;
   }[];
 }
+
+/** The live binding the stand-in's endpoint inventory and snapshots name. */
+export const STAND_IN_BINDING = "33333333-0000-4000-8000-000000000001";
 
 interface SessionState {
   epoch: bigint;
@@ -174,7 +191,7 @@ class ScriptedHost {
         loaded: false,
       };
       this.sessions.set(existing.sessionId, session);
-      this.recordSession(existing.sessionId);
+      this.recordSession(existing.sessionId, existing.createdBy);
     }
   }
 
@@ -201,12 +218,14 @@ class ScriptedHost {
       case "provider_session_inspect":
         return {
           result: {
-            target: this.target(this.session(name, sessionId).id),
+            target: this.target(this.options.inspectSessionId ?? this.session(name, sessionId).id),
             state: this.options.sessionState ?? "unloaded",
             capabilities: {},
             history: "available",
           },
         };
+      case "endpoints_list":
+        return { result: this.inventory() };
       default:
         throw new Error(`the stand-in has no answer for ${name}`);
     }
@@ -351,7 +370,8 @@ class ScriptedHost {
   }
 
   private wait(operationId: string): Answer {
-    const settlement = this.settlements.get(operationId);
+    const settlement =
+      this.options.settlementUnretained === true ? undefined : this.settlements.get(operationId);
     return {
       result: {
         operation: this.snapshot(operationId),
@@ -363,15 +383,55 @@ class ScriptedHost {
     };
   }
 
+  /** endpoints_list in the recorded shape (endpoint_inventory.rs, endpoint_description.rs). */
+  private inventory(): Json {
+    const inventory = this.options.inventory ?? {};
+    return {
+      serviceEpoch: inventory.epoch ?? this.options.bindingEpoch ?? STAND_IN_EPOCH,
+      sequence: 1,
+      endpoints: [
+        {
+          endpoint: {
+            serviceId: STAND_IN_SERVICE,
+            endpointId: this.options.endpointId ?? "cursor-local",
+          },
+          label: "Cursor",
+          availability:
+            inventory.unavailable === true
+              ? { state: "unavailable", observedAt: "2026-11-05T00:00:00Z", reason: "stopped" }
+              : { state: "available", observedAt: "2026-11-05T00:00:00Z" },
+          channels:
+            inventory.withoutProviderChannel === true
+              ? []
+              : [
+                  {
+                    kind: "externalProvider",
+                    transport: "stdioAcp",
+                    bindingId: STAND_IN_BINDING,
+                    bindingGeneration: 2,
+                    runtime: { provider: "cursor", runtimeName: "stand-in", runtimeVersion: "1" },
+                    capabilities: [],
+                  },
+                ],
+        },
+      ],
+    };
+  }
+
   private snapshot(operationId: string, stage = "terminal"): Json {
     const kind = this.kinds.get(operationId) ?? "conversationPrompt";
+    const load = kind === "conversationLoad" ? (this.options.loadBinding ?? {}) : {};
     return {
       operationId,
       operation: kind,
       binding: {
         kind: "externalProvider",
         binding: {
-          generation: { serviceEpoch: this.options.bindingEpoch ?? STAND_IN_EPOCH, generation: 2 },
+          bindingId: load.bindingId ?? STAND_IN_BINDING,
+          generation: {
+            serviceEpoch: load.epoch ?? this.options.bindingEpoch ?? STAND_IN_EPOCH,
+            generation: 2,
+          },
         },
       },
       target: this.target(lookupSession(this.store, operationId) ?? "session-1"),
@@ -428,13 +488,13 @@ class ScriptedHost {
     db.close();
   }
 
-  private recordSession(sessionId: string): void {
+  private recordSession(sessionId: string, createdBy: string = STAND_IN_OWNER): void {
     this.write(
       "INSERT INTO provider_session_records VALUES (?, ?, ?, ?, ?)",
       STAND_IN_SERVICE,
       this.options.endpointId ?? "cursor-local",
       sessionId,
-      encode({ humanId: STAND_IN_OWNER }),
+      encode({ humanId: createdBy }),
       encode({ humanId: STAND_IN_OWNER }),
     );
   }
@@ -517,78 +577,4 @@ function lookupSession(store: string, operationId: string): string | null {
   } finally {
     db.close();
   }
-}
-
-/**
- * Writes a Host-context marker in the automation Host's own shape (automation-debug-host.rs
- * DebugHostContext, camelCase): the provider launch is `{executable, arguments}`.
- */
-export function writeHostContext(
-  path: string,
-  props: {
-    readonly hostPid: number;
-    readonly executable: string;
-    readonly arguments: readonly string[];
-  },
-): void {
-  writeFileSync(
-    path,
-    JSON.stringify({
-      kind: "debugHostPrepared",
-      runDirectory: "/tmp/stand-in-run",
-      serviceDirectory: "/tmp/stand-in-run/agent-communication",
-      workspace: "/tmp/stand-in-run/agent-workspace",
-      profile: "codex-router-debug",
-      model: "gpt-5.6-luna",
-      port: 18791,
-      hostPid: props.hostPid,
-      routerRoot: "/tmp/stand-in-root",
-      claudeProvider: null,
-      cursorProvider: { executable: props.executable, arguments: props.arguments },
-      peerRegistryDirectory: null,
-    }),
-  );
-}
-
-/** A plan for the driver's case entry against `standIn`; schema-level checks are control-plan.ts's. */
-export function standInPlan(
-  standIn: StandIn,
-  cases: readonly string[],
-  extra: Readonly<Record<string, unknown>> = {},
-): Record<string, unknown> {
-  return {
-    repository: standIn.root,
-    sourceHead: "a".repeat(40),
-    buildManifest: standIn.root,
-    host: {
-      kind: "automationDebugHost",
-      pid: process.pid,
-      path: process.execPath,
-      sha256: "0".repeat(64),
-    },
-    hostContext: null,
-    router: { path: standIn.root, sha256: "0".repeat(64) },
-    serviceDirectory: standIn.root,
-    expectedServiceId: STAND_IN_SERVICE,
-    expectedServiceEpoch: STAND_IN_EPOCH,
-    endpointId: "cursor-local",
-    workingDirectory: standIn.root,
-    actor: { kind: "human", humanId: STAND_IN_OWNER, source: "ownerLookup" },
-    approver: { kind: "human", humanId: STAND_IN_OWNER, source: "ownerLookup" },
-    wrongRoleRequester: null,
-    peer: {
-      kind: "controlled",
-      receipt: standIn.receipt,
-      releaseSentinel: join(standIn.root, "release"),
-    },
-    cases,
-    promptText: "facade-controlled-proof",
-    holdText: null,
-    effects: { maxSessions: 6, maxPrompts: 7 },
-    deadline: "2099-01-01T00:00:00Z",
-    evidence: join(standIn.root, "evidence"),
-    schemaSource: null,
-    continuation: null,
-    ...extra,
-  };
 }

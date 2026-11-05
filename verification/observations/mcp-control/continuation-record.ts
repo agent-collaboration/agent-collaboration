@@ -1,16 +1,23 @@
 // The two-lifetime continuation's verification evidence: the exclusive record its first lifetime
-// writes, the provider launch it binds, and the continuity its second lifetime must show before
-// any effect. This is verification input and evidence only; nothing here is application state.
+// writes, the prepared Host context and provider launch it binds, and the continuity its second
+// lifetime must show before any effect. Verification input and evidence only; nothing here is
+// application state.
 //
-// The provider launch comes from the automation Host's own prepared-context marker in its run
-// directory (codex-router-host examples/automation-debug-host.rs DebugHostContext, camelCase;
-// launch_options.rs ProviderCommand `{executable, arguments}`), the same fields its
-// --resume-run-directory admission compares (validate_resume_binding). The marker records no
-// artifact digest, so this binding adds the executable's sha256 and the sha256 of each
-// argument that names an existing file. An absent launch is refused, never equal to another.
+// The prepared context is the automation Host's own marker in its run directory
+// (codex-router-host examples/automation-debug-host.rs DebugHostContext, camelCase, unknown
+// fields denied), whose fields its --resume-run-directory admission compares
+// (validate_resume_run_directory, validate_resume_binding). The marker lives in the run
+// directory beside its agent-workspace; the service directory is the canonical Router root's
+// agent-communication child, or the run directory's when no Router root is given
+// (validate_collaboration_directory, launch_options.rs selected_collaboration_directory). Its
+// `port` is the Router proxy port the Host publishes as service.json `routerProxyEndpoint`,
+// not the separately assigned MCP port. The marker records no artifact digest, so the launch
+// binding adds the executable's sha256 and that of each argument naming an existing file. An
+// absent field is refused, never equal to another. The Host PID and service epoch belong to one
+// lifetime and are allowed to change; everything else must be identical.
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
 import { z } from "zod";
 import { decode, encode } from "../../exact-json.ts";
 import { sameSession, sessionRefSchema } from "./observation-models.ts";
@@ -26,6 +33,18 @@ const launchBindingSchema = z.strictObject({
 });
 export type LaunchBinding = z.infer<typeof launchBindingSchema>;
 
+const preparedContextSchema = z.strictObject({
+  runDirectory: absolutePath,
+  serviceDirectory: absolutePath,
+  workspace: absolutePath,
+  profile: z.string().min(1),
+  model: z.string().min(1),
+  routerProxyPort: z.number().int().positive(),
+  routerRoot: absolutePath.nullable(),
+  peerRegistryDirectory: absolutePath.nullable(),
+});
+export type PreparedContext = z.infer<typeof preparedContextSchema>;
+
 export const continuationRecordSchema = z.strictObject({
   kind: z.literal("mcpControlContinuation"),
   // Integers decode exact (exact-json yields bigint).
@@ -36,6 +55,10 @@ export const continuationRecordSchema = z.strictObject({
   workingDirectory: absolutePath,
   host: z.strictObject({ kind: z.string(), path: absolutePath, sha256: digest }),
   router: z.strictObject({ path: absolutePath, sha256: digest }),
+  context: z.strictObject({
+    ...preparedContextSchema.shape,
+    routerProxyPort: z.union([z.number().int().positive(), z.bigint()]).transform(Number),
+  }),
   launch: launchBindingSchema,
   actor: z.unknown(),
   approver: z.unknown(),
@@ -49,36 +72,106 @@ export const continuationRecordSchema = z.strictObject({
     unsupportedClose: z.string().min(1),
   }),
 });
-export type ContinuationRecord = z.infer<typeof continuationRecordSchema>;
+export type ContinuationRecord = z.input<typeof continuationRecordSchema>;
 
+const exactInteger = z.union([z.bigint(), z.number().int()]).transform(Number);
 const providerCommandSchema = z.strictObject({
   executable: absolutePath,
   arguments: z.array(z.string()),
 });
-const hostContextSchema = z.looseObject({
+// DebugHostContext exactly (deny_unknown_fields on the producer).
+const hostContextSchema = z.strictObject({
   kind: z.literal("debugHostPrepared"),
-  hostPid: z.union([z.bigint(), z.number().int()]).transform((pid) => Number(pid)),
-  claudeProvider: providerCommandSchema.nullable().optional(),
-  cursorProvider: providerCommandSchema.nullable().optional(),
+  runDirectory: absolutePath,
+  serviceDirectory: absolutePath,
+  workspace: absolutePath,
+  profile: z.string().min(1),
+  model: z.string().min(1),
+  port: exactInteger,
+  hostPid: exactInteger,
+  routerRoot: absolutePath.nullable(),
+  claudeProvider: providerCommandSchema.nullable(),
+  cursorProvider: providerCommandSchema.nullable(),
+  peerRegistryDirectory: absolutePath.nullable(),
 });
 
 const sha256File = (path: string): string =>
   createHash("sha256").update(readFileSync(path)).digest("hex");
+const real = (path: string): string => (existsSync(path) ? realpathSync(path) : path);
 
-/** The endpoint's provider launch named by the declared Host context, with artifact digests. */
-export function providerLaunchBinding(plan: ControlPlan): LaunchBinding {
+/** The Router proxy port the running Host published, or why it cannot be read. */
+function publishedProxyPort(serviceDirectory: string): number {
+  const service = z
+    .looseObject({ routerProxyEndpoint: z.string().optional() })
+    .parse(decode(readFileSync(join(serviceDirectory, "service.json"), "utf8")));
+  if (service.routerProxyEndpoint === undefined)
+    throw new Error("the published service names no Router proxy endpoint");
+  const port = Number(
+    service.routerProxyEndpoint.slice(service.routerProxyEndpoint.lastIndexOf(":") + 1),
+  );
+  if (!Number.isInteger(port) || port <= 0)
+    throw new Error("the published Router proxy endpoint has no port");
+  return port;
+}
+
+/**
+ * The declared plan's prepared Host context and the endpoint's provider launch, checked against
+ * the Host's own admission rules and this lifetime's process and published service.
+ */
+export function preparedContextBinding(plan: ControlPlan): {
+  readonly context: PreparedContext;
+  readonly launch: LaunchBinding;
+} {
   if (plan.hostContext === null) throw new Error("a continuation needs the declared Host context");
   if (!existsSync(plan.hostContext)) throw new Error("the declared Host context is absent");
-  const context = hostContextSchema.parse(decode(readFileSync(plan.hostContext, "utf8")));
-  if (context.hostPid !== plan.host.pid)
+  const marker = hostContextSchema.parse(decode(readFileSync(plan.hostContext, "utf8")));
+  if (marker.hostPid !== plan.host.pid)
     throw new Error("the Host context names another Host process than the plan declares");
+  if (real(plan.hostContext) !== real(join(marker.runDirectory, "debug-host-context.json")))
+    throw new Error("the declared Host context is not its run directory's own marker");
+  if (marker.workspace !== join(marker.runDirectory, "agent-workspace"))
+    throw new Error("the Host context's workspace is not its run directory's");
+  if (real(plan.workingDirectory) !== real(marker.workspace))
+    throw new Error("the plan's working directory is not the prepared workspace");
+  const canonicalService =
+    marker.routerRoot === null
+      ? join(marker.runDirectory, "agent-communication")
+      : join(marker.routerRoot, "agent-communication");
+  if (
+    marker.serviceDirectory !== canonicalService ||
+    (marker.routerRoot !== null && real(marker.routerRoot) !== marker.routerRoot)
+  )
+    throw new Error("the Host context's service directory is not the canonical Router root child");
+  if (real(plan.serviceDirectory) !== real(marker.serviceDirectory))
+    throw new Error("the plan's service directory is not the prepared service directory");
+  if (publishedProxyPort(plan.serviceDirectory) !== marker.port)
+    throw new Error("the Host context's port is not the published Router proxy port");
+  return {
+    context: {
+      runDirectory: marker.runDirectory,
+      serviceDirectory: marker.serviceDirectory,
+      workspace: marker.workspace,
+      profile: marker.profile,
+      model: marker.model,
+      routerProxyPort: marker.port,
+      routerRoot: marker.routerRoot,
+      peerRegistryDirectory: marker.peerRegistryDirectory,
+    },
+    launch: providerLaunch(plan, marker),
+  };
+}
+
+function providerLaunch(
+  plan: ControlPlan,
+  marker: z.infer<typeof hostContextSchema>,
+): LaunchBinding {
   const command =
     plan.endpointId === "cursor-local"
-      ? context.cursorProvider
+      ? marker.cursorProvider
       : plan.endpointId === "claude-local"
-        ? context.claudeProvider
-        : undefined;
-  if (command === null || command === undefined)
+        ? marker.claudeProvider
+        : null;
+  if (command === null)
     throw new Error(`the Host context declares no provider launch for ${plan.endpointId}`);
   if (!existsSync(command.executable) || !statSync(command.executable).isFile())
     throw new Error("the Host context's provider executable is absent");
@@ -96,7 +189,7 @@ export function providerLaunchBinding(plan: ControlPlan): LaunchBinding {
 }
 
 /** The reload phase's kept record, exactly as hash-bound in the plan. */
-export function readKeptRecord(plan: ControlPlan): ContinuationRecord {
+export function readKeptRecord(plan: ControlPlan): z.output<typeof continuationRecordSchema> {
   const continuation = plan.continuation;
   if (continuation?.phase !== "reload") throw new Error("no kept continuation record is declared");
   const bytes = readFileSync(continuation.record);
@@ -108,8 +201,8 @@ export function readKeptRecord(plan: ControlPlan): ContinuationRecord {
 /** Why the second lifetime is not the same continuation, or null when every binding holds. */
 export function reloadContinuityProblem(
   plan: ControlPlan,
-  record: ContinuationRecord,
-  launch: LaunchBinding,
+  record: z.output<typeof continuationRecordSchema>,
+  binding: { readonly context: PreparedContext; readonly launch: LaunchBinding },
 ): string | null {
   const expectedTarget = {
     endpoint: { serviceId: plan.expectedServiceId, endpointId: plan.endpointId },
@@ -129,7 +222,9 @@ export function reloadContinuityProblem(
     record.router.sha256 !== plan.router.sha256
   )
     return "the second lifetime is not the same Host and Router build";
-  if (encode(record.launch) !== encode(launch))
+  if (encode(record.context) !== encode(binding.context))
+    return "the second lifetime is not the same prepared context";
+  if (encode(record.launch) !== encode(binding.launch))
     return "the second lifetime is not the same provider launch";
   if (
     encode(record.actor) !== encode(plan.actor) ||

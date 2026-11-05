@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { decideNoReplay, decideReplayedHistory } from "./history-replay-oracle.ts";
 import type { NumberedEvent } from "./observation-ledger.ts";
+import { sessionEventSchema } from "./observation-models.ts";
 
 type Raw = Readonly<Record<string, unknown>>;
 const REPLAYED = { unknown: "replayed" };
@@ -46,7 +47,8 @@ function baseline(turns: readonly Raw[][]): NumberedEvent[] {
   ];
   return events.map((event, index) => ({
     sequence: BigInt(index + 1),
-    event: event as NumberedEvent["event"],
+    // Parsed through the wire schema, so a fixture that is not a real event fails here.
+    event: sessionEventSchema.parse(event),
   }));
 }
 
@@ -58,14 +60,12 @@ test("the recorded conversation replayed in order as historical turns is complet
 });
 
 test("missing, extra, reordered, canned or foreign history is refused", () => {
-  const distinct = [
-    { prompt: "first prompt", reply: "first reply" },
-    { prompt: "second prompt", reply: "second reply" },
-  ];
+  const first = { prompt: "first prompt", reply: "first reply" };
+  const distinct = [first, { prompt: "second prompt", reply: "second reply" }];
   const turns = distinct.map((exchange, index) => historicalTurn(index, exchange, REPLAYED));
   const cases: [string, NumberedEvent[], readonly { prompt: string; reply: string }[]][] = [
     ["missing", baseline(turns.slice(0, 1)), distinct],
-    ["extra", baseline([...turns, historicalTurn(2, distinct[0]!, REPLAYED)]), distinct],
+    ["extra", baseline([...turns, historicalTurn(2, first, REPLAYED)]), distinct],
     ["reordered", baseline([...turns].reverse()), distinct],
     [
       "canned",
@@ -85,9 +85,10 @@ test("missing, extra, reordered, canned or foreign history is refused", () => {
 test("a live-looking terminal or an injected input inside replayed history is refused", () => {
   const live = RECORDED.map((exchange, index) => historicalTurn(index, exchange, "endTurn"));
   assert.equal(decideReplayedHistory(baseline(live), RECORDED).kind, "failed");
-  const injected = faithful();
-  injected[0]!.splice(1, 0, { kind: "inputAccepted", inputId: "steer", turnId: "history-turn-0" });
-  assert.equal(decideReplayedHistory(baseline(injected), RECORDED).kind, "failed");
+  const [steered, ...rest] = faithful();
+  if (steered === undefined) throw new Error("the faithful fixture holds no turn");
+  steered.splice(1, 0, { kind: "inputAccepted", inputId: "steer", turnId: "history-turn-0" });
+  assert.equal(decideReplayedHistory(baseline([steered, ...rest]), RECORDED).kind, "failed");
 });
 
 test("after resume, no historical turn may appear", () => {
