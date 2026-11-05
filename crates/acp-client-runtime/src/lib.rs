@@ -93,6 +93,12 @@ pub use session_event_sink::{
 #[cfg(feature = "test-observation")]
 pub const MAX_ACP_FRAME_BYTES: usize = agent_session_client::MAX_ACP_FRAME_BYTES;
 
+#[cfg(any(test, feature = "test-observation"))]
+/// Process-wide incoming frame-limit count; compare readings around an operation.
+pub fn provider_frame_limit_exceeded_count_for_test() -> u64 {
+    agent_session_client::frame_limit_exceeded_count_for_test()
+}
+
 #[cfg(feature = "test-observation")]
 pub fn acp_operation_error_for_test(
     error: agent_client_protocol::Error,

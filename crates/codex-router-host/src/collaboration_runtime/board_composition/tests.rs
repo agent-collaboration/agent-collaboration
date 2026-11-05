@@ -508,15 +508,21 @@ async fn native_registration_refusal_moves_an_empty_file_and_replays_the_origina
     }
     read.finish().await?;
     service.release_registration()?;
+    timeout(BOUND, projects.settle_operations()).await??;
     assert_eq!(
-        timeout(BOUND, writer.runtime.wait_registration()).await??,
+        {
+            let registry = projects.registry()?;
+            let retained_refusal = timeout(BOUND, registry.rejected_project(&request.project_id))
+                .await??
+                .ok_or("retained rejected project is missing")?;
+            retained_refusal.registration_outcome().clone()
+        },
         WriterRegistrationOutcome::Refused {
             reason: RegistrationRefusal::DatabaseRejected {
                 reason: reason.clone()
             }
         }
     );
-    timeout(BOUND, projects.settle_operations()).await??;
     assert!(!source.exists());
     let moved = source.with_extension("orphaned.sqlite");
     assert!(moved.exists());

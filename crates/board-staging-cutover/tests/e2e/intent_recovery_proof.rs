@@ -12,11 +12,51 @@ use message_board::{
     RecordPlacement, RecordedActor, RequestLedgerEntry, RouterComponent, StoredDecision,
 };
 use message_board_storage::MailHandoffItem;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::Path, time::Duration};
 
 pub(super) struct RecoveredIntent {
     pub head: FeedCursor,
     pub item: message_board::MailItemRef,
+}
+
+pub(super) async fn await_recovered_intent_handoff(
+    router_root: &Path,
+    project: &message_board::ProjectId,
+    before: &NotifyIntent,
+) -> TestResult {
+    let directory = codex_router_host::router_collaboration_directory(router_root);
+    let client = collaboration_client::CollaborationClient::connect(
+        &directory,
+        "cutover-recovery-readback",
+        "1",
+    )
+    .await?;
+    tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            let shown = client
+                .intent_show(message_board::ProjectRecordShowRequest {
+                    project_id: project.clone(),
+                    record: before.intent_id.clone().into(),
+                })
+                .await?;
+            let Record::NotifyIntent(observed) = shown else {
+                return Err("source recovery intent returned another record kind".into());
+            };
+            match observed.state() {
+                IntentState::HandedOff { .. } => return TestResult::Ok(()),
+                IntentState::Emitted {} => {
+                    tokio::time::sleep(Duration::from_millis(25)).await;
+                }
+                state @ (IntentState::Superseded {} | IntentState::Refused { .. }) => {
+                    return Err(
+                        format!("source recovery intent did not hand off: {state:?}").into(),
+                    );
+                }
+            }
+        }
+    })
+    .await
+    .map_err(|_| std::io::Error::other("source recovery intent stayed Emitted before Host stop"))?
 }
 
 pub(super) async fn verify_recovered_intent(
