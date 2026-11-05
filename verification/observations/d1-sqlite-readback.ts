@@ -43,10 +43,14 @@ async function requireClosedOwnedStore(
   const metadata = await lstat(database);
   if (!metadata.isFile() || metadata.uid !== process.getuid?.())
     throw new Error("D1 database not owned");
-  const consumers = spawnSync("/usr/sbin/lsof", ["-t", "--", database], {
-    encoding: "utf8",
-    timeout: 5000,
-  });
+  const consumers = spawnSync(
+    process.platform === "darwin" ? "/usr/sbin/lsof" : "/usr/bin/lsof",
+    ["-t", "--", database],
+    {
+      encoding: "utf8",
+      timeout: 5000,
+    },
+  );
   if (
     consumers.error !== undefined ||
     consumers.status !== 1 ||
