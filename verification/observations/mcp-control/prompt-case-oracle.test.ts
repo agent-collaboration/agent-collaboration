@@ -133,6 +133,7 @@ function evidence(
     peerReceipt: { prompts: 1, cancels: 0, releases: 0, releasesFollowPrompt: true },
     expectedPeerCancels: 0,
     expectedPeerReleases: 0,
+    requireAgentReply: true,
     ...overrides,
   };
 }
@@ -324,4 +325,64 @@ test("a cursor that skips past a second turn is refused, though the visible chai
     kind: "failed",
     reason: "observation read 2: the request did not continue from the last observed cursor",
   });
+});
+
+// A positive inference case needs an actual agent-message reply with non-whitespace text; the
+// cross-view equality alone passes when every view is equally empty. A cancelled outcome, which
+// carries no inference obligation, may still end with no output.
+function silentTurn(stopReason: string, items: readonly RawEvent[]): readonly RawEvent[] {
+  return [
+    numbered(3, { kind: "turnStarted", turnId: "turn-1", inputId: "input-1" }),
+    numbered(4, { kind: "inputAccepted", inputId: "input-1", turnId: "turn-1" }),
+    ...items.map((item, index) => numbered(5 + index, { kind: "itemStarted", item })),
+    numbered(5 + items.length, {
+      kind: "turnEnded",
+      turnId: "turn-1",
+      outcome: { kind: "ended", stopReason, localCause: null },
+    }),
+  ];
+}
+
+test("a positive inference case with no agent reply, or only empty or blank text, cannot qualify", () => {
+  const cases: [string, readonly RawEvent[], string][] = [
+    ["no agent-message item", silentTurn("endTurn", []), ""],
+    ["an agent item with empty text", silentTurn("endTurn", [agentItem("")]), ""],
+    ["an agent item with whitespace only", silentTurn("endTurn", [agentItem("  \n ")]), "  \n "],
+    [
+      "a non-agent item only",
+      silentTurn("endTurn", [{ itemId: "t-1", kind: { kind: "agentThought" }, text: "thinking" }]),
+      "",
+    ],
+  ];
+  for (const [name, events, reply] of cases) {
+    const verdict = decidePromptCase(
+      evidence([{ after: 2, events }], {
+        reply: { kind: "promptResult", value: promptResult(reply) },
+        requireAgentReply: true,
+      }),
+    );
+    assert.equal(verdict.kind, "failed", name);
+  }
+});
+
+test("a cancelled outcome with no output still qualifies where no reply is required", () => {
+  const cancelled = {
+    kind: "completed",
+    target: TARGET,
+    operationId: OPERATION,
+    settlement: {
+      target: TARGET,
+      stopReason: "cancelled",
+      detail: { kind: "providerPrompt", output: { kind: "available", text: "" } },
+    },
+  };
+  const verdict = decidePromptCase(
+    evidence([{ after: 2, events: silentTurn("cancelled", []) }], {
+      expectedStopReason: "cancelled",
+      reply: { kind: "promptResult", value: cancelled },
+      operation: { ...SETTLED_OPERATION, terminalStopReason: "cancelled" },
+      requireAgentReply: false,
+    }),
+  );
+  assert.equal(verdict.kind, "qualified");
 });

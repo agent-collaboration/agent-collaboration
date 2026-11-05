@@ -94,6 +94,13 @@ export interface PromptCaseEvidence {
   readonly expectedPeerCancels: number;
   /** One for a held turn released to completion after its waiter was dropped; zero otherwise. */
   readonly expectedPeerReleases: number;
+  /**
+   * A positive inference case must show an actual agent-message reply with non-whitespace
+   * text: equality across views alone passes when every view is equally empty. A cancelled
+   * outcome carries no such obligation and may end with no output. This is the case's own
+   * obligation, not a product output contract, and it names no expected provider text.
+   */
+  readonly requireAgentReply: boolean;
 }
 
 export type PromptCaseVerdict =
@@ -114,6 +121,12 @@ export function decidePromptCase(evidence: PromptCaseEvidence): PromptCaseVerdic
   if (isolated.kind === "verdict") return isolated.verdict;
   const { turn } = isolated;
   const reply = agentReplyText(turn);
+  if (evidence.requireAgentReply) {
+    const hasAgentItem = turn.items.some((item) => item.kind === "agentMessage");
+    if (!hasAgentItem) return failed("the positive case observed no agent-message reply");
+    if (reply.trim() === "")
+      return failed("the positive case's agent reply has no non-whitespace text");
+  }
   const outcome = z
     .looseObject({ kind: z.literal("ended"), stopReason: z.string() })
     .safeParse(turn.outcome);

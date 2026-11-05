@@ -75,19 +75,35 @@ function declaredStored(identity: ControlPlan["actor"]): StoredIdentity {
     : { kind: "session", session: identity.session };
 }
 
-/** Creates the case's Session and requires its stored creator and Approver to be the declared ones. */
+/**
+ * Creates the case's Session. Before anything else uses the answer, the returned operation must
+ * be the one submitted and the returned Session must be on the plan's own service and endpoint:
+ * a self-consistently wrong answer would otherwise become the expected target for every later
+ * view. The Session ID itself is provider-generated and is taken as returned, never guessed.
+ * Then its stored creator and Approver must be the declared ones.
+ */
 export async function createSession(inputs: CaseInputs, step: string): Promise<SessionRef> {
   const { context, plan, store } = inputs;
+  const operationId = requests.newOperationId();
   const outcome = await callTool(
     context,
     step,
     "conversation_create",
-    requests.createArguments(plan, requests.newOperationId(), 60),
-    {
-      timeoutMs: 70_000,
-    },
+    requests.createArguments(plan, operationId, 60),
+    { timeoutMs: 70_000 },
   );
   const created = createdSchema.parse(answered(outcome, `${step} create`));
+  if (created.operationId !== operationId)
+    throw new Error(
+      `${step}: the create answer names operation ${created.operationId}, not the one submitted`,
+    );
+  if (
+    created.target.endpoint.serviceId !== plan.expectedServiceId ||
+    created.target.endpoint.endpointId !== plan.endpointId
+  )
+    throw new Error(
+      `${step}: the create answer is for another service or endpoint than the plan declares`,
+    );
   const roles = store.sessionRoles(created.target);
   if (roles === null)
     throw new Error(`${step}: the owning store has no record of the created Session`);
@@ -197,6 +213,7 @@ export async function attachedPrompt(
     peerReceipt: peerDelta(peerBefore, peerSnapshot(inputs, target)),
     expectedPeerCancels: 0,
     expectedPeerReleases: 0,
+    requireAgentReply: true,
   });
 }
 
@@ -288,6 +305,7 @@ export async function callerLossCase(inputs: CaseInputs): Promise<CaseResult> {
     peerReceipt: peerSnapshot(inputs, target),
     expectedPeerCancels: 0,
     expectedPeerReleases: 1,
+    requireAgentReply: true,
   });
   // Only a confirmed release retires the marker; an unconfirmed one stays for diagnosis.
   if (verdict.kind === "qualified") retireReleaseMarker(releaseSentinel, operationId);
@@ -351,6 +369,8 @@ export async function explicitCancelCase(inputs: CaseInputs): Promise<CaseResult
     peerReceipt: peerSnapshot(inputs, target),
     expectedPeerCancels: inputs.plan.peer.kind === "controlled" ? 1 : 0,
     expectedPeerReleases: 0,
+    // A cancelled turn carries no inference obligation; its output may be empty.
+    requireAgentReply: false,
   });
   await closeSession(inputs, target, "cancel-close");
   return { name: "explicitCancel", target, verdict };

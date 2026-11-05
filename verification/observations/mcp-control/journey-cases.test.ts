@@ -37,11 +37,27 @@ const callSchema = z.object({
   params: z.object({ name: z.string(), arguments: z.record(z.string(), z.unknown()) }),
 });
 
+/** How the stand-in answers conversation_create: faithfully, or self-consistently wrong. */
+type CreateAnswer = "faithful" | "otherEndpoint" | "otherService" | "foreignOperation";
+
 interface StandIn {
   readonly store: string;
   readonly receipt: string;
   readonly duplicateDispatch: boolean;
+  readonly createAnswer: CreateAnswer;
+  readonly calls: string[];
   promptOperation: string | null;
+}
+
+function createdTarget(answer: CreateAnswer): typeof TARGET {
+  if (answer === "otherEndpoint")
+    return { ...TARGET, endpoint: { ...TARGET.endpoint, endpointId: "claude-local" } };
+  if (answer === "otherService")
+    return {
+      ...TARGET,
+      endpoint: { ...TARGET.endpoint, serviceId: "99999999-9999-4999-8999-999999999999" },
+    };
+  return TARGET;
 }
 
 function answer(standIn: StandIn, name: string, args: Readonly<Record<string, unknown>>): unknown {
@@ -61,16 +77,25 @@ function answer(standIn: StandIn, name: string, args: Readonly<Record<string, un
   });
   switch (name) {
     case "conversation_create": {
+      // The store record matches whatever target is answered, so a wrong answer is fully
+      // self-consistent and only a check against the plan can catch it.
+      const target = createdTarget(standIn.createAnswer);
       const database = new DatabaseSync(standIn.store);
       database
-        .prepare(
-          "INSERT INTO provider_session_records VALUES ('" +
-            SERVICE +
-            "', 'cursor-local', 's-1', ?, ?)",
-        )
-        .run(encode({ humanId: OWNER }), encode({ humanId: OWNER }));
+        .prepare("INSERT INTO provider_session_records VALUES (?, ?, ?, ?, ?)")
+        .run(
+          target.endpoint.serviceId,
+          target.endpoint.endpointId,
+          target.sessionId,
+          encode({ humanId: OWNER }),
+          encode({ humanId: OWNER }),
+        );
       database.close();
-      return { kind: "created", operationId: args["operationId"], target: TARGET };
+      const operationId =
+        standIn.createAnswer === "foreignOperation"
+          ? "0190a000-0000-7000-8000-00000000f0f0"
+          : args["operationId"];
+      return { kind: "created", operationId, target };
     }
     case "events_observe":
       return observe();
@@ -117,18 +142,21 @@ function answer(standIn: StandIn, name: string, args: Readonly<Record<string, un
 }
 
 async function withStandIn(
-  duplicateDispatch: boolean,
+  options: { readonly duplicateDispatch?: boolean; readonly createAnswer?: CreateAnswer },
   body: (
     plan: ControlPlan,
     client: StreamingMcpClient,
     store: ProviderStoreReadback,
+    standIn: StandIn,
   ) => Promise<void>,
 ): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), "mcp-journey-"));
   const standIn: StandIn = {
     store: join(root, "provider-operations.sqlite"),
     receipt: join(root, "receipt.jsonl"),
-    duplicateDispatch,
+    duplicateDispatch: options.duplicateDispatch ?? false,
+    createAnswer: options.createAnswer ?? "faithful",
+    calls: [],
     promptOperation: null,
   };
   const database = new DatabaseSync(standIn.store);
@@ -142,6 +170,7 @@ async function withStandIn(
     request.on("data", (chunk: Buffer) => (text += chunk.toString("utf8")));
     request.on("end", () => {
       const call = callSchema.parse(decode(text));
+      standIn.calls.push(call.params.name);
       response.setHeader("content-type", "application/json");
       response.end(
         encode({
@@ -181,7 +210,12 @@ async function withStandIn(
   });
   const store = new ProviderStoreReadback(standIn.store);
   try {
-    await body(plan, new StreamingMcpClient(`http://127.0.0.1:${address.port}/mcp`), store);
+    await body(
+      plan,
+      new StreamingMcpClient(`http://127.0.0.1:${address.port}/mcp`),
+      store,
+      standIn,
+    );
   } finally {
     store.close();
     server.closeAllConnections();
@@ -191,7 +225,7 @@ async function withStandIn(
 }
 
 test("the lifecycle case qualifies one isolated prompt from the driver's own calls", async () => {
-  await withStandIn(false, async (plan, client, store) => {
+  await withStandIn({}, async (plan, client, store) => {
     const context = {
       client,
       evidence: join(plan.repository, "evidence"),
@@ -215,7 +249,7 @@ test("the lifecycle case qualifies one isolated prompt from the driver's own cal
 });
 
 test("the same driver refuses a duplicate provider dispatch it did not cause", async () => {
-  await withStandIn(true, async (plan, client, store) => {
+  await withStandIn({ duplicateDispatch: true }, async (plan, client, store) => {
     const context = {
       client,
       evidence: join(plan.repository, "evidence"),
@@ -234,4 +268,38 @@ test("the same driver refuses a duplicate provider dispatch it did not cause", a
       reason: "the controlled peer received 2 prompts, not exactly one",
     });
   });
+});
+
+const MUTATING_TOOLS = new Set([
+  "conversation_prompt",
+  "conversation_close",
+  "conversation_cancel",
+  "conversation_resume",
+  "conversation_load",
+  "conversation_settings_accept",
+  "conversation_settings_set",
+]);
+
+test("a self-consistent create answer for another endpoint, service or operation stops all later mutation", async () => {
+  for (const createAnswer of ["otherEndpoint", "otherService", "foreignOperation"] as const) {
+    await withStandIn({ createAnswer }, async (plan, client, store, standIn) => {
+      const context = {
+        client,
+        evidence: join(plan.repository, "evidence"),
+        deadline: Date.parse(plan.deadline),
+      };
+      mkdirSync(context.evidence);
+      await assert.rejects(
+        lifecycleCase({ context, plan, store, promptText: "ordinary", holdText: "hold" }),
+        /create/,
+        createAnswer,
+      );
+      const afterCreate = standIn.calls.slice(standIn.calls.indexOf("conversation_create") + 1);
+      assert.deepEqual(
+        afterCreate.filter((tool) => MUTATING_TOOLS.has(tool)),
+        [],
+        createAnswer,
+      );
+    });
+  }
 });

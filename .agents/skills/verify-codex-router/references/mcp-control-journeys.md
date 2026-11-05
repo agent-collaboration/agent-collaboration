@@ -82,6 +82,8 @@ Integers stay exact. A verdict can be rechecked from these files alone.
 - Each notification must equal its result's event and carry that event's own cursor.
 - Stop reasons are compared across their vocabularies: the turn event and settlement are camelCase, the operation snapshot is snake_case.
 - An extra turn or operation on the isolated Session makes the case inconclusive.
+- A create answer must name the operation that was submitted and a Session on the plan's own service and endpoint before anything else uses it. A self-consistently wrong answer stops the case with no further input. The Session ID is provider-generated and taken as returned.
+- A positive inference case (stop reason endTurn) needs an actual agent-message reply with non-whitespace text, beyond cross-view equality. A cancelled outcome may end with no output.
 
 Sensitivity is permanent in the colocated tests:
 - wrong target, including the same raw ID on another endpoint;
