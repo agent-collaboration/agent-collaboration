@@ -35,9 +35,17 @@ Option B holds because the defect is shared source compilation and over-wide dep
 | `collaboration-central-tokio` feature `test-support` | `mail_relay_transport` | codex-router-host | replaces 1 include |
 | `collaboration-central-conformance` | `workerd_process` as a library module of its own | collaboration-central-tokio examples | replaces 6 includes |
 | `board-legacy-upgrade` feature `test-support` | `upload_support::actual_cli` | agent-collaboration e2e | replaces 1 include |
-| `codex-router-quota-reset-test-harness` | `loopback_provider` as a library module | codex-router-cli tests | replaces 1 include |
+| `codex-router-quota-reset-test-harness` | the loopback provider *helpers* as a library module | codex-router-cli tests | replaces 1 include; the test case in that file stays (see below) |
 
-**Named exceptions, left for the production design:** collaboration-central-tokio compiles collaboration-central-cloudflare's `object_location.rs` and `binding_attachment.rs` by path. The Cloudflare crate is a `cdylib` (`crates/collaboration-central-cloudflare/Cargo.toml:12`), so it can't be a dev-dependency. The real fix is a shared rlib for the Worker codec, which is a production-crate change, and `object_location.rs` is near B2's planned address-resolver work. These two includes stay, each listed by exact path in the boundary check's allow list, until the owner authorizes the production split.
+**Named exceptions, left for the production design:** collaboration-central-tokio compiles collaboration-central-cloudflare's `object_location.rs` and `binding_attachment.rs` by path. The Cloudflare crate is a `cdylib` (`crates/collaboration-central-cloudflare/Cargo.toml:12`), so it can't be a dev-dependency. The real fix is a shared rlib for the Worker codec, which is a production-crate change, and `object_location.rs` is near B2's planned address-resolver work. These are the two exact R1 exceptions. They stay until the owner authorizes the production extraction.
+
+**Case-bearing files are split, not moved whole.** A file that holds both reusable helpers and test cases moves only its helpers. Each case stays in its current target and module path, importing the helper from its new owner, so its binary id and name don't change (R4). Known instances:
+- **`scenario_finalization`:** `scenario_finalization.rs:101-103` includes `scenario_finalization_tests.rs`, whose three cases sit at `:242`, `:270` and `:302` in the `codex-router-test-support` lib-test binary. The helper code moves to `owned-process-test-support`. The three cases stay in `codex-router-test-support`, which then dev-depends on the new crate, and they use its peer fixtures as before.
+- **The loopback provider:** `loopback_provider_test.rs:348-349` defines `quota_refresh_response_plan_is_opt_in_and_retains_real_get_post_gates` inside the quota-reset e2e target (`tests/e2e/quota_reset/mod.rs:1-5`). The helpers move into the harness's library. The case stays in that file and module.
+
+Before extraction, every file to be moved is checked for `#[test]`, `#[tokio::test]` and other test attributes, and every case found is recorded with its current binary id and name. That list is the R4 mapping.
+
+**The fixture closure moves together.** `board_fixture.rs` depends on sibling support files: `board_context_backend`, `registered_project`, `board_poll_services`, `controlled_clock` and others. They move with it into `collaboration-application-test-support`, so no new include appears. The fixture's `pub(crate)` items become a suitable API inside that unpublished crate. This doesn't widen a production API: `ApplicationFixture` is already exported only under `cfg(test)` or `feature = "test-support"` (`collaboration-service/src/lib.rs:17-20`), and the constructors it calls are already public.
 
 ## Rules for agents (proposed AGENTS.md section)
 
@@ -68,15 +76,16 @@ Option B holds because the defect is shared source compilation and over-wide dep
 
 ## Enforcement (workspace-architecture-check)
 
-- **R2, metadata check:** extend `crate_layers.rs` from its 17-crate table to all packages. Any production edge into a `*-test-support` crate or a `test-support` feature fails. Feature use is read from the release feature selection, not the workspace test build, because Cargo unifies features across the workspace.
-- **R3, metadata check:** for each package, `autotests = false`, at most one integration and one e2e target, and a README present.
-- **R1, boundary assert (owner question Q1):** reads `#[path = "…"]` attributes in workspace `.rs` files, resolves each against its declaring file, and fails when the target lies outside the declaring crate and isn't on the exact allow list.
+- **R2, shipping-closure check:** run `cargo tree --locked -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade -e normal,build,features`, the release build's own selection (`release.yml:147`), and fail if a `*-test-support` crate or a `test-support` feature appears. This extends the release workflow's existing guard (`release.yml:184-193`), which uses the same method for `codex-router-secret-store`. It lives in CI's Static job next to that guard, not in `crate_layers.rs`. That reader drops node features (`crate_layers.rs:115-119`), and Cargo metadata merges dev units, so neither can tell a dev-only activation from a shipping one.
+- **R3, layout check:** in `crate_layers.rs`, read from Cargo metadata, which is right for manifest facts. For each package: `autotests = false`, at most one integration and one e2e target, and a README present. The 17-crate layer table also grows a rule: no production crate depends on a `*-test-support` crate.
+- **R1, source-path check, only if the owner accepts it (Q1):** reads `#[path = "…"]` attributes, resolves each against its declaring file, and fails on any target outside the declaring crate, other than the two R1 exceptions. It also fails on a stale exception. If the owner declines it, R1 rests on rule 2 and on review.
 
 ## Proof seams
 
-- **R1, R3:** the two checks above.
-- **R2:** the metadata check on the release selection.
-- **R4:** same-revision `cargo nextest list` pairs for both CI invocations.
+- **R1:** the source-path check, if accepted. Otherwise the include inventory recomputed at review.
+- **R2:** the `cargo tree` shipping-closure check.
+- **R3:** the layout check.
+- **R4:** `cargo nextest list` inventories from the pinned pre-extraction and post-extraction trees, for the five affected CI selections.
 - **R5:** E5 pairs, built on the same CI machine type with identical toolchain, features and inventory.
 - **R6:** the AGENTS.md text, plus a seeded violation per check, kept in the working tree only.
 
@@ -84,9 +93,17 @@ Option B holds because the defect is shared source compilation and over-wide dep
 
 | U | R | Owner | Seam |
 | --- | --- | --- | --- |
-| U1, U3 | R1 | each support unit | path boundary assert |
-| U1, U3 | R2 | `crate_layers.rs` | release-selection metadata |
+| U1, U3 | R1 | each support unit | source-path check (if Q1 accepted), else review inventory |
+| U1, U3 | R2 | CI Static job, beside the release guard | `cargo tree -e normal,build,features` on the release selection |
 | U1, U3 | R3 | `crate_layers.rs` (layout) | package metadata |
 | U4 | R4 | nextest config, unchanged | list pairs |
 | U2 | R5 | the Lead | E5 measurements |
 | U3 | R6 | AGENTS.md and the checks | text plus seeded red |
+
+## Measured context (not a selected change)
+
+The first timing report of the whole test build, on 16 vCPU (run 42045129233; `tmp/design-workflows/2026-11-05-test-organization/`), took 251 s wall:
+- **Test units:** 98, with 962 s of summed unit time.
+- **Dependency units:** 892, with 956 s.
+- **Longest units:** collaboration-central-tokio's integration test binary at 122 s, collaboration-service's lib tests at 58 s and its integration tests at 56 s.
+- **Two caveats:** that step's selection included e2e targets the nextest build excludes, and `turso_core` 0.8.1 compiled four times with identical features. So it isn't yet a clean "before" sample for R5. Its value is pointing at the central-tokio integration binary as the one place where Option A (splitting a target) could pay off. That remains a phase-2 candidate, measured like Q2.

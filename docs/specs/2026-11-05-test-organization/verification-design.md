@@ -1,41 +1,62 @@
 # Test organization: Verification Design
 
-Each requirement is proven on the real build: Cargo's metadata, nextest's listings, and CI-machine builds measured before and after. Nothing here has been observed yet.
+Each requirement is proven on the real build: Cargo's dependency views, nextest's case inventories, and CI-machine builds measured before and after under one fixed decision rule. Nothing here has been observed yet.
 
 ## Proven by (owner view)
 
 | Need | Proven by | Stays unverified |
 | --- | --- | --- |
-| U1 · parts with owners | The boundary check finds no source path into another crate, apart from two named exceptions. The layer check finds no production dependency on test support. | the two Cloudflare codec exceptions, until the production design |
-| U2 · CPU and cache | The test build is measured before and after on the same CI machine type: cold, cached-dependency, test-only edit and production edit. CPU time, link-inclusive time, target size and saved-cache size must not get worse on any of them, and must improve on at least one. | other machine types; developer laptops |
-| U3 · rules for agents | The rules are in AGENTS.md. Each check fails on a deliberately planted violation. | whether agents read the rules; the checks catch what they can |
-| U4 · proof kept | Test lists from the same commit, before and after, match exactly for both CI test invocations. | — |
-| U5 · validated first | The Advisor's check before any build, and an independent design review. The owner then decides the production split separately. | — |
+| U1 · parts with owners | Only the two named Cloudflare codec paths still reach into another crate's source. The shipping build's dependency tree contains no test-support crate and no `test-support` feature. | those two paths, until the production design |
+| U2 · CPU and cache | The test build is measured twice before and twice after on the same CI machine type, in four scenarios: cold, cached-dependency, test-only edit and production edit. A fixed rule decides "worse" and "better" for each measure, so the same numbers always give the same verdict. | other machine types; developer laptops |
+| U3 · rules for agents | The rules are in AGENTS.md. Each enforced check fails on a deliberately planted violation. | whether agents read the rules |
+| U4 · proof kept | Test inventories from the tree before the move and the tree after it match exactly, for every CI test selection the move touches, the separate e2e runs included. | — |
+| U5 · validated first | The Advisor's check before authoring, and this independent design review. The owner then decides the production split separately. | — |
 
 ## Coverage rows
 
 | U | R | Observation | Target | Passes when | Fails for |
 | --- | --- | --- | --- | --- | --- |
-| U1, U3 | R1 | O1 boundary assert | workspace at the PR head; `cargo nextest run -p workspace-architecture-check` | zero `#[path]` targets outside their crate, except the exact two allow-listed files | any remaining include, or an allow-list entry that no longer matches a file |
-| U1, U3 | R2 | O2 metadata | `cargo metadata` with the release features of codex-router-cli, codex-router-host and collaboration-service | no normal or build edge into a `*-test-support` crate, and no `test-support` feature enabled | a fixture crate in a production dependency tree |
-| U1, U3 | R3 | O2 metadata | every workspace package | `autotests = false`; integration and e2e targets ≤ 1 each; README present | a second integration target |
-| U4 | R4 | O3 list pairs | same revision, both CI invocations' exact selections | run and skipped identity sets equal | a case dropped, renamed or newly skipped |
-| U2 | R5 | O4 E5 pairs | Blacksmith 16 vCPU (or the CI machine type chosen), same toolchain, features and inventory; `/usr/bin/time` on the cargo build, `--timings`, `du` of target, the size of the saved rust-cache entry | no scenario worse beyond run-to-run noise (measured by repeating the before build once), and at least one better | an extra-link regression, or a larger cache |
-| U3 | R6 | O5 seeded red | working tree only, never committed | each check fails on one planted violation and passes after it's removed | a check that cannot fail |
+| U1, U3 | R1 | O1 source-path inventory | the PR head | exactly the two R1 exceptions remain | a third cross-crate edge; an exception whose file or target is gone |
+| U1, U3 | R2 | O2 shipping closure | `cargo tree --locked -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade -e normal,build,features`, the release selection (`release.yml:147`) | no `*-test-support` crate and no `test-support` feature in the output; a dev-only activation, such as collaboration-mcp's `collaboration-service/test-support`, is absent from it | the same activation moved into a normal dependency of any of the three roots |
+| U1, U3 | R3 | O3 manifest facts | `cargo metadata` for every package | `autotests = false`; integration and e2e targets ≤ 1 each; README present | a second integration target |
+| U4 | R4 | O4 inventory pair | pinned pre-extraction tree P and post-extraction tree Q, same toolchain, five selections: workspace (`ci.yml:295`), quota-reset (`:310`), and the three e2e runs (`:389-391`) | for each selection, the run and skipped identity sets observed on Q equal those observed on P | a case dropped or renamed, for example the loopback case or a `scenario_finalization` case; a dropped e2e case |
+| U2 | R5 | O5 measurement pairs | the CI machine type in use (Blacksmith 16 vCPU if adopted), two samples per side per scenario | the decision rule below | a clear CPU, link or cache regression; a "gain" inside the noise |
+| U3 | R6 | O6 seeded red | working tree only, never committed | each enforced check fails on one planted violation, and passes after it's removed | a check that can't fail |
 
 ## Observations
 
-- **O1:** the R1 check's own output, listing every resolved target.
-- **O2:** `cargo metadata --format-version 1` read by the R2 and R3 checks.
-- **O3:** `cargo nextest list --profile ci --message-format json` pairs, reusing the CI-to-30 design's comparison method.
-- **O4:** one CI run before and one after, plus one repeat of the before run to measure noise. Scenarios:
-  - cold, with no cache;
-  - dependency-cached, which is the normal CI case;
-  - a one-line edit to a test file;
-  - a one-line edit to a collaboration-service production file.
-  The inventories match because both sides build the same selection. The experiment's earlier timing step built the e2e targets the nextest selection excludes; the measured step uses the nextest selection itself.
-- **O5:** a planted violation per check, recorded in the PR description by its output, never committed.
+- **O1:** the include inventory, resolving each `#[path]` against its declaring file. It's the R1 check's output if the owner accepts Q1, and otherwise a review-time command.
+- **O2:** the `cargo tree` output above. Cargo metadata isn't used for R2, because its resolver merges dev units.
+- **O3:** `cargo metadata --format-version 1 --no-deps`.
+- **O4:** `cargo nextest list --message-format json` per selection, once on P and once on Q, and the two identity sets compared. P's inventory is recorded before any edit.
+- **O5:** each scenario sets its starting state explicitly, as follows.
+  - **Cold:** rust-cache disabled for the job, on a fresh runner.
+  - **Cached-dependency:** the normal restore of main's entry.
+  - **Test-only edit:** after the cached build, in the same job, a one-line change to one test file, then rebuild.
+  - **Production edit:** the same with a one-line change to a collaboration-service source file.
+
+  `CARGO_INCREMENTAL=0` as in CI. Every sample builds exactly the nextest selection the CI test step uses (`ci.yml:305`). The `cargo test --timings` step's selection isn't used, because it differs.
+
+  Measures:
+  - **CPU:** user+sys, from `/usr/bin/time -v` around the build.
+  - **Elapsed:** wall time.
+  - **Target size:** bytes of `target/debug`, from `du -sb`.
+  - **Saved-cache size:** the compressed rust-cache entry, from the cache API.
+- **O6:** one planted violation per enforced check, recorded in the PR description by its output.
+
+## Decision rule for R5
+
+For each measure m and each scenario:
+- **The samples:** take two before samples, b1 and b2, and two after samples, a1 and a2. Let B = mean(b1, b2) and A = mean(a1, a2).
+- **The noise band:** N = max(|b1 − b2|, |a1 − a2|, 3% of B).
+  - For saved-cache bytes, which hardly vary between runs, N = 1% of B.
+- **Worse** means A > B + N. Any "worse" fails R5 for the change being measured.
+- **Better** means A < B − N.
+- **R5 passes** only when no measure is worse in any scenario, and at least one measure is better in at least one scenario.
+- **Inside the band:** a difference within ±N counts as neither worse nor better.
+
+Example: with b1 = 100, b2 = 104 and a1 = a2 = 101, B = 102 and N = 4, so A = 101 is neither worse nor better.
 
 ## Limits
 
-R5 is a gate, not a forecast. If phase 1 shows no gain on any scenario, the owner sees the numbers, and the hygiene case stands or falls on its own.
+R5 is a gate, not a forecast. If phase 1 is better on no scenario, the owner gets the numbers, and the hygiene case is judged on its own merits.
