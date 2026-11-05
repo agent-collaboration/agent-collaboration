@@ -44,6 +44,12 @@ pub fn translate_session_item(
                 "content":[]}),
             None,
         ),
+        SessionItemKind::ToolCall {
+            tool_kind,
+            status: ToolCallStatus::Completed,
+        } if tool_kind == "contextCompaction" => {
+            (json!({"type":"contextCompaction","id":item_id}), None)
+        }
         SessionItemKind::ToolCall { tool_kind, status } => {
             let status = match status {
                 ToolCallStatus::Pending | ToolCallStatus::InProgress => "inProgress",

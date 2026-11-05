@@ -28,6 +28,7 @@ mod conversation_operation_projection;
 pub use codex_acp_adapter::ConversationOperationRecorder;
 pub use conversation_operation_projection::conversation_operation_snapshot;
 #[cfg(test)]
+#[path = "wake_creation_crash_test.rs"]
 mod wake_creation_crash_tests;
 pub use collaboration_protocol::{DeliveryClientReceipt, DeliveryReceipt};
 mod push_record_delivery;

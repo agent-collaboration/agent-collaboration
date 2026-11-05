@@ -103,6 +103,7 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
                         "cursor-held".to_owned(),
                         cursor_loads.display().to_string(),
                         cursor_prompts.display().to_string(),
+                        "cursor_login".to_owned(),
                     ],
                 )
                 .expect("Cursor binding"),
@@ -356,6 +357,7 @@ async fn host_composed_permission_push_preserves_selected_option_through_provide
                         "permission-approver".to_owned(),
                         root.path().join("approver-loads.log").display().to_string(),
                         approver_prompts.display().to_string(),
+                        "cursor_login".to_owned(),
                     ],
                 )
                 .expect("approver binding"),

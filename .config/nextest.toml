@@ -18,6 +18,14 @@ slow-timeout = { period = "60s", terminate-after = 5 }
 process-runtime = { max-threads = 1 }
 heavy-tests = { max-threads = 1 }
 
+# These nested global-CLI startup cases passed in isolation but exhausted their
+# unchanged 15-second initialization budget under the complete Host suite.
+# Reserve the existing process window; preserve every wire assertion and budget.
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & binary(=integration) & (test(/^auth_file_reload::/) | test(/^external_provider_composition::/) | test(/^global_harness_selection::/))"
+test-group = "process-runtime"
+threads-required = "num-test-threads"
+
 [[profile.ci.overrides]]
 filter = "(package(=codex-router-host) & binary(=integration) & test(/^update_reexec::/)) | (package(=codex-router-host) & binary(=integration) & test(/^runtime_restart::/)) | (package(=codex-router-cli) & binary(=integration) & test(/^compiled_cli_host_acceptance::/)) | (package(=codex-router-quota-reset-test-harness) & binary(=e2e)) | (package(=codex-router-auth) & test(=claude_oauth::tests::refresh_timeout_is_ambiguous_and_never_returns_the_old_token)) | (package(=codex-router-proxy) & test(=tests::tunnel_affinity_tests::async_websocket_tunnel_does_not_gate_forwarding_on_slow_affinity_recorder))"
 test-group = "process-runtime"
@@ -31,10 +39,16 @@ filter = "(package(=agent-collaboration) & binary(=integration) & test(/^board_r
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
-# These Host fixtures require an actual child initialize/terminal response.
-# Keep their unchanged deadlines apart from unrelated process startup load.
+# Enrollment fixtures retain their existing process reservation and deadlines.
 [[profile.ci.overrides]]
-filter = "package(=codex-router-host) & binary(=integration) & (test(/^external_provider_composition::/) | test(/^auth_file_reload::/) | test(/^production_enrollment::/) | test(/^native_claude_catalogue::/))"
+filter = "package(=codex-router-host) & binary(=integration) & test(/^production_enrollment::/)"
+test-group = "process-runtime"
+threads-required = "num-test-threads"
+
+# Native catalogue fixtures launch a bounded read-only CLI. Keep their five-second
+# contract apart from unrelated process/IO load, as with the other process fixtures.
+[[profile.ci.overrides]]
+filter = "(package(=codex-router-host) | package(=collaboration-service)) & binary(=integration) & test(/^native_claude_catalogue::/)"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 

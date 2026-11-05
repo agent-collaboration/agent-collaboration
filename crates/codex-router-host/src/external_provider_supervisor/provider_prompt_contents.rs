@@ -19,7 +19,7 @@ pub struct ProviderPromptContentsRequest {
     pub target: SessionRef,
     pub requested_by: ProviderIdentity,
     pub approver: ProviderIdentity,
-    pub contents: Vec<session_event_model::PromptContent>,
+    pub input: acp_client_runtime::ProviderTurnInput,
 }
 
 impl ProviderPromptContentsRequest {
@@ -39,7 +39,9 @@ impl ProviderPromptContentsRequest {
             target,
             requested_by,
             approver,
-            contents: vec![content],
+            input: acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![content]),
+            ),
         })
     }
 
@@ -69,7 +71,9 @@ impl ProviderPromptContentsRequest {
             target: request.target,
             requested_by: request.requested_by,
             approver: request.approver,
-            contents: vec![content],
+            input: acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![content]),
+            ),
         })
     }
 }
@@ -108,18 +112,19 @@ impl ExternalProviderSupervisor {
             match prepared {
                 PreparedOperation::Existing(operation) => Ok(existing_submission(operation)),
                 PreparedOperation::Admitted { snapshot, live } => {
+                    let (dispatch, dispatched) = tokio::sync::oneshot::channel();
                     let operation_id = request.operation_id.clone();
                     let provider_session_id = String::from(target.session_id.clone());
                     let input_id = request.input_id;
                     let completion_target = target.clone();
                     backend.spawn_operation(operation_id.clone(), live, async move {
                         match runtime
-                            .prompt_contents_with_approval_dispatch_for_input(
+                            .submit_with_approval_dispatch_for_input(
                                 provider_session_id,
                                 input_id,
-                                request.contents,
+                                request.input,
                                 approval_context,
-                                None,
+                                Some(dispatch),
                             )
                             .await
                         {
@@ -162,7 +167,75 @@ impl ExternalProviderSupervisor {
                             }
                         }
                     });
-                    Ok(admitted_submission(snapshot))
+                    match tokio::time::timeout(std::time::Duration::from_secs(10), dispatched).await
+                    {
+                        Ok(Ok(
+                            acp_client_runtime::ProviderPromptDispatchObservation::Submitted,
+                        )) => Ok(admitted_submission(snapshot)),
+                        Ok(Ok(acp_client_runtime::ProviderPromptDispatchObservation::Refused(
+                            reason,
+                        ))) => {
+                            use acp_client_runtime::{ProviderDispatchRefusal, ProviderError};
+                            let (kind, message) = match reason {
+                                ProviderDispatchRefusal::Behavior(
+                                    ProviderError::InvalidSelection,
+                                ) => (
+                                    ConversationOperationFailureKind::InvalidRequest,
+                                    "invalid skill selection",
+                                ),
+                                ProviderDispatchRefusal::Behavior(
+                                    ProviderError::Unsupported | ProviderError::SourceUnavailable,
+                                ) => (
+                                    ConversationOperationFailureKind::UnsupportedCapability,
+                                    "provider input is unsupported",
+                                ),
+                                ProviderDispatchRefusal::Behavior(
+                                    ProviderError::MalformedMetadata,
+                                ) => (
+                                    ConversationOperationFailureKind::InvalidRequest,
+                                    "provider metadata is malformed",
+                                ),
+                                ProviderDispatchRefusal::Busy => (
+                                    ConversationOperationFailureKind::Busy,
+                                    "provider session is busy",
+                                ),
+                                ProviderDispatchRefusal::SettingsUnresolved => (
+                                    ConversationOperationFailureKind::SettingsUnresolved,
+                                    "provider settings are unresolved",
+                                ),
+                                ProviderDispatchRefusal::UnsupportedContent(_) => (
+                                    ConversationOperationFailureKind::UnsupportedCapability,
+                                    "provider content is unsupported",
+                                ),
+                            };
+                            Err(failure(
+                                kind,
+                                ConversationOperationFailureStage::Dispatch,
+                                ProviderOperationEffect::None,
+                                message,
+                                request.operation_id,
+                                Some(target),
+                            ))
+                        }
+                        Ok(Ok(
+                            acp_client_runtime::ProviderPromptDispatchObservation::NotSubmitted,
+                        )) => Err(failure(
+                            ConversationOperationFailureKind::Unavailable,
+                            ConversationOperationFailureStage::Dispatch,
+                            ProviderOperationEffect::None,
+                            "provider input was not submitted",
+                            request.operation_id,
+                            Some(target),
+                        )),
+                        Ok(Err(_)) | Err(_) => Err(failure(
+                            ConversationOperationFailureKind::OutcomeUnknown,
+                            ConversationOperationFailureStage::Dispatch,
+                            ProviderOperationEffect::Unknown,
+                            "provider dispatch outcome is unknown",
+                            request.operation_id,
+                            Some(target),
+                        )),
+                    }
                 }
             }
         })
@@ -170,46 +243,5 @@ impl ExternalProviderSupervisor {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::ProviderPromptContentsRequest;
-    use collaboration_protocol::{
-        ConversationPromptRequest, MessageContent, MessageText, OperationId, SessionRef,
-    };
-    use session_event_model::PromptContent;
-
-    #[test]
-    fn prompt_request_forwards_exact_task_text_without_router_envelope() {
-        let target: SessionRef = serde_json::from_value(serde_json::json!({
-            "endpoint":{"serviceId":"018f47d2-24d5-7a68-b9ec-6f759c39458f","endpointId":"codex-local"},
-            "sessionId":"target-session"
-        }))
-        .expect("target session");
-        let sender: SessionRef = serde_json::from_value(serde_json::json!({
-            "endpoint":{"serviceId":"018f47d2-24d5-7a68-b9ec-6f759c39458f","endpointId":"claude-local"},
-            "sessionId":"sender-session"
-        }))
-        .expect("sender session");
-        let request = ConversationPromptRequest {
-            operation_id: OperationId::generate(),
-            input_id: None,
-            target,
-            generation: None,
-            requested_by: sender.clone().into(),
-            approver: sender.clone().into(),
-            prompt: MessageContent::Agent {
-                sender,
-                text: MessageText::try_from("Check the provider prompt.".to_owned())
-                    .expect("prompt text"),
-            },
-        };
-
-        let provider_request = ProviderPromptContentsRequest::from_prompt_request(request)
-            .expect("provider prompt contents");
-        let Some(PromptContent::Text { text }) = provider_request.contents.first() else {
-            panic!("one text prompt should be generated");
-        };
-        assert_eq!(text.as_str(), "Check the provider prompt.");
-        assert!(!text.as_str().contains("Agent communication"));
-        assert!(!text.as_str().contains("Self-declared sender:"));
-    }
-}
+#[path = "provider_prompt_contents_test.rs"]
+mod tests;

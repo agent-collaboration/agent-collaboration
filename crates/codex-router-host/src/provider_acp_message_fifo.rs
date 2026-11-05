@@ -53,6 +53,8 @@ impl ProviderQueuedPrompt {
 }
 
 pub(crate) struct ProviderAcpMessageFifo {
+    #[cfg(test)]
+    wait_started: Arc<tokio::sync::Notify>,
     supervisor: Arc<ExternalProviderSupervisor>,
     store: Arc<Mutex<ProviderOperationStore>>,
     ownership: Arc<dyn LiveSessionOwnershipCheck>,
@@ -68,6 +70,8 @@ impl ProviderAcpMessageFifo {
         ownership: Arc<dyn LiveSessionOwnershipCheck>,
     ) -> Self {
         Self {
+            #[cfg(test)]
+            wait_started: Arc::new(tokio::sync::Notify::new()),
             supervisor,
             store,
             ownership,
@@ -103,6 +107,8 @@ impl ProviderAcpMessageFifo {
                 Arc::clone(&self.store),
                 Arc::clone(&self.ownership),
                 self.shutdown.clone(),
+                #[cfg(test)]
+                Arc::clone(&self.wait_started),
             ));
             self.workers
                 .lock()
@@ -157,6 +163,7 @@ async fn run_provider_message_fifo(
     store: Arc<Mutex<ProviderOperationStore>>,
     ownership: Arc<dyn LiveSessionOwnershipCheck>,
     shutdown: CancellationToken,
+    #[cfg(test)] wait_started: Arc<tokio::sync::Notify>,
 ) {
     loop {
         let request = tokio::select! {
@@ -260,6 +267,8 @@ async fn run_provider_message_fifo(
                     }
                 }
             }
+            #[cfg(test)]
+            wait_started.notify_one();
             let idle = tokio::select! {
                 () = shutdown.cancelled() => {
                     drop_current_and_remaining(&supervisor, &operation_id, &mut receiver, "Router shutdown before provider submission");
@@ -313,6 +322,7 @@ async fn run_provider_message_fifo(
                 Ok(
                     ProviderPromptDispatch::Submitted
                     | ProviderPromptDispatch::NotSubmitted
+                    | ProviderPromptDispatch::Refused(_)
                     | ProviderPromptDispatch::Existing
                     | ProviderPromptDispatch::Uncertain,
                 ) => {
@@ -445,5 +455,5 @@ fn mark_remaining_not_submitted(
 }
 
 #[cfg(test)]
-#[path = "provider_acp_message_fifo_tests.rs"]
+#[path = "provider_acp_message_fifo_test.rs"]
 mod loaded_only_tests;

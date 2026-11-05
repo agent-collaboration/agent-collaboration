@@ -59,6 +59,8 @@ mod provider_configuration_file;
 mod provider_content_commands;
 mod provider_endpoint_routing_structure;
 mod provider_face_composition;
+mod provider_native_models;
+mod provider_native_skills;
 mod provider_pending_hub_races;
 mod provider_startup_isolation;
 mod remote_wake;

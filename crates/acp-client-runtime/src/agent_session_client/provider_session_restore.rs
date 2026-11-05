@@ -31,6 +31,8 @@ pub(super) struct RestoreAdmissionInputs<P: InteractionPort> {
     pub(super) mcp_servers: Vec<McpServer>,
     pub(super) shutdown: CancellationToken,
     pub(super) event_sink: Arc<dyn SessionEventSink>,
+    pub(super) behavior: Arc<dyn crate::ProviderBehavior>,
+    pub(super) connection_model_reasoning: crate::ModelReasoningMetadata,
     pub(super) admission_tx: tokio::sync::mpsc::Sender<PendingSessionAdmission<P>>,
     pub(super) reply: tokio::sync::oneshot::Sender<Result<(), ExternalProviderRuntimeError>>,
 }
@@ -44,6 +46,8 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
         mcp_servers,
         shutdown,
         event_sink,
+        behavior,
+        connection_model_reasoning,
         admission_tx,
         reply,
     } = inputs;
@@ -67,10 +71,11 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
                     result = connection.load_session_from(request).block_task().start_session() =>
                         result.map_err(acp_load_session_error).and_then(|restored| {
                             let mut session = restored.into_session();
-                            let mut settings_catalog = catalog_from_session_response(&session.response());
+                            let mut settings_catalog = catalog_from_session_response(&session.response(), behavior.as_ref(), &connection_model_reasoning);
                             let projection = replay_queued_session_updates(
                                 &mut session,
                                 Arc::clone(&event_sink),
+                                Arc::clone(&behavior),
                                 &mut settings_catalog,
                             )?;
                             Ok(RestoredProviderSession {
@@ -89,7 +94,7 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
                     result = connection.resume_session_from(request).block_task().start_session() =>
                         result.map(|restored| {
                             let session = restored.into_session();
-                            let settings_catalog = catalog_from_session_response(&session.response());
+                            let settings_catalog = catalog_from_session_response(&session.response(), behavior.as_ref(), &connection_model_reasoning);
                             RestoredProviderSession { session, item_projection: None, settings_catalog }
                         }).map_err(acp_operation_error),
                 }
@@ -111,10 +116,16 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
 fn replay_queued_session_updates(
     session: &mut ActiveSession<'static, Agent>,
     event_sink: Arc<dyn SessionEventSink>,
+    behavior: Arc<dyn crate::ProviderBehavior>,
     settings_catalog: &mut crate::ProviderSettingsCatalog,
 ) -> Result<ProviderItemProjection, ExternalProviderRuntimeError> {
     let session_id = session.session_id().to_string();
-    let mut projection = ProviderItemProjection::new(session_id.clone(), Arc::clone(&event_sink));
+    let mut projection = ProviderItemProjection::new(
+        session_id.clone(),
+        Arc::clone(&event_sink),
+        Arc::clone(&behavior),
+    );
+    projection.admit().map_err(replay_projection_error)?;
     let mut historical_turn: Option<String> = None;
     let mut saw_agent_output = false;
     while let Some(update) = session.read_update().now_or_never() {
@@ -148,7 +159,7 @@ fn replay_queued_session_updates(
             tracing::warn!("malformed ACP replay update");
             continue;
         };
-        apply_settings_update(settings_catalog, &notification.update);
+        apply_settings_update(settings_catalog, &notification.update, behavior.as_ref());
         let user_message = matches!(notification.update, SessionUpdate::UserMessageChunk(_));
         if user_message && (historical_turn.is_none() || saw_agent_output) {
             end_historical_turn(
@@ -173,7 +184,7 @@ fn replay_queued_session_updates(
             saw_agent_output = true;
         }
         projection
-            .observe(&notification.update)
+            .observe(&notification.update, params.get("update"))
             .map_err(replay_projection_error)?;
     }
     end_historical_turn(

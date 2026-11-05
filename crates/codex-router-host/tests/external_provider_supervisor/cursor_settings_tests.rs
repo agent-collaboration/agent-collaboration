@@ -29,6 +29,7 @@ async fn cursor_effort_setting_reports_adjusted_catalog_without_public_api_expan
         acp_client_runtime::ProviderModelPicker::CursorParameterized,
         "fixture",
         "http://127.0.0.1:1/mcp",
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
     )
     .await?;
     let backend = supervisor(

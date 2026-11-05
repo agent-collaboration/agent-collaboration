@@ -25,6 +25,25 @@ use session_event_model::{
 use std::sync::Mutex;
 use tokio::sync::broadcast;
 
+impl collaboration_runtime::SessionModelCatalog for ScriptedProviderBackend {
+    fn read_models(
+        &self,
+        _: SessionRef,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Vec<collaboration_runtime::ProviderModelEntry>,
+                        collaboration_runtime::SessionModelCatalogError,
+                    >,
+                > + Send
+                + '_,
+        >,
+    > {
+        Box::pin(async { Ok(Vec::new()) })
+    }
+}
+
 pub(crate) struct ScriptedProviderBackend {
     pub(crate) endpoint: SessionEndpointRef,
     pub(crate) session: SessionRef,
@@ -71,6 +90,9 @@ impl ScriptedProviderBackend {
 }
 
 impl SessionCommandPort for ScriptedProviderBackend {
+    fn compact(&self, _: SessionTargetCommand) -> CommandFuture<'_, SessionTurnHandle> {
+        Box::pin(async { Err(CommandFailure::Unsupported) })
+    }
     fn create(&self, command: CreateSessionCommand) -> CommandFuture<'_, SessionRef> {
         self.created_by
             .lock()
@@ -194,6 +216,24 @@ impl SessionCommandPort for ScriptedProviderBackend {
 }
 
 impl SessionEventHub for ScriptedProviderBackend {
+    fn skill_view(
+        &self,
+        session: SessionRef,
+        _: std::path::PathBuf,
+    ) -> HubFuture<'_, collaboration_contracts::SkillViewAttachment> {
+        let exists = session == self.session;
+        Box::pin(async move {
+            if !exists {
+                return Err(SessionEventHubError::SessionNotFound);
+            }
+            let (_, receiver) =
+                tokio::sync::watch::channel(session_event_model::SkillView::Unknown);
+            Ok(collaboration_contracts::SkillViewAttachment {
+                snapshot: session_event_model::SkillView::Unknown,
+                receiver,
+            })
+        })
+    }
     fn attach(&self, session: SessionRef) -> HubFuture<'_, SessionEventAttachment> {
         let exists = session == self.session;
         let receiver = self.events.subscribe();

@@ -28,6 +28,10 @@ struct ActiveTextItem {
 }
 
 pub(crate) struct ProviderItemProjection {
+    behavior: Arc<dyn crate::ProviderBehavior>,
+    skill_view: session_event_model::SkillView,
+    compaction_hints: HashMap<String, crate::ProviderCompactionHint>,
+    invalid_compaction: bool,
     session_id: String,
     event_sink: Arc<dyn SessionEventSink>,
     active_text: Option<ActiveTextItem>,
@@ -37,8 +41,188 @@ pub(crate) struct ProviderItemProjection {
 }
 
 impl ProviderItemProjection {
-    pub(crate) fn new(session_id: String, event_sink: Arc<dyn SessionEventSink>) -> Self {
+    pub(crate) fn admit(&mut self) -> Result<(), ItemProjectionError> {
+        self.apply_provider_update(crate::ProviderUpdate::SessionAdmitted, Vec::new())
+    }
+
+    pub(crate) fn validates(&self, submission: &session_event_model::ProviderSubmission) -> bool {
+        submission
+            .selected
+            .iter()
+            .all(|selection| self.skill_view.contains_selection(selection))
+    }
+
+    pub(crate) fn compact_confirmed(&self) -> bool {
+        !self.invalid_compaction
+            && self.compaction_hints.iter().any(|(id, hint)| {
+                matches!(
+                    hint.trigger,
+                    crate::CompactionTrigger::Manual | crate::CompactionTrigger::Unlabelled
+                ) && self.tool_items.get(id).is_some_and(|item| {
+                    matches!(
+                        item.kind,
+                        SessionItemKind::ToolCall {
+                            status: ToolCallStatus::Completed,
+                            ..
+                        }
+                    )
+                })
+            })
+    }
+
+    pub(crate) fn promote_compaction(&mut self) -> Result<(), ItemProjectionError> {
+        let completed = self
+            .compaction_hints
+            .iter()
+            .filter_map(|(id, hint)| {
+                (matches!(
+                    hint.trigger,
+                    crate::CompactionTrigger::Manual | crate::CompactionTrigger::Unlabelled
+                ) && self.tool_items.get(id).is_some_and(|item| {
+                    matches!(
+                        item.kind,
+                        SessionItemKind::ToolCall {
+                            status: ToolCallStatus::Completed,
+                            ..
+                        }
+                    )
+                }))
+                .then_some(id.clone())
+            })
+            .collect::<Vec<_>>();
+        for id in completed {
+            if let Some(item) = self.tool_items.get_mut(&id) {
+                item.kind = SessionItemKind::ToolCall {
+                    tool_kind: "contextCompaction".into(),
+                    status: ToolCallStatus::Completed,
+                };
+                let item = item.clone();
+                self.emit(SessionEvent::ItemUpdated { item })?;
+            }
+        }
+        Ok(())
+    }
+
+    fn apply_provider_update(
+        &mut self,
+        update: crate::ProviderUpdate,
+        row_errors: Vec<session_event_model::SkillRowError>,
+    ) -> Result<(), ItemProjectionError> {
+        let tool_update = matches!(update, crate::ProviderUpdate::ToolStatus { .. });
+        match self.behavior.observe(update) {
+            Ok(facts) => {
+                if let Some(mut view) = facts.skill_view {
+                    if let session_event_model::SkillView::Available { errors, .. } = &mut view {
+                        errors.extend(row_errors);
+                    }
+                    if self.skill_view != view {
+                        self.event_sink
+                            .publish_skill_view(&self.session_id, view.clone())?;
+                        self.skill_view = view;
+                    }
+                }
+                if let Some(hint) = facts.compaction {
+                    self.compaction_hints.insert(hint.tool_id.clone(), hint);
+                }
+            }
+            Err(_) if tool_update => self.invalid_compaction = true,
+            Err(_) => {
+                let view = session_event_model::SkillView::Unavailable(
+                    session_event_model::SkillSourceError::MalformedMetadata,
+                );
+                self.event_sink
+                    .publish_skill_view(&self.session_id, view.clone())?;
+                self.skill_view = view;
+            }
+        }
+        Ok(())
+    }
+
+    fn observe_provider_update(
+        &mut self,
+        update: &SessionUpdate,
+        raw: Option<&serde_json::Value>,
+    ) -> Result<(), ItemProjectionError> {
+        let mut row_errors = Vec::new();
+        let neutral = match update {
+            SessionUpdate::AvailableCommandsUpdate(commands) => crate::ProviderUpdate::Commands {
+                commands: if let Some(raw) = raw {
+                    let Some(rows) = raw
+                        .get("availableCommands")
+                        .and_then(serde_json::Value::as_array)
+                    else {
+                        let view = session_event_model::SkillView::Unavailable(
+                            session_event_model::SkillSourceError::MalformedMetadata,
+                        );
+                        self.event_sink
+                            .publish_skill_view(&self.session_id, view.clone())?;
+                        self.skill_view = view;
+                        return Ok(());
+                    };
+                    rows.iter().filter_map(|raw_row| {
+                        match serde_json::from_value::<agent_client_protocol::schema::v1::AvailableCommand>(raw_row.clone()) {
+                            Ok(row) => Some(crate::ProviderCommand {
+                                invocation_name: row.name,
+                                description: row.description,
+                                input_hint: match row.input { Some(agent_client_protocol::schema::v1::AvailableCommandInput::Unstructured(input)) => Some(input.hint), _ => None },
+                                metadata: raw_row.get("_meta").cloned(),
+                            }),
+                            Err(_) => {
+                                row_errors.push(session_event_model::SkillRowError { advertised_name: raw_row.get("name").and_then(serde_json::Value::as_str).unwrap_or("<invalid>").into(), reason: session_event_model::SkillRowErrorReason::MalformedMetadata });
+                                None
+                            }
+                        }
+                    }).collect()
+                } else {
+                    commands.available_commands.iter().map(|row| crate::ProviderCommand {
+                    invocation_name: row.name.clone(), description: row.description.clone(),
+                    input_hint: match &row.input {
+                        Some(agent_client_protocol::schema::v1::AvailableCommandInput::Unstructured(input)) => Some(input.hint.clone()),
+                        _ => None,
+                    },
+                    metadata: row.meta.clone().map(serde_json::Value::Object),
+                }).collect()
+                },
+                metadata: raw
+                    .and_then(|update| update.get("_meta"))
+                    .cloned()
+                    .or_else(|| commands.meta.clone().map(serde_json::Value::Object)),
+            },
+            SessionUpdate::ToolCall(tool) => crate::ProviderUpdate::ToolStatus {
+                tool_id: tool.tool_call_id.0.to_string(),
+                status: tool_status(tool.status),
+                metadata: tool.meta.clone().map(serde_json::Value::Object),
+            },
+            SessionUpdate::ToolCallUpdate(tool) => {
+                let current_status = self
+                    .tool_items
+                    .get(tool.tool_call_id.0.as_ref())
+                    .and_then(|item| match item.kind {
+                        SessionItemKind::ToolCall { status, .. } => Some(status),
+                        _ => None,
+                    })
+                    .unwrap_or(ToolCallStatus::Pending);
+                crate::ProviderUpdate::ToolStatus {
+                    tool_id: tool.tool_call_id.0.to_string(),
+                    status: tool.fields.status.map_or(current_status, tool_status),
+                    metadata: tool.meta.clone().map(serde_json::Value::Object),
+                }
+            }
+            _ => return Ok(()),
+        };
+        self.apply_provider_update(neutral, row_errors)
+    }
+
+    pub(crate) fn new(
+        session_id: String,
+        event_sink: Arc<dyn SessionEventSink>,
+        behavior: Arc<dyn crate::ProviderBehavior>,
+    ) -> Self {
         Self {
+            behavior,
+            skill_view: session_event_model::SkillView::Unknown,
+            compaction_hints: HashMap::new(),
+            invalid_compaction: false,
             session_id,
             event_sink,
             active_text: None,
@@ -54,7 +238,12 @@ impl ProviderItemProjection {
             .map_err(Into::into)
     }
 
-    pub(crate) fn observe(&mut self, update: &SessionUpdate) -> Result<(), ItemProjectionError> {
+    pub(crate) fn observe(
+        &mut self,
+        update: &SessionUpdate,
+        raw: Option<&serde_json::Value>,
+    ) -> Result<(), ItemProjectionError> {
+        self.observe_provider_update(update, raw)?;
         match update {
             SessionUpdate::UserMessageChunk(chunk) => {
                 self.observe_text(chunk, SessionItemKind::UserMessage)
@@ -149,6 +338,8 @@ impl ProviderItemProjection {
     }
 
     pub(crate) fn discard_turn_local_cursors(&mut self) {
+        self.compaction_hints.clear();
+        self.invalid_compaction = false;
         self.active_text = None;
         self.tool_order.clear();
         self.plan_item = None;
@@ -168,7 +359,11 @@ impl ProviderItemProjection {
         let item = SessionItem {
             item_id: item_id.clone(),
             kind: SessionItemKind::ToolCall {
-                tool_kind: tool_kind(tool_call.kind).to_owned(),
+                tool_kind: if self.tool_items.get(&item_id).is_some_and(|item| matches!(&item.kind, SessionItemKind::ToolCall { tool_kind, .. } if tool_kind == "contextCompaction")) {
+                    "contextCompaction".into()
+                } else {
+                    tool_kind(tool_call.kind).to_owned()
+                },
                 status: tool_status(tool_call.status),
             },
             text: Some(tool_call.title.clone()),
@@ -206,7 +401,9 @@ impl ProviderItemProjection {
             status,
         } = &mut item.kind
         {
-            if let Some(kind) = update.fields.kind {
+            if *current_kind != "contextCompaction"
+                && let Some(kind) = update.fields.kind
+            {
                 *current_kind = tool_kind(kind).to_owned();
             }
             if let Some(updated) = update.fields.status {

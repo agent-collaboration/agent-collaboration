@@ -6,7 +6,7 @@ Run the package with nextest:
 cargo nextest run --locked --profile ci -p codex-router-host --features keychain-test-support,runtime-test-support
 ```
 
-`integration/main.rs` gathers the 49 former external roots. Each root keeps its
+`integration/main.rs` gathers the external roots, including native model and skill bridge cases. Each root keeps its
 module namespace. The cases cover Host startup and configuration, singleton
 ownership, child process groups, update and restart lifecycles, enrollment,
 collaboration composition, provider routes, wakes and native inventory.

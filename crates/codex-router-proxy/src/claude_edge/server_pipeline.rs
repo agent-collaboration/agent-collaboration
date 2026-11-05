@@ -73,6 +73,7 @@ use super::forward::{
     BufferedClaudeRequestBody, CLAUDE_ERROR_EVIDENCE_LIMIT, ClaudeEdge, ErrorBodyEvidence,
     buffer_request_body,
 };
+use crate::claude_route_diagnostics::{ClaudeRouteDiagnostic, record as record_route_diagnostic};
 
 static NEXT_CLAUDE_REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
@@ -119,7 +120,10 @@ impl ClaudeServerRuntime {
             false,
         ) {
             Ok(token) => token,
-            Err(reason) => return http_error_response(HttpProxyError::LocalAuth { reason }),
+            Err(reason) => {
+                record_route_diagnostic(ClaudeRouteDiagnostic::LocalFailure("local_auth_rejected"));
+                return http_error_response(HttpProxyError::LocalAuth { reason });
+            }
         };
         let token_generation = match self
             .auth_gate
@@ -128,7 +132,10 @@ impl ClaudeServerRuntime {
             .and_then(|gate| gate.authorize(presented_token))
         {
             Ok(generation) => generation,
-            Err(reason) => return http_error_response(HttpProxyError::LocalAuth { reason }),
+            Err(reason) => {
+                record_route_diagnostic(ClaudeRouteDiagnostic::LocalFailure("local_auth_rejected"));
+                return http_error_response(HttpProxyError::LocalAuth { reason });
+            }
         };
         let pipeline = ClaudeServerAttemptPipeline {
             handler: self,
@@ -157,6 +164,7 @@ impl ClaudeServerRuntime {
         {
             Ok(body) => body,
             Err(error) => {
+                record_route_diagnostic(ClaudeRouteDiagnostic::BodyBufferFailure);
                 return empty_response(
                     StatusCode::from_u16(error.status_code()).unwrap_or(StatusCode::BAD_REQUEST),
                 );
@@ -181,10 +189,16 @@ impl ClaudeServerRuntime {
         {
             Ok(result) => result,
             Err(error) => {
+                record_route_diagnostic(ClaudeRouteDiagnostic::LocalFailure(
+                    failure_class_from_proxy_error(&error),
+                ));
                 pipeline.log_attempts_completed(1, failure_class_from_proxy_error(&error));
                 return pipeline.response_for_error(error).await;
             }
         };
+        record_route_diagnostic(ClaudeRouteDiagnostic::Outcome(failure_class_from_outcome(
+            &result.outcome,
+        )));
         pipeline.log_attempts_completed(
             result.attempts,
             if result.attempts == 2 {
@@ -476,6 +490,7 @@ impl ClaudeServerAttemptPipeline<'_> {
     }
 
     fn log_attempt_failure(&self, attempt_number: u8, failure_class: &'static str) {
+        record_route_diagnostic(ClaudeRouteDiagnostic::LocalFailure(failure_class));
         tracing::info!(
             request.sequence = self.request_sequence,
             attempt.number = attempt_number,
@@ -623,6 +638,7 @@ fn log_claude_attempt_selection(
     attempt_number: u8,
     selected: &SelectedAccountDecision,
 ) {
+    record_route_diagnostic(ClaudeRouteDiagnostic::AttemptSelected);
     let selection_mode = if selected.selection_reason() == "prompt_cache_account_affinity" {
         "pin"
     } else {
@@ -659,10 +675,16 @@ impl ClaudeAttemptPipeline for ClaudeServerAttemptPipeline<'_> {
         body: Bytes,
     ) -> BoxFuture<'a, Result<AsyncStreamingHttpProxyResponse, TransportFailure>> {
         Box::pin(async move {
-            let body = BufferedClaudeRequestBody::new(body)
-                .map_err(|_error| TransportFailure::Connection)?;
+            let body = BufferedClaudeRequestBody::new(body).map_err(|_error| {
+                record_route_diagnostic(ClaudeRouteDiagnostic::UpstreamPreparationFailure);
+                TransportFailure::Connection
+            })?;
             let request = ClaudeEdge::prepare_upstream(&self.request, &body, &attempt.credential)
-                .map_err(|_error| TransportFailure::Connection)?;
+                .map_err(|_error| {
+                record_route_diagnostic(ClaudeRouteDiagnostic::UpstreamPreparationFailure);
+                TransportFailure::Connection
+            })?;
+            record_route_diagnostic(ClaudeRouteDiagnostic::UpstreamSend);
             let response = self
                 .handler
                 .upstream

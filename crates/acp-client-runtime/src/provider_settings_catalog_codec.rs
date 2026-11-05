@@ -12,6 +12,8 @@ use crate::{
 
 pub(crate) fn catalog_from_session_response(
     response: &NewSessionResponse,
+    behavior: &dyn crate::ProviderBehavior,
+    connection_models: &crate::ModelReasoningMetadata,
 ) -> ProviderSettingsCatalog {
     let (current_mode, modes) = response.modes.as_ref().map_or_else(
         || (None, Vec::new()),
@@ -29,7 +31,8 @@ pub(crate) fn catalog_from_session_response(
             )
         },
     );
-    ProviderSettingsCatalog {
+    let mut catalog = ProviderSettingsCatalog {
+        model_reasoning: connection_models.clone(),
         current_mode,
         modes,
         config_options: response
@@ -39,6 +42,23 @@ pub(crate) fn catalog_from_session_response(
             .iter()
             .filter_map(project_config_option)
             .collect(),
+    };
+    apply_model_metadata(&mut catalog, behavior, response.meta.as_ref());
+    catalog
+}
+
+pub(crate) fn apply_model_metadata(
+    catalog: &mut ProviderSettingsCatalog,
+    behavior: &dyn crate::ProviderBehavior,
+    metadata: Option<&serde_json::Map<String, serde_json::Value>>,
+) {
+    if behavior.model_metadata_source() == crate::ModelMetadataSource::SessionMetadata {
+        catalog.model_reasoning = metadata
+            .and_then(|meta| meta.get("codexRouter"))
+            .and_then(|meta| meta.get("modelReasoning"))
+            .map_or_else(crate::ModelReasoningMetadata::default, |value| {
+                behavior.decode_model_metadata(value)
+            });
     }
 }
 
@@ -54,6 +74,7 @@ pub(crate) fn replace_catalog_config_options(
 pub(crate) fn apply_settings_update(
     catalog: &mut ProviderSettingsCatalog,
     update: &SessionUpdate,
+    behavior: &dyn crate::ProviderBehavior,
 ) -> bool {
     match update {
         SessionUpdate::CurrentModeUpdate(mode) => {
@@ -69,6 +90,7 @@ pub(crate) fn apply_settings_update(
             true
         }
         SessionUpdate::ConfigOptionUpdate(config) => {
+            apply_model_metadata(catalog, behavior, config.meta.as_ref());
             replace_catalog_config_options(catalog, &config.config_options);
             if let Some(mode) = catalog.config_option(ProviderSettingKind::Mode)
                 && let ProviderConfigValue::Select(value) = &mode.current_value
@@ -155,57 +177,5 @@ fn setting_category(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use agent_client_protocol::schema::v1::{
-        SessionConfigSelectOption, SessionMode, SessionModeState,
-    };
-
-    /// Oracle: ACP v1 session config options use semantic categories when
-    /// present, and their response after each set is the complete current set
-    /// (docs/protocol/v1/session-config-options.mdx:239-281).
-    #[test]
-    fn catalog_keeps_current_mode_model_effort_and_advertised_choices() {
-        let response = NewSessionResponse::new("fixture-session")
-            .modes(SessionModeState::new(
-                "ask",
-                vec![
-                    SessionMode::new("ask", "Ask"),
-                    SessionMode::new("auto", "Auto"),
-                ],
-            ))
-            .config_options(vec![
-                SessionConfigOption::select(
-                    "model",
-                    "Model",
-                    "model-a",
-                    vec![
-                        SessionConfigSelectOption::new("model-a", "Model A"),
-                        SessionConfigSelectOption::new("model-b", "Model B"),
-                    ],
-                )
-                .category(SessionConfigOptionCategory::Model),
-                SessionConfigOption::select(
-                    "reasoning",
-                    "Reasoning",
-                    "medium",
-                    vec![SessionConfigSelectOption::new("medium", "Medium")],
-                )
-                .category(SessionConfigOptionCategory::ThoughtLevel),
-            ]);
-        let catalog = catalog_from_session_response(&response);
-        assert_eq!(catalog.effective_settings().mode.as_deref(), Some("ask"));
-        assert_eq!(
-            catalog.effective_settings().model.as_deref(),
-            Some("model-a")
-        );
-        assert_eq!(
-            catalog.effective_settings().effort.as_deref(),
-            Some("medium")
-        );
-        assert_eq!(
-            catalog.advertised_values(ProviderSettingKind::Model),
-            vec!["model-a", "model-b"]
-        );
-    }
-}
+#[path = "provider_settings_catalog_codec_test.rs"]
+mod tests;

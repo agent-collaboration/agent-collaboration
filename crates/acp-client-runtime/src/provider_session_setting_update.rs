@@ -15,11 +15,16 @@ use session_event_model::SessionEvent;
 
 pub(crate) async fn apply_loaded_setting(
     session: &ActiveSession<'_, Agent>,
-    kind: ProviderSettingKind,
-    value: String,
+    request: crate::ProviderSettingRequest,
     handles: &ProviderSessionRuntimeHandles,
 ) -> Result<EffectiveProviderSettings, ExternalProviderRuntimeError> {
     let provider_session_id = session.session_id().to_string();
+    let crate::ProviderSettingRequest {
+        kind,
+        value,
+        intent,
+        expected_model,
+    } = request;
     let mut catalog = handles
         .session_settings
         .read()
@@ -27,13 +32,41 @@ pub(crate) async fn apply_loaded_setting(
         .get(&provider_session_id)
         .cloned()
         .ok_or(ExternalProviderRuntimeError::LocalNotFound)?;
+    if intent == session_event_model::SettingApplicationIntent::TurnContext
+        && handles
+            .settings_unresolved
+            .read()
+            .await
+            .contains_key(&provider_session_id)
+    {
+        return Err(ExternalProviderRuntimeError::SettingsUnresolved);
+    }
+    let current = catalog.effective_settings();
+    if expected_model
+        .as_ref()
+        .is_some_and(|expected| current.model.as_ref() != Some(expected))
+    {
+        return Err(ExternalProviderRuntimeError::SettingsContextChanged);
+    }
+    let current_value = match kind {
+        ProviderSettingKind::Mode => current.mode.as_ref(),
+        ProviderSettingKind::Model => current.model.as_ref(),
+        ProviderSettingKind::Effort => current.effort.as_ref(),
+    };
+    if intent == session_event_model::SettingApplicationIntent::TurnContext
+        && handles.behavior.can_reuse_setting_confirmation(kind)
+        && current_value == Some(&value)
+    {
+        return Ok(current);
+    }
     let mut requested = RequestedProviderSettings::default();
     match kind {
         ProviderSettingKind::Mode => requested.mode = Some(value.clone()),
         ProviderSettingKind::Model => requested.model = Some(value.clone()),
         ProviderSettingKind::Effort => requested.effort = Some(value.clone()),
     }
-    let (_, failure) = apply_initial_settings(session, &requested, &mut catalog).await;
+    let (_, failure) =
+        apply_initial_settings(session, &requested, &mut catalog, handles.behavior.as_ref()).await;
     match failure {
         Some(SettingSetupFailure::Invalid { advertised, .. }) => {
             Err(ExternalProviderRuntimeError::InvalidSetting {
@@ -84,7 +117,6 @@ pub(crate) async fn apply_loaded_setting(
                 .write()
                 .await
                 .insert(provider_session_id.clone(), catalog.clone());
-            *handles.last_settings_catalog.write().await = Some(catalog);
             let mut unresolved = handles.settings_unresolved.write().await;
             if let Some(kinds) = unresolved.get_mut(&provider_session_id) {
                 kinds.remove(&kind);

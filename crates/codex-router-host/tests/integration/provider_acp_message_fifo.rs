@@ -28,9 +28,12 @@ async fn typed_queue_keeps_blocks_and_input_identity_through_fifo() {
     let listener = tokio::net::UnixListener::bind(&event_socket).expect("fixture events");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(multiblock_queue_fixture(&event_socket))
-        .await
-        .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        multiblock_queue_fixture(&event_socket),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -106,14 +109,14 @@ async fn typed_queue_keeps_blocks_and_input_identity_through_fifo() {
         .queue_contents(
             target.clone(),
             other_actor.clone().into(),
-            vec![
+            session_event_model::ProviderSubmission::plain(vec![
                 session_event_model::PromptContent::image(
                     "image/png".into(),
                     "aGVsbG8=".into(),
                     None,
                 )
                 .expect("image"),
-            ],
+            ]),
         )
         .await;
     assert!(matches!(
@@ -129,7 +132,7 @@ async fn typed_queue_keeps_blocks_and_input_identity_through_fifo() {
         .queue_contents(
             target.clone(),
             other_actor.into(),
-            vec![
+            session_event_model::ProviderSubmission::plain(vec![
                 session_event_model::PromptContent::resource_link(
                     "https://example.test/context".into(),
                     "context".into(),
@@ -137,7 +140,7 @@ async fn typed_queue_keeps_blocks_and_input_identity_through_fifo() {
                 )
                 .expect("resource link"),
                 session_event_model::PromptContent::text("queued text".into()).expect("text"),
-            ],
+            ]),
         )
         .await
         .expect("typed queue admission");
@@ -177,9 +180,12 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
     let listener = tokio::net::UnixListener::bind(&event_socket).expect("fixture events");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(cursor_prompt_fixture(&event_socket))
-        .await
-        .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        cursor_prompt_fixture(&event_socket),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -413,9 +419,12 @@ async fn permanent_queued_load_failure_is_inspectable_and_does_not_stop_fifo() {
     let load_marker = root.path().join("load-marker.txt");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(refusing_load_fixture(&load_marker))
-        .await
-        .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        refusing_load_fixture(&load_marker),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     let store = Arc::new(tokio::sync::Mutex::new(
         ProviderOperationStore::open(&root.path().join("operations.sqlite"))
             .await
@@ -541,9 +550,12 @@ async fn failed_queued_prompt_advances_to_the_next_accepted_item() {
     let listener = tokio::net::UnixListener::bind(&event_socket).expect("fixture events");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(first_prompt_refusal_fixture(&event_socket))
-        .await
-        .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        first_prompt_refusal_fixture(&event_socket),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await
@@ -739,9 +751,12 @@ async fn provider_retirement_marks_queued_items_not_submitted() {
     let listener = tokio::net::UnixListener::bind(&event_socket).expect("fixture events");
     let target = target();
     let binding = provider_binding(&target);
-    let runtime = ExternalProviderRuntime::initialize(cursor_prompt_fixture(&event_socket))
-        .await
-        .expect("fixture provider");
+    let runtime = ExternalProviderRuntime::initialize(
+        cursor_prompt_fixture(&event_socket),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
     runtime
         .create_session(PathBuf::from("/tmp"))
         .await

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Claude routing: keep the local token out of argv</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head><body><ex-document>
+<h1>Authorize a private temporary settings file, or keep routed Claude inference on hold</h1>
+<p><strong>Decision for Sun, through Station Chief.</strong> The Host-selected Router route needs a settings tier above ordinary user/project/local settings. The committed Q0 candidate puts the real local admission token in inline SDK settings; the qualified SDK serializes those settings onto the native child's command line. That candidate is held. No Q0 Host or provider session has run, and its Q2 build stopped before compilation.</p>
+<p>I recommend the documented SDK settings-file path, with the narrow ownership and limits below. It keeps token values out of argv and retains the same vendor query/reader. It introduces a temporary credential-bearing file, so this is a security/storage decision the current implementation scope does not settle.</p>
+<h2>What the code establishes</h2>
+<ex-mermaid id="current-route" label="The held inline settings path exposes the token in argv"><script type="text/plain">
+flowchart TD
+  Host["Host owns Router URL and local token"] --> Env["Provider launch environment"]
+  Env --> Capture["Q0 captures the selected binding"]
+  Capture --> Options["SDK env and inline settings.env"]
+  Options --> SDK["SDK serializes settings JSON"]
+  SDK --> Argv["Native child argv contains token value"]
+</script></ex-mermaid>
+<p>Environment-only injection does not preserve the route against later ordinary settings. The public SDK settings tier does; however, object settings become <code>--settings &lt;JSON&gt;</code>. The SDK also formats its arguments for debug logging before a custom-spawn hook, so rewriting args only at that hook is too late. No public settings-env interpolation or pre-start secret-reference option was established. Managed policy stays higher priority and is not bypassed.</p>
+<h2>Option A — a private temporary settings file</h2>
+<ex-mermaid id="file-route" label="The public settings path keeps the token value out of argv"><script type="text/plain">
+flowchart TD
+  Host["Existing Host binding"] --> Wrapper["Qualified Claude wrapper owns temporary projection"]
+  Wrapper --> File["Private 0700 directory and immutable 0600 JSON files"]
+  File --> ACP["Stock ACP reads the public settings path"]
+  ACP --> SDK["Same vendor SDK query and reader"]
+  SDK --> Argv["argv contains path only"]
+  File --> Native["Native CLI reads flag-tier settings"]
+</script></ex-mermaid>
+<p><strong>Gain:</strong> preserve the selected URL and actual bearer through ordinary settings without placing token-bearing JSON in argv. Use the existing public <code>Options.settings: absolutePath</code>; the SDK passes that string unchanged. Keep normal home, normal sources and managed-policy precedence.</p>
+<p><strong>Proposed owner:</strong> the existing qualified Claude wrapper owns this derived, process-lifetime projection. The Host remains the authority for the original URL/token. The wrapper creates one owner-private temporary directory and immutable owner-only settings files before delegating session creation, passes their paths through the public API, and keeps them available while any vendor query/recreation may read them. It uses the existing shutdown/disposal path to remove its exact files after the vendor is disposed. No global cache, durable preference, credential database, second process/controller, query or reader is added.</p>
+<p><strong>Cost and limit:</strong> maintainers must implement and prove this small file lifetime. Abrupt termination such as SIGKILL cannot run the wrapper's cleanup; private files may remain until explicit task cleanup or OS temporary-storage cleanup. This option does not promise secure erasure or invent a background scavenger. Sun accepts that temporary credential-on-disk boundary, or declines it. No file is created before that decision.</p>
+<p><strong>Required proof:</strong> the real shipped entry keeps the Host binding, model-config fallback and unrelated settings; the file has the required permissions and lifetime; a faithful SDK spawn boundary receives a settings path and no token-bearing argv/debug string; normal disposal removes the exact owned files; failure leaves no untracked file or delegated effect. A real isolated Host must then produce a positive Claude audit window, genuine ordinary and selected-skill/image replies, and normal CLI exit. Existing J1/J2/J3/native/reverse obligations remain.</p>
+<p><strong>Version limits:</strong> stock ACP can turn a settings path back into an object when an explicit provider/gateway override is active; the qualified Host route must not combine with that mode. SDK settings-path plus its separate sandbox option is unsupported at this pin. New actual callers of those shapes return to design rather than being coerced. The file remains available beyond spawn; deleting it at spawn return is not justified.</p>
+<h2>Option B — keep the affected inference path on hold</h2>
+<ex-mermaid id="hold-route" label="Defer the new secret-file boundary"><script type="text/plain">
+flowchart TD
+  Evidence["Preserve Q0/Q1 source and failed-run evidence"] --> Hold["No Q0 runtime or further inference probe"]
+  Hold --> Decision["Wait for an accepted secret-transport boundary"]
+</script></ex-mermaid>
+<p><strong>Gain:</strong> introduce no new credential file or process responsibility. <strong>Cost:</strong> routed Claude ordinary/skill inference and final bridge readiness stay blocked. Source inventory, already proven refusal recovery and independent verifier review can continue; none substitutes for the missing real integration.</p>
+<h2>Where the agents stand</h2>
+<p>The 🦁 Lead recommends A with the explicit private-file lifetime and crash-residue limit. The 🦉 Advisor confirms the public path is source-feasible and retracts its earlier incomplete inline-settings advice; it requires an owner decision on the new storage responsibility. The 🔎 Reviewer found S1 and requires a boundary decision before the next real run. The 🔬 Verifier and 🐒 Implementer are held with no active action or cleanup dependency. No one claims routed inference is working.</p>
+<h2>Evidence and limits</h2>
+<p>Product candidate <code>112b31adf2157f5799ed1fd7ca160d37bc429399</code>; SDK <code>0.3.280</code>, ACP <code>0.81.0</code>, native Claude <code>2.1.314</code>. Source establishes object-settings serialization and public path carry-through. It does not establish the failed j7/j8/j9 endpoint or cause, actual managed-policy settings, a future file cleanup pass or successful routing.</p>
+<ul>
+<li>Private route preparation: <code>providers/claude-acp/src/route-preparation.ts:78–107</code>.</li>
+<li>SDK inert source: object settings serialization near byte 1571444; argv construction near 933719; <code>Vk</code> near 925182. Public declaration: <code>sdk.d.ts:2127–2144</code>.</li>
+<li>ACP query creation: <code>acp-agent.js:6057–6105</code>; resolved-provider path conversion at 6071–6077.</li>
+<li><a href="https://code.claude.com/docs/en/agent-sdk/configuration">Official SDK configuration</a>: public settings path/object and tier precedence.</li>
+<li><a href="https://code.claude.com/docs/en/env-vars">Official environment reference</a>: settings env strings are copied as written.</li>
+</ul>
+<p>Independent S1: Router push <code>01a190d0-0d86-7d03-842c-7f523019a7bd</code>. Advisor safe-path follow-up: <code>01a190d6-298d-71b0-8cae-c60e6f31cb27</code>. Task research: <code>tmp/practices-research/2026-10-31-claude-route-argv/research-ledger.md</code>. This page is a decision brief, not an adopted design or a ready replacement plan.</p>
+</ex-document></body></html>

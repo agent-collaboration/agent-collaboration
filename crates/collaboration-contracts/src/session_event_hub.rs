@@ -5,7 +5,7 @@
 use message_board::{Identity, SessionEndpointRef, SessionRef};
 use session_event_model::{SessionEvent, SessionState};
 use std::{future::Future, path::PathBuf, pin::Pin};
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, watch};
 
 pub type HubFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, SessionEventHubError>> + Send + 'a>>;
@@ -20,6 +20,11 @@ pub struct SessionEventAttachment {
     pub snapshot: Vec<HubEvent>,
     pub receiver: broadcast::Receiver<HubEvent>,
     pub epoch: u64,
+}
+
+pub struct SkillViewAttachment {
+    pub snapshot: session_event_model::SkillView,
+    pub receiver: watch::Receiver<session_event_model::SkillView>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -47,6 +52,7 @@ pub enum SessionEventHubError {
 /// The implementation owns the event log and sequence numbers. Sessions
 /// returns only Sessions on the requested provider endpoint.
 pub trait SessionEventHub: Send + Sync {
+    fn skill_view(&self, session: SessionRef, cwd: PathBuf) -> HubFuture<'_, SkillViewAttachment>;
     fn attach(&self, session: SessionRef) -> HubFuture<'_, SessionEventAttachment>;
     fn state(&self, session: SessionRef) -> HubFuture<'_, SessionState>;
     fn sessions(&self, endpoint: SessionEndpointRef) -> HubFuture<'_, Vec<HubSessionSummary>>;

@@ -68,6 +68,14 @@ impl InteractionPort for NoInteractions {
 struct MetadataCapture(tokio::sync::mpsc::UnboundedSender<SessionEvent>);
 
 impl SessionEventSink for MetadataCapture {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
@@ -90,6 +98,7 @@ async fn check_metadata_projection(replay: bool) {
         },
         Arc::new(NoInteractions),
         Arc::new(MetadataCapture(sender)),
+        std::sync::Arc::new(acp_provider_adapters::StandardAcpBehavior),
     )
     .await
     .expect("ACP initializes");
@@ -107,10 +116,15 @@ async fn check_metadata_projection(replay: bool) {
                 .await
                 .expect("session opens");
             client
-                .prompt_contents_with_approval_dispatch_for_input(
+                .submit_with_approval_dispatch_for_input(
                     session,
                     session_event_model::InputId::generate(),
-                    vec![session_event_model::PromptContent::text("Reply".into()).expect("prompt")],
+                    acp_client_runtime::ProviderTurnInput::Prompt(
+                        session_event_model::ProviderSubmission::plain(vec![
+                            session_event_model::PromptContent::text("Reply".into())
+                                .expect("prompt"),
+                        ]),
+                    ),
                     (),
                     None,
                 )

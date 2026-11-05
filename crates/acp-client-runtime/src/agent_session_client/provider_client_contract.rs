@@ -149,6 +149,12 @@ pub struct ExternalProviderPermissionObservation {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ExternalProviderRuntimeError {
+    #[error(transparent)]
+    Behavior(#[from] crate::ProviderError),
+    #[error(
+        "explicit compaction was not confirmed by a completed manual marker and successful terminal"
+    )]
+    CompactionUnconfirmed,
     #[error("provider process could not be launched: {0}")]
     Launch(String),
     #[error("provider ACP initialization failed: {0}")]
@@ -161,6 +167,8 @@ pub enum ExternalProviderRuntimeError {
     LocalBusy,
     #[error("provider session settings need resolution before work can start")]
     SettingsUnresolved,
+    #[error("confirmed model changed before applying the dependent setting")]
+    SettingsContextChanged,
     #[error(
         "settings-uncertain: run conversation settings set to resolve the unknown provider setting outcome"
     )]

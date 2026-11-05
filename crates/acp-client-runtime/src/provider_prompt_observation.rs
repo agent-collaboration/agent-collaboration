@@ -100,7 +100,6 @@ pub(crate) async fn read_bounded_prompt(
             }
         }
     };
-    item_projection.finish().map_err(projection_error)?;
     #[cfg(any(test, feature = "test-observation"))]
     {
         *test_tool_calls
@@ -158,7 +157,7 @@ pub(crate) async fn observe_idle_session_update(
                 .await
                 .map_err(|_| ExternalProviderRuntimeError::SinkClosed)?;
             item_projection
-                .observe(&parsed.update)
+                .observe(&parsed.update, update)
                 .map_err(projection_error)
         }
         Dispatch::Notification(_) | Dispatch::Response(_, _) => Ok(()),
@@ -185,7 +184,7 @@ async fn update_live_settings(
     let catalog = if capability_change.is_some() {
         let mut catalogs = handles.session_settings.write().await;
         let catalog = catalogs.entry(session_id.to_owned()).or_default();
-        apply_settings_update(catalog, update);
+        apply_settings_update(catalog, update, handles.behavior.as_ref());
         Some(catalog.clone())
     } else {
         None
@@ -197,7 +196,6 @@ async fn update_live_settings(
                 settings: catalog.to_session_settings(),
             },
         )?;
-        *handles.last_settings_catalog.write().await = Some(catalog);
     }
     if let Some(modes_update) = capability_change {
         let capabilities = {
@@ -276,6 +274,12 @@ async fn record_prompt_update(
                 }
                 return Ok(None);
             }
+            let raw_update = match &dispatch {
+                Dispatch::Notification(notification) => {
+                    notification.params().get("update").cloned()
+                }
+                _ => None,
+            };
             let mut sink_closed = false;
             let handled = MatchDispatch::new(dispatch)
                 .if_notification(async |notification: SessionNotification| {
@@ -291,7 +295,7 @@ async fn record_prompt_update(
                     }
                     if let Err(error) = session_context
                         .item_projection
-                        .observe(&notification.update)
+                        .observe(&notification.update, raw_update.as_ref())
                     {
                         match error {
                             ItemProjectionError::OutputLimit => {

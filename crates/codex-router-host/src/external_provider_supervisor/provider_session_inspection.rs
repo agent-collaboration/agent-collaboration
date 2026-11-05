@@ -145,3 +145,43 @@ fn failure(kind: ProviderInspectFailureKind, target: &SessionRef) -> ProviderIns
         },
     }
 }
+
+impl ExternalProviderSupervisor {
+    pub async fn session_model_catalog(
+        &self,
+        target: &SessionRef,
+    ) -> Result<
+        Vec<collaboration_runtime::ProviderModelEntry>,
+        collaboration_runtime::SessionModelCatalogError,
+    > {
+        use collaboration_runtime::SessionModelCatalogError;
+        if self
+            .inner
+            .store
+            .lock()
+            .await
+            .session_record(target)
+            .await
+            .map_err(|_| SessionModelCatalogError::Unavailable)?
+            .is_none()
+        {
+            return Err(SessionModelCatalogError::SessionNotFound);
+        }
+        let runtime = self
+            .runtime_for(&target.endpoint)
+            .ok_or(SessionModelCatalogError::Unavailable)?;
+        let session_id = String::from(target.session_id.clone());
+        let catalog = match runtime.settings_catalog(&session_id).await {
+            Some(catalog) => catalog,
+            None => self
+                .inner
+                .settings_catalogs
+                .lock()
+                .await
+                .get(target)
+                .cloned()
+                .ok_or(SessionModelCatalogError::Unavailable)?,
+        };
+        Ok(crate::provider_model_catalog::model_entries(&catalog))
+    }
+}

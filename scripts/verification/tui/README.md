@@ -6,6 +6,21 @@ wterm packages are pinned at 0.5.7. The separate original-image sink renders tho
 bytes with `@wterm/dom` in headless Chrome through DevTools. No reconstructed cell
 image counts as an original. A headless image is not physical-terminal evidence.
 
+The package is organized by responsibility. Tests sit beside the modules they
+exercise; fixture programs are kept separate from the test runner's discovery.
+
+| Directory    | Responsibility                                                    |
+| ------------ | ----------------------------------------------------------------- |
+| `capture/`   | Capture orchestration and baseline journeys                       |
+| `terminal/`  | PTY grid driver, wterm qualification and original images          |
+| `processes/` | Child lifecycle and process identity                              |
+| `evidence/`  | Evidence schemas, source binding and readback                     |
+| `journeys/`  | Journey definitions, catalogue, input encoding and scene matching |
+| `codex-acp/` | Codex CLI ACP targets and their journey scenes                    |
+| `sessions/`  | Public Sessions capture and settlement                            |
+| `fixtures/`  | Controlled child programs and shared test fixtures                |
+| `cli/`       | Command-line argument validation                                  |
+
 Use a privately retained Node 26.13.0 runtime and pnpm 12.14.0, from the repository root. Copy the complete Node runtime (including libnode) into an owned toolchain directory before declaring its canonical executable path and SHA-256; a mutable Homebrew symlink is not the retained runtime. Keep its dependency inventory with the declaration and re-qualify after any runtime dependency change. Historical 26.12.1 receipts remain evidence for their original runs only:
 
 ```sh

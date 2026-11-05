@@ -18,6 +18,7 @@ const entries: readonly (readonly [PtyGridTarget['surface'], string])[] = [
 	['sessions', 'quota_storyboard::compiled_grid_terminal_observation'],
 	['sessions-filters', 'quota_storyboard::compiled_grid_terminal_observation'],
 	['public-sessions', 'quota_storyboard::compiled_public_sessions_grid_observation'],
+	['codex-acp', 'quota_storyboard::compiled_codex_acp_grid_observation'],
 	['showcase', 'quota_storyboard::compiled_grid_terminal_observation'],
 ];
 

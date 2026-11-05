@@ -82,6 +82,14 @@ impl InteractionPort for QuestionPort {
 
 struct NoopEventSink;
 impl SessionEventSink for NoopEventSink {
+    fn publish_skill_view(
+        &self,
+        _session_id: &str,
+        _view: session_event_model::SkillView,
+    ) -> Result<(), acp_client_runtime::EventSinkClosed> {
+        Ok(())
+    }
+
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
@@ -125,6 +133,7 @@ async fn cursor_question_preserves_choice_ids_and_answer_shape() {
         },
         port.clone(),
         Arc::new(NoopEventSink),
+        std::sync::Arc::new(crate::test_behavior::TestProviderBehavior),
     )
     .await
     .expect("fixture initializes");
@@ -134,10 +143,15 @@ async fn cursor_question_preserves_choice_ids_and_answer_shape() {
         .expect("session opens");
     tokio::time::timeout(
         std::time::Duration::from_secs(2),
-        client.prompt_contents_with_approval_dispatch_for_input(
+        client.submit_with_approval_dispatch_for_input(
             session_id,
             session_event_model::InputId::generate(),
-            vec![session_event_model::PromptContent::text("Ask".to_owned()).expect("text prompt")],
+            acp_client_runtime::ProviderTurnInput::Prompt(
+                session_event_model::ProviderSubmission::plain(vec![
+                    session_event_model::PromptContent::text("Ask".to_owned())
+                        .expect("text prompt"),
+                ]),
+            ),
             (),
             None,
         ),

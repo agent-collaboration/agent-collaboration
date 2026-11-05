@@ -28,7 +28,7 @@ fn fixture_provider(directory: &Path) -> std::path::PathBuf {
     node_test_fixture::write_node_fixture(
         &executable,
         "host-composition-agent.ts",
-        &serde_json::json!({"mode":"startup"}),
+        &serde_json::json!({"mode":"startup","authentication":"cursor_login"}),
     )
     .expect("write fixture provider");
     std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700))
