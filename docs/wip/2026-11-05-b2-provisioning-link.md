@@ -17,3 +17,9 @@ ProvisionOrganization uses organizationId itself as its idempotency identity. It
 ## Proof boundary
 
 The two permanent aggregate integration cases compare Rust serialization and generated JSON Schema with F1c literals, including retired request/result negatives. They do not prove link reachability, stamp/mismatch policy, atomic record write, live signing, or the real settingUp→ready journey. The table SQL and the B2c confirmation envelope/replay-state home remain separately gated. No automatic retry, admission workflow or table-backed stand-in is introduced here.
+
+## Component checkpoint
+
+The core now supplies organization_provisioning_router and an OrganizationProvisioningPort capability. HTTP400 carries the fixed wrong-operation refusal for an invalid body; a mismatched organization is HTTP403 with an empty body; unavailable or unconfirmed commit is HTTP503 with an empty body. The consumer still treats every non200 as unknown and parses no error body as a ProvisionOrganizationResult. Method/path selection precedes body decoding. One admitted HTTP attempt invokes the capability exactly once.
+
+The concrete Fleet transaction capability and both hosts’ mount remain unimplemented while owner SQL and project-affinity decisions are pending. The HTTP tests use a RecordingProvisioner outside the parsing/status/attempt-count claims; it records no database state. This allows transport policy to progress, at the cost of unverified storage and physical-link integration. Closure requires the actual Fleet owner and real Cloudflare/Unix mounts passing the joint journey. The pure OrganizationIdentity rules separately pin unstamped, same-organization and different-organization decisions; they do not enforce concurrency or persistence.

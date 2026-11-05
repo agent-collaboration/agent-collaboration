@@ -2,6 +2,9 @@
 #![forbid(unsafe_code)]
 
 pub mod identity_contract;
+pub mod organization_authority;
+mod organization_provisioning_http;
+pub use organization_provisioning_http::organization_provisioning_router;
 
 mod admin_import_columns;
 mod admin_import_contract;
