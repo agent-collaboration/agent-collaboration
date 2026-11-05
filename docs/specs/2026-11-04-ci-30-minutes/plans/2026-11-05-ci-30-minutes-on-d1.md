@@ -11,7 +11,7 @@ governing planning basis:
   Specification:       docs/specs/2026-11-04-ci-30-minutes/specification.md (R7 and its failure case corrected for the D1 base)
   Program Design:      docs/specs/2026-11-04-ci-30-minutes/program-design.md (S2 anchors and R7 seam corrected)
   Verification Design: docs/specs/2026-11-04-ci-30-minutes/verification-design.md (U1 and U6 rows, O4 corrected)
-  review: four-document-design, Reviewer codex-local 01a1a807 (Sol xhigh), ready at 0f08b8b89; the base-change corrections go to the same Reviewer to verify the corrected anchors
+  review: four-document-design, an independent Sol xhigh Reviewer, ready at 0f08b8b89; the base-change corrections go to the same Reviewer to verify the corrected anchors
   current applicability anchors: D1 feat/central-storage-reset-d1-router 71e466dbf (frozen except CI or merge-readiness fixes, per the D1 Lead 2026-11-05)
 delivery context:
   requested terminal: pr-ready-unmerged
@@ -40,8 +40,8 @@ Unchanged from the 2026-11-04 plan. Make the workspace nextest invocation start 
 
 ## Who does it, and where
 
-- **Implementer:** 🐒 Sol high on Sunclaw, codex-local `01a1ab5b-e03e-78e0-b52c-a9f23e4ea029`, in worktree `codex-router.ci-scheduling-30-min`.
-- **Verifier:** 🔎 Luna high on Sunclaw, codex-local `01a1ab5b-e03e-78e0-b52c-a9e65583f345`, same worktree, building only after the Implementer hands back.
+- **Implementer:** 🐒 Sol high on the build machine, in the assigned repository worktree.
+- **Verifier:** 🔎 Luna high on the build machine, in the same assigned worktree, building only after the Implementer hands back.
 - **Review:** an independent Sol xhigh Reviewer reviews the PR.
 - **Commits** use `--no-gpg-sign`. No git stash. Files stay under 1,000 lines.
 
@@ -56,7 +56,7 @@ Reads, writes, pre-change signal and oracle carry forward from the 2026-11-04 pl
 
 ### S2 · Causal fix for the oversized-frame test
 
-As in the 2026-11-04 plan, with the anchors above. Its proof is the O5 pair on Sunclaw, run by the Verifier: the pre-fix test at the branch base and the fixed test, each with the fixture's start delayed beyond 2 s. Also `cargo nextest run -p codex-router-host -E 'test(admission_lifecycle)'`. Its stop conditions carry forward. The "port only the watcher helper" stop no longer applies, because the pattern is in the same file.
+As in the 2026-11-04 plan, with the anchors above. Its proof is the O5 pair on the build machine, run by the Verifier: the pre-fix test at the branch base and the fixed test, each with the fixture's start delayed beyond 2 s. Also `cargo nextest run -p codex-router-host -E 'test(admission_lifecycle)'`. Its stop conditions carry forward. The "port only the watcher helper" stop no longer applies, because the pattern is in the same file.
 
 ### S3 · Priorities and 8 threads
 
@@ -104,9 +104,9 @@ As in the 2026-11-04 plan, with these changes:
 | --- | --- | --- | --- |
 | U1 / R1 | S5, and the first main run after both land | `gh api …/actions/runs/<id>` and `/jobs` | after PR CI; after both land |
 | U2 / R2 | S5 | the same `/jobs` count | after PR CI |
-| U3 / R3 | S3 (list pair), S5 (Summary match) | `cargo nextest list --profile ci …` ×2 per invocation on Sunclaw; the S1 tool on the CI log | S3 before the PR; S5 after CI |
+| U3 / R3 | S3 (list pair), S5 (Summary match) | `cargo nextest list --profile ci …` ×2 per invocation on the build machine; the S1 tool on the CI log | S3 before the PR; S5 after CI |
 | U3 / R4 | S2 and every S5 fix | PR diff review against the pre-change files | at review |
-| U4 / R5 | S2 (and S5 fixes) | delayed-start pre-fix and fixed runs on Sunclaw, plus the 8-thread PR run | before the PR; after CI |
+| U4 / R5 | S2 (and S5 fixes) | delayed-start pre-fix and fixed runs on the build machine, plus the 8-thread PR run | before the PR; after CI |
 | U5 / R6 | S5 | `static` job steps from `/jobs` | after PR CI |
 | U6 / R7 | S3 (selectors), S4 (merge-forward) | `git merge-tree`, merge, per-selector `nextest list` on the merged head | before the PR; each time D1's head moves; after D1 lands |
 
