@@ -160,3 +160,7 @@ mod tests;
 #[cfg(test)]
 #[path = "tests/claim_notice_overlap.rs"]
 mod notice_tests;
+
+#[cfg(test)]
+#[path = "tests/inline_install_enrollment.rs"]
+mod enrollment_tests;
