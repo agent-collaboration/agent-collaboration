@@ -1,0 +1,82 @@
+name: Test organization build cost
+
+on:
+  push:
+    branches:
+      - ci/test-org-measure
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: test-organization-measurement
+  cancel-in-progress: false
+
+jobs:
+  before-sample:
+    if: github.ref == 'refs/heads/ci/test-org-measure'
+    name: Four-CPU build sample
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_TOOLCHAIN: 1.98.1
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: verification/package.json
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: verification/package.json
+      - name: Install fixture dependencies
+        run: |
+          pnpm --dir verification install --frozen-lockfile
+          pnpm --dir providers/claude-acp install --frozen-lockfile
+          pnpm --dir scripts/verification/tui install --frozen-lockfile
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy,rustfmt,rust-src
+      - name: Install pinned CI tools
+        uses: ./.github/actions/install-ci-tools
+      - name: Check target and record sample identity
+        run: |
+          df -h /
+          node verification/tooling/test-organization/measure-build.ts prepare
+      # There is deliberately no Rust-cache restore before the cold sample.
+      - name: Cold build
+        run: node verification/tooling/test-organization/measure-build.ts cold
+      - name: Remove only the job's cold-build target
+        run: cargo clean --target-dir target
+      - name: Restore the normal dependency cache and save one sample entry
+        id: rust_cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: test
+          save-if: true
+      - name: Cached-dependency build and checkpoint
+        run: node verification/tooling/test-organization/measure-build.ts cached
+      - name: Test-only edit build
+        run: node verification/tooling/test-organization/measure-build.ts test-edit
+      - name: Production edit build from the cached checkpoint
+        run: node verification/tooling/test-organization/measure-build.ts production-edit
+      - name: Record cache restore result
+        env:
+          CACHE_HIT: ${{ steps.rust_cache.outputs.cache-hit }}
+        run: node -e 'require("node:fs").writeFileSync("tmp/test-org-measure/cache-hit.txt", process.env.CACHE_HIT + "\n")'
+      - name: Preserve every sample and command outcome
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-organization-sample-${{ github.run_id }}
+          path: tmp/test-org-measure/
+          if-no-files-found: error
+          retention-days: 14
