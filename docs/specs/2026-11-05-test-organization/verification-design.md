@@ -41,7 +41,7 @@ Each requirement is proven on the real build: Cargo's dependency views, nextest'
   - **CPU:** user+sys, from `/usr/bin/time -v` around the build.
   - **Elapsed:** wall time.
   - **Target size:** bytes of `target/debug`, from `du -sb`.
-  - **Saved-cache size:** the compressed rust-cache entry, from the cache API.
+  - **Saved-cache size:** the compressed rust-cache entry that the job saves once, at its end, under the normal policy, read from the cache API. It is one job-level value per sample, not one per scenario. rust-cache saves only in its post-job step, and it strips workspace crates before saving, so the four scenarios share one dependency cache. Between the cold scenario and the cached-dependency scenario, the job runs `cargo clean` on its own target, so the cached scenario does not start from cold-built workspace artifacts.
 - **O6:** one planted violation per enforced check, recorded in the PR description by its output.
 
 ## Decision rule for R5
