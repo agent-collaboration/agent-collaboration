@@ -161,6 +161,9 @@ impl Scenario {
             Scenario::RevocationRace => println!(
                 "REVOCATION_RESULT 2 passed; 0 failed; 0 ignored (normal revoke, held real delivery, unchanged owning enrollment, actual completed journal and late CallId replay; no heap-loss recovery claim)"
             ),
+            Scenario::MutationRevocation => println!(
+                "MUTATION_REVOCATION_RESULT 1 passed; 0 failed; 0 ignored (eleven exact shared mutation refusals on a live revoked session)"
+            ),
             Scenario::SenderRevocation => println!(
                 "SENDER_REVOCATION_RESULT 1 passed; 0 failed; 0 ignored (shared Native/Worker scenario; committed revoked row with live sender, exact item/cancel refusal, unchanged outbox count and no recipient Push)"
             ),

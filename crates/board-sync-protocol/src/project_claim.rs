@@ -46,6 +46,7 @@ pub enum ProjectClaimReply {
     deny_unknown_fields
 )]
 pub enum ProjectClaimRefusal {
+    CallerNotEnrolled,
     AlreadyHeld {
         #[schemars(schema_with = "peer_schema")]
         holder: PeerId,

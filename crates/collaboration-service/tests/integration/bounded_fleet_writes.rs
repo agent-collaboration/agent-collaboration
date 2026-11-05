@@ -109,13 +109,15 @@ async fn fleet_write_reads_only_its_operands_and_survives_an_unrelated_corrupt_c
     // C6 adds nine fixed statements to the former budget of 38:
     // workspace repository children (2), feed repository children (2), feed ADR
     // files (2), feed ledger heads (2), and workspace child-tail pruning (1).
-    // Each feed read batches the range; none scales with unrelated records.
+    // Enrollment admission adds one current-caller lookup in the Fleet frame
+    // transaction. Each feed read batches the range; neither cost scales with
+    // unrelated records.
     assert_eq!(
-        small.0.statements, 47,
+        small.0.statements, 48,
         "exact foreground board/cache SQL budget"
     );
     assert_eq!(
-        large.0.statements, 47,
+        large.0.statements, 48,
         "exact foreground board/cache SQL budget"
     );
     assert!(

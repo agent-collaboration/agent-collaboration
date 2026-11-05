@@ -6,11 +6,17 @@ use crate::{
     object_call_envelope::encode_refusal,
 };
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
-use durable_steps::{CallFailure, CallRetryReason};
+use durable_steps::{
+    AtomicStore, CallFailure, CallRetryReason, StoreError, storage::TransactionScope,
+};
 use fleet_sync_protocol::{FrameId, PeerId, ServerCall, ServerFrame, ServerRequest};
 use fleet_sync_session::{ConnectionRegistration, SessionKey};
 use futures_util::future::{Either, select};
 use runtime_primitives::{Clock, IdSource, WakeScheduler};
+use sqlx_core::{
+    arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
+    encode::Encode, types::Type,
+};
 use std::{future::Future, sync::Arc, time::Duration};
 
 pub(crate) async fn begin_peer_request<Host, Time, MakeDeadline, Deadline>(
@@ -24,6 +30,12 @@ pub(crate) async fn begin_peer_request<Host, Time, MakeDeadline, Deadline>(
 ) -> Result<ReplyWaiter, CallFailure>
 where
     Host: ObjectHost,
+    for<'t> <Host::Store as AtomicStore>::Scope<'t>: TransactionScope<Database = Host::Database>,
+    <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'v> String: Type<Host::Database> + Encode<'v, Host::Database> + Decode<'v, Host::Database>,
+    for<'v> Option<String>:
+        Type<Host::Database> + Encode<'v, Host::Database> + Decode<'v, Host::Database>,
+    for<'r> &'r str: ColumnIndex<<Host::Database as Database>::Row>,
     Time: Clock + IdSource + Send + Sync + 'static,
     MakeDeadline: FnOnce(Duration) -> Deadline + Send,
     Deadline: Future<Output = ()> + Send,
@@ -38,32 +50,54 @@ where
     let selection_time = time.clone();
     let (connection, waiter, deadline) = host
         .with_local_section(async move {
-            for (connection, registration) in
-                selection_host.registrations().await.map_err(|_| unsent())?
-            {
-                let ConnectionRegistration::Attached { session_id, .. } = registration else {
-                    continue;
-                };
-                let Ok(binding) = selection_host.admission_binding(connection).await else {
-                    continue;
-                };
-                let now = selection_time.now();
-                if binding.connection != connection
-                    || binding.peer != peer
-                    || binding.expires_at <= now
-                {
-                    continue;
-                }
-                let deadline = now.after(timeout);
-                let waiter = replies.register(
-                    SessionKey { peer, session_id },
-                    connection,
-                    frame,
-                    deadline,
-                )?;
-                return Ok((connection, waiter, deadline));
-            }
-            Err(unsent())
+            let selection_store = selection_host.store().clone();
+            selection_store
+                .transaction(move |scope| {
+                    Box::pin(async move {
+                        let now = selection_time.now();
+                        if crate::machine_enrollment::admission::read_current_enrolled_machine(
+                            scope, peer, now,
+                        )
+                        .await?
+                        .is_none()
+                        {
+                            return Ok(Err(unsent()));
+                        }
+                        let Ok(registrations) = selection_host.registrations().await else {
+                            return Ok(Err(unsent()));
+                        };
+                        for (connection, registration) in registrations {
+                            let ConnectionRegistration::Attached { session_id, .. } = registration
+                            else {
+                                continue;
+                            };
+                            let Ok(binding) = selection_host.admission_binding(connection).await
+                            else {
+                                continue;
+                            };
+                            if binding.connection != connection
+                                || binding.peer != peer
+                                || binding.expires_at <= now
+                            {
+                                continue;
+                            }
+                            let deadline = now.after(timeout);
+                            // The particular waiter is selected before this enrollment
+                            // transaction commits. Rollback drops its RAII correlation.
+                            return Ok(replies
+                                .register(
+                                    SessionKey { peer, session_id },
+                                    connection,
+                                    frame,
+                                    deadline,
+                                )
+                                .map(|waiter| (connection, waiter, deadline)));
+                        }
+                        Ok(Err(unsent()))
+                    })
+                })
+                .await
+                .map_err(|_: StoreError| CallFailure::AnswerLost)?
         })
         .await
         .map_err(|_| unsent())??;
@@ -100,3 +134,7 @@ fn unsent() -> CallFailure {
         reason: durable_steps::NotSentReason::Unreachable { last_seen: None },
     }
 }
+
+#[cfg(test)]
+#[path = "peer_selection_test.rs"]
+mod enrollment_tests;

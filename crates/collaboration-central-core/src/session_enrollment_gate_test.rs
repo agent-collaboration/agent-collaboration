@@ -134,7 +134,7 @@ async fn selection(body: Value, expected: Value) -> Result<(), TestError> {
 }
 #[tokio::test]
 async fn revoked_fleet_request_selects_only_its_admission_refusal() -> Result<(), TestError> {
-    selection(json!({"kind":"consumer","value":{"kind":"fleet","value":{"requestId":PROJECT,"operation":{}}}}),json!({"kind":"consumer","value":{"kind":"fleet","value":{"requestId":PROJECT,"decision":{"kind":"callerNotEnrolled"}}}})).await
+    selection(json!({"kind":"consumer","value":{"kind":"fleet","value":{"requestId":PROJECT,"operation":fleet_request()?}}}),json!({"kind":"consumer","value":{"kind":"fleet","value":{"requestId":PROJECT,"decision":{"kind":"callerNotEnrolled"}}}})).await
 }
 #[tokio::test]
 async fn revoked_archive_seen_selects_only_its_admission_refusal() -> Result<(), TestError> {
@@ -147,4 +147,104 @@ async fn revoked_forward_selects_no_pending_row_or_route() -> Result<(), TestErr
 #[tokio::test]
 async fn revoked_project_settle_selects_no_negative_custody() -> Result<(), TestError> {
     selection(json!({"kind":"delivery","value":{"kind":"settle","value":{"call":{"operation":PROJECT,"step":"settle"},"submitter":{"kind":"project","value":PROJECT},"mailbox":PEER,"item":PROJECT,"digest":"ab".repeat(32)}}}),json!({"kind":"delivery","value":{"kind":"deliveryUnavailable","value":{"reason":{"kind":"senderNotEnrolled"}}}})).await
+}
+
+fn gate_reason() -> Value {
+    json!({"code":"callerNotEnrolled","detail":"Machine is not enrolled or its enrollment has expired."})
+}
+fn replication_refusal() -> Value {
+    json!({"kind":"replication","value":{"kind":"refused","value":{"kind":"hook","value":gate_reason()}}})
+}
+#[tokio::test]
+async fn revoked_register_selects_no_registration() -> Result<(), TestError> {
+    selection(json!({"kind":"lease","value":{"kind":"register","value":{"attempt":PROJECT,"database":PROJECT,"writer":PEER,"origin":{"kind":"empty"}}}}),json!({"kind":"lease","value":{"kind":"register","value":{"kind":"refused","value":{"kind":"databaseRejected","value":{"reason":gate_reason()}}}}})).await
+}
+#[tokio::test]
+async fn revoked_renew_selects_no_renewal() -> Result<(), TestError> {
+    selection(json!({"kind":"lease","value":{"kind":"renew","value":{"attempt":PROJECT,"database":PROJECT,"epoch":1}}}),json!({"kind":"lease","value":{"kind":"renew","value":{"kind":"refused","value":{"kind":"holderNotEnrolled"}}}})).await
+}
+#[tokio::test]
+async fn revoked_claim_selects_no_transfer() -> Result<(), TestError> {
+    selection(json!({"kind":"lease","value":{"kind":"claim","value":{"attempt":PROJECT,"database":PROJECT}}}),json!({"kind":"lease","value":{"kind":"claim","value":{"kind":"refused","value":{"kind":"gateRefused","value":{"reason":gate_reason()}}}}})).await
+}
+#[tokio::test]
+async fn revoked_seed_begin_selects_no_copy_write() -> Result<(), TestError> {
+    selection(json!({"kind":"replication","value":{"kind":"seedBegin","value":{"database":PROJECT,"attempt":PROJECT}}}),replication_refusal()).await
+}
+fn piece() -> Result<Value, TestError> {
+    use fleet_sync_protocol::{
+        CommitSequence, Epoch, Piece, PieceContents, ReplicatedTransaction, ReplicationPosition,
+    };
+    let epoch = Epoch::new(1)?;
+    let contents = PieceContents::<board_sync_protocol::BoardAnnotation> {
+        database: PROJECT.to_owned().try_into()?,
+        epoch,
+        continues_from: ReplicationPosition::new(epoch, CommitSequence::new(0)),
+        through: ReplicationPosition::new(epoch, CommitSequence::new(1)),
+        transactions: vec![ReplicatedTransaction::Rows {
+            commit_id: CommitSequence::new(1),
+            rows: Vec::new(),
+        }],
+        part: None,
+        annotation: None,
+    };
+    Ok(serde_json::to_value(Piece::new(contents)?)?)
+}
+#[tokio::test]
+async fn revoked_piece_selects_no_copy_write() -> Result<(), TestError> {
+    selection(
+        json!({"kind":"replication","value":{"kind":"piece","value":piece()?}}),
+        replication_refusal(),
+    )
+    .await
+}
+fn page() -> Result<fleet_sync_protocol::SnapshotPage, TestError> {
+    Ok(fleet_sync_protocol::SnapshotPage {
+        database: PROJECT.to_owned().try_into()?,
+        position: fleet_sync_protocol::ReplicationPosition::new(
+            fleet_sync_protocol::Epoch::new(1)?,
+            fleet_sync_protocol::CommitSequence::new(0),
+        ),
+        schema: fleet_sync_protocol::SchemaIdentity::new(1, "gate-fixture".into())?,
+        schema_steps: Vec::new(),
+        table: "".into(),
+        rows: Vec::new(),
+        next: None,
+    })
+}
+#[tokio::test]
+async fn revoked_seed_page_selects_no_copy_write() -> Result<(), TestError> {
+    let page = page()?;
+    let request = fleet_sync_protocol::SeedPage {
+        seed: fleet_sync_protocol::SeedId { generation: 1 },
+        page: 0,
+        digest: fleet_sync_protocol::PageDigest::of_canonical(&page)?,
+        contents: page,
+    };
+    selection(
+        json!({"kind":"replication","value":{"kind":"seedPage","value":request}}),
+        replication_refusal(),
+    )
+    .await
+}
+#[tokio::test]
+async fn revoked_seed_complete_selects_no_copy_write() -> Result<(), TestError> {
+    let page = page()?;
+    selection(json!({"kind":"replication","value":{"kind":"seedComplete","value":{"database":PROJECT,"seed":{"generation":1},"position":page.position,"pages":1,"schema":page.schema,"tableDigests":[]}}}),replication_refusal()).await
+}
+
+fn fleet_request() -> Result<Value, TestError> {
+    Ok(serde_json::to_value(fleet_admission::FleetRequest {
+        request_id: PROJECT.to_owned().try_into()?,
+        workspace: PROJECT.to_owned().try_into()?,
+        actor: message_board::RecordedActor::Human {
+            human_id: "revocation fixture".to_owned().try_into()?,
+        },
+        acting_for: None,
+        protocol_version: message_board::ProtocolVersion::CURRENT,
+        operation: fleet_admission::FleetOperation::WorkspaceCreate {
+            name: "revoked creation".to_owned().try_into()?,
+            description: "must select no write".to_owned().try_into()?,
+        },
+    })?)
 }

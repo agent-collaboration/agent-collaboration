@@ -7,7 +7,11 @@ use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerProtocol, BoardConsumerRequest, BoardPayload, ForwardOutcome,
 };
 use fleet_sync_protocol::{
-    DeliveryAnswer, DeliveryRefusal, DeliveryRequest, OperationAnswer, OperationRequest, Submitter,
+    DeliveryAnswer, DeliveryRefusal, DeliveryRequest, GateReason, GateReasonCode,
+    HolderChangeAnswer, HolderChangeRefusal, HookRefusal, HookRefusalCode, LeaseAnswer,
+    LeaseRefusal, LeaseRequest, OperationAnswer, OperationRequest, PieceRefusal,
+    RegistrationAnswer, RegistrationRefusal, RenewAnswer, ReplicationAnswer, ReplicationRequest,
+    Submitter,
 };
 
 impl<Host: ObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
@@ -26,7 +30,37 @@ where
         operation: &OperationRequest<BoardConsumerProtocol>,
         now: SyncTime,
     ) -> Result<Option<OperationAnswer<BoardConsumerProtocol>>, StoreError> {
+        let reason = || -> Result<GateReason, StoreError> {
+            Ok(GateReason {
+                code: GateReasonCode::new("callerNotEnrolled").map_err(StoreError::backend)?,
+                detail: "Machine is not enrolled or its enrollment has expired.".into(),
+            })
+        };
         let answer = match operation {
+            OperationRequest::Lease(LeaseRequest::Register(_)) => Some(OperationAnswer::Lease(
+                LeaseAnswer::Register(RegistrationAnswer::Refused(
+                    RegistrationRefusal::DatabaseRejected { reason: reason()? },
+                )),
+            )),
+            OperationRequest::Lease(LeaseRequest::Renew(_)) => Some(OperationAnswer::Lease(
+                LeaseAnswer::Renew(RenewAnswer::Refused(LeaseRefusal::HolderNotEnrolled)),
+            )),
+            OperationRequest::Lease(LeaseRequest::Claim { .. }) => Some(OperationAnswer::Lease(
+                LeaseAnswer::Claim(HolderChangeAnswer::Refused(
+                    HolderChangeRefusal::GateRefused { reason: reason()? },
+                )),
+            )),
+            OperationRequest::Replication(
+                ReplicationRequest::Piece(_)
+                | ReplicationRequest::SeedBegin { .. }
+                | ReplicationRequest::SeedPage(_)
+                | ReplicationRequest::SeedComplete(_),
+            ) => Some(OperationAnswer::Replication(ReplicationAnswer::Refused(
+                PieceRefusal::Hook(HookRefusal {
+                    code: HookRefusalCode::new("callerNotEnrolled").map_err(StoreError::backend)?,
+                    detail: "Machine is not enrolled or its enrollment has expired.".into(),
+                }),
+            ))),
             OperationRequest::Consumer(BoardConsumerRequest::Fleet(request)) => {
                 Some(OperationAnswer::Consumer(BoardConsumerAnswer::Fleet {
                     request_id: request.request_id.clone(),
@@ -71,8 +105,11 @@ where
                     ..
                 },
             )
-            | OperationRequest::Lease(_)
-            | OperationRequest::Replication(_) => None,
+            | OperationRequest::Replication(
+                ReplicationRequest::SnapshotManifest { .. }
+                | ReplicationRequest::SnapshotPage { .. }
+                | ReplicationRequest::CopyStatus { .. },
+            ) => None,
         };
         if answer.is_none() {
             return Ok(None);

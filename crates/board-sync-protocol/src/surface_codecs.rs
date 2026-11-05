@@ -51,6 +51,7 @@ pub(crate) enum PieceRefusalCodec {
     deny_unknown_fields
 )]
 pub(crate) enum LeaseRefusalCodec {
+    HolderNotEnrolled,
     StaleEpoch {
         current_epoch: wire::Epoch,
         epoch_ended_at: wire::ReplicationPosition,
