@@ -163,27 +163,18 @@ pub(super) async fn maximum_directory_summary(
             "kind":"central.directory-summary","target":null,"request":summary
         }))?).await.map_err(|error|format!("maximum directory summary did not answer: {error:?}"))?;
     }
-    let id = project.as_str().to_owned();
+    let database = project.as_str().parse()?;
     let stored = fixture
         .object
         .transaction(move |scope| {
             Box::pin(async move {
-                let row = query::<sqlx_turso::Turso>(
-                    "SELECT copy_summary FROM project_directory WHERE project_id=?",
-                )
-                .bind(id)
-                .fetch_one(scope.executor())
-                .await
-                .map_err(StoreError::backend)?;
-                row.try_get::<String, _>("copy_summary")
-                    .map_err(StoreError::backend)
+                collaboration_central_core::read_fleet_copy_summary_in_scope(scope, database)
+                    .await?
+                    .ok_or_else(|| StoreError::backend("committed directory summary absent"))
             })
         })
         .await?;
-    assert_eq!(
-        serde_json::from_str::<collaboration_central_core::CopyDirectorySummary>(&stored)?,
-        summary
-    );
+    assert_eq!(stored, summary);
     Ok(())
 }
 pub(super) fn envelope(
@@ -206,7 +197,7 @@ pub(super) fn envelope(
 }
 async fn read(fixture: &Fixture, request: Value) -> TestResult<BoardReadPage> {
     let bytes = fixture.runtime.on_call(serde_json::to_vec(&json!({
-        "source":{"kind":"connection","value":SERVICE},"sourceFace":"session","authority":{"kind":"object"},
+        "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":SERVICE}},
         "destination":{"kind":"fleet"},"destinationFace":"fleet",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"maximum_row_read"},
         "kind":"central.fleet-read","target":null,"request":request
@@ -264,10 +255,10 @@ pub(super) async fn measure(fixture: &Fixture, kind: &'static str, expected: Rec
         expected
     );
     let sql = match reference.kind {
-        RecordKind::Workspace => "SELECT * FROM workspaces WHERE workspace_id=?",
-        RecordKind::Board => "SELECT * FROM boards WHERE board_id=?",
-        RecordKind::Adr => "SELECT * FROM workspace_adrs WHERE adr_id=?",
-        RecordKind::Project => "SELECT * FROM project_directory WHERE project_id=?",
+        RecordKind::Workspace => "SELECT * FROM fleet_workspaces WHERE workspace_id=?",
+        RecordKind::Board => "SELECT * FROM fleet_boards WHERE board_id=?",
+        RecordKind::Adr => "SELECT * FROM fleet_workspace_adrs WHERE adr_id=?",
+        RecordKind::Project => "SELECT * FROM fleet_project_directory WHERE project_id=?",
         _ => return Err("maximum-row measurement names a non-Fleet family".into()),
     };
     let (rows, stored_digest) = fixture
@@ -296,9 +287,23 @@ pub(super) async fn measure(fixture: &Fixture, kind: &'static str, expected: Rec
                         row.columns()
                             .iter()
                             .map(|column| {
-                                if column.name() == "position" {
-                                    row.try_get::<i64, _>(column.name())
-                                        .map(SqlValue::Integer)
+                                if matches!(
+                                    column.name(),
+                                    "position"
+                                        | "repository_count"
+                                        | "repository_file_count"
+                                        | "fleet_position"
+                                        | "created_at"
+                                        | "updated_at"
+                                        | "copy_acked_at"
+                                        | "lease_changed_at"
+                                        | "lease_retired_at"
+                                        | "lease_expires_at"
+                                ) {
+                                    row.try_get::<Option<i64>, _>(column.name())
+                                        .map(|value| {
+                                            value.map_or(SqlValue::Null, SqlValue::Integer)
+                                        })
                                         .map_err(StoreError::backend)
                                 } else {
                                     row.try_get::<Option<String>, _>(column.name())

@@ -3,13 +3,10 @@
 use crate::native_fleet as fleet_fixture;
 pub(super) use fleet_fixture::Fixture as FleetFixture;
 
-use collaboration_central_core::{
-    CoreHost, ObjectAddress, ObjectRuntime, PlatformIo, RegistryKind,
-};
+use collaboration_central_core::{CoreHost, ObjectAddress, ObjectRuntime, PlatformIo};
 use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{BoxFuture, CallFailure};
 use fleet_sync_lease::{LeasePolicy, RegistryConfig};
-use fleet_sync_protocol::ReceiverId;
 use fleet_sync_tokio_runner::{ObjectKey, ObjectStore};
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use serde_json::Value;
@@ -23,8 +20,11 @@ use std::{
 
 pub(super) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 pub(super) type RegistryStore = fleet_sync_tokio_runner::TokioObject<CoreHost<RoutingIo>>;
-pub(super) type RegistryRuntime =
-    ObjectRuntime<RegistryKind, TokioStorageHost<CoreHost<RoutingIo>>, RoutingIo>;
+pub(super) type RegistryRuntime = ObjectRuntime<
+    collaboration_central_core::FleetKind,
+    TokioStorageHost<CoreHost<RoutingIo>>,
+    RoutingIo,
+>;
 
 pub(super) struct RegistryFixture {
     pub root: tempfile::TempDir,
@@ -60,14 +60,14 @@ impl RegistryFixture {
                 lease_duration: Duration::from_secs(60),
                 renew_interval: Duration::from_secs(20),
             },
-            authoritative_receiver: ReceiverId::new(durable_steps::Uuid::now_v7())?,
+            authoritative_receiver: fleet.receiver,
             release_unsent_for: Duration::from_secs(10),
             move_needs_renewal_within: None,
         };
         let objects = ObjectStore::open(root.path()).await?;
         let registry = objects
             .object(
-                ObjectKey::new("registry")?,
+                ObjectKey::new("fleet")?,
                 Default::default(),
                 Arc::new(CoreHost::for_store(
                     io.clone(),
@@ -75,7 +75,7 @@ impl RegistryFixture {
                 )),
             )
             .await?;
-        let runtime = ObjectRuntime::registry(
+        let runtime = ObjectRuntime::fleet(
             Arc::new(TokioStorageHost::new(registry.clone())),
             io.clone(),
             config,
@@ -84,6 +84,7 @@ impl RegistryFixture {
                     "019f0000-0000-7000-8000-000000005240".to_owned(),
                 )?,
             },
+            std::time::Duration::from_secs(2),
         )?;
         runtime.initialize().await?;
         Ok(Self {
@@ -141,6 +142,13 @@ impl WakeScheduler for RoutingIo {
     }
 }
 impl PlatformIo for RoutingIo {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     async fn object_call(
         &self,
         destination: ObjectAddress,

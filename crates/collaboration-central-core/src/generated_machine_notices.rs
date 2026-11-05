@@ -9,39 +9,46 @@ use sqlx_core::{
 
 #[derive(Debug)]
 pub(crate) struct StoredMachineNoticeState {
-    pub state_id: Option<String>,
-    pub name: Option<String>,
+    pub machine_id: Option<String>,
     pub last_position: Option<String>,
     pub position_class: Option<String>,
     pub pruned_through: Option<String>,
     pub floor_class: Option<String>,
-    pub peer_id: Option<String>,
+    pub created_at: Option<String>,
+    pub created_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_class: Option<String>,
 }
 pub(crate) fn read_machine_notice_state<S>(
     scope: &mut S,
+    machine_id: String,
 ) -> impl std::future::Future<Output = Result<Vec<StoredMachineNoticeState>, sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
     for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
     for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
         let statement = query::<S::Database>(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/sql/machine_notices/read_machine_notice_state.sql"
-        )));
+        )))
+        .bind(machine_id);
         let rows = statement.fetch_all(scope.executor()).await?;
         rows.iter()
             .map(|row| {
                 Ok(StoredMachineNoticeState {
-                    state_id: row.try_get("state_id")?,
-                    name: row.try_get("name")?,
+                    machine_id: row.try_get("machine_id")?,
                     last_position: row.try_get("last_position")?,
                     position_class: row.try_get("position_class")?,
                     pruned_through: row.try_get("pruned_through")?,
                     floor_class: row.try_get("floor_class")?,
-                    peer_id: row.try_get("peer_id")?,
+                    created_at: row.try_get("created_at")?,
+                    created_class: row.try_get("created_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_class: row.try_get("updated_class")?,
                 })
             })
             .collect()
@@ -49,7 +56,8 @@ where
 }
 pub(crate) fn initialize_machine_notice_state<S>(
     scope: &mut S,
-    state_id: String,
+    machine_id: String,
+    now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -61,33 +69,46 @@ where
             env!("CARGO_MANIFEST_DIR"),
             "/sql/machine_notices/initialize_machine_notice_state.sql"
         )))
-        .bind(state_id);
+        .bind(machine_id)
+        .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
 }
-pub(crate) fn remember_machine_notice_peer<S>(
+
+#[derive(Debug)]
+pub(crate) struct MachineNoticePeer {
+    pub machine_id: Option<String>,
+}
+pub(crate) fn read_machine_notice_peers<S>(
     scope: &mut S,
-    peer: String,
-) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+) -> impl std::future::Future<Output = Result<Vec<MachineNoticePeer>, sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
 {
     async move {
         let statement = query::<S::Database>(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/sql/machine_notices/remember_machine_notice_peer.sql"
-        )))
-        .bind(peer);
-        statement.execute(scope.executor()).await?;
-        Ok(())
+            "/sql/machine_notices/read_machine_notice_peers.sql"
+        )));
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(MachineNoticePeer {
+                    machine_id: row.try_get("machine_id")?,
+                })
+            })
+            .collect()
     }
 }
 pub(crate) fn advance_machine_notice_head<S>(
     scope: &mut S,
     position: String,
+    now: String,
+    machine_id: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -99,7 +120,9 @@ where
             env!("CARGO_MANIFEST_DIR"),
             "/sql/machine_notices/advance_machine_notice_head.sql"
         )))
-        .bind(position);
+        .bind(position)
+        .bind(now)
+        .bind(machine_id);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -107,6 +130,8 @@ where
 pub(crate) fn advance_machine_notice_floor<S>(
     scope: &mut S,
     position: String,
+    now: String,
+    machine_id: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -118,7 +143,9 @@ where
             env!("CARGO_MANIFEST_DIR"),
             "/sql/machine_notices/advance_machine_notice_floor.sql"
         )))
-        .bind(position);
+        .bind(position)
+        .bind(now)
+        .bind(machine_id);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -126,14 +153,20 @@ where
 pub(crate) fn append_machine_notice<S>(
     scope: &mut S,
     notice_id: String,
+    machine_id: String,
     position: String,
     kind: String,
+    board_id: Option<String>,
+    project_id: Option<String>,
+    epoch: Option<String>,
+    feed_through: Option<String>,
     created_at: String,
     expires_at: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
     for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
@@ -142,8 +175,13 @@ where
             "/sql/machine_notices/append_machine_notice.sql"
         )))
         .bind(notice_id)
+        .bind(machine_id)
         .bind(position)
         .bind(kind)
+        .bind(board_id)
+        .bind(project_id)
+        .bind(epoch)
+        .bind(feed_through)
         .bind(created_at)
         .bind(expires_at);
         statement.execute(scope.executor()).await?;
@@ -154,16 +192,24 @@ where
 #[derive(Debug)]
 pub(crate) struct StoredMachineNotice {
     pub notice_id: Option<String>,
+    pub machine_id: Option<String>,
     pub position: Option<String>,
     pub position_class: Option<String>,
     pub kind: Option<String>,
+    pub board_id: Option<String>,
+    pub project_id: Option<String>,
+    pub epoch: Option<String>,
+    pub feed_through: Option<String>,
     pub created_at: Option<String>,
     pub created_class: Option<String>,
     pub expires_at: Option<String>,
     pub expiry_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_class: Option<String>,
 }
 pub(crate) fn read_machine_notices<S>(
     scope: &mut S,
+    machine_id: String,
     after: String,
 ) -> impl std::future::Future<Output = Result<Vec<StoredMachineNotice>, sqlx_core::Error>> + Send
 where
@@ -178,19 +224,27 @@ where
             env!("CARGO_MANIFEST_DIR"),
             "/sql/machine_notices/read_machine_notices.sql"
         )))
+        .bind(machine_id)
         .bind(after);
         let rows = statement.fetch_all(scope.executor()).await?;
         rows.iter()
             .map(|row| {
                 Ok(StoredMachineNotice {
                     notice_id: row.try_get("notice_id")?,
+                    machine_id: row.try_get("machine_id")?,
                     position: row.try_get("position")?,
                     position_class: row.try_get("position_class")?,
                     kind: row.try_get("kind")?,
+                    board_id: row.try_get("board_id")?,
+                    project_id: row.try_get("project_id")?,
+                    epoch: row.try_get("epoch")?,
+                    feed_through: row.try_get("feed_through")?,
                     created_at: row.try_get("created_at")?,
                     created_class: row.try_get("created_class")?,
                     expires_at: row.try_get("expires_at")?,
                     expiry_class: row.try_get("expiry_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_class: row.try_get("updated_class")?,
                 })
             })
             .collect()
@@ -198,6 +252,7 @@ where
 }
 pub(crate) fn read_expired_machine_notices<S>(
     scope: &mut S,
+    machine_id: String,
     now: String,
 ) -> impl std::future::Future<Output = Result<Vec<StoredMachineNotice>, sqlx_core::Error>> + Send
 where
@@ -212,19 +267,27 @@ where
             env!("CARGO_MANIFEST_DIR"),
             "/sql/machine_notices/read_expired_machine_notices.sql"
         )))
+        .bind(machine_id)
         .bind(now);
         let rows = statement.fetch_all(scope.executor()).await?;
         rows.iter()
             .map(|row| {
                 Ok(StoredMachineNotice {
                     notice_id: row.try_get("notice_id")?,
+                    machine_id: row.try_get("machine_id")?,
                     position: row.try_get("position")?,
                     position_class: row.try_get("position_class")?,
                     kind: row.try_get("kind")?,
+                    board_id: row.try_get("board_id")?,
+                    project_id: row.try_get("project_id")?,
+                    epoch: row.try_get("epoch")?,
+                    feed_through: row.try_get("feed_through")?,
                     created_at: row.try_get("created_at")?,
                     created_class: row.try_get("created_class")?,
                     expires_at: row.try_get("expires_at")?,
                     expiry_class: row.try_get("expiry_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_class: row.try_get("updated_class")?,
                 })
             })
             .collect()
@@ -232,6 +295,7 @@ where
 }
 pub(crate) fn prune_machine_notices<S>(
     scope: &mut S,
+    machine_id: String,
     through: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
@@ -244,6 +308,7 @@ where
             env!("CARGO_MANIFEST_DIR"),
             "/sql/machine_notices/prune_machine_notices.sql"
         )))
+        .bind(machine_id)
         .bind(through);
         statement.execute(scope.executor()).await?;
         Ok(())
@@ -288,18 +353,21 @@ pub(crate) struct MachineNoticeBounds {
 }
 pub(crate) fn read_machine_notice_bounds<S>(
     scope: &mut S,
+    machine_id: String,
 ) -> impl std::future::Future<Output = Result<Option<MachineNoticeBounds>, sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
     for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
     for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
         let statement = query::<S::Database>(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/sql/machine_notices/read_machine_notice_bounds.sql"
-        )));
+        )))
+        .bind(machine_id);
         let row = statement.fetch_optional(scope.executor()).await?;
         row.as_ref()
             .map(|row| {

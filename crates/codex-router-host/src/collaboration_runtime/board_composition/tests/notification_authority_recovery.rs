@@ -6,7 +6,7 @@ use fleet_sync_protocol::{
     CommitSequence, DeliveryStatus, Epoch, LeaseRefusal, LeaseState, LeaseStatus, RenewAnswer,
     RenewResult, ReplicationPosition,
 };
-use runtime_primitives::{Clock, SyncTime, SystemClock};
+use runtime_primitives::{Clock, SystemClock};
 use std::{collections::BTreeMap, io::Write};
 use tracing::field::{Field, Visit};
 use tracing_subscriber::{Layer, layer::Context, prelude::*};
@@ -171,14 +171,14 @@ async fn assert_recovery() -> Result<(), TestError> {
         Some(1)
     );
     let database = fixture.harness.registry.database(&fixture.project).await?;
-    let started = SyncTime::from_unix_millis(SystemClock.now().unix_millis() - 120_000);
+    let started = SystemClock.now();
     let old = LeaseStatus {
         database: database.database(),
         epoch: Epoch::new(fixture.seed_epoch.get())?,
         holder: fixture.harness.peer(),
         state: LeaseState::Held,
-        expires_at: started.after(Duration::from_secs(60)),
-        remaining_ms: 60_000,
+        expires_at: started,
+        remaining_ms: 0,
     };
     database
         .observe_renewal(

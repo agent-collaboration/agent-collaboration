@@ -135,6 +135,7 @@ fn rejected_before_submission(rejection: &MessageFailure) -> bool {
     match rejection.kind {
         MessageFailureKind::ItemConflict
         | MessageFailureKind::MailboxFull
+        | MessageFailureKind::TooOld
         | MessageFailureKind::InvalidShape
         | MessageFailureKind::InvalidField
         | MessageFailureKind::WrongService
@@ -166,3 +167,7 @@ impl schemars::JsonSchema for UndecodedMessageSend {
         <MessageSendRequest as schemars::JsonSchema>::json_schema(generator)
     }
 }
+
+#[cfg(test)]
+#[path = "message_tools_test.rs"]
+mod tests;

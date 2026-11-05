@@ -22,6 +22,11 @@
           "name": "state_id",
           "kind": "text",
           "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
         }
       ]
     },
@@ -35,6 +40,11 @@
           "name": "position",
           "kind": "text",
           "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
         }
       ]
     },
@@ -46,6 +56,11 @@
       "parameters": [
         {
           "name": "position",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
           "kind": "text",
           "nullable": false
         }
@@ -63,9 +78,64 @@
           "nullable": false
         },
         {
-          "name": "payload",
+          "name": "position",
           "kind": "text",
           "nullable": false
+        },
+        {
+          "name": "record_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "record_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "workspace_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "board_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "actor_human_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_service_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_endpoint_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_session_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_router_component",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "envelope_request_id",
+          "kind": "text",
+          "nullable": true
         },
         {
           "name": "router_time",
@@ -78,9 +148,114 @@
           "nullable": false
         },
         {
+          "name": "origin_installation",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_machine",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
           "name": "as_of",
           "kind": "text",
           "nullable": false
+        },
+        {
+          "name": "name",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "description",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "workspace_state",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "repository_count",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "board_kind",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "initiative_goal",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "initiative_done_when",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "board_state",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "project_title",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "adr_title",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "adr_text",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "adr_status",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "supersedes_adr_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "made_in_kind",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "made_in_record_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "adr_revision",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "repository_file_count",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "ledger_request_id",
+          "kind": "text",
+          "nullable": true
         }
       ]
     },
@@ -153,6 +328,11 @@
         },
         {
           "name": "position",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
           "kind": "text",
           "nullable": false
         }

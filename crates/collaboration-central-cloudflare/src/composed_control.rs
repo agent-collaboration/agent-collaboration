@@ -8,6 +8,7 @@ use worker::{Env, Headers, Method, Request, RequestInit, Response, Result};
 pub(crate) const CONTROL_PATH: &str = "/admin/v1/conformance/runtime";
 pub(crate) const OBJECT_PATH: &str = "/test/runtime-control";
 pub(crate) const CLOCK_KEY: &str = "_cf_composed_clock";
+pub(crate) const PROJECT_FAULT_KEY: &str = "_cf_composed_project_unavailable";
 
 pub(crate) async fn fetch(mut request: Request, env: Env) -> Result<Response> {
     let labels = access_verification::InvocationLabels::for_request(&request)?;

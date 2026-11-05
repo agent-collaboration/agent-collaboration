@@ -35,16 +35,8 @@ pub(super) async fn operation(socket: &mut WebSocket, body: Value) -> Conformanc
                     body: ServerRequest::Crate(ServerCall::PublishStatus { .. }),
                     ..
                 } => {}
-                // Mailbox custody also journals a recipient-only wake hint.
-                // The real Router's SessionPump routes notices independently
-                // from pending answers; this helper preserves that interleaving.
-                ServerFrame::Notice {
-                    body: fleet_sync_protocol::Notice::Consumer(notice),
-                    ..
-                } if matches!(
-                    notice.kind,
-                    board_sync_protocol::BoardNotice::MailWaiting { .. }
-                ) => {}
+                // Control notices remain independent of this request/answer.
+                ServerFrame::Notice { .. } => {}
                 _ => return Err(format!("mail relay lost frame correlation: {answer}").into()),
             }
         }

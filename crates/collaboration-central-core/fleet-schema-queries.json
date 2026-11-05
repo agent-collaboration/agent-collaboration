@@ -1,0 +1,6 @@
+{
+  "migrations": ["core_migrations"],
+  "output": "src/generated_fleet_schema.rs",
+  "metadata": "fleet-schema-query-metadata.json",
+  "queries": [{"name":"read_fleet_schema","sql":"sql/read_fleet_schema.sql","row":"StoredSchemaObject","result":"many","parameters":[]}]
+}

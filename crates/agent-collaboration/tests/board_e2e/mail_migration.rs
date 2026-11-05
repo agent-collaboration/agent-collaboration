@@ -9,7 +9,6 @@ use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../automation-storage/migrations");
 const PRE_WAKE_VERSION: i64 = 20_261_015_000_200;
-const TERMINAL_ITEM: &str = "019f0000-0000-7000-8000-000000000101";
 const TERMINAL_TEXT: &str = "LM01 terminal message stays terminal through legacy wake migration";
 const OLDER: &str = "019f0000-0000-7000-8000-000000000111";
 const NEWEST: &str = "019f0000-0000-7000-8000-000000000112";
@@ -172,24 +171,26 @@ async fn stopped_migration_readback(suite: &MailFixture) -> FixtureResult {
 }
 
 pub async fn legacy_migration(suite: &mut MailFixture) -> FixtureResult {
-    let original = cli_send(suite, TERMINAL_ITEM, TERMINAL_TEXT).await?;
+    let terminal_identity = super::mail_fixture::identity();
+    let terminal_item = terminal_identity.as_str();
+    let original = cli_send(suite, terminal_item, TERMINAL_TEXT).await?;
     suite.peer_mut()?.expect_marker(TERMINAL_TEXT).await?;
     assert_eq!(suite.peer()?.count_after_barrier().await?, 1);
     suite.stop_host().await?;
-    terminal_readback(suite, TERMINAL_ITEM, &original).await?;
+    terminal_readback(suite, terminal_item, &original).await?;
     historical_store(suite).await?;
     let before = chrono::Utc::now().timestamp_millis();
     suite.reopen_host().await?;
     let after = chrono::Utc::now().timestamp_millis();
     let snapshots = observe_wakes(suite, before, after).await?;
     assert_eq!(
-        cli_send(suite, TERMINAL_ITEM, TERMINAL_TEXT).await?,
+        cli_send(suite, terminal_item, TERMINAL_TEXT).await?,
         original
     );
     assert_eq!(suite.peer()?.count_after_barrier().await?, 1);
     suite.stop_host().await?;
     stopped_migration_readback(suite).await?;
-    terminal_readback(suite, TERMINAL_ITEM, &original).await?;
+    terminal_readback(suite, terminal_item, &original).await?;
     suite.reopen_host().await?;
     let reopened = observe_wakes(suite, before, after).await?;
     for (first, second) in snapshots.iter().zip(&reopened) {
@@ -201,7 +202,7 @@ pub async fn legacy_migration(suite: &mut MailFixture) -> FixtureResult {
         assert_eq!(at(first, "/state")?, at(second, "/state")?);
     }
     assert_eq!(
-        cli_send(suite, TERMINAL_ITEM, TERMINAL_TEXT).await?,
+        cli_send(suite, terminal_item, TERMINAL_TEXT).await?,
         original
     );
     assert_eq!(suite.peer()?.count_after_barrier().await?, 1);

@@ -169,6 +169,10 @@ async fn records_sequential_admission_costs_at_held_depths_and_the_real_capacity
 -> Result<(), TestError> {
     let counter = held_queue_counter::SqlCounter::default();
     counter.install();
+    assert!(
+        !tracing::enabled!(target: "turso_core::vdbe", tracing::Level::TRACE),
+        "SQL measurements must not enable Turso's per-opcode traced interpreter"
+    );
     let fixture = BoardFixture::start_replay().await?;
     let automation = Arc::new(Mutex::new(
         AutomationStore::open(&fixture._directory.path().join("automation.sqlite")).await?,

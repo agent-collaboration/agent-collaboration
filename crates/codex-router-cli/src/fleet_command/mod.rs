@@ -65,14 +65,18 @@ enum FileStatus {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct StatusReply {
     status: FileStatus,
     activation: Activation,
+    restart_instruction: Option<&'static str>,
 }
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct EnrollmentReply {
     decision: EnrollmentDecision,
     activation: Activation,
+    restart_instruction: Option<&'static str>,
 }
 
 pub(crate) async fn run_fleet_command(
@@ -93,16 +97,10 @@ pub(crate) async fn run_fleet_command(
                     "--router-root must be absolute",
                 ));
             }
-            let status = tokio::task::spawn_blocking(move || inspect(root))
+            let status = tokio::task::spawn_blocking(move || inspect_status(root))
                 .await
                 .map_err(|_| FleetCommandError::LocalTask)?;
-            output(
-                stdout,
-                &StatusReply {
-                    status,
-                    activation: Activation::NextRouterStart,
-                },
-            )
+            output(stdout, &status)
         }
         FleetCommand::Enroll(arguments) => {
             let context = context.clone();
@@ -128,11 +126,37 @@ pub(crate) async fn run_fleet_command(
             output(
                 stdout,
                 &EnrollmentReply {
+                    restart_instruction: matches!(
+                        &decision,
+                        EnrollmentDecision::MachineEnrolled { .. }
+                    )
+                    .then_some(codex_router_host::ENROLLMENT_RESTART_INSTRUCTION),
                     decision,
                     activation: Activation::NextRouterStart,
                 },
             )
         }
+    }
+}
+
+fn inspect_status(root: PathBuf) -> StatusReply {
+    let (status, restart_instruction) =
+        match codex_router_host::fleet_enrollment_restart_required(&root) {
+            Ok(pending) => (
+                inspect(root),
+                pending.then_some(codex_router_host::ENROLLMENT_RESTART_INSTRUCTION),
+            ),
+            Err(_) => (
+                FileStatus::Invalid {
+                    message: "enrollment reset journal is invalid or unavailable",
+                },
+                Some(codex_router_host::ENROLLMENT_RESTART_INSTRUCTION),
+            ),
+        };
+    StatusReply {
+        status,
+        activation: Activation::NextRouterStart,
+        restart_instruction,
     }
 }
 

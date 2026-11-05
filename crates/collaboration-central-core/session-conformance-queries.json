@@ -1,5 +1,8 @@
 {
-  "migrations": ["session_migrations"],
+  "migrations": [
+    "registry_migrations",
+    "session_migrations"
+  ],
   "output": "src/generated_session_conformance.rs",
   "metadata": "session-conformance-query-metadata.json",
   "queries": [
@@ -15,7 +18,13 @@
       "sql": "sql/session_conformance/sql_failure.sql",
       "row": "SessionConformanceSqlResult",
       "result": "optional",
-      "parameters": [{"name":"value","kind":"text","nullable":false}]
+      "parameters": [
+        {
+          "name": "value",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
     }
   ]
 }

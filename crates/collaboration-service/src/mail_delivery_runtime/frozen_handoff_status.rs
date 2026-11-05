@@ -1,14 +1,10 @@
-//! Frontier observations and acknowledged retirement use public SDK custody operations.
+//! Acknowledged project cleanup releases its frontier while custody keeps its 60-day record.
 use super::{
-    AtomicStore, DeliveryItemRef, Inbox, ItemId, MailDeliveryRuntime, PeerId, RecipientOutcome,
-    RemoteCancelReplay, RouterDeliveryTypes, StoreError,
+    AtomicStore, Clock, DeliveryItemRef, Inbox, ItemId, MailDeliveryRuntime, PeerId,
+    RecipientOutcome, RemoteCancelReplay, RouterDeliveryTypes, StoreError,
 };
 use board_sync_protocol::BoardDeliveryTypes;
-use fleet_sync_delivery::LocalRetirement;
-use fleet_sync_protocol::{
-    DeliveryAnswer, DeliveryEnvelope, DeliveryRequest, ItemStatusState, OperationAnswer,
-    OperationRequest,
-};
+use fleet_sync_protocol::{DeliveryEnvelope, ItemStatusState};
 
 impl MailDeliveryRuntime {
     pub(crate) async fn await_native_outcome_commit(&self, item: ItemId) -> Result<(), StoreError> {
@@ -38,8 +34,9 @@ impl MailDeliveryRuntime {
             }
             let id = item.id();
             let config = self.config;
+            let binding = self.binding.clone();
             return self.store.transaction(move |scope| Box::pin(async move {
-                let outcome = Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
+                let outcome = Inbox::<_, RouterDeliveryTypes, _>::new(scope, config.owner, config.limits, binding.as_ref())
                     .local_outcome(id).await.map_err(StoreError::backend)?;
                 Ok(matches!(outcome, Some(outcome) if !matches!(outcome, RecipientOutcome::Held)))
             })).await;
@@ -59,6 +56,9 @@ impl MailDeliveryRuntime {
         let DeliveryEnvelope::Item(item) = envelope else {
             return Err(StoreError::backend("retired handoff is not an original"));
         };
+        if self.host.now() >= fleet_sync_delivery::removal_deadline(item.id()) {
+            return Ok(true);
+        }
         let reference = DeliveryItemRef {
             item: item.id(),
             digest: item.digest().clone(),
@@ -67,30 +67,9 @@ impl MailDeliveryRuntime {
             if item.recipient().peer != self.config.owner {
                 return Err(StoreError::backend("local retirement peer"));
             }
-            let config = self.config;
-            return self
-                .store
-                .transaction(move |scope| {
-                    Box::pin(async move {
-                        let retired = Inbox::<_, RouterDeliveryTypes>::new(
-                            scope,
-                            config.owner,
-                            config.limits,
-                        )
-                        .retire_local(&reference)
-                        .await
-                        .map_err(StoreError::backend)?;
-                        // The acknowledged frontier supplies eligibility, including on a
-                        // replay after deletion committed but native progress did not.
-                        Ok(matches!(
-                            retired,
-                            LocalRetirement::Retired | LocalRetirement::Absent
-                        ))
-                    })
-                })
-                .await;
+            return self.frozen_delivery_is_terminal(envelope).await;
         }
-        self.retire_remote_reference(item.recipient().peer, &reference)
+        self.remote_reference_is_terminal(item.recipient().peer, &reference)
             .await
     }
 
@@ -106,6 +85,9 @@ impl MailDeliveryRuntime {
             // The public local retirement contract intentionally retains controls.
             return Ok(control.recipient().peer == self.config.owner);
         }
+        if self.host.now() >= fleet_sync_delivery::removal_deadline(control.id()) {
+            return Ok(true);
+        }
         let Some(canonical) = self
             .remote_frozen_cancel_reference(control, RemoteCancelReplay::Eligible { epoch })
             .await?
@@ -116,11 +98,11 @@ impl MailDeliveryRuntime {
             // Decision 949: an earlier requested control is not this group's custody.
             return Ok(true);
         }
-        self.retire_remote_reference(control.recipient().peer, &canonical)
+        self.remote_reference_is_terminal(control.recipient().peer, &canonical)
             .await
     }
 
-    async fn retire_remote_reference(
+    async fn remote_reference_is_terminal(
         &self,
         mailbox: PeerId,
         reference: &DeliveryItemRef,
@@ -130,35 +112,6 @@ impl MailDeliveryRuntime {
         {
             return Ok(false);
         }
-        let session = self
-            .session
-            .as_ref()
-            .ok_or_else(|| StoreError::backend("retirement session missing"))?;
-        let answer = session
-            .requests
-            .request(OperationRequest::Delivery(DeliveryRequest::Retire {
-                call: super::remote_status::status_call("frozen-item-retire")?,
-                mailbox,
-                items: vec![reference.item],
-            }))
-            .await
-            .map_err(StoreError::backend)?;
-        let OperationAnswer::Delivery(DeliveryAnswer::Retire(answer)) = answer else {
-            return Err(StoreError::backend("frozen retirement answer"));
-        };
-        let exact = |items: &[ItemId]| items == [reference.item];
-        if exact(&answer.retired)
-            && answer.unknown.is_empty()
-            && answer.not_current_target.is_empty()
-        {
-            return Ok(true);
-        }
-        if answer.retired.is_empty()
-            && ((exact(&answer.unknown) && answer.not_current_target.is_empty())
-                || (exact(&answer.not_current_target) && answer.unknown.is_empty()))
-        {
-            return Ok(false);
-        }
-        Err(StoreError::backend("frozen retirement identities"))
+        Ok(true)
     }
 }

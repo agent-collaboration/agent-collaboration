@@ -2,7 +2,7 @@
 #![cfg(feature = "conformance")]
 
 use collaboration_central_conformance::{
-    ConformanceResult, JwksFixtureServer, fixture_policy, owner_assertion,
+    ConformanceClient, ConformanceResult, JwksFixtureServer, fixture_policy, owner_assertion,
 };
 use collaboration_central_core::{
     AdminImportHeader, AdminImportPhase, AdminImportRefusal, AdminProjectImportAnswer,
@@ -130,6 +130,22 @@ async fn reservation_and_seed_identity_survive_reopen_without_reporting_completi
     let jwks = JwksFixtureServer::start().await?;
     let server = start(directory.path(), &jwks).await?;
     let offered = header()?;
+    // UpgradePublisher publishes the Fleet graph before importing its projects.
+    // The lease hook now commits that project's directory view with every lifecycle change.
+    let graph = serde_json::from_value(serde_json::json!({
+        "provenance":offered.provenance,"declaredOwner":offered.declared_owner,
+        "records":[
+            {"kind":"workspace","id":"019f0000-0000-7000-8000-000000000611","name":"reservation workspace","description":"real import parent","repositories":[],"time":{"kind":"legacyUnknown"}},
+            {"kind":"board","id":"019f0000-0000-7000-8000-000000000612","workspace":"019f0000-0000-7000-8000-000000000611","name":"reservation board","description":"real import parent","state":"active","time":{"kind":"legacyUnknown"}},
+            {"kind":"directory","project":PROJECT,"board":"019f0000-0000-7000-8000-000000000612","title":"reservation project","time":{"kind":"legacyUnknown"}}
+        ]
+    }))?;
+    assert!(matches!(
+        ConformanceClient::new(server.base_url())?
+            .import_fleet(&graph)
+            .await?,
+        fleet_admission::FleetImportResult::Imported { .. }
+    ));
     let first = async {
         let identity = begin(&server, &offered).await?;
         assert_eq!(begin(&server, &offered).await?, identity);
@@ -190,7 +206,7 @@ async fn reservation_and_seed_identity_survive_reopen_without_reporting_completi
         assert_eq!(request(&reopened, &page).await?, staged);
         assert_eq!(request(&reopened, &page).await?, staged);
         let page_sql = "SELECT json_object('seed',seed,'page',page,'digest',digest,'payload',payload) AS snapshot FROM _fleet_sync_seed_pages ORDER BY page";
-        let workflow_sql = "SELECT json_object('importId',import_id,'project',project_id,'digest',digest,'header',header,'phase',phase) AS snapshot FROM admin_imports ORDER BY import_id";
+        let workflow_sql = "SELECT json_array(import_id,project_id,digest,provenance_installation,provenance_machine,declared_owner,manifest_epoch,manifest_sequence,schema_version,schema_fingerprint,pages,manifest_table_count,summary_kind,summary_time_basis,summary_record_at,phase_kind,published_epoch,published_sequence,created_at,updated_at) AS snapshot FROM fleet_admin_imports ORDER BY import_id";
         let copy = format!("copy-{PROJECT}");
         let pages_before = durable_rows(directory.path(), &copy, page_sql).await?;
         let workflow_before = durable_rows(directory.path(), "fleet", workflow_sql).await?;

@@ -19,6 +19,9 @@ pub(crate) struct SessionConnectionObservation {
 }
 
 impl SessionConnectionObservation {
+    pub(crate) fn belongs_to(&self, installation: &message_board::ServiceId) -> bool {
+        &self.admission_origin.installation == installation
+    }
     pub(crate) fn connection(&self) -> ConnectionId {
         self.connection
     }

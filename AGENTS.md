@@ -10,6 +10,11 @@ After reducing cycles or their edges, update `architecture/module-cycle-baseline
 - No Python in this repository. Write code in TypeScript or Rust; for any
   other language, ask the owner first.
 
+## Identifiers
+
+- Every identifier we generate is UUIDv7. Never UUIDv4.
+- Every table has a UUIDv7 primary key and `created_at` / `updated_at` timestamps, unless a really good reason is written next to the table. A key that is already UUIDv7 stays the key; any other key becomes a UNIQUE constraint; counters are ordinary columns.
+
 ## Rust Test Layout
 
 - Colocate unit tests with their implementation in `*_test.rs` files.

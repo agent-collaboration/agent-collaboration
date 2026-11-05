@@ -31,6 +31,11 @@ pub(crate) fn mount(
         Router::new()
             .route(ROUTE, post(control))
             .route(
+                collaboration_central_core::FLEET_MAIL_CUSTODY_PATH,
+                post(mail_custody),
+            )
+            .route("/__conformance/admission", post(admission))
+            .route(
                 collaboration_central_core::FORWARD_STATE_PATH,
                 post(forward_state),
             )
@@ -39,6 +44,77 @@ pub(crate) fn mount(
                 platform,
             })),
     ))
+}
+
+async fn mail_custody(
+    State(controls): State<Arc<Controls>>,
+    headers: HeaderMap,
+    Json(request): Json<collaboration_central_core::FleetMailCustodyRequest>,
+) -> Response {
+    let assertion = headers
+        .get("Cf-Access-Jwt-Assertion")
+        .and_then(|value| value.to_str().ok());
+    match controls
+        .application
+        .verify_access(
+            assertion,
+            collaboration_central_core::FLEET_MAIL_CUSTODY_PATH,
+        )
+        .await
+    {
+        Ok(AccessCaller::Owner { .. }) => {}
+        Ok(_) => return StatusCode::UNAUTHORIZED.into_response(),
+        Err(refusal) => return (StatusCode::UNAUTHORIZED, Json(refusal)).into_response(),
+    }
+    match controls
+        .platform
+        .conformance_mail_custody(request.item)
+        .await
+    {
+        Ok(observed) => Json(observed).into_response(),
+        Err(error) => (StatusCode::CONFLICT, Json(error.to_string())).into_response(),
+    }
+}
+
+#[derive(serde::Deserialize)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "camelCase",
+    deny_unknown_fields
+)]
+enum AdmissionObservation {
+    SessionConnections {
+        service: Option<message_board::ServiceId>,
+    },
+}
+
+async fn admission(
+    State(controls): State<Arc<Controls>>,
+    headers: HeaderMap,
+    Json(request): Json<AdmissionObservation>,
+) -> Response {
+    let assertion = headers
+        .get("Cf-Access-Jwt-Assertion")
+        .and_then(|value| value.to_str().ok());
+    match controls
+        .application
+        .verify_access(assertion, "/admin/v1/conformance")
+        .await
+    {
+        Ok(AccessCaller::Owner { .. }) => {}
+        Ok(_) => return StatusCode::UNAUTHORIZED.into_response(),
+        Err(refusal) => return (StatusCode::UNAUTHORIZED, Json(refusal)).into_response(),
+    }
+    let AdmissionObservation::SessionConnections { service } = request;
+    match controls
+        .platform
+        .conformance_session_connections(service.as_ref())
+        .await
+    {
+        Ok(connections) => Json(connections).into_response(),
+        Err(error) => (StatusCode::CONFLICT, Json(error.to_string())).into_response(),
+    }
 }
 async fn control(
     State(controls): State<Arc<Controls>>,

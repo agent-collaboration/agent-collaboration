@@ -1,19 +1,11 @@
-//! Sender query, retirement and settlement use the authenticated Registry mapping.
+//! Sender reconciliation reads and settles Fleet custody under authenticated authority.
 use crate::{
-    CallerKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
-    caller_context::CallAuthority,
-    mailbox_requests::{MailboxRelayRequest, MailboxRequest},
-    object_call_envelope::{ObjectCallEnvelope, encode_refusal},
-    object_runtime::ObjectWork,
     registry_peer_lookup::service_for_peer,
-    step_driver::{StepCallback, StepDriver, StepResult},
+    step_driver::{StepCallback, StepResult},
 };
 use board_sync_protocol::BoardDeliveryTypes;
-use durable_steps::{
-    AtomicStore, BoxFuture, CallFailure, CallTarget, Host as _, NotSentReason,
-    storage::TransactionScope,
-};
-use fleet_sync_protocol::{DeliveryAnswer, DeliveryRefusal, DeliveryRequest};
+use durable_steps::{AtomicStore, BoxFuture, CallTarget, storage::TransactionScope};
+use fleet_sync_protocol::{DeliveryAnswer, DeliveryRequest};
 use fleet_sync_session::SessionKey;
 use message_board::ServiceId;
 use serde::{Deserialize, Serialize};
@@ -23,90 +15,34 @@ use sqlx_core::{
 };
 use std::convert::Infallible;
 
+#[cfg(test)]
+#[path = "mail_sender_calls_test.rs"]
+mod tests;
 #[derive(Serialize, Deserialize)]
-pub(crate) struct SenderMailboxRegistry;
+pub(crate) struct SenderFleetMail;
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct SenderMailboxRequest {
+pub(crate) struct SenderMailRequest {
     pub session: SessionKey,
     pub request: Box<DeliveryRequest<BoardDeliveryTypes>>,
 }
-impl CallTarget for SenderMailboxRegistry {
-    const KIND: &'static str = "central.sender-mailbox";
-    type Request = SenderMailboxRequest;
+impl CallTarget for SenderFleetMail {
+    const KIND: &'static str = "central.sender-mail";
+    type Request = SenderMailRequest;
     type Answer = DeliveryAnswer<BoardDeliveryTypes>;
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
-where
-    for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
-        TransactionScope<Database = Host::Database>,
-    <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
-    for<'value> String:
-        Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
-    for<'value> Option<String>:
-        Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
-    for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
-{
-    pub(crate) async fn sender_mailbox_call(
-        &self,
-        invocation: ObjectCallEnvelope,
-    ) -> Result<Vec<u8>, CallFailure> {
-        if invocation.source_face != CallerKind::Session
-            || !matches!(invocation.authority, CallAuthority::Object)
-        {
-            return Err(refused());
-        }
-        let ObjectAddress::Connection(source) = invocation.source else {
-            return Err(refused());
-        };
-        let _: SenderMailboxRegistry =
-            serde_json::from_value(invocation.target).map_err(encode_refusal)?;
-        let request: SenderMailboxRequest =
-            serde_json::from_value(invocation.request).map_err(encode_refusal)?;
-        if request.request.call() != &invocation.identity {
-            return Err(refused());
-        }
-        let ObjectWork::Registry {
-            host, shared_host, ..
-        } = &self.work
-        else {
-            return Err(refused());
-        };
-        let (route, _) = StepDriver::new(host.clone())
-            .run(SenderMailboxRoute {
-                source,
-                input: request,
-            })
-            .await
-            .map_err(|_| CallFailure::AnswerLost)?;
-        let answer = match route {
-            SenderRoute::Refused => return Err(refused()),
-            SenderRoute::UnknownRecipient => DeliveryAnswer::MailboxUnavailable {
-                reason: DeliveryRefusal::RecipientUnknown,
-            },
-            SenderRoute::Mailbox { target, request } => {
-                shared_host
-                    .dispatch(target, request, invocation.identity)
-                    .await?
-            }
-        };
-        serde_json::to_vec(&answer).map_err(|_| CallFailure::AnswerLost)
-    }
-}
-enum SenderRoute {
+pub(crate) enum SenderRoute {
     Refused,
-    UnknownRecipient,
-    Mailbox {
-        target: MailboxRequest,
-        request: MailboxRelayRequest,
-    },
+    Answered(DeliveryAnswer<BoardDeliveryTypes>),
 }
-struct SenderMailboxRoute {
-    source: ServiceId,
-    input: SenderMailboxRequest,
+pub(crate) struct AdmitSenderMail {
+    pub source: ServiceId,
+    pub input: SenderMailRequest,
+    pub limits: fleet_sync_delivery::DeliveryLimits,
+    pub now: runtime_primitives::SyncTime,
 }
-impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for SenderMailboxRoute
+impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for AdmitSenderMail
 where
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
     Driver::Arguments: IntoArguments<Driver>,
@@ -128,40 +64,96 @@ where
             {
                 return Ok((SenderRoute::Refused, Vec::new()));
             }
-            let mailbox = match self.input.request.as_ref() {
-                DeliveryRequest::Query { mailbox, .. }
-                | DeliveryRequest::Settle { mailbox, .. }
-                | DeliveryRequest::Retire { mailbox, .. } => *mailbox,
-                DeliveryRequest::Submit { .. }
-                | DeliveryRequest::Fetch { .. }
-                | DeliveryRequest::Received { .. }
-                | DeliveryRequest::Report { .. }
-                | DeliveryRequest::StatusFetch { .. }
-                | DeliveryRequest::StatusAck { .. } => {
-                    return Ok((SenderRoute::Refused, Vec::new()));
+            if let DeliveryRequest::Query { items, .. } = self.input.request.as_ref() {
+                let mut statuses = Vec::with_capacity(items.len());
+                for item in items {
+                    let Some(submitter) = crate::mail_sender_authority::authorized_submitter(
+                        scope,
+                        self.input.session.peer,
+                        *item,
+                        self.limits,
+                        self.now,
+                    )
+                    .await?
+                    else {
+                        return Ok((
+                            SenderRoute::Answered(DeliveryAnswer::DeliveryUnavailable {
+                                reason: fleet_sync_protocol::DeliveryRefusal::NotSubmitter,
+                            }),
+                            Vec::new(),
+                        ));
+                    };
+                    match fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
+                        scope,
+                        self.limits,
+                        &crate::fleet_sender_binding::FleetSenderBinding,
+                    )
+                    .relay_query(submitter, *item)
+                    .await
+                    {
+                        Ok(status) => statuses.push(status),
+                        Err(fleet_sync_delivery::DeliveryError::Refused { reason }) => {
+                            return Ok((
+                                SenderRoute::Answered(DeliveryAnswer::DeliveryUnavailable {
+                                    reason,
+                                }),
+                                Vec::new(),
+                            ));
+                        }
+                        Err(error) => return Err(fleet_sync_delivery::delivery_rollback(error)),
+                    }
                 }
-            };
-            let Some(installation) = service_for_peer(scope, mailbox).await? else {
-                return Ok((SenderRoute::UnknownRecipient, Vec::new()));
-            };
-            Ok((
-                SenderRoute::Mailbox {
-                    target: MailboxRequest {
-                        installation,
-                        recipient: mailbox,
-                    },
-                    request: MailboxRelayRequest {
-                        actor: self.input.session.peer,
-                        request: self.input.request,
-                    },
-                },
-                Vec::new(),
-            ))
+                return Ok((
+                    SenderRoute::Answered(DeliveryAnswer::Query(
+                        fleet_sync_protocol::QueryResult { statuses },
+                    )),
+                    Vec::new(),
+                ));
+            }
+            if let DeliveryRequest::Settle {
+                submitter,
+                item,
+                digest,
+                ..
+            } = self.input.request.as_ref()
+            {
+                if !crate::mail_sender_authority::claim_is_authorized(
+                    scope,
+                    self.input.session.peer,
+                    *submitter,
+                    self.now,
+                )
+                .await?
+                {
+                    return Ok((
+                        SenderRoute::Answered(DeliveryAnswer::DeliveryUnavailable {
+                            reason: fleet_sync_protocol::DeliveryRefusal::NotSubmitter,
+                        }),
+                        Vec::new(),
+                    ));
+                };
+                let answer = fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
+                    scope,
+                    self.limits,
+                    &crate::fleet_sender_binding::FleetSenderBinding,
+                )
+                .relay_settle::<crate::fleet_mail_tasks::FleetMailRemoval<Store, Driver>>(
+                    *submitter,
+                    *item,
+                    digest.clone(),
+                    self.now,
+                )
+                .await;
+                let answer = match answer {
+                    Ok(result) => DeliveryAnswer::Settle(result),
+                    Err(fleet_sync_delivery::DeliveryError::Refused { reason }) => {
+                        DeliveryAnswer::DeliveryUnavailable { reason }
+                    }
+                    Err(error) => return Err(fleet_sync_delivery::delivery_rollback(error)),
+                };
+                return Ok((SenderRoute::Answered(answer), Vec::new()));
+            }
+            Ok((SenderRoute::Refused, Vec::new()))
         })
-    }
-}
-fn refused() -> CallFailure {
-    CallFailure::NotSent {
-        reason: NotSentReason::Unreachable { last_seen: None },
     }
 }

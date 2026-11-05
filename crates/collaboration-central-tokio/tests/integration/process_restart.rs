@@ -9,11 +9,7 @@ mod copy_staged_parts;
 use crate::creation_scenarios;
 #[path = "../process_restart/fleet_notice_outbox.rs"]
 mod fleet_notice_outbox;
-use crate::imported_board_fixture;
-use crate::imported_claim_scenarios;
-#[path = "../process_restart/lease_publication.rs"]
-mod lease_publication;
-use crate::native_fleet;
+use crate::{imported_board_fixture, imported_claim_scenarios, native_fleet};
 #[path = "../process_restart/registration.rs"]
 mod registration;
 #[path = "../process_restart/registry_notices.rs"]
@@ -27,6 +23,7 @@ mod session_resume;
 mod support;
 
 use board_sync_protocol::*;
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, DispatchFaultObservation, JwksFixtureServer,
     RuntimeControl, enroll_admitted_peer, fixture_policy,
@@ -77,6 +74,13 @@ async fn native_central_process() -> ConformanceResult<()> {
     Ok(())
 }
 
+fn notice_key() -> DispatchKey {
+    DispatchKey::new(
+        ObjectAddress::Fleet,
+        collaboration_central_conformance::DispatchCallSelector::FleetMachineNotice,
+    )
+}
+
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Assertions must fail this test while fixture errors propagate through Result."
@@ -119,9 +123,7 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
     control(
         &first.base,
         ObjectAddress::Fleet,
-        RuntimeControl::HoldNextDispatch {
-            destination: ObjectAddress::Connection(SERVICE.to_owned().try_into()?),
-        },
+        RuntimeControl::HoldNextDispatch { key: notice_key() },
     )
     .await?;
     let request = FleetRequest {
@@ -148,10 +150,10 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
     let held = control(
         &first.base,
         ObjectAddress::Fleet,
-        RuntimeControl::AwaitHeldDispatch,
+        RuntimeControl::AwaitHeldDispatch { key: notice_key() },
     )
     .await?;
-    let DispatchFaultObservation::Held { request: bytes, .. } = held.dispatch else {
+    let DispatchFaultObservation::Held { request: bytes, .. } = held.dispatch(&notice_key()) else {
         return Err("Fleet did not reach its post-commit dispatch barrier".into());
     };
     let call: Value = serde_json::from_slice(&bytes)?;
@@ -160,14 +162,13 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
         .ok_or("notice call omitted its durable identity")?
         .clone();
     let fleet_path = root.path().join("fleet.db");
-    let connection_path = root.path().join(format!("connection-{SERVICE}.db"));
     let before = operation(&fleet_path, &operation_id).await?;
     assert_eq!(before.0, "running");
     assert_eq!(before.2, 1);
     assert_eq!(
         read_count(
-            &connection_path,
-            "SELECT COUNT(*) AS count FROM machine_notices"
+            &fleet_path,
+            "SELECT COUNT(*) AS count FROM machine_control_notices"
         )
         .await?,
         0
@@ -256,13 +257,17 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
         1
     );
     assert_eq!(
-        read_count(&fleet_path, "SELECT COUNT(*) AS count FROM workspaces").await?,
+        read_count(
+            &fleet_path,
+            "SELECT COUNT(*) AS count FROM fleet_workspaces"
+        )
+        .await?,
         1
     );
     assert_eq!(
         read_count(
-            &connection_path,
-            "SELECT COUNT(*) AS count FROM machine_notices"
+            &fleet_path,
+            "SELECT COUNT(*) AS count FROM machine_control_notices"
         )
         .await?,
         1

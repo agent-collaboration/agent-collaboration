@@ -3,6 +3,7 @@
 #![deny(clippy::too_many_lines)]
 
 use crate::configuration;
+use crate::{mail_push_inbox, mail_push_transport};
 #[path = "../support/mailbox_cancel_scenarios.rs"]
 mod mailbox_cancel_scenarios;
 #[path = "../support/mailbox_capacity_scenarios.rs"]
@@ -34,7 +35,7 @@ async fn lost_custody_answer_keeps_cancel_pending_until_recipient_decides() -> C
     run_case(RuleCase::Cancel).await
 }
 #[tokio::test]
-async fn held_mailbox_payload_survives_history_horizon_and_releases_after_receipt()
+async fn held_recipient_payload_survives_history_horizon_until_local_release()
 -> ConformanceResult<()> {
     run_case(RuleCase::HeldRetention).await
 }

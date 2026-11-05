@@ -7,7 +7,7 @@ use fleet_sync_protocol::{
     DeliveryAnswer, DeliveryRequest, ItemId, OperationAnswer, OperationRequest, StatusAckResult,
     StatusPublication,
 };
-use runtime_primitives::{IdSource, OperationId, StepName, UuidV7Ids};
+use runtime_primitives::{Clock, IdSource, OperationId, StepName, UuidV7Ids};
 use std::collections::BTreeSet;
 
 pub(super) fn status_call(step: &str) -> Result<CallId, StoreError> {
@@ -18,20 +18,27 @@ pub(super) fn status_call(step: &str) -> Result<CallId, StoreError> {
 }
 
 impl MailDeliveryRuntime {
+    pub(crate) fn custody_record_is_past_retention(&self, item: ItemId) -> bool {
+        fleet_sync_delivery::item_is_too_old(item, self.host.now())
+    }
+
     pub(crate) async fn outbox_status(
         &self,
         item: ItemId,
     ) -> Result<fleet_sync_delivery::OutboxStatusState<CarrierAcceptance>, StoreError> {
         let limits = self.config.limits;
         self.store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    Outbox::<_, RouterDeliveryTypes>::new(scope, limits)
-                        .status(item)
-                        .await
-                        .map(|status| status.state)
-                        .map_err(delivery_rollback)
-                })
+            .transaction({
+                let binding = self.binding.clone();
+                move |scope| {
+                    Box::pin(async move {
+                        Outbox::<_, RouterDeliveryTypes, _>::new(scope, limits, binding.as_ref())
+                            .status(item)
+                            .await
+                            .map(|status| status.state)
+                            .map_err(delivery_rollback)
+                    })
+                }
             })
             .await
     }
@@ -44,13 +51,20 @@ impl MailDeliveryRuntime {
         loop {
             let after = self
                 .store
-                .transaction(move |scope| {
-                    Box::pin(async move {
-                        Outbox::<_, RouterDeliveryTypes>::new(scope, limits)
+                .transaction({
+                    let binding = self.binding.clone();
+                    move |scope| {
+                        Box::pin(async move {
+                            Outbox::<_, RouterDeliveryTypes, _>::new(
+                                scope,
+                                limits,
+                                binding.as_ref(),
+                            )
                             .status_cursor()
                             .await
                             .map_err(delivery_rollback)
-                    })
+                        })
+                    }
                 })
                 .await?;
             // Network I/O never holds the native owner's transaction.
@@ -70,15 +84,23 @@ impl MailDeliveryRuntime {
             let empty = batch.events.is_empty();
             let through = batch.through;
             let items: Vec<_> = batch.events.iter().map(|event| event.item).collect();
+            let observed_at = self.host.now();
             self.store
-                .transaction(move |scope| {
-                    Box::pin(async move {
-                        Outbox::<_, RouterDeliveryTypes>::new(scope, limits)
-                            .apply_status_batch(after, batch)
+                .transaction({
+                    let binding = self.binding.clone();
+                    move |scope| {
+                        Box::pin(async move {
+                            Outbox::<_, RouterDeliveryTypes, _>::new(
+                                scope,
+                                limits,
+                                binding.as_ref(),
+                            )
+                            .apply_status_batch(after, batch, observed_at)
                             .await
                             .map_err(delivery_rollback)?;
-                        Ok(())
-                    })
+                            Ok(())
+                        })
+                    }
                 })
                 .await?;
             self.prompt_project_coverage(&items).await;
@@ -113,17 +135,21 @@ impl MailDeliveryRuntime {
     ) -> Result<(), StoreError> {
         let limits = self.config.limits;
         let item = publication.item;
+        let observed_at = self.host.now();
         self.store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    // This applies one canonical item only. The SDK catch-up cursor
-                    // belongs to apply_status_batch and is never advanced by a live hint.
-                    Outbox::<_, RouterDeliveryTypes>::new(scope, limits)
-                        .publish_status(publication)
-                        .await
-                        .map_err(delivery_rollback)?;
-                    Ok(())
-                })
+            .transaction({
+                let binding = self.binding.clone();
+                move |scope| {
+                    Box::pin(async move {
+                        // This applies one canonical item only. The SDK catch-up cursor
+                        // belongs to apply_status_batch and is never advanced by a live hint.
+                        Outbox::<_, RouterDeliveryTypes, _>::new(scope, limits, binding.as_ref())
+                            .publish_status(publication, observed_at)
+                            .await
+                            .map_err(delivery_rollback)?;
+                        Ok(())
+                    })
+                }
             })
             .await?;
         self.prompt_project_coverage(&[item]).await;

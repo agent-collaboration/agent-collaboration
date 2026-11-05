@@ -1,11 +1,12 @@
 //! Revocation admission and readmission share the enrollment's journal reference.
+use crate::FleetKind;
 
 use super::{
     AtomicStore, BoxFuture, Clock, ColumnIndex, Database, Decode, Encode, EnrollmentState,
     IdSource, Infallible, IntoArguments, ObjectHost, ObjectRuntime, ObjectWork, OwnerIdentity,
-    PeerId, PlatformIo, RegistryKind, RevocationDecision, ServiceId, StepCallback, StepDriver,
-    StepResult, StoreError, StoredMachine, SyncTime, TransactionScope, Type, corrupt,
-    operation_pending, queries, readmission, wrong_face,
+    PeerId, PlatformIo, RevocationDecision, ServiceId, StepCallback, StepDriver, StepResult,
+    StoreError, StoredMachine, SyncTime, TransactionScope, Type, corrupt, operation_pending,
+    queries, readmission, wrong_face,
 };
 use durable_steps::{
     CallTarget, JournalScope, OperationContext, OperationFailure, OperationId, RequestKey, Task,
@@ -34,7 +35,7 @@ pub(crate) struct RevokeInput {
 pub(crate) struct RevokeMachineTask<Store>(pub PhantomData<fn() -> Store>);
 impl<Store: AtomicStore> Task for RevokeMachineTask<Store> {
     const KIND: &'static str = REVOKE_TASK_KIND;
-    const VERSION: u32 = 1;
+    const VERSION: u32 = 2;
     type Store = Store;
     type Input = RevokeInput;
     type Output = ();
@@ -55,17 +56,6 @@ impl<Store: AtomicStore> Task for RevokeMachineTask<Store> {
                 (),
             )
             .await?;
-        context
-            .call(
-                durable_steps::StepName::new("close_mailbox").map_err(|error| {
-                    OperationFailure::InvalidPayload {
-                        message: error.to_string(),
-                    }
-                })?,
-                crate::mailbox_lifecycle::ClosePeerMailbox { peer: input.peer },
-                (),
-            )
-            .await?;
         Ok(())
     }
 }
@@ -83,11 +73,14 @@ pub(super) async fn in_progress<Scope: JournalStorage>(
     .await
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -99,7 +92,7 @@ where
         _owner: &OwnerIdentity,
         installation: ServiceId,
     ) -> Result<RevocationDecision, StoreError> {
-        let ObjectWork::Registry {
+        let ObjectWork::Fleet {
             host,
             shared_host,
             engine,
@@ -197,9 +190,19 @@ where
                 .await
                 .map_err(StoreError::backend)?;
             let operation = admitted.id();
-            queries::revoke_enrollment(scope, String::from(operation), machine.peer.to_string())
-                .await
-                .map_err(StoreError::backend)?;
+            let updated_at = chrono::DateTime::from_timestamp_millis(self.now.unix_millis())
+                .ok_or_else(|| {
+                    StoreError::backend("revocation clock is outside the timestamp range")
+                })?
+                .to_rfc3339();
+            queries::revoke_enrollment(
+                scope,
+                String::from(operation),
+                updated_at,
+                machine.peer.to_string(),
+            )
+            .await
+            .map_err(StoreError::backend)?;
             scope.ensure_wake(self.now).await?;
             Ok((RevokeAdmission::Pending, Vec::new()))
         })

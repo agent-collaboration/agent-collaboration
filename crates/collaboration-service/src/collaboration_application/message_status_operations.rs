@@ -106,6 +106,10 @@ impl MessageOperations {
             .clone()
             .try_into()
             .map_err(|_| MessageFailure::not_found(stage))?;
+        let sdk_item = ItemId::new(
+            uuid::Uuid::parse_str(item.as_str()).map_err(|_| MessageFailure::not_found(stage))?,
+        )
+        .map_err(|_| MessageFailure::not_found(stage))?;
         let store = self.push_store(stage)?;
         let context = store.mail_read_context(&item).await.map_err(|_| {
             MessageFailure::new(
@@ -124,11 +128,6 @@ impl MessageOperations {
                     "Sender custody is unavailable",
                 )
             })?;
-            let sdk_item = ItemId::new(
-                uuid::Uuid::parse_str(item.as_str())
-                    .map_err(|_| MessageFailure::not_found(stage))?,
-            )
-            .map_err(|_| MessageFailure::not_found(stage))?;
             let status = mail.outbox_status(sdk_item).await.map_err(|_| {
                 MessageFailure::new(
                     MessageFailureKind::Unavailable,
@@ -137,7 +136,7 @@ impl MessageOperations {
                 )
             })?;
             let OutboxStatusState::Known { status, .. } = status else {
-                return Err(MessageFailure::not_found(stage));
+                return Err(self.missing_status(sdk_item, stage));
             };
             let status = public_status(status).map_err(|_| {
                 MessageFailure::new(
@@ -162,7 +161,14 @@ impl MessageOperations {
                     reference: request.reference,
                 })
                 .await
-                .map(|shown| MessageShowResult::Local(Box::new(shown))),
+                .map(|shown| MessageShowResult::Local(Box::new(shown)))
+                .map_err(|failure| {
+                    if failure.kind == MessageFailureKind::NotFound {
+                        self.missing_status(sdk_item, stage)
+                    } else {
+                        failure
+                    }
+                }),
             MessageReadCaller::Human(_) => {
                 let record = store
                     .get_push_record(&push)
@@ -174,7 +180,7 @@ impl MessageOperations {
                             "Push storage could not be read",
                         )
                     })?
-                    .ok_or_else(|| MessageFailure::not_found(stage))?;
+                    .ok_or_else(|| self.missing_status(sdk_item, stage))?;
                 if !(record.kind == PushKind::DirectMessage
                     && record.origin == PushOrigin::OwnerUnverified
                     || matches!(
@@ -204,6 +210,18 @@ impl MessageOperations {
                 })))
             }
         }
+    }
+
+    fn missing_status(&self, item: ItemId, stage: MessageFailureStage) -> MessageFailure {
+        let Some(mail) = &self.mail_delivery else {
+            return MessageFailure::not_found(stage);
+        };
+        let message = if mail.custody_record_is_past_retention(item) {
+            "removed after 60 days"
+        } else {
+            "unknown"
+        };
+        MessageFailure::new(MessageFailureKind::NotFound, stage, message)
     }
 
     async fn authorize_mail_read(
@@ -326,12 +344,13 @@ fn public_status(
 ) -> Result<RemoteDeliveryStatus, ()> {
     Ok(match status {
         DeliveryStatus::Queued => RemoteDeliveryStatus::Queued,
-        DeliveryStatus::Sent { seq } => RemoteDeliveryStatus::Sent { seq: seq.value() },
+        DeliveryStatus::Sent => RemoteDeliveryStatus::Sent,
         DeliveryStatus::AtRecipient => RemoteDeliveryStatus::AtMachine,
         DeliveryStatus::Held => RemoteDeliveryStatus::Held,
         DeliveryStatus::Delivered { acceptance } => RemoteDeliveryStatus::Delivered { acceptance },
         DeliveryStatus::Uncertain => RemoteDeliveryStatus::Uncertain,
         DeliveryStatus::Expired => RemoteDeliveryStatus::Expired,
+        DeliveryStatus::ExpiredAtUpgrade => RemoteDeliveryStatus::ExpiredAtUpgrade,
         DeliveryStatus::Cancelled => RemoteDeliveryStatus::Cancelled,
         DeliveryStatus::Refused { reason } => RemoteDeliveryStatus::Refused {
             reason: match reason {
@@ -398,8 +417,13 @@ fn public_status(
                             .map_err(|_| ())?,
                     }
                 }
+                DeliveryRefusal::NotThisMachine => RemoteDeliveryRefusal::NotThisMachine,
+                DeliveryRefusal::NotRecipient => RemoteDeliveryRefusal::NotRecipient,
+                DeliveryRefusal::NotSubmitter => RemoteDeliveryRefusal::NotSubmitter,
+                DeliveryRefusal::TooOld => RemoteDeliveryRefusal::TooOld,
                 DeliveryRefusal::RecipientUnknown => RemoteDeliveryRefusal::RecipientUnknown,
                 DeliveryRefusal::RecipientRevoked => RemoteDeliveryRefusal::RecipientRevoked,
+                DeliveryRefusal::SenderNotEnrolled => RemoteDeliveryRefusal::SenderNotEnrolled,
                 DeliveryRefusal::DroppedByPolicy => RemoteDeliveryRefusal::DroppedByPolicy,
                 DeliveryRefusal::CancelSenderMismatch => {
                     RemoteDeliveryRefusal::CancelSenderMismatch

@@ -1,5 +1,7 @@
 # Board records, replication and holder changes
 
+For central-storage-reset D1 project isolation, use [D1 central mail](d1-central-mail.md). Existing board journeys supply real project actions, but a consumed one-shot CopyFull fault does not prove P1 remains unavailable while mail and P2 complete.
+
 ## Current entry
 
 The wrapper retired in 0.1.102. Current local model-free process journeys are the Rust `board_records_e2e` and `board_central_e2e` modules in the `e2e` aggregate, backed by `crates/agent-collaboration/tests/board_e2e/`. After the CI local-end-to-end job’s artifact preparation, run:

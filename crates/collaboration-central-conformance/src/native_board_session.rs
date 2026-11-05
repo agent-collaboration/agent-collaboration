@@ -44,7 +44,13 @@ impl NativeBoardSession {
                     body: OperationAnswer::Consumer(answer),
                 } if actual == frame => return Ok(answer),
                 ServerFrame::Notice { .. } => {}
-                _ => return Err("unexpected native board frame or correlation".into()),
+                other => {
+                    return Err(format!(
+                        "unexpected native board frame or correlation: {}",
+                        serde_json::to_string(&other)?
+                    )
+                    .into());
+                }
             }
         }
     }

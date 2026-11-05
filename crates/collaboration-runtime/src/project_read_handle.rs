@@ -62,6 +62,7 @@ enum ProjectReadStatus {
     RegistrationRejected {
         reason: GateReason,
     },
+    NotInCentral,
 }
 
 impl ProjectReadHandle {
@@ -142,6 +143,10 @@ impl ProjectReadHandle {
                     Err(ProjectStorageError::Writer(OpenError::Holder {
                         error: HolderError::RegistrationRejected { reason },
                     })) => ProjectReadStatus::RegistrationRejected { reason },
+                    Err(ProjectStorageError::Writer(OpenError::Holder {
+                        error:
+                            HolderError::Refused(fleet_sync_protocol::LeaseRefusal::NotRegistered),
+                    })) => ProjectReadStatus::NotInCentral,
                     Err(error) => return Err(error.into()),
                 },
                 ProjectRuntime::SnapshotInstalling { .. } => {
@@ -231,6 +236,9 @@ impl ProjectReadSnapshot {
             ProjectReadStatus::RegistrationRejected { reason } => {
                 tracing::debug!(?reason, "rejected registration has no project view");
                 None
+            }
+            ProjectReadStatus::NotInCentral => {
+                Some((CurrentWriter::NotInCentral {}, None, CopySource::Writer {}))
             }
             ProjectReadStatus::Writer(state) => {
                 let epoch = match state {

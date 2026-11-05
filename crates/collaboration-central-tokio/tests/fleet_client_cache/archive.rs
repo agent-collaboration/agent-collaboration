@@ -30,26 +30,28 @@ async fn stored(root: &Path) -> TestResult<(Vec<serde_json::Value>, Vec<String>)
         .read_only(true)
         .connect()
         .await?;
-    let rows = query::<sqlx_turso::Turso>("SELECT report FROM archive_reports ORDER BY project_id")
+    let rows = query::<sqlx_turso::Turso>("SELECT report_id,board_id,project_id,epoch,commit_sequence,installation,reported_at,created_at,updated_at FROM fleet_archive_reports ORDER BY project_id")
         .fetch_all(&mut connection)
         .await?;
     let reports = rows
         .into_iter()
         .map(|row| {
-            Ok(serde_json::from_str::<serde_json::Value>(
-                &row.try_get::<String, _>("report")?,
-            )?)
+            Ok(serde_json::json!({
+                "id":row.try_get::<String,_>("report_id")?,
+                "board":row.try_get::<String,_>("board_id")?,
+                "project":row.try_get::<String,_>("project_id")?,
+                "position": {
+                    "epoch":row.try_get::<String,_>("epoch")?.parse::<u64>()?,
+                    "sequence":row.try_get::<String,_>("commit_sequence")?.parse::<u64>()?,
+                },
+                "installation":row.try_get::<String,_>("installation")?,
+                "reportedAt":row.try_get::<String,_>("reported_at")?,
+                "createdAt":row.try_get::<i64,_>("created_at")?,
+                "updatedAt":row.try_get::<i64,_>("updated_at")?,
+            }))
         })
         .collect::<TestResult<Vec<_>>>()?;
-    let rows = query::<sqlx_turso::Turso>(
-        "SELECT payload FROM fleet_request_decisions ORDER BY request_id",
-    )
-    .fetch_all(&mut connection)
-    .await?;
-    let ledgers = rows
-        .into_iter()
-        .map(|row| row.try_get::<String, _>("payload"))
-        .collect::<Result<Vec<_>, _>>()?;
+    let ledgers = crate::fleet_ledger_rows::on_connection(&mut connection).await?;
     connection.close().await?;
     Ok((reports, ledgers))
 }

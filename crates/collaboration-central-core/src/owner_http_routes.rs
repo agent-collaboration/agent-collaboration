@@ -1,10 +1,9 @@
 //! The shared HTTP application narrows the owner before constructing operations.
 use crate::{
-    AccessCaller, CallOutcome, CentralApplication, CentralPlatform, CopyKind, FleetKind,
-    OwnerIdentity,
+    AccessCaller, CallOutcome, CentralApplication, CentralPlatform, FleetKind, OwnerIdentity,
     owner_operation_calls::{
-        CopyDirectoryPage, CopyOperations, CopyOpsAnswer, CopyOpsCall, CopyPageLimit,
-        CopyPageRequest, ReadCopyDirectoryPage,
+        CopyDirectoryPage, CopyOpsAnswer, CopyOpsCall, CopyPageLimit, CopyPageRequest,
+        FleetProjectOperations, ReadCopyDirectoryPage,
     },
 };
 use axum::{
@@ -45,10 +44,10 @@ pub(crate) async fn health<Platform: CentralPlatform>(
         Err(refusal) => return (StatusCode::UNAUTHORIZED, Json(refusal)).into_response(),
     };
     match app
-        .call_from_owner::<CopyKind, _>(
+        .call_from_owner::<FleetKind, _>(
             owner,
-            database,
-            CopyOperations { database },
+            (),
+            FleetProjectOperations { database },
             CopyOpsCall::Health,
         )
         .await
@@ -111,10 +110,10 @@ pub(crate) async fn repair<Platform: CentralPlatform>(
         Err(refusal) => return (StatusCode::UNAUTHORIZED, Json(refusal)).into_response(),
     };
     match app
-        .call_from_owner::<CopyKind, _>(
+        .call_from_owner::<FleetKind, _>(
             owner,
-            database,
-            CopyOperations { database },
+            (),
+            FleetProjectOperations { database },
             CopyOpsCall::Repair,
         )
         .await
@@ -193,10 +192,10 @@ pub(crate) async fn migrate<Platform: CentralPlatform>(
                 }
             };
         let result = match app
-            .call_from_owner::<CopyKind, _>(
+            .call_from_owner::<FleetKind, _>(
                 owner.clone(),
-                database,
-                CopyOperations { database },
+                (),
+                FleetProjectOperations { database },
                 CopyOpsCall::Migrate,
             )
             .await

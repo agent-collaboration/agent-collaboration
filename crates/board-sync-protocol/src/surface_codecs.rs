@@ -51,6 +51,7 @@ pub(crate) enum PieceRefusalCodec {
     deny_unknown_fields
 )]
 pub(crate) enum LeaseRefusalCodec {
+    HolderNotEnrolled,
     StaleEpoch {
         current_epoch: wire::Epoch,
         epoch_ended_at: wire::ReplicationPosition,
@@ -124,9 +125,7 @@ pub(crate) enum ClaimAnswerCodec {
 )]
 pub(crate) enum DeliveryStatusCodec<A> {
     Queued,
-    Sent {
-        seq: wire::DeliverySeq,
-    },
+    Sent,
     #[serde(rename = "atMachine")]
     AtRecipient,
     Held,
@@ -135,6 +134,7 @@ pub(crate) enum DeliveryStatusCodec<A> {
     },
     Uncertain,
     Expired,
+    ExpiredAtUpgrade,
     Cancelled,
     Refused {
         reason: wire::DeliveryRefusal,

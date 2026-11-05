@@ -203,6 +203,16 @@ impl TokioCentralPlatform {
         self.objects.forward_state(service).await
     }
 
+    /// Read-only observation of one committed mail row in the Fleet owner.
+    #[cfg(feature = "conformance")]
+    pub async fn conformance_mail_custody(
+        &self,
+        item: fleet_sync_protocol::ItemId,
+    ) -> Result<collaboration_central_core::FleetMailCustodyObservation, durable_steps::StoreError>
+    {
+        self.objects.mail_custody(item).await
+    }
+
     /// Read-only observation of live holder request correlations.
     #[cfg(feature = "conformance")]
     pub async fn conformance_holder_frames(
@@ -213,6 +223,24 @@ impl TokioCentralPlatform {
     }
 
     /// Read-only observation of attachments created by the real HTTP upgrade.
+    #[cfg(feature = "conformance")]
+    pub(crate) async fn conformance_session_connections(
+        &self,
+        service: Option<&message_board::ServiceId>,
+    ) -> Result<
+        Vec<crate::native_objects::SessionConnectionSnapshot>,
+        collaboration_central_core::SocketFailure,
+    > {
+        self.objects.session_connections(service).await
+    }
+
+    #[cfg(feature = "conformance")]
+    pub async fn conformance_socket_inventory(
+        &self,
+    ) -> Result<Vec<crate::SocketOwnerSnapshot>, collaboration_central_core::SocketFailure> {
+        self.objects.socket_inventory().await
+    }
+
     #[cfg(feature = "conformance")]
     pub async fn conformance_socket_origins(
         &self,

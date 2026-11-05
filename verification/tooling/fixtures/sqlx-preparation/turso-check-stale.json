@@ -63,6 +63,9 @@
       },
       "crates/message-board-storage/.sqlx": {
         "query-original.json": "original"
+      },
+      "crates/board-staging-cutover/.sqlx": {
+        "query-original.json": "original"
       }
     },
     "stderr": "board-legacy-upgrade: Turso SQLx metadata is out of date; run node verification/tooling/prepare-sqlx-turso.ts\n  missing query-board-legacy-upgrade.json\n  stale query-original.json\n"

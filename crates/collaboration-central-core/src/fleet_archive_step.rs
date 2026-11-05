@@ -52,7 +52,11 @@ where
                 self.row_ids.next()?.to_string(),
                 self.report.board.as_str().into(),
                 self.report.project.as_str().into(),
-                serde_json::to_string(&self.report).map_err(StoreError::backend)?,
+                self.report.position.epoch.value().to_string(),
+                self.report.position.sequence.value().to_string(),
+                self.report.installation.as_str().into(),
+                self.report.reported_at.to_rfc3339(),
+                self.report.reported_at.timestamp_millis().to_string(),
             )
             .await
             .map_err(StoreError::backend)?;
@@ -66,7 +70,7 @@ where
                 )
                 .await?;
             }
-            crate::fleet_notice_admission::admit_mutation_notices::<Store, Driver>(
+            crate::fleet_notice_admission::admit_mutation_notices::<Store, Driver, _>(
                 scope,
                 previous_feed,
                 runtime_primitives::SyncTime::from_unix_millis(

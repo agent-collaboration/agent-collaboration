@@ -13,8 +13,6 @@ mod claim_admission;
 mod claim_settlement;
 #[path = "../fleet_storage/creation_decisions.rs"]
 mod creation_decisions;
-#[path = "../fleet_storage/lease_version_publication.rs"]
-mod lease_version_publication;
 #[path = "../fleet_storage/maximum_rows.rs"]
 mod maximum_rows;
 #[path = "../fleet_storage/metadata.rs"]
@@ -24,8 +22,6 @@ mod owned_ids;
 #[path = "../fleet_storage/rollback.rs"]
 mod rollback;
 use crate::native_fleet as support;
-#[path = "../fleet_storage/upgrade.rs"]
-mod upgrade;
 use fleet_admission::{FleetImportCounts, FleetImportResult};
 use support::{Fixture, TestResult, bundle};
 

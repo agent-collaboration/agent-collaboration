@@ -2,7 +2,7 @@ import type { CaseRegistration } from "../coverage.ts";
 import type { JourneyMachine } from "../run-context.ts";
 import type { Receipt } from "../receipt.ts";
 import type { SessionGate } from "../access/session-gate.ts";
-import { sendAndRepeatRemoteMessage } from "./direct-messages.ts";
+import { finishAndRepeatRemoteMessage, submitRemoteMessage } from "./direct-messages.ts";
 import { notifyAndRepeat } from "./notifications.ts";
 
 export const messageNotificationCase = {
@@ -38,21 +38,33 @@ export async function messagesAndNotifications(input: {
     const gate = input.gates.get(target.installation.machine.name);
     if (gate === undefined) throw new Error("recipient Session gate absent");
     const connected = await gate.ready();
-    await sendAndRepeatRemoteMessage({
+    const participants = {
       sender: source.installation,
       senderSession: source.recipient.target,
       recipient: target.recipient,
       receipt: input.receipt,
-    });
+    };
+    const submission = await submitRemoteMessage(participants);
+    await finishAndRepeatRemoteMessage(participants, submission);
     const observed = await gate.ready();
     await input.receipt.require(
-      "connected recipient observes actual items MailWaiting and correlated model arrival",
-      observed.mailWaiting.items > connected.mailWaiting.items,
+      "connected recipient observes the submitted item's actual Push and correlated model arrival",
+      observed.pushedItemIds.items.includes(submission.admission.item),
     );
-    await input.receipt.record("mailWaitingSignal", {
+    await input.receipt.require(
+      "connected recipient item Push count increases",
+      observed.pushes.items > connected.pushes.items,
+    );
+    await input.receipt.equal(
+      "recipient Push observation introduces no invalid connections",
+      observed.invalidConnections,
+      connected.invalidConnections,
+    );
+    await input.receipt.record("mailPushSignal", {
       machine: target.installation.machine.name,
-      before: connected.mailWaiting,
-      after: observed.mailWaiting,
+      before: connected.pushes,
+      after: observed.pushes,
+      submittedItemObserved: observed.pushedItemIds.items.includes(submission.admission.item),
       invalidConnections: observed.invalidConnections,
     });
     await notifyAndRepeat({

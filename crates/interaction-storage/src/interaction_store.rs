@@ -1,35 +1,9 @@
 //! The serialized physical owner; library scopes borrow its transaction connection.
-use crate::approval_routes::StoredApprovalRoute;
+use crate::{StorageError, approval_routes::StoredApprovalRoute};
 use sqlx::Connection;
 use sqlx_turso::TursoConnection;
 use std::path::Path;
 use tokio::sync::Mutex;
-
-#[derive(Debug, thiserror::Error)]
-pub enum StorageError {
-    #[error("interaction database operation failed")]
-    Database(#[from] sqlx::Error),
-    #[error("interaction storage is unavailable")]
-    StorageUnavailable,
-    #[error("interaction schema is not owned or supported")]
-    InvalidSchema,
-    #[error("interaction storage contains an invalid stored record")]
-    InvalidStoredRecord,
-    #[error("interaction record is invalid or inconsistent")]
-    InvalidRecord,
-    #[error("push record id already exists")]
-    PushAlreadyExists,
-    #[error("push identity already belongs to different content")]
-    PushContentConflict,
-    #[error("push record was not found in this interaction database")]
-    PushNotFound,
-    #[error("push record delivery state does not permit this transition")]
-    PushStateConflict,
-    #[error("push record is not permitted for this caller")]
-    PushNotPermitted,
-    #[error("installation identities conflict with the immutable local directory")]
-    InstallationPeerConflict,
-}
 
 pub struct InteractionStore {
     pub(crate) writer: Mutex<TursoConnection>,
@@ -49,6 +23,14 @@ impl InteractionStore {
 
     pub async fn close(self) -> Result<(), StorageError> {
         self.writer.into_inner().close().await?;
+        Ok(())
+    }
+
+    /// Forgets the central status stream before a new enrollment attaches.
+    pub async fn clear_central_mail_status_cursor(&self) -> Result<(), StorageError> {
+        sqlx::query::<sqlx_turso::Turso>("DELETE FROM _fleet_sync_outbox_status")
+            .execute(&mut *self.writer.lock().await)
+            .await?;
         Ok(())
     }
 
@@ -142,3 +124,7 @@ impl InteractionStore {
         Ok(route_json)
     }
 }
+
+#[cfg(test)]
+#[path = "interaction_store_reopen_test.rs"]
+mod reopen_tests;

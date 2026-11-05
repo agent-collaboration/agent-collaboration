@@ -80,6 +80,9 @@ pub(crate) async fn record<Scope: TransactionScope>(
 ) -> Result<(), StoreError>
 where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::encode::Encode<'scalar, Scope::Database>
+        + sqlx_core::decode::Decode<'scalar, Scope::Database>,
     for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
 {
     crate::generated_bootstrap::initialize_migration_failures(scope)
@@ -89,7 +92,7 @@ where
         scope,
         durable_steps::Uuid::now_v7().to_string(),
         failure.corpus,
-        failure.version.to_string(),
+        i64::try_from(failure.version).map_err(StoreError::backend)?,
         failure.reason,
         failure.at.unix_millis().to_string(),
     )

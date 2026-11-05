@@ -12,7 +12,7 @@ use board_cli_execution::{accepted, cli};
 use collaboration_service::ProjectAdmission;
 use collaboration_service::ProjectAdmissionProps;
 use message_board::*;
-use runtime_primitives::{Clock, SyncTime, SystemClock};
+use runtime_primitives::{Clock, SystemClock};
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, sync::Arc};
 type TestError = Box<dyn std::error::Error + Send + Sync>;
@@ -343,7 +343,7 @@ async fn aggregate_cli_pages_and_batch_acknowledgements_keep_project_keys() -> R
         read.finish().await?;
         entries.push(json!({"requestId":RequestId::generate(),"scope":{"kind":"project","projectId":project},"through":through}));
     }
-    let expired_at = SyncTime::from_unix_millis(SystemClock.now().unix_millis() - 120_000);
+    let expired_at = SystemClock.now();
     let lease = fleet_sync_protocol::LeaseStatus {
         database: fleet_sync_protocol::DatabaseId::new(uuid::Uuid::parse_str(
             projects[1].as_str(),
@@ -351,8 +351,8 @@ async fn aggregate_cli_pages_and_batch_acknowledgements_keep_project_keys() -> R
         epoch: fleet_sync_protocol::Epoch::new(1)?,
         holder: native_registry::fixture_peer()?,
         state: fleet_sync_protocol::LeaseState::Held,
-        expires_at: SyncTime::from_unix_millis(expired_at.unix_millis() + 60_000),
-        remaining_ms: 60_000,
+        expires_at: expired_at,
+        remaining_ms: 0,
     };
     registry
         .database(&projects[1])
@@ -370,6 +370,14 @@ async fn aggregate_cli_pages_and_batch_acknowledgements_keep_project_keys() -> R
             expired_at,
         )
         .await?;
+    assert!(matches!(
+        registry
+            .database(&projects[1])
+            .await?
+            .writer_state()
+            .await?,
+        fleet_sync_lease::WriterState::Paused { .. }
+    ));
     let strings: Vec<_> = entries.iter().map(Value::to_string).collect();
     let first_entry = strings.first().ok_or("entry")?;
     let second_entry = strings.get(1).ok_or("entry")?;

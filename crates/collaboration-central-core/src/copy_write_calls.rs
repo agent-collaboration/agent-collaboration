@@ -159,6 +159,9 @@ where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -173,9 +176,9 @@ where
         &self,
         call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
-        if !matches!(call.authority, CallAuthority::Object)
+        if !matches!(call.authority, CallAuthority::Machine { .. })
             || call.source_face != CallerKind::Session
-            || !matches!(call.source, ObjectAddress::Connection(_))
+            || !matches!(call.source, ObjectAddress::Fleet)
         {
             return Err(refused());
         }
@@ -189,7 +192,7 @@ where
         call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if !matches!(call.authority, CallAuthority::Owner(_))
-            || call.source_face != CallerKind::Edge
+            || call.source_face != CallerKind::Fleet
         {
             return Err(refused());
         }
@@ -453,4 +456,16 @@ fn refused() -> CallFailure {
     CallFailure::NotSent {
         reason: durable_steps::NotSentReason::Unreachable { last_seen: None },
     }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct FleetProjectSeed {
+    pub copy: ReceiverId,
+    pub database: DatabaseId,
+}
+impl CallTarget for FleetProjectSeed {
+    const KIND: &'static str = "central.fleet-project-seed";
+    type Request = AdminCopySeedRequest;
+    type Answer = ReplicationAnswer;
 }

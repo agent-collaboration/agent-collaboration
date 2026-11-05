@@ -170,7 +170,7 @@ impl Fixture {
             .post(format!("{}/admin/v1/conformance/runtime", self.base()))
             .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
             .json(&RuntimeControlRequest {
-                address: ObjectAddress::Registry,
+                address: ObjectAddress::Fleet,
                 command,
             })
             .send()

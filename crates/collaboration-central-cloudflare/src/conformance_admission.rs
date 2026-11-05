@@ -13,6 +13,7 @@ use worker::{Env, Headers, Method, Request, RequestInit, Response, Result};
     deny_unknown_fields
 )]
 enum Command {
+    FleetSchema,
     Origins {
         service: message_board::ServiceId,
     },
@@ -43,7 +44,7 @@ enum Command {
         operation: durable_steps::OperationId,
     },
     SessionConnections {
-        service: message_board::ServiceId,
+        service: Option<message_board::ServiceId>,
     },
     AttachmentCodec {
         service: message_board::ServiceId,
@@ -69,77 +70,76 @@ pub(crate) async fn fetch(mut request: Request, env: Env) -> Result<Response> {
 
 async fn forward_command(command: Command, env: Env) -> Result<Response> {
     let (address, path, body) = match command {
+        Command::FleetSchema => (ObjectAddress::Fleet, "/test/fleet-schema", None),
         #[cfg(feature = "conformance-faults")]
         Command::SessionBarrier {
-            service,
+            service: _service,
             connection,
         } => (
-            ObjectAddress::Connection(service),
+            ObjectAddress::Fleet,
             "/test/session-finalize-barrier",
             Some(serde_json::to_string(&connection)?),
         ),
         #[cfg(feature = "conformance-faults")]
-        Command::SessionJournal { service, operation } => (
-            ObjectAddress::Connection(service),
+        Command::SessionJournal {
+            service: _service,
+            operation,
+        } => (
+            ObjectAddress::Fleet,
             "/test/session-finalize-journal",
             Some(serde_json::to_string(&operation)?),
         ),
-        Command::HolderObservation { service } => (
-            ObjectAddress::Connection(service),
-            "/test/holder-observation",
-            None,
-        ),
+        Command::HolderObservation { service: _service } => {
+            (ObjectAddress::Fleet, "/test/holder-observation", None)
+        }
         Command::HolderSessionIdentity {
-            service,
+            service: _service,
             connection,
         } => (
-            ObjectAddress::Connection(service),
+            ObjectAddress::Fleet,
             "/test/holder-session-identity",
             Some(serde_json::to_string(&connection)?),
         ),
-        Command::SessionFault { service, command } => (
-            ObjectAddress::Connection(service),
+        Command::SessionFault {
+            service: _service,
+            command,
+        } => (
+            ObjectAddress::Fleet,
             "/test/session-faults",
             Some(serde_json::to_string(&command)?),
         ),
         Command::SessionConnections { service } => (
-            ObjectAddress::Connection(service),
+            ObjectAddress::Fleet,
             "/test/session-connections",
-            None,
+            Some(serde_json::to_string(&service)?),
         ),
         Command::AttachmentCodec {
-            service,
+            service: _service,
             connection,
         } => (
-            ObjectAddress::Connection(service),
+            ObjectAddress::Fleet,
             "/test/session-attachment-codec",
             Some(serde_json::to_string(&connection)?),
         ),
         Command::SessionAlarm {
-            service,
+            service: _service,
             connection,
         } => (
-            ObjectAddress::Connection(service),
+            ObjectAddress::Fleet,
             "/test/session-alarm",
             Some(serde_json::to_string(&connection)?),
         ),
-        Command::ForwardState { service } => (
-            ObjectAddress::Connection(service),
-            "/test/forward-state",
-            None,
-        ),
-        Command::HolderFrames { service } => (
-            ObjectAddress::Connection(service),
-            "/test/holder-frames",
-            None,
-        ),
-        Command::Origins { service } => (
-            ObjectAddress::Connection(service),
-            "/test/admission-origins",
-            None,
-        ),
+        Command::ForwardState { service: _service } => {
+            (ObjectAddress::Fleet, "/test/forward-state", None)
+        }
+        Command::HolderFrames { service: _service } => {
+            (ObjectAddress::Fleet, "/test/holder-frames", None)
+        }
+        Command::Origins { service: _service } => {
+            (ObjectAddress::Fleet, "/test/admission-origins", None)
+        }
         Command::SchemaReport { peer } => (
-            ObjectAddress::Registry,
+            ObjectAddress::Fleet,
             "/test/schema-report",
             Some(serde_json::to_string(&peer)?),
         ),
@@ -168,6 +168,30 @@ pub(crate) async fn forward_state(mut request: Request, env: Env) -> Result<Resp
             service: input.service,
         },
         env,
+    )
+    .await
+}
+
+pub(crate) async fn fleet_schema(request: Request, env: Env) -> Result<Response> {
+    if !owner_allowed(&request, &env).await? {
+        return Response::error("owner required", 401);
+    }
+    forward_command(Command::FleetSchema, env).await
+}
+
+pub(crate) async fn fleet_mail_custody(mut request: Request, env: Env) -> Result<Response> {
+    if !owner_allowed(&request, &env).await? {
+        return Response::error("owner required", 401);
+    }
+    let input: collaboration_central_core::FleetMailCustodyRequest = match request.json().await {
+        Ok(input) => input,
+        Err(_) => return Response::error("invalid custody item request", 400),
+    };
+    crate::composed_control::forward(
+        &env,
+        &ObjectAddress::Fleet,
+        "/test/fleet-mail-custody",
+        Some(serde_json::to_string(&input)?),
     )
     .await
 }

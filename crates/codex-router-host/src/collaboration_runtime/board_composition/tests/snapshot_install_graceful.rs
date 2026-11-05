@@ -357,14 +357,20 @@ pub(super) async fn observe_restart_renewal(
         loop {
             let observed = central
                 .runtime_control(
-                    ObjectAddress::Connection(origin()?.installation),
-                    RuntimeControl::AwaitHeldDispatch,
+                    ObjectAddress::Fleet,
+                    RuntimeControl::AwaitHeldDispatch {
+                        key: board_central_test_support::DispatchKey::any(
+                            board_central_test_support::ObjectAddress::Fleet,
+                        ),
+                    },
                 )
                 .await?;
             let DispatchFaultObservation::Held {
-                destination: ObjectAddress::Registry,
+                destination: ObjectAddress::Fleet,
                 request,
-            } = observed.dispatch
+            } = observed.dispatch(&board_central_test_support::DispatchKey::any(
+                board_central_test_support::ObjectAddress::Fleet,
+            ))
             else {
                 return Err("restart Registry dispatch was not held".into());
             };
@@ -395,8 +401,12 @@ pub(super) async fn observe_restart_renewal(
                 );
                 central
                     .runtime_control(
-                        ObjectAddress::Connection(origin()?.installation),
-                        RuntimeControl::ResumeDispatch,
+                        ObjectAddress::Fleet,
+                        RuntimeControl::ResumeDispatch {
+                            key: board_central_test_support::DispatchKey::any(
+                                board_central_test_support::ObjectAddress::Fleet,
+                            ),
+                        },
                     )
                     .await?;
                 println!("RECEIVING_RESTART_FRESH_RENEW same_database_epoch_no_claim");
@@ -404,9 +414,14 @@ pub(super) async fn observe_restart_renewal(
             }
             central
                 .runtime_control(
-                    ObjectAddress::Connection(origin()?.installation),
+                    ObjectAddress::Fleet,
                     RuntimeControl::ResumeDispatchAndHoldNext {
-                        destination: ObjectAddress::Registry,
+                        key: board_central_test_support::DispatchKey::any(
+                            board_central_test_support::ObjectAddress::Fleet,
+                        ),
+                        next: board_central_test_support::DispatchKey::any(
+                            board_central_test_support::ObjectAddress::Fleet,
+                        ),
                     },
                 )
                 .await?;

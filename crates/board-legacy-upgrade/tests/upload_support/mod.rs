@@ -1,4 +1,5 @@
 pub mod actual_cli;
+pub mod fleet_readback;
 use board_legacy_upgrade::PreparedUpgrade;
 use sqlx_turso::sqlx::{ConnectOptions, Connection, Executor, Row};
 use std::path::Path;
@@ -6,18 +7,24 @@ type TestResult<T> = Result<T, Box<dyn std::error::Error>>;
 pub async fn projection(root: &Path, projects: usize) -> TestResult<Vec<String>> {
     tokio::time::timeout(std::time::Duration::from_secs(10), async {
         loop {
-            let summaries = read(root, "fleet", "SELECT copy_summary AS value FROM project_directory WHERE copy_summary IS NOT NULL ORDER BY project_id").await?;
+            let summaries = fleet_readback::summaries(root).await?;
             if summaries.len() == projects {
                 for value in &summaries {
-                    let summary: collaboration_central_core::CopyDirectorySummary = serde_json::from_str(value)?;
+                    let summary: collaboration_central_core::CopyDirectorySummary =
+                        serde_json::from_str(value)?;
                     let copy = format!("copy-{}", summary.database);
-                    assert_eq!(read(root, &copy, "SELECT record AS value FROM _copy_summary").await?, vec![value.clone()]);
+                    assert_eq!(
+                        read(root, &copy, "SELECT record AS value FROM _copy_summary").await?,
+                        vec![value.clone()],
+                        "Fleet summary must equal the native Copy receipt"
+                    );
                 }
-                return Ok::<_,Box<dyn std::error::Error>>(summaries);
+                return Ok::<_, Box<dyn std::error::Error>>(summaries);
             }
             tokio::task::yield_now().await;
         }
-    }).await?
+    })
+    .await?
 }
 pub const COPY_SNAPSHOT: &str = "SELECT json_object('copy',(SELECT record FROM _fleet_sync_copy),'seed',(SELECT record FROM _fleet_sync_seed),'summary',(SELECT record FROM _copy_summary),'posts',(SELECT count(*) FROM posts),'staged',(SELECT count(*) FROM _fleet_sync_seed_pages)) AS value";
 
@@ -48,6 +55,37 @@ pub async fn header(
             latest_record_at: message_board::RecordTime::LegacyUnknown,
         },
     })
+}
+
+pub async fn await_project_reservation(
+    http: &reqwest::Client,
+    endpoint: &str,
+    header: &collaboration_central_core::AdminImportHeader,
+) -> TestResult<collaboration_central_core::AdminProjectImportAnswer> {
+    use collaboration_central_core::{AdminProjectImportAnswer, AdminProjectImportRequest};
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let answer: AdminProjectImportAnswer = http
+                .post(format!(
+                    "{endpoint}/admin/v1/import/projects/{}",
+                    header.database()
+                ))
+                .json(&AdminProjectImportRequest::Begin {
+                    header: header.clone(),
+                })
+                .send()
+                .await?
+                .error_for_status()?
+                .json()
+                .await?;
+            match answer {
+                AdminProjectImportAnswer::Ready { .. } => return Ok(answer),
+                AdminProjectImportAnswer::Pending => tokio::task::yield_now().await,
+                other => return Err(format!("unexpected reservation answer: {other:?}").into()),
+            }
+        }
+    })
+    .await?
 }
 
 pub async fn execute(root: &Path, object: &str, statement: &'static str) -> TestResult<()> {

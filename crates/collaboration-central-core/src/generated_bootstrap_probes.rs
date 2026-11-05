@@ -39,8 +39,16 @@ where
 #[derive(Debug)]
 pub(crate) struct BootstrapHistoryRow {
     pub corpus: Option<String>,
-    pub version: Option<String>,
-    pub checksum: Option<String>,
+    pub version: Option<i64>,
+    pub description: Option<String>,
+    pub installed_on: Option<i64>,
+    pub success: Option<i64>,
+    pub checksum: Option<Vec<u8>>,
+    pub execution_time: Option<i64>,
+    pub version_class: Option<String>,
+    pub checksum_class: Option<String>,
+    pub installed_class: Option<String>,
+    pub execution_class: Option<String>,
 }
 pub(crate) fn bootstrap_probe_history<S>(
     scope: &mut S,
@@ -50,6 +58,8 @@ where
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
     for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
     for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> Option<Vec<u8>>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> Option<i64>: Type<S::Database> + Decode<'value, S::Database>,
 {
     async move {
         let statement = query::<S::Database>(include_str!(concat!(
@@ -62,7 +72,15 @@ where
                 Ok(BootstrapHistoryRow {
                     corpus: row.try_get("corpus")?,
                     version: row.try_get("version")?,
+                    description: row.try_get("description")?,
+                    installed_on: row.try_get("installed_on")?,
+                    success: row.try_get("success")?,
                     checksum: row.try_get("checksum")?,
+                    execution_time: row.try_get("execution_time")?,
+                    version_class: row.try_get("version_class")?,
+                    checksum_class: row.try_get("checksum_class")?,
+                    installed_class: row.try_get("installed_class")?,
+                    execution_class: row.try_get("execution_class")?,
                 })
             })
             .collect()
@@ -70,13 +88,14 @@ where
 }
 pub(crate) fn bootstrap_probe_checksum<S>(
     scope: &mut S,
-    value: String,
+    value: Vec<u8>,
     corpus: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
     for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> Vec<u8>: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
         let statement = query::<S::Database>(include_str!(concat!(
@@ -91,13 +110,14 @@ where
 }
 pub(crate) fn bootstrap_probe_version<S>(
     scope: &mut S,
-    value: String,
+    value: i64,
     corpus: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
     for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> i64: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
         let statement = query::<S::Database>(include_str!(concat!(

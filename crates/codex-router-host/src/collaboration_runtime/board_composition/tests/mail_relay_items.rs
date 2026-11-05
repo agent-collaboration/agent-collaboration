@@ -80,7 +80,8 @@ pub(super) fn largest_notification(peer: PeerId) -> DeliveryItem<RouterDeliveryT
                 message_board::ThreadId::generate(),
                 cursor,
                 cursor,
-                u64::MAX,
+                // Native activity records aggregate every root count in one u64.
+                u64::MAX / u64::try_from(MAX_SUBSCRIPTION_NOTICE_ROOTS).unwrap(),
             )
             .unwrap()
         })

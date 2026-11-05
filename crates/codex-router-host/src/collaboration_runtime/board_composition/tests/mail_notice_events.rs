@@ -1,7 +1,7 @@
 //! SDK-generated hints cross the real pump and the Host's existing event owner.
 use super::super::fleet_service::{BOUND, TestFleet};
 use super::*;
-use fleet_sync_protocol::{DeliveryStream, GateAnswer, OperationAnswer, OperationRequest};
+use fleet_sync_protocol::{GateAnswer, OperationAnswer, OperationRequest};
 use fleet_sync_session::{
     Bytes, ConnectFailure, ConnectionClosed, PeerCredential, SessionClientStore, SessionTransport,
     TransportConnection,
@@ -19,108 +19,8 @@ mod mail_owner;
 mod harness;
 use harness::MailHarness;
 
-#[tokio::test]
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract asserts; setup may fail."
-)]
-async fn pre_welcome_hint_is_deferred_then_admitted_with_both_welcome_streams_before_ack()
--> Result<(), TestError> {
-    let mut harness = MailHarness::open(true).await?;
-    // Actual client Notice precedes the gated Host Welcome: no admission or ACK.
-    assert!(!*harness.welcomed.borrow());
-    assert!(harness.mail.state().await?.is_none());
-    assert_eq!(harness.ack().await?, NoticePosition::new(0));
-    harness.release_welcome()?;
-    // The real mail runner is held inactive so its exact durable obligations
-    // remain inspectable. Fetch behavior is proved separately through central.
-    let state = harness
-        .wait_state(
-            |state| {
-                state["items"]["rerunRequested"] == true
-                    && state["controls"]["active"]["cycle"] == 1
-            },
-            "deferred hint did not commit alongside both Welcome receive streams",
-        )
-        .await?;
-    harness.wait_ack(NoticePosition::new(1)).await?;
-    assert_eq!(state["items"]["active"]["cycle"], 1);
-    assert_eq!(state["items"]["nextCycle"], 2);
-    assert_eq!(state["controls"]["nextCycle"], 2);
-    assert_eq!(state["controls"]["rerunRequested"], false);
-    assert!(*harness.welcomed.borrow());
-    harness.close().await
-}
-
-#[tokio::test]
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract asserts; setup may fail."
-)]
-async fn five_minute_pass_admits_both_streams_without_a_notice_and_waits_while_unwelcomed()
--> Result<(), TestError> {
-    let mut harness = MailHarness::open(false).await?;
-    // Keep Tokio from automatically jumping over native I/O while its clock is
-    // paused. Only explicit advance below moves this test's elapsed time.
-    tokio::time::pause();
-    let clock_guard = tokio::spawn(async {
-        loop {
-            tokio::task::yield_now().await;
-        }
-    });
-    tokio::time::advance(Duration::from_secs(5 * 60)).await;
-    assert!(
-        harness.mail.state().await?.is_none(),
-        "unwelcomed timer admitted mail"
-    );
-    assert_eq!(harness.ack().await?, NoticePosition::new(0));
-    harness.release_welcome()?;
-    let state = harness
-        .wait_state(
-            |state| {
-                state["items"]["active"]["cycle"] == 1 && state["controls"]["active"]["cycle"] == 1
-            },
-            "Welcome did not admit both receive streams",
-        )
-        .await?;
-    assert_eq!(state["items"]["rerunRequested"], false);
-    assert_eq!(state["controls"]["rerunRequested"], false);
-    tokio::time::advance(Duration::from_secs(299)).await;
-    let before = harness
-        .mail
-        .state()
-        .await?
-        .ok_or("Welcome state disappeared")?;
-    assert_eq!(
-        before["items"]["rerunRequested"], false,
-        "receive timer fired early"
-    );
-    assert_eq!(before["controls"]["rerunRequested"], false);
-    tokio::time::advance(Duration::from_secs(1)).await;
-    tokio::time::resume();
-    clock_guard.abort();
-    let _ = clock_guard.await;
-    let state = harness
-        .wait_state(
-            |state| {
-                state["items"]["rerunRequested"] == true
-                    && state["controls"]["rerunRequested"] == true
-            },
-            "five-minute branch did not commit both receive streams",
-        )
-        .await?;
-    assert_eq!(
-        state["items"]["nextCycle"], 2,
-        "timer bypassed SDK cycle coalescing"
-    );
-    assert_eq!(state["controls"]["nextCycle"], 2);
-    assert_eq!(
-        harness.ack().await?,
-        NoticePosition::new(0),
-        "fixture unexpectedly supplied a notice"
-    );
-    harness.close().await
-}
+#[path = "../machine_session_push_test.rs"]
+mod pushed_mail;
 
 #[path = "mail_session_transport.rs"]
 mod transport;
@@ -131,6 +31,8 @@ mod relay_items;
 mod relay_paths;
 #[path = "mail_status_catch_up.rs"]
 mod status_catch_up;
+#[path = "mail_status_reset_test.rs"]
+mod status_reset;
 #[path = "mail_submission_epochs.rs"]
 mod submission_epochs;
 
@@ -181,7 +83,7 @@ async fn sdk_generated_notice_before_welcome_allows_a_real_durable_client_acknow
         .ok_or("notice event missing")?;
     assert!(
         matches!(event, ClientEvent::Notice { position, body: Notice::Consumer(ref notice) }
-        if position == NoticePosition::new(1) && matches!(notice.kind, board_sync_protocol::BoardNotice::MailWaiting { stream: DeliveryStream::Items }))
+        if position == NoticePosition::new(1) && matches!(notice.kind, board_sync_protocol::BoardNotice::LeaseSuperseded { .. }))
     );
     requests.acknowledge_notice(NoticePosition::new(1)).await?;
     let resumed = MachineSessionStore::open(&root)

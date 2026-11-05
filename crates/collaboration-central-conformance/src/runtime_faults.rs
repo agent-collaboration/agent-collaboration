@@ -1,94 +1,44 @@
 //! Ephemeral fault state belongs to one runtime object, never to the core rules.
 
 use crate::runtime_controls::{
-    AnswerFaultObservation, ClockObservation, DispatchFaultObservation,
-    ObjectReplyFaultObservation, RuntimeControl, RuntimeControlFailure, RuntimeFaultObservation,
-    StorageFaultObservation,
+    AnswerFaultObservation, ClockObservation, DispatchKey, ObjectReplyFaultObservation,
+    RuntimeControl, RuntimeControlFailure, RuntimeFaultObservation, StorageFaultObservation,
 };
 use collaboration_central_core::{ObjectAddress, RegistryTime};
-use fleet_sync_protocol::FrameId;
-use std::{
-    future::poll_fn,
-    sync::{Arc, Mutex, MutexGuard},
-    task::{Poll, Waker},
-};
+use fleet_sync_protocol::{ConnectionId, FrameId};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 #[path = "runtime_faults/session_faults.rs"]
 mod session_faults;
 pub use session_faults::{SessionFaultControl, SessionFaultObservation};
+mod dispatch_holds;
+mod signal;
+use signal::Signal;
 mod selected_calls;
+use dispatch_holds::DispatchHolds;
 use selected_calls::DispatchSelection;
 #[cfg(all(test, feature = "client"))]
+mod connection_drop_test;
+#[cfg(all(test, feature = "client"))]
+mod effect_selector_test;
+#[cfg(all(test, feature = "client"))]
+mod keyed_dispatch_test;
+#[cfg(all(test, feature = "client"))]
 mod selected_call_tests;
-
-#[derive(Default)]
-struct SignalState {
-    signalled: bool,
-    waiters: Vec<Waker>,
-}
-#[derive(Default)]
-struct Signal(Mutex<SignalState>);
-impl Signal {
-    fn signal(&self) -> Result<(), RuntimeControlFailure> {
-        let waiters = {
-            let mut state = self.0.lock().map_err(|_| RuntimeControlFailure::Poisoned)?;
-            state.signalled = true;
-            std::mem::take(&mut state.waiters)
-        };
-        for waiter in waiters {
-            waiter.wake();
-        }
-        Ok(())
-    }
-    async fn wait(&self) -> Result<(), RuntimeControlFailure> {
-        poll_fn(|context| {
-            let Ok(mut state) = self.0.lock() else {
-                return Poll::Ready(Err(RuntimeControlFailure::Poisoned));
-            };
-            if state.signalled {
-                return Poll::Ready(Ok(()));
-            }
-            if !state
-                .waiters
-                .iter()
-                .any(|waiter| waiter.will_wake(context.waker()))
-            {
-                state.waiters.push(context.waker().clone());
-            }
-            Poll::Pending
-        })
-        .await
-    }
-}
 
 #[derive(Default)]
 enum AnswerFault {
     #[default]
     Idle,
     Armed {
+        connection: ConnectionId,
         frame: FrameId,
         observed: Arc<Signal>,
     },
     Dropped {
+        connection: ConnectionId,
         frame: FrameId,
         observed: Arc<Signal>,
-    },
-}
-#[derive(Default)]
-enum DispatchFault {
-    #[default]
-    Idle,
-    Armed {
-        destination: ObjectAddress,
-        selection: DispatchSelection,
-        reached: Arc<Signal>,
-        release: Arc<Signal>,
-    },
-    Held {
-        destination: ObjectAddress,
-        request: Vec<u8>,
-        reached: Arc<Signal>,
-        release: Arc<Signal>,
     },
 }
 #[derive(Default)]
@@ -108,10 +58,9 @@ enum ObjectReplyFault {
 }
 struct FaultState {
     clock: Option<RegistryTime>,
-    small_mailbox_capacity: bool,
     storage: StorageFaultObservation,
     answer: AnswerFault,
-    dispatch: DispatchFault,
+    dispatch: DispatchHolds,
     object_reply: ObjectReplyFault,
     session: session_faults::SessionFaultState,
 }
@@ -119,10 +68,9 @@ impl Default for FaultState {
     fn default() -> Self {
         Self {
             clock: None,
-            small_mailbox_capacity: false,
             storage: StorageFaultObservation::Idle,
             answer: AnswerFault::Idle,
-            dispatch: DispatchFault::Idle,
+            dispatch: DispatchHolds::default(),
             object_reply: ObjectReplyFault::Idle,
             session: Default::default(),
         }
@@ -131,10 +79,10 @@ impl Default for FaultState {
 
 #[derive(Default)]
 pub struct RuntimeFaults(Mutex<FaultState>);
+#[cfg(test)]
+#[path = "runtime_faults_test.rs"]
+mod tests;
 impl RuntimeFaults {
-    pub fn small_mailbox_capacity(&self) -> Result<bool, RuntimeControlFailure> {
-        Ok(self.state()?.small_mailbox_capacity)
-    }
     fn state(&self) -> Result<MutexGuard<'_, FaultState>, RuntimeControlFailure> {
         self.0.lock().map_err(|_| RuntimeControlFailure::Poisoned)
     }
@@ -148,14 +96,30 @@ impl RuntimeFaults {
     pub fn storage_armed(&self) -> Result<bool, RuntimeControlFailure> {
         Ok(matches!(
             self.state()?.storage,
-            StorageFaultObservation::Armed { .. }
+            StorageFaultObservation::Armed { .. } | StorageFaultObservation::Unavailable
         ))
+    }
+    pub fn project_unavailable(&self) -> Result<bool, RuntimeControlFailure> {
+        Ok(matches!(
+            self.state()?.storage,
+            StorageFaultObservation::Unavailable
+        ))
+    }
+    pub fn restore_project_fault(&self, unavailable: bool) -> Result<(), RuntimeControlFailure> {
+        let mut state = self.state()?;
+        if unavailable {
+            state.storage = StorageFaultObservation::Unavailable;
+        } else if matches!(state.storage, StorageFaultObservation::Unavailable) {
+            state.storage = StorageFaultObservation::Idle;
+        }
+        Ok(())
     }
     /// A late callback failure follows real writes and is rolled back by the real store.
     /// `written` is the measured SQLite total_changes delta, not an invented count.
     pub fn fail_after_writes(&self, written: u64) -> Result<bool, RuntimeControlFailure> {
         let mut state = self.state()?;
         match state.storage {
+            StorageFaultObservation::Unavailable => Ok(true),
             StorageFaultObservation::Armed { after_writes } if written >= after_writes.get() => {
                 state.storage = StorageFaultObservation::Triggered {
                     after_writes,
@@ -168,16 +132,22 @@ impl RuntimeFaults {
             | StorageFaultObservation::Triggered { .. } => Ok(false),
         }
     }
-    pub fn drop_answer(&self, frame: FrameId) -> Result<bool, RuntimeControlFailure> {
+    pub fn drop_answer(
+        &self,
+        connection: ConnectionId,
+        frame: FrameId,
+    ) -> Result<bool, RuntimeControlFailure> {
         let observed = {
             let mut state = self.state()?;
             match &state.answer {
                 AnswerFault::Armed {
+                    connection: expected_connection,
                     frame: expected,
                     observed,
-                } if *expected == frame => {
+                } if *expected_connection == connection && *expected == frame => {
                     let observed = observed.clone();
                     state.answer = AnswerFault::Dropped {
+                        connection,
                         frame,
                         observed: observed.clone(),
                     };
@@ -199,33 +169,13 @@ impl RuntimeFaults {
         destination: &ObjectAddress,
         request: &[u8],
     ) -> Result<(), RuntimeControlFailure> {
-        let held = {
-            let mut state = self.state()?;
-            match &state.dispatch {
-                DispatchFault::Armed {
-                    destination: expected,
-                    selection,
-                    reached,
-                    release,
-                } if expected == destination && selection.matches(request) => {
-                    let reached = reached.clone();
-                    let release = release.clone();
-                    state.dispatch = DispatchFault::Held {
-                        destination: destination.clone(),
-                        request: request.to_vec(),
-                        reached: reached.clone(),
-                        release: release.clone(),
-                    };
-                    Some((reached, release))
-                }
-                DispatchFault::Idle | DispatchFault::Armed { .. } | DispatchFault::Held { .. } => {
-                    None
-                }
-            }
-        };
-        if let Some((reached, release)) = held {
-            reached.signal()?;
-            release.wait().await?;
+        let held = self
+            .state()?
+            .dispatch
+            .before_dispatch(destination, request)?;
+        if let Some(signals) = held {
+            signals.reached.signal()?;
+            signals.release.wait().await?;
         }
         Ok(())
     }
@@ -275,25 +225,20 @@ impl RuntimeFaults {
             storage: state.storage.clone(),
             answer: match &state.answer {
                 AnswerFault::Idle => AnswerFaultObservation::Idle,
-                AnswerFault::Armed { frame, .. } => AnswerFaultObservation::Armed { frame: *frame },
-                AnswerFault::Dropped { frame, .. } => {
-                    AnswerFaultObservation::Dropped { frame: *frame }
-                }
-            },
-            dispatch: match &state.dispatch {
-                DispatchFault::Idle => DispatchFaultObservation::Idle,
-                DispatchFault::Armed { destination, .. } => DispatchFaultObservation::Armed {
-                    destination: destination.clone(),
+                AnswerFault::Armed {
+                    connection, frame, ..
+                } => AnswerFaultObservation::Armed {
+                    connection: *connection,
+                    frame: *frame,
                 },
-                DispatchFault::Held {
-                    destination,
-                    request,
-                    ..
-                } => DispatchFaultObservation::Held {
-                    destination: destination.clone(),
-                    request: request.clone(),
+                AnswerFault::Dropped {
+                    connection, frame, ..
+                } => AnswerFaultObservation::Dropped {
+                    connection: *connection,
+                    frame: *frame,
                 },
             },
+            dispatches: state.dispatch.observe(),
             object_reply: match &state.object_reply {
                 ObjectReplyFault::Idle => ObjectReplyFaultObservation::Idle,
                 ObjectReplyFault::Armed { destination, .. } => ObjectReplyFaultObservation::Armed {
@@ -315,32 +260,45 @@ impl RuntimeFaults {
         command: RuntimeControl,
     ) -> Result<RuntimeFaultObservation, RuntimeControlFailure> {
         match command {
-            // Startup and live controls select the same fixed quota at the platform owner.
-            RuntimeControl::SmallMailboxCapacity => self.state()?.small_mailbox_capacity = true,
+            RuntimeControl::ProjectUnavailable => {
+                self.state()?.storage = StorageFaultObservation::Unavailable
+            }
+            RuntimeControl::ClearProjectFault => {
+                self.state()?.storage = StorageFaultObservation::Idle
+            }
             RuntimeControl::SetTime { now } => self.state()?.clock = Some(now),
             RuntimeControl::CopyFull { after_writes } => {
-                self.state()?.storage = StorageFaultObservation::Armed { after_writes };
+                let mut state = self.state()?;
+                if matches!(state.storage, StorageFaultObservation::Unavailable) {
+                    return Err(RuntimeControlFailure::AlreadyArmed);
+                }
+                state.storage = StorageFaultObservation::Armed { after_writes };
             }
-            RuntimeControl::DropNextAnswer { frame } => {
+            RuntimeControl::DropNextAnswer { connection, frame } => {
                 let mut state = self.state()?;
                 if matches!(state.answer, AnswerFault::Armed { .. }) {
                     return Err(RuntimeControlFailure::AlreadyArmed);
                 }
                 state.answer = AnswerFault::Armed {
+                    connection,
                     frame,
                     observed: Arc::default(),
                 };
             }
-            RuntimeControl::AwaitDroppedAnswer { frame } => {
+            RuntimeControl::AwaitDroppedAnswer { connection, frame } => {
                 let observed = match &self.state()?.answer {
                     AnswerFault::Armed {
+                        connection: expected_connection,
                         frame: expected,
                         observed,
                     }
                     | AnswerFault::Dropped {
+                        connection: expected_connection,
                         frame: expected,
                         observed,
-                    } if *expected == frame => observed.clone(),
+                    } if *expected_connection == connection && *expected == frame => {
+                        observed.clone()
+                    }
                     AnswerFault::Idle => return Err(RuntimeControlFailure::NotArmed),
                     AnswerFault::Armed { .. } | AnswerFault::Dropped { .. } => {
                         return Err(RuntimeControlFailure::DifferentFrame);
@@ -348,35 +306,15 @@ impl RuntimeFaults {
                 };
                 observed.wait().await?;
             }
-            RuntimeControl::HoldNextDispatch { destination } => {
-                self.arm_dispatch(destination, DispatchSelection::Any)?;
+            RuntimeControl::HoldNextDispatch { key } => {
+                self.state()?.dispatch.arm(key)?;
             }
-            RuntimeControl::HoldNextSelectedDispatch { destination, call } => {
-                self.arm_dispatch(destination, DispatchSelection::Call(call))?;
-            }
-            RuntimeControl::AwaitHeldDispatch => {
-                let reached = match &self.state()?.dispatch {
-                    DispatchFault::Armed { reached, .. } | DispatchFault::Held { reached, .. } => {
-                        reached.clone()
-                    }
-                    DispatchFault::Idle => return Err(RuntimeControlFailure::NotArmed),
-                };
+            RuntimeControl::AwaitHeldDispatch { key } => {
+                let reached = self.state()?.dispatch.reached(&key)?;
                 reached.wait().await?;
             }
-            RuntimeControl::ResumeDispatch => {
-                let release = {
-                    let mut state = self.state()?;
-                    match &state.dispatch {
-                        DispatchFault::Held { release, .. } => {
-                            let release = release.clone();
-                            state.dispatch = DispatchFault::Idle;
-                            release
-                        }
-                        DispatchFault::Idle | DispatchFault::Armed { .. } => {
-                            return Err(RuntimeControlFailure::NotHeld);
-                        }
-                    }
-                };
+            RuntimeControl::ResumeDispatch { key } => {
+                let release = self.state()?.dispatch.resume(&key, None)?;
                 release.signal()?;
             }
             RuntimeControl::DropNextObjectReply { destination } => {
@@ -385,12 +323,10 @@ impl RuntimeFaults {
             RuntimeControl::DropNextSelectedObjectReply { destination, call } => {
                 self.arm_object_reply(destination, DispatchSelection::Call(call))?;
             }
-            RuntimeControl::DropHeldDispatchReply => self.arm_held_reply()?,
-            RuntimeControl::ResumeDispatchAndHoldNext { destination } => {
-                self.resume_and_hold(destination, DispatchSelection::Any)?;
-            }
-            RuntimeControl::ResumeDispatchAndHoldNextSelected { destination, call } => {
-                self.resume_and_hold(destination, DispatchSelection::Call(call))?;
+            RuntimeControl::DropHeldDispatchReply { key } => self.arm_held_reply(key)?,
+            RuntimeControl::ResumeDispatchAndHoldNext { key, next } => {
+                let release = self.state()?.dispatch.resume(&key, Some(next))?;
+                release.signal()?;
             }
             RuntimeControl::AwaitDroppedObjectReply => {
                 let observed = match &self.state()?.object_reply {
@@ -403,49 +339,6 @@ impl RuntimeFaults {
             RuntimeControl::Observe => {}
         }
         self.observe()
-    }
-
-    fn arm_dispatch(
-        &self,
-        destination: ObjectAddress,
-        selection: DispatchSelection,
-    ) -> Result<(), RuntimeControlFailure> {
-        let mut state = self.state()?;
-        if !matches!(state.dispatch, DispatchFault::Idle) {
-            return Err(RuntimeControlFailure::AlreadyArmed);
-        }
-        state.dispatch = DispatchFault::Armed {
-            destination,
-            selection,
-            reached: Arc::default(),
-            release: Arc::default(),
-        };
-        Ok(())
-    }
-
-    fn resume_and_hold(
-        &self,
-        destination: ObjectAddress,
-        selection: DispatchSelection,
-    ) -> Result<(), RuntimeControlFailure> {
-        let release = {
-            let mut state = self.state()?;
-            let release = match &state.dispatch {
-                DispatchFault::Held { release, .. } => release.clone(),
-                DispatchFault::Idle | DispatchFault::Armed { .. } => {
-                    return Err(RuntimeControlFailure::NotHeld);
-                }
-            };
-            // Install the next selection before releasing the current caller.
-            state.dispatch = DispatchFault::Armed {
-                destination,
-                selection,
-                reached: Arc::default(),
-                release: Arc::default(),
-            };
-            release
-        };
-        release.signal()
     }
 
     fn arm_object_reply(
@@ -465,24 +358,17 @@ impl RuntimeFaults {
         Ok(())
     }
 
-    fn arm_held_reply(&self) -> Result<(), RuntimeControlFailure> {
+    fn arm_held_reply(&self, key: DispatchKey) -> Result<(), RuntimeControlFailure> {
         let mut state = self.state()?;
-        let DispatchFault::Held {
-            destination,
-            request,
-            ..
-        } = &state.dispatch
-        else {
-            return Err(RuntimeControlFailure::NotHeld);
-        };
+        let request = state.dispatch.held_request(&key)?;
         if matches!(state.object_reply, ObjectReplyFault::Armed { .. }) {
             return Err(RuntimeControlFailure::AlreadyArmed);
         }
         // Capture both under the fault owner's lock; a later bypassing call
         // cannot consume the lost reply even when its invocation kind matches.
         state.object_reply = ObjectReplyFault::Armed {
-            destination: destination.clone(),
-            selection: DispatchSelection::ExactRequest(request.clone()),
+            destination: key.destination,
+            selection: DispatchSelection::ExactRequest(request),
             observed: Arc::default(),
         };
         Ok(())

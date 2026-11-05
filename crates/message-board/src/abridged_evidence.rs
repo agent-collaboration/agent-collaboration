@@ -109,7 +109,40 @@ struct EvidenceWire<T> {
     abridged: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum EvidenceValidationError {
+    #[error("evidence count and prefix must agree")]
+    Count,
+    #[error("complete evidence digest must match")]
+    Digest,
+}
+
 impl<T: EvidenceEntry> AbridgedEvidence<T> {
+    /// Reconstruct a validated prefix while retaining its original full commitment.
+    pub fn from_parts(
+        entries: Vec<T>,
+        total_count: u64,
+        digest: CanonicalHash,
+        abridged: bool,
+    ) -> Result<Self, EvidenceValidationError> {
+        if entries.len() > MAX_EVIDENCE_ENTRIES
+            || u64::try_from(entries.len()).ok() != Some(total_count.min(256))
+            || abridged != (total_count > 256)
+        {
+            return Err(EvidenceValidationError::Count);
+        }
+        // The omitted entries are unavailable for an abridged commitment.
+        if !abridged && evidence_digest(&entries) != digest {
+            return Err(EvidenceValidationError::Digest);
+        }
+        Ok(Self {
+            entries,
+            total_count,
+            digest,
+            abridged,
+        })
+    }
+
     #[must_use]
     pub fn from_full(mut entries: Vec<T>) -> Self {
         const {
@@ -148,25 +181,11 @@ impl<T: EvidenceEntry> AbridgedEvidence<T> {
 impl<'de, T: Deserialize<'de> + EvidenceEntry> Deserialize<'de> for AbridgedEvidence<T> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let wire = EvidenceWire::<T>::deserialize(deserializer)?;
-        if wire.entries.len() > MAX_EVIDENCE_ENTRIES
-            || u64::try_from(wire.entries.len()).ok() != Some(wire.total_count.min(256))
-            || wire.abridged != (wire.total_count > 256)
-        {
-            return Err(serde::de::Error::custom(
-                "evidence count and prefix must agree",
-            ));
-        }
-        // An abridged commitment cannot be recomputed without the omitted evidence.
-        if !wire.abridged && evidence_digest(&wire.entries) != wire.digest {
-            return Err(serde::de::Error::custom(
-                "complete evidence digest must match",
-            ));
-        }
-        Ok(Self {
-            entries: wire.entries,
-            total_count: wire.total_count,
-            digest: wire.digest,
-            abridged: wire.abridged,
-        })
+        Self::from_parts(wire.entries, wire.total_count, wire.digest, wire.abridged)
+            .map_err(serde::de::Error::custom)
     }
 }
+
+#[cfg(test)]
+#[path = "abridged_evidence_test.rs"]
+mod tests;

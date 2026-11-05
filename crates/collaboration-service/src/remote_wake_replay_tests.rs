@@ -98,28 +98,35 @@ async fn publish_recorded_status(
     let id = item.id();
     let relay = PeerId::new(uuid::Uuid::now_v7()).unwrap();
     let limits = source.fixture.host.config.local.limits;
+    let binding = source.fixture.host.binding.clone();
+    let submitter = fleet_sync_protocol::Submitter::Machine(source.fixture.host.config.local.owner);
+    let observed_at = runtime_primitives::Clock::now(source.fixture.host.as_ref());
     source
         .fixture
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                let mut outbox = Outbox::<_, RouterDeliveryTypes>::new(scope, limits);
+                let mut outbox =
+                    Outbox::<_, RouterDeliveryTypes, _>::new(scope, limits, binding.as_ref());
                 outbox
-                    .enqueue(item, relay)
+                    .enqueue(item, relay, submitter, observed_at)
                     .await
                     .map_err(delivery_rollback)?;
                 outbox
-                    .publish_status(StatusPublication {
-                        item: id,
-                        version: StatusVersion::new(1),
-                        cancel: None,
-                        status: match result {
-                            Some(result) => DeliveryStatus::Delivered {
-                                acceptance: CarrierAcceptance::Wake(Box::new(result)),
+                    .publish_status(
+                        StatusPublication {
+                            item: id,
+                            version: StatusVersion::new(1),
+                            cancel: None,
+                            status: match result {
+                                Some(result) => DeliveryStatus::Delivered {
+                                    acceptance: CarrierAcceptance::Wake(Box::new(result)),
+                                },
+                                None => DeliveryStatus::Uncertain,
                             },
-                            None => DeliveryStatus::Uncertain,
                         },
-                    })
+                        observed_at,
+                    )
                     .await
                     .map_err(delivery_rollback)?;
                 Ok::<_, StoreError>(())
@@ -219,12 +226,13 @@ async fn wake_operations_remote_expired_new_request_has_no_custody() {
         }
     ));
     let limits = source.fixture.host.config.local.limits;
+    let binding = source.fixture.host.binding.clone();
     let state = source
         .fixture
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                Outbox::<_, RouterDeliveryTypes>::new(scope, limits)
+                Outbox::<_, RouterDeliveryTypes, _>::new(scope, limits, binding.as_ref())
                     .status(id)
                     .await
                     .map(|status| status.state)

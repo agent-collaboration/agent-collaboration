@@ -106,7 +106,7 @@ where
         entry.position = position;
         envelope.request = None;
         envelope.time = RecordTime::Router(now);
-        fleet_record_store::put(scope, &record, RecordWriteSource::Live, row_ids).await?;
+        fleet_record_store::put(scope, &record, RecordWriteSource::Live, now, row_ids).await?;
         feed.push(FleetFeedEntry { position, record });
     }
     crate::fleet_feed_store::append(scope, &feed, now, row_ids).await

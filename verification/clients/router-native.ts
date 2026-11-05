@@ -1,9 +1,9 @@
-import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { decode, encode } from "../exact-json.ts";
 import { OwnedProcess, shellQuote } from "../machines/owned-process.ts";
 import { Remote } from "../machines/remote.ts";
-import type { Machine } from "../declaration.ts";
+import type { Artifact, Machine } from "../declaration.ts";
+import { boardIdentity } from "./board-requests.ts";
 import type { Receipt } from "../receipt.ts";
 
 const frameSchema = z.object({
@@ -67,7 +67,7 @@ export class RouterNative {
       arguments: argumentsList,
       environment: globalThis.process.env,
       cwd: input.repository,
-      name: `native-${input.machine.name}-${randomUUID()}`,
+      name: `native-${input.machine.name}-${boardIdentity()}`,
       receipt: input.receipt,
     });
     const connection = new RouterNative(process);
@@ -88,6 +88,45 @@ export class RouterNative {
       throw error;
     }
   }
+  static async connectAtService(input: {
+    cli: Artifact;
+    serviceDirectory: string;
+    repository: string;
+    environment: NodeJS.ProcessEnv;
+    receipt: Receipt;
+  }): Promise<RouterNative> {
+    const process = new OwnedProcess({
+      executable: input.cli.path,
+      arguments: [
+        "native",
+        "--endpoint",
+        "codex-local",
+        "--service-directory",
+        input.serviceDirectory,
+      ],
+      environment: input.environment,
+      cwd: input.repository,
+      name: `d1-native-${boardIdentity()}`,
+      receipt: input.receipt,
+    });
+    const connection = new RouterNative(process);
+    try {
+      await connection.rpc("initialize", {
+        clientInfo: {
+          name: "codex-router-d1-verification",
+          title: "D1 verification",
+          version: "1.0.0",
+        },
+        capabilities: { experimentalApi: true },
+      });
+      process.child.stdin?.write(`${encode({ method: "initialized" })}\n`);
+      process.capture();
+      return connection;
+    } catch (error: unknown) {
+      await connection.close();
+      throw error;
+    }
+  }
   healthy(): void {
     this.process.checkOutput();
     if (this.failure !== undefined) throw this.failure;
@@ -96,7 +135,7 @@ export class RouterNative {
   }
   async rpc(method: string, params: Readonly<Record<string, unknown>>): Promise<unknown> {
     this.healthy();
-    const id = randomUUID();
+    const id = boardIdentity();
     return new Promise<unknown>((resolve, reject): void => {
       const timer = setTimeout((): void => {
         this.pending.delete(id);

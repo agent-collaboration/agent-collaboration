@@ -16,9 +16,12 @@ type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 #[path = "../../tests/native_http/support.rs"]
 mod configuration;
 async fn open(root: &Path) -> TestResult<Arc<NativeObjects>> {
+    open_with_clock(root, Arc::new(runtime_primitives::SystemClock)).await
+}
+async fn open_with_clock(root: &Path, clock: Arc<dyn Clock>) -> TestResult<Arc<NativeObjects>> {
     Ok(NativeObjects::open_with_controls(
         root,
-        Arc::new(runtime_primitives::SystemClock),
+        clock,
         configuration::registry_config()?,
         crate::DeliveryConfig {
             relay_peer: "019f0000-0000-7000-8000-000000005240"
@@ -31,13 +34,27 @@ async fn open(root: &Path) -> TestResult<Arc<NativeObjects>> {
     )
     .await?)
 }
+struct TokioClock(tokio::time::Instant);
+impl Clock for TokioClock {
+    fn now(&self) -> SyncTime {
+        SyncTime::from_unix_millis(
+            1_792_281_600_000_i64
+                .saturating_add(i64::try_from(self.0.elapsed().as_millis()).unwrap_or(i64::MAX)),
+        )
+    }
+}
+
 async fn ready(slot: &ObjectSlot) -> TestResult {
-    let mut ready = slot.alarm_owner_ready.subscribe();
-    tokio::time::timeout(Duration::from_secs(2), ready.wait_for(|ready| *ready)).await??;
+    let mut ready = slot.alarm_owner_generation.subscribe();
+    tokio::time::timeout(
+        Duration::from_secs(2),
+        ready.wait_for(|generation| *generation > 0),
+    )
+    .await??;
     Ok(())
 }
 fn envelope(database: DatabaseId, kind: &str, target: Value, request: Value) -> Value {
-    json!({"source":{"kind":"registry"},"sourceFace":"registry","authority":{"kind":"object"},"destination":{"kind":"copy","value":database},"destinationFace":"copy","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"alarm_test"},"kind":kind,"target":target,"request":request})
+    json!({"source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},"destination":{"kind":"copy","value":database},"destinationFace":"copy","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"alarm_test"},"kind":kind,"target":target,"request":request})
 }
 
 #[expect(
@@ -126,8 +143,12 @@ impl Task for SavedCopyProbe {
 async fn registry_consumed_wake_recovers_its_saved_operation_after_two_begin_failures() -> TestResult
 {
     let root = tempfile::tempdir()?;
-    let objects = open(root.path()).await?;
-    let slot = objects.slot(ObjectAddress::Registry).await?;
+    let objects = open_with_clock(
+        root.path(),
+        Arc::new(TokioClock(tokio::time::Instant::now())),
+    )
+    .await?;
+    let slot = objects.slot(ObjectAddress::Fleet).await?;
     ready(&slot).await?;
     let host = slot.host.get().ok_or("Registry host missing")?;
     let database = DatabaseId::new(durable_steps::Uuid::now_v7())?;
@@ -147,9 +168,35 @@ async fn registry_consumed_wake_recovers_its_saved_operation_after_two_begin_fai
         })
         .await?;
     host.observed.inner().fail_next_begins(2);
+    let mut generation = slot.alarm_owner_generation.subscribe();
+    let mut previous = *generation.borrow_and_update();
+    tokio::time::pause();
     slot.io
         .wake_at(slot.io.now().after(Duration::from_millis(50)))
         .await?;
+    for elapsed in [Duration::from_millis(50), Duration::from_secs(1)] {
+        tokio::time::advance(elapsed).await;
+        let current = *tokio::time::timeout(
+            Duration::from_secs(3),
+            generation.wait_for(|current| *current > previous),
+        )
+        .await??;
+        assert_eq!(
+            current,
+            previous + 1,
+            "one virtual deadline must finish one owner drive"
+        );
+        previous = current;
+    }
+    assert_eq!(host.observed.inner().begin_failures(), 2);
+    tokio::time::advance(Duration::from_secs(2)).await;
+    // External SQLite work runs under a real safety cap after all retry time was injected.
+    tokio::time::resume();
+    tokio::time::timeout(
+        Duration::from_secs(3),
+        generation.wait_for(|current| *current > previous),
+    )
+    .await??;
     let observed = tokio::time::timeout(Duration::from_secs(3), async {
         loop {
             // Read-only public journal observation bypasses the injected wrapper;
@@ -159,8 +206,14 @@ async fn registry_consumed_wake_recovers_its_saved_operation_after_two_begin_fai
                 .transaction(move |scope| Box::pin(async move { scope.operation(operation).await }))
                 .await?
                 .ok_or("saved operation disappeared")?;
-            if matches!(record.execution, OperationExecution::Completed { .. }) {
-                return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(record);
+            match record.execution {
+                OperationExecution::Completed { .. } => {
+                    return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(record);
+                }
+                OperationExecution::Failed { .. } => {
+                    return Err(format!("saved copy probe failed: {record:?}").into());
+                }
+                OperationExecution::Running { .. } => {}
             }
             tokio::task::yield_now().await;
         }
@@ -168,7 +221,18 @@ async fn registry_consumed_wake_recovers_its_saved_operation_after_two_begin_fai
     .await;
     assert_eq!(host.observed.inner().begin_failures(), 2);
     println!("ALARM_FAILURES registry begin_failures=2");
-    let observed = observed??;
+    let observed = match observed {
+        Ok(result) => result?,
+        Err(error) => {
+            let retained = host
+                .object
+                .transaction(move |scope| Box::pin(async move { scope.operation(operation).await }))
+                .await?;
+            return Err(
+                format!("saved probe recovery timed out: {error}; retained={retained:?}").into(),
+            );
+        }
+    };
     assert_eq!(observed.id, operation);
     assert_eq!(observed.request_key, key);
     assert_eq!(host.observed.inner().begin_failures(), 2);
@@ -186,24 +250,6 @@ async fn registry_consumed_wake_recovers_its_saved_operation_after_two_begin_fai
 struct SavedFleetNotice;
 impl Task for SavedFleetNotice {
     const KIND: &'static str = "central.fleet-notice";
-    const VERSION: u32 = 1;
-    type Store = <NativeHost as ObjectHost>::Store;
-    type Input = Value;
-    type Output = ();
-    async fn run<Context: OperationContext<Store = Self::Store>>(
-        &self,
-        _: &mut Context,
-        _: &Value,
-    ) -> Result<(), OperationFailure> {
-        Err(OperationFailure::InvalidPayload {
-            message: "admission type must never execute".into(),
-        })
-    }
-}
-
-struct SavedOpenMailbox;
-impl Task for SavedOpenMailbox {
-    const KIND: &'static str = "central.open-mailbox";
     const VERSION: u32 = 1;
     type Store = <NativeHost as ObjectHost>::Store;
     type Input = Value;
@@ -261,11 +307,19 @@ async fn fleet_consumed_wake_recovers_its_saved_notice_after_prune_begin_failure
         let installation = message_board::ServiceId::try_from(durable_steps::Uuid::now_v7().to_string())?;
         // Initialize the real destination before fault injection, without a
         // connected transport. The same notice must survive missing admission.
-        let target = objects.slot(ObjectAddress::Connection(installation.clone())).await?;
+        let target = objects.slot(ObjectAddress::Fleet).await?;
         ready(&target).await?;
         let slot = objects.slot(ObjectAddress::Fleet).await?;
         ready(&slot).await?;
         let host = slot.host.get().ok_or("Fleet host missing")?;
+        let peer = fleet_sync_protocol::PeerId::new(durable_steps::Uuid::now_v7())?;
+        let enrolled = installation.clone();
+        host.object.transaction(move |scope|Box::pin(async move {
+            use durable_steps::storage::TransactionScope;
+            sqlx_core::query::query::<sqlx_turso::Turso>("INSERT INTO machine_enrollments(machine_id,service_id,machine_label,access_client_id,credential_hash,state,expires_at,created_at,updated_at) VALUES(?,?,'alarm fixture','alarm-client','alarm-credential','enrolled','2033-05-18T03:33:20+00:00','2026-10-18T00:00:00+00:00','2026-10-18T00:00:00+00:00')")
+                .bind(peer.to_string()).bind(enrolled.as_str()).execute(scope.executor()).await.map_err(StoreError::backend)?;
+            Ok(())
+        })).await?;
         let key = RequestKey::new("retained-fleet-notice-alarm")?;
         let saved_key = key.clone();
         let input = json!({"installation":installation,"notice":{"kind":"fleetFeedAdvanced","value":{"through":1}}});
@@ -283,50 +337,11 @@ async fn fleet_consumed_wake_recovers_its_saved_notice_after_prune_begin_failure
         let rows = target_host.object.transaction(|scope| Box::pin(async move {
             use durable_steps::storage::TransactionScope;
             use sqlx_core::{query::query, row::Row};
-            let rows = query::<sqlx_turso::Turso>("SELECT position,kind FROM machine_notices ORDER BY position").fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
-            rows.into_iter().map(|row| Ok((row.try_get::<i64, _>("position").map_err(StoreError::backend)?, row.try_get::<String, _>("kind").map_err(StoreError::backend)?))).collect::<Result<Vec<_>, _>>()
+            let rows = query::<sqlx_turso::Turso>("SELECT position,kind,feed_through FROM machine_control_notices ORDER BY position").fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
+            rows.into_iter().map(|row| Ok((row.try_get::<i64, _>("position").map_err(StoreError::backend)?, row.try_get::<String, _>("kind").map_err(StoreError::backend)?, row.try_get::<i64, _>("feed_through").map_err(StoreError::backend)?))).collect::<Result<Vec<_>, _>>()
         })).await?;
         assert_eq!(rows.len(), 1);
-        let delivered: board_sync_protocol::BoardNotice = serde_json::from_str(&rows[0].1)?;
-        assert_eq!(rows[0].0, 1);
-        assert_eq!(delivered, board_sync_protocol::BoardNotice::FleetFeedAdvanced { through: message_board::FleetPosition::try_from(1)? });
-        Ok(())
-    }.await;
-    objects.shutdown().await?;
-    proof
-}
-
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions must fail this test while fixture errors propagate through Result."
-)]
-#[tokio::test]
-async fn mailbox_consumed_wake_recovers_its_saved_open_after_deadline_begin_failure() -> TestResult
-{
-    let root = tempfile::tempdir()?;
-    let objects = open(root.path()).await?;
-    let proof = async {
-        let installation = message_board::ServiceId::try_from(durable_steps::Uuid::now_v7().to_string())?;
-        let peer = fleet_sync_protocol::PeerId::new(durable_steps::Uuid::now_v7())?;
-        let slot = objects.slot(ObjectAddress::Mailbox(installation)).await?;
-        ready(&slot).await?;
-        let host = slot.host.get().ok_or("Mailbox host missing")?;
-        let key = RequestKey::new("retained-mailbox-open-alarm")?;
-        let saved_key = key.clone();
-        let input = json!({"peer":peer});
-        let operation = host.object.transaction(move |scope| Box::pin(async move {
-            Ok(scope.admit::<SavedOpenMailbox>(&saved_key, &input).await.map_err(StoreError::backend)?.id())
-        })).await?;
-        host.observed.inner().fail_next_begin();
-        slot.io.wake_at(slot.io.now().after(Duration::from_millis(50))).await?;
-        let completion = completed(host, operation, key).await;
-        assert_eq!(host.observed.inner().begin_failures(), 1);
-        println!("ALARM_FAILURES maintenance begin_failures=1");
-        completion?;
-        let recipient = host.object.transaction(|scope| Box::pin(async move {
-            fleet_sync_delivery::Mailbox::<_, board_sync_protocol::BoardDeliveryTypes>::stored_recipient(scope).await.map_err(StoreError::backend)
-        })).await?;
-        assert_eq!(recipient, Some(peer));
+        assert_eq!(rows, vec![(1, "fleet_feed_advanced".to_owned(), 1)]);
         Ok(())
     }.await;
     objects.shutdown().await?;

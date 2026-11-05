@@ -2,8 +2,8 @@
 
 use crate::{
     CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
-    admin_import_contract::AdminImportRecord,
-    admin_import_store::{AdminImportCommand, AdminImportRefusal, AdminImportStep},
+    admin_import_contract::{AdminImportRecord, AdminImportRefusal},
+    admin_import_store::{AdminImportCommand, AdminImportStep},
     caller_context::CallAuthority,
     object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork,
@@ -31,6 +31,9 @@ where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -45,26 +48,25 @@ where
         let command: AdminImportCommand =
             serde_json::from_value(call.request).map_err(|_| refused())?;
         let allowed = match &command {
-            AdminImportCommand::Published { .. } => {
-                call.source_face == CallerKind::Copy
-                    && matches!(call.authority, CallAuthority::Object)
-                    && matches!(&call.source, ObjectAddress::Copy(project)
-                        if *project == command.database())
-            }
+            AdminImportCommand::Published { .. } => false,
             _ => {
                 call.source_face == CallerKind::Edge
-                    && call.source == ObjectAddress::Registry
+                    && call.source == ObjectAddress::Fleet
                     && matches!(call.authority, CallAuthority::Owner(_))
             }
         };
         if !allowed {
             return Err(refused());
         }
-        let ObjectWork::Fleet { host, .. } = &self.work else {
+        let ObjectWork::Fleet { host, io, .. } = &self.work else {
             return Err(refused());
         };
         let (answer, _) = StepDriver::new(host.clone())
-            .run(AdminImportStep(command))
+            .run(AdminImportStep {
+                command,
+                now: io.now(),
+                row_ids: crate::fleet_row_ids::FleetRowIds::new(io.clone()),
+            })
             .await
             .map_err(|_| CallFailure::AnswerLost)?;
         serde_json::to_vec(&answer).map_err(|_| CallFailure::AnswerLost)

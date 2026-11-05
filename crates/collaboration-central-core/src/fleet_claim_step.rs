@@ -1,8 +1,9 @@
 //! A claim's attempt stays settled even when an earlier reservation arrives late.
 use crate::{
     ClaimReservationOutcome, ClaimReservationState,
-    fleet_record_codec::{corrupt, decode_json, required},
-    fleet_record_store, generated_fleet_lease as queries,
+    fleet_claim_store::{read_reservation as read, write_reservation as write},
+    fleet_record_store,
+    fleet_row_codec::corrupt,
     step_driver::{StepCallback, StepResult},
 };
 use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScope};
@@ -18,6 +19,7 @@ pub(crate) enum ClaimStep {
     Reserve {
         database: DatabaseId,
         attempt: TransferId,
+        now: chrono::DateTime<chrono::Utc>,
     },
     Refuse {
         database: DatabaseId,
@@ -48,8 +50,12 @@ where
     ) -> BoxFuture<'scope, StepResult<Self::Output, Infallible>> {
         Box::pin(async move {
             match self {
-                Self::Reserve { database, attempt } => Ok((
-                    ClaimStepResult::Reservation(reserve(scope, database, attempt).await?),
+                Self::Reserve {
+                    database,
+                    attempt,
+                    now,
+                } => Ok((
+                    ClaimStepResult::Reservation(reserve(scope, database, attempt, now).await?),
                     Vec::new(),
                 )),
                 Self::Refuse {
@@ -79,6 +85,7 @@ where
                                 ClaimReservationState::Settled {
                                     outcome: ClaimReservationOutcome::Refused,
                                 },
+                                now,
                             )
                             .await?;
                         }
@@ -92,7 +99,7 @@ where
                         &mut row_ids,
                     )
                     .await?;
-                    crate::fleet_notice_admission::admit_mutation_notices::<Store, Driver>(
+                    crate::fleet_notice_admission::admit_mutation_notices::<Store, Driver, _>(
                         scope,
                         previous_feed,
                         runtime_primitives::SyncTime::from_unix_millis(now.timestamp_millis()),
@@ -109,12 +116,14 @@ async fn reserve<Scope: TransactionScope>(
     scope: &mut Scope,
     database: DatabaseId,
     attempt: TransferId,
+    now: chrono::DateTime<chrono::Utc>,
 ) -> Result<GateAnswer, StoreError>
 where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
     for<'value> String:
         Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
-    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'value> Option<String>:
+        Type<Scope::Database> + Decode<'value, Scope::Database> + Encode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
     if let Some(state) = read(scope, database, attempt).await? {
@@ -151,55 +160,8 @@ where
         BoardState::Archived => return refusal("board_archived", "claim board is archived"),
         BoardState::Open | BoardState::Closed => {}
     }
-    write(scope, database, attempt, ClaimReservationState::Active).await?;
+    write(scope, database, attempt, ClaimReservationState::Active, now).await?;
     Ok(GateAnswer::Reserved)
-}
-
-pub(crate) async fn read<Scope: TransactionScope>(
-    scope: &mut Scope,
-    database: DatabaseId,
-    attempt: TransferId,
-) -> Result<Option<ClaimReservationState>, StoreError>
-where
-    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
-    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
-    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
-    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
-{
-    queries::read_claim_reservation(scope, attempt.as_uuid().to_string())
-        .await
-        .map_err(StoreError::backend)?
-        .map(|stored| {
-            if required(stored.project_id, "claim.project_id")? != database.as_uuid().to_string() {
-                return Err(corrupt(
-                    "claim.project_id",
-                    "attempt belongs to another project",
-                ));
-            }
-            decode_json(&required(stored.state, "claim.state")?, "claim.state")
-        })
-        .transpose()
-}
-
-pub(crate) async fn write<Scope: TransactionScope>(
-    scope: &mut Scope,
-    database: DatabaseId,
-    attempt: TransferId,
-    state: ClaimReservationState,
-) -> Result<(), StoreError>
-where
-    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
-    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
-{
-    queries::store_claim_reservation(
-        scope,
-        attempt.as_uuid().to_string(),
-        database.as_uuid().to_string(),
-        serde_json::to_string(&state).map_err(StoreError::backend)?,
-    )
-    .await
-    .map_err(StoreError::backend)?;
-    Ok(())
 }
 
 fn refusal(code: &str, detail: impl Into<String>) -> Result<GateAnswer, StoreError> {

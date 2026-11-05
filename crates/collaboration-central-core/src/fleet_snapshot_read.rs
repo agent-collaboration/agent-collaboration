@@ -1,7 +1,11 @@
 //! Snapshot pages reuse each canonical record owner's validated decoding.
+#[cfg(test)]
+#[path = "fleet_snapshot_read_test.rs"]
+mod tests;
 use crate::{
+    fleet_record_batch,
     fleet_record_codec::{corrupt, required},
-    fleet_record_store, generated_fleet_record_reads as queries,
+    generated_fleet_record_reads as queries,
 };
 use durable_steps::{StoreError, storage::TransactionScope};
 use message_board::{Record, RecordId, RecordKind, RecordRef};
@@ -87,16 +91,15 @@ where
         keys.pop();
     }
     let mut records = Vec::with_capacity(keys.len());
+    let batch = fleet_record_batch::read(scope, &keys).await?;
     for reference in &keys {
-        let stored = fleet_record_store::read(scope, reference)
-            .await?
-            .ok_or_else(|| {
-                corrupt(
-                    "snapshot.record",
-                    "key has no canonical record in this transaction",
-                )
-            })?;
-        records.push(stored.record);
+        let stored = batch.get(reference).ok_or_else(|| {
+            corrupt(
+                "snapshot.record",
+                "key has no canonical record in this transaction",
+            )
+        })?;
+        records.push(stored.record.clone());
     }
     let next = if has_more { keys.last().cloned() } else { None };
     Ok((records, next))

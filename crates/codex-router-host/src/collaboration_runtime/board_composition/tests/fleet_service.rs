@@ -53,7 +53,11 @@ use notification_directory_probe::DirectoryProbe;
 mod fleet_read_probe;
 use fleet_read_probe::FleetReadProbe;
 
+#[path = "fixture_sender_binding.rs"]
+mod fixture_sender_binding;
+
 struct Consumer {
+    peer: PeerId,
     directory: Arc<DirectoryProbe>,
     fleet_reads: Arc<FleetReadProbe>,
     read_copy_entries: Arc<Mutex<Vec<fleet_admission::DirectoryEntry>>>,
@@ -380,8 +384,6 @@ impl TestFleet {
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,
-            10_000,
-            64 * 1024 * 1024,
             minimum_settlement_allowance::<board_sync_protocol::BoardDeliveryTypes>()?,
         )?;
         Self::start_configured(
@@ -427,10 +429,13 @@ impl TestFleet {
         let read_copy_entries = Arc::new(Mutex::new(Vec::new()));
         let read_copy_unavailable = Arc::new(AtomicBool::new(false));
         let read_copy_requests = Arc::new(AtomicUsize::new(0));
+        let relay = "0192a1b2-c3d4-7000-8000-000000000003".parse()?;
         let service = FleetService::<BoardConsumerProtocol, _, _>::open(
             ServiceOptions {
                 directory: directory.to_owned(),
-                delivery,
+                clock: Arc::new(SystemClock),
+                delivery: delivery
+                    .map(|limits| fleet_sync_service::RelayDeliveryConfig { relay, limits }),
                 receiver,
                 registry: RegistryConfig {
                     lease: BOARD_LEASE_POLICY,
@@ -442,6 +447,7 @@ impl TestFleet {
                 socket_timeout: BOUND,
             },
             Arc::new(Consumer {
+                peer,
                 directory: directory_probe.clone(),
                 fleet_reads: fleet_reads.clone(),
                 read_copy_entries: read_copy_entries.clone(),

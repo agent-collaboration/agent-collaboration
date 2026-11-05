@@ -1,8 +1,9 @@
 //! Conformance-only import of genuine consumer snapshots through the owning engines.
 use super::imported_unheld_fixture::{fixture_fleet, fixture_seed};
 use super::{IdSource, PlatformIo};
+use crate::FleetKind;
 use crate::{
-    ConformanceBoardState, ObjectHost, ObjectRuntime, OwnerIdentity, RegistryKind,
+    ConformanceBoardState, ObjectHost, ObjectRuntime, OwnerIdentity,
     copy_write_calls::{AdminCopySeedRequest, CopyAdminSeed},
     object_runtime::ObjectWork,
 };
@@ -17,7 +18,7 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -37,7 +38,7 @@ where
         pages: Vec<SnapshotPage>,
         manifest: SnapshotManifest,
     ) -> Result<ReplicationPosition, StoreError> {
-        let ObjectWork::Registry {
+        let ObjectWork::Fleet {
             engine,
             shared_host,
             config,
@@ -50,7 +51,7 @@ where
         fixture_fleet(shared_host, &owner, database, board_state).await?;
         let attempt = RequestId::new(shared_host.new_id()).map_err(StoreError::backend)?;
         let operation = engine
-            .start::<fleet_sync_lease::ImportTask<Host::Store, Host::Database>>(
+            .start_import(
                 &fleet_sync_lease::lifecycle_request_key(attempt).map_err(StoreError::backend)?,
                 Import {
                     attempt,

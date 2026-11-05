@@ -32,7 +32,13 @@ where
         pending: PendingForward,
         post: ForwardedPost,
     ) -> Result<(), StoreError> {
-        if forward_store::pending(self).await?.len() >= 16 {
+        if forward_store::pending(self)
+            .await?
+            .iter()
+            .filter(|row| row.session.peer == pending.session.peer)
+            .count()
+            >= 16
+        {
             return self.stage_operation_answer(
                 pending.connection,
                 pending.request_frame,
@@ -70,11 +76,16 @@ where
                 pending.phase = ForwardPhase::AwaitingHolder {
                     installation: installation.clone(),
                 };
+                pending.updated_at = now;
                 forward_store::save_pending(self, &pending).await?;
                 let request = ForwardDeliveryRequest {
                     forward_frame: id,
                     holder,
                     deadline: pending.deadline,
+                    origin_session: pending.session,
+                    request_frame: pending.request_frame,
+                    connection: pending.connection,
+                    created_at: pending.created_at,
                     post: VerifiedForwardedPost {
                         project: pending.project,
                         origin,

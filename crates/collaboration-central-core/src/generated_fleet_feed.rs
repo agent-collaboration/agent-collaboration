@@ -15,6 +15,10 @@ pub(crate) struct StoredFleetFeedState {
     pub position_class: Option<String>,
     pub retained_through: Option<String>,
     pub floor_class: Option<String>,
+    pub created_at: Option<String>,
+    pub created_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_class: Option<String>,
 }
 pub(crate) fn read_fleet_feed_state<S>(
     scope: &mut S,
@@ -40,6 +44,10 @@ where
                     position_class: row.try_get("position_class")?,
                     retained_through: row.try_get("retained_through")?,
                     floor_class: row.try_get("floor_class")?,
+                    created_at: row.try_get("created_at")?,
+                    created_class: row.try_get("created_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_class: row.try_get("updated_class")?,
                 })
             })
             .collect()
@@ -48,6 +56,7 @@ where
 pub(crate) fn initialize_fleet_feed_state<S>(
     scope: &mut S,
     state_id: String,
+    now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -59,7 +68,8 @@ where
             env!("CARGO_MANIFEST_DIR"),
             "/sql/fleet/initialize_fleet_feed_state.sql"
         )))
-        .bind(state_id);
+        .bind(state_id)
+        .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -67,6 +77,7 @@ where
 pub(crate) fn advance_fleet_feed_head<S>(
     scope: &mut S,
     position: String,
+    now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -78,7 +89,8 @@ where
             env!("CARGO_MANIFEST_DIR"),
             "/sql/fleet/advance_fleet_feed_head.sql"
         )))
-        .bind(position);
+        .bind(position)
+        .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -86,6 +98,7 @@ where
 pub(crate) fn advance_fleet_feed_floor<S>(
     scope: &mut S,
     position: String,
+    now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -97,7 +110,8 @@ where
             env!("CARGO_MANIFEST_DIR"),
             "/sql/fleet/advance_fleet_feed_floor.sql"
         )))
-        .bind(position);
+        .bind(position)
+        .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -105,10 +119,42 @@ where
 pub(crate) fn append_fleet_feed<S>(
     scope: &mut S,
     entry_id: String,
-    payload: String,
+    position: String,
+    record_kind: String,
+    record_id: String,
+    workspace_id: String,
+    board_id: Option<String>,
+    actor_kind: String,
+    actor_human_id: Option<String>,
+    actor_service_id: Option<String>,
+    actor_endpoint_id: Option<String>,
+    actor_session_id: Option<String>,
+    actor_router_component: Option<String>,
+    envelope_request_id: Option<String>,
     router_time: Option<String>,
     time_basis: String,
+    origin_installation: String,
+    origin_machine: String,
+    created_at: String,
     as_of: String,
+    name: Option<String>,
+    description: Option<String>,
+    workspace_state: Option<String>,
+    repository_count: Option<String>,
+    board_kind: Option<String>,
+    initiative_goal: Option<String>,
+    initiative_done_when: Option<String>,
+    board_state: Option<String>,
+    project_title: Option<String>,
+    adr_title: Option<String>,
+    adr_text: Option<String>,
+    adr_status: Option<String>,
+    supersedes_adr_id: Option<String>,
+    made_in_kind: Option<String>,
+    made_in_record_id: Option<String>,
+    adr_revision: Option<String>,
+    repository_file_count: Option<String>,
+    ledger_request_id: Option<String>,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -122,10 +168,42 @@ where
             "/sql/fleet/append_fleet_feed.sql"
         )))
         .bind(entry_id)
-        .bind(payload)
+        .bind(position)
+        .bind(record_kind)
+        .bind(record_id)
+        .bind(workspace_id)
+        .bind(board_id)
+        .bind(actor_kind)
+        .bind(actor_human_id)
+        .bind(actor_service_id)
+        .bind(actor_endpoint_id)
+        .bind(actor_session_id)
+        .bind(actor_router_component)
+        .bind(envelope_request_id)
         .bind(router_time)
         .bind(time_basis)
-        .bind(as_of);
+        .bind(origin_installation)
+        .bind(origin_machine)
+        .bind(created_at)
+        .bind(as_of)
+        .bind(name)
+        .bind(description)
+        .bind(workspace_state)
+        .bind(repository_count)
+        .bind(board_kind)
+        .bind(initiative_goal)
+        .bind(initiative_done_when)
+        .bind(board_state)
+        .bind(project_title)
+        .bind(adr_title)
+        .bind(adr_text)
+        .bind(adr_status)
+        .bind(supersedes_adr_id)
+        .bind(made_in_kind)
+        .bind(made_in_record_id)
+        .bind(adr_revision)
+        .bind(repository_file_count)
+        .bind(ledger_request_id);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -134,15 +212,81 @@ where
 #[derive(Debug)]
 pub(crate) struct StoredFleetFeedEntry {
     pub entry_id: Option<String>,
+    pub entry_id_class: Option<String>,
     pub position: Option<String>,
     pub position_class: Option<String>,
+    pub record_kind: Option<String>,
+    pub record_kind_class: Option<String>,
     pub record_id: Option<String>,
-    pub payload: Option<String>,
+    pub record_id_class: Option<String>,
+    pub workspace_id: Option<String>,
+    pub workspace_id_class: Option<String>,
+    pub board_id: Option<String>,
+    pub board_id_class: Option<String>,
+    pub actor_kind: Option<String>,
+    pub actor_kind_class: Option<String>,
+    pub actor_human_id: Option<String>,
+    pub actor_human_id_class: Option<String>,
+    pub actor_service_id: Option<String>,
+    pub actor_service_id_class: Option<String>,
+    pub actor_endpoint_id: Option<String>,
+    pub actor_endpoint_id_class: Option<String>,
+    pub actor_session_id: Option<String>,
+    pub actor_session_id_class: Option<String>,
+    pub actor_router_component: Option<String>,
+    pub actor_router_component_class: Option<String>,
+    pub envelope_request_id: Option<String>,
+    pub envelope_request_id_class: Option<String>,
     pub router_time: Option<String>,
+    pub router_time_class: Option<String>,
     pub time_basis: Option<String>,
+    pub time_basis_class: Option<String>,
     pub origin_installation: Option<String>,
+    pub origin_installation_class: Option<String>,
     pub origin_machine: Option<String>,
+    pub origin_machine_class: Option<String>,
+    pub created_at: Option<String>,
+    pub created_at_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_at_class: Option<String>,
     pub as_of: Option<String>,
+    pub as_of_class: Option<String>,
+    pub name: Option<String>,
+    pub name_class: Option<String>,
+    pub description: Option<String>,
+    pub description_class: Option<String>,
+    pub workspace_state: Option<String>,
+    pub workspace_state_class: Option<String>,
+    pub repository_count: Option<String>,
+    pub repository_count_class: Option<String>,
+    pub board_kind: Option<String>,
+    pub board_kind_class: Option<String>,
+    pub initiative_goal: Option<String>,
+    pub initiative_goal_class: Option<String>,
+    pub initiative_done_when: Option<String>,
+    pub initiative_done_when_class: Option<String>,
+    pub board_state: Option<String>,
+    pub board_state_class: Option<String>,
+    pub project_title: Option<String>,
+    pub project_title_class: Option<String>,
+    pub adr_title: Option<String>,
+    pub adr_title_class: Option<String>,
+    pub adr_text: Option<String>,
+    pub adr_text_class: Option<String>,
+    pub adr_status: Option<String>,
+    pub adr_status_class: Option<String>,
+    pub supersedes_adr_id: Option<String>,
+    pub supersedes_adr_id_class: Option<String>,
+    pub made_in_kind: Option<String>,
+    pub made_in_kind_class: Option<String>,
+    pub made_in_record_id: Option<String>,
+    pub made_in_record_id_class: Option<String>,
+    pub adr_revision: Option<String>,
+    pub adr_revision_class: Option<String>,
+    pub repository_file_count: Option<String>,
+    pub repository_file_count_class: Option<String>,
+    pub ledger_request_id: Option<String>,
+    pub ledger_request_id_class: Option<String>,
 }
 pub(crate) fn read_fleet_feed_page<S>(
     scope: &mut S,
@@ -168,15 +312,81 @@ where
             .map(|row| {
                 Ok(StoredFleetFeedEntry {
                     entry_id: row.try_get("entry_id")?,
+                    entry_id_class: row.try_get("entry_id_class")?,
                     position: row.try_get("position")?,
                     position_class: row.try_get("position_class")?,
+                    record_kind: row.try_get("record_kind")?,
+                    record_kind_class: row.try_get("record_kind_class")?,
                     record_id: row.try_get("record_id")?,
-                    payload: row.try_get("payload")?,
+                    record_id_class: row.try_get("record_id_class")?,
+                    workspace_id: row.try_get("workspace_id")?,
+                    workspace_id_class: row.try_get("workspace_id_class")?,
+                    board_id: row.try_get("board_id")?,
+                    board_id_class: row.try_get("board_id_class")?,
+                    actor_kind: row.try_get("actor_kind")?,
+                    actor_kind_class: row.try_get("actor_kind_class")?,
+                    actor_human_id: row.try_get("actor_human_id")?,
+                    actor_human_id_class: row.try_get("actor_human_id_class")?,
+                    actor_service_id: row.try_get("actor_service_id")?,
+                    actor_service_id_class: row.try_get("actor_service_id_class")?,
+                    actor_endpoint_id: row.try_get("actor_endpoint_id")?,
+                    actor_endpoint_id_class: row.try_get("actor_endpoint_id_class")?,
+                    actor_session_id: row.try_get("actor_session_id")?,
+                    actor_session_id_class: row.try_get("actor_session_id_class")?,
+                    actor_router_component: row.try_get("actor_router_component")?,
+                    actor_router_component_class: row.try_get("actor_router_component_class")?,
+                    envelope_request_id: row.try_get("envelope_request_id")?,
+                    envelope_request_id_class: row.try_get("envelope_request_id_class")?,
                     router_time: row.try_get("router_time")?,
+                    router_time_class: row.try_get("router_time_class")?,
                     time_basis: row.try_get("time_basis")?,
+                    time_basis_class: row.try_get("time_basis_class")?,
                     origin_installation: row.try_get("origin_installation")?,
+                    origin_installation_class: row.try_get("origin_installation_class")?,
                     origin_machine: row.try_get("origin_machine")?,
+                    origin_machine_class: row.try_get("origin_machine_class")?,
+                    created_at: row.try_get("created_at")?,
+                    created_at_class: row.try_get("created_at_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_at_class: row.try_get("updated_at_class")?,
                     as_of: row.try_get("as_of")?,
+                    as_of_class: row.try_get("as_of_class")?,
+                    name: row.try_get("name")?,
+                    name_class: row.try_get("name_class")?,
+                    description: row.try_get("description")?,
+                    description_class: row.try_get("description_class")?,
+                    workspace_state: row.try_get("workspace_state")?,
+                    workspace_state_class: row.try_get("workspace_state_class")?,
+                    repository_count: row.try_get("repository_count")?,
+                    repository_count_class: row.try_get("repository_count_class")?,
+                    board_kind: row.try_get("board_kind")?,
+                    board_kind_class: row.try_get("board_kind_class")?,
+                    initiative_goal: row.try_get("initiative_goal")?,
+                    initiative_goal_class: row.try_get("initiative_goal_class")?,
+                    initiative_done_when: row.try_get("initiative_done_when")?,
+                    initiative_done_when_class: row.try_get("initiative_done_when_class")?,
+                    board_state: row.try_get("board_state")?,
+                    board_state_class: row.try_get("board_state_class")?,
+                    project_title: row.try_get("project_title")?,
+                    project_title_class: row.try_get("project_title_class")?,
+                    adr_title: row.try_get("adr_title")?,
+                    adr_title_class: row.try_get("adr_title_class")?,
+                    adr_text: row.try_get("adr_text")?,
+                    adr_text_class: row.try_get("adr_text_class")?,
+                    adr_status: row.try_get("adr_status")?,
+                    adr_status_class: row.try_get("adr_status_class")?,
+                    supersedes_adr_id: row.try_get("supersedes_adr_id")?,
+                    supersedes_adr_id_class: row.try_get("supersedes_adr_id_class")?,
+                    made_in_kind: row.try_get("made_in_kind")?,
+                    made_in_kind_class: row.try_get("made_in_kind_class")?,
+                    made_in_record_id: row.try_get("made_in_record_id")?,
+                    made_in_record_id_class: row.try_get("made_in_record_id_class")?,
+                    adr_revision: row.try_get("adr_revision")?,
+                    adr_revision_class: row.try_get("adr_revision_class")?,
+                    repository_file_count: row.try_get("repository_file_count")?,
+                    repository_file_count_class: row.try_get("repository_file_count_class")?,
+                    ledger_request_id: row.try_get("ledger_request_id")?,
+                    ledger_request_id_class: row.try_get("ledger_request_id_class")?,
                 })
             })
             .collect()
@@ -204,15 +414,81 @@ where
             .map(|row| {
                 Ok(StoredFleetFeedEntry {
                     entry_id: row.try_get("entry_id")?,
+                    entry_id_class: row.try_get("entry_id_class")?,
                     position: row.try_get("position")?,
                     position_class: row.try_get("position_class")?,
+                    record_kind: row.try_get("record_kind")?,
+                    record_kind_class: row.try_get("record_kind_class")?,
                     record_id: row.try_get("record_id")?,
-                    payload: row.try_get("payload")?,
+                    record_id_class: row.try_get("record_id_class")?,
+                    workspace_id: row.try_get("workspace_id")?,
+                    workspace_id_class: row.try_get("workspace_id_class")?,
+                    board_id: row.try_get("board_id")?,
+                    board_id_class: row.try_get("board_id_class")?,
+                    actor_kind: row.try_get("actor_kind")?,
+                    actor_kind_class: row.try_get("actor_kind_class")?,
+                    actor_human_id: row.try_get("actor_human_id")?,
+                    actor_human_id_class: row.try_get("actor_human_id_class")?,
+                    actor_service_id: row.try_get("actor_service_id")?,
+                    actor_service_id_class: row.try_get("actor_service_id_class")?,
+                    actor_endpoint_id: row.try_get("actor_endpoint_id")?,
+                    actor_endpoint_id_class: row.try_get("actor_endpoint_id_class")?,
+                    actor_session_id: row.try_get("actor_session_id")?,
+                    actor_session_id_class: row.try_get("actor_session_id_class")?,
+                    actor_router_component: row.try_get("actor_router_component")?,
+                    actor_router_component_class: row.try_get("actor_router_component_class")?,
+                    envelope_request_id: row.try_get("envelope_request_id")?,
+                    envelope_request_id_class: row.try_get("envelope_request_id_class")?,
                     router_time: row.try_get("router_time")?,
+                    router_time_class: row.try_get("router_time_class")?,
                     time_basis: row.try_get("time_basis")?,
+                    time_basis_class: row.try_get("time_basis_class")?,
                     origin_installation: row.try_get("origin_installation")?,
+                    origin_installation_class: row.try_get("origin_installation_class")?,
                     origin_machine: row.try_get("origin_machine")?,
+                    origin_machine_class: row.try_get("origin_machine_class")?,
+                    created_at: row.try_get("created_at")?,
+                    created_at_class: row.try_get("created_at_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_at_class: row.try_get("updated_at_class")?,
                     as_of: row.try_get("as_of")?,
+                    as_of_class: row.try_get("as_of_class")?,
+                    name: row.try_get("name")?,
+                    name_class: row.try_get("name_class")?,
+                    description: row.try_get("description")?,
+                    description_class: row.try_get("description_class")?,
+                    workspace_state: row.try_get("workspace_state")?,
+                    workspace_state_class: row.try_get("workspace_state_class")?,
+                    repository_count: row.try_get("repository_count")?,
+                    repository_count_class: row.try_get("repository_count_class")?,
+                    board_kind: row.try_get("board_kind")?,
+                    board_kind_class: row.try_get("board_kind_class")?,
+                    initiative_goal: row.try_get("initiative_goal")?,
+                    initiative_goal_class: row.try_get("initiative_goal_class")?,
+                    initiative_done_when: row.try_get("initiative_done_when")?,
+                    initiative_done_when_class: row.try_get("initiative_done_when_class")?,
+                    board_state: row.try_get("board_state")?,
+                    board_state_class: row.try_get("board_state_class")?,
+                    project_title: row.try_get("project_title")?,
+                    project_title_class: row.try_get("project_title_class")?,
+                    adr_title: row.try_get("adr_title")?,
+                    adr_title_class: row.try_get("adr_title_class")?,
+                    adr_text: row.try_get("adr_text")?,
+                    adr_text_class: row.try_get("adr_text_class")?,
+                    adr_status: row.try_get("adr_status")?,
+                    adr_status_class: row.try_get("adr_status_class")?,
+                    supersedes_adr_id: row.try_get("supersedes_adr_id")?,
+                    supersedes_adr_id_class: row.try_get("supersedes_adr_id_class")?,
+                    made_in_kind: row.try_get("made_in_kind")?,
+                    made_in_kind_class: row.try_get("made_in_kind_class")?,
+                    made_in_record_id: row.try_get("made_in_record_id")?,
+                    made_in_record_id_class: row.try_get("made_in_record_id_class")?,
+                    adr_revision: row.try_get("adr_revision")?,
+                    adr_revision_class: row.try_get("adr_revision_class")?,
+                    repository_file_count: row.try_get("repository_file_count")?,
+                    repository_file_count_class: row.try_get("repository_file_count_class")?,
+                    ledger_request_id: row.try_get("ledger_request_id")?,
+                    ledger_request_id_class: row.try_get("ledger_request_id_class")?,
                 })
             })
             .collect()
@@ -244,6 +520,10 @@ pub(crate) struct StoredFleetFeedReader {
     pub installation: Option<String>,
     pub last_read_position: Option<String>,
     pub position_class: Option<String>,
+    pub created_at: Option<String>,
+    pub created_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_class: Option<String>,
 }
 pub(crate) fn read_feed_readers<S>(
     scope: &mut S,
@@ -267,6 +547,10 @@ where
                     installation: row.try_get("installation")?,
                     last_read_position: row.try_get("last_read_position")?,
                     position_class: row.try_get("position_class")?,
+                    created_at: row.try_get("created_at")?,
+                    created_class: row.try_get("created_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_class: row.try_get("updated_class")?,
                 })
             })
             .collect()
@@ -277,6 +561,7 @@ pub(crate) fn store_feed_reader<S>(
     reader_id: String,
     installation: String,
     position: String,
+    now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -290,7 +575,8 @@ where
         )))
         .bind(reader_id)
         .bind(installation)
-        .bind(position);
+        .bind(position)
+        .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
     }

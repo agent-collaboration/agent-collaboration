@@ -1,7 +1,7 @@
 //! Conformance-only commands address the same physical object as normal traffic.
 
 use collaboration_central_core::{ObjectAddress, RegistryTime};
-use fleet_sync_protocol::{FrameId, ItemId, PeerId};
+use fleet_sync_protocol::{ConnectionId, FrameId, ItemId, PeerId};
 use serde::{Deserialize, Serialize};
 use std::num::NonZeroU64;
 
@@ -13,24 +13,53 @@ pub struct RuntimeControlRequest {
 }
 impl RuntimeControlRequest {
     pub fn validate(&self) -> Result<(), RuntimeControlFailure> {
+        let (selected, next) = match &self.command {
+            RuntimeControl::HoldNextDispatch { key }
+            | RuntimeControl::AwaitHeldDispatch { key }
+            | RuntimeControl::ResumeDispatch { key }
+            | RuntimeControl::DropHeldDispatchReply { key } => {
+                (Some((&key.destination, &key.call)), None)
+            }
+            RuntimeControl::ResumeDispatchAndHoldNext { key, next } => (
+                Some((&key.destination, &key.call)),
+                Some((&next.destination, &next.call)),
+            ),
+            RuntimeControl::DropNextSelectedObjectReply { destination, call } => {
+                (Some((destination, call)), None)
+            }
+            _ => (None, None),
+        };
+        for (destination, call) in [selected, next].into_iter().flatten() {
+            if matches!(
+                call,
+                DispatchCallSelector::FleetMailSubmit
+                    | DispatchCallSelector::FleetMailSubmitFor { .. }
+            ) && (!matches!(self.address, ObjectAddress::Fleet)
+                || !matches!(destination, ObjectAddress::Fleet))
+            {
+                return Err(RuntimeControlFailure::WrongObjectKind);
+            }
+        }
         match (&self.command, &self.address) {
-            (RuntimeControl::CopyFull { .. }, ObjectAddress::Copy(_))
-            | (RuntimeControl::SmallMailboxCapacity, ObjectAddress::Mailbox(_))
+            (
+                RuntimeControl::CopyFull { .. }
+                | RuntimeControl::ProjectUnavailable
+                | RuntimeControl::ClearProjectFault,
+                ObjectAddress::Copy(_),
+            )
             | (
                 RuntimeControl::DropNextAnswer { .. } | RuntimeControl::AwaitDroppedAnswer { .. },
-                ObjectAddress::Connection(_),
+                ObjectAddress::Fleet,
             )
             | (
                 RuntimeControl::SetTime { .. }
                 | RuntimeControl::HoldNextDispatch { .. }
-                | RuntimeControl::HoldNextSelectedDispatch { .. }
-                | RuntimeControl::AwaitHeldDispatch
-                | RuntimeControl::ResumeDispatch
+                | RuntimeControl::AwaitHeldDispatch { .. }
+                | RuntimeControl::ResumeDispatch { .. }
                 | RuntimeControl::ResumeDispatchAndHoldNext { .. }
-                | RuntimeControl::ResumeDispatchAndHoldNextSelected { .. }
                 | RuntimeControl::DropNextObjectReply { .. }
                 | RuntimeControl::DropNextSelectedObjectReply { .. }
-                | RuntimeControl::DropHeldDispatchReply
+                | RuntimeControl::DropHeldDispatchReply { .. }
                 | RuntimeControl::AwaitDroppedObjectReply
                 | RuntimeControl::Observe,
                 _,
@@ -49,7 +78,8 @@ impl RuntimeControlRequest {
     deny_unknown_fields
 )]
 pub enum RuntimeControl {
-    SmallMailboxCapacity,
+    ProjectUnavailable,
+    ClearProjectFault,
     SetTime {
         now: RegistryTime,
     },
@@ -57,26 +87,25 @@ pub enum RuntimeControl {
         after_writes: NonZeroU64,
     },
     DropNextAnswer {
+        connection: ConnectionId,
         frame: FrameId,
     },
     AwaitDroppedAnswer {
+        connection: ConnectionId,
         frame: FrameId,
     },
     HoldNextDispatch {
-        destination: ObjectAddress,
+        key: DispatchKey,
     },
-    HoldNextSelectedDispatch {
-        destination: ObjectAddress,
-        call: DispatchCallSelector,
+    AwaitHeldDispatch {
+        key: DispatchKey,
     },
-    AwaitHeldDispatch,
-    ResumeDispatch,
+    ResumeDispatch {
+        key: DispatchKey,
+    },
     ResumeDispatchAndHoldNext {
-        destination: ObjectAddress,
-    },
-    ResumeDispatchAndHoldNextSelected {
-        destination: ObjectAddress,
-        call: DispatchCallSelector,
+        key: DispatchKey,
+        next: DispatchKey,
     },
     DropNextObjectReply {
         destination: ObjectAddress,
@@ -86,20 +115,44 @@ pub enum RuntimeControl {
         call: DispatchCallSelector,
     },
     /// Bind the reply fault to the current held dispatch, without releasing it.
-    DropHeldDispatchReply,
+    DropHeldDispatchReply {
+        key: DispatchKey,
+    },
     AwaitDroppedObjectReply,
     Observe,
 }
 
-/// Select an invocation kind or one immutable mailbox item amid concurrent traffic.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+/// Select an invocation kind or one Fleet submit's authenticated peer and item.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum DispatchCallSelector {
-    MailboxSubmit,
-    MailboxSubmitFor { origin: PeerId, item: ItemId },
+    Any,
+    FleetMailSubmit,
+    FleetMailSubmitFor { peer: PeerId, item: ItemId },
+    FleetMachineNotice,
+    FleetClaimSettlement,
     InstallationPeer,
     ForwardRoute,
     CopyWrite,
+    CopyFence,
+}
+
+/// One invocation selection at one physical destination.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DispatchKey {
+    pub destination: ObjectAddress,
+    pub call: DispatchCallSelector,
+}
+impl DispatchKey {
+    #[must_use]
+    pub const fn new(destination: ObjectAddress, call: DispatchCallSelector) -> Self {
+        Self { destination, call }
+    }
+    #[must_use]
+    pub const fn any(destination: ObjectAddress) -> Self {
+        Self::new(destination, DispatchCallSelector::Any)
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -125,6 +178,7 @@ pub enum ClockObservation {
 )]
 pub enum StorageFaultObservation {
     Idle,
+    Unavailable,
     Armed {
         after_writes: NonZeroU64,
     },
@@ -144,8 +198,14 @@ pub enum StorageFaultObservation {
 )]
 pub enum AnswerFaultObservation {
     Idle,
-    Armed { frame: FrameId },
-    Dropped { frame: FrameId },
+    Armed {
+        connection: ConnectionId,
+        frame: FrameId,
+    },
+    Dropped {
+        connection: ConnectionId,
+        frame: FrameId,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -192,8 +252,24 @@ pub struct RuntimeFaultObservation {
     pub clock: ClockObservation,
     pub storage: StorageFaultObservation,
     pub answer: AnswerFaultObservation,
-    pub dispatch: DispatchFaultObservation,
+    pub dispatches: Vec<DispatchHoldObservation>,
     pub object_reply: ObjectReplyFaultObservation,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DispatchHoldObservation {
+    pub key: DispatchKey,
+    pub state: DispatchFaultObservation,
+}
+impl RuntimeFaultObservation {
+    #[must_use]
+    pub fn dispatch(&self, key: &DispatchKey) -> DispatchFaultObservation {
+        self.dispatches
+            .iter()
+            .find(|entry| entry.key == *key)
+            .map_or(DispatchFaultObservation::Idle, |entry| entry.state.clone())
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -205,6 +281,8 @@ pub enum RuntimeControlFailure {
     AlreadyArmed,
     NotHeld,
     DifferentFrame,
+    TooManyDispatchKeys,
+    AmbiguousDispatchKey,
 }
 impl std::fmt::Display for RuntimeControlFailure {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

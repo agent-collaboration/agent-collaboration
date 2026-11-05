@@ -62,7 +62,7 @@ pub(crate) enum SessionTransportEffect {
         frame: fleet_sync_protocol::FrameId,
         request: crate::fleet_read_calls::FleetReadRequest,
     },
-    MailboxRequest {
+    SenderMailRequest {
         connection: ConnectionId,
         session: fleet_sync_session::SessionKey,
         frame: fleet_sync_protocol::FrameId,
@@ -153,31 +153,39 @@ impl<Host: ObjectHost, Io: PlatformIo> CoreSessionStore<Host, Io> {
     }
 }
 
-struct SessionTransaction<Host: ObjectHost, Io: PlatformIo, Callback> {
+// Bound wasm monomorphization by erasing callbacks at the existing store boundary.
+type SessionTransactionCallback<Host, Io, Output> =
+    dyn for<'scope, 'transaction> FnOnce(
+            &'scope mut CoreSessionScope<'transaction, Host, Io>,
+        ) -> BoxFuture<'scope, Result<Output, StoreError>>
+        + Send;
+
+struct SessionTransaction<Host: ObjectHost, Io: PlatformIo, Output>
+where
+    Host::Store: ReborrowScope,
+{
     registrations: RegistrationSnapshot,
-    callback: Callback,
+    callback: Box<SessionTransactionCallback<Host, Io, Output>>,
     #[cfg(feature = "conformance")]
     finalize_fault: Option<crate::SessionFinalizeFault>,
     marker: PhantomData<fn() -> (Host, Io)>,
 }
-impl<Host: ObjectHost, Io: PlatformIo, Output, Callback> StepCallback<Host::Store, Host::Database>
-    for SessionTransaction<Host, Io, Callback>
+impl<Host: ObjectHost, Io: PlatformIo, Output> StepCallback<Host::Store, Host::Database>
+    for SessionTransaction<Host, Io, Output>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
     Output: Send + 'static,
-    Callback: for<'scope, 'transaction> FnOnce(
-            &'scope mut CoreSessionScope<'transaction, Host, Io>,
-        ) -> BoxFuture<'scope, Result<Output, StoreError>>
-        + Send
-        + 'static,
 {
     type Output = Output;
     type Effect = SessionCommit;
@@ -233,6 +241,9 @@ where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -261,9 +272,9 @@ where
                 #[cfg(feature = "conformance")]
                 let observation_host = host.clone();
                 let result = StepDriver::new(host)
-                    .run(SessionTransaction::<Host, Io, _> {
+                    .run(SessionTransaction::<Host, Io, Output> {
                         registrations,
-                        callback: run,
+                        callback: Box::new(run),
                         #[cfg(feature = "conformance")]
                         finalize_fault,
                         marker: PhantomData,

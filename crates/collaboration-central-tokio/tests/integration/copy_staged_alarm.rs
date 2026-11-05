@@ -158,7 +158,7 @@ async fn an_alarm_discards_a_younger_transaction_below_the_actual_copy_fence() -
                 holder: PeerId::try_from("019f0000-0000-7000-8000-000000000902".to_owned())?,
             };
             let answer = fixture.runtime.on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"registry"},"sourceFace":"registry","authority":{"kind":"object"},
+            "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
             "destination":{"kind":"copy","value":fixture.database},"destinationFace":"copy",
             "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"fence"},
             "kind":"fleet-sync.copy-fence","target":{"copy":fixture.receiver},"request":request

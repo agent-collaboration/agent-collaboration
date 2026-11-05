@@ -82,7 +82,7 @@ impl InteractionHistoryStore {
         let owner = Arc::new(
             crate::InteractionStore::open(path)
                 .await
-                .map_err(|failure| failure.public_error(true))?,
+                .map_err(|failure| InteractionHistoryError::from_storage(failure, true))?,
         );
         Self::from_owner(owner).await
     }
@@ -91,20 +91,18 @@ impl InteractionHistoryStore {
         owner: Arc<crate::InteractionStore>,
     ) -> Result<Self, InteractionHistoryError> {
         let mut connection = owner.writer.lock().await;
-        let mut transaction = connection
-            .begin()
-            .await
-            .map_err(|_| crate::StorageError::StorageUnavailable.public_error(true))?;
+        let mut transaction = connection.begin().await.map_err(|_| {
+            InteractionHistoryError::from_storage(crate::StorageError::StorageUnavailable, true)
+        })?;
         let revision = read_revision(&mut transaction)
             .await
-            .map_err(|failure| failure.public_error(true))?;
+            .map_err(|failure| InteractionHistoryError::from_storage(failure, true))?;
         let cache = read_records(&mut transaction)
             .await
-            .map_err(|failure| failure.public_error(true))?;
-        transaction
-            .commit()
-            .await
-            .map_err(|_| crate::StorageError::StorageUnavailable.public_error(true))?;
+            .map_err(|failure| InteractionHistoryError::from_storage(failure, true))?;
+        transaction.commit().await.map_err(|_| {
+            InteractionHistoryError::from_storage(crate::StorageError::StorageUnavailable, true)
+        })?;
         drop(connection);
         Ok(Self {
             owner,
@@ -163,18 +161,21 @@ impl InteractionHistoryStore {
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(|_| {
-                interaction_history_database::StorageError::StorageUnavailable.public_error(false)
+                InteractionHistoryError::from_storage(
+                    crate::StorageError::StorageUnavailable,
+                    false,
+                )
             })?;
         let staged = async {
             let revision = read_revision(&mut transaction)
                 .await
-                .map_err(|failure| failure.public_error(false))?;
+                .map_err(|failure| InteractionHistoryError::from_storage(failure, false))?;
             let baseline = if revision == previous_revision {
                 previous_cache
             } else {
                 read_records(&mut transaction)
                     .await
-                    .map_err(|failure| failure.public_error(false))?
+                    .map_err(|failure| InteractionHistoryError::from_storage(failure, false))?
             };
             let (next, outcome) = match stage(&baseline) {
                 Ok((next, outcome)) => (next, Ok(outcome)),
@@ -183,7 +184,7 @@ impl InteractionHistoryStore {
             let revision = if outcome.is_ok() {
                 commit_delta(&mut transaction, &baseline, &next, revision)
                     .await
-                    .map_err(|failure| failure.public_error(false))?
+                    .map_err(|failure| InteractionHistoryError::from_storage(failure, false))?
             } else {
                 revision
             };
@@ -196,14 +197,16 @@ impl InteractionHistoryStore {
                 // A dropped native transaction queues rollback until its next
                 // use. Finish it before returning this file owner's writer.
                 transaction.rollback().await.map_err(|_| {
-                    interaction_history_database::StorageError::StorageUnavailable
-                        .public_error(false)
+                    InteractionHistoryError::from_storage(
+                        crate::StorageError::StorageUnavailable,
+                        false,
+                    )
                 })?;
                 return Err(error);
             }
         };
         transaction.commit().await.map_err(|_| {
-            interaction_history_database::StorageError::StorageUnavailable.public_error(false)
+            InteractionHistoryError::from_storage(crate::StorageError::StorageUnavailable, false)
         })?;
         // This test-only pause proves durable commit without cache publication. Production has no await here.
         #[cfg(test)]
@@ -567,5 +570,5 @@ fn is_settled_history_record(record: &InteractionHistoryRecord) -> bool {
 mod question_history;
 
 #[cfg(test)]
-#[path = "interaction_history_store_tests.rs"]
+#[path = "interaction_history_store_test.rs"]
 mod tests;

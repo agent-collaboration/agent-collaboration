@@ -3,7 +3,7 @@
 use super::EffectDriver;
 use crate::{
     ObjectHost, PlatformIo,
-    mail_submit_calls::{MailSubmitRegistry, MailSubmitReply, MailSubmitRequest},
+    mail_submit_calls::{FleetMailSubmit, MailSubmitReply, MailSubmitRequest},
 };
 use board_sync_protocol::{BoardConsumerAnswer, BoardConsumerProtocol, BoardDeliveryTypes};
 use durable_steps::Host as _;
@@ -38,7 +38,7 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
         let answer = self
             .shared_host
             .dispatch(
-                MailSubmitRegistry,
+                FleetMailSubmit,
                 MailSubmitRequest {
                     session,
                     origin,

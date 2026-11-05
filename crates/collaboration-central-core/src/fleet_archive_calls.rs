@@ -1,8 +1,8 @@
 //! The authenticated Session supplies the installation; Fleet supplies report time.
 use crate::{
-    CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
-    caller_context::CallAuthority, fleet_archive_step::ReportArchive,
-    object_call_envelope::ObjectCallEnvelope, object_runtime::ObjectWork, step_driver::StepDriver,
+    CallerKind, FleetKind, ObjectHost, ObjectRuntime, PlatformIo, caller_context::CallAuthority,
+    fleet_archive_step::ReportArchive, object_call_envelope::ObjectCallEnvelope,
+    object_runtime::ObjectWork, step_driver::StepDriver,
 };
 use durable_steps::{
     AtomicStore, CallFailure, CallTarget, NotSentReason, storage::TransactionScope,
@@ -26,6 +26,9 @@ where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -37,11 +40,11 @@ where
         call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if call.source_face != CallerKind::Session
-            || !matches!(call.authority, CallAuthority::Object)
+            || !matches!(call.authority, CallAuthority::Machine { .. })
         {
             return Err(refused());
         }
-        let ObjectAddress::Connection(installation) = call.source else {
+        let CallAuthority::Machine { installation } = call.authority else {
             return Err(refused());
         };
         let _: FleetArchiveReport = serde_json::from_value(call.target).map_err(|_| refused())?;

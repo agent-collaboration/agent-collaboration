@@ -42,6 +42,13 @@ async fn another_verified_peer_cannot_consume_a_known_forward_identity() -> Resu
     let forward = FrameId::new(Uuid::now_v7())?;
     let installation = "019f0000-0000-7000-8000-000000000001";
     let sender = "019f0000-0000-7000-8000-000000000002";
+    let sender_peer = PeerId::new(Uuid::now_v7())?;
+    let sender_session = fleet_sync_protocol::SessionId::new(Uuid::now_v7())?;
+    fixture.host.store.object.transaction(move |scope|Box::pin(async move {
+        query::<sqlx_turso::Turso>("INSERT INTO machine_enrollments(machine_id,service_id,machine_label,access_client_id,credential_hash,state,expires_at,created_at,updated_at) VALUES(?,?,'forward origin','forward-client','forward-credential','enrolled','2033-05-18T03:33:20+00:00','2026-10-18T00:00:00+00:00','2026-10-18T00:00:00+00:00')")
+            .bind(sender_peer.to_string()).bind(sender).execute(scope.executor()).await.map_err(StoreError::backend)?;
+        Ok(())
+    })).await?;
     let identity = CallId {
         operation: OperationId::new(Uuid::now_v7())?,
         step: StepName::new("deliver_forward")?,
@@ -49,12 +56,14 @@ async fn another_verified_peer_cannot_consume_a_known_forward_identity() -> Resu
     // Enter the actual delivery face to select the holder and store its identity.
     // The transport fixture records outgoing callbacks but does not run a sender.
     let delivered = fixture.runtime.delivery()?.on_call(serde_json::to_vec(&json!({
-        "source":{"kind":"connection","value":sender},"sourceFace":"session",
-        "authority":{"kind":"object"},
-        "destination":{"kind":"connection","value":installation},"destinationFace":"delivery",
+        "source":{"kind":"fleet"},"sourceFace":"session",
+        "authority":{"kind":"machine","value":{"installation":sender}},
+        "destination":{"kind":"fleet"},"destinationFace":"delivery",
         "identity":identity,"kind":"central.deliver-forward","target":{"installation":installation},
         "request":{"forwardFrame":forward,"holder":holder.peer,
             "deadline":fixture.io.now().after(Duration::from_secs(30)),
+            "originSession":{"peer":sender_peer,"sessionId":sender_session},
+            "requestFrame":durable_steps::Uuid::now_v7(),"connection":durable_steps::Uuid::now_v7(),"createdAt":fixture.io.now(),
             "post":{"project":"019f0000-0000-7000-8000-000000000003",
                 "origin":{"installation":sender,"machine":"forward fixture"},
                 "post":{"kind":"threadPost","body":{"secret":"never-store-forward-body"}}}}
@@ -69,7 +78,7 @@ async fn another_verified_peer_cannot_consume_a_known_forward_identity() -> Resu
     ));
     fixture
         .io
-        .calls
+        .local_calls
         .lock()
         .map_err(|_| "calls mutex poisoned")?
         .clear();
@@ -82,7 +91,7 @@ async fn another_verified_peer_cannot_consume_a_known_forward_identity() -> Resu
 
     other_fixture
         .io
-        .calls
+        .local_calls
         .lock()
         .map_err(|_| "calls mutex poisoned")?
         .clear();
@@ -94,7 +103,7 @@ async fn another_verified_peer_cannot_consume_a_known_forward_identity() -> Resu
     assert!(
         other_fixture
             .io
-            .calls
+            .local_calls
             .lock()
             .map_err(|_| "calls mutex poisoned")?
             .is_empty(),
@@ -109,7 +118,7 @@ async fn another_verified_peer_cannot_consume_a_known_forward_identity() -> Resu
     assert!(
         fixture
             .io
-            .calls
+            .local_calls
             .lock()
             .map_err(|_| "calls mutex poisoned")?
             .is_empty(),
@@ -120,7 +129,7 @@ async fn another_verified_peer_cannot_consume_a_known_forward_identity() -> Resu
     {
         let calls = fixture
             .io
-            .calls
+            .local_calls
             .lock()
             .map_err(|_| "calls mutex poisoned")?;
         assert_eq!(
@@ -135,7 +144,7 @@ async fn another_verified_peer_cannot_consume_a_known_forward_identity() -> Resu
     assert_eq!(
         fixture
             .io
-            .calls
+            .local_calls
             .lock()
             .map_err(|_| "calls mutex poisoned")?
             .len(),
@@ -159,22 +168,17 @@ async fn replace_recorded_holder(
         .transaction(move |scope| {
             Box::pin(async move {
                 let row = query::<sqlx_turso::Turso>(
-                    "SELECT record FROM delivered_forwards WHERE forward_frame = ?1",
+                    "SELECT expected_holder_machine_id FROM machine_forward_requests WHERE forward_frame_id = ?1 AND side='holder'",
                 )
                 .bind(frame.to_string())
                 .fetch_one(scope.executor())
                 .await
                 .map_err(StoreError::backend)?;
-                let original: String = row.try_get("record").map_err(StoreError::backend)?;
-                let mut stored: serde_json::Value =
-                    serde_json::from_str(&original).map_err(StoreError::backend)?;
-                *stored.get_mut("holder").ok_or_else(|| {
-                    StoreError::backend("delivered correlation lacks selected holder")
-                })? = json!(peer);
+                let original: String = row.try_get("expected_holder_machine_id").map_err(StoreError::backend)?;
                 query::<sqlx_turso::Turso>(
-                    "UPDATE delivered_forwards SET record = ?1 WHERE forward_frame = ?2",
+                    "UPDATE machine_forward_requests SET expected_holder_machine_id = ?1 WHERE forward_frame_id = ?2 AND side='holder'",
                 )
-                .bind(stored.to_string())
+                .bind(peer.to_string())
                 .bind(frame.to_string())
                 .execute(scope.executor())
                 .await
@@ -196,7 +200,7 @@ async fn restore_record(
         .transaction(move |scope| {
             Box::pin(async move {
                 query::<sqlx_turso::Turso>(
-                    "UPDATE delivered_forwards SET record = ?1 WHERE forward_frame = ?2",
+                    "UPDATE machine_forward_requests SET expected_holder_machine_id = ?1 WHERE forward_frame_id = ?2 AND side='holder'",
                 )
                 .bind(record)
                 .bind(frame.to_string())

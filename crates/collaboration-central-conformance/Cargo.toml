@@ -17,6 +17,7 @@ board-sync-protocol = { version = "0.1.96", path = "../board-sync-protocol", opt
 collaboration-client = { version = "0.1.100", path = "../collaboration-client", optional = true }
 durable-steps.workspace = true
 fleet-sync-protocol.workspace = true
+fleet-sync-session.workspace = true
 fleet-admission = { version = "0.1.93", path = "../fleet-admission" }
 message-board = { version = "0.1.93", path = "../message-board" }
 collaboration-central-core = { version = "0.1.93", path = "../collaboration-central-core", features = ["conformance"] }

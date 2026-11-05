@@ -8,6 +8,7 @@ use crate::session_move_fixture as fixture;
 
 use crate::owner_registry_scenarios;
 
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     ConformanceResult, DispatchFaultObservation, RuntimeControl,
 };
@@ -46,9 +47,9 @@ async fn move_keeps_one_transfer_and_waits_for_the_correlated_holders_exact_fina
             return Err("renewal did not recover the exact still-active Move transfer".into());
         }
         println!("SESSION_MOVE_STAGE active_transfer_conflict_and_renewal_notice passed");
-        fixture.control(RuntimeControl::HoldNextDispatch { destination:ObjectAddress::Copy(fixture.database) }).await?;
+        fixture.control(RuntimeControl::HoldNextDispatch { key: DispatchKey::any(ObjectAddress::Copy(fixture.database)) }).await?;
         fixture.reply(frame,ReleaseAnswer::Released {final_position:position(1,2)?}).await?;
-        let DispatchFaultObservation::Held {destination,request:bytes}=fixture.control(RuntimeControl::AwaitHeldDispatch).await?.dispatch else {
+        let DispatchFaultObservation::Held {destination,request:bytes}=fixture.control(RuntimeControl::AwaitHeldDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Copy(fixture.database)) }).await?.dispatch(&DispatchKey::any(collaboration_central_core::ObjectAddress::Copy(fixture.database))) else {
             return Err("released Move did not reach its actual Copy acknowledgement call".into());
         };
         let held:Value=serde_json::from_slice(&bytes)?;
@@ -60,7 +61,7 @@ async fn move_keeps_one_transfer_and_waits_for_the_correlated_holders_exact_fina
         }
         let identity:durable_steps::CallId=serde_json::from_value(held["identity"].clone())?;
         fixture.copy_unchanged(1,position(1,1)?,false).await?;
-        fixture.control(RuntimeControl::ResumeDispatch).await?;
+        fixture.control(RuntimeControl::ResumeDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Copy(fixture.database)) }).await?;
         let observer=copy_wait_scenarios::CopyClient::new(fixture.base())?;
         let observed=observer.observed(fixture.database,|state|state.waiting==1).await
             .map_err(|error|format!("released Move never owned its real below-final Copy wait: {error}"))?;
@@ -83,7 +84,13 @@ async fn move_keeps_one_transfer_and_waits_for_the_correlated_holders_exact_fina
         println!("SESSION_MOVE_CASE exact_catchup_transfer_notice_and_single_epoch_replay passed");
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
     }.await;
-    let _ = fixture.control(RuntimeControl::ResumeDispatch).await;
+    let _ = fixture
+        .control(RuntimeControl::ResumeDispatch {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Copy(
+                fixture.database,
+            )),
+        })
+        .await;
     callers.abort_all();
     while callers.join_next().await.is_some() {}
     let closed = fixture.close().await;

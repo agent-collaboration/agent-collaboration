@@ -18,7 +18,6 @@ use collaboration_protocol::{
 };
 use durable_steps::{AtomicStore, Engine, storage::TransactionScope, turso_store::TursoScope};
 pub(super) use fixture::{Fixture, ProjectionHost, ProjectionStore, ProjectionTask, recorded_at};
-use fleet_sync_delivery::ReportOutcome;
 use fleet_sync_protocol::{ItemId, Recipient};
 use message_board::{
     BatchTiming, FeedCursor, Identity, SubscriptionGeneration, SubscriptionLifetime,
@@ -288,15 +287,7 @@ impl Runtime {
             })));
     }
     pub(super) fn engine(&self) -> Engine<ProjectionStore, ProjectionHost> {
-        let mut engine = self.fixture.engine();
-        engine
-            .register(ReportOutcome::<
-                ProjectionStore,
-                Database,
-                RouterDeliveryTypes,
-            >::new(self.fixture.host.config))
-            .unwrap();
-        engine
+        self.fixture.engine()
     }
     pub(super) fn set_time(&self, milliseconds_after_start: i64) {
         self.fixture.host.clock.store(

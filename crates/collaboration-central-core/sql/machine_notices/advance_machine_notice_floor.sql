@@ -1,1 +1,1 @@
-UPDATE machine_notice_state SET pruned_through=CAST(? AS INTEGER) WHERE name='machine';
+UPDATE machine_control_progress SET pruned_through=CAST(? AS INTEGER),updated_at=CAST(? AS INTEGER) WHERE machine_id=?;

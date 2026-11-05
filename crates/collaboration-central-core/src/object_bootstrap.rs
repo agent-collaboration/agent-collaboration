@@ -5,12 +5,65 @@ use crate::{
     step_driver::{StepCallback, StepDriver, StepResult},
 };
 use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScope};
+use runtime_primitives::Clock;
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, executor::Executor, types::Type,
 };
 use std::{collections::BTreeMap, convert::Infallible, sync::Arc};
+
+#[cfg(test)]
+#[path = "migration_bookkeeping_test.rs"]
+mod tests;
+
+#[cfg(test)]
+#[path = "fleet_workspace_columns_test.rs"]
+pub(crate) mod workspace_columns_tests;
+
+#[cfg(test)]
+#[path = "fleet_board_columns_test.rs"]
+mod board_columns_tests;
+
+#[cfg(test)]
+#[path = "fleet_adr_columns_test.rs"]
+pub(crate) mod adr_columns_tests;
+
+#[cfg(test)]
+#[path = "fleet_repository_columns_test.rs"]
+mod repository_columns_tests;
+
+#[cfg(test)]
+#[path = "fleet_directory_columns_test.rs"]
+mod directory_columns_tests;
+
+#[cfg(test)]
+#[path = "fleet_feed_columns_test.rs"]
+mod feed_columns_tests;
+
+#[cfg(test)]
+#[path = "fleet_feed_retention_test.rs"]
+mod feed_retention_tests;
+
+#[cfg(test)]
+#[path = "fleet_ledger_columns_test.rs"]
+pub(crate) mod ledger_columns_tests;
+
+#[cfg(test)]
+#[path = "fleet_ledger_integrity_test.rs"]
+mod ledger_integrity_tests;
+
+#[cfg(test)]
+#[path = "fleet_receipt_columns_test.rs"]
+mod receipt_columns_tests;
+
+#[cfg(test)]
+#[path = "admin_import_columns_test.rs"]
+mod admin_import_columns_tests;
+
+#[cfg(test)]
+#[path = "admin_import_corruption_test.rs"]
+mod admin_import_corruption_tests;
 
 #[cfg(feature = "conformance")]
 mod conformance;
@@ -26,7 +79,7 @@ pub enum EngineSchema {
     Registry,
     Copy,
     Session,
-    Mailbox,
+    Delivery,
     Fleet,
 }
 impl EngineSchema {
@@ -35,22 +88,25 @@ impl EngineSchema {
             Self::Registry => "fleet-sync-lease",
             Self::Copy => "fleet-sync-receiver",
             Self::Session => "fleet-sync-session",
-            Self::Mailbox => "fleet-sync-delivery",
+            Self::Delivery => "fleet-sync-delivery",
             Self::Fleet => "central-fleet",
         }
     }
     fn migrations(self) -> Vec<&'static sqlx_core::migrate::Migration> {
         match self {
-            Self::Registry => fleet_sync_lease::LEASE_MIGRATOR.iter().collect(),
+            Self::Registry => fleet_sync_lease::LEASE_MIGRATOR.sql_migrations().collect(),
             Self::Copy => fleet_sync_receiver::RECEIVER_MIGRATOR.iter().collect(),
-            Self::Session => fleet_sync_session::SESSION_MIGRATOR.iter().collect(),
-            Self::Mailbox => fleet_sync_delivery::DELIVERY_MIGRATOR.iter().collect(),
+            Self::Session => fleet_sync_session::SESSION_MIGRATOR
+                .sql_migrations()
+                .collect(),
+            Self::Delivery => fleet_sync_delivery::DELIVERY_MIGRATOR.iter().collect(),
             Self::Fleet => FLEET_MIGRATIONS.iter().collect(),
         }
     }
 }
 
 pub struct ObjectBootstrap<Host: ObjectHost> {
+    clock: Arc<dyn Clock>,
     driver: StepDriver<Host>,
     now: runtime_primitives::SyncTime,
 }
@@ -59,14 +115,26 @@ where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'blob, Host::Database>
+        + sqlx_core::decode::Decode<'blob, Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Host::Database> + sqlx_core::decode::Decode<'blob, Host::Database>,
+    for<'scalar> Option<i64>:
+        sqlx_core::types::Type<Host::Database> + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
 {
-    pub fn new(host: Arc<Host>, now: runtime_primitives::SyncTime) -> Self {
+    pub fn new(host: Arc<Host>, clock: Arc<dyn Clock>) -> Self {
+        let now = clock.now();
         Self {
+            clock,
             driver: StepDriver::new(host),
             now,
         }
@@ -77,6 +145,7 @@ where
             .run(BootstrapStep {
                 schema,
                 now: self.now,
+                clock: self.clock.clone(),
             })
             .await?;
         Ok(applied.count)
@@ -84,7 +153,14 @@ where
 
     pub(crate) async fn migrate_copy(&self) -> crate::owner_operation_calls::CopyMigrationResult {
         use crate::owner_operation_calls::CopyMigrationResult;
-        match self.driver.run(MigrateCopyStep { now: self.now }).await {
+        match self
+            .driver
+            .run(MigrateCopyStep {
+                now: self.now,
+                clock: self.clock.clone(),
+            })
+            .await
+        {
             Ok((result, _effects)) => result,
             Err(error) => match crate::migration_failure::MigrationFailure::from_rollback(&error) {
                 Some(failure) => {
@@ -114,7 +190,12 @@ where
                 None => CopyMigrationResult::Failed {
                     corpus: EngineSchema::Copy.corpus().into(),
                     version: None,
-                    reason: error.to_string(),
+                    reason: match fleet_sync_receiver::classify_copy_store_error(error.clone()) {
+                        fleet_sync_receiver::CopyTransactionFailure::Unavailable(
+                            fleet_sync_protocol::CopyUnavailableReason::Damaged { detail },
+                        ) => detail,
+                        _ => error.to_string(),
+                    },
                 },
             },
         }
@@ -133,6 +214,7 @@ struct BootstrapApplied {
 }
 
 struct BootstrapStep {
+    clock: Arc<dyn Clock>,
     schema: EngineSchema,
     now: runtime_primitives::SyncTime,
 }
@@ -142,6 +224,16 @@ where
     Driver: Database,
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
     Driver::Arguments: IntoArguments<Driver>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Driver>
+        + sqlx_core::encode::Encode<'blob, Driver>
+        + sqlx_core::decode::Decode<'blob, Driver>,
+    for<'scalar> i64: sqlx_core::types::Type<Driver>
+        + sqlx_core::encode::Encode<'scalar, Driver>
+        + sqlx_core::decode::Decode<'scalar, Driver>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Driver> + sqlx_core::decode::Decode<'blob, Driver>,
+    for<'scalar> Option<i64>:
+        sqlx_core::types::Type<Driver> + sqlx_core::decode::Decode<'scalar, Driver>,
     for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'row> &'row str: ColumnIndex<Driver::Row>,
@@ -164,8 +256,14 @@ where
                 self.schema.corpus(),
                 self.schema.migrations(),
                 self.now,
+                self.clock.as_ref(),
             )
             .await?;
+            if self.schema == EngineSchema::Delivery {
+                fleet_sync_delivery::retire_relay_host_tables(scope)
+                    .await
+                    .map_err(fleet_sync_delivery::delivery_rollback)?;
+            }
             let mut count = primary.count;
             if self.schema == EngineSchema::Copy {
                 let rules = crate::CopyReceiverRules::new(
@@ -202,6 +300,7 @@ where
                     "central-registry",
                     REGISTRY_MIGRATIONS.iter().collect(),
                     self.now,
+                    self.clock.as_ref(),
                 )
                 .await?
                 .count;
@@ -212,6 +311,7 @@ where
                     "central-session",
                     SESSION_MIGRATIONS.iter().collect(),
                     self.now,
+                    self.clock.as_ref(),
                 )
                 .await?
                 .count;
@@ -230,17 +330,17 @@ static SESSION_MIGRATIONS: std::sync::LazyLock<Vec<sqlx_core::migrate::Migration
         };
         vec![
             Migration::new(
-                1,
+                11,
                 "machine notices".into(),
                 MigrationType::Simple,
-                include_str!("../session_migrations/0001_machine_notices.sql").into_sql_str(),
+                include_str!("../session_migrations/0011_machine_notices.sql").into_sql_str(),
                 false,
             ),
             Migration::new(
-                2,
+                12,
                 "forward correlations".into(),
                 MigrationType::Simple,
-                include_str!("../session_migrations/0002_forward_correlations.sql").into_sql_str(),
+                include_str!("../session_migrations/0012_forward_correlations.sql").into_sql_str(),
                 false,
             ),
         ]
@@ -262,16 +362,6 @@ static REGISTRY_MIGRATIONS: std::sync::LazyLock<Vec<sqlx_core::migrate::Migratio
                 2,
                 "lease incarnation",
                 include_str!("../registry_migrations/0002_lease_incarnation.sql"),
-            ),
-            (
-                3,
-                "lease publication acknowledgements",
-                include_str!("../registry_migrations/0003_lease_acknowledgements.sql"),
-            ),
-            (
-                4,
-                "registry notice marks",
-                include_str!("../registry_migrations/0004_notice_marks.sql"),
             ),
         ]
         .into_iter()
@@ -365,10 +455,21 @@ async fn apply_corpus<Scope>(
     corpus: &'static str,
     migrations: Vec<&'static sqlx_core::migrate::Migration>,
     now: runtime_primitives::SyncTime,
+    clock: &dyn Clock,
 ) -> Result<CorpusProgress, StoreError>
 where
     Scope: TransactionScope,
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::encode::Encode<'blob, Scope::Database>
+        + sqlx_core::decode::Decode<'blob, Scope::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::encode::Encode<'scalar, Scope::Database>
+        + sqlx_core::decode::Decode<'scalar, Scope::Database>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Scope::Database> + sqlx_core::decode::Decode<'blob, Scope::Database>,
+    for<'scalar> Option<i64>: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::decode::Decode<'scalar, Scope::Database>,
     for<'value> String:
         Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
     for<'value> Option<String>:
@@ -380,18 +481,13 @@ where
         .await
         .map_err(bootstrap_sql_error)?
     {
+        crate::migration_bookkeeping::validate_history_times(&row)?;
         crate::fleet_record_codec::check_private_id(
             &row.row_id
                 .ok_or_else(|| corrupt("missing physical row identity"))?,
             "migration row identity",
         )?;
-        let text = row.version.ok_or_else(|| corrupt("missing version"))?;
-        let version = text
-            .parse::<i64>()
-            .map_err(|_| corrupt("invalid version"))?;
-        if version.to_string() != text {
-            return Err(corrupt("noncanonical version"));
-        }
+        let version = row.version.ok_or_else(|| corrupt("missing version"))?;
         let checksum = row.checksum.ok_or_else(|| corrupt("missing checksum"))?;
         if applied.insert(version, checksum).is_some() {
             return Err(corrupt("duplicate version"));
@@ -404,7 +500,7 @@ where
                 migration.version == *version && migration.migration_type.is_up_migration()
             })
             .ok_or_else(|| corrupt("applied migration is absent from the corpus"))?;
-        if &checksum(migration)? != saved {
+        if &checksum(migration) != saved {
             return Err(corrupt("migration checksum changed"));
         }
     }
@@ -425,6 +521,28 @@ where
         if highest.is_some_and(|version| migration.version <= version) {
             return Err(corrupt("migration inserted below an applied version"));
         }
+        // Validate legacy domain rows after their old corpus prefix, before typed DDL consumes them.
+        let validated = match (corpus, migration.version) {
+            ("fleet-sync-lease", 5 | 6) => fleet_sync_lease::validate_legacy_rows(scope)
+                .await
+                .map_err(|error| error.to_string()),
+            ("fleet-sync-session", 202611030001) => fleet_sync_session::validate_legacy_rows(scope)
+                .await
+                .map_err(|error| error.to_string()),
+            _ => Ok(()),
+        };
+        validated.map_err(|message| {
+            crate::migration_failure::MigrationFailure::rollback(
+                corpus,
+                migration.version,
+                now,
+                StoreError::Corrupt {
+                    field: format!("{corpus}.legacy_rows"),
+                    message,
+                },
+            )
+        })?;
+        let started = clock.now().unix_millis();
         scope
             .executor()
             .execute(migration.sql.as_ref())
@@ -437,12 +555,18 @@ where
                     bootstrap_sql_error(error),
                 )
             })?;
+        let installed_on = clock.now().unix_millis();
+        let execution_time = installed_on.saturating_sub(started).max(0);
         generated_bootstrap::insert_migration_history(
             scope,
             durable_steps::Uuid::now_v7().to_string(),
             corpus.into(),
-            migration.version.to_string(),
-            checksum(migration)?,
+            migration.version,
+            migration.description.to_string(),
+            installed_on,
+            checksum(migration),
+            execution_time,
+            now.unix_millis(),
         )
         .await
         .map_err(|error| {
@@ -476,9 +600,10 @@ where
     })
 }
 
-fn checksum(migration: &sqlx_core::migrate::Migration) -> Result<String, StoreError> {
-    serde_json::to_string(migration.checksum.as_ref()).map_err(StoreError::backend)
+fn checksum(migration: &sqlx_core::migrate::Migration) -> Vec<u8> {
+    migration.checksum.to_vec()
 }
+
 fn corrupt(message: &str) -> StoreError {
     StoreError::Corrupt {
         field: "schema.migration".into(),
@@ -493,6 +618,7 @@ fn bootstrap_sql_error(error: sqlx_core::Error) -> StoreError {
 }
 
 struct MigrateCopyStep {
+    clock: Arc<dyn Clock>,
     now: runtime_primitives::SyncTime,
 }
 impl<Store, Driver> StepCallback<Store, Driver> for MigrateCopyStep
@@ -501,6 +627,16 @@ where
     Driver: Database,
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
     Driver::Arguments: IntoArguments<Driver>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Driver>
+        + sqlx_core::encode::Encode<'blob, Driver>
+        + sqlx_core::decode::Decode<'blob, Driver>,
+    for<'scalar> i64: sqlx_core::types::Type<Driver>
+        + sqlx_core::encode::Encode<'scalar, Driver>
+        + sqlx_core::decode::Decode<'scalar, Driver>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Driver> + sqlx_core::decode::Decode<'blob, Driver>,
+    for<'scalar> Option<i64>:
+        sqlx_core::types::Type<Driver> + sqlx_core::decode::Decode<'scalar, Driver>,
     for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'row> &'row str: ColumnIndex<Driver::Row>,
@@ -525,6 +661,7 @@ where
                 BootstrapStep {
                     schema: EngineSchema::Copy,
                     now: self.now,
+                    clock: self.clock,
                 },
                 scope,
             )
@@ -545,5 +682,18 @@ where
             };
             Ok((result, effects))
         })
+    }
+}
+
+#[cfg(test)]
+#[path = "fleet_directory_projection_test.rs"]
+mod directory_projection_tests;
+
+#[cfg(any(test, feature = "conformance"))]
+pub(crate) struct FixedBootstrapClock(pub runtime_primitives::SyncTime);
+#[cfg(any(test, feature = "conformance"))]
+impl Clock for FixedBootstrapClock {
+    fn now(&self) -> runtime_primitives::SyncTime {
+        self.0
     }
 }

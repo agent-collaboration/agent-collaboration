@@ -3,8 +3,12 @@ use super::super::super::forwarded_notification_fixture::{HolderNotifications, M
 use super::*;
 use board_central_test_support::EnrolledTestMachine;
 
+#[path = "messaging_recipient_observation.rs"]
+mod recipient_observation;
+
 pub(in crate::collaboration_runtime::board_composition::tests::messaging_rule_cases) struct RuleMachine
 {
+    pub peer: durable_steps::Uuid,
     pub registry: Arc<ProjectStoreRegistry>,
     pub projects: Arc<project_writers::ProjectWriters>,
     pub admission: Arc<ProjectAdmission>,
@@ -13,21 +17,56 @@ pub(in crate::collaboration_runtime::board_composition::tests::messaging_rule_ca
     machine: EnrolledTestMachine,
 }
 impl RuleMachine {
+    pub fn observe_mail_wire(
+        &self,
+    ) -> Result<
+        board_central_test_support::MailWireObservation,
+        Box<dyn std::error::Error + Send + Sync>,
+    > {
+        self.machine.observe_mail_wire(None)
+    }
     pub async fn open(
         holder: &claim_fixture::ClaimFixture,
         origin: &ActorOrigin,
         worker_start: MailWorkerStart,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let machine = holder
-            .central
-            .additional_machine(
-                origin,
-                fleet_sync_protocol::PeerId::try_from(
-                    "019f0000-0000-7000-8000-000000051082".to_owned(),
-                )?,
-            )
-            .await?;
-        let root = holder.directory.path().join("rule-successor");
+        Self::open_at(
+            holder,
+            origin,
+            worker_start,
+            "rule-successor",
+            "019f0000-0000-7000-8000-000000051082",
+        )
+        .await
+    }
+
+    pub async fn open_recipient(
+        holder: &claim_fixture::ClaimFixture,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let origin = ActorOrigin {
+            installation: super::RECIPIENT.to_owned().try_into()?,
+            machine: "rule recipient".to_owned().try_into()?,
+        };
+        Self::open_at(
+            holder,
+            &origin,
+            MailWorkerStart::Deferred,
+            "rule-recipient",
+            "019f0000-0000-7000-8000-000000051083",
+        )
+        .await
+    }
+
+    async fn open_at(
+        holder: &claim_fixture::ClaimFixture,
+        origin: &ActorOrigin,
+        worker_start: MailWorkerStart,
+        directory_name: &str,
+        peer: &str,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let peer = fleet_sync_protocol::PeerId::try_from(peer.to_owned())?;
+        let machine = holder.central.additional_machine(origin, peer).await?;
+        let root = holder.directory.path().join(directory_name);
         let identity = MachineIdentity::new(
             UuidIdentity::try_from(origin.installation.as_str().to_owned())?,
             Some(origin.machine.as_str()),
@@ -44,6 +83,7 @@ impl RuleMachine {
         let running = board.start().ok_or("successor running session")?;
         wait_welcome(projects.welcomed.clone()).await?;
         Ok(Self {
+            peer: peer.as_uuid(),
             registry,
             projects,
             admission,

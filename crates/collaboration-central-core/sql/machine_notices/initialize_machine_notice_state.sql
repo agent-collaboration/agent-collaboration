@@ -1,1 +1,1 @@
-INSERT INTO machine_notice_state(state_id,name,last_position,pruned_through,peer_id) VALUES(?,'machine',0,0,NULL);
+INSERT INTO machine_control_progress(machine_id,last_position,pruned_through,created_at,updated_at) VALUES(?1,0,0,CAST(?2 AS INTEGER),CAST(?2 AS INTEGER));

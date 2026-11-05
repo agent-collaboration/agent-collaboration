@@ -103,7 +103,7 @@ pub enum AdminProjectImportAnswer {
     OutcomeUnknown {
         reason: fleet_sync_protocol::OutcomeUnknownReason,
     },
-    Refused(crate::admin_import_store::AdminImportRefusal),
+    Refused(AdminImportRefusal),
 }
 
 impl AdminImportRecord {
@@ -131,4 +131,27 @@ impl AdminImportRecord {
             AdminImportPhase::Complete { .. } => true,
         }
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "camelCase",
+    deny_unknown_fields
+)]
+pub enum AdminImportRefusal {
+    NotFound,
+    ImportAttemptInProgress {
+        provenance: fleet_admission::ImportProvenance,
+        #[serde(rename = "declaredOwner")]
+        declared_owner: message_board::HumanId,
+    },
+    InvalidHeader,
+    IdentityMismatch,
+    NotPublished,
+    PositionMismatch,
+    PageRefused(fleet_sync_protocol::SeedPageAnswer),
+    SeedRefused(fleet_sync_protocol::SeedAnswer),
+    CopyRefused(fleet_sync_protocol::PieceRefusal),
 }

@@ -14,20 +14,19 @@ impl PreparedRuntimeControls {
             request.validate().map_err(StoreError::backend)?;
             match request.command {
                 RuntimeControl::SetTime { .. }
-                | RuntimeControl::SmallMailboxCapacity
                 | RuntimeControl::CopyFull { .. }
                 | RuntimeControl::DropNextAnswer { .. }
                 | RuntimeControl::HoldNextDispatch { .. }
-                | RuntimeControl::HoldNextSelectedDispatch { .. }
                 | RuntimeControl::DropNextObjectReply { .. }
                 | RuntimeControl::DropNextSelectedObjectReply { .. } => {}
-                RuntimeControl::AwaitDroppedAnswer { .. }
-                | RuntimeControl::AwaitHeldDispatch
-                | RuntimeControl::ResumeDispatch
+                RuntimeControl::ProjectUnavailable
+                | RuntimeControl::ClearProjectFault
+                | RuntimeControl::AwaitDroppedAnswer { .. }
+                | RuntimeControl::AwaitHeldDispatch { .. }
+                | RuntimeControl::ResumeDispatch { .. }
                 | RuntimeControl::ResumeDispatchAndHoldNext { .. }
-                | RuntimeControl::ResumeDispatchAndHoldNextSelected { .. }
                 | RuntimeControl::AwaitDroppedObjectReply
-                | RuntimeControl::DropHeldDispatchReply
+                | RuntimeControl::DropHeldDispatchReply { .. }
                 | RuntimeControl::Observe => {
                     return Err(StoreError::backend(
                         "native conformance startup controls must only arm faults",

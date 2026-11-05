@@ -1,7 +1,7 @@
 //! Non-creating inspection of the exact owned interaction schema and migration lineage.
 use super::{MIGRATOR, StorageError, read_records, read_revision};
 use sqlx_turso::TursoConnection;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Eq, PartialEq)]
 pub(super) enum SchemaAdmission {
@@ -15,6 +15,7 @@ struct SchemaObjectRow {
     sql: Option<String>,
 }
 
+#[derive(sqlx::FromRow)]
 struct MigrationProofRow {
     version: i64,
     success: i64,
@@ -46,6 +47,8 @@ const SCHEDULED_RETRY_READINESS_VERSION: i64 = 202610210003;
 const MAIL_ROUTE_EVIDENCE_VERSION: i64 = 202610210004;
 const SETTLED_ANSWER_RETENTION_VERSION: i64 = 202610310001;
 const APPROVAL_ROUTES_VERSION: i64 = 202610310002;
+const MAIL_REMOVAL_BACKFILL_VERSION: i64 = 202611030001;
+const SDK_BACKFILL_OWNERSHIP_VERSION: i64 = 202611030002;
 
 fn expected_table_sql(
     table_name: &str,
@@ -158,6 +161,12 @@ pub(super) async fn inspect_schema(
     let has_approval_routes = migrations
         .iter()
         .any(|row| row.version == APPROVAL_ROUTES_VERSION);
+    let has_mail_removal_backfill = migrations
+        .iter()
+        .any(|row| row.version == MAIL_REMOVAL_BACKFILL_VERSION);
+    let has_sdk_backfill_ownership = migrations
+        .iter()
+        .any(|row| row.version == SDK_BACKFILL_OWNERSHIP_VERSION);
     let history_tables = BTreeSet::from([
         "_sqlx_migrations",
         "interaction_history_revision",
@@ -200,6 +209,12 @@ pub(super) async fn inspect_schema(
         .filter(|object| object.object_type == "table")
         .map(|object| object.name.as_str())
         .collect();
+    let (library_indexes, has_library_backfills) =
+        if tables.contains("_fleet_sync_delivery_migrations") {
+            delivery_schema_lineage(connection).await?
+        } else {
+            (BTreeMap::new(), false)
+        };
     let has_delivery_retries = tables.contains("local_delivery_retries");
     let has_installation_directory = tables.contains("installation_peer_directory");
     let has_submission_epochs = tables.contains("mail_submission_epochs");
@@ -221,6 +236,9 @@ pub(super) async fn inspect_schema(
     let mut composed_tables = history_tables.clone();
     composed_tables.extend(message_tables);
     composed_tables.extend(library_tables);
+    if has_library_backfills {
+        composed_tables.insert("_fleet_sync_delivery_backfills");
+    }
     if has_delivery_retries {
         composed_tables.insert("local_delivery_retries");
     }
@@ -242,6 +260,9 @@ pub(super) async fn inspect_schema(
     if has_approval_routes {
         composed_tables.insert("approval_routes");
     }
+    if has_mail_removal_backfill && !has_sdk_backfill_ownership {
+        composed_tables.insert("mail_removal_backfill");
+    }
     let composed = tables == composed_tables;
     if tables != history_tables && !composed {
         return Err(StorageError::InvalidSchema);
@@ -254,7 +275,6 @@ pub(super) async fn inspect_schema(
         "subscription_delivery_progress_identity",
         "board_intent_progress_identity",
         "_fleet_sync_operations_due",
-        "_fleet_sync_mail_deadlines",
     ]);
     if has_settled_answer_retention {
         for index_name in [
@@ -322,26 +342,25 @@ pub(super) async fn inspect_schema(
             return Err(StorageError::InvalidSchema);
         }
     }
-    // The public SDK migrator upgrades its genuine preceding prefixes. Accept
-    // its added index only with the public migration's exact DDL; inspecting an
-    // applied-but-missing SDK object belongs to that migration owner (963).
-    if let Some(index) = objects.iter().find(|object| {
-        object.object_type == "index" && object.name == "_fleet_sync_inbox_accounting"
-    }) {
-        let expected = fleet_sync_delivery::DELIVERY_MIGRATOR
-            .iter()
-            .flat_map(|migration| migration.sql.as_str().split(';'))
-            .find(|statement| {
-                statement
-                    .trim_start()
-                    .starts_with("CREATE INDEX _fleet_sync_inbox_accounting")
-            })
-            .ok_or(StorageError::InvalidSchema)?;
-        let actual = index.sql.as_deref().ok_or(StorageError::InvalidSchema)?;
-        if normalize_schema_sql(actual) != normalize_schema_sql(expected) {
-            return Err(StorageError::InvalidSchema);
+    if composed {
+        for (name, expected) in library_indexes {
+            let actual = objects
+                .iter()
+                .find(|object| object.object_type == "index" && object.name == name)
+                .and_then(|object| object.sql.as_deref())
+                .ok_or(StorageError::InvalidSchema)?;
+            if normalize_schema_sql(actual) != expected {
+                return Err(StorageError::InvalidSchema);
+            }
+            expected_indexes.insert(
+                objects
+                    .iter()
+                    .find(|object| object.name == name)
+                    .ok_or(StorageError::InvalidSchema)?
+                    .name
+                    .as_str(),
+            );
         }
-        expected_indexes.insert("_fleet_sync_inbox_accounting");
     }
     if has_held_readiness {
         expected_indexes.insert("router_pushes_held_mail_readiness");
@@ -426,6 +445,7 @@ pub(super) async fn inspect_schema(
                         | "pending_poll_mail"
                         | "mail_read_contexts"
                         | "approval_routes"
+                        | "mail_removal_backfill"
                 ))
     }) {
         let actual = object.sql.as_deref().ok_or(StorageError::InvalidSchema)?;
@@ -479,6 +499,8 @@ pub(super) async fn inspect_schema(
             - usize::from(!has_read_contexts)
             - usize::from(!has_settled_answer_retention)
             - usize::from(!has_approval_routes)
+            - usize::from(!has_mail_removal_backfill)
+            - usize::from(!has_sdk_backfill_ownership)
     } else {
         1
     };
@@ -488,4 +510,58 @@ pub(super) async fn inspect_schema(
     read_revision(connection).await?;
     read_records(connection).await?;
     Ok(SchemaAdmission::Owned)
+}
+
+// SDK indexes and its startup-marker table belong to the exact applied prefix.
+// Later migrations must not invalidate genuine stores from an earlier prefix.
+async fn delivery_schema_lineage(
+    connection: &mut TursoConnection,
+) -> Result<(BTreeMap<String, String>, bool), StorageError> {
+    let applied = sqlx::query_as::<_, MigrationProofRow>(
+        "SELECT version, CAST(success AS INTEGER) AS success, checksum, typeof(version) AS version_storage, typeof(success) AS success_storage, typeof(checksum) AS checksum_storage FROM _fleet_sync_delivery_migrations ORDER BY version"
+    ).fetch_all(connection).await.map_err(|_| StorageError::InvalidSchema)?;
+    if applied.is_empty()
+        || applied.len() > fleet_sync_delivery::DELIVERY_MIGRATOR.iter().count()
+        || applied
+            .iter()
+            .zip(fleet_sync_delivery::DELIVERY_MIGRATOR.iter())
+            .any(|(actual, expected)| {
+                actual.version != expected.version
+                    || actual.success != 1
+                    || actual.version_storage != "integer"
+                    || actual.success_storage != "integer"
+                    || actual.checksum_storage != "blob"
+                    || actual.checksum.as_slice() != expected.checksum.as_ref()
+            })
+    {
+        return Err(StorageError::InvalidSchema);
+    }
+    let mut indexes = BTreeMap::new();
+    for migration in fleet_sync_delivery::DELIVERY_MIGRATOR
+        .iter()
+        .take(applied.len())
+    {
+        for statement in migration.sql.as_str().split(';') {
+            let statement = statement
+                .lines()
+                .filter(|line| !line.trim_start().starts_with("--"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            let statement = statement.trim();
+            if let Some(index) = statement
+                .strip_prefix("CREATE INDEX ")
+                .or_else(|| statement.strip_prefix("CREATE UNIQUE INDEX "))
+            {
+                let name = index
+                    .split_whitespace()
+                    .next()
+                    .ok_or(StorageError::InvalidSchema)?;
+                indexes.insert(name.to_owned(), normalize_schema_sql(statement));
+            } else if let Some(index) = statement.strip_prefix("DROP INDEX ") {
+                indexes.remove(index.trim());
+            }
+        }
+    }
+    let has_backfills = applied.iter().any(|migration| migration.version == 11);
+    Ok((indexes, has_backfills))
 }

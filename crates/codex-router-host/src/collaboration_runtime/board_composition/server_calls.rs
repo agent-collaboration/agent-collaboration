@@ -26,6 +26,36 @@ pub(super) async fn answer_server_call(
     body: ServerRequest<BoardConsumerProtocol>,
 ) -> io::Result<()> {
     match body {
+        ServerRequest::Crate(ServerCall::Push {
+            submitter, item, ..
+        }) => {
+            let mail = mail
+                .upgrade()
+                .ok_or_else(|| io::Error::other("pushed mail owner is not attached"))?;
+            let receipt = mail
+                .accept_pushed_mail(submitter, item)
+                .await
+                .map_err(io::Error::other)?;
+            #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+            if matches!(
+                &receipt,
+                fleet_sync_protocol::PushResult::Accepted { .. }
+                    | fleet_sync_protocol::PushResult::Replayed { .. }
+            ) {
+                crate::debug_runtime_barrier::wait_at_socket(
+                    "CODEX_ROUTER_DEBUG_INBOX_ACCEPTED_BARRIER_SOCKET",
+                    b"inbox-accepted\n",
+                )
+                .await?;
+            }
+            requests
+                .answer(
+                    frame,
+                    ClientAnswer::Crate(ServerCallAnswer::Pushed(receipt)),
+                )
+                .await
+                .map_err(io::Error::other)
+        }
         ServerRequest::Crate(ServerCall::Release { call, request }) => {
             let project =
                 ProjectId::try_from(request.database.to_string()).map_err(io::Error::other)?;

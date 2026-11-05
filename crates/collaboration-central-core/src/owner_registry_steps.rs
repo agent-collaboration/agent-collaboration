@@ -1,7 +1,7 @@
 //! Capture and replay native transfer admission inside one borrowed Registry step.
 use crate::{
     generated_enrollment,
-    machine_enrollment::identity_from_stored_enrollment,
+    machine_enrollment_record::identity_from_stored_enrollment,
     owner_registry_calls::{
         OwnerBlockedSubject, OwnerPreviewAnswer, OwnerPreviewSuccess, OwnerTransferAnswer,
         OwnerTransferOffer,
@@ -128,7 +128,9 @@ where
             // Check the same idempotent journal admission first to preserve a
             // typed conflict, including an ID used by another task kind.
             match scope
-                .admit::<HolderChangeTask<Store, Driver>>(&key, &request)
+                .admit::<HolderChangeTask<Store, Driver, fleet_sync_lease::NoLeaseChangeHook>>(
+                    &key, &request,
+                )
                 .await
             {
                 Ok(_) => {}

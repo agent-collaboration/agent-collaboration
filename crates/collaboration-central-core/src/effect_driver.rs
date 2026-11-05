@@ -29,7 +29,7 @@ mod fleet_requests;
 mod forwards;
 mod installation_reads;
 mod mail_submit;
-mod mailbox_requests;
+mod sender_mail;
 
 pub(crate) struct EffectDriver<Host: ObjectHost, Io: PlatformIo> {
     host: Arc<Host>,
@@ -101,6 +101,9 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
             durable_steps::storage::TransactionScope<Database = Host::Database>,
         <Host::Database as sqlx_core::database::Database>::Arguments:
             sqlx_core::arguments::IntoArguments<Host::Database>,
+        for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+            + sqlx_core::encode::Encode<'scalar, Host::Database>
+            + sqlx_core::decode::Decode<'scalar, Host::Database>,
         for<'value> String: sqlx_core::types::Type<Host::Database>
             + sqlx_core::encode::Encode<'value, Host::Database>
             + sqlx_core::decode::Decode<'value, Host::Database>,
@@ -175,14 +178,14 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
                             .await;
                     }
                 }
-                SessionTransportEffect::MailboxRequest {
+                SessionTransportEffect::SenderMailRequest {
                     connection,
                     session,
                     frame,
                     request,
                 } => {
                     if !published.close.contains(&connection) {
-                        self.answer_mailbox_request(connection, session, frame, request)
+                        self.answer_sender_mail(connection, session, frame, request)
                             .await;
                     }
                 }

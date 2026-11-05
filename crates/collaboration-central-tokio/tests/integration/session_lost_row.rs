@@ -16,7 +16,7 @@ use durable_steps::Uuid;
 use fleet_admission::FleetOperation;
 use fleet_sync_protocol::*;
 use futures_util::{SinkExt, StreamExt};
-use message_board::{BoardId, Description, ResourceName, ServiceId, WorkspaceId};
+use message_board::{BoardId, Description, ResourceName, WorkspaceId};
 use reqwest_websocket::{Message, RequestBuilderExt, WebSocket};
 use std::time::Duration;
 
@@ -53,7 +53,7 @@ async fn control(
         .post(format!("{base}/admin/v1/conformance/runtime"))
         .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
         .json(&RuntimeControlRequest {
-            address: ObjectAddress::Connection(ServiceId::try_from(SERVICE.to_owned())?),
+            address: ObjectAddress::Fleet,
             command,
         })
         .send()
@@ -122,6 +122,9 @@ async fn reconnect(
             })?
             .into(),
         ))
+        .await?;
+    ConformanceClient::new(base)?
+        .wake_due_after_hello(session_id)
         .await?;
     let proof =
         tokio::time::timeout(Duration::from_secs(5), async {
@@ -204,9 +207,10 @@ async fn run_normal_case(base: &str) -> ConformanceResult<()> {
         if !matches!(creation::operation_answer(&mut writer.socket,OperationRequest::Replication(ReplicationRequest::Piece(schema))).await?,OperationAnswer::Replication(ReplicationAnswer::Applied {through}) if through==position(1)?) {return Err("lost-row setup did not commit its normal schema1 prefix".into());}
         let piece=Piece::<BoardAnnotation>::new(PieceContents {database,epoch:Epoch::new(1)?,continues_from:position(1)?,through:position(2)?,transactions:vec![ReplicatedTransaction::Rows {commit_id:CommitSequence::new(2),rows:vec![RowChange::upsert("lost_rows",vec![SqlValue::Text(RECORD_KEY.into())],vec![SqlValue::Text(RECORD_KEY.into()),SqlValue::Integer(1),SqlValue::Text("accepted once".into())])?]}],part:None,annotation:None})?;
         let frame=FrameId::new(Uuid::now_v7())?;
-        control(base,RuntimeControl::DropNextAnswer {frame}).await?;
+    let connection=ConformanceClient::new(base)?.active_connection(SERVICE,PeerId::try_from(PEER.to_owned())?).await?;
+        control(base,RuntimeControl::DropNextAnswer {connection,frame}).await?;
         writer.socket.send(Message::Binary(serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Request {frame,body:OperationRequest::Replication(ReplicationRequest::Piece(piece.clone()))})?.into())).await?;
-        if !matches!(control(base,RuntimeControl::AwaitDroppedAnswer {frame}).await?.answer,AnswerFaultObservation::Dropped {frame:actual} if actual==frame) {return Err("nonempty Piece did not lose its exact outgoing frame answer".into());}
+        if !matches!(control(base,RuntimeControl::AwaitDroppedAnswer {connection,frame}).await?.answer,AnswerFaultObservation::Dropped {connection:actual_connection,frame:actual} if actual_connection==connection && actual==frame) {return Err("nonempty Piece did not lose its exact outgoing frame answer".into());}
         println!("SESSION_LOST_ROW_STAGE exact_nonempty_Piece_answer_dropped passed");
         // Transport evidence: no close, new Hello, reopen or eviction occurred.
         exact_snapshot(&mut writer.socket,database).await?;

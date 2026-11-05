@@ -43,7 +43,16 @@ mod external_provider_supervisor;
 pub use external_provider_supervisor::{
     ExternalProviderBinding, ExternalProviderSupervisor, ProviderPromptContentsRequest,
 };
+#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+mod debug_inbox_limit;
+#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+mod debug_mail_clock;
+#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+mod debug_runtime_barrier;
+mod enrollment_reset;
+mod enrollment_session_transport;
 mod fleet_enrollment_file;
+pub use enrollment_reset::{ENROLLMENT_RESTART_INSTRUCTION, fleet_enrollment_restart_required};
 mod global_claude_executable;
 pub use fleet_enrollment_file::{
     FleetAccess, FleetAccessReference, FleetEnrollmentDocument, FleetEnrollmentMetadata,

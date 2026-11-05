@@ -35,7 +35,6 @@ mod notice_dispatch;
 
 const SESSION_CALL_TIMEOUT: Duration = Duration::from_secs(30);
 const SESSION_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-const MAIL_RECEIVE_INTERVAL: Duration = Duration::from_secs(5 * 60);
 const MAIL_STATUS_INTERVAL: Duration = Duration::from_secs(10 * 60);
 pub(super) const FLEET_REFRESH_PERIOD: Duration = Duration::from_secs(60);
 
@@ -59,8 +58,11 @@ fn mail_status_interval() -> Duration {
 )]
 mod mail_notice_events;
 
-type BoardSessionPump =
-    SessionPump<ReqwestSessionTransport, MachineSessionStore, BoardConsumerProtocol>;
+type BoardSessionPump = SessionPump<
+    crate::enrollment_session_transport::EnrollmentSessionTransport,
+    MachineSessionStore,
+    BoardConsumerProtocol,
+>;
 
 pub(super) struct PreparedMachineSession {
     pump: BoardSessionPump,
@@ -86,6 +88,7 @@ impl PreparedMachineSession {
         directory: &Path,
         inputs: BoardSessionInputs,
         registry: &Arc<ProjectStoreRegistry>,
+        enrollment_directory: &Path,
     ) -> io::Result<Self> {
         let schema = BoardProjectSchema::new().map_err(io::Error::other)?;
         let max_version = schema
@@ -100,6 +103,10 @@ impl PreparedMachineSession {
             SESSION_CALL_TIMEOUT,
         )
         .map_err(io::Error::other)?;
+        let transport = crate::enrollment_session_transport::EnrollmentSessionTransport::new(
+            transport,
+            enrollment_directory,
+        );
         let client = SessionClient::<_, _, BoardConsumerProtocol>::load(
             transport,
             MachineSessionStore::open(directory)
@@ -301,11 +308,6 @@ async fn run_events(
     let mut receipts = NoticeReceipts::default();
     let mut generation = 0_u64;
     let mut reactions = notice_dispatch::NoticeReactionQueue::new(notices);
-    let mut mail_interval = tokio::time::interval_at(
-        tokio::time::Instant::now() + MAIL_RECEIVE_INTERVAL,
-        MAIL_RECEIVE_INTERVAL,
-    );
-    mail_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let status_period = mail_status_interval();
     let mut status_interval =
         tokio::time::interval_at(tokio::time::Instant::now() + status_period, status_period);
@@ -317,10 +319,6 @@ async fn run_events(
         reactions.dispatch_next(&mut handlers, &owners, &requests);
         tokio::select! {
             _ = stopped.changed() => break,
-            _ = mail_interval.tick(), if *welcomed.borrow() => {
-                let mail = owners.mail.clone();
-                spawn_operation(&mut handlers, async move { prompt_mail_receive(&mail).await });
-            },
             _ = status_interval.tick(), if *welcomed.borrow() => {
                 spawn_status_catch_up(&mut handlers, &owners.mail);
             },
@@ -344,7 +342,6 @@ async fn run_events(
                     generation = generation.checked_add(1).ok_or_else(|| io::Error::other("notice generation exhausted"))?;
                     receipts = NoticeReceipts::default();
                     welcomed.send_replace(true);
-                    mail_interval.reset();
                     spawn_installation_directory_refresh(&mut handlers, &owners.mail);
                     status_interval.reset();
                     spawn_welcome_recovery(&mut handlers, &owners, databases);
@@ -406,8 +403,6 @@ fn spawn_welcome_recovery(
     owners: &MachineSessionEventOwners,
     databases: Vec<DatabaseStatus>,
 ) {
-    let mail = owners.mail.clone();
-    spawn_operation(handlers, async move { prompt_mail_receive(&mail).await });
     spawn_status_catch_up(handlers, &owners.mail);
     let publisher = owners.publisher.clone();
     spawn_operation(handlers, async move {
@@ -575,13 +570,6 @@ async fn acknowledge_handled_prefix(
             }
         }
     }
-}
-
-async fn prompt_mail_receive(mail: &Weak<MailDeliveryRuntime>) -> io::Result<()> {
-    if let Some(mail) = mail.upgrade() {
-        mail.prompt_receive_all().await.map_err(io::Error::other)?;
-    }
-    Ok(())
 }
 
 async fn finish_reaction(

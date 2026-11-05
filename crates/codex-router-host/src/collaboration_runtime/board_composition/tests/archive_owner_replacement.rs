@@ -140,26 +140,9 @@ impl ReplacementFixture {
     async fn close(mut self) -> TestResult {
         let mut failures = Vec::new();
         if let Some(central) = &self.central {
-            let address = ObjectAddress::Connection(origin()?.installation);
-            match central
-                .runtime_control(address.clone(), RuntimeControl::Observe)
-                .await
-            {
-                Ok(observed)
-                    if matches!(
-                        observed.dispatch,
-                        board_central_test_support::DispatchFaultObservation::Held { .. }
-                    ) =>
-                {
-                    if let Err(error) = central
-                        .runtime_control(address, RuntimeControl::ResumeDispatch)
-                        .await
-                    {
-                        failures.push(format!("held Copy release: {error}"));
-                    }
-                }
-                Ok(_) => {}
-                Err(error) => failures.push(format!("fault observation: {error}")),
+            let address = ObjectAddress::Fleet;
+            if let Err(error) = central.release_held_dispatches(address).await {
+                failures.push(format!("held dispatch cleanup: {error}"));
             }
         }
         if let Some(second) = self.second.take()
@@ -296,11 +279,12 @@ async fn record_unacknowledged(
     first.fleet.upgrade().ok_or("Fleet")?.synchronize().await?;
     central
         .runtime_control(
-            ObjectAddress::Connection(origin()?.installation),
+            ObjectAddress::Fleet,
             RuntimeControl::HoldNextDispatch {
-                destination: ObjectAddress::Copy(DatabaseId::try_from(
-                    project.as_str().to_owned(),
-                )?),
+                key: board_central_test_support::DispatchKey::new(
+                    ObjectAddress::Copy(DatabaseId::try_from(project.as_str().to_owned())?),
+                    board_central_test_support::DispatchCallSelector::CopyWrite,
+                ),
             },
         )
         .await?;
@@ -311,8 +295,13 @@ async fn record_unacknowledged(
         .ok_or("archive observation")?;
     central
         .runtime_control(
-            ObjectAddress::Connection(origin()?.installation),
-            RuntimeControl::AwaitHeldDispatch,
+            ObjectAddress::Fleet,
+            RuntimeControl::AwaitHeldDispatch {
+                key: board_central_test_support::DispatchKey::new(
+                    ObjectAddress::Copy(DatabaseId::try_from(project.as_str().to_owned())?),
+                    board_central_test_support::DispatchCallSelector::CopyWrite,
+                ),
+            },
         )
         .await?;
     let copied = first

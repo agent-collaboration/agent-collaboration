@@ -22,7 +22,7 @@ async fn control(
         ))
         .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
         .json(&RuntimeControlRequest {
-            address: ObjectAddress::Connection(ServiceId::try_from(SENDER_SERVICE.to_owned())?),
+            address: ObjectAddress::Fleet,
             command,
         })
         .send()
@@ -196,16 +196,17 @@ async fn await_empty_pending(root: &std::path::Path) -> ConformanceResult<()> {
         row::Row,
     };
     let mut reader = sqlx_turso::TursoConnectOptions::new()
-        .filename(root.join(format!("connection-{SENDER_SERVICE}.db")))
+        .filename(root.join("fleet.db"))
         .read_only(true)
         .connect()
         .await?;
     let proof = tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
-            let row =
-                query::<sqlx_turso::Turso>("SELECT count(*) AS pending FROM pending_forwards")
-                    .fetch_one(&mut reader)
-                    .await?;
+            let row = query::<sqlx_turso::Turso>(
+                "SELECT count(*) AS pending FROM machine_forward_requests WHERE side='origin'",
+            )
+            .fetch_one(&mut reader)
+            .await?;
             if row.try_get::<i64, _>("pending")? == 0 {
                 return Ok(());
             }

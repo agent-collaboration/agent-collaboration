@@ -27,16 +27,14 @@ async fn held_local_follow_keeps_prevention_when_takeover_discards_its_unreplica
             .queue_project(fixture.project.clone())
             .await?;
         wait_local_state(notifications, seed.item.id(), PushDeliveryState::Held).await?;
-        let connection = ObjectAddress::Connection(origin()?.installation);
+        let connection = ObjectAddress::Fleet;
         fixture
             .holder
             .central
             .runtime_control(
                 connection.clone(),
                 RuntimeControl::HoldNextDispatch {
-                    destination: ObjectAddress::Copy(DatabaseId::try_from(
-                        fixture.project.as_str().to_owned(),
-                    )?),
+                    key: fixture.copy_write_key()?,
                 },
             )
             .await?;
@@ -44,7 +42,12 @@ async fn held_local_follow_keeps_prevention_when_takeover_discards_its_unreplica
         fixture
             .holder
             .central
-            .runtime_control(connection.clone(), RuntimeControl::AwaitHeldDispatch)
+            .runtime_control(
+                connection.clone(),
+                RuntimeControl::AwaitHeldDispatch {
+                    key: fixture.copy_write_key()?,
+                },
+            )
             .await?;
         notifications
             .publisher
@@ -71,7 +74,12 @@ async fn held_local_follow_keeps_prevention_when_takeover_discards_its_unreplica
         fixture
             .holder
             .central
-            .runtime_control(connection, RuntimeControl::ResumeDispatch)
+            .runtime_control(
+                connection,
+                RuntimeControl::ResumeDispatch {
+                    key: fixture.copy_write_key()?,
+                },
+            )
             .await?;
         let store = received_grants::wait_published_project(
             &fixture.successor.registry,

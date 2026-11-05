@@ -30,6 +30,8 @@ mod copy_wait_scenarios;
 mod creation_scenarios;
 #[path = "../tests/support/delivery_config_scenarios.rs"]
 mod delivery_config_scenarios;
+#[path = "../tests/support/fleet_mail_expiry_scenarios.rs"]
+mod fleet_mail_expiry_scenarios;
 #[path = "../tests/support/fleet_notice_scenarios.rs"]
 mod fleet_notice_scenarios;
 #[path = "session_scope_workerd/forward_reopen.rs"]
@@ -62,14 +64,16 @@ mod holder_writer_retry;
 mod http_body_scenarios;
 #[path = "../tests/support/imported_claim_scenarios.rs"]
 mod imported_claim_scenarios;
+#[path = "../tests/support/mail_push_inbox.rs"]
+mod mail_push_inbox;
+#[path = "../tests/support/mail_push_transport.rs"]
+mod mail_push_transport;
 #[path = "../tests/support/mail_submit_scenarios.rs"]
 mod mail_submit_scenarios;
 #[path = "../tests/support/mailbox_cancel_scenarios.rs"]
 mod mailbox_cancel_scenarios;
 #[path = "../tests/support/mailbox_capacity_scenarios.rs"]
 mod mailbox_capacity_scenarios;
-#[path = "../tests/support/mailbox_deadline_scenarios.rs"]
-mod mailbox_deadline_scenarios;
 #[path = "../tests/support/mailbox_held_retention_scenario.rs"]
 mod mailbox_held_retention_scenario;
 #[path = "../tests/support/mailbox_identity_scenarios.rs"]
@@ -108,7 +112,7 @@ enum Scenario {
     MailboxIdentity,
     MailboxCapacity,
     MailboxCancel,
-    MailboxDeadline,
+    FleetMailExpiry,
     DeliveryConfigRefusals,
     ForwardReopen,
     ForwardPost(forwarded_post_scenarios::ForwardCase),
@@ -140,17 +144,23 @@ enum Scenario {
     MalformedFrames,
     AccessSessions,
     RevocationRace,
+    SenderRevocation,
+    MutationRevocation,
+    FleetMailObserver,
     ReadmissionActivation,
     ReadmissionOpen,
     MailStatus,
     MailSubmitAdmission,
     RawSubmitRefusal,
     SenderSettlement,
-    SenderRetirement,
     HttpBodyKeepalive,
     HttpBodyOverLimit,
     CreationGates,
     FleetNotices,
+    FleetAdrColumns,
+    FleetRepositoryColumns,
+    FleetFeedColumns,
+    FleetSnapshotMerge,
     DeliveryConfig {
         relay_peer: fleet_sync_protocol::PeerId,
     },
@@ -223,10 +233,13 @@ async fn main() -> ConformanceResult<()> {
         Some("malformed-frames") => Scenario::MalformedFrames,
         Some("access-sessions") => Scenario::AccessSessions,
         Some("revocation-race") => Scenario::RevocationRace,
+        Some("sender-revocation") => Scenario::SenderRevocation,
+        Some("mutation-revocation") => Scenario::MutationRevocation,
+        Some("fleet-mail-observer") => Scenario::FleetMailObserver,
         Some("readmission-activation") => Scenario::ReadmissionActivation,
         Some("readmission-open") => Scenario::ReadmissionOpen,
         Some("mail-status") => Scenario::MailStatus,
-        Some("mailbox-deadline") => Scenario::MailboxDeadline,
+        Some("fleet-mail-expiry") => Scenario::FleetMailExpiry,
         Some("mailbox-report-terminal") => Scenario::MailboxReportTerminal,
         Some("mailbox-held-retention") => Scenario::MailboxHeldRetention,
         Some("mailbox-identity") => Scenario::MailboxIdentity,
@@ -235,11 +248,14 @@ async fn main() -> ConformanceResult<()> {
         Some("mail-submit-admission") => Scenario::MailSubmitAdmission,
         Some("raw-submit-refusal") => Scenario::RawSubmitRefusal,
         Some("sender-settlement") => Scenario::SenderSettlement,
-        Some("sender-retirement") => Scenario::SenderRetirement,
         Some("http-body-keepalive") => Scenario::HttpBodyKeepalive,
         Some("http-body-over-limit") => Scenario::HttpBodyOverLimit,
         Some("creation-gates") => Scenario::CreationGates,
         Some("fleet-notices") => Scenario::FleetNotices,
+        Some("fleet-adr-columns") => Scenario::FleetAdrColumns,
+        Some("fleet-repository-columns") => Scenario::FleetRepositoryColumns,
+        Some("fleet-feed-columns") => Scenario::FleetFeedColumns,
+        Some("fleet-snapshot-merge") => Scenario::FleetSnapshotMerge,
         Some("delivery-config") => Scenario::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 args.next().ok_or("explicit configured relay peer")?,
@@ -325,7 +341,15 @@ async fn main() -> ConformanceResult<()> {
     let result = std::panic::AssertUnwindSafe(async { match scenario {
         Scenario::MailboxReportTerminal => mailbox_report_terminal_scenario::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::MailboxHeldRetention => mailbox_held_retention_scenario::run(&format!("http://127.0.0.1:{port}")).await,
-        Scenario::MailboxDeadline => mailbox_deadline_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
+        Scenario::FleetMailExpiry => {
+            let base = format!("http://127.0.0.1:{port}");
+            fleet_mail_expiry_scenarios::run(&base, || async {
+                Ok(client.http.post(format!("{base}/__conformance/admission"))
+                    .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
+                    .json(&json!({"kind":"holderFrames","value":{"service":fleet_mail_expiry_scenarios::RECIPIENT_SERVICE}}))
+                    .send().await?.error_for_status()?.json::<Vec<fleet_sync_protocol::FrameId>>().await?)
+            }).await
+        },
         Scenario::MailboxIdentity => mailbox_identity_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::MailboxCapacity => mailbox_capacity_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::MailboxCancel => mailbox_cancel_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
@@ -340,6 +364,10 @@ async fn main() -> ConformanceResult<()> {
         Scenario::OwnerRetirement => owner_registry_scenarios::retire_imported_fixture(&format!("http://127.0.0.1:{port}")).await,
         Scenario::OwnerRegistry => owner_registry_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::FleetNotices => fleet_notice_scenarios::feed_advancement_reaches_reader_once(&format!("http://127.0.0.1:{port}")).await,
+        Scenario::FleetAdrColumns => collaboration_central_conformance::run_adr_round_trip_conformance(&collaboration_central_conformance::ConformanceClient::new(&format!("http://127.0.0.1:{port}"))?).await,
+        Scenario::FleetFeedColumns => collaboration_central_conformance::run_feed_history_conformance(&collaboration_central_conformance::ConformanceClient::new(&format!("http://127.0.0.1:{port}"))?).await,
+        Scenario::FleetSnapshotMerge => collaboration_central_conformance::run_fleet_snapshot_merge_conformance(&collaboration_central_conformance::ConformanceClient::new(&format!("http://127.0.0.1:{port}"))?).await,
+        Scenario::FleetRepositoryColumns => collaboration_central_conformance::run_repository_round_trip_conformance(&collaboration_central_conformance::ConformanceClient::new(&format!("http://127.0.0.1:{port}"))?).await,
         Scenario::InstallationDirectory => installation_peer_directory_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::DeliveryConfig { relay_peer } => delivery_config_scenarios::run(&format!("http://127.0.0.1:{port}"),relay_peer).await,
         Scenario::CreationGates => creation_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
@@ -347,7 +375,6 @@ async fn main() -> ConformanceResult<()> {
         Scenario::HttpBodyOverLimit => http_body_scenarios::an_over_limit_body_is_refused_and_the_connection_is_closed(&format!("http://127.0.0.1:{port}")).await,
         Scenario::RawSubmitRefusal => sender_control_scenarios::raw_submit_is_refused_without_custody_and_the_same_socket_remains_usable(&format!("http://127.0.0.1:{port}")).await,
         Scenario::SenderSettlement => sender_control_scenarios::sender_query_and_settlement_preserve_existing_custody_and_pin_unknown_identity(&format!("http://127.0.0.1:{port}")).await,
-        Scenario::SenderRetirement => sender_control_scenarios::retirement_uses_the_verified_sender_and_replays_its_original_call_receipt(&format!("http://127.0.0.1:{port}")).await,
         Scenario::CopyReads => copy_read_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::MalformedFrames => {
             malformed_frame_scenarios::run(&format!("http://127.0.0.1:{port}")).await
@@ -399,6 +426,18 @@ async fn main() -> ConformanceResult<()> {
             ))?;
             collaboration_central_conformance::run_revocation_race_conformance(&shared).await
         }
+        Scenario::SenderRevocation => {
+            let shared = collaboration_central_conformance::ConformanceClient::new(&format!("http://127.0.0.1:{port}"))?;
+            collaboration_central_conformance::run_sender_revocation_conformance(&shared).await
+        }
+        Scenario::MutationRevocation => {
+            let shared = collaboration_central_conformance::ConformanceClient::new(&format!("http://127.0.0.1:{port}"))?;
+            collaboration_central_conformance::run_mutation_revocation_conformance(&shared).await
+        }
+        Scenario::FleetMailObserver => {
+            let shared = collaboration_central_conformance::ConformanceClient::new(&format!("http://127.0.0.1:{port}"))?;
+            collaboration_central_conformance::run_fleet_mail_observer_conformance(&shared).await
+        }
         Scenario::ReadmissionActivation => {
             let shared = collaboration_central_conformance::ConformanceClient::new(&format!(
                 "http://127.0.0.1:{port}"
@@ -409,7 +448,7 @@ async fn main() -> ConformanceResult<()> {
             let shared = collaboration_central_conformance::ConformanceClient::new(&format!(
                 "http://127.0.0.1:{port}"
             ))?;
-            collaboration_central_conformance::run_readmission_open_conformance(&shared).await
+            collaboration_central_conformance::run_readmission_reservation_conformance(&shared).await
         }
         Scenario::MailStatus => {
             let shared = collaboration_central_conformance::ConformanceClient::new(&format!(

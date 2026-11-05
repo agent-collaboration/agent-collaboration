@@ -63,8 +63,9 @@ impl MailDeliveryRuntime {
                 LocalCancelReference::Local { reference }
                 | LocalCancelReference::ExistingElsewhere { reference } => reference,
             };
+            let binding = self.binding.clone();
             return self.store.transaction(move |scope| Box::pin(async move {
-                let mut inbox = Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits);
+                let mut inbox = Inbox::<_, RouterDeliveryTypes, _>::new(scope, config.owner, config.limits, binding.as_ref());
                 let target = inbox.local_outcome(item).await.map_err(StoreError::backend)?;
                 let control = inbox.local_outcome(canonical.item).await.map_err(StoreError::backend)?;
                 if !local_terminal(&target) || !local_terminal(&control) {
@@ -118,14 +119,21 @@ impl MailDeliveryRuntime {
         let child = control.id();
         let state = self
             .store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    Outbox::<_, RouterDeliveryTypes>::new(scope, config.limits)
+            .transaction({
+                let binding = self.binding.clone();
+                move |scope| {
+                    Box::pin(async move {
+                        Outbox::<_, RouterDeliveryTypes, _>::new(
+                            scope,
+                            config.limits,
+                            binding.as_ref(),
+                        )
                         .status(child)
                         .await
                         .map(|status| status.state)
                         .map_err(StoreError::backend)
-                })
+                    })
+                }
             })
             .await?;
         // The publisher replays eligible admission before frontier observation.

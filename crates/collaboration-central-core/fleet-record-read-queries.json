@@ -6,80 +6,13 @@
   "metadata": "fleet-record-read-query-metadata.json",
   "queries": [
     {
-      "name": "read_canonical_fleet_record",
-      "sql": "sql/fleet/read_canonical_fleet_record.sql",
-      "row": "StoredFleetRecord",
+      "name": "read_project_columns",
+      "sql": "sql/fleet/read_project_columns.sql",
+      "row": "StoredFleetProject",
       "result": "optional",
       "parameters": [
-        {
-          "name": "kind",
-          "kind": "text",
-          "nullable": false
-        },
         {
           "name": "record_id",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "read_workspace_name",
-      "sql": "sql/fleet/read_workspace_name.sql",
-      "row": "FleetNameRecord",
-      "result": "optional",
-      "parameters": [
-        {
-          "name": "name",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "read_board_name",
-      "sql": "sql/fleet/read_board_name.sql",
-      "row": "FleetNameRecord",
-      "result": "optional",
-      "parameters": [
-        {
-          "name": "workspace_id",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "name",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "read_project_name",
-      "sql": "sql/fleet/read_project_name.sql",
-      "row": "FleetNameRecord",
-      "result": "optional",
-      "parameters": [
-        {
-          "name": "board_id",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "name",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "list_workspace_boards",
-      "sql": "sql/fleet/list_workspace_boards.sql",
-      "row": "StoredFleetRecord",
-      "result": "many",
-      "parameters": [
-        {
-          "name": "workspace_id",
           "kind": "text",
           "nullable": false
         }
@@ -216,7 +149,7 @@
     {
       "name": "list_board_projects",
       "sql": "sql/fleet/list_board_projects.sql",
-      "row": "StoredFleetRecord",
+      "row": "StoredFleetProject",
       "result": "many",
       "parameters": [
         {
@@ -246,6 +179,58 @@
         },
         {
           "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_project_batch",
+      "sql": "sql/fleet/read_project_batch.sql",
+      "row": "StoredFleetProject",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "ids",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_workspace_name_batch",
+      "sql": "sql/fleet/read_workspace_name_batch.sql",
+      "row": "StoredFleetNameOwner",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "names",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_board_name_batch",
+      "sql": "sql/fleet/read_board_name_batch.sql",
+      "row": "StoredFleetNameOwner",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "names",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_project_name_batch",
+      "sql": "sql/fleet/read_project_name_batch.sql",
+      "row": "StoredFleetNameOwner",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "names",
           "kind": "text",
           "nullable": false
         }

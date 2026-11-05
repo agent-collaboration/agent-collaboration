@@ -39,6 +39,9 @@ pub(super) async fn reconnect(
             .into(),
         ))
         .await?;
+    ConformanceClient::new(base)?
+        .wake_due_after_hello(session_id)
+        .await?;
     let proof = async {
         loop {
             match next(&mut socket).await? {

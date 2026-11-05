@@ -16,6 +16,10 @@ use crate::operator_client;
 #[tokio::test]
 async fn auth_file_atomic_rotation_reloads_once_and_refuses_account_switch()
 -> Result<(), Box<dyn std::error::Error>> {
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::WARN)
+        .with_test_writer()
+        .try_init();
     use std::os::unix::fs::PermissionsExt;
     let directory = tempfile::Builder::new()
         .prefix("auth-reload-")

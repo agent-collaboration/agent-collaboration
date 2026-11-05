@@ -39,6 +39,12 @@ filter = "(package(=agent-collaboration) & binary(=integration) & test(/^board_r
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
+# Enrollment fixtures retain their existing process reservation and deadlines.
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & binary(=integration) & test(/^production_enrollment::/)"
+test-group = "process-runtime"
+threads-required = "num-test-threads"
+
 # Native catalogue fixtures launch a bounded read-only CLI. Keep their five-second
 # contract apart from unrelated process/IO load, as with the other process fixtures.
 [[profile.ci.overrides]]

@@ -35,20 +35,14 @@ pub struct RegistryTime(pub DateTime<Utc>);
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum ObjectAddress {
     Copy(DatabaseId),
-    Registry,
     Fleet,
-    Connection(message_board::ServiceId),
-    Mailbox(message_board::ServiceId),
 }
 impl ObjectAddress {
     #[must_use]
     pub const fn primary_face(&self) -> crate::CallerKind {
         match self {
-            Self::Connection(_) => crate::CallerKind::Session,
-            Self::Registry => crate::CallerKind::Registry,
             Self::Copy(_) => crate::CallerKind::Copy,
             Self::Fleet => crate::CallerKind::Fleet,
-            Self::Mailbox(_) => crate::CallerKind::Mailbox,
         }
     }
 }

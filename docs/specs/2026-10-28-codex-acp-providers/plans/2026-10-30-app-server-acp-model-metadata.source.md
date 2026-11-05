@@ -147,4 +147,3 @@ Retain original native-harness completion tests and normal builds. Install depen
 Supersedes the shared-verifier plan. C0/B/C/L/I gain qualified model descriptors, exact-session read injection, explicit provider-settings delegation and actor setting intent. Their initial model/data proof is requalified at M3. The former endpoint catalogue, guessed medium, automatic implicit re-writes and pre-session foreign-catalogue validation are replaced; none is retained as a compatibility path.
 
 Skills, compact, FIFO/approval authority, unchanged client/provider versions, TS/Rust/wterm proof architecture and one-PR terminal remain. Existing completed observations are not re-labelled as current model proof. All original incomplete outcomes, quality gates, independent review and PR boundary carry forward. The owner rejected row hiding; no accepted model or observation is removed.
-

@@ -104,6 +104,11 @@ fn claim_refusal(reason: HolderChangeRefusal) -> io::Result<ProjectClaimRefusal>
         }
         HolderChangeRefusal::NotFound => ProjectClaimRefusal::NotFound,
         HolderChangeRefusal::Retired => ProjectClaimRefusal::Retired,
+        HolderChangeRefusal::GateRefused { reason }
+            if reason.code.as_str() == "callerNotEnrolled" =>
+        {
+            ProjectClaimRefusal::CallerNotEnrolled
+        }
         HolderChangeRefusal::GateRefused { reason } if reason.code.as_str() == "board_archived" => {
             ProjectClaimRefusal::Archived
         }

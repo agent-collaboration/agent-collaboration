@@ -12,7 +12,7 @@ pub(super) async fn verify_cleanup(
     observe_exact_recovered_call(base, input).await?;
     let mut reader = registration::reconnect_peer(base, READER_CREDENTIAL, 1).await?;
     let proof=async {
-        let expected=match &input.settled_before {Some(before)=>before.clone(),None=>finalized(&input.before,RegistryTime(input.at.0+chrono::TimeDelta::seconds(6)))?};
+        let expected=match &input.settled_before {Some(before)=>before.clone(),None=>finalized(&input.before,journal.ready_at)?};
         tokio::time::timeout(RECOVERY_BOUND,async {
             loop {
                 if read_fleet(&mut reader).await?==expected {return Ok::<_,Box<dyn std::error::Error+Send+Sync>>(());}
@@ -21,14 +21,14 @@ pub(super) async fn verify_cleanup(
         }).await.map_err(|_|"startup did not apply the original refused settlement and exact archive finalization")??;
         // This is the existing durable-journal observation used by the physical
         // recovery cases. No Claim replay is allowed to drive this completion.
-        let path=root.join("registry.db");
+        let path=root.join("fleet.db");
         tokio::time::timeout(RECOVERY_BOUND,async {
             loop {
                 if operation(&path,&input.operation).await?.0=="completed" {return Ok::<_,Box<dyn std::error::Error+Send+Sync>>(());}
                 tokio::task::yield_now().await;
             }
         }).await.map_err(|_|"original refused-settlement debt kept retrying after recipient finalization")??;
-        if lease_publication::reservation(base,input.database,match &input.original.change {HolderChangeRequest::Claim {attempt,..}=>*attempt,_=>return Err("saved settlement is not Claim".into())}).await?
+        if read_claim_reservation(base,input.database,match &input.original.change {HolderChangeRequest::Claim {attempt,..}=>*attempt,_=>return Err("saved settlement is not Claim".into())}).await?
             !=Some(ClaimReservationState::Settled {outcome:ClaimReservationOutcome::Refused}) {return Err("recovered settlement did not retain Refused for its exact original attempt".into());}
         let before_ledger=exact_ledger_decision(base,input.archive.request_id.clone()).await?;
         if decide(&mut reader,&input.archive).await?!=input.decision {return Err("archive replay changed its exact original request decision".into());}
@@ -44,8 +44,8 @@ pub(super) async fn verify_cleanup(
         let claimant_closed=claimant.close(reqwest_websocket::CloseCode::Normal,None).await;
         claim_proof?;claimant_closed?;
         let terminal=operation(&path,&input.operation).await?;
-        let later=RegistryTime(chrono::Utc::now()+chrono::TimeDelta::seconds(60));
-        for address in [ObjectAddress::Registry,ObjectAddress::Fleet] {control(base,address,RuntimeControl::SetTime {now:later}).await?;}
+        let later=RegistryTime(journal.ready_at.0+chrono::TimeDelta::seconds(60));
+        control(base,ObjectAddress::Fleet,RuntimeControl::SetTime {now:later}).await?;
         if read_fleet(&mut reader).await?!=expected || exact_ledger_decision(base,input.archive.request_id.clone()).await?!=before_ledger {
             return Err("later wake repeated archive records/feed or changed the stored request ledger".into());
         }
@@ -65,33 +65,48 @@ pub(super) async fn verify_cleanup(
 }
 
 async fn observe_exact_recovered_call(base: &str, input: &CleanupInput) -> ConformanceResult<()> {
-    let http = reqwest::Client::builder()
-        .no_proxy()
-        .timeout(RECOVERY_BOUND + Duration::from_secs(2))
-        .build()?;
-    tokio::time::timeout(RECOVERY_BOUND,async {
-        loop {
-            let observed=http.post(format!("{base}/admin/v1/conformance/runtime"))
-                .header("Cf-Access-Jwt-Assertion",owner_assertion()?)
-                .json(&RuntimeControlRequest {address:ObjectAddress::Registry,command:RuntimeControl::AwaitHeldDispatch})
-                .send().await?.error_for_status()?.json::<collaboration_central_conformance::RuntimeFaultObservation>().await?;
-            let DispatchFaultObservation::Held {destination,request}=observed.dispatch else {return Err("startup retry never reached its pre-armed real transport gate".into());};
-            if destination!=ObjectAddress::Fleet {return Err("startup retry reached another destination".into());}
-            let call:Value=serde_json::from_slice(&request)?;
-            if call.get("kind")==Some(&json!(<fleet_sync_lease::ClaimSettlement as durable_steps::CallTarget>::KIND)) {
-                if call!=input.call {return Err(format!("recovered settlement changed its exact original call identity or payload: {call}").into());}
-                control(base,ObjectAddress::Registry,RuntimeControl::ResumeDispatch).await?;
-                println!("ARCHIVE_CLEANUP_RESTART_STAGE actual_retried_call_identity_and_payload_unchanged");
-                return Ok::<_,Box<dyn std::error::Error+Send+Sync>>(());
-            }
-            // A fresh run may allocate/publish its ordinary metadata before
-            // the killed drive's existing lease expires. Those calls stay real.
-            if !matches!(call.get("kind").and_then(Value::as_str),Some("central.lease-incarnation"|"central.lease-projection")) {
-                return Err(format!("startup recovery intercepted an unexpected Fleet call: {call}").into());
-            }
-            control(base,ObjectAddress::Registry,RuntimeControl::ResumeDispatchAndHoldNext {destination:ObjectAddress::Fleet}).await?;
-        }
-    }).await.map_err(|_|"startup did not reconstruct the exact original refused-settlement call")?
+    let observed = tokio::time::timeout(
+        RECOVERY_BOUND,
+        control(
+            base,
+            ObjectAddress::Fleet,
+            RuntimeControl::AwaitHeldDispatch {
+                key: settlement_key(),
+            },
+        ),
+    )
+    .await
+    .map_err(|_| "startup did not reconstruct the exact original refused-settlement call")??;
+    let DispatchFaultObservation::Held {
+        destination,
+        request,
+    } = observed.dispatch(&settlement_key())
+    else {
+        return Err("startup retry never reached its exact pre-armed settlement gate".into());
+    };
+    let call: Value = serde_json::from_slice(&request)?;
+    if destination != ObjectAddress::Fleet
+        || call != input.call
+        || call.get("kind")
+            != Some(&json!(
+                <fleet_sync_lease::ClaimSettlement as durable_steps::CallTarget>::KIND
+            ))
+    {
+        return Err(format!(
+            "recovered settlement changed its original call identity or payload: {call}"
+        )
+        .into());
+    }
+    control(
+        base,
+        ObjectAddress::Fleet,
+        RuntimeControl::ResumeDispatch {
+            key: settlement_key(),
+        },
+    )
+    .await?;
+    println!("ARCHIVE_CLEANUP_RESTART_STAGE actual_retried_call_identity_and_payload_unchanged");
+    Ok(())
 }
 
 async fn verify_one_terminal_input(
@@ -100,7 +115,7 @@ async fn verify_one_terminal_input(
     journal: &SavedJournal,
 ) -> ConformanceResult<()> {
     let mut connection = sqlx_turso::TursoConnectOptions::new()
-        .filename(root.join("registry.db"))
+        .filename(root.join("fleet.db"))
         .read_only(true)
         .connect()
         .await?;

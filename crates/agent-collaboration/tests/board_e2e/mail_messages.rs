@@ -1,12 +1,12 @@
 //! Replay and lost-caller-answer observations over actual Unix CLI/TCP MCP.
 use super::mail_fixture::{MailFixture, at};
 use codex_router_test_support::{FixtureResult, scenario_finalization::run_scenario};
+use collaboration_contracts::RouterDeliveryTypes;
 use serde_json::{Value, json};
-use sqlx_turso::sqlx::{ConnectOptions, Connection, Row};
+use sqlx_turso::sqlx::{ConnectOptions, Connection};
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-pub const REPLAY_ID: &str = "019f0000-0000-7000-8000-000000000202";
 pub const REPLAY_TEXT: &str = "LM02 literal same identity, one actual peer write";
 
 pub async fn cli_send(suite: &MailFixture, item: &str, text: &str) -> FixtureResult<Value> {
@@ -26,8 +26,10 @@ pub async fn cli_send(suite: &MailFixture, item: &str, text: &str) -> FixtureRes
 }
 
 pub async fn fixed_identity(suite: &mut MailFixture) -> FixtureResult {
-    let original = cli_send(suite, REPLAY_ID, REPLAY_TEXT).await?;
-    assert_eq!(at(&original, "/pushId")?, &json!(REPLAY_ID));
+    let replay_identity = super::mail_fixture::identity();
+    let replay_id = replay_identity.as_str();
+    let original = cli_send(suite, replay_id, REPLAY_TEXT).await?;
+    assert_eq!(at(&original, "/pushId")?, &json!(replay_id));
     assert_eq!(
         original.pointer("/receipt/outcome/kind"),
         Some(&json!("peerMessageWritten"))
@@ -36,7 +38,7 @@ pub async fn fixed_identity(suite: &mut MailFixture) -> FixtureResult {
         .peer_mut()?
         .expect_text_with_timeout(REPLAY_TEXT, Duration::from_secs(15))
         .await?;
-    assert!(frame.contains(REPLAY_ID));
+    assert!(frame.contains(replay_id));
     assert_eq!(suite.peer()?.count_after_barrier().await?, 1);
     for reopening in [false, true] {
         if reopening {
@@ -48,13 +50,13 @@ pub async fn fixed_identity(suite: &mut MailFixture) -> FixtureResult {
                 .host()?
                 .mcp(
                     "message_send",
-                    suite.message_input(Some(REPLAY_ID), REPLAY_TEXT)
+                    suite.message_input(Some(replay_id), REPLAY_TEXT)
                 )
                 .await?,
             original
         );
-        assert_eq!(cli_send(suite, REPLAY_ID, REPLAY_TEXT).await?, original);
-        check_refusals(suite, &original).await?;
+        assert_eq!(cli_send(suite, replay_id, REPLAY_TEXT).await?, original);
+        check_refusals(suite, &original, replay_id).await?;
         let shown = suite
             .host()?
             .mcp(
@@ -62,22 +64,22 @@ pub async fn fixed_identity(suite: &mut MailFixture) -> FixtureResult {
                 json!({"caller":suite.target,"reference":at(&original, "/link")?}),
             )
             .await?;
-        assert_eq!(shown.pointer("/record/pushId"), Some(&json!(REPLAY_ID)));
+        assert_eq!(shown.pointer("/record/pushId"), Some(&json!(replay_id)));
         assert_eq!(shown.pointer("/record/body"), Some(&json!(REPLAY_TEXT)));
         assert_eq!(suite.peer()?.count_after_barrier().await?, 1);
     }
     suite.stop_host().await?;
-    terminal_readback(suite, REPLAY_ID, &original).await?;
+    terminal_readback(suite, replay_id, &original).await?;
     assert_eq!(suite.peer()?.count_after_barrier().await?, 1);
     Ok(())
 }
 
-async fn check_refusals(suite: &MailFixture, original: &Value) -> FixtureResult {
+async fn check_refusals(suite: &MailFixture, original: &Value, replay_id: &str) -> FixtureResult {
     let conflict = suite
         .host()?
         .mcp_reply(
             "message_send",
-            suite.message_input(Some(REPLAY_ID), "changed literal content"),
+            suite.message_input(Some(replay_id), "changed literal content"),
         )
         .await?;
     assert!(conflict.is_error);
@@ -93,7 +95,7 @@ async fn check_refusals(suite: &MailFixture, original: &Value) -> FixtureResult 
             "--text",
             "changed literal content",
             "--item-id",
-            REPLAY_ID,
+            replay_id,
         ])
         .await?;
     assert_eq!(code, 4);
@@ -135,47 +137,123 @@ async fn check_refusals(suite: &MailFixture, original: &Value) -> FixtureResult 
         .await?;
     assert_eq!(code, 2);
     assert_eq!(malformed.pointer("/error/effect"), Some(&json!("none")));
-    assert_eq!(at(original, "/pushId")?, &json!(REPLAY_ID));
+    assert_eq!(at(original, "/pushId")?, &json!(replay_id));
     Ok(())
 }
 
 pub async fn terminal_readback(suite: &MailFixture, item: &str, original: &Value) -> FixtureResult {
+    let binding = crate::messaging_stopped_owner::sender_binding(suite.stopped_directory()?)?;
     let connection = sqlx_turso::TursoConnectOptions::new()
         .filename(suite.stopped_directory()?.join("interaction.sqlite"))
         .create_if_missing(false)
         .read_only(true)
         .connect()
         .await?;
-    run_scenario(connection, async |connection: &mut sqlx_turso::TursoConnection| {
-        let answer: String = sqlx_turso::sqlx::query_scalar("SELECT result FROM message_send_answers WHERE item_id=?")
-            .bind(item).fetch_one(&mut *connection).await?;
-        assert_eq!(serde_json::from_str::<Value>(&answer)?, *original);
-        let rows = sqlx_turso::sqlx::query("SELECT item_id,live,payload_bytes,payload,record FROM _fleet_sync_inbox_items WHERE item_id=?")
-            .bind(item).fetch_all(&mut *connection).await?;
-        assert_eq!(rows.len(), 1, "one retained local custody identity");
-        let custody_ids: Vec<String> = sqlx_turso::sqlx::query_scalar("SELECT item_id FROM _fleet_sync_inbox_items ORDER BY item_id")
-            .fetch_all(&mut *connection).await?;
-        assert_eq!(custody_ids, vec![item.to_owned()], "migration/replay must not invent another custody item");
-        let answer_ids: Vec<String> = sqlx_turso::sqlx::query_scalar("SELECT item_id FROM message_send_answers ORDER BY item_id")
-            .fetch_all(&mut *connection).await?;
-        assert_eq!(answer_ids, vec![item.to_owned()], "retained first-answer inventory");
-        let push_ids: Vec<String> = sqlx_turso::sqlx::query_scalar("SELECT push_id FROM router_pushes ORDER BY push_id")
-            .fetch_all(&mut *connection).await?;
-        assert_eq!(push_ids, vec![item.to_owned()], "terminal migration must retain exactly the original push");
-        let outbox_ids: Vec<String> = sqlx_turso::sqlx::query_scalar("SELECT item_id FROM _fleet_sync_outbox_items ORDER BY item_id")
-            .fetch_all(&mut *connection).await?;
-        assert!(outbox_ids.is_empty(), "local terminal mail must not invent outgoing custody");
-        let row = rows.first().ok_or("terminal inbox row absent")?;
-        assert_eq!(row.try_get::<String, _>("item_id")?, item);
-        assert_eq!(row.try_get::<i64, _>("live")?, 0);
-        assert_eq!(row.try_get::<i64, _>("payload_bytes")?, 0);
-        assert_eq!(row.try_get::<Option<String>, _>("payload")?, None);
-        let record: Value = serde_json::from_str(&row.try_get::<String, _>("record")?)?;
-        assert_eq!(at(&record, "/route")?, &json!("local"));
-        assert_eq!(record.pointer("/progress/kind"), Some(&json!("final")));
-        assert_eq!(record.pointer("/progress/value/outcome/kind"), Some(&json!("delivered")));
-        Ok(())
-    }, async |connection| { connection.close().await?; Ok(()) }, || Ok(())).await
+    run_scenario(
+        connection,
+        async |connection: &mut sqlx_turso::TursoConnection| {
+            let answer: String = sqlx_turso::sqlx::query_scalar(
+                "SELECT result FROM message_send_answers WHERE item_id=?",
+            )
+            .bind(item)
+            .fetch_one(&mut *connection)
+            .await?;
+            assert_eq!(serde_json::from_str::<Value>(&answer)?, *original);
+            let mut transaction = connection.begin().await?;
+            let observations =
+                fleet_sync_delivery::test_support::snapshot::<_, RouterDeliveryTypes, _>(
+                    &mut durable_steps::turso_store::TursoScope::new(
+                        &mut transaction,
+                        &crate::native_sql::SqlHost,
+                    ),
+                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    &binding,
+                )
+                .await?;
+            transaction.commit().await?;
+            let rows = observations
+                .iter()
+                .filter(|row| row.category == "inbox" && row.identity == item)
+                .collect::<Vec<_>>();
+            assert_eq!(rows.len(), 1, "one retained local custody identity");
+            let custody_ids: Vec<String> = sqlx_turso::sqlx::query_scalar(
+                "SELECT item_id FROM _fleet_sync_inbox_items ORDER BY item_id",
+            )
+            .fetch_all(&mut *connection)
+            .await?;
+            assert_eq!(
+                custody_ids,
+                vec![item.to_owned()],
+                "migration/replay must not invent another custody item"
+            );
+            let answer_ids: Vec<String> = sqlx_turso::sqlx::query_scalar(
+                "SELECT item_id FROM message_send_answers ORDER BY item_id",
+            )
+            .fetch_all(&mut *connection)
+            .await?;
+            assert_eq!(
+                answer_ids,
+                vec![item.to_owned()],
+                "retained first-answer inventory"
+            );
+            let push_ids: Vec<String> = sqlx_turso::sqlx::query_scalar(
+                "SELECT push_id FROM router_pushes ORDER BY push_id",
+            )
+            .fetch_all(&mut *connection)
+            .await?;
+            assert_eq!(
+                push_ids,
+                vec![item.to_owned()],
+                "terminal migration must retain exactly the original push"
+            );
+            let outbox_ids: Vec<String> = sqlx_turso::sqlx::query_scalar(
+                "SELECT item_id FROM _fleet_sync_outbox_items ORDER BY item_id",
+            )
+            .fetch_all(&mut *connection)
+            .await?;
+            assert!(
+                outbox_ids.is_empty(),
+                "local terminal mail must not invent outgoing custody"
+            );
+            let row = rows.first().ok_or("terminal inbox row absent")?;
+            assert_eq!(row.identity, item);
+            assert_eq!(row.metadata.as_deref(), Some("0"));
+            assert_eq!(row.payload_bytes.as_deref(), Some("0"));
+            // Keep the physical payload-erasure oracle as well as SDK accounting;
+            // the public observation's content is the validated header, not payload.
+            let payload: Option<String> = sqlx_turso::sqlx::query_scalar(
+                "SELECT payload FROM _fleet_sync_inbox_items WHERE item_id=?",
+            )
+            .bind(item)
+            .fetch_one(&mut *connection)
+            .await?;
+            assert_eq!(payload, None);
+            let record: Value =
+                serde_json::from_str(row.content.as_deref().ok_or("terminal SDK header absent")?)?;
+            assert_terminal_header(&record)?;
+            Ok(())
+        },
+        async |connection| {
+            connection.close().await?;
+            Ok(())
+        },
+        || Ok(()),
+    )
+    .await
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong stored header; parsing errors propagate."
+)]
+fn assert_terminal_header(record: &Value) -> FixtureResult {
+    assert_eq!(at(record, "/route")?, &json!("local"));
+    assert_eq!(record.pointer("/progress/kind"), Some(&json!("final")));
+    assert_eq!(
+        record.pointer("/progress/value/outcome/kind"),
+        Some(&json!("delivered"))
+    );
+    Ok(())
 }
 
 async fn discard_response(
@@ -216,29 +294,30 @@ async fn discard_response(
 }
 
 pub async fn lost_answers(suite: &mut MailFixture) -> FixtureResult {
-    const ITEM: &str = "019f0000-0000-7000-8000-000000000303";
+    let item_identity = super::mail_fixture::identity();
+    let item = item_identity.as_str();
     const TEXT: &str = "LM03 supplied identity with lost caller answer";
-    let request = suite.message_input(Some(ITEM), TEXT);
+    let request = suite.message_input(Some(item), TEXT);
     let frame = tokio::time::timeout(
         Duration::from_secs(20),
         discard_response(suite, request.clone(), TEXT),
     )
     .await??;
-    assert!(frame.contains(ITEM));
+    assert!(frame.contains(item));
     let recovered = suite.host()?.mcp("message_send", request).await?;
-    assert_eq!(at(&recovered, "/pushId")?, &json!(ITEM));
+    assert_eq!(at(&recovered, "/pushId")?, &json!(item));
     assert_eq!(
         recovered.pointer("/receipt/outcome/kind"),
         Some(&json!("peerMessageWritten"))
     );
     assert_eq!(suite.peer()?.count_after_barrier().await?, 1);
     suite.stop_host().await?;
-    terminal_readback(suite, ITEM, &recovered).await?;
+    terminal_readback(suite, item, &recovered).await?;
     suite.reopen_host().await?;
     assert_eq!(
         suite
             .host()?
-            .mcp("message_send", suite.message_input(Some(ITEM), TEXT))
+            .mcp("message_send", suite.message_input(Some(item), TEXT))
             .await?,
         recovered
     );
@@ -265,7 +344,7 @@ pub async fn lost_answers(suite: &mut MailFixture) -> FixtureResult {
     assert_eq!(
         suite
             .host()?
-            .mcp("message_send", suite.message_input(Some(ITEM), TEXT))
+            .mcp("message_send", suite.message_input(Some(item), TEXT))
             .await?,
         recovered
     );

@@ -35,6 +35,7 @@ pub enum ArchiveReportOutcome {
     deny_unknown_fields
 )]
 pub enum ArchiveReportRefusal {
+    CallerNotEnrolled,
     NotFound(RecordRef),
     ProjectNotOnBoard { project: ProjectId, board: BoardId },
     BoardNotArchiving { state: BoardState },

@@ -380,6 +380,9 @@ impl FleetClient {
                 RequestResult::Decided(decision)
             }
             FleetRequestResult::ConflictingRequest => RequestResult::ConflictingRequest,
+            FleetRequestResult::CallerNotEnrolled => {
+                RequestResult::ScopeUnavailable(message_board::ScopeRefusal::CallerNotEnrolled {})
+            }
         };
         Ok(FleetReply { result })
     }

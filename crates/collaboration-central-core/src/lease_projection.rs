@@ -15,8 +15,19 @@ pub(crate) struct LeaseProjectionVersion {
     change: NonZeroU64,
 }
 impl LeaseProjectionVersion {
-    pub(crate) fn incarnation(&self) -> RegistryIncarnation {
-        self.incarnation
+    pub(crate) const fn from_components(
+        epoch: Epoch,
+        incarnation: RegistryIncarnation,
+        change: NonZeroU64,
+    ) -> Self {
+        Self {
+            epoch,
+            incarnation,
+            change,
+        }
+    }
+    pub(crate) const fn components(self) -> (Epoch, RegistryIncarnation, NonZeroU64) {
+        (self.epoch, self.incarnation, self.change)
     }
 }
 
@@ -73,11 +84,14 @@ impl LeaseProjection {
         })
     }
 
+    pub(crate) fn snapshot(&self) -> &RegistrySnapshot {
+        &self.snapshot
+    }
+    pub(crate) fn holder(&self) -> Option<&ServiceId> {
+        self.holder.as_ref()
+    }
     pub(crate) fn database(&self) -> DatabaseId {
         self.snapshot.database
-    }
-    pub(crate) fn incarnation(&self) -> RegistryIncarnation {
-        self.incarnation
     }
     pub(crate) fn version(&self) -> LeaseProjectionVersion {
         LeaseProjectionVersion {
@@ -101,7 +115,7 @@ impl LeaseProjection {
         let version = self.version();
         let display_time = |time: fleet_sync_protocol::SyncTime| {
             chrono::DateTime::from_timestamp_millis(time.unix_millis()).ok_or_else(|| {
-                crate::fleet_record_codec::corrupt(
+                crate::fleet_row_codec::corrupt(
                     "directory.lease_time",
                     "stored lease time is outside the display range",
                 )
@@ -116,7 +130,7 @@ impl LeaseProjection {
             }
             DatabaseLifecycle::Registered { .. } => {
                 let grant = self.snapshot.grant.as_ref().ok_or_else(|| {
-                    crate::fleet_record_codec::corrupt(
+                    crate::fleet_row_codec::corrupt(
                         "directory.grant",
                         "registered projection has no grant",
                     )
@@ -124,7 +138,7 @@ impl LeaseProjection {
                 DirectoryLease::Held {
                     epoch: version.epoch,
                     holder: self.holder.clone().ok_or_else(|| {
-                        crate::fleet_record_codec::corrupt(
+                        crate::fleet_row_codec::corrupt(
                             "directory.holder",
                             "grant has no verified service mapping",
                         )
@@ -139,7 +153,7 @@ impl LeaseProjection {
             }
         };
         let invalid_version = || {
-            crate::fleet_record_codec::corrupt(
+            crate::fleet_row_codec::corrupt(
                 "directory.lease_version",
                 "invalid committed lease version",
             )
@@ -192,6 +206,5 @@ pub(crate) enum LeaseProjectionResult {
     Applied,
     Duplicate,
     Older { stored: LeaseProjectionVersion },
-    Fenced { fence: RegistryIncarnation },
     Conflict { stored: LeaseProjectionVersion },
 }

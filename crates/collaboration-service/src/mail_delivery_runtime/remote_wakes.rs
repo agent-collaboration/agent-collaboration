@@ -2,7 +2,8 @@
 use super::{
     Arc, AtomicStore, CarrierAcceptance, Clock, DeliveryError, DeliveryItem, DeliveryReceipt,
     InstallationPeerResolutionError, ItemId, LocalDelivery, MailConsumer, MailDeliveryRuntime,
-    MailSender, RouterDeliveryTypes, StoreError, SubmitMailTask, SyncTime, WakeScheduler,
+    MailSender, RemoveMailRecord, RouterDeliveryTypes, StoreError, SubmitMailTask, SyncTime,
+    WakeScheduler,
 };
 use collaboration_mail_protocol::{
     RemoteWakeCreator, RemoteWakeMutationState, RemoteWakeRefusal, RemoteWakeResult, WakeBody,
@@ -135,49 +136,62 @@ impl MailDeliveryRuntime {
         let deadline_ms = request.valid_until_ms;
         let relay = session.relay;
         let limits = self.config.limits;
+        let submitter = fleet_sync_protocol::Submitter::Machine(self.config.owner);
         let clock = self.clock.clone();
-        let retirement = fleet_sync_delivery::SubmitInput {
-            item: id,
-            digest: item.digest().clone(),
-            relay,
-            mailbox: peer,
-        };
-        let expired = self
-            .store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    // Peer lookup or the store lock may have consumed the deadline.
-                    // Inspect custody again atomically, without admitting expired work.
-                    if clock.now().timestamp_millis() >= deadline_ms {
-                        return Outbox::<_, RouterDeliveryTypes>::new(scope, limits)
-                            .status(id)
+        let expired =
+            self.store
+                .transaction({
+                    let binding = self.binding.clone();
+                    move |scope| {
+                        Box::pin(async move {
+                            // Peer lookup or the store lock may have consumed the deadline.
+                            // Inspect custody again atomically, without admitting expired work.
+                            let admitted_at = clock.now();
+                            if admitted_at.timestamp_millis() >= deadline_ms {
+                                return Outbox::<_, RouterDeliveryTypes, _>::new(
+                                    scope,
+                                    limits,
+                                    binding.as_ref(),
+                                )
+                                .status(id)
+                                .await
+                                .map(|status| Some(status.state))
+                                .map_err(delivery_rollback);
+                            }
+                            let (answer, _) = Outbox::<_, RouterDeliveryTypes, _>::new(
+                                scope,
+                                limits,
+                                binding.as_ref(),
+                            )
+                            .enqueue_and_admit::<SubmitMailTask, RemoveMailRecord>(
+                                item,
+                                relay,
+                                submitter,
+                                SyncTime::from_unix_millis(admitted_at.timestamp_millis()),
+                            )
                             .await
-                            .map(|status| Some(status.state))
-                            .map_err(delivery_rollback);
-                    }
-                    let (answer, _) = Outbox::<_, RouterDeliveryTypes>::new(scope, limits)
-                        .enqueue_and_admit::<SubmitMailTask>(item, relay)
-                        .await
-                        .map_err(delivery_rollback)?;
-                    super::terminal_retirement::admit_terminal_retirement(
-                        scope, &answer, retirement,
-                    )
-                    .await?;
-                    match answer {
-                        OutboxAdmission::Queued { .. } | OutboxAdmission::Replayed { .. } => {
-                            Ok(None)
-                        }
-                        OutboxAdmission::Refused { reason } => {
-                            Err(delivery_rollback(DeliveryError::Refused { reason }))
-                        }
-                        OutboxAdmission::CancelAlreadyRequested { .. } => {
-                            Err(StoreError::backend("wake item has a cancel admission"))
-                        }
+                            .map_err(delivery_rollback)?;
+                            match answer {
+                                OutboxAdmission::BindingUnavailable { reason } => Err(
+                                    delivery_rollback(DeliveryError::SenderBindingUnavailable {
+                                        row: fleet_sync_delivery::CustodyRow::Outbox(id),
+                                        reason,
+                                    }),
+                                ),
+                                OutboxAdmission::Queued { .. }
+                                | OutboxAdmission::Replayed { .. } => Ok(None),
+                                OutboxAdmission::Refused { reason } => {
+                                    Err(delivery_rollback(DeliveryError::Refused { reason }))
+                                }
+                                OutboxAdmission::CancelAlreadyRequested { .. } => {
+                                    Err(StoreError::backend("wake item has a cancel admission"))
+                                }
+                            }
+                        })
                     }
                 })
-            })
-            .await
-            .map_err(|_| RemoteWakeRefusal::RemoteUnavailable)?;
+                .await
+                .map_err(|_| RemoteWakeRefusal::RemoteUnavailable)?;
         if let Some(state) = expired {
             return expired_wake_answer(state, previously_prepared);
         }

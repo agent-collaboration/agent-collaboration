@@ -398,7 +398,17 @@ impl MessageOperations {
                         MessageFailureKind::MailboxFull,
                         "Local message inbox is full",
                     ),
-                    _ => MessageFailure::discovery(
+                    MailRefusal::TooOld {} => MessageFailure::discovery(
+                        MessageFailureKind::TooOld,
+                        "Item is older than the 60-day limit",
+                    ),
+                    MailRefusal::NotThisMachine {}
+                    | MailRefusal::NotRecipient {}
+                    | MailRefusal::RecipientUnknown {}
+                    | MailRefusal::RecipientRevoked {}
+                    | MailRefusal::RecipientUnsupported {}
+                    | MailRefusal::DroppedByPolicy {}
+                    | MailRefusal::CancelSenderMismatch { .. } => MessageFailure::discovery(
                         MessageFailureKind::Unavailable,
                         "Local mail refused",
                     ),
@@ -464,6 +474,8 @@ pub enum MessageFailureKind {
     InvalidShape,
     ItemConflict,
     MailboxFull,
+    /// The item's UUIDv7 creation time is older than the 60-day limit.
+    TooOld,
     /// A request field is invalid.
     InvalidField,
     /// A named session belongs to another Router.
@@ -471,7 +483,7 @@ pub enum MessageFailureKind {
     /// The push lives on another machine; cross-machine reads are not available yet.
     ForeignMachine,
     Unavailable,
-    /// The push expired after two calendar months, or never existed.
+    /// No retained push or sender-custody record matched.
     NotFound,
     NotPermitted,
     NotDirectMessage,
@@ -523,6 +535,7 @@ impl CollaborationRejection for MessageFailure {
             }
             MessageFailureKind::ItemConflict
             | MessageFailureKind::MailboxFull
+            | MessageFailureKind::TooOld
             | MessageFailureKind::WrongService
             | MessageFailureKind::ForeignMachine
             | MessageFailureKind::Unavailable
@@ -538,6 +551,7 @@ impl CollaborationRejection for MessageFailure {
         let code = match self.kind {
             MessageFailureKind::ItemConflict
             | MessageFailureKind::MailboxFull
+            | MessageFailureKind::TooOld
             | MessageFailureKind::InvalidShape
             | MessageFailureKind::InvalidField
             | MessageFailureKind::WrongService => PublishedRejection::INVALID_PARAMS,

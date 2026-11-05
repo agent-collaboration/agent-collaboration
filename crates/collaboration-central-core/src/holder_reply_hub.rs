@@ -37,6 +37,7 @@ pub(crate) struct ReplyWaiter {
     hub: Weak<HolderReplyHub>,
     key: ReplyKey,
     received: oneshot::Receiver<Reply>,
+    deadline: SyncTime,
 }
 
 impl HolderReplyHub {
@@ -64,6 +65,7 @@ impl HolderReplyHub {
             hub: Arc::downgrade(self),
             key,
             received,
+            deadline,
         })
     }
 
@@ -207,6 +209,9 @@ pub(crate) fn session_identity_probe(
 }
 
 impl ReplyWaiter {
+    pub(crate) fn deadline(&self) -> SyncTime {
+        self.deadline
+    }
     pub(crate) async fn answer(mut self) -> Result<Reply, CallFailure> {
         (&mut self.received)
             .await

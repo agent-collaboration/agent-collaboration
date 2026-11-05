@@ -3,9 +3,7 @@
 //! Fleet admission and an idle holder's release answer are setup stand-ins.
 //! They do not prove the unfinished normal Register/Move request composition.
 use collaboration_central_conformance::ConformanceResult;
-use collaboration_central_core::{
-    CopyKind, CoreHost, ObjectAddress, ObjectRuntime, PlatformIo, RegistryKind,
-};
+use collaboration_central_core::{CopyKind, CoreHost, ObjectAddress, ObjectRuntime, PlatformIo};
 use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{
     AtomicStore, CallFailure, CallId, CallTarget, Engine, Host, OperationState, Uuid,
@@ -58,6 +56,13 @@ impl WakeScheduler for SetupIo {
     }
 }
 impl PlatformIo for SetupIo {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     async fn object_call(&self, _: ObjectAddress, _: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
         Err(CallFailure::AnswerLost)
     }
@@ -89,20 +94,31 @@ impl Host for GrantHost {
         call: CallId,
     ) -> Result<C::Answer, CallFailure> {
         let answer = match C::KIND {
-            "fleet-sync.registration-admission" | "fleet-sync.retirement-admission" => serde_json::to_vec(&GateAnswer::Admitted),
+            "fleet-sync.registration-admission" | "fleet-sync.retirement-admission" => {
+                serde_json::to_vec(&GateAnswer::Admitted)
+            }
             "fleet-sync.holder-release" => serde_json::to_vec(&ReleaseAnswer::Released {
-                final_position: ReplicationPosition::new(Epoch::new(1).map_err(lost)?, CommitSequence::new(0)),
+                final_position: ReplicationPosition::new(
+                    Epoch::new(1).map_err(lost)?,
+                    CommitSequence::new(0),
+                ),
             }),
-            "fleet-sync.copy-create" | "fleet-sync.copy-acknowledged" | "fleet-sync.copy-fence" | "fleet-sync.copy-status" | "fleet-sync.copy-retire" => {
+            "fleet-sync.copy-create"
+            | "fleet-sync.copy-acknowledged"
+            | "fleet-sync.copy-fence"
+            | "fleet-sync.copy-status"
+            | "fleet-sync.copy-retire" => {
                 let bytes = serde_json::to_vec(&json!({
-                    "source":{"kind":"registry"},"sourceFace":"registry","authority":{"kind":"object"},
+                    "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
                     "destination":{"kind":"copy","value":self.database},"destinationFace":"copy",
                     "identity":call,"kind":C::KIND,"target":target,"request":request
-                })).map_err(lost)?;
+                }))
+                .map_err(lost)?;
                 return serde_json::from_slice(&self.copy.on_call(bytes).await?).map_err(lost);
             }
             _ => return Err(CallFailure::AnswerLost),
-        }.map_err(lost)?;
+        }
+        .map_err(lost)?;
         serde_json::from_slice(&answer).map_err(lost)
     }
 }
@@ -126,14 +142,27 @@ pub(super) async fn register_grant_history(
         host,
     } = GrantFixture::open(root, config, database).await?;
     let mut engine = Engine::new(registry.clone(), host.clone());
-    engine.register(RegistrationTask::<Store, sqlx_turso::Turso>::new(config))?;
-    engine.register(HolderChangeTask::<Store, sqlx_turso::Turso>::new(
+    engine.register(RegistrationTask::<
+        Store,
+        sqlx_turso::Turso,
+        fleet_sync_lease::NoLeaseChangeHook,
+    >::new(
         config,
         host.clone(),
+        Arc::new(fleet_sync_lease::NoLeaseChangeHook),
+    ))?;
+    engine.register(HolderChangeTask::<
+        Store,
+        sqlx_turso::Turso,
+        fleet_sync_lease::NoLeaseChangeHook,
+    >::new(
+        config,
+        host.clone(),
+        Arc::new(fleet_sync_lease::NoLeaseChangeHook),
     ))?;
     let proof = async {
         let registration = Registration { attempt: RequestId::new(Uuid::now_v7())?, database, writer: first, origin: Origin::Empty };
-        let id = engine.start::<RegistrationTask<Store, sqlx_turso::Turso>>(
+        let id = engine.start::<RegistrationTask<Store, sqlx_turso::Turso, fleet_sync_lease::NoLeaseChangeHook>>(
             &lifecycle_request_key(registration.attempt)?, registration).await?;
         let OperationState::Completed { result } = engine.status(&id).await?.state else {
             return Err("real registration task did not complete".into());
@@ -164,7 +193,7 @@ pub(super) async fn register_grant_history(
                         attach_seq:AttachSequence::new(1).map_err(durable_steps::StoreError::backend)?,support:SchemaSupport {max_version:status.schema.version},
                     },
                 };
-                fleet_sync_lease::report_schema_support(scope,&report).await.map_err(durable_steps::StoreError::backend)?;
+                fleet_sync_lease::report_schema_support(scope,&report,SetupIo.now()).await.map_err(durable_steps::StoreError::backend)?;
                 Ok(())
             })).await?;
             let request = HolderChangeRequest::Move { attempt: TransferId::new(Uuid::now_v7())?, database, from_epoch: *from_epoch, to: target, reason: HolderChangeReason::new("grant-history setup")? };
@@ -211,12 +240,12 @@ impl GrantFixture {
         let objects = ObjectStore::open(root).await?;
         let registry = objects
             .object(
-                ObjectKey::new("registry")?,
+                ObjectKey::new("fleet")?,
                 Default::default(),
                 Arc::new(CoreHost::for_store(SetupIo, config.authoritative_receiver)),
             )
             .await?;
-        let runtime = ObjectRuntime::<RegistryKind, _, _>::registry(
+        let runtime = ObjectRuntime::<collaboration_central_core::FleetKind, _, _>::fleet(
             Arc::new(TokioStorageHost::new(registry.clone())),
             SetupIo,
             config,
@@ -225,6 +254,7 @@ impl GrantFixture {
                     "019f0000-0000-7000-8000-000000005240".to_owned(),
                 )?,
             },
+            std::time::Duration::from_secs(2),
         )?;
         runtime.initialize().await?;
         let copy_store = objects
@@ -253,124 +283,103 @@ impl GrantFixture {
     }
 }
 
-/// Create genuine public Unheld state, without any central publication bookkeeping.
-// This shared arranger is used by the ordinary-publication target.
+/// Admit public ImportTask input; the actual native Fleet owns execution and its lease hook.
 pub(super) async fn import_unheld(
     root: &Path,
     config: RegistryConfig,
     database: DatabaseId,
 ) -> ConformanceResult<()> {
-    let GrantFixture {
-        objects,
-        registry,
-        host,
-    } = GrantFixture::open(root, config, database).await?;
-    let mut engine = Engine::new(registry, host);
-    engine.register(fleet_sync_lease::ImportTask::<Store, sqlx_turso::Turso>::new(config))?;
-    let proof = async {
-        let request = Import {
-            attempt: RequestId::new(Uuid::now_v7())?,
-            database,
-            digest: ImportDigest::new("d".repeat(64))?,
-        };
-        let id = engine
-            .start::<fleet_sync_lease::ImportTask<Store, sqlx_turso::Turso>>(
-                &lifecycle_request_key(request.attempt)?,
-                request,
-            )
-            .await?;
-        let OperationState::Completed { result } = engine.status(&id).await?.state else {
-            return Err("public Unheld import did not complete".into());
-        };
-        if serde_json::from_slice::<ImportAnswer>(&result)? != ImportAnswer::Imported {
-            return Err("public Unheld import was not newly committed".into());
-        }
-        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
-    }
-    .await;
-    objects.close().await?;
-    proof
-}
-
-/// Commit genuine public retirement and require the real Registry to refuse a new claim.
-/// The retirement admission gate is a setup stand-in; normal admin composition is separate.
-// Shared by targets that arrange grants without retirement.
-pub(super) async fn retire_unheld(
-    root: &Path,
-    config: RegistryConfig,
-    database: DatabaseId,
-    claimant: PeerId,
-) -> ConformanceResult<SyncTime> {
-    import_unheld(root, config, database).await?;
-    let GrantFixture {
-        objects,
-        registry,
-        host,
-    } = GrantFixture::open(root, config, database).await?;
-    let mut engine = Engine::new(registry.clone(), host.clone());
-    engine.register(fleet_sync_lease::RetirementTask::<Store, sqlx_turso::Turso>::new(config))?;
-    engine.register(HolderChangeTask::<Store, sqlx_turso::Turso>::new(
-        config,
-        host.clone(),
-    ))?;
-    let proof = async {
-        let epoch = Epoch::new(1)?;
-        // ImportTask already created the real AwaitingSeed Copy at (1, 0).
-        let retirement = Retirement {
-            attempt: RequestId::new(Uuid::now_v7())?,
-            database,
-            expect_fence: epoch,
-            expect_acked: ReplicationPosition::new(epoch, CommitSequence::new(0)),
-        };
-        let id = engine
-            .start::<fleet_sync_lease::RetirementTask<Store, sqlx_turso::Turso>>(
-                &lifecycle_request_key(retirement.attempt)?,
-                retirement,
-            )
-            .await?;
-        let OperationState::Completed { result } = engine.status(&id).await?.state else {
-            return Err("public retirement did not complete".into());
-        };
-        let RetirementAnswer::Retired { at } = serde_json::from_slice(&result)? else {
-            return Err("public retirement was refused".into());
-        };
-        let claim = HolderChangeRequest::Claim {
-            attempt: TransferId::new(Uuid::now_v7())?,
-            database,
-            claimant,
-        };
-        let id = registry
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    admit_holder_change::<Store, sqlx_turso::Turso>(
-                        scope,
-                        &claim,
-                        &ActorRef::new("retired-directory-proof")
-                            .map_err(durable_steps::StoreError::backend)?,
-                        SetupIo.now(),
-                    )
+    use durable_steps::{JournalScope, StoreError};
+    use sqlx_core::{
+        connection::{ConnectOptions, Connection},
+        query::query,
+        row::Row,
+    };
+    let objects = ObjectStore::open(root).await?;
+    let registry = objects
+        .object(
+            ObjectKey::new("fleet")?,
+            Default::default(),
+            Arc::new(CoreHost::for_store(SetupIo, config.authoritative_receiver)),
+        )
+        .await?;
+    let request = Import {
+        attempt: RequestId::new(Uuid::now_v7())?,
+        database,
+        digest: ImportDigest::new("d".repeat(64))?,
+    };
+    let key = lifecycle_request_key(request.attempt)?;
+    let operation = registry
+        .transaction(move |scope| {
+            Box::pin(async move {
+                // Only kind/version/input are supplied here. No NoHook engine runs.
+                scope
+                    .admit::<fleet_sync_lease::ImportTask<
+                        Store,
+                        sqlx_turso::Turso,
+                        fleet_sync_lease::NoLeaseChangeHook,
+                    >>(&key, &request)
                     .await
                     .map(|admitted| admitted.id())
-                    .map_err(durable_steps::StoreError::backend)
-                })
+                    .map_err(StoreError::backend)
             })
-            .await?;
-        engine.drive_due().await?;
-        let OperationState::Completed { result } = engine.status(&id).await?.state else {
-            return Err("claim against genuine Retired Registry did not complete".into());
-        };
-        if serde_json::from_slice::<HolderChangeAnswer>(&result)?
-            != HolderChangeAnswer::Refused(HolderChangeRefusal::Retired)
-        {
-            return Err(
-                "genuine Retired Registry did not return the distinct Retired refusal".into(),
-            );
-        }
-        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(at)
-    }
-    .await;
+        })
+        .await?;
     objects.close().await?;
-    proof
+    let platform = collaboration_central_tokio::TokioCentralPlatform::new(
+        "http://127.0.0.1:1/unused-fixture-jwks",
+        Arc::new(SetupIo),
+        |_| {},
+        root,
+        config,
+        collaboration_central_tokio::DeliveryConfig {
+            relay_peer: "019f0000-0000-7000-8000-000000005240"
+                .to_owned()
+                .try_into()?,
+        },
+        Duration::from_secs(2),
+        Duration::from_secs(2),
+    )
+    .await?;
+    // Opening the native owner discovers the committed task and drives its real
+    // Copy creation and same-transaction Fleet hook. This is component setup,
+    // not proof of the admin HTTP import workflow.
+    let proof = tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let mut observer = sqlx_turso::TursoConnectOptions::new()
+                .filename(root.join("fleet.db"))
+                .read_only(true)
+                .connect()
+                .await?;
+            let row = query::<sqlx_turso::Turso>(
+                "SELECT state,result FROM _fleet_sync_operations WHERE operation_id=?",
+            )
+            .bind(operation.as_uuid().to_string())
+            .fetch_one(&mut observer)
+            .await?;
+            let state = row.try_get::<String, _>("state")?;
+            let result = row.try_get::<Option<Vec<u8>>, _>("result")?;
+            observer.close().await?;
+            match state.as_str() {
+                "running" => tokio::task::yield_now().await,
+                "completed" => {
+                    if serde_json::from_slice::<ImportAnswer>(
+                        &result.ok_or("real import lost its result")?,
+                    )? != ImportAnswer::Imported
+                    {
+                        return Err("real native import did not newly commit Unheld".into());
+                    }
+                    return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
+                }
+                _ => return Err(format!("real native import stopped as {state}").into()),
+            }
+        }
+    })
+    .await;
+    let closed = platform.shutdown().await;
+    proof??;
+    closed?;
+    Ok(())
 }
 
 /// Arrange genuine imported state and publish its physical seed before the server owns it.
@@ -402,71 +411,4 @@ pub(super) async fn import_normal_rows(
             .await;
     objects.close().await?;
     result
-}
-
-/// Exercise the public retirement workflow with the real Copy, after its server closes.
-/// A deliberately wrong fence leaves a genuine Retiring seal via CopyMismatch.
-// Only the lifecycle-precedence target needs this arranger.
-pub(super) async fn retire_imported_copy(
-    root: &Path,
-    config: RegistryConfig,
-    database: DatabaseId,
-    expect_fence: Epoch,
-) -> ConformanceResult<(RequestId, RetirementAnswer)> {
-    let GrantFixture {
-        objects,
-        registry,
-        host,
-    } = GrantFixture::open(root, config, database).await?;
-    let mut engine = Engine::new(registry.clone(), host);
-    engine.register(fleet_sync_lease::RetirementTask::<Store, sqlx_turso::Turso>::new(config))?;
-    let attempt = RequestId::new(Uuid::now_v7())?;
-    let proof = async {
-        let request = Retirement {
-            attempt,
-            database,
-            expect_fence,
-            expect_acked: ReplicationPosition::new(Epoch::new(1)?, CommitSequence::new(0)),
-        };
-        let operation = engine
-            .start::<fleet_sync_lease::RetirementTask<Store, sqlx_turso::Turso>>(
-                &lifecycle_request_key(attempt)?,
-                request,
-            )
-            .await?;
-        let OperationState::Completed { result } = engine.status(&operation).await?.state else {
-            return Err("public retirement arrangement did not complete".into());
-        };
-        let answer = serde_json::from_slice::<RetirementAnswer>(&result)?;
-        let lifecycle = registry
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    fleet_sync_lease::database_lifecycle(scope, database)
-                        .await
-                        .map_err(durable_steps::StoreError::backend)
-                })
-            })
-            .await?
-            .ok_or("retirement arrangement lost its database")?;
-        match (&answer, lifecycle) {
-            (
-                RetirementAnswer::Retired { .. },
-                fleet_sync_lease::DatabaseLifecycle::Retired { .. },
-            ) => {}
-            (
-                RetirementAnswer::Refused(RetirementRefusal::CopyMismatch { .. }),
-                fleet_sync_lease::DatabaseLifecycle::Retiring { attempt: sealed },
-            ) if sealed == attempt => {}
-            _ => {
-                return Err(format!(
-                    "public retirement did not retain the expected seal: {answer:?}"
-                )
-                .into());
-            }
-        }
-        Ok::<_, Box<dyn std::error::Error + Send + Sync>>((attempt, answer))
-    }
-    .await;
-    objects.close().await?;
-    proof
 }

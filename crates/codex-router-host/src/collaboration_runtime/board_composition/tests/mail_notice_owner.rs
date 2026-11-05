@@ -39,6 +39,7 @@ type ArrangedSubmit = SubmitItem<
     ObserverDatabase,
     collaboration_contracts::RouterDeliveryTypes,
     AdmissionMarker,
+    collaboration_service::MachineSenderBinding,
 >;
 
 // This marker supplies only the SDK's stable task kind for journal arrangement.
@@ -70,6 +71,8 @@ impl DeliveryConsumer<TursoScope<'_, ObserverHost>> for AdmissionMarker {
 }
 
 pub(super) struct MailOwner {
+    pub binding: Arc<collaboration_service::MachineSenderBinding>,
+    peer: PeerId,
     pub mail: Arc<MailDeliveryRuntime>,
     pub(super) owner: Arc<InteractionStore>,
     store: ObserverStore,
@@ -88,18 +91,21 @@ impl MailOwner {
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,
-            10_000,
-            64 * 1024 * 1024,
             minimum_settlement_allowance::<collaboration_contracts::RouterDeliveryTypes>()?,
         )?;
+        let binding = self.binding.clone();
         Ok(self
             .store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(scope, limits)
-                        .status(item)
-                        .await
-                        .map_err(delivery_rollback)
+                    Outbox::<_, collaboration_contracts::RouterDeliveryTypes, _>::new(
+                        scope,
+                        limits,
+                        binding.as_ref(),
+                    )
+                    .status(item)
+                    .await
+                    .map_err(delivery_rollback)
                 })
             })
             .await?)
@@ -125,6 +131,10 @@ impl MailOwner {
         machine: MachineIdentity,
         delivery: Arc<C>,
     ) -> Result<Self, TestError> {
+        let binding = Arc::new(collaboration_service::MachineSenderBinding::new(
+            String::from(machine.service_id().clone()).try_into()?,
+            peer,
+        ));
         let owner = Arc::new(InteractionStore::open(root.join("interaction.sqlite")).await?);
         let automation = Arc::new(Mutex::new(
             automation_storage::AutomationStore::open(&root.join("automation.sqlite")).await?,
@@ -154,33 +164,14 @@ impl MailOwner {
             Arc::new(TokioHost::new(Arc::new(NoObservationCalls), SystemClock)),
         );
         Ok(Self {
+            binding,
+            peer,
             mail,
             owner,
             store,
             actors,
             automation,
         })
-    }
-    pub async fn state(&self) -> Result<Option<Value>, TestError> {
-        Ok(self
-            .store
-            .transaction(|scope| {
-                Box::pin(async move {
-                    let rows = fleet_sync_delivery::test_support::snapshot(scope)
-                        .await
-                        .map_err(StoreError::backend)?;
-                    rows.into_iter()
-                        .find(|row| row.category == "inboxState")
-                        .map(|row| {
-                            serde_json::from_str(&row.content.ok_or_else(|| {
-                                StoreError::backend("inbox state content missing")
-                            })?)
-                            .map_err(StoreError::backend)
-                        })
-                        .transpose()
-                })
-            })
-            .await?)
     }
     pub async fn local_outcome(
         &self,
@@ -196,16 +187,24 @@ impl MailOwner {
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,
-            10_000,
-            64 * 1024 * 1024,
             minimum_settlement_allowance::<collaboration_contracts::RouterDeliveryTypes>()?,
         )?;
-        Ok(self.store.transaction(move |scope| {
-            Box::pin(async move {
-                fleet_sync_delivery::Inbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(scope, peer, limits)
-                    .local_outcome(item).await.map_err(delivery_rollback)
+        let binding = self.binding.clone();
+        Ok(self
+            .store
+            .transaction(move |scope| {
+                Box::pin(async move {
+                    fleet_sync_delivery::Inbox::<
+                            _,
+                            collaboration_contracts::RouterDeliveryTypes,
+                            _,
+                        >::new(scope, peer, limits, binding.as_ref())
+                        .local_outcome(item)
+                        .await
+                        .map_err(delivery_rollback)
+                })
             })
-        }).await?)
+            .await?)
     }
 
     // Fault only Router-owned progress, through the same physical writer as the SDK.
@@ -247,13 +246,22 @@ impl MailOwner {
     pub async fn rows(
         &self,
     ) -> Result<Vec<fleet_sync_delivery::test_support::DeliveryObservation>, TestError> {
+        let binding = self.binding.clone();
         Ok(self
             .store
-            .transaction(|scope| {
+            .transaction(move |scope| {
                 Box::pin(async move {
-                    fleet_sync_delivery::test_support::snapshot(scope)
-                        .await
-                        .map_err(StoreError::backend)
+                    fleet_sync_delivery::test_support::snapshot::<
+                        _,
+                        collaboration_contracts::RouterDeliveryTypes,
+                        _,
+                    >(
+                        scope,
+                        fleet_sync_delivery::DeliveryHostRole::Machine,
+                        binding.as_ref(),
+                    )
+                    .await
+                    .map_err(StoreError::backend)
                 })
             })
             .await?)
@@ -264,14 +272,22 @@ impl MailOwner {
         relay: PeerId,
     ) -> Result<(ItemId, runtime_primitives::OperationId), TestError> {
         let id = item.id();
+        let submitter = match item.sender() {
+            collaboration_mail_protocol::MailSender::Project { project } => {
+                fleet_sync_protocol::Submitter::Project(project.as_str().to_owned().try_into()?)
+            }
+            collaboration_mail_protocol::MailSender::Session(_)
+            | collaboration_mail_protocol::MailSender::HumanUser { .. } => {
+                fleet_sync_protocol::Submitter::Machine(self.peer)
+            }
+        };
         let limits = DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
-            64 * 1024 * 1024,
-            10_000,
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,
             minimum_settlement_allowance::<collaboration_contracts::RouterDeliveryTypes>()?,
         )?;
+        let binding = self.binding.clone();
         let operation = self
             .store
             .transaction(move |scope| {
@@ -279,8 +295,14 @@ impl MailOwner {
                     let (answer, admitted) = Outbox::<
                         _,
                         collaboration_contracts::RouterDeliveryTypes,
-                    >::new(scope, limits)
-                    .enqueue_and_admit::<ArrangedSubmit>(item, relay)
+                        _,
+                    >::new(scope, limits, binding.as_ref())
+                    .enqueue_and_admit::<ArrangedSubmit, fleet_sync_delivery::RemoveDeliveryRecord<ObserverStore, ObserverDatabase>>(
+                        item,
+                        relay,
+                        submitter,
+                        runtime_primitives::Clock::now(&SystemClock),
+                    )
                     .await
                     .map_err(delivery_rollback)?;
                     if !matches!(answer, fleet_sync_delivery::OutboxAdmission::Queued { .. })
@@ -377,25 +399,30 @@ impl MailOwner {
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,
-            10_000,
-            64 * 1024 * 1024,
             minimum_settlement_allowance::<collaboration_contracts::RouterDeliveryTypes>()?,
         )?;
+        let binding = self.binding.clone();
         Ok(self
             .store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(scope, limits)
-                        .status_cursor()
-                        .await
-                        .map(|cursor| cursor.value())
-                        .map_err(delivery_rollback)
+                    Outbox::<_, collaboration_contracts::RouterDeliveryTypes, _>::new(
+                        scope,
+                        limits,
+                        binding.as_ref(),
+                    )
+                    .status_cursor()
+                    .await
+                    .map(|cursor| cursor.value())
+                    .map_err(delivery_rollback)
                 })
             })
             .await?)
     }
     pub async fn close(self) -> Result<(), TestError> {
         let Self {
+            binding: _,
+            peer: _,
             mail,
             owner,
             store,

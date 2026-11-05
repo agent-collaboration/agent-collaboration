@@ -89,7 +89,7 @@ pub async fn run_revocation_race_conformance(client: &ConformanceClient) -> Conf
             return Err("released revocation did not close its actual old session".into());
         }
         observed(client, |value| matches!(value.operation.as_ref().map(|operation| &operation.state), Some(durable_steps::OperationState::Completed { .. }))).await?;
-        // Readmission may answer pending after admitting the mailbox Open.
+        // Readmission may answer pending while its enrollment activation completes.
         // Observe its owning journal without an admin retry driving it, then
         // repeat the exact active contents while opening the new session.
         let readmit = json!({"kind":"enrollMachine","value":{
@@ -144,7 +144,7 @@ pub async fn run_revocation_race_conformance(client: &ConformanceClient) -> Conf
     proof
 }
 
-async fn control(
+pub(crate) async fn control(
     client: &ConformanceClient,
     command: RevocationControl,
 ) -> ConformanceResult<RevocationObservation> {
@@ -163,7 +163,7 @@ async fn control(
         .json()
         .await?)
 }
-async fn observed(
+pub(crate) async fn observed(
     client: &ConformanceClient,
     ready: impl Fn(&RevocationObservation) -> bool,
 ) -> ConformanceResult<RevocationObservation> {
@@ -173,7 +173,7 @@ async fn observed(
             if ready(&value) {
                 return Ok(value);
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
+            tokio::task::yield_now().await;
         }
     })
     .await?

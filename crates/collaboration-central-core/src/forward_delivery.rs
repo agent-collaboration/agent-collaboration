@@ -1,6 +1,6 @@
 //! Delivery accepts verified object callers; opaque replies travel only after commit.
 use crate::{
-    CallerKind, DeliveryKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, DeliveryKind, ObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     forward_calls::{
         AnswerForward, DeliverForward, ForwardAnswerRequest, ForwardDeliveryRequest,
@@ -30,6 +30,9 @@ where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -41,18 +44,20 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Session
-            || !matches!(invocation.authority, CallAuthority::Object)
+            || !matches!(invocation.authority, CallAuthority::Machine { .. })
         {
             return Err(unsent());
         }
-        let ObjectAddress::Connection(source) = invocation.source else {
+        let CallAuthority::Machine {
+            installation: source,
+        } = invocation.authority
+        else {
             return Err(unsent());
         };
-        let ObjectWork::Session {
+        let ObjectWork::Fleet {
             host,
             shared_host,
             replies,
-            installation,
             ..
         } = &self.work
         else {
@@ -61,11 +66,8 @@ where
         let store = CoreSessionStore::new(host.clone(), shared_host.clone(), replies.clone());
         match invocation.kind.as_str() {
             DeliverForward::KIND => {
-                let target: DeliverForward =
+                let _target: DeliverForward =
                     serde_json::from_value(invocation.target).map_err(encode_refusal)?;
-                if target.installation != *installation {
-                    return Err(unsent());
-                }
                 let request: ForwardDeliveryRequest =
                     serde_json::from_value(invocation.request).map_err(encode_refusal)?;
                 let selection = host.clone();
@@ -86,6 +88,11 @@ where
                                 if existing.sender != source
                                     || existing.project != request.post.project
                                     || existing.deadline != request.deadline
+                                    || existing.holder != request.holder
+                                    || existing.origin_session != request.origin_session
+                                    || existing.request_frame != request.request_frame
+                                    || existing.connection != request.connection
+                                    || existing.created_at != request.created_at
                                 {
                                     return Err(StoreError::Corrupt {
                                         field: "delivered_forwards.forward_frame".into(),
@@ -93,6 +100,16 @@ where
                                     });
                                 }
                                 return Ok(ForwardDeliveryResult::Delivered);
+                            }
+                            if crate::machine_enrollment::admission::read_current_enrolled_machine(
+                                scope,
+                                request.holder,
+                                now,
+                            )
+                            .await?
+                            .is_none()
+                            {
+                                return Ok(ForwardDeliveryResult::NoConnection);
                             }
                             for (connection, registration) in scope.registrations.clone() {
                                 let ConnectionRegistration::Attached { session_id, .. } =
@@ -122,6 +139,11 @@ where
                                         project: request.post.project.clone(),
                                         holder: binding.peer,
                                         deadline: request.deadline,
+                                        origin_session: request.origin_session,
+                                        request_frame: request.request_frame,
+                                        connection: request.connection,
+                                        created_at: request.created_at,
+                                        updated_at: now,
                                     },
                                 )
                                 .await?;
@@ -149,11 +171,8 @@ where
                 serde_json::to_vec(&result).map_err(|_| CallFailure::AnswerLost)
             }
             AnswerForward::KIND => {
-                let target: AnswerForward =
+                let _target: AnswerForward =
                     serde_json::from_value(invocation.target).map_err(encode_refusal)?;
-                if target.installation != *installation {
-                    return Err(unsent());
-                }
                 let request: ForwardAnswerRequest =
                     serde_json::from_value(invocation.request).map_err(encode_refusal)?;
                 let clock = shared_host.clone();

@@ -21,6 +21,9 @@ where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -31,7 +34,7 @@ where
         &self,
         call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
-        if call.source != ObjectAddress::Registry
+        if call.source != ObjectAddress::Fleet
             || call.source_face != CallerKind::Registry
             || !matches!(call.authority, CallAuthority::Object)
         {
@@ -51,7 +54,12 @@ where
             else {
                 return Err(refused());
             };
-            ClaimStep::Reserve { database, attempt }
+            ClaimStep::Reserve {
+                database,
+                attempt,
+                now: chrono::DateTime::from_timestamp_millis(io.now().unix_millis())
+                    .ok_or(CallFailure::AnswerLost)?,
+            }
         } else {
             let _: fleet_sync_lease::ClaimSettlement =
                 serde_json::from_value(call.target).map_err(|_| refused())?;

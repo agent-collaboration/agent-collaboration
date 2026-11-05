@@ -21,6 +21,7 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 use std::marker::PhantomData;
+mod enrollment_gate;
 mod fleet_reads;
 mod forwards;
 mod operations;
@@ -60,6 +61,9 @@ where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -117,6 +121,9 @@ where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -138,7 +145,42 @@ where
         };
         use fleet_sync_session::SessionEffect;
         for effect in effects {
+            if let SessionEffect::Route {
+                session,
+                frame,
+                operation,
+            } = &effect
+                && let Some(answer) = self
+                    .refuse_unenrolled_mutation(session.peer, operation, now)
+                    .await?
+            {
+                self.stage_operation_answer(connection, *frame, answer)?;
+                continue;
+            }
             match effect {
+                SessionEffect::Route {
+                    session,
+                    frame,
+                    operation: OperationRequest::Delivery(DeliveryRequest::Report { report, .. }),
+                } => {
+                    let limits = crate::fleet_outbox_limits().map_err(StoreError::backend)?;
+                    let result = fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
+                        self,
+                        limits,
+                        &crate::fleet_sender_binding::FleetSenderBinding,
+                    )
+                    .recipient_report::<crate::fleet_mail_tasks::FleetStatusTask<
+                        crate::session_store::CoreSessionStore<Host, Io>,
+                        Host::Database,
+                    >>(session.peer, report, now)
+                    .await
+                    .map_err(fleet_sync_delivery::delivery_rollback)?;
+                    self.stage_operation_answer(
+                        connection,
+                        frame,
+                        OperationAnswer::Delivery(DeliveryAnswer::Report(result)),
+                    )?;
+                }
                 SessionEffect::Route {
                     session,
                     frame,
@@ -147,10 +189,10 @@ where
                 } => {
                     let result = fleet_sync_delivery::StatusStream::<_, BoardDeliveryTypes>::new(
                         self,
-                        session.peer,
+                        fleet_sync_protocol::Submitter::Machine(session.peer),
                         installation.clone(),
                     )
-                    .acknowledge(through)
+                    .acknowledge(through, now)
                     .await
                     .map_err(StoreError::backend)?;
                     let bytes = serde_json::to_vec(&ServerFrame::<BoardConsumerProtocol>::Answer {
@@ -174,10 +216,14 @@ where
                     let answer =
                         match fleet_sync_delivery::StatusStream::<_, BoardDeliveryTypes>::new(
                             self,
-                            session.peer,
+                            fleet_sync_protocol::Submitter::Machine(session.peer),
                             installation.clone(),
                         )
-                        .fetch(session.peer, after, limit)
+                        .fetch(
+                            fleet_sync_protocol::Submitter::Machine(session.peer),
+                            after,
+                            limit,
+                        )
                         .await
                         {
                             Ok(result) => {
@@ -239,7 +285,14 @@ where
         key: &RequestKey,
         input: &SharedTask::Input,
     ) -> Result<Admitted, StartRefusal> {
-        self.inner.admit::<SharedTask>(key, input).await
+        let admitted = self.inner.admit::<SharedTask>(key, input).await?;
+        // Native journal admission records work but does not arm a timer.
+        // Capture its deadline in the session commit, so the host wakes only
+        // after the transaction and registration publication succeed.
+        if let Some(at) = self.inner.earliest().await? {
+            self.ensure_wake(at).await?;
+        }
+        Ok(admitted)
     }
     async fn ensure_wake(&mut self, at: SyncTime) -> Result<(), StoreError> {
         self.inner.ensure_wake(at).await?;
@@ -364,3 +417,7 @@ where
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "session_enrollment_gate_test.rs"]
+mod enrollment_gate_tests;

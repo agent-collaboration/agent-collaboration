@@ -102,9 +102,6 @@ pub enum BoardReadCursor {
     deny_unknown_fields
 )]
 pub enum BoardNotice {
-    MailWaiting {
-        stream: fleet_sync_protocol::DeliveryStream,
-    },
     FleetFeedAdvanced {
         through: message_board::FleetPosition,
     },
@@ -130,6 +127,7 @@ pub enum BoardNotice {
     deny_unknown_fields
 )]
 pub enum ForwardOutcome {
+    CallerNotEnrolled,
     Answered {
         reply: BoardPayload,
     },

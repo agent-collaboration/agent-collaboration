@@ -9,10 +9,10 @@ impl Scenario {
                 "MAILBOX_REPORT_TERMINAL_RESULT 1 passed; 0 failed; 0 ignored (real SDK report task and central socket; terminal refusal stops retries)"
             ),
             Scenario::MailboxHeldRetention => println!(
-                "MAILBOX_HELD_RETENTION_RESULT 1 passed; 0 failed; 0 ignored (same Native/Worker oracle, actual held payload across31controlled days and exact receipt release; no physical restart claim)"
+                "MAILBOX_HELD_RETENTION_RESULT 1 passed; 0 failed; 0 ignored (same Native/Worker oracle, real Inbox Held payload across31controlled days, scheduled retention, explicit local release and terminal report; no physical restart claim)"
             ),
             Scenario::MailboxCapacity => println!(
-                "MAILBOX_CAPACITY_RESULT 1 passed; 0 failed; 0 ignored (shared one-item quota, unknown rejected item, exact original and reserved cancel; no disk-full claim)"
+                "MAILBOX_CAPACITY_RESULT 1 passed; 0 failed; 0 ignored (real recipient Inbox quota refusal, exact original and prepaid cancellation; Fleet retains Sent for retry; no disk-full claim)"
             ),
             Scenario::MailboxCancel => println!(
                 "MAILBOX_CANCEL_RESULT 1 passed; 0 failed; 0 ignored (real dropped custody answer, pending cancel readback, recipient decision and final original status; no Router end-to-end claim)"
@@ -20,8 +20,8 @@ impl Scenario {
             Scenario::MailboxIdentity => println!(
                 "MAILBOX_IDENTITY_RESULT 1 passed; 0 failed; 0 ignored (shared native/workerd oracle, real mailbox replay/conflict and exact single original payload; no Router end-to-end claim)"
             ),
-            Scenario::MailboxDeadline => println!(
-                "MAILBOX_DEADLINE_RESULT 1 passed; 0 failed; 0 ignored (shared normal session, offline recipient, real alarm, newer status and released payload; no physical restart claim)"
+            Scenario::FleetMailExpiry => println!(
+                "FLEET_MAIL_EXPIRY_RESULT 1 passed; 0 failed; 0 ignored (shared normal session, injected Fleet clock, unsolicited expiry before recipient reconnect, exact later sentinel Push; owning reopen proven by native component cases)"
             ),
             Scenario::DeliveryConfigRefusals => println!(
                 "DELIVERY_TEMPLATE_REFUSALS_RESULT 2 passed; 0 failed; 0 ignored (real Worker missing relay field and malformed peer refusal)"
@@ -92,6 +92,18 @@ impl Scenario {
             Scenario::FleetNotices => println!(
                 "FLEET_NOTICES_RESULT 1 passed; 0 failed; 0 ignored (three normal admitted sessions; two reader installations with two exact numbered hints each, Fleet mutation and replay, own alarm, real Delivery and positioned notice read; no physical restart claim)"
             ),
+            Scenario::FleetAdrColumns => println!(
+                "FLEET_ADR_COLUMNS_RESULT 1 passed; 0 failed; 0 ignored (real normal sessions and typed canonical ADR body, sixteen ordered files, lifecycle and replay; owning reopen is covered by native storage tests)"
+            ),
+            Scenario::FleetFeedColumns => println!(
+                "FLEET_FEED_COLUMNS_RESULT 1 passed; 0 failed; 0 ignored (ordinary Fleet writes and historical feed reads, sixteen ordered refs/files, canonical changes beside immutable snapshots, accepted/rejected authority and exact replay; owning reopen and retention rollback are covered by native storage tests)"
+            ),
+            Scenario::FleetSnapshotMerge => println!(
+                "FLEET_SNAPSHOT_MERGE_RESULT 1 passed; 0 failed; 0 ignored (shared Native/Worker normal-session oracle; 261 exact keys, equal-ID board/project/workspace order, 256/5 pages and stable cut; SQL cost measured separately in Core)"
+            ),
+            Scenario::FleetRepositoryColumns => println!(
+                "FLEET_REPOSITORY_COLUMNS_RESULT 1 passed; 0 failed; 0 ignored (ordinary Fleet sessions, typed origin/local associations, canonical ordered list, attach/detach and replay; first provenance and owning reopen are covered by native storage tests)"
+            ),
             Scenario::DeliveryConfig { .. } => println!(
                 "DELIVERY_CONFIG_RESULT 1 passed; 0 failed; 0 ignored (explicit relay distinct from receiver, exact first/replay/update/readmission answers through real Registry and Mailbox; no Router delivery-call closure claim)"
             ),
@@ -108,10 +120,7 @@ impl Scenario {
                 "RAW_SUBMIT_RESULT 1 passed; 0 failed; 0 ignored (normal admitted sockets, permanent raw Submit refusal, same-socket survival and empty recipient custody)"
             ),
             Scenario::SenderSettlement => println!(
-                "SENDER_SETTLEMENT_RESULT 1 passed; 0 failed; 0 ignored (normal Query and Settle through Registry to recipient Mailbox, known custody replay, unknown tombstone, late Submit refusal and custody readback)"
-            ),
-            Scenario::SenderRetirement => println!(
-                "SENDER_RETIREMENT_RESULT 1 passed; 0 failed; 0 ignored (verified sender fencing, actual recipient Mailbox, same-CallId receipt replay and one control effect)"
+                "SENDER_SETTLEMENT_RESULT 1 passed; 0 failed; 0 ignored (normal Query and Settle at Fleet, known custody replay, unknown settlement, late Submit replay, exact original Push and no socket-write custody acknowledgement)"
             ),
             Scenario::CopyReads => println!(
                 "COPY_READ_RESULT 1 passed; 0 failed; 0 ignored (normal session→Copy, shared manifest/page/status reads, per-copy uninitialized/retired containment; no applied rows, large pages or healthy idle hibernation claim)"
@@ -151,6 +160,15 @@ impl Scenario {
             ),
             Scenario::RevocationRace => println!(
                 "REVOCATION_RESULT 2 passed; 0 failed; 0 ignored (normal revoke, held real delivery, unchanged owning enrollment, actual completed journal and late CallId replay; no heap-loss recovery claim)"
+            ),
+            Scenario::MutationRevocation => println!(
+                "MUTATION_REVOCATION_RESULT 1 passed; 0 failed; 0 ignored (eleven exact shared mutation refusals on a live revoked session)"
+            ),
+            Scenario::SenderRevocation => println!(
+                "SENDER_REVOCATION_RESULT 1 passed; 0 failed; 0 ignored (shared Native/Worker scenario; committed revoked row with live sender, exact item/cancel refusal, unchanged outbox count and no recipient Push)"
+            ),
+            Scenario::FleetMailObserver => println!(
+                "FLEET_MAIL_OBSERVER_RESULT 1 passed; 0 failed; 0 ignored (shared Native/Worker owner-only single-item row/status/version/payload-presence and owning count, absent/refused row with unchanged count; no payload content or hosted proof)"
             ),
             Scenario::ReadmissionActivation => println!(
                 "READMISSION_RESULT 1 passed; 0 failed; 0 ignored (real activation row and saved local receipt, normal credential/session admission, revoke before engine finish, old completion leaves row revoked and credential refused; no mailbox readback or process-crash claim)"

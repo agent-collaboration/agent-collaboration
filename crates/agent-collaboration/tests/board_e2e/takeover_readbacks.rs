@@ -236,47 +236,156 @@ pub async fn local_cancel_deliveries(
         .await?.iter().map(|row| serde_json::from_str(row).map_err(Into::into)).collect()
 }
 
-#[derive(Deserialize)]
-struct FinalOriginal {
-    item: ItemId,
-    sequence: fleet_sync_protocol::ReportSeq,
-    outcome: fleet_sync_protocol::RecipientOutcome<
-        <BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Acceptance,
-    >,
-}
-
-pub async fn assert_prevented_report_stopped(
+pub async fn held_local_sequence_stopped(
     stopped: &StoppedHost,
     item: ItemId,
-    cancel: ItemId,
-) -> FixtureResult {
-    let rows = stopped_database_values(stopped, Path::new("interaction.sqlite"),
-        "SELECT json_object('item',item_id,'sequence',json_extract(record,'$.reportSeq'),'outcome',json_extract(record,'$.progress.value.outcome')) AS value FROM _fleet_sync_inbox_items WHERE json_extract(record,'$.progress.kind')='final'").await?;
-    let originals = rows
+) -> FixtureResult<fleet_sync_protocol::ReportSeq> {
+    let observations = super::messaging_stopped_owner::delivery_rows(stopped).await?;
+    let header = super::messaging_stopped_owner::header(
+        &observations,
+        "inbox",
+        &item.as_uuid().to_string(),
+    )?;
+    assert_eq!(header.get("route"), Some(&serde_json::json!("local")));
+    assert_eq!(
+        header.pointer("/progress/kind"),
+        Some(&serde_json::json!("held"))
+    );
+    Ok(serde_json::from_value(
+        header
+            .get("reportSeq")
+            .cloned()
+            .ok_or("held outcome sequence absent")?,
+    )?)
+}
+
+pub async fn prevented_cancel_stopped(
+    stopped: &StoppedHost,
+    item: ItemId,
+    held_sequence: fleet_sync_protocol::ReportSeq,
+) -> FixtureResult<ItemId> {
+    let observations = super::messaging_stopped_owner::delivery_rows(stopped).await?;
+    let originals = observations
         .iter()
-        .map(|row| serde_json::from_str::<FinalOriginal>(row))
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
-        .filter(|row| row.item == item)
+        .filter(|row| row.category == "inbox" && row.identity == item.as_uuid().to_string())
         .collect::<Vec<_>>();
     let [original] = originals.as_slice() else {
         return Err("original has no unique native Final outcome".into());
     };
-    assert_eq!(original.sequence.value(), 3);
-    assert!(
-        matches!(original.outcome, fleet_sync_protocol::RecipientOutcome::Prevented { cancel: actual } if actual == cancel)
+    let header: serde_json::Value = serde_json::from_str(
+        original
+            .content
+            .as_deref()
+            .ok_or("original Inbox header absent")?,
+    )?;
+    assert_eq!(header.get("route"), Some(&serde_json::json!("relayed")));
+    let cancel: ItemId = serde_json::from_value(
+        header
+            .pointer("/progress/value/outcome/value/cancel")
+            .cloned()
+            .ok_or("prevented cancel identity absent")?,
+    )?;
+    let cancel_header = super::messaging_stopped_owner::header(
+        &observations,
+        "inbox",
+        &cancel.as_uuid().to_string(),
+    )?;
+    assert_eq!(
+        cancel_header.get("cancelTarget"),
+        Some(&serde_json::json!(item))
     );
-    // ReportOutcome prunes finished rows. Absence is meaningful only alongside
-    // the independently observed typed wire refusal and later scan barriers.
-    let running = stopped_database_values(stopped, Path::new("interaction.sqlite"),
-        "SELECT request_key AS value FROM _fleet_sync_operations WHERE kind='fleet-sync.delivery.report-outcome' AND state='running'").await?;
-    for request in running {
-        let (actual, sequence): (ItemId, fleet_sync_protocol::ReportSeq) =
+    let prevented_sequence = held_sequence
+        .next()
+        .and_then(|sequence| sequence.next())
+        .ok_or("local promotion report sequence exhausted")?;
+    assert_eq!(
+        header.get("reportSeq"),
+        Some(&serde_json::json!(prevented_sequence))
+    );
+    assert_eq!(
+        header.pointer("/progress/kind"),
+        Some(&serde_json::json!("final"))
+    );
+    assert_eq!(
+        header.pointer("/progress/value/outcome"),
+        Some(&serde_json::json!({"kind":"prevented","value":{"cancel":cancel}}))
+    );
+    assert_refused_promotion_evidence(stopped, item, cancel, prevented_sequence, &observations)
+        .await?;
+    Ok(cancel)
+}
+
+// The local producer's frozen control supplies the expected identity before promotion.
+pub async fn local_prevention_cancel(stopped: &StoppedHost, item: ItemId) -> FixtureResult<ItemId> {
+    let records = local_cancel_deliveries(stopped).await?;
+    let matching = records
+        .iter()
+        .filter(|record| record.get("target") == Some(&serde_json::json!(item)))
+        .collect::<Vec<_>>();
+    let [record] = matching.as_slice() else {
+        return Err("local prevention has no unique frozen control".into());
+    };
+    Ok(serde_json::from_value(
+        record
+            .get("cancel")
+            .cloned()
+            .ok_or("local prevention control absent")?,
+    )?)
+}
+
+pub async fn assert_single_cancelled_sender(stopped: &StoppedHost, item: ItemId) -> FixtureResult {
+    let rows = super::messaging_stopped_owner::delivery_rows(stopped).await?;
+    let original_count = rows
+        .iter()
+        .filter(|row| row.category == "outbox" && row.identity == item.as_uuid().to_string())
+        .count();
+    assert_eq!(
+        original_count, 1,
+        "takeover duplicated the sender's canonical item"
+    );
+    let header =
+        super::messaging_stopped_owner::header(&rows, "outbox", &item.as_uuid().to_string())?;
+    assert_eq!(
+        header.pointer("/value/status/kind"),
+        Some(&serde_json::json!("cancelled"))
+    );
+    Ok(())
+}
+
+async fn assert_refused_promotion_evidence(
+    stopped: &StoppedHost,
+    item: ItemId,
+    cancel: ItemId,
+    report_seq: fleet_sync_protocol::ReportSeq,
+    observations: &[fleet_sync_delivery::test_support::DeliveryObservation],
+) -> FixtureResult {
+    let reports = observations
+        .iter()
+        .filter(|row| row.category == "report" && row.identity == item.as_uuid().to_string())
+        .collect::<Vec<_>>();
+    let [retained] = reports.as_slice() else {
+        return Err("refused promotion must retain exactly one report as evidence".into());
+    };
+    let report: serde_json::Value = serde_json::from_str(
+        retained
+            .content
+            .as_deref()
+            .ok_or("retained report absent")?,
+    )?;
+    assert_eq!(
+        report,
+        serde_json::json!({"item":item,"reportSeq":report_seq,"outcome":{"kind":"prevented","value":{"cancel":cancel}}})
+    );
+    // ReportOutcome::KEEP_RESULT=false removes the terminal journal operation;
+    // its refused report evidence above remains until custody retention.
+    let operations=stopped_database_values(stopped,Path::new("interaction.sqlite"),
+        "SELECT request_key AS value FROM _fleet_sync_operations WHERE kind='fleet-sync.delivery.report-outcome'").await?;
+    for request in operations {
+        let (actual, _sequence): (ItemId, fleet_sync_protocol::ReportSeq) =
             serde_json::from_str(&request)?;
         assert_ne!(
-            (actual, sequence.value()),
-            (item, 3),
-            "prevented report is still RUNNING after terminal refusal"
+            actual, item,
+            "terminal refusal left report operation or retry work"
         );
     }
     Ok(())

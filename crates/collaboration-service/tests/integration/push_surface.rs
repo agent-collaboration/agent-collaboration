@@ -328,12 +328,7 @@ async fn foreign_and_missing_links_have_distinct_errors() {
         .call("router/show", json!({"caller":caller,"reference":push_id}))
         .await;
     assert_eq!(missing["error"]["data"]["kind"], "notFound");
-    assert!(
-        missing["error"]["message"]
-            .as_str()
-            .expect("not-found message")
-            .contains("expired after two calendar months")
-    );
+    assert_eq!(missing["error"]["message"], "unknown");
     drop(store);
     drop(delivery);
     control.close().await;

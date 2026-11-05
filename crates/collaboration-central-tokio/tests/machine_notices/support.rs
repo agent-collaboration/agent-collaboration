@@ -10,11 +10,10 @@ pub const RETENTION: i64 = 7 * 24 * 60 * 60 * 1_000;
 type Socket = mpsc::Receiver<SocketCommand>;
 pub async fn insert_zero_position(fixture: &Fixture) -> Result<(), TestError> {
     let id = durable_steps::Uuid::now_v7().to_string();
-    let kind = serde_json::to_string(&notice(1)?)?;
     let created = fixture.io.now().unix_millis();
     fixture.host.store.object.transaction(move |scope|Box::pin(async move {
-        query::<sqlx_turso::Turso>("INSERT INTO machine_notices(notice_id,position,kind,created_at,expires_at) VALUES(?,0,?,?,?)")
-            .bind(id).bind(kind).bind(created).bind(created+RETENTION).execute(scope.executor()).await.map_err(StoreError::backend)?;
+        query::<sqlx_turso::Turso>("INSERT INTO machine_control_notices(notice_id,machine_id,position,kind,feed_through,created_at,expires_at,updated_at) SELECT ?,machine_id,0,'fleetFeedAdvanced',1,?,?,? FROM machine_enrollments LIMIT 1")
+            .bind(id).bind(created).bind(created+RETENTION).bind(created).execute(scope.executor()).await.map_err(StoreError::backend)?;
         Ok(())
     })).await?;
     Ok(())
@@ -27,7 +26,7 @@ pub async fn state_rows(fixture: &Fixture) -> Result<i64, TestError> {
         .transaction(|scope| {
             Box::pin(async move {
                 let row = query::<sqlx_turso::Turso>(
-                    "SELECT COUNT(*) AS count FROM machine_notice_state",
+                    "SELECT COUNT(*) AS count FROM machine_control_progress",
                 )
                 .fetch_one(scope.executor())
                 .await
@@ -49,7 +48,7 @@ pub fn snapshot_closed_owner(
         let entry = entry?;
         let name = entry.file_name();
         let name_text = name.to_str().ok_or("non-UTF8 native owner filename")?;
-        if name_text == "session.db" || name_text.starts_with("session.db-") {
+        if name_text == "fleet.db" || name_text.starts_with("fleet.db-") {
             assert!(entry.file_type()?.is_file());
             eprintln!(
                 "closed owner snapshot: {name_text}, {} bytes",
@@ -58,7 +57,7 @@ pub fn snapshot_closed_owner(
             std::fs::copy(entry.path(), destination.join(name))?;
         }
     }
-    assert!(destination.join("session.db").is_file());
+    assert!(destination.join("fleet.db").is_file());
     Ok(())
 }
 pub fn notice(through: u64) -> Result<BoardNotice, TestError> {
@@ -69,7 +68,7 @@ pub fn notice(through: u64) -> Result<BoardNotice, TestError> {
 pub fn invocation(kind: &BoardNotice) -> Result<Vec<u8>, TestError> {
     Ok(serde_json::to_vec(&serde_json::json!({
         "source":{"kind":"fleet"},"sourceFace":"fleet","authority":{"kind":"object"},
-        "destination":{"kind":"connection","value":"019f0000-0000-7000-8000-000000000001"},"destinationFace":"delivery",
+        "destination":{"kind":"fleet"},"destinationFace":"delivery",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"deliver_machine_notice"},
         "kind":"central.machine-notice","target":{"installation":"019f0000-0000-7000-8000-000000000001"},"request":kind
     }))?)
@@ -93,6 +92,7 @@ pub async fn admit(
     fixture: &Fixture,
     peer: PeerId,
 ) -> Result<(ConnectionBinding, SessionId, Socket), TestError> {
+    fixture.enroll(peer).await?;
     let binding = ConnectionBinding::new(
         ConnectionId::new(durable_steps::Uuid::now_v7())?,
         VerifiedPeer {
@@ -197,28 +197,13 @@ pub async fn rows(fixture: &Fixture) -> Result<i64, TestError> {
         .object
         .transaction(|scope| {
             Box::pin(async move {
-                let row =
-                    query::<sqlx_turso::Turso>("SELECT COUNT(*) AS count FROM machine_notices")
-                        .fetch_one(scope.executor())
-                        .await
-                        .map_err(StoreError::backend)?;
+                let row = query::<sqlx_turso::Turso>(
+                    "SELECT COUNT(*) AS count FROM machine_control_notices",
+                )
+                .fetch_one(scope.executor())
+                .await
+                .map_err(StoreError::backend)?;
                 row.try_get("count").map_err(StoreError::backend)
-            })
-        })
-        .await?)
-}
-pub async fn stored_peer(fixture: &Fixture) -> Result<String, TestError> {
-    Ok(fixture
-        .host
-        .store
-        .object
-        .transaction(|scope| {
-            Box::pin(async move {
-                let row = query::<sqlx_turso::Turso>("SELECT peer_id FROM machine_notice_state")
-                    .fetch_one(scope.executor())
-                    .await
-                    .map_err(StoreError::backend)?;
-                row.try_get("peer_id").map_err(StoreError::backend)
             })
         })
         .await?)

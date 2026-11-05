@@ -20,11 +20,10 @@ mod http_body;
 mod object_location;
 mod object_shell;
 mod platform;
+mod reply_deadline;
 mod shared_object_store;
 mod storage_measurement;
-pub use object_shell::{
-    ConnectionObject, FleetObject, LeaseRegistryObject, MailboxObject, ProjectCopyObject,
-};
+pub use object_shell::{FleetObject, ProjectCopyObject};
 pub use shared_object_store::CloudflareStorageHost;
 use worker::{Context, Env, Request, Response, Result, event};
 #[event(fetch)]
@@ -46,6 +45,14 @@ pub async fn main(request: Request, env: Env, _context: Context) -> Result<Respo
     #[cfg(feature = "conformance")]
     if request.uri().path() == composed_control::CONTROL_PATH {
         return composed_control::fetch(request.try_into()?, env).await;
+    }
+    #[cfg(feature = "conformance")]
+    if request.uri().path() == collaboration_central_core::FLEET_SCHEMA_PATH {
+        return conformance_admission::fleet_schema(request.try_into()?, env).await;
+    }
+    #[cfg(feature = "conformance")]
+    if request.uri().path() == collaboration_central_core::FLEET_MAIL_CUSTODY_PATH {
+        return conformance_admission::fleet_mail_custody(request.try_into()?, env).await;
     }
     #[cfg(feature = "conformance")]
     if request.uri().path() == collaboration_central_core::FORWARD_STATE_PATH {

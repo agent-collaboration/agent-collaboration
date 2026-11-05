@@ -55,6 +55,9 @@ where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -98,14 +101,15 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Session
-            || !matches!(invocation.authority, CallAuthority::Object)
+            || !matches!(invocation.authority, CallAuthority::Machine { .. })
         {
             return Err(refused());
         }
         let _: FleetMetadata = serde_json::from_value(invocation.target).map_err(|_| refused())?;
         let bound: FleetMetadataRequest =
             serde_json::from_value(invocation.request).map_err(|_| refused())?;
-        if invocation.source != ObjectAddress::Connection(bound.origin.installation.clone())
+        if invocation.source != ObjectAddress::Fleet
+            || !matches!(&invocation.authority, CallAuthority::Machine { installation } if installation == &bound.origin.installation)
             || !bound.actor_matches_origin()
         {
             return Err(refused());

@@ -1,4 +1,4 @@
-//! The shared frame codec distinguishes transport progress, machine progress and read refusals.
+//! Real public frames preserve control progress and reject retired notice contracts.
 use board_sync_protocol::BoardConsumerProtocol;
 use fleet_sync_protocol as wire;
 use serde_json::{Value, json};
@@ -42,11 +42,14 @@ fn pushed_consumer_notice_keeps_machine_position_separate_from_transport_positio
 }
 
 #[test]
-fn mail_waiting_notice_preserves_each_library_stream_on_push_and_catch_up() {
-    // Decision 670 names a stream hint, not a mail sequence or an item payload.
-    // The real frame codec must accept the producer's literal closed shape.
-    for stream in ["items", "controls"] {
-        let notice = json!({"position":73,"kind":{"kind":"mailWaiting","value":{"stream":stream}}});
+fn four_control_notice_kinds_roundtrip_on_push_and_catch_up() {
+    for kind in [
+        json!({"kind":"fleetFeedAdvanced","value":{"through":91}}),
+        json!({"kind":"boardArchiving","value":{"board":FRAME}}),
+        json!({"kind":"leaseGranted","value":{"project":FRAME,"epoch":7}}),
+        json!({"kind":"leaseSuperseded","value":{"project":FRAME,"epoch":8}}),
+    ] {
+        let notice = json!({"position":73,"kind":kind});
         for expected in [
             pushed_notice(notice.clone()),
             read_answer(json!({"kind":"page","value":{"notices":[notice],"asOf":AS_OF}})),
@@ -59,21 +62,24 @@ fn mail_waiting_notice_preserves_each_library_stream_on_push_and_catch_up() {
 }
 
 #[test]
-fn mail_waiting_notice_rejects_missing_unknown_or_extra_stream_fields() {
+fn removed_mail_waiting_notices_are_rejected_on_push_and_catch_up() {
     for fields in [
+        json!({"stream":"items"}),
+        json!({"stream":"controls"}),
         json!({}),
         json!({"stream":"invented"}),
         json!({"stream":0}),
         json!({"stream":"items","through":73}),
     ] {
         let notice = json!({"position":73,"kind":{"kind":"mailWaiting","value":fields}});
-        assert!(
-            serde_json::from_value::<wire::ServerFrame<BoardConsumerProtocol>>(pushed_notice(
-                notice.clone()
-            ))
-            .is_err(),
-            "accepted invalid mail-waiting notice: {notice}"
-        );
+        for frame in [
+            pushed_notice(notice.clone()),
+            read_answer(json!({"kind":"page","value":{"notices":[notice],"asOf":AS_OF}})),
+        ] {
+            assert!(
+                serde_json::from_value::<wire::ServerFrame<BoardConsumerProtocol>>(frame).is_err()
+            );
+        }
     }
 }
 

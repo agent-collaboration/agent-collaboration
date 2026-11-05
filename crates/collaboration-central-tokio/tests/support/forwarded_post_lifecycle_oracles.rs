@@ -4,6 +4,7 @@ use board_sync_protocol::{
     BoardClientAnswer, BoardConsumerAnswer, BoardPayload, BoardServerRequest, ForwardOutcome,
     ForwardedPost, ForwardedPostKind,
 };
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     ConformanceResult, RuntimeControl, RuntimeFaultObservation,
 };
@@ -88,25 +89,37 @@ where
         outstanding.push((post(sender, database).await?, holder_frame(holder).await?));
     }
     control(RuntimeControl::HoldNextDispatch {
-        destination: ObjectAddress::Registry,
+        key: DispatchKey::any(ObjectAddress::Fleet),
     })
     .await?;
     let sixteenth = post(sender, database).await?;
-    control(RuntimeControl::AwaitHeldDispatch).await?;
+    control(RuntimeControl::AwaitHeldDispatch {
+        key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+    })
+    .await?;
     let seventeenth = post(sender, database).await?;
     let observed = outcome(sender, seventeenth).await;
     if observed.is_err() {
         // A wrong build must still release the exact barrier this oracle owns.
-        let _ = control(RuntimeControl::ResumeDispatch).await;
+        let _ = control(RuntimeControl::ResumeDispatch {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+        })
+        .await;
     }
     let refused = observed.map_err(|error| {
         format!("seventeenth forward did not answer Overloaded before Registry dispatch: {error}")
     })?;
     if refused != ForwardOutcome::Overloaded {
-        let _ = control(RuntimeControl::ResumeDispatch).await;
+        let _ = control(RuntimeControl::ResumeDispatch {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+        })
+        .await;
         return Err("seventeenth forward lost its exact Overloaded outcome".into());
     }
-    control(RuntimeControl::ResumeDispatch).await?;
+    control(RuntimeControl::ResumeDispatch {
+        key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+    })
+    .await?;
     let delivered = holder_frame(holder).await?;
     let reply = answer(holder, delivered).await?;
     if outcome(sender, sixteenth).await? != (ForwardOutcome::Answered { reply }) {
