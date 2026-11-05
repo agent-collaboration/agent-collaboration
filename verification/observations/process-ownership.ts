@@ -19,6 +19,8 @@ export function lookupProcessIdentity(pid: number): IdentityRecord | null {
     ["-p", String(pid), "-o", "pid=,ruid=,uid=,pgid=,lstart=,comm="],
     {
       encoding: "utf8",
+      // Same C locale as processTable, so a recheck reads birth exactly as the capture did.
+      env: { ...process.env, LC_ALL: "C" },
       timeout: 5000,
       maxBuffer: Number.MAX_SAFE_INTEGER,
     },

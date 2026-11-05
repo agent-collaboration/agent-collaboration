@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { test } from "node:test";
+import { z } from "zod";
 import { sameIdentity } from "./process-ownership.ts";
-import type { ProcessIdentity } from "./evidence-models.ts";
+import {
+  identityRecordSchema,
+  processIdentitySchema,
+  type ProcessIdentity,
+} from "./evidence-models.ts";
 import {
   identityRecord,
   observeOwned,
@@ -104,3 +110,75 @@ test("PID reuse is never adopted, while an effective-only transition keeps the i
     false,
   );
 });
+
+// Caller locale is fixed per child process, so no test mutates this process's environment.
+function callerEnvironment(locale: Readonly<Record<string, string>>): NodeJS.ProcessEnv {
+  const inherited = Object.entries(process.env).filter(
+    ([name]) => name !== "LANG" && !name.startsWith("LC_"),
+  );
+  return { ...Object.fromEntries(inherited), ...locale };
+}
+
+const C_CALLER = callerEnvironment({ LC_ALL: "C" });
+const EN_CA_CALLER = callerEnvironment({ LANG: "en_CA.UTF-8" });
+
+function rawStartTime(environment: NodeJS.ProcessEnv): string {
+  const result = spawnSync("/bin/ps", ["-p", String(process.pid), "-o", "lstart="], {
+    encoding: "utf8",
+    env: environment,
+    timeout: 5000,
+  });
+  if (result.error !== undefined || result.status !== 0)
+    throw new Error(
+      `ps could not read this test's own start time: ${result.error?.message ?? result.stderr.trim()}`,
+    );
+  return result.stdout.trim().split(/\s+/).join(" ");
+}
+
+// A host whose ps prints one start-time format for every locale cannot reach this case.
+function hostPsIgnoresCallerLocale(): string | false {
+  return rawStartTime(C_CALLER) === rawStartTime(EN_CA_CALLER)
+    ? "host ps prints lstart identically under C and en_CA.UTF-8, so caller locale cannot reach a recorded birth"
+    : false;
+}
+
+const readingSchema = z.object({ table: processIdentitySchema, lookup: identityRecordSchema });
+const READER_SCRIPT = [
+  "const { processTable, identityRecord } = await import(process.argv[1]);",
+  "const { lookupProcessIdentity } = await import(process.argv[2]);",
+  "const pid = Number(process.argv[3]);",
+  "const row = processTable().get(pid);",
+  "process.stdout.write(JSON.stringify({ table: row && identityRecord(row), lookup: lookupProcessIdentity(pid) }));",
+].join("\n");
+
+/** Reads this live test process through both real readers from a caller with `environment`. */
+function readThisProcessAs(environment: NodeJS.ProcessEnv): z.infer<typeof readingSchema> {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      READER_SCRIPT,
+      new URL("./runtime-processes.ts", import.meta.url).href,
+      new URL("./process-ownership.ts", import.meta.url).href,
+      String(process.pid),
+    ],
+    { encoding: "utf8", env: environment, timeout: 15_000 },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  return readingSchema.parse(JSON.parse(result.stdout));
+}
+
+test(
+  "a live process keeps one exact identity across capture and recheck whatever the caller's locale",
+  { timeout: 30_000, skip: hostPsIgnoresCallerLocale() },
+  (): void => {
+    const fromC = readThisProcessAs(C_CALLER);
+    const fromEnCa = readThisProcessAs(EN_CA_CALLER);
+    assert.deepEqual(fromEnCa.table, fromC.table);
+    // Captured by the table under one locale and rechecked by lookup under the other, the exact
+    // guard still matches the same live process.
+    assert.equal(sameIdentity(fromEnCa.lookup, identityRecord(fromC.table)), true);
+    assert.equal(sameIdentity(fromC.lookup, identityRecord(fromEnCa.table)), true);
+  },
+);
