@@ -3,6 +3,18 @@ use serde_json::{Value, json};
 pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
     let mut invalid = vec![Value::Null];
     match name {
+        "ProvisionOrganization" => invalid.extend([
+            json!({"operation":"admitSignIn","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002","verifiedEmail":"fixture@example.invalid"}),
+            json!({"operation":"admitSignIn","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002"}),
+            json!({"operation":"standing","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002"}),
+        ]),
+        "ProvisionOrganizationResult" => invalid.extend([
+            json!({"result":"admitted","role":"member"}),
+            json!({"result":"admitted","role":"owner"}),
+            json!({"result":"awaitingOwner"}),
+            json!({"result":"notAdmitted"}),
+            json!({"result":"refused","reason":{"kind":"notPermitted"}}),
+        ]),
         "DecideDeviceLogin" | "PresentedMachine" | "AdmittedMachine" => {
             if let Some(first) = literals.first() {
                 for peer in ["00000000-0000-4000-8000-000000000001", "019A3DCE-2000-7000-8000-000000000001"] {

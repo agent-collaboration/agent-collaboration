@@ -6,7 +6,7 @@ Run with the conformance feature enabled in workspace CI:
 cargo nextest run --locked --profile ci -p collaboration-central-core --features conformance
 ```
 
-`integration/main.rs` gathers the 12 former external roots. Cases exercise
+`integration/main.rs` gathers the former external roots and B2 provisioning contracts. Cases exercise
 Central Core's identity, access, admission and wire contracts. Library unit
 tests remain colocated with their implementations.
 
