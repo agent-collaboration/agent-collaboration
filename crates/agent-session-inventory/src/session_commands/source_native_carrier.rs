@@ -75,12 +75,16 @@ async fn run_source_client_with_command(
         .kill_on_drop(true)
         .spawn()
         .map_err(|_| SourceRejection::SourceUnavailable)?;
+    let (frontend_accepted, mut accepted_frontend) = tokio::sync::oneshot::channel();
     let mut forwarding = Box::pin(async move {
         let (frontend, _) = tokio::time::timeout(Duration::from_secs(30), listener.accept())
             .await
             .map_err(|_| io::Error::other("source frontend did not connect"))??;
         // This invocation has one frontend. Never accept/reconnect another client.
         drop(listener);
+        // Record ownership before the upgrade can write its response: the
+        // client may flush its last frames and exit as soon as it sees that.
+        let _observed = frontend_accepted.send(());
         let frontend = tokio::time::timeout(
             Duration::from_secs(30),
             tokio_tungstenite::accept_async_with_config(
@@ -99,7 +103,20 @@ async fn run_source_client_with_command(
         forward_native_streams(frontend, connection.stream).await
     });
     let result = tokio::select! {
-        status = child.wait() => status.map(exit_code).map_err(|_| SourceRejection::SourceUnavailable),
+        status = child.wait() => {
+            let status = status.map_err(|_| SourceRejection::SourceUnavailable)?;
+            if accepted_frontend.try_recv().is_ok() {
+                // Exit does not mean the child's flushed frames have crossed
+                // the carrier. Keep the established sockets until forwarding
+                // ends, with the same bounded teardown as child settlement.
+                match tokio::time::timeout(Duration::from_secs(2), &mut forwarding).await {
+                    Ok(Ok(())) => Ok(exit_code(status)),
+                    _ => Err(SourceRejection::SourceUnavailable),
+                }
+            } else {
+                Ok(exit_code(status))
+            }
+        },
         result = &mut forwarding => {
             // A normal TUI close precedes process teardown. Let that actual exit
             // settle before forced cleanup; do not sleep or reopen its carrier.

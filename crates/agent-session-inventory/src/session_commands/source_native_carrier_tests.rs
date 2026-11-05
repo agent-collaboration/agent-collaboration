@@ -4,10 +4,12 @@ use super::*;
 use collaboration_client::protocol::EndpointRef;
 use serde_json::json;
 use std::path::PathBuf;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-const CLIENT_PROBE: &str = "sessions::source_native_carrier::tests::source_carrier_client_probe";
-const SUPERVISOR_PROBE: &str =
-    "sessions::source_native_carrier::tests::source_carrier_supervisor_probe";
+fn probe_selector(probe: &str) -> String {
+    let module = module_path!().split_once("::").unwrap().1;
+    format!("{module}::{probe}")
+}
 const INITIALIZE: &str = "{\"id\":\"carrier-proof\",\"method\":\"initialize\"}";
 const REPLY: &str = "{\"id\":\"carrier-proof\",\"result\":{}}";
 
@@ -40,7 +42,12 @@ fn client_probe_command(
         .map(|argument| argument.to_str().unwrap())
         .collect();
     command
-        .args(["--exact", CLIENT_PROBE, "--ignored", "--nocapture"])
+        .args([
+            "--exact",
+            &probe_selector("source_carrier_client_probe"),
+            "--ignored",
+            "--nocapture",
+        ])
         .env(
             "SOURCE_CARRIER_FIXTURE_ARGUMENTS",
             serde_json::to_string(&arguments).unwrap(),
@@ -204,6 +211,67 @@ async fn source_carrier_forwards_native_child_messages_once_and_cleans_up_after_
 }
 
 #[tokio::test]
+async fn source_carrier_forwards_flushed_frames_when_child_exits_before_forwarding_resumes() {
+    let root = tempfile::tempdir().unwrap();
+    let prepared = prepared_launch(root.path(), "resume");
+    let record = root.path().join("child.json");
+    let witness_path = root.path().join("exit-witness.sock");
+    let witness_listener = UnixListener::bind(&witness_path).unwrap();
+    let (connection, mut backend) = native_connection_pair(prepared.endpoint.clone()).await;
+    let options = SourceNativeOptions::default();
+    let mut carrier = Box::pin(run_source_client_with_command(
+        &prepared,
+        &options,
+        connection,
+        |arguments| {
+            let mut command =
+                client_probe_command(arguments, "exchange-after-carrier-pauses", &record);
+            command.env("SOURCE_CARRIER_FIXTURE_EXIT_WITNESS", &witness_path);
+            command
+        },
+    ));
+    let result = tokio::time::timeout(Duration::from_secs(3), async {
+        let initialize = tokio::select! {
+            result = &mut carrier => panic!("carrier ended before initialize: {result:?}"),
+            frame = backend.next() => frame.unwrap().unwrap(),
+        };
+        assert_eq!(initialize, Message::Text(INITIALIZE.into()));
+        backend.send(Message::Text(REPLY.into())).await.unwrap();
+        let child_ready = async {
+            let (mut witness, _) = witness_listener.accept().await.unwrap();
+            let mut marker = [0; 1];
+            witness.read_exact(&mut marker).await.unwrap();
+            assert_eq!(marker, [1], "child has not consumed the reply");
+            witness
+        };
+        let mut witness = tokio::select! {
+            result = &mut carrier => panic!("carrier ended before child readiness: {result:?}"),
+            witness = child_ready => witness,
+        };
+        // Stop polling the carrier while its real child flushes both frames and
+        // exits. EOF comes from process exit, not a timer or a scheduling guess.
+        witness.write_all(&[2]).await.unwrap();
+        let mut flushed = Vec::new();
+        witness.read_to_end(&mut flushed).await.unwrap();
+        assert_eq!(flushed, [3], "child did not flush Binary and Close");
+        let (result, frames) = tokio::join!(&mut carrier, async {
+            assert_eq!(
+                backend.next().await.unwrap().unwrap(),
+                Message::Binary(vec![0, 255, 1, 17].into())
+            );
+            assert_eq!(backend.next().await.unwrap().unwrap(), Message::Close(None));
+            2
+        });
+        assert_eq!(frames, 2);
+        result
+    })
+    .await
+    .unwrap();
+    assert_eq!(result, Ok(0));
+    assert_private_frontend_removed(&record);
+}
+
+#[tokio::test]
 async fn source_carrier_backend_loss_settles_its_child_and_never_reconnects() {
     let root = tempfile::tempdir().unwrap();
     let prepared = prepared_launch(root.path(), "new");
@@ -247,7 +315,12 @@ async fn source_carrier_signals_reap_owned_child_and_private_socket() {
         let record = root.path().join("child.json");
         let prepared = prepared_launch(root.path(), "new");
         let mut supervisor = tokio::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", SUPERVISOR_PROBE, "--ignored", "--nocapture"])
+            .args([
+                "--exact",
+                &probe_selector("source_carrier_supervisor_probe"),
+                "--ignored",
+                "--nocapture",
+            ])
             .env(
                 "SOURCE_CARRIER_FIXTURE_PREPARED",
                 serde_json::to_string(&prepared).unwrap(),
@@ -351,6 +424,17 @@ fn source_carrier_client_probe() {
                 stream.next().await.unwrap().unwrap(),
                 Message::Text(REPLY.into())
             );
+            let mut exit_witness = if mode == "exchange-after-carrier-pauses" {
+                let path = std::env::var_os("SOURCE_CARRIER_FIXTURE_EXIT_WITNESS").unwrap();
+                let mut witness = UnixStream::connect(path).await.unwrap();
+                witness.write_all(&[1]).await.unwrap();
+                let mut released = [0; 1];
+                witness.read_exact(&mut released).await.unwrap();
+                assert_eq!(released, [2]);
+                Some(witness)
+            } else {
+                None
+            };
             stream
                 .send(Message::Binary(vec![0, 255, 1, 17].into()))
                 .await
@@ -361,6 +445,11 @@ fn source_carrier_client_probe() {
                 std::future::pending::<()>().await;
             } else {
                 stream.close(None).await.unwrap();
+                if let Some(witness) = &mut exit_witness {
+                    witness.write_all(&[3]).await.unwrap();
+                    // Keep the witness open until the OS closes process FDs.
+                    std::process::exit(0);
+                }
             }
         });
 }
