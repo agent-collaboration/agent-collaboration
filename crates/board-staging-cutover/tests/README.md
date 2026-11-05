@@ -78,5 +78,15 @@ Claim CLI proof uses the existing SelfHosted assertion transport directly to
 TestCentral as a local stand-in. Cloudflare Access transport for the Claim phase
 remains unverified until declared staging execution exercises it end to end.
 
-Host lifecycle orchestration, the full process-crash matrix, richer frozen
+The richer L2 process case uses separate old/new Central lifetimes. Ordinary
+public mutations populate work, dependency links, subtask history, roles,
+facts, plan revisions, threads/refilings/posts/references, participation, covered
+read marks, legacy watches and explicit Poll membership. It carries the original
+Fleet graph forward verbatim and compares the installed writer with an
+independent pre-export SDK manifest. Line-two inheritance, cursor and record time
+remain exact. Public readback preserves a fact integer above 2^53 and escaped
+Unicode text; replaying the old task request adds no history. A seeded loss of
+task-link rows prevents publication.
+
+Host lifecycle orchestration, the full process-crash matrix, frozen
 mail/cancel state, remote hardware and staging corpus remain unverified.

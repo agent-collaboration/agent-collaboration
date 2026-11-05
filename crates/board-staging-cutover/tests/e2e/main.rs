@@ -21,3 +21,7 @@ mod pending_intent_fixture;
 mod public_claim;
 mod publication_hold;
 mod recovery_rows;
+mod rich_project_cutover;
+mod rich_source_messages;
+mod rich_source_readback;
+mod rich_source_records;

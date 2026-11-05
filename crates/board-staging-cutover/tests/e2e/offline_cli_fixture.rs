@@ -59,6 +59,17 @@ impl RunFixture {
                 },
             ],
         };
+        Self::from_preserved_fleet(host, source, target, area, fleet)
+    }
+
+    pub fn from_preserved_fleet(
+        host: &CutoverHostFixture,
+        source: &NativeFixture,
+        target: &str,
+        area: &Path,
+        fleet: FleetImportBundle,
+    ) -> TestResult<Self> {
+        std::fs::set_permissions(area, std::fs::Permissions::from_mode(0o700))?;
         let run = uuid::Uuid::now_v7();
         let claim = RequestId::generate();
         let canary = RequestId::generate();
