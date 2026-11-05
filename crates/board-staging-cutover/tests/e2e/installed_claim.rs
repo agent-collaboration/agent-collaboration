@@ -44,6 +44,28 @@ async fn compiled_verification_refuses_an_unexplained_public_application_write()
     cold_claim_case(SourceContents::UnexplainedPublicWrite).await
 }
 
+#[tokio::test]
+async fn compiled_verification_accepts_only_the_named_local_emitted_intent_progression()
+-> TestResult {
+    cold_claim_case(SourceContents::EmittedIntentViaHelperVerification).await
+}
+
+#[tokio::test]
+async fn compiled_verification_refuses_an_extra_decision_among_named_recovery_tables() -> TestResult
+{
+    cold_claim_case(SourceContents::EmittedIntentWithUnexplainedDecision).await
+}
+
+#[tokio::test]
+async fn compiled_verification_refuses_a_settled_frontier_without_local_custody() -> TestResult {
+    cold_claim_case(SourceContents::EmittedIntentMissingCustody).await
+}
+
+#[tokio::test]
+async fn compiled_verification_refuses_a_settled_frontier_with_another_target() -> TestResult {
+    cold_claim_case(SourceContents::EmittedIntentWrongCustodyTarget).await
+}
+
 #[derive(Clone, Copy)]
 enum SourceContents {
     ProjectOnly,
@@ -52,6 +74,10 @@ enum SourceContents {
     ProjectOnlyViaHelperClaim,
     ProjectOnlyViaHelperVerification,
     UnexplainedPublicWrite,
+    EmittedIntentViaHelperVerification,
+    EmittedIntentWithUnexplainedDecision,
+    EmittedIntentMissingCustody,
+    EmittedIntentWrongCustodyTarget,
 }
 
 impl SourceContents {
@@ -61,6 +87,10 @@ impl SourceContents {
             Self::ProjectOnlyViaHelperClaim
                 | Self::ProjectOnlyViaHelperVerification
                 | Self::UnexplainedPublicWrite
+                | Self::EmittedIntentViaHelperVerification
+                | Self::EmittedIntentWithUnexplainedDecision
+                | Self::EmittedIntentMissingCustody
+                | Self::EmittedIntentWrongCustodyTarget
         )
     }
 }
@@ -79,7 +109,12 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
         .map_err(|e| std::io::Error::other(e.to_string()))?;
     let pending = if matches!(
         contents,
-        SourceContents::EmittedIntent | SourceContents::EmittedIntentWithRemoteReadback
+        SourceContents::EmittedIntent
+            | SourceContents::EmittedIntentWithRemoteReadback
+            | SourceContents::EmittedIntentViaHelperVerification
+            | SourceContents::EmittedIntentWithUnexplainedDecision
+            | SourceContents::EmittedIntentMissingCustody
+            | SourceContents::EmittedIntentWrongCustodyTarget
     ) {
         Some(super::pending_intent_fixture::add_pending_intent(&fixture, &mut source).await?)
     } else {
@@ -161,6 +196,13 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
                 if matches!(contents, SourceContents::UnexplainedPublicWrite) {
                     super::verification_extra_write::append(&fixture, &bundle).await?;
                 }
+                if matches!(
+                    contents,
+                    SourceContents::EmittedIntentWithUnexplainedDecision
+                ) {
+                    super::verification_extra_write::append_rejected_request(&fixture, &bundle)
+                        .await?;
+                }
                 return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
             }
             let directory = codex_router_host::router_collaboration_directory(&fixture.root);
@@ -202,8 +244,24 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
         stopped?;
         if matches!(
             contents,
+            SourceContents::EmittedIntentMissingCustody
+                | SourceContents::EmittedIntentWrongCustodyTarget
+        ) {
+            super::custody_fault_fixture::corrupt(
+                &fixture,
+                &source.selected.project,
+                matches!(contents, SourceContents::EmittedIntentWrongCustodyTarget),
+            )
+            .await?;
+        }
+        if matches!(
+            contents,
             SourceContents::ProjectOnlyViaHelperVerification
                 | SourceContents::UnexplainedPublicWrite
+                | SourceContents::EmittedIntentViaHelperVerification
+                | SourceContents::EmittedIntentWithUnexplainedDecision
+                | SourceContents::EmittedIntentMissingCustody
+                | SourceContents::EmittedIntentWrongCustodyTarget
         ) {
             let verified = run.execute_verification().await?;
             let report: serde_json::Value = serde_json::from_slice(&verified.stdout)?;
@@ -220,7 +278,13 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
                         == Some(&serde_json::to_value(&source.selected.project)?),
                 "verification report changed the frozen run or project",
             )?;
-            if matches!(contents, SourceContents::UnexplainedPublicWrite) {
+            if matches!(
+                contents,
+                SourceContents::UnexplainedPublicWrite
+                    | SourceContents::EmittedIntentWithUnexplainedDecision
+                    | SourceContents::EmittedIntentMissingCustody
+                    | SourceContents::EmittedIntentWrongCustodyTarget
+            ) {
                 super::recovery_rows::require(
                     !verified.status.success(),
                     "verification accepted unexplained application writes",
@@ -241,20 +305,49 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
                 )?;
                 return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
             }
-            super::recovery_rows::require(
-                verified.status.success(),
-                "compiled verification refused unchanged content",
-            )?;
-            super::recovery_rows::require(
-                report.get("kind").and_then(serde_json::Value::as_str) == Some("contentVerified")
-                    && project.get("kind").and_then(serde_json::Value::as_str) == Some("verified")
-                    && project
-                        .get("installed")
-                        .and_then(|value| value.get("manifest"))
-                        .and_then(|value| value.get("tables"))
-                        == Some(&serde_json::to_value(&source.manifest.tables)?),
-                "verification did not compare actual tables with the original source",
-            )?;
+            if matches!(contents, SourceContents::EmittedIntentViaHelperVerification) {
+                super::recovery_rows::require(
+                    verified.status.success(),
+                    &format!(
+                        "named recovery verification refused: {}",
+                        String::from_utf8_lossy(&verified.stdout)
+                    ),
+                )?;
+                super::recovery_rows::require(
+                    report.get("kind").and_then(serde_json::Value::as_str)
+                        == Some("contentVerified")
+                        && project.get("kind").and_then(serde_json::Value::as_str)
+                            == Some("verifiedRecovery")
+                        && project
+                            .get("recovery")
+                            .and_then(|value| value.get("handedOff"))
+                            .and_then(serde_json::Value::as_u64)
+                            == Some(1)
+                        && project
+                            .get("recovery")
+                            .and_then(|value| value.get("remainingEmitted"))
+                            .and_then(serde_json::Value::as_u64)
+                            == Some(0),
+                    "named recovery report did not retain the exact source progression",
+                )?;
+            } else {
+                super::recovery_rows::require(
+                    verified.status.success(),
+                    "compiled verification refused unchanged content",
+                )?;
+                super::recovery_rows::require(
+                    report.get("kind").and_then(serde_json::Value::as_str)
+                        == Some("contentVerified")
+                        && project.get("kind").and_then(serde_json::Value::as_str)
+                            == Some("verified")
+                        && project
+                            .get("installed")
+                            .and_then(|value| value.get("manifest"))
+                            .and_then(|value| value.get("tables"))
+                            == Some(&serde_json::to_value(&source.manifest.tables)?),
+                    "verification did not compare actual tables with the original source",
+                )?;
+            }
         }
         // Assert exact installed content only after the actual Host and native child exit.
         let mut offline = fixture

@@ -93,9 +93,15 @@ run and original backup, and compares the actual installed e2 tables plus
 application history metadata. Exact equality returns `contentVerified`.
 Changed content returns `contentUnverified` with both manifests and nonzero
 exit. Tests reject selecting the old source epoch and falsely accepting an
-unrelated public write. Named legitimate startup recovery is not yet accepted
-by this operator phase; it remains changed/unverified until semantic support
-lands. This command does not declare the whole cutover complete.
+unrelated public write. The named local emitted-intent recovery rule streams old
+rows exactly across seven known tables, correlates every new intent, decision
+and handoff, and rejects extra effects. A settled frontier may cover only these
+new handoffs, bounded by their head, with terminal local custody and matching
+item/target read through existing owner decoders on a SQLite read-only connection.
+Missing custody, a different target and a frontier beyond the head refuse; a
+write through the observer connection must fail. Remote or unresolved recovery
+and other unexplained progressions remain unverified. This command does not
+declare the whole cutover complete.
 
 Host lifecycle orchestration, the full process-crash matrix, frozen
 mail/cancel state, remote hardware and staging corpus remain unverified.

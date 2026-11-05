@@ -2,6 +2,7 @@
 use board_staging_cutover::{OfflineHost, OfflineHostError, SelectedWriterFile};
 mod canary_proof;
 mod cross_machine_canary;
+mod custody_fault_fixture;
 #[path = "../../src/cutover_host_fixture.rs"]
 mod cutover_host_fixture;
 mod direct_central_enrollment;

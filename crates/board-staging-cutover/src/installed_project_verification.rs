@@ -34,10 +34,16 @@ enum InstalledProjectComparison {
         project: ProjectId,
         installed: Box<NativeSourcePreflight>,
     },
+    VerifiedRecovery {
+        project: ProjectId,
+        installed: Box<NativeSourcePreflight>,
+        recovery: crate::intent_recovery_verification::VerifiedIntentRecovery,
+    },
     Changed {
         project: ProjectId,
         source: Box<NativeSourcePreflight>,
         installed: Box<NativeSourcePreflight>,
+        reason: String,
     },
     Unavailable {
         project: ProjectId,
@@ -57,9 +63,13 @@ enum VerificationStage {
 
 impl InstalledVerificationReport {
     pub fn all_verified(&self) -> bool {
-        self.projects
-            .iter()
-            .all(|project| matches!(project, InstalledProjectComparison::Verified { .. }))
+        self.projects.iter().all(|project| {
+            matches!(
+                project,
+                InstalledProjectComparison::Verified { .. }
+                    | InstalledProjectComparison::VerifiedRecovery { .. }
+            )
+        })
     }
 }
 
@@ -128,7 +138,8 @@ impl OfflineRunPlan {
             peer: host.peer(),
             file_epoch: epoch,
         };
-        let installed = match NativeProjectSnapshot::open(host, selected).await {
+        let machine_store = host.collaboration_directory().join("interaction.sqlite");
+        let mut installed = match NativeProjectSnapshot::open(host, selected).await {
             Ok(installed) => installed,
             Err(error) => return failed(VerificationStage::InstalledSource, error.to_string()),
         };
@@ -140,6 +151,26 @@ impl OfflineRunPlan {
             && actual.line_two == source.line_two
             && actual.latest_record_at == source.latest_record_at
             && actual.project_scope == source.project_scope;
+        let recovery = if exact {
+            None
+        } else {
+            let service = String::from(self.service_id.clone()).try_into();
+            Some(match service {
+                Ok(service) => {
+                    crate::intent_recovery_verification::verify_intent_recovery(
+                        &bundle,
+                        &mut installed,
+                        &service,
+                        self.peer_id,
+                        &machine_store,
+                    )
+                    .await
+                }
+                Err(_) => Err(crate::intent_recovery_rows::RecoveryError::Invalid(
+                    "declared service",
+                )),
+            })
+        };
         if let Err(error) = installed.close().await {
             return failed(VerificationStage::Close, error.to_string());
         }
@@ -148,11 +179,22 @@ impl OfflineRunPlan {
                 project: project.selected.project.clone(),
                 installed: Box::new(actual),
             }
+        } else if let Some(Ok(recovery)) = recovery {
+            InstalledProjectComparison::VerifiedRecovery {
+                project: project.selected.project.clone(),
+                installed: Box::new(actual),
+                recovery,
+            }
         } else {
+            let reason = match recovery {
+                Some(Err(error)) => error.to_string(),
+                _ => "content differs from the source".to_owned(),
+            };
             InstalledProjectComparison::Changed {
                 project: project.selected.project.clone(),
                 source: Box::new(source.clone()),
                 installed: Box::new(actual),
+                reason,
             }
         }
     }

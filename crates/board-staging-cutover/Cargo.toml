@@ -14,6 +14,12 @@ name = "codex-router-board-staging-cutover"
 path = "src/main.rs"
 
 [dependencies]
+durable-steps.workspace = true
+fleet-sync-delivery.workspace = true
+collaboration-contracts = { path = "../collaboration-contracts", version = "0.1.123" }
+collaboration-service = { path = "../collaboration-service", version = "0.1.123" }
+interaction-storage = { path = "../interaction-storage", version = "0.1.123" }
+collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.123" }
 collaboration-client = { path = "../collaboration-client", version = "0.1.123" }
 collaboration-central-admin-protocol = { path = "../collaboration-central-admin-protocol", version = "0.1.123" }
 codex-router-secret-store = { path = "../codex-router-secret-store", version = "0.1.123" }
@@ -48,7 +54,6 @@ thiserror.workspace = true
 
 [dev-dependencies]
 codex-router-core.workspace = true
-collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.123" }
 codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.123" }
 codex-native-integration.workspace = true
 axum.workspace = true

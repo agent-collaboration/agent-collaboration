@@ -42,7 +42,12 @@ impl RecoveryRows {
                 .iter()
                 .find(|table| table.table == source.table)
                 .ok_or("installed table missing")?;
-            if let Some((_, delta)) = DELTAS
+            if source.table.as_str() == "handoff_frontier" {
+                require(
+                    source.row_count == 0 && actual.row_count <= 1,
+                    "unexpected settlement frontier rows",
+                )?;
+            } else if let Some((_, delta)) = DELTAS
                 .iter()
                 .find(|(name, _)| *name == source.table.as_str())
             {
@@ -76,6 +81,30 @@ impl RecoveryRows {
         }
         check_counts(&before, before_manifest)?;
         check_counts(&after, &installed.preflight().manifest)?;
+        let frontier = after.get("handoff_frontier").map_or(&[][..], Vec::as_slice);
+        let frontier_count = installed
+            .preflight()
+            .manifest
+            .tables
+            .iter()
+            .find(|table| table.table.as_str() == "handoff_frontier")
+            .ok_or("frontier manifest missing")?
+            .row_count;
+        require(
+            u64::try_from(frontier.len())? == frontier_count,
+            "frontier paging count differs",
+        )?;
+        if let [row] = frontier {
+            require(
+                row.len() == 2 && integer(row, 1)? == 1,
+                "frontier did not cover exactly the recovered handoff",
+            )?;
+            let id = uuid::Uuid::parse_str(text(row, 0)?)?;
+            require(
+                runtime_primitives::uuid_v7(id),
+                "frontier identifier is not UUIDv7",
+            )?;
+        }
         for (name, _) in DELTAS {
             if name != "notify_intents" {
                 let prior = table(&before, name)?;
@@ -105,7 +134,7 @@ impl RecoveryRows {
 }
 
 fn append(rows: &mut Rows, name: String, values: Vec<Row>) {
-    if DELTAS.iter().any(|(table, _)| *table == name) {
+    if name == "handoff_frontier" || DELTAS.iter().any(|(table, _)| *table == name) {
         rows.entry(name).or_default().extend(values);
     }
 }
