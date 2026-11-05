@@ -46,6 +46,12 @@ pub enum NativeSourceError {
     UnsafePath,
     #[error("selected native source identity or file epoch differs")]
     FileIdentityMismatch,
+    #[error(
+        "selected native source is not the Router's current file; review the explicit inventory"
+    )]
+    ObsoleteSelection,
+    #[error("selected project has persisted authority loss or rejected registration")]
+    AuthorityLost,
     #[error("installed replicated schema or table hashes differ from the prepared snapshot")]
     ReplicatedTablesMismatch,
     #[error("source application history exceeds the supported import epoch")]
@@ -92,10 +98,20 @@ impl<'host> NativeProjectSnapshot<'host> {
         let path = selected_path(host, &selected)?;
         let database_id = DatabaseId::try_from(selected.project.as_str().to_owned())
             .map_err(|_| NativeSourceError::FileIdentityMismatch)?;
+        require_current_source(&path, database_id, selected.file_epoch).await?;
         let retained = RetainedFile::open_read_only(&path, BoardProjectSchema::new()?).await?;
         let origin = retained.origin();
         if origin.database != database_id || origin.epoch != selected.file_epoch {
             return Err(NativeSourceError::FileIdentityMismatch);
+        }
+        if retained.authority().is_some()
+            || matches!(
+                retained.registration_outcome(),
+                fleet_sync_writer::WriterRegistrationOutcome::Refused { .. }
+                    | fleet_sync_writer::WriterRegistrationOutcome::Failed { .. }
+            )
+        {
+            return Err(NativeSourceError::AuthorityLost);
         }
         // Unsupported application epochs refuse before a writable owner opens.
         let application_epoch = read_application_epoch(&retained).await?;
@@ -183,6 +199,54 @@ pub(crate) fn selected_path(
         return Err(NativeSourceError::UnsafePath);
     }
     Ok(path)
+}
+
+async fn require_current_source(
+    selected_path: &Path,
+    database: DatabaseId,
+    selected_epoch: Epoch,
+) -> Result<(), NativeSourceError> {
+    let directory = selected_path
+        .parent()
+        .ok_or(NativeSourceError::UnsafePath)?;
+    let mut newest = None;
+    // Match the Router's eN.sqlite inventory and separate rejection suffix.
+    // The SDK owns epoch/authority decoding; never substitute a discovered file.
+    for entry in std::fs::read_dir(directory)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        let Some(epoch_text) = name
+            .strip_prefix('e')
+            .and_then(|name| name.strip_suffix(".sqlite"))
+        else {
+            continue;
+        };
+        if epoch_text.ends_with(".orphaned") {
+            return Err(NativeSourceError::AuthorityLost);
+        }
+        if epoch_text.contains('.') {
+            continue;
+        }
+        let path = entry.path();
+        let metadata = std::fs::symlink_metadata(&path)?;
+        if !metadata.is_file() || metadata.uid() != nix::unistd::geteuid().as_raw() {
+            return Err(NativeSourceError::UnsafePath);
+        }
+        let inspected = fleet_sync_writer::inspect_native_file(&path).await?;
+        let epoch = inspected.origin.epoch;
+        if inspected.origin.database != database || name != format!("e{}.sqlite", epoch.value()) {
+            return Err(NativeSourceError::FileIdentityMismatch);
+        }
+        if epoch == selected_epoch && inspected.authority.is_some() {
+            return Err(NativeSourceError::AuthorityLost);
+        }
+        newest = Some(newest.map_or(epoch, |previous: Epoch| previous.max(epoch)));
+    }
+    if newest != Some(selected_epoch) {
+        return Err(NativeSourceError::ObsoleteSelection);
+    }
+    Ok(())
 }
 
 struct StoredEpochNumber {
