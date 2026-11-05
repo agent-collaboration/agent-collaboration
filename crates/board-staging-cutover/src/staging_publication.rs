@@ -32,6 +32,8 @@ pub enum PublicationError {
     TargetMismatch,
     #[error("the prepared source belongs to another offline Host")]
     SourceHostMismatch,
+    #[error("the source directory changed after immutable preparation")]
+    SourceChanged,
     #[error("central status differs from the prepared import")]
     StatusMismatch,
     #[error("central did not finish project publication")]
@@ -111,11 +113,20 @@ impl StagingPublisher {
                     .collaboration_directory()
                     .join("projects")
                     .join(selected.project.as_str())
+            || bundle.manifest().backup_directory
+                != crate::bundle_files::backup_directory(
+                    host.router_root(),
+                    bundle.manifest().run_id,
+                    &selected.project,
+                )?
         {
             return Err(PublicationError::SourceHostMismatch);
         }
         // Reopen validates every sealed page before the first external effect.
         require_unchanged_bundle(bundle)?;
+        // A valid seal cannot authorize replay after local content advances.
+        // Check before Fleet import as well as the project publication requests.
+        require_unchanged_source_or_backup(bundle)?;
         let fleet: FleetImportResult = self
             .post(
                 "/admin/v1/import/fleet",
@@ -362,6 +373,34 @@ impl StagingPublisher {
             .await
             .map_err(|source| PublicationError::OutcomeUnknown { stage, source })
     }
+}
+
+fn require_unchanged_source_or_backup(
+    bundle: &PreparedProjectBundle,
+) -> Result<(), PublicationError> {
+    let manifest = bundle.manifest();
+    let source = manifest
+        .source_directory
+        .try_exists()
+        .map_err(ProjectBundleError::Io)?;
+    let backup = manifest
+        .backup_directory
+        .try_exists()
+        .map_err(ProjectBundleError::Io)?;
+    let unchanged = match (source, backup) {
+        (true, false) => manifest
+            .source_fingerprint
+            .matches(&manifest.source_directory)?,
+        // A lost local result may resume after the exact original directory was moved.
+        (false, true) => manifest
+            .source_fingerprint
+            .matches(&manifest.backup_directory)?,
+        (true, true) | (false, false) => false,
+    };
+    if !unchanged {
+        return Err(PublicationError::SourceChanged);
+    }
+    Ok(())
 }
 
 fn require_unchanged_bundle(bundle: &PreparedProjectBundle) -> Result<(), PublicationError> {

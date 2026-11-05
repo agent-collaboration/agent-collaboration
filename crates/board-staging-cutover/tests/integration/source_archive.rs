@@ -181,8 +181,9 @@ async fn refused_archive(case: RefusalCase) -> TestResult {
             }
             RefusalCase::ChangedBackup => {
                 archive_confirmed_source(&mut offline, &bundle, confirmed)?;
-                std::fs::write(backup.join("changed-after-move.keep"), b"unverified backup")?;
                 let confirmed = owner.publish(&mut offline, &bundle).await?;
+                // Keep this archive-fence proof after the new publication preflight.
+                std::fs::write(backup.join("changed-after-move.keep"), b"unverified backup")?;
                 let outcome = archive_confirmed_source(&mut offline, &bundle, confirmed);
                 assert!(outcome.is_err());
                 assert!(!source_dir.exists());
