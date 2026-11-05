@@ -440,18 +440,26 @@ async fn held_initialize_times_out_and_reaps_owned_process() {
 }
 
 #[cfg(unix)]
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn oversized_initialize_frame_is_rejected_and_reaps_owned_process() {
     let fixture_root = tempfile::tempdir().expect("fixture root");
     let process_id_path = fixture_root.path().join("provider.pid");
+    let frame_written_path = fixture_root.path().join("frame-written.pid");
     let fixture = acp_scripted_fixture::launch_fixture_agent(
         "host-failing-initialization-agent.ts",
         vec![
             "oversized".to_owned(),
             process_id_path.to_string_lossy().into_owned(),
             MAX_ACP_FRAME_BYTES.to_string(),
+            frame_written_path.to_string_lossy().into_owned(),
         ],
     );
+    // Keep virtual time paused through cold startup and the complete frame write.
+    // The existing watcher validates the pid recorded by the write callback.
+    let fixture_wrote_frame = tokio::task::spawn_blocking({
+        let frame_written_path = frame_written_path.clone();
+        move || wait_for_recorded_process_id(&frame_written_path)
+    });
     let error = ExternalProviderRuntime::initialize_with_timeout(
         fixture,
         Duration::from_secs(2),
@@ -460,6 +468,10 @@ async fn oversized_initialize_frame_is_rejected_and_reaps_owned_process() {
     .await
     .expect_err("oversized frame must fail initialization");
 
+    assert!(
+        fixture_wrote_frame.await.expect("frame watcher finished"),
+        "fixture wrote its complete oversized frame before the timeout"
+    );
     assert!(
         matches!(error, ExternalProviderRuntimeError::Initialize(_)),
         "expected oversized frame rejection, got {error:?}"
