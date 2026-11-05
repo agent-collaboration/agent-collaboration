@@ -6,8 +6,8 @@ use super::{
 };
 use collaboration_runtime::ProjectStoreRegistry;
 use fleet_sync_protocol::{
-    Epoch, LeaseAnswer, LeaseRequest, LeaseState, OperationAnswer, OperationRequest, RenewAnswer,
-    RenewRequest, ReplicationPosition,
+    Epoch, LeaseAnswer, LeaseRefusal, LeaseRequest, LeaseState, OperationAnswer, OperationRequest,
+    RenewAnswer, RenewRequest, ReplicationPosition,
 };
 use fleet_sync_writer::BootstrapGrant;
 use message_board::ProjectId;
@@ -19,6 +19,12 @@ pub(super) enum SnapshotAdmission {
     Pending,
     NoLongerOwned,
     Stopped,
+}
+
+enum StoppedWriterRenewal {
+    Authorized,
+    Fenced,
+    EnrollmentPending,
 }
 
 impl ProjectWriters {
@@ -198,7 +204,11 @@ impl ProjectWriters {
                 _ => return Ok(SnapshotAdmission::NoLongerOwned),
             }
             if *self.stopped.borrow() { return Ok(SnapshotAdmission::Stopped); }
-            if !self.renew_stopped_writer(&install.database, epoch).await? { return Ok(SnapshotAdmission::NoLongerOwned); }
+            match self.renew_stopped_writer(&install.database, epoch).await? {
+                StoppedWriterRenewal::Authorized => {},
+                StoppedWriterRenewal::Fenced => return Ok(SnapshotAdmission::NoLongerOwned),
+                StoppedWriterRenewal::EnrollmentPending => return Ok(SnapshotAdmission::Pending),
+            }
             install.database.migrate().await.map_err(io::Error::other)?;
             install.record_board_baseline().await?;
             registry.publish_claim_seed(project, install.database.clone(), start).await.map_err(io::Error::other)?;
@@ -229,10 +239,19 @@ impl ProjectWriters {
                 .ok_or_else(|| {
                     io::Error::other("snapshot replacement lacks an older native epoch")
                 })?;
-            if self.renew_stopped_writer(database, previous).await? {
-                return Err(io::Error::other(
-                    "previous epoch unexpectedly retained authority",
-                ));
+            match self.renew_stopped_writer(database, previous).await? {
+                StoppedWriterRenewal::Fenced => {}
+                StoppedWriterRenewal::Authorized => {
+                    return Err(io::Error::other(
+                        "previous epoch unexpectedly retained authority",
+                    ));
+                }
+                StoppedWriterRenewal::EnrollmentPending => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::WouldBlock,
+                        "snapshot renewal awaits machine enrollment",
+                    ));
+                }
             }
         }
         registry
@@ -245,7 +264,7 @@ impl ProjectWriters {
         &self,
         database: &fleet_sync_writer::ReplicatedDatabase<board_fleet_sync::BoardProjectSchema>,
         epoch: Epoch,
-    ) -> io::Result<bool> {
+    ) -> io::Result<StoppedWriterRenewal> {
         // No installer task remains and the live writer has not started.
         if *self.stopped.borrow() {
             return Err(io::Error::other(
@@ -271,6 +290,14 @@ impl ProjectWriters {
                 "snapshot renewal returned another operation answer",
             ));
         };
+        // Enrollment is a transient caller gate, not native file authority.
+        // Keep the verified install available for the next enrolled session.
+        if matches!(
+            answer,
+            RenewAnswer::Refused(LeaseRefusal::HolderNotEnrolled)
+        ) {
+            return Ok(StoppedWriterRenewal::EnrollmentPending);
+        }
         let authorized = matches!(&answer, RenewAnswer::Renewed { current, .. }
             if current.database == database.database()
                 && current.state == LeaseState::Held
@@ -282,10 +309,12 @@ impl ProjectWriters {
             .await
             .map_err(io::Error::other)?;
         if !authorized {
-            return Ok(false);
+            return Ok(StoppedWriterRenewal::Fenced);
         }
         match database.writer_state().await.map_err(io::Error::other)? {
-            fleet_sync_lease::WriterState::Writing { epoch: actual } if actual == epoch => Ok(true),
+            fleet_sync_lease::WriterState::Writing { epoch: actual } if actual == epoch => {
+                Ok(StoppedWriterRenewal::Authorized)
+            }
             state => Err(io::Error::other(format!(
                 "snapshot renewal is not writable: {state:?}"
             ))),
