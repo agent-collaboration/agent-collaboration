@@ -136,7 +136,7 @@ async fn run_source_client_with_command(
 }
 
 #[cfg(test)]
-#[path = "source_native_carrier_tests.rs"]
+#[path = "source_native_carrier_test.rs"]
 mod tests;
 
 fn native_arguments(
