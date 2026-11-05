@@ -1,10 +1,11 @@
 import { appendFileSync, existsSync, unwatchFile, watchFile, writeFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { AcpExchange } from "../../../../verification/fixtures/acp-exchange.ts";
-import { field } from "../../../../verification/exact-json.ts";
+import { field, textField } from "../../../../verification/exact-json.ts";
 import { requireArgument } from "../../../../verification/fixtures/acp-stdio.ts";
 const receipt = requireArgument(2);
 const compactCase = process.argv[3] ?? "manual";
+const lifecycleProfile = compactCase === "lifecycle";
 const primaryEnter = [
   "primary-enter",
   "primary-enter-select",
@@ -24,6 +25,7 @@ const agent = new AcpExchange();
 await agent.initialize("behavior-fixture", {
   agentCapabilities: {
     loadSession: true,
+    ...(lifecycleProfile ? { sessionCapabilities: { resume: {}, close: {} } } : {}),
     promptCapabilities: { image: true },
     _meta: { steering: { supported: true } },
   },
@@ -39,6 +41,47 @@ if (requiresConnectionAuthentication) {
 }
 let sequence = 0;
 let held: Record<string, unknown> | undefined;
+interface RecordedMessage {
+  readonly sessionUpdate: "user_message_chunk" | "agent_message_chunk";
+  readonly content: unknown;
+}
+interface KnownFixtureSession {
+  readonly cwd: string;
+  phase: "open" | "closed";
+  readonly history: RecordedMessage[];
+}
+const knownSessions = new Map<string, KnownFixtureSession>();
+function readSessionText(params: unknown, name: string): string | undefined {
+  try {
+    const value = textField(params, name);
+    return value.length > 0 ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+function refuseSessionRequest(request: Readonly<Record<string, unknown>>): void {
+  if (request.id !== undefined)
+    agent.send({
+      jsonrpc: "2.0",
+      id: request.id,
+      error: { code: -32602, message: "invalid fixture Session input" },
+    });
+}
+function publishUpdate(update: Readonly<Record<string, unknown>>, sessionId: string): void {
+  const sessionUpdate = update.sessionUpdate;
+  if (
+    lifecycleProfile &&
+    (sessionUpdate === "user_message_chunk" || sessionUpdate === "agent_message_chunk")
+  ) {
+    const session = knownSessions.get(sessionId);
+    if (session === undefined) throw new Error("observed message has no known Session");
+    session.history.push({ sessionUpdate, content: update.content });
+  }
+  agent.update(update, sessionId);
+}
+function replayRecordedMessages(session: KnownFixtureSession, sessionId: string): void {
+  for (const message of session.history) agent.update(message, sessionId);
+}
 function stopReleaseWatch(): void {
   if (releaseFile !== undefined) unwatchFile(releaseFile, releaseHeldIfSignalled);
 }
@@ -52,7 +95,7 @@ function finishHeld(stopReason: "end_turn" | "cancelled"): void {
     const sessionId = field(request.params, "sessionId");
     if (typeof sessionId !== "string") throw new Error("held sessionId required");
     appendFileSync(receipt, `${JSON.stringify({ kind: "release", sessionId })}\n`);
-    agent.update(
+    publishUpdate(
       { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "after" } },
       sessionId,
     );
@@ -119,6 +162,58 @@ for (;;) {
   const request = await agent.readRequest();
   if (!request) break;
   const params = request.params;
+  if (lifecycleProfile && String(request.method).startsWith("session/"))
+    appendFileSync(receipt, `${JSON.stringify(request)}\n`);
+  if (
+    lifecycleProfile &&
+    [
+      "session/prompt",
+      "session/cancel",
+      "session/close",
+      "session/resume",
+      "session/load",
+    ].includes(String(request.method))
+  ) {
+    const sessionId = readSessionText(params, "sessionId");
+    const session = sessionId === undefined ? undefined : knownSessions.get(sessionId);
+    if (sessionId === undefined || session === undefined) {
+      refuseSessionRequest(request);
+      continue;
+    }
+    if (request.method === "session/cancel" || request.method === "session/close") {
+      if (held !== undefined && field(held.params, "sessionId") === sessionId)
+        finishHeld("cancelled");
+      if (request.method === "session/close") {
+        session.phase = "closed";
+        agent.respond(request, {});
+      }
+      continue;
+    }
+    if (request.method === "session/resume" || request.method === "session/load") {
+      const cwd = readSessionText(params, "cwd");
+      if (
+        cwd === undefined ||
+        !isAbsolute(cwd) ||
+        cwd !== session.cwd ||
+        (held !== undefined && field(held.params, "sessionId") === sessionId)
+      ) {
+        refuseSessionRequest(request);
+        continue;
+      }
+      session.phase = "open";
+      // Replay only this Session's actual messages; replay itself is not new history.
+      if (request.method === "session/load") replayRecordedMessages(session, sessionId);
+      agent.respond(request, {});
+      continue;
+    }
+    if (
+      session.phase === "closed" ||
+      (held !== undefined && field(held.params, "sessionId") === sessionId)
+    ) {
+      refuseSessionRequest(request);
+      continue;
+    }
+  }
   if (request.method === "cursor/list_available_models") {
     if (compactCase === "settings") {
       agent.respond(request, {
@@ -199,8 +294,14 @@ for (;;) {
       });
     } else agent.respond(request, {});
   } else if (request.method === "session/new") {
+    const cwd = lifecycleProfile ? readSessionText(params, "cwd") : undefined;
+    if (lifecycleProfile && (cwd === undefined || !isAbsolute(cwd))) {
+      refuseSessionRequest(request);
+      continue;
+    }
     sequence += 1;
     const sessionId = `session-${sequence}`;
+    if (cwd !== undefined) knownSessions.set(sessionId, { cwd, phase: "open", history: [] });
     savePrimaryEnterState();
     agent.respond(request, {
       sessionId,
@@ -208,7 +309,7 @@ for (;;) {
         ? { configOptions: settingsOptions() }
         : {}),
     });
-    agent.update(
+    publishUpdate(
       {
         sessionUpdate: "available_commands_update",
         availableCommands: [{ name: "review", description: "Review (skill)" }],
@@ -219,7 +320,7 @@ for (;;) {
     request.method === "session/set_config_option" &&
     (["settings", "model-catalog", "held-model-catalog"].includes(compactCase) || primaryEnter)
   ) {
-    appendFileSync(receipt, `${JSON.stringify(request)}\n`);
+    if (!lifecycleProfile) appendFileSync(receipt, `${JSON.stringify(request)}\n`);
     const configId = field(params, "configId");
     const value = field(params, "value");
     if (compactCase === "model-catalog" && configId === "model" && value === "rejected") {
@@ -245,17 +346,28 @@ for (;;) {
     agent.respond(request, { configOptions: settingsOptions() });
   } else if (request.method === "session/prompt") {
     savePrimaryEnterState();
-    appendFileSync(receipt, `${JSON.stringify(request)}\n`);
+    if (!lifecycleProfile) appendFileSync(receipt, `${JSON.stringify(request)}\n`);
     const sessionId = field(params, "sessionId");
     if (typeof sessionId !== "string") throw new Error("sessionId required");
     const prompt = field(params, "prompt");
     const first: unknown = Array.isArray(prompt) ? prompt[0] : undefined;
     const text = field(first, "text");
+    if (lifecycleProfile) {
+      if (text === "hold" && held !== undefined) {
+        refuseSessionRequest(request);
+        continue;
+      }
+      const session = knownSessions.get(sessionId);
+      if (session === undefined || !Array.isArray(prompt))
+        throw new Error("admitted fixture Session prompt missing");
+      for (const content of prompt)
+        session.history.push({ sessionUpdate: "user_message_chunk", content });
+    }
     if (text === "hold") {
       if (releaseFile !== undefined && existsSync(releaseFile))
         throw new Error("release sentinel already exists before held prompt");
       held = request;
-      agent.update(
+      publishUpdate(
         { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "HOLDING" } },
         sessionId,
       );
@@ -267,12 +379,12 @@ for (;;) {
       }
       continue;
     }
-    agent.update(
+    publishUpdate(
       { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "before" } },
       sessionId,
     );
     if (text === "semantic-error") {
-      agent.update(
+      publishUpdate(
         {
           sessionUpdate: "tool_call",
           toolCallId: "semantic-tool",
@@ -285,7 +397,7 @@ for (;;) {
       );
     }
     if (text === "remove-skill")
-      agent.update(
+      publishUpdate(
         { sessionUpdate: "available_commands_update", availableCommands: [] },
         sessionId,
       );
@@ -293,7 +405,7 @@ for (;;) {
       const hint =
         compactCase === "auto" ? "automatic" : compactCase === "malformed" ? "malformed" : "manual";
       if (compactCase !== "terminal")
-        agent.update(
+        publishUpdate(
           {
             sessionUpdate: "tool_call",
             toolCallId: "compact-tool",
@@ -304,7 +416,7 @@ for (;;) {
           },
           sessionId,
         );
-      agent.update(
+      publishUpdate(
         {
           sessionUpdate: compactCase === "terminal" ? "tool_call" : "tool_call_update",
           toolCallId: "compact-tool",
@@ -316,7 +428,7 @@ for (;;) {
         sessionId,
       );
     }
-    agent.update(
+    publishUpdate(
       { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "after" } },
       sessionId,
     );

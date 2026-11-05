@@ -76,8 +76,13 @@ fn controlled_behavior_peer_release_and_race_tests_are_discovered() {
     let stderr = String::from_utf8_lossy(&result.stderr);
     assert!(result.status.success(), "{stdout}\n{stderr}");
     assert!(
-        stdout.contains("tests 4") && stdout.contains("pass 4"),
-        "all four permanent fixture cases must execute: {stdout}\n{stderr}"
+        stdout
+            .lines()
+            .any(|line| matches!(line.trim(), "# tests 10" | "ℹ tests 10"))
+            && stdout
+                .lines()
+                .any(|line| matches!(line.trim(), "# pass 10" | "ℹ pass 10")),
+        "all ten permanent fixture cases must execute: {stdout}\n{stderr}"
     );
 }
 
