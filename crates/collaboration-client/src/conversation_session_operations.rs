@@ -174,9 +174,10 @@ impl ConversationClient {
         timeout: Duration,
         cancel: CancellationToken,
     ) -> Result<ConversationOperationResult, ConversationClientError> {
+        let requested_by = input.requested_by.provider_identity()?;
         validate_target_operation(
             &input.target,
-            Some(&input.requested_by),
+            requested_by.session(),
             input.approver.as_ref(),
         )?;
         validate_operation_timeout(timeout)?;
@@ -185,6 +186,13 @@ impl ConversationClient {
         self.validate_operation_id(&target.endpoint, operation_id.as_ref(), "prompt")?;
         match &mut self {
             Self::CodexAcp(acp) => {
+                if requested_by.session().is_none() {
+                    return Err(unsupported(
+                        &target.endpoint,
+                        "requestedBy",
+                        "Codex prompt requires a Session requester; use a provider endpoint for Human prompt",
+                    ));
+                }
                 if input.generation.is_some() {
                     return Err(unsupported(
                         &target.endpoint,
@@ -264,10 +272,8 @@ impl ConversationClient {
                     input_id: None,
                     target: target.clone(),
                     generation: input.generation,
-                    requested_by: input.requested_by.clone().into(),
-                    approver: input
-                        .approver
-                        .unwrap_or_else(|| ProviderIdentity::from(input.requested_by)),
+                    requested_by: requested_by.clone(),
+                    approver: input.approver.unwrap_or(requested_by),
                     prompt: input.message.into(),
                 };
                 let wait_seconds = provider_wait_seconds(timeout)?;
@@ -329,9 +335,10 @@ impl ConversationClient {
         mut self,
         input: ConversationCancelInput,
     ) -> Result<ConversationOperationSubmission, ConversationClientError> {
+        let requested_by = input.requested_by.provider_identity()?;
         validate_target_operation(
             &input.target,
-            Some(&input.requested_by),
+            requested_by.session(),
             input.approver.as_ref(),
         )?;
         match &mut self {
@@ -364,10 +371,8 @@ impl ConversationClient {
                         target_operation_id: input.target_operation_id,
                         target: input.target,
                         generation: input.generation,
-                        requested_by: input.requested_by.clone().into(),
-                        approver: input
-                            .approver
-                            .unwrap_or_else(|| ProviderIdentity::from(input.requested_by)),
+                        requested_by: requested_by.clone(),
+                        approver: input.approver.unwrap_or(requested_by),
                     })
                     .await?)
             }

@@ -3,7 +3,7 @@ use super::owned_resources::OwnedMatrixResources;
 use super::{OBSERVATION_TIMEOUT, ProofContext, ProofResult};
 use codex_router_test_support::owned_cli_process::run_cli_output;
 use collaboration_client::{
-    ConversationClient, ConversationCreateActor, ConversationCreateInput,
+    ConversationActor, ConversationClient, ConversationCreateInput,
     protocol::{
         ConversationCreateOutcome, DestinationPreparation, EndpointRef, ExecutionDestination,
         InstructionCreateParams, OperationId, PushRecordListParams, PushRecordShowParams,
@@ -45,8 +45,8 @@ async fn create_conversation_fixture(
                 endpoint,
                 working_directory: proof.workspace.clone(),
                 access: settings.access,
-                created_by: ConversationCreateActor::Session(creator.clone()),
-                approver: Some(ConversationCreateActor::Session(creator.clone())),
+                created_by: ConversationActor::Session(creator.clone()),
+                approver: Some(ConversationActor::Session(creator.clone())),
                 generation: None,
                 model: settings.model,
                 mode: None,

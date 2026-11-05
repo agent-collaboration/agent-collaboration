@@ -2,8 +2,8 @@
 use super::create_input_validation::validate_create_endpoint_options;
 use super::{
     CancelArguments, CancellationToken, ClientError, CloseArguments, CodexGeneration,
-    CollaborationClient, ConversationAccess, ConversationCancelInput, ConversationClient,
-    ConversationClientError, ConversationCreateActor, ConversationCreateInput,
+    CollaborationClient, ConversationAccess, ConversationActor, ConversationCancelInput,
+    ConversationClient, ConversationClientError, ConversationCreateInput,
     ConversationCreateOutcome, ConversationCreatePromptInput, ConversationCreatePromptOutcome,
     ConversationLoadInput, ConversationOperationFailure, ConversationOperationFailureKind,
     ConversationOperationResult, ConversationPromptInput, ConversationRecord,
@@ -126,7 +126,7 @@ pub(super) fn run_create(args: CreateArguments) -> i32 {
             Err(error) => return report_create_client_error(error, &operation_id, args.json),
         };
         let creator = match args.from.as_deref() {
-            Some(value) => match serde_json::from_str::<ConversationCreateActor>(value) {
+            Some(value) => match serde_json::from_str::<ConversationActor>(value) {
                 Ok(value) => value,
                 Err(_) => {
                     return crate::endpoint_commands::report_failure(
@@ -155,7 +155,7 @@ pub(super) fn run_create(args: CreateArguments) -> i32 {
         };
         let approver = if args.approver_owner {
             match collaboration_client::resolve_owner_human_id().await {
-                Ok(human_id) => Some(ConversationCreateActor::Typed(
+                Ok(human_id) => Some(ConversationActor::Typed(
                     message_board::Identity::Human { human_id },
                 )),
                 Err(_) => {
@@ -169,7 +169,7 @@ pub(super) fn run_create(args: CreateArguments) -> i32 {
             }
         } else {
             match args.approver.as_deref() {
-                Some(value) => match serde_json::from_str::<ConversationCreateActor>(value) {
+                Some(value) => match serde_json::from_str::<ConversationActor>(value) {
                     Ok(value) => Some(value),
                     Err(_) => {
                         return crate::endpoint_commands::report_failure(
@@ -545,7 +545,7 @@ pub(super) fn run_existing_prompt(args: PromptArguments) -> i32 {
             operation_id: provider.then_some(operation_id.clone()),
             target: target.clone(),
             working_directory: args.cwd,
-            requested_by: sender,
+            requested_by: sender.into(),
             approver: approver.map(Into::into),
             message,
             effort: args.effort,
@@ -737,7 +737,7 @@ pub(super) fn run_cancel(args: CancelArguments) -> i32 {
             operation_id: operation_id.clone(),
             target_operation_id,
             target: target.clone(),
-            requested_by: sender,
+            requested_by: sender.into(),
             approver: approver.map(Into::into),
             generation,
         };

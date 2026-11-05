@@ -51,8 +51,11 @@ pub(crate) use provider_acp_error_mapping::acp_operation_error;
 use provider_auth_status_update::ProviderAuthStatusHandler;
 #[cfg(any(test, feature = "test-observation"))]
 pub(crate) use provider_client_contract::classify_mcp_tool_outcome;
+pub(crate) use provider_client_contract::provider_frame_decode_error;
 #[cfg(feature = "test-observation")]
 pub(crate) use provider_client_contract::sanitized_acp_error;
+#[cfg(feature = "test-observation")]
+pub(crate) use provider_client_contract::sanitized_initialization_error;
 pub use provider_client_contract::{
     ExternalProviderAdmission, ExternalProviderApprovalRefusalReason,
     ExternalProviderCreatedSession, ExternalProviderLaunch, ExternalProviderPromptOutcome,
@@ -62,9 +65,6 @@ pub use provider_client_contract::{
 pub use provider_client_contract::{
     ExternalProviderApprovalRefusalWarning, ExternalProviderPermissionObservation,
     ExternalProviderPermissionOutcome, ExternalProviderToolCall, ExternalProviderToolOutcome,
-};
-pub(crate) use provider_client_contract::{
-    provider_frame_decode_error, sanitized_initialization_error,
 };
 use provider_cursor_create_plan::ProviderCursorCreatePlanHandler;
 pub(crate) use provider_cursor_plan_items::CursorPlanItems;
