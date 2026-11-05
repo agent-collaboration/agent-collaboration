@@ -7,8 +7,9 @@
 // (codex-router-host examples/automation-debug-host.rs DebugHostContext, camelCase, unknown
 // fields denied), whose fields its --resume-run-directory admission compares
 // (validate_resume_run_directory, validate_resume_binding). The marker lives in the run
-// directory beside its agent-workspace; the service directory is the canonical Router root's
-// agent-communication child, or the run directory's when no Router root is given
+// directory beside its agent-workspace. This journey selects explicit --router-root and
+// --collaboration-directory <canonical-root>/agent-communication. The Host also supports a
+// run-directory default even with a Router root, but that layout is outside this proof profile
 // (validate_collaboration_directory, launch_options.rs selected_collaboration_directory). Its
 // `port` is the Router proxy port the Host publishes as service.json `routerProxyEndpoint`,
 // not the separately assigned MCP port. The marker records no artifact digest, so the launch
@@ -141,7 +142,9 @@ export function preparedContextBinding(plan: ControlPlan): {
     marker.serviceDirectory !== canonicalService ||
     (marker.routerRoot !== null && real(marker.routerRoot) !== marker.routerRoot)
   )
-    throw new Error("the Host context's service directory is not the canonical Router root child");
+    throw new Error(
+      "this continuation profile requires --collaboration-directory <canonical Router root>/agent-communication; the Host's run-directory default is outside this profile",
+    );
   if (real(plan.serviceDirectory) !== real(marker.serviceDirectory))
     throw new Error("the plan's service directory is not the prepared service directory");
   if (publishedProxyPort(plan.serviceDirectory) !== marker.port)
