@@ -11,7 +11,7 @@ The interface design includes the owner-selected ordinary MCP facade. An ACP-mes
 - [Verification Design](verification-design.md): the deciding evidence, provider-effort preservation and false-pass cases.
 - [Milestones and workstreams](delivery-plan.md): ordered delivery, parallel limits, completion checks and timing forecast.
 - [Delivery overview by deliverable](plans/overview.md): outcomes, sequence, proof and forecasts, with a direct plan link for each deliverable. [HTML reader](plans/overview.html).
-- [Interface implementation plan](plans/2026-11-05-mcp-facade-lifecycle.md): the current first R23/V23 lifecycle deliverable, F0–F4 and proof gates. Its terminal is PR-ready-unmerged; Shravan merges. The earlier bound-ACP plan remains future delivery input, not a completed capability. [HTML reader](plans/2026-11-05-mcp-facade-lifecycle.html).
+- [Interface implementation plan](plans/2026-11-05-mcp-facade-proof-boundaries.md): the current first R23/V23 lifecycle deliverable, F0–F4 and proof gates. Its terminal is PR-ready-unmerged; Shravan merges. The earlier bound-ACP plan remains future delivery input, not a completed capability. [HTML reader](plans/2026-11-05-mcp-facade-proof-boundaries.html).
 - [Bounded M1 continuation plan](plans/2026-11-02-m1-provider-settings-proof.md): preserve the implemented model/default/auth contracts and valid Select journeys; earn the remaining actual provider-settings branch proof. Its [HTML reader](plans/2026-11-02-m1-provider-settings-proof.html) is the human entry. Terminal remains pr-ready-unmerged under A's repair commission; broader outcomes remain open.
 - [Detailed CLI command inventory](../2026-10-31-codex-cli-acp-actions/command-inventory.html): 65 slash variants plus other UI surfaces.
 
@@ -69,3 +69,4 @@ Meaning: [authority/custody R13 and supplier scope R18](specification.md#observa
 3. [Existing owners and MCP mappings](mcp-facade.md#capability-inventory-and-discovery)
 4. [Output and recovery semantics](mcp-facade.md#output-observation-without-a-new-subscription-owner)
 5. [Deciding MCP qualification](verification-design.md#f--ordinary-mcp-facade-qualification)
+6. [Real-provider proof profiles](verification-design.md#real-provider-proof-profiles)

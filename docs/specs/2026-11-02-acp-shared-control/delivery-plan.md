@@ -1,6 +1,6 @@
 # Milestones and workstreams
 
-The current first follow-up is the [MCP facade lifecycle deliverable](plans/2026-11-05-mcp-facade-lifecycle.html): ordinary controls through the real Host, truthful operator identity, actual Claude/Cursor and original CLI full-turn proof. Its [delivery overview](plans/overview.html) is the human entry. The earlier CLI and bound-ACP roadmap below retains its requirements and open gates; it is not a claim that those later deliverables are implemented or that a tunnel phase exists.
+The current first follow-up is the [MCP facade lifecycle deliverable](plans/2026-11-05-mcp-facade-proof-boundaries.html): ordinary controls through the real Host, truthful operator identity, actual Claude/Cursor and original CLI full-turn proof. Its [delivery overview](plans/overview.html) is the human entry. The earlier CLI and bound-ACP roadmap below retains its requirements and open gates; it is not a claim that those later deliverables are implemented or that a tunnel phase exists.
 
 This is the owner's requested **proposed roadmap**, not an execution-ready whole-surface instruction. Its full planning result remains **revision-requested** while later gates remain open. The independently reviewed M1 scope has a [bounded continuation plan](plans/2026-11-02-m1-provider-settings-proof.html), preserving model/default/auth work and earning the remaining actual changed-family proof; its pr-ready-unmerged context applies only to A's repair commission and grants no broader capability or merge authority.
 

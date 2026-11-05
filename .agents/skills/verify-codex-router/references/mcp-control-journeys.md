@@ -1,12 +1,12 @@
 # MCP control journeys
 
-An ordinary MCP caller controls a Claude or Cursor Session through the existing typed tools over a declared Host: create, prompt with bounded observation, exact cancellation, caller loss, reattach and close. The caller never speaks ACP. This journey qualifies the first facade deliverable's V23 rows (plan `docs/specs/2026-11-02-acp-shared-control/plans/2026-11-05-mcp-facade-lifecycle.md`, VD F). It does not cover the bound-ACP or full-facade obligations.
+An ordinary MCP caller controls a Claude or Cursor Session through the existing typed tools over a declared Host: create, prompt with bounded observation, exact cancellation, caller loss, reattach and close. The caller never speaks ACP. This journey qualifies the first facade deliverable's V23 rows (plan `docs/specs/2026-11-02-acp-shared-control/plans/2026-11-05-mcp-facade-proof-boundaries.md`, VD F). It does not cover the bound-ACP or full-facade obligations.
 
 **Status: draft.** The driver, oracles and sensitivity tests exist and pass under `node --test`.
 
-The first controlled Host run (mcf11, 2026-11-05) reached create and one completed prompt. It then stopped on the driver's own wire schema, which was since corrected against the recorded shapes. No case has qualified yet.
+The driver wire shape and explicit controlled lifecycle profile are qualified locally. A normal controlled Host run passed five cases and stopped inconclusive at load after close. The owning replay repair has a permanent real Host/hub regression; the complete normal six-case journey still needs a fresh declared observation. Actual provider and original CLI profiles remain separately unverified.
 
-The controlled peer advertises `loadSession` only, so close and resume are refused before dispatch on that profile; this is an open fixture prerequisite. The journey stays draft until a declared controlled-peer Host run and then real Claude and Cursor runs pass, each under its own exact-target commission.
+Use the peer's explicit `lifecycle` profile for this full controlled journey. Other peer profiles retain their existing offers and cannot substitute for positive close/resume proof. Real providers use the actual capability profiles in VD F; the full controlled case cannot be relabelled to ignore an unsupported method. The journey remains draft until its required targets and observations pass under their separate commissions.
 
 ## What it proves and what it does not
 
@@ -36,7 +36,7 @@ The plan's schema is `controlPlanSchema` in `verification/observations/mcp-contr
 
 **Controlled peer.** The normal-dependency `automation-debug-host` launches it through its existing Cursor selectors:
 - `--cursor-acp-executable <node>`;
-- `--cursor-acp-arguments` set to `crates/acp-client-runtime/tests/support/behavior-agent.ts <receipt> <mode> cursor_login <release-sentinel>`.
+- `--cursor-acp-arguments` set to `crates/acp-client-runtime/tests/support/behavior-agent.ts <receipt> lifecycle cursor_login <release-sentinel>`.
 
 Text `hold` holds the turn until the sentinel appears, which completes it as `HOLDINGafter`/end_turn, or until an exact cancellation. The receipt records each `session/prompt`, `session/cancel` and `{kind:"release"}` row. The driver writes the sentinel only to release its own held prompt, retires that marker once the release is confirmed, and refuses to start another hold while any marker remains.
 
