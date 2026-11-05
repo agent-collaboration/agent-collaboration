@@ -2,7 +2,7 @@
 retries = 0
 
 [profile.ci]
-test-threads = 8
+test-threads = "num-cpus"
 fail-fast = false
 retries = 0
 status-level = "slow"

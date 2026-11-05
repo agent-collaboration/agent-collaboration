@@ -28,7 +28,7 @@ permissions:
 jobs:
   static:
     name: Static validation
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     # Keep Linux test profiles out of the macOS release cache environment.
     env:
       CARGO_TERM_COLOR: always
@@ -56,7 +56,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: static
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          save-if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.head_ref == 'ci/blacksmith-experiment' }}
       - name: Restore pinned Rust tools
         id: rust_tools
         uses: actions/cache/restore@v4
@@ -204,7 +204,7 @@ jobs:
 
   test:
     name: Test Rust workspace
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     timeout-minutes: 360
     # Keep Linux test profiles out of the macOS release cache environment.
     env:
@@ -253,7 +253,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: test
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          save-if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.head_ref == 'ci/blacksmith-experiment' }}
       # The dependency-structure tests use offline Cargo metadata for all
       # targets, so fetch target-specific packages even on this Linux runner.
       - name: Fetch dependencies for all targets
