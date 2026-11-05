@@ -174,18 +174,6 @@ pub(crate) async fn initialize_history(
         durable_steps::turso_store::migrate_journal(&mut transaction)
             .await
             .map_err(|_| StorageError::InvalidSchema)?;
-        if admission == SchemaAdmission::LegacyMailbox {
-            // The deleted central Mailbox owned these released bodies. Its final
-            // outcome cannot be recovered from the new Fleet. Pending bodies
-            // retain their original journal/id; terminal knowledge stays intact.
-            // This runs once, before SDK migration 4 removes the JSON header.
-            sqlx::query(
-                "UPDATE _fleet_sync_outbox_items SET record=json_set(record,'$.value.status',json('{\"kind\":\"uncertain\"}'),'$.value.capacitySlot',json('false')),live=0,capacity_slot=0,payload_bytes=0,settlement_bytes=0 WHERE payload IS NULL AND json_extract(record,'$.value.status.kind') IN ('sent','atRecipient','held') AND (json_extract(record,'$.value.submitAttempted')=1 OR json_extract(record,'$.kind')='recovered')",
-            )
-            .execute(&mut *transaction)
-            .await
-            .map_err(|_| StorageError::InvalidStoredRecord)?;
-        }
         let mut delivery_migrator = sqlx::migrate::Migrator::with_migrations(
             fleet_sync_delivery::DELIVERY_MIGRATOR
                 .iter()

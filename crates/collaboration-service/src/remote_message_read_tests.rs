@@ -4,9 +4,6 @@ use super::*;
 #[path = "collaboration_application/message_status_operations_test.rs"]
 mod retention_status;
 
-#[path = "mail_upgrade_test.rs"]
-mod mail_upgrade;
-
 async fn remote_application(
     runtime: &Runtime,
 ) -> (Arc<MailDeliveryRuntime>, crate::CollaborationApplication) {
