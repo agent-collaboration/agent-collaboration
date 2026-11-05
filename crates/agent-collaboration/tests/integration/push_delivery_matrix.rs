@@ -115,7 +115,7 @@ fn prepare_delivery_matrix_acp_target_fixture() -> ProofResult<()> {
 async fn push_delivery_matrix_covers_codex_and_claude_peer() -> ProofResult<()> {
     let config_guard = delivery_matrix_support::ConfigHashGuard::capture()?;
     let mut peer_owner: Option<delivery_matrix_support::PeerFixture> = None;
-    codex_router_test_support::scenario_finalization::run_scenario(
+    owned_process_test_support::scenario_finalization::run_scenario(
         &mut peer_owner,
         async |owner: &mut &mut Option<delivery_matrix_support::PeerFixture>| {
             exercise_push_delivery_matrix(&config_guard, owner).await
@@ -377,7 +377,7 @@ async fn exercise_push_delivery_matrix(
 #[ignore = "requires a fresh isolated debug Host with the scripted ACP target fixture"]
 async fn push_delivery_matrix_reaches_scripted_acp_target() -> ProofResult<()> {
     let config_guard = delivery_matrix_support::ConfigHashGuard::capture()?;
-    codex_router_test_support::scenario_finalization::run_scenario(
+    owned_process_test_support::scenario_finalization::run_scenario(
         (),
         async |_: &mut ()| exercise_scripted_acp_target(&config_guard).await,
         |_| async { Ok(()) },
@@ -451,7 +451,7 @@ async fn exercise_scripted_acp_target(
 async fn push_delivery_matrix_holds_codex_recipients() -> ProofResult<()> {
     let config_guard = delivery_matrix_support::ConfigHashGuard::capture()?;
     let mut resource_owner: Option<owned_resource_cleanup::OwnedMatrixScope> = None;
-    codex_router_test_support::scenario_finalization::run_scenario(
+    owned_process_test_support::scenario_finalization::run_scenario(
         &mut resource_owner,
         async |owner: &mut &mut Option<owned_resource_cleanup::OwnedMatrixScope>| {
             exercise_held_codex_recipients(&config_guard, owner).await

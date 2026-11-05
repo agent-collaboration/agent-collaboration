@@ -5,7 +5,7 @@ use crate::e2e_support::{
     required_readback_cell, run_cli, thread_participation_rows, thread_watch_rows,
 };
 use crate::post_selection::{MainStartCutoff, ReaderCutoffs, ThreadCutoff, ThreadWatchCutoff};
-use codex_router_test_support::scenario_finalization::run_scenario;
+use owned_process_test_support::scenario_finalization::run_scenario;
 use serde_json::{Value, json};
 use std::path::Path;
 

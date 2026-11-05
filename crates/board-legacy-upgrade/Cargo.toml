@@ -53,7 +53,7 @@ uuid.workspace = true
 tempfile = "3.27.0"
 
 [dev-dependencies]
-codex-router-test-support = { version = "0.1.102", path = "../codex-router-test-support" }
+owned-process-test-support = { path = "../owned-process-test-support", version = "0.1.126" }
 futures-util.workspace = true
 reqwest-websocket = "=0.5.1"
 collaboration-central-tokio = { version = "0.1.100", path = "../collaboration-central-tokio", features = ["conformance"] }

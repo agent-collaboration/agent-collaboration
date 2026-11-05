@@ -233,6 +233,7 @@ dependencies = [
  "message-board",
  "message-board-storage",
  "node-test-fixture",
+ "owned-process-test-support",
  "reqwest 0.12.28",
  "rmcp",
  "runtime-primitives",
@@ -968,7 +969,6 @@ dependencies = [
  "clap",
  "codex-router-host",
  "codex-router-secret-store",
- "codex-router-test-support",
  "collaboration-central-admin-protocol",
  "collaboration-central-conformance",
  "collaboration-central-core",
@@ -988,6 +988,7 @@ dependencies = [
  "message-board",
  "message-board-storage",
  "nix",
+ "owned-process-test-support",
  "reqwest 0.12.28",
  "reqwest-websocket",
  "runtime-primitives",
@@ -1445,6 +1446,7 @@ dependencies = [
  "opentelemetry-appender-tracing",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
+ "owned-process-test-support",
  "reqwest 0.12.28",
  "rustix 1.1.4",
  "serde",
@@ -1527,6 +1529,7 @@ dependencies = [
  "nix",
  "node-test-fixture",
  "opentelemetry",
+ "owned-process-test-support",
  "reqwest 0.12.28",
  "reqwest-websocket",
  "runtime-primitives",
@@ -1732,6 +1735,7 @@ dependencies = [
  "collaboration-client",
  "futures-util",
  "node-test-fixture",
+ "owned-process-test-support",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -4681,6 +4685,14 @@ name = "outref"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a80800c0488c3a21695ea981a54918fbb37abf04f4d0720c453632255e2ff0e"
+
+[[package]]
+name = "owned-process-test-support"
+version = "0.1.126"
+dependencies = [
+ "futures-util",
+ "tokio",
+]
 
 [[package]]
 name = "owo-colors"
