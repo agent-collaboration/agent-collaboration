@@ -98,8 +98,9 @@ export async function observe(
 export function nextCursor(
   target: SessionRef,
   reads: readonly ObservationRead[],
+  baselineReads = 1,
 ): { readonly epoch: bigint; readonly afterSequence: bigint | null } {
-  const ledger = foldObservationReads(target, reads);
+  const ledger = foldObservationReads(target, reads, baselineReads);
   if (ledger.kind !== "continuous")
     throw new Error(`observation is ${ledger.kind}; it cannot be continued`);
   const last = ledger.events.at(-1)?.sequence ?? null;
@@ -116,16 +117,50 @@ export async function observeUntilTurnsEnd(
   target: SessionRef,
   reads: ObservationRead[],
   turns: number,
+  baselineReads = 1,
 ): Promise<void> {
   for (let attempt = 0; attempt < 120; attempt += 1) {
-    const ledger = foldObservationReads(target, reads);
+    const ledger = foldObservationReads(target, reads, baselineReads);
     if (ledger.kind !== "continuous") return;
     const reconstruction = reconstructTurns(ledger.events);
     if (reconstruction.kind === "rejected") return;
     const ended = reconstruction.turns.filter((turn) => turn.outcome !== null).length;
     if (ended >= turns || ledger.backendDisconnected) return;
-    reads.push(await observe(context, `${step}-${attempt}`, target, nextCursor(target, reads), 2));
+    reads.push(
+      await observe(
+        context,
+        `${step}-${attempt}`,
+        target,
+        nextCursor(target, reads, baselineReads),
+        2,
+      ),
+    );
   }
+}
+
+/** Bounded reads per reattach baseline: up to 200 events each, so 2000 replayed events in all. */
+export const REPLAY_BASELINE_READS = 10;
+
+/**
+ * A baseline that continues while the Host reports `resultLimitReached`, so a long replayed
+ * history is read whole before the next input. Returns the reads, or null when the declared
+ * bound ran out first; a truncated baseline must never be decided as complete history.
+ */
+export async function observeReplayBaseline(
+  context: JourneyContext,
+  step: string,
+  target: SessionRef,
+): Promise<ObservationRead[] | null> {
+  const reads = [
+    await observe(context, `${step}-0`, target, { epoch: null, afterSequence: null }, 1),
+  ];
+  for (let read = 1; read < REPLAY_BASELINE_READS; read += 1) {
+    if (reads.at(-1)?.result.endReason !== "resultLimitReached") return reads;
+    reads.push(
+      await observe(context, `${step}-${read}`, target, nextCursor(target, reads, reads.length), 1),
+    );
+  }
+  return reads.at(-1)?.result.endReason === "resultLimitReached" ? null : reads;
 }
 
 /** Reads the operation's snapshot without changing it. */

@@ -206,31 +206,40 @@ async function withStandIn(
   const address = server.address();
   if (address === null || typeof address === "string") throw new Error("no stand-in port");
   const owner = { kind: "human" as const, humanId: OWNER, source: "ownerLookup" as const };
-  const plan = controlPlanSchema.parse({
-    repository: root,
-    sourceHead: "a".repeat(40),
-    buildManifest: root,
-    host: { pid: 1, path: root, sha256: "0".repeat(64) },
-    router: { path: root, sha256: "0".repeat(64) },
-    serviceDirectory: root,
-    expectedServiceId: SERVICE,
-    expectedServiceEpoch: "22222222-2222-4222-8222-222222222222",
-    endpointId: "cursor-local",
-    workingDirectory: root,
-    actor: owner,
-    approver: owner,
-    wrongRoleRequester: null,
-    peer: { kind: "controlled", receipt: standIn.receipt, releaseSentinel: join(root, "release") },
-    cases: ["lifecycle"],
-    promptText: "ordinary",
-    holdText: "hold",
-    effects: { maxSessions: 1, maxPrompts: 1 },
-    deadline: "2099-01-01T00:00:00Z",
-    evidence: join(root, "evidence"),
-    schemaSource: null,
-  });
-  const store = new ProviderStoreReadback(standIn.store);
+  // Built inside the teardown's reach: a plan that fails to parse must fail the test, not leave
+  // the stand-in server listening.
+  let store: ProviderStoreReadback | null = null;
   try {
+    const plan = controlPlanSchema.parse({
+      repository: root,
+      sourceHead: "a".repeat(40),
+      buildManifest: root,
+      host: { kind: "automationDebugHost", pid: 1, path: root, sha256: "0".repeat(64) },
+      hostContext: null,
+      router: { path: root, sha256: "0".repeat(64) },
+      serviceDirectory: root,
+      expectedServiceId: SERVICE,
+      expectedServiceEpoch: "22222222-2222-4222-8222-222222222222",
+      endpointId: "cursor-local",
+      workingDirectory: root,
+      actor: owner,
+      approver: owner,
+      wrongRoleRequester: null,
+      peer: {
+        kind: "controlled",
+        receipt: standIn.receipt,
+        releaseSentinel: join(root, "release"),
+      },
+      cases: ["lifecycle"],
+      promptText: "ordinary",
+      holdText: "hold",
+      effects: { maxSessions: 1, maxPrompts: 1 },
+      deadline: "2099-01-01T00:00:00Z",
+      evidence: join(root, "evidence"),
+      schemaSource: null,
+      continuation: null,
+    });
+    store = new ProviderStoreReadback(standIn.store);
     await body(
       plan,
       new StreamingMcpClient(`http://127.0.0.1:${address.port}/mcp`),
@@ -238,7 +247,7 @@ async function withStandIn(
       standIn,
     );
   } finally {
-    store.close();
+    store?.close();
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
     rmSync(root, { recursive: true, force: true });
@@ -266,6 +275,7 @@ test("the lifecycle case qualifies one isolated prompt from the driver's own cal
       turnId: "t-1",
       inputId: "in-1",
       reply: "beforeafter",
+      dispatchWitness: "controlledReceipt",
     });
   });
 });

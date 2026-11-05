@@ -22,6 +22,7 @@ import {
   type CaseResult,
 } from "./journey-cases.ts";
 import { loadResumeCase, staleCancelCase, wrongRoleCase } from "./journey-control-cases.ts";
+import { continuationReloadCase, continuationRetainCase } from "./journey-continuation-cases.ts";
 import { openEvidence, record, type JourneyContext } from "./journey-steps.ts";
 import { ProviderStoreReadback } from "./role-readback.ts";
 import { StreamingMcpClient } from "./streaming-mcp-client.ts";
@@ -34,6 +35,8 @@ const CASES: Readonly<Record<ControlCase, (inputs: CaseInputs) => Promise<CaseRe
   staleCancel: staleCancelCase,
   wrongRole: wrongRoleCase,
   loadResume: loadResumeCase,
+  continuationRetain: continuationRetainCase,
+  continuationReload: continuationReloadCase,
 };
 
 async function discover(context: JourneyContext): Promise<readonly string[]> {

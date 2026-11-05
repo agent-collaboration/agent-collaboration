@@ -1,13 +1,19 @@
 // The declared target of one MCP control run and its `--check`. Checking reads files and runs
-// two read-only local commands (git and the owner lookup); it opens no socket, calls no MCP
-// tool and launches nothing, so it has zero Host, provider or model effects.
-import { execFileSync } from "node:child_process";
+// read-only local commands (git, the owner lookup and, on macOS, lsof for the declared Host
+// process's executable); it opens no socket, calls no MCP tool, signals nothing and launches
+// nothing, so it has zero Host, provider or model effects.
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, sep } from "node:path";
+import { dirname, isAbsolute, join, sep } from "node:path";
 import { z } from "zod";
 import { decode } from "../../exact-json.ts";
+import {
+  providerLaunchBinding,
+  readKeptRecord,
+  reloadContinuityProblem,
+} from "./continuation-record.ts";
 import {
   extractLockedNames,
   extractSessionUpdates,
@@ -41,12 +47,38 @@ export const controlCaseSchema = z.enum([
   "staleCancel",
   "wrongRole",
   "loadResume",
+  // The two-lifetime continuation profile: one lone case per lifetime (continuation-record.ts).
+  "continuationRetain",
+  "continuationReload",
+]);
+// Which normal Host artifact serves the run: the automation acceptance Host, or the Router's
+// own foreground Host, each the manifest entry of that name. Never inferred from a path.
+const hostKindSchema = z.enum(["automationDebugHost", "foregroundRouterHost"]);
+const MANIFEST_ENTRY: Readonly<Record<z.infer<typeof hostKindSchema>, string>> = {
+  automationDebugHost: "automation-debug-host",
+  foregroundRouterHost: "codex-router",
+};
+// The continuation phase this lifetime runs: retain writes the exclusive record inside its own
+// fresh evidence; reload consumes the kept record, bound by its exact digest.
+const continuationSchema = z.discriminatedUnion("phase", [
+  z.strictObject({ phase: z.literal("retain"), record: absolutePath }),
+  z.strictObject({
+    phase: z.literal("reload"),
+    record: absolutePath,
+    recordSha256: z.string().regex(/^[0-9a-f]{64}$/),
+  }),
 ]);
 export const controlPlanSchema = z.strictObject({
   repository: absolutePath,
   sourceHead: z.string().regex(/^[0-9a-f]{40}$/),
   buildManifest: absolutePath,
-  host: z.strictObject({ pid: z.number().int().positive(), ...artifactSchema.shape }),
+  host: z.strictObject({
+    kind: hostKindSchema,
+    pid: z.number().int().positive(),
+    ...artifactSchema.shape,
+  }),
+  // The automation Host's prepared-context marker, which names its provider launch.
+  hostContext: absolutePath.nullable(),
   router: artifactSchema,
   serviceDirectory: absolutePath,
   expectedServiceId: z.uuid(),
@@ -79,6 +111,7 @@ export const controlPlanSchema = z.strictObject({
   deadline: z.iso.datetime(),
   evidence: absolutePath,
   schemaSource: absolutePath.nullable(),
+  continuation: continuationSchema.nullable(),
 });
 export type ControlPlan = z.infer<typeof controlPlanSchema>;
 export type ControlCase = z.infer<typeof controlCaseSchema>;
@@ -93,7 +126,12 @@ const CASE_EFFECTS: Readonly<
   staleCancel: { sessions: 1, prompts: 1 },
   wrongRole: { sessions: 1, prompts: 0 },
   loadResume: { sessions: 1, prompts: 3 },
+  // One Session and one prompt, plus resume and close refused before any dispatch.
+  continuationRetain: { sessions: 1, prompts: 1 },
+  // No new Session: one load of the kept Session and one prompt.
+  continuationReload: { sessions: 0, prompts: 1 },
 };
+const CONTINUATION_CASE = { retain: "continuationRetain", reload: "continuationReload" } as const;
 const OWNER_LOOKUP_COMMAND = "/usr/bin/id"; // collaboration-client owner_identity_resolution.rs:8
 
 export interface CheckedTarget {
@@ -107,20 +145,12 @@ const sha256File = (path: string): string =>
 /** Every declared identity, checked without contacting the Host. Throws on the first mismatch. */
 export function checkControlPlan(plan: ControlPlan, now: Date): CheckedTarget {
   checkSource(plan);
+  checkContinuationDeclaration(plan);
   for (const artifact of [plan.host, plan.router])
     if (sha256File(artifact.path) !== artifact.sha256)
       throw new Error(`${artifact.path} hash differs from the plan`);
-  const manifest = z
-    .looseObject({
-      source_commit: z.string(),
-      dirty: z.literal(false),
-      binaries: z.record(z.string(), z.looseObject({ sha256: z.string() })),
-    })
-    .parse(decode(readFileSync(plan.buildManifest, "utf8")));
-  if (manifest.source_commit !== plan.sourceHead)
-    throw new Error("the build manifest is for another source");
-  if (manifest.binaries["automation-debug-host"]?.sha256 !== plan.host.sha256)
-    throw new Error("the Host is not the manifest's build");
+  checkNormalArtifacts(plan);
+  checkHostProcess(plan);
   const service = z
     .looseObject({
       serviceId: z.string(),
@@ -148,7 +178,109 @@ export function checkControlPlan(plan: ControlPlan, now: Date): CheckedTarget {
     throw new Error("the evidence directory is not fresh");
   if (plan.peer.kind === "controlled" && existsSync(plan.peer.releaseSentinel))
     throw new Error("the release sentinel already exists; it would release a held turn at once");
+  checkContinuationRecord(plan);
   return { mcpEndpoint: service.mcp.url, providerStore };
+}
+
+const manifestSchema = z.looseObject({
+  source_commit: z.string(),
+  dirty: z.literal(false),
+  test_guard_features: z.array(z.string()),
+  binaries: z.record(z.string(), z.looseObject({ path: absolutePath, sha256: z.string() })),
+});
+
+/**
+ * Both the Host and the Router must be the normal manifest's own artifacts at their recorded
+ * paths, not self-consistently declared unrelated files. A foreground Host is the Router binary.
+ */
+function checkNormalArtifacts(plan: ControlPlan): void {
+  const manifest = manifestSchema.parse(decode(readFileSync(plan.buildManifest, "utf8")));
+  if (manifest.source_commit !== plan.sourceHead)
+    throw new Error("the build manifest is for another source");
+  if (manifest.test_guard_features.length > 0)
+    throw new Error("the build manifest is not a normal build: it enables test guard features");
+  const sameArtifact = (
+    entry: { path: string; sha256: string } | undefined,
+    artifact: { path: string; sha256: string },
+  ): boolean =>
+    entry !== undefined &&
+    entry.sha256 === artifact.sha256 &&
+    existsSync(entry.path) &&
+    realpathSync(entry.path) === realpathSync(artifact.path);
+  if (!sameArtifact(manifest.binaries[MANIFEST_ENTRY[plan.host.kind]], plan.host))
+    throw new Error("the Host is not the manifest's build");
+  if (!sameArtifact(manifest.binaries["codex-router"], plan.router))
+    throw new Error("the Router is not the manifest's build");
+  if (
+    plan.host.kind === "foregroundRouterHost" &&
+    (plan.host.sha256 !== plan.router.sha256 ||
+      realpathSync(plan.host.path) !== realpathSync(plan.router.path))
+  )
+    throw new Error("a foreground Router Host is the declared Router artifact itself");
+}
+
+/** The executable a live process runs, read without signalling it; null when unreadable. */
+function processExecutable(pid: number): string | null {
+  if (process.platform === "linux") {
+    try {
+      return realpathSync(`/proc/${pid}/exe`);
+    } catch {
+      return null;
+    }
+  }
+  // macOS: the process's first text mapping is its executable (lsof -d txt).
+  const listed = spawnSync("/usr/sbin/lsof", ["-a", "-p", String(pid), "-d", "txt", "-Fn"], {
+    encoding: "utf8",
+    timeout: 5000,
+    env: { ...process.env, LC_ALL: "C" },
+  });
+  if (listed.error !== undefined || listed.status !== 0) return null;
+  const first = listed.stdout.split("\n").find((line) => line.startsWith("n"));
+  const path = first?.slice(1);
+  return path === undefined || !existsSync(path) ? null : realpathSync(path);
+}
+
+/** The declared Host process must be live and running the declared Host artifact. */
+function checkHostProcess(plan: ControlPlan): void {
+  if (processExecutable(plan.host.pid) !== realpathSync(plan.host.path))
+    throw new Error("the declared Host process is not running the declared Host artifact");
+}
+
+/** A continuation phase runs only its own lone case on the automation Host with its context. */
+function checkContinuationDeclaration(plan: ControlPlan): void {
+  const phaseCases = plan.cases.filter(
+    (name) => name === CONTINUATION_CASE.retain || name === CONTINUATION_CASE.reload,
+  );
+  if (plan.continuation === null) {
+    if (phaseCases.length > 0)
+      throw new Error(`${phaseCases.join(", ")} needs its continuation declaration`);
+    return;
+  }
+  const own = CONTINUATION_CASE[plan.continuation.phase];
+  if (plan.cases.length !== 1 || plan.cases[0] !== own)
+    throw new Error(`a ${plan.continuation.phase} continuation runs ${own} as its only case`);
+  if (plan.host.kind !== "automationDebugHost")
+    throw new Error(
+      "a continuation reopens the automation Host's own context; select the automation Host",
+    );
+  if (plan.hostContext === null) throw new Error("a continuation needs the declared Host context");
+}
+
+/** The retain record's exclusive place, or the kept record's continuity, before any effect. */
+function checkContinuationRecord(plan: ControlPlan): void {
+  if (plan.continuation === null) return;
+  const launch = providerLaunchBinding(plan);
+  if (plan.continuation.phase === "retain") {
+    if (dirname(plan.continuation.record) !== plan.evidence)
+      throw new Error("the continuation record must be written inside the evidence directory");
+    if (existsSync(plan.continuation.record))
+      throw new Error("the continuation record already exists");
+    return;
+  }
+  if (dirname(plan.continuation.record) === plan.evidence)
+    throw new Error("the kept continuation record cannot live in the new evidence directory");
+  const problem = reloadContinuityProblem(plan, readKeptRecord(plan), launch);
+  if (problem !== null) throw new Error(problem);
 }
 
 /**
@@ -203,8 +335,13 @@ function checkEffectsAndTime(plan: ControlPlan, now: Date): void {
     throw new Error("callerLoss and explicitCancel need a declared hold text");
   if (plan.cases.includes("wrongRole") && plan.wrongRoleRequester === null)
     throw new Error("wrongRole needs a declared wrong-role requester");
-  if (plan.peer.kind === "provider" && plan.cases.includes("callerLoss"))
-    throw new Error("callerLoss needs the controlled peer's release gate");
+  // A held case needs an actual causal hold, the controlled peer's release gate. A real model
+  // is not assumed to obey a prompt that says "hold".
+  const held = plan.cases.filter((name) => name === "callerLoss" || name === "explicitCancel");
+  if (plan.peer.kind === "provider" && held.length > 0)
+    throw new Error(
+      `${held.join(" and ")} need an actual causal hold, which a real provider lacks`,
+    );
 }
 
 function checkInventory(plan: ControlPlan): void {

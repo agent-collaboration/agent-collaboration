@@ -184,15 +184,33 @@ function newOperations(
     .filter((row) => !before.includes(row.operationId) && !own.includes(row.operationId)).length;
 }
 
-/** One attached prompt decided by the oracle: the ordinary lifecycle and the resume/load turns. */
+/**
+ * The exact text one attached prompt submits: the declared harmless prompt marked with its case
+ * step. Each history segment is then distinguishable, so a reordered or foreign replay cannot
+ * pass as the recorded conversation even when replies repeat.
+ */
+export function segmentPrompt(inputs: CaseInputs, step: string): string {
+  return `${inputs.promptText} [${step}]`;
+}
+
+/**
+ * One attached prompt decided by the oracle: the ordinary lifecycle and the resume/load turns.
+ * After a reattach the caller passes the replay baseline it already read whole, so replayed
+ * history stays baseline and only the new input's turn is decided.
+ */
 export async function attachedPrompt(
   inputs: CaseInputs,
   target: SessionRef,
   step: string,
+  takenBaseline: readonly ObservationRead[] | null = null,
 ): Promise<PromptCaseVerdict> {
   const before = inputs.store.operations(target).map((row) => row.operationId);
   const peerBefore = peerSnapshot(inputs, target);
-  const reads = [await baseline(inputs, `${step}-baseline`, target)];
+  const reads =
+    takenBaseline === null
+      ? [await baseline(inputs, `${step}-baseline`, target)]
+      : [...takenBaseline];
+  const baselineReads = reads.length;
   const operationId = requests.newOperationId();
   const outcome = await callTool(
     inputs.context,
@@ -202,18 +220,18 @@ export async function attachedPrompt(
       plan: inputs.plan,
       target,
       operationId,
-      text: inputs.promptText,
+      text: segmentPrompt(inputs, step),
       timeoutSeconds: PROMPT_SECONDS,
     }),
     { timeoutMs: (PROMPT_SECONDS + 10) * 1000 },
   );
   const value = answered(outcome, `${step} prompt`);
-  await observeUntilTurnsEnd(inputs.context, `${step}-observe`, target, reads, 1);
+  await observeUntilTurnsEnd(inputs.context, `${step}-observe`, target, reads, 1, baselineReads);
   return decidePromptCase({
     target,
     operationId,
     expectedStopReason: "endTurn",
-    ledger: foldObservationReads(target, reads),
+    ledger: foldObservationReads(target, reads, baselineReads),
     reply: { kind: "promptResult", value },
     operation: await operationShow(inputs.context, `${step}-readback`, operationId),
     otherOperations: newOperations(inputs, target, before, [operationId]),

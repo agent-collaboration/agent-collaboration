@@ -70,3 +70,58 @@ export function settlementState(
     };
   return { kind: "settled" };
 }
+
+// ConversationOperationWaitResult `{operation, output}`: output `available` carries the
+// ConversationOperationSettlement (provider_conversation_contract.rs:571-637); Loaded is
+// `{kind: "loaded", target, effectiveSettings}`, Resumed adds `history`, which the Host always
+// reports as historyUnavailable after a resume (provider_session_lifecycle.rs:91). A wait on an
+// operation no longer retained reports outputUnavailable (provider_conversation_backend.rs:531-545).
+const reattachWaitSchema = z.looseObject({
+  operation: snapshotSchema,
+  output: z.discriminatedUnion("kind", [
+    z.looseObject({ kind: z.literal("pending") }),
+    z.looseObject({
+      kind: z.literal("available"),
+      settlement: z.looseObject({
+        kind: z.string(),
+        target: sessionRefSchema.optional(),
+        history: z.string().optional(),
+      }),
+    }),
+    z.looseObject({ kind: z.literal("outputUnavailable"), reason: z.unknown() }),
+  ]),
+});
+
+export type ReattachSettlement =
+  | { readonly kind: "settled" }
+  | { readonly kind: "unknown"; readonly reason: string }
+  | { readonly kind: "refused"; readonly reason: string };
+
+/**
+ * Decides the actual Loaded or Resumed settlement from an operation wait on the operation the
+ * caller supplied: the exact operation and target, the expected kind, and for resume the
+ * unavailable history. A completion acknowledgement or a settled snapshot alone is not enough.
+ */
+export function reattachSettlement(
+  wait: unknown,
+  operationId: string,
+  target: SessionRef,
+  expected: "loaded" | "resumed",
+): ReattachSettlement {
+  const parsed = reattachWaitSchema.safeParse(wait);
+  if (!parsed.success)
+    return { kind: "refused", reason: "the wait result is not an operation wait" };
+  const { operation, output } = parsed.data;
+  if (operation.operationId !== operationId)
+    return { kind: "refused", reason: "the wait names another operation" };
+  if (output.kind !== "available")
+    return { kind: "unknown", reason: `the ${expected} settlement is ${output.kind}` };
+  const { settlement } = output;
+  if (settlement.kind !== expected)
+    return { kind: "refused", reason: `the operation settled ${settlement.kind}, not ${expected}` };
+  if (settlement.target === undefined || !sameSession(settlement.target, target))
+    return { kind: "refused", reason: "the settlement names another Session" };
+  if (expected === "resumed" && settlement.history !== "historyUnavailable")
+    return { kind: "refused", reason: `resume reported history ${settlement.history ?? "absent"}` };
+  return { kind: "settled" };
+}

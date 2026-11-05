@@ -4,7 +4,15 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -17,7 +25,11 @@ import {
 } from "./control-plan.ts";
 
 const NOW = new Date("2026-11-05T02:00:00Z");
-const sha = (text: string): string => createHash("sha256").update(text).digest("hex");
+const sha = (text: string | Buffer): string => createHash("sha256").update(text).digest("hex");
+// The declared Host is this test process: a live process whose executable is the artifact, so the
+// process binding is real without launching anything.
+const HOST_PATH = realpathSync(process.execPath);
+const HOST_SHA = sha(readFileSync(HOST_PATH));
 
 /** A schema source whose constants and SessionUpdate variants are exactly the inventory's. */
 function writeSchemaSource(directory: string): void {
@@ -50,9 +62,7 @@ function writeSchemaSource(directory: string): void {
 function fixture(root: string): ControlPlan {
   const repository = join(root, "repo");
   mkdirSync(repository);
-  const host = join(root, "automation-debug-host");
   const router = join(root, "codex-router");
-  writeFileSync(host, "host-binary");
   writeFileSync(router, "router-binary");
   writeFileSync(
     join(repository, "Cargo.lock"),
@@ -82,8 +92,13 @@ function fixture(root: string): ControlPlan {
     manifest,
     JSON.stringify({
       source_commit: sourceHead,
+      source_tree: "b".repeat(40),
       dirty: false,
-      binaries: { "automation-debug-host": { sha256: sha("host-binary") } },
+      test_guard_features: [],
+      binaries: {
+        "automation-debug-host": { path: HOST_PATH, sha256: HOST_SHA, signature: {} },
+        "codex-router": { path: router, sha256: sha("router-binary"), signature: {} },
+      },
     }),
   );
   const service = join(root, "service");
@@ -106,7 +121,8 @@ function fixture(root: string): ControlPlan {
     repository,
     sourceHead,
     buildManifest: manifest,
-    host: { pid: 1, path: host, sha256: sha("host-binary") },
+    host: { kind: "automationDebugHost", pid: process.pid, path: HOST_PATH, sha256: HOST_SHA },
+    hostContext: null,
     router: { path: router, sha256: sha("router-binary") },
     serviceDirectory: service,
     expectedServiceId: serviceId,
@@ -128,6 +144,7 @@ function fixture(root: string): ControlPlan {
     deadline: "2026-11-05T03:00:00Z",
     evidence: join(root, "evidence"),
     schemaSource: schema,
+    continuation: null,
   });
 }
 
@@ -223,5 +240,237 @@ test("an MCP endpoint on a protected production port is refused", () => {
       }),
     );
     assert.throws(() => checkControlPlan(plan, NOW), /protected production port/);
+  });
+});
+
+function rewriteManifest(
+  plan: ControlPlan,
+  change: (manifest: Record<string, unknown>) => void,
+): void {
+  const manifest = JSON.parse(readFileSync(plan.buildManifest, "utf8")) as Record<string, unknown>;
+  change(manifest);
+  writeFileSync(plan.buildManifest, JSON.stringify(manifest));
+}
+
+test("the Router and Host must both be the normal manifest's own artifacts", () => {
+  withFixture((plan, root) => {
+    const other = join(root, "other-router");
+    writeFileSync(other, "unrelated-router");
+    assert.throws(
+      () =>
+        checkControlPlan(
+          { ...plan, router: { path: other, sha256: sha("unrelated-router") } },
+          NOW,
+        ),
+      /Router is not the manifest's build/,
+    );
+    rewriteManifest(plan, (manifest) => {
+      manifest["test_guard_features"] = ["keychain-test-support"];
+    });
+    assert.throws(() => checkControlPlan(plan, NOW), /not a normal build/);
+  });
+});
+
+test("the declared Host process must be running the declared Host artifact", () => {
+  withFixture((plan) => {
+    assert.throws(
+      () => checkControlPlan({ ...plan, host: { ...plan.host, pid: 1 } }, NOW),
+      /Host process/,
+    );
+  });
+});
+
+test("a foreground Router Host is the manifest's codex-router artifact, selected explicitly", () => {
+  withFixture((plan) => {
+    rewriteManifest(plan, (manifest) => {
+      manifest["binaries"] = {
+        "automation-debug-host": {
+          path: plan.router.path,
+          sha256: plan.router.sha256,
+          signature: {},
+        },
+        "codex-router": { path: HOST_PATH, sha256: HOST_SHA, signature: {} },
+      };
+    });
+    const foreground: ControlPlan = {
+      ...plan,
+      host: { ...plan.host, kind: "foregroundRouterHost" },
+      router: { path: HOST_PATH, sha256: HOST_SHA },
+    };
+    assert.doesNotThrow(() => checkControlPlan(foreground, NOW));
+    assert.throws(
+      () => checkControlPlan({ ...foreground, host: { ...plan.host } }, NOW),
+      /Host is not the manifest's build/,
+    );
+  });
+});
+
+test("a real provider cannot run the held caller-loss or explicit-cancel cases", () => {
+  withFixture((plan) => {
+    for (const held of ["callerLoss", "explicitCancel"] as const)
+      assert.throws(
+        () =>
+          checkControlPlan(
+            { ...plan, peer: { kind: "provider" }, cases: [held], holdText: "hold" },
+            NOW,
+          ),
+        /actual causal hold/,
+      );
+  });
+});
+
+/** A continuation record in the shape continuationRetain writes, bound to `plan`'s first lifetime. */
+function continuationRecord(plan: ControlPlan, launch: unknown): Record<string, unknown> {
+  return {
+    kind: "mcpControlContinuation",
+    version: 1,
+    target: {
+      endpoint: { serviceId: plan.expectedServiceId, endpointId: plan.endpointId },
+      sessionId: "session-1",
+    },
+    serviceEpoch: "44444444-4444-4444-8444-444444444444",
+    workingDirectory: plan.workingDirectory,
+    host: { kind: plan.host.kind, path: plan.host.path, sha256: plan.host.sha256 },
+    router: plan.router,
+    launch,
+    actor: plan.actor,
+    approver: plan.approver,
+    storedRoles: { createdBy: { humanId: "owner" }, approver: { humanId: "owner" } },
+    history: [{ prompt: "ordinary", reply: "beforeafter" }],
+    operations: { create: "c", prompt: "p", unsupportedResume: "r", unsupportedClose: "x" },
+  };
+}
+
+function continuationFixture(
+  plan: ControlPlan,
+  root: string,
+): {
+  readonly hostContext: string;
+  readonly launch: unknown;
+} {
+  const script = join(root, "provider-launch.ts");
+  writeFileSync(script, "launch v1");
+  const hostContext = join(root, "debug-host-context.json");
+  writeFileSync(
+    hostContext,
+    JSON.stringify({
+      kind: "debugHostPrepared",
+      hostPid: plan.host.pid,
+      claudeProvider: null,
+      cursorProvider: { executable: HOST_PATH, arguments: [script, "--flag"] },
+    }),
+  );
+  return {
+    hostContext,
+    launch: {
+      executable: HOST_PATH,
+      executableSha256: HOST_SHA,
+      arguments: [
+        { value: script, sha256: sha("launch v1") },
+        { value: "--flag", sha256: null },
+      ],
+    },
+  };
+}
+
+test("a retain continuation needs its own lone case, the Host context and an absent record in its evidence", () => {
+  withFixture((plan, root) => {
+    const { hostContext } = continuationFixture(plan, root);
+    const retain: ControlPlan = {
+      ...plan,
+      cases: ["continuationRetain"],
+      hostContext,
+      continuation: { phase: "retain", record: join(plan.evidence, "continuation-record.json") },
+    };
+    assert.doesNotThrow(() => checkControlPlan(retain, NOW));
+    const refusals: [Partial<ControlPlan>, RegExp][] = [
+      [{ hostContext: null }, /Host context/],
+      [{ cases: ["continuationRetain", "lifecycle"] }, /only case/],
+      [{ continuation: null }, /continuation declaration/],
+      [
+        { continuation: { phase: "retain", record: join(root, "elsewhere.json") } },
+        /inside the evidence/,
+      ],
+      [{ host: { ...plan.host, kind: "foregroundRouterHost" } }, /automation Host/],
+    ];
+    for (const [change, expected] of refusals)
+      assert.throws(() => checkControlPlan({ ...retain, ...change }, NOW), expected);
+    writeFileSync(
+      hostContext,
+      JSON.stringify({ kind: "debugHostPrepared", hostPid: 1, cursorProvider: null }),
+    );
+    assert.throws(() => checkControlPlan(retain, NOW), /Host context/);
+  });
+});
+
+test("a reload continuation validates the exact kept record before any effect", () => {
+  withFixture((plan, root) => {
+    const { hostContext, launch } = continuationFixture(plan, root);
+    const recordPath = join(root, "kept-record.json");
+    const write = (record: Record<string, unknown>): string => {
+      const bytes = JSON.stringify(record);
+      writeFileSync(recordPath, bytes);
+      return sha(bytes);
+    };
+    const base: ControlPlan = {
+      ...plan,
+      cases: ["continuationReload"],
+      hostContext,
+      continuation: {
+        phase: "reload",
+        record: recordPath,
+        recordSha256: write(continuationRecord(plan, launch)),
+      },
+    };
+    assert.doesNotThrow(() => checkControlPlan(base, NOW));
+    const refusals: [Record<string, unknown>, RegExp][] = [
+      [{ serviceEpoch: plan.expectedServiceEpoch }, /new service epoch/],
+      [
+        {
+          target: {
+            endpoint: {
+              serviceId: "99999999-9999-4999-8999-999999999999",
+              endpointId: plan.endpointId,
+            },
+            sessionId: "session-1",
+          },
+        },
+        /same service and endpoint/,
+      ],
+      [{ workingDirectory: join(root, "other") }, /working directory/],
+      [
+        { launch: { ...(launch as Record<string, unknown>), arguments: [] } },
+        /same provider launch/,
+      ],
+      [{ router: { path: plan.router.path, sha256: "0".repeat(64) } }, /same Host and Router/],
+    ];
+    for (const [change, expected] of refusals) {
+      const digest = write({ ...continuationRecord(plan, launch), ...change });
+      assert.throws(
+        () =>
+          checkControlPlan(
+            {
+              ...base,
+              continuation: { phase: "reload", record: recordPath, recordSha256: digest },
+            },
+            NOW,
+          ),
+        expected,
+      );
+    }
+    write(continuationRecord(plan, launch));
+    assert.throws(
+      () =>
+        checkControlPlan(
+          {
+            ...base,
+            continuation: { phase: "reload", record: recordPath, recordSha256: "0".repeat(64) },
+          },
+          NOW,
+        ),
+      /record hash/,
+    );
+    writeFileSync(join(root, "provider-launch.ts"), "launch v2");
+    assert.throws(() => checkControlPlan(base, NOW), /same provider launch/);
   });
 });

@@ -155,6 +155,7 @@ test("one isolated prompt with matching reply, readback and one dispatch qualifi
     turnId: "turn-1",
     inputId: "input-1",
     reply: "beforeafter",
+    dispatchWitness: "controlledReceipt",
   });
 });
 
@@ -437,6 +438,7 @@ test("the oracle accepts the recorded observation shape with a stand-in terminal
     turnId: "turn-1",
     inputId: "input-1",
     reply: "beforeafter",
+    dispatchWitness: "controlledReceipt",
   });
 });
 
@@ -508,4 +510,28 @@ test("a turn the Router ended for a local cause is inconclusive, not a positive 
     const verdict = decidePromptCase(evidence([{ after: 2, events }]));
     assert.equal(verdict.kind, "inconclusive", JSON.stringify(cause));
   }
+});
+
+test("a real provider qualifies only with its dispatch count named unavailable, never as a passed receipt check", () => {
+  const provider = decidePromptCase(
+    evidence([{ after: 2, events: PROMPT_TURN }], { peerReceipt: null }),
+  );
+  assert.deepEqual(provider, {
+    kind: "qualified",
+    turnId: "turn-1",
+    inputId: "input-1",
+    reply: "beforeafter",
+    dispatchWitness: "unavailable",
+  });
+  // The other isolated-case guards still decide a real provider's case.
+  const extra = decidePromptCase(
+    evidence([{ after: 2, events: [...PROMPT_TURN, ...promptTurn(9, "turn-2", "input-2")] }], {
+      peerReceipt: null,
+    }),
+  );
+  assert.equal(extra.kind, "inconclusive");
+  const shared = decidePromptCase(
+    evidence([{ after: 2, events: PROMPT_TURN }], { peerReceipt: null, otherOperations: 1 }),
+  );
+  assert.equal(shared.kind, "inconclusive");
 });

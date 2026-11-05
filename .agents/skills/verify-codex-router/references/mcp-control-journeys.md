@@ -4,7 +4,7 @@ An ordinary MCP caller controls a Claude or Cursor Session through the existing 
 
 **Status: draft.** The driver, oracles and sensitivity tests exist and pass under `node --test`.
 
-The driver wire shape and explicit controlled lifecycle profile are qualified locally. A normal controlled Host run passed five cases and stopped inconclusive at load after close. The owning replay repair has a permanent real Host/hub regression; the complete normal six-case journey still needs a fresh declared observation. Actual provider and original CLI profiles remain separately unverified.
+The driver wire shape and explicit controlled lifecycle profile are qualified locally. After the owning load-after-close repair, the normal controlled Host run mcf13 passed all six cases at source 581eecbec. The strengthened history assertions and new two-lifetime continuation profile below have only oracle tests so far; their affected real-path observations remain open. Actual provider and original CLI profiles remain separately unverified.
 
 Use the peer's explicit `lifecycle` profile for this full controlled journey. Other peer profiles retain their existing offers and cannot substitute for positive close/resume proof. Real providers use the actual capability profiles in VD F; the full controlled case cannot be relabelled to ignore an unsupported method. The journey remains draft until its required targets and observations pass under their separate commissions.
 
@@ -13,7 +13,7 @@ Use the peer's explicit `lifecycle` profile for this full controlled journey. Ot
 | Proves, on the declared target | Does not prove |
 | --- | --- |
 | Create stores the declared creator and Approver, read back from the owning store | Authenticated identity. Identities are reported, not authenticated |
-| One isolated prompt: a baseline, exactly one new accepted, started and ended turn, its reconstructed reply equal to the operation's own reply, a settled operation and one provider dispatch | An operation-to-turn join. The public surface has none, so concurrent streams are not attributed |
+| One isolated prompt: a baseline, exactly one new started and ended turn with no other accepted input, its reconstructed reply equal to the operation's own reply, a settled operation and, on the controlled peer, exactly one provider dispatch in its receipt | An operation-to-turn join. The public surface has none, so concurrent streams are not attributed. A real provider's dispatch count: it keeps no receipt, so verdicts name it unavailable |
 | A dropped waiter detaches; the held work completes once, with no redispatch and no implied cancel | Network attachment before the input. The baseline earns reconstructed output only |
 | Explicit exact cancellation settles that prompt as cancelled, with one provider cancellation | Every intermediate delta. Snapshots retain the latest item state |
 | A stale cancellation gets the typed "not active" refusal and changes nothing; a declared wrong-role actor's setting change gets the typed `wrongActor` refusal and changes nothing | Who requested an operation, after the fact. The operation's requester is not persisted. Prompts have no creator/Approver guard, so the wrong-role case uses the settings gate |
@@ -25,14 +25,17 @@ The coverage inventory `verification/observations/mcp-control/acp-inventory.json
 
 The plan's schema is `controlPlanSchema` in `verification/observations/mcp-control/control-plan.ts`. Declare:
 
-- **Source and build:** a clean committed source head, the normal build manifest, and the Host and Router hashes.
+- **Source and build:** a clean committed source head, the normal build manifest (no `test_guard_features`), and the Host and Router artifacts. Both must be that manifest's own entries at their recorded paths and hashes.
+- **Host artifact:** select it explicitly with `host.kind`. `automationDebugHost` is the manifest's `automation-debug-host`; `foregroundRouterHost` is the Router's own foreground Host, the manifest's `codex-router` and the declared Router itself. The declared Host PID must be live and running that artifact (`/proc/<pid>/exe` on Linux, the first `lsof -d txt` path on macOS).
+- **Host context:** `hostContext` names the automation Host's `debug-host-context.json` (kind `debugHostPrepared`), whose `cursorProvider`/`claudeProvider` is the provider launch. It is required for a continuation and binds the Host PID it records.
 - **Host:** a debug Host's service directory with its identity and epoch, plus the endpoint and the provider working directory. The MCP URL comes from the Host's `service.json`. The production root `~/.codex-router` and anything inside it are refused; the normal debug root `~/.codex-router-debug` is usable for ordinary checks. Disruptive cases still need their declared owned allocation.
 - **Identities:**
   - The actor and Approver are the local operator's existing Human, from `/usr/bin/id -un` (the owner lookup `collaboration-client` uses), or an actual hosted requester acting as itself.
   - Never borrow a Session to pass the schema.
   - The wrong-role requester is a real identity that is neither creator nor Approver.
-- **Peer:** `controlled` names the peer's receipt and its release sentinel; `provider` means a real Claude or Cursor, which keeps no receipt.
+- **Peer:** `controlled` names the peer's receipt and its release sentinel; `provider` means a real Claude or Cursor, which keeps no receipt. A real provider's qualified verdicts carry `dispatchWitness: "unavailable"`: the isolated operation, input, turn, nonblank reply, readback and no other admitted work still decide the case, but the provider-side dispatch count is unobserved, never a passed check. `callerLoss` and `explicitCancel` need the controlled peer's actual causal hold and are refused for a real provider.
 - **Run limits:** the cases, the prompt and hold texts, the effect budget (Sessions and prompts per case are fixed in source), an immutable deadline, and a fresh evidence directory.
+- **Continuation (two-lifetime profile only):** `continuation` is `null` for every other profile. `{phase: "retain", record}` runs `continuationRetain` as the only case and writes the record exclusively inside this lifetime's evidence. `{phase: "reload", record, recordSha256}` runs `continuationReload` as the only case against the kept record, bound by its digest and kept outside the new evidence.
 
 **Controlled peer.** The normal-dependency `automation-debug-host` launches it through its existing Cursor selectors:
 - `--cursor-acp-executable <node>`;
@@ -49,16 +52,17 @@ node verification/observations/mcp-control/run.ts PLAN.json --check
 node verification/observations/mcp-control/run.ts PLAN.json
 ```
 
-`--check` reads files and runs only `git` and the owner lookup. It opens no socket and calls no tool. It checks:
+`--check` reads files and runs only read-only local commands: `git`, the owner lookup and, on macOS, `lsof` for the declared Host process. It opens no socket, calls no tool and signals nothing. It checks:
 - the source head and a clean tree;
-- the Host and Router hashes against the manifest;
+- the Host and Router as the normal manifest's own artifacts, the selected Host kind, and the live Host process running the Host artifact;
+- for a continuation: its lone case, the automation Host and its context, and the provider launch; for reload, the kept record's digest and continuity (same service, endpoint, Session, working directory, Host and Router build, provider launch and caller, and a new service epoch);
 - the service identity and epoch;
 - the Human against the owner lookup;
 - the effect budget, the deadline and a fresh evidence directory;
 - that the release sentinel is absent;
 - the inventory: the `Cargo.lock` pin, and the locked names re-derived from the crate's registry source.
 
-The run sends only ordinary MCP: `initialize`, `tools/list` (checked against the inventory), then the declared cases. Each case uses its own fresh Session.
+The run sends only ordinary MCP: `initialize`, `tools/list` (checked against the inventory), then the declared cases. Each case creates its own Session except `continuationReload`, which must load the exact Session retained by the first lifetime.
 
 | Case | Deciding observation |
 | --- | --- |
@@ -67,7 +71,20 @@ The run sends only ordinary MCP: `initialize`, `tools/list` (checked against the
 | `explicitCancel` | No release marker may remain. `conversation_cancel` for the held prompt's exact operation, naming the binding generation the latest observation reported (the backend refuses any other); the cancel settles, and the prompt settles `cancelled` with one peer cancellation |
 | `staleCancel` | After a settled prompt, a cancellation aimed at it, with the real generation, must get `notFound`/`validation`/effect `none` for its own operation and target, change nothing and reach no provider |
 | `wrongRole` | `conversation_settings_accept` from the declared wrong-role actor must get `wrongActor` at the exact target, with effective settings and stored roles unchanged and no peer prompt |
-| `loadResume` | Close, `conversation_resume`, a new reply; close, `conversation_load`, a new reply. A profile refusal is inconclusive, not a pass |
+| `loadResume` | Close and `conversation_resume`: the operation wait's settlement is `resumed` with history `historyUnavailable`, and the new epoch's baseline holds no turn. Then a new reply. Close and `conversation_load`: the settlement is `loaded`, the baseline is a new replay epoch holding exactly the earlier exchanges in order as historical turns ending `{unknown: "replayed"}`, read whole across result-limited reads (at most 10), then a new reply. Then close. A profile refusal or an unretained settlement is inconclusive, not a pass |
+| `continuationRetain` | Lifetime one of the two-lifetime profile: create, one isolated prompt, then `conversation_resume` and `conversation_close` each refused as `unsupportedCapability`/`binding`/`none` on its own operation and target with no owning-store record; then the record of target, service epoch, working directory, Host, Router, provider launch, caller, stored roles, history and operation IDs |
+| `continuationReload` | Lifetime two, after the owned controller has settled lifetime one and reopened its context with `--resume-run-directory`. Before any effect: the record's digest and continuity, the same stored roles, and the Session `unloaded` in `provider_session_inspect`. Then a real `conversation_load` settled `loaded` and bound in the new service epoch, the recorded history replayed in order, and one new isolated prompt. No new Session |
+
+| Profile | Cases | Effects |
+| --- | --- | --- |
+| Full controlled peer | `lifecycle`, `callerLoss`, `explicitCancel`, `staleCancel`, `wrongRole`, `loadResume` | 6 Sessions, 7 peer prompts |
+| Claude full reattach | `loadResume` | 1 Session, 3 prompts, no hold or cancel |
+| Cursor retain | `continuationRetain` | 1 Session, 1 prompt, 2 refused controls |
+| Cursor reload | `continuationReload` | 0 new Sessions, 1 load, 1 prompt |
+
+Each attached prompt submits the declared harmless prompt marked with its case step, `<promptText> [<step>]`, for example `[reattach-first]`, `[retain]` or `[reload]`. Replayed history is compared in order against that exact submitted text and the observed reply, so a reordered or foreign replay fails even when replies repeat. The continuation record keeps the exact text.
+
+The owned controller, never this driver, starts and stops each Host lifetime; each lifetime has its own plan, fresh evidence and immutable deadline. The original CLI turn is a separate observation on the pinned unforked Codex 0.165.0.
 
 Close, resume and load answer with an admission that may still be open. The driver follows its own operation ID through show, and one bounded wait if needed, to a terminal, applied, confirmed record on the exact target. HTTP, protocol, schema or unrelated refusals never satisfy a negative case. Operation IDs are canonical UUIDv7, the only form the carrier tools accept. The first case that does not pass stops all later mutating input; its IDs and known targets stay in the evidence. The process exits 0 only when every case passes and the store holds no non-terminal operation.
 
@@ -98,6 +115,9 @@ Sensitivity is permanent in the colocated tests:
 - a lost turn, an unknown stop reason and a Router-local cause;
 - an injected input on the isolated Session;
 - a validated target kept after a later store or observation failure, and never kept after a wrong-target answer;
+- reattach history: missing, canned, reordered, foreign or live-looking load history; history after resume or a resume settlement reporting it; another settlement kind; a stale post-load terminal or injected input; a replay baseline that never completes;
+- continuation: a supported resume or close, or a refused control with a store record, in lifetime one; in lifetime two an already attached Session, a reused epoch, a changed launch, a record digest mismatch, a fresh provider Session, and canned or missing history after load;
+- target: a Router or Host that is not the normal manifest's artifact, test guard features, a Host PID not running the Host artifact, a foreground Host that is not the Router, and held cases on a real provider;
 - false completion;
 - lost or truncated reply;
 - duplicate dispatch;

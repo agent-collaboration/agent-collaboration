@@ -38,6 +38,13 @@ export type ObservationLedger =
       readonly epoch: bigint;
       /** The baseline's last sequence; null when the baseline held no numbered event. */
       readonly baselineSequence: bigint | null;
+      /** The baseline's own numbered events, such as history a reattach replayed. */
+      readonly baselineEvents: readonly NumberedEvent[];
+      /** Oversized-event markers inside the baseline; replayed history they hide is not complete. */
+      readonly baselineTooLarge: readonly {
+        readonly sequence: bigint;
+        readonly itemId: string | null;
+      }[];
       readonly events: readonly NumberedEvent[];
       readonly tooLarge: readonly { readonly sequence: bigint; readonly itemId: string | null }[];
       readonly backendDisconnected: boolean;
@@ -49,21 +56,30 @@ interface Fold {
   epoch: bigint | null;
   last: bigint | null;
   baselineSequence: bigint | null;
+  baselineEvents: NumberedEvent[];
+  baselineTooLarge: { sequence: bigint; itemId: string | null }[];
   events: NumberedEvent[];
   tooLarge: { sequence: bigint; itemId: string | null }[];
   disconnected: boolean;
 }
 
-/** Folds `reads[0]` (the baseline, sent with no cursor) and every later continuation. */
+/**
+ * Folds the baseline and every later continuation. The baseline is `reads[0]`, sent with no
+ * cursor, plus the next `baselineReads - 1` reads that continued it; a result-limited baseline
+ * (a long replayed history) spans several reads, and every read still chains by cursor.
+ */
 export function foldObservationReads(
   target: SessionRef,
   reads: readonly ObservationRead[],
+  baselineReads = 1,
 ): ObservationLedger {
   if (reads.length === 0) return { kind: "rejected", read: 0, reason: "no baseline read" };
   const fold: Fold = {
     epoch: null,
     last: null,
     baselineSequence: null,
+    baselineEvents: [],
+    baselineTooLarge: [],
     events: [],
     tooLarge: [],
     disconnected: false,
@@ -71,8 +87,10 @@ export function foldObservationReads(
   for (const [index, read] of reads.entries()) {
     const outcome = foldRead(target, fold, read, index);
     if (outcome !== null) return outcome;
-    if (index === 0) {
+    if (index === baselineReads - 1) {
       fold.baselineSequence = fold.last;
+      fold.baselineEvents = fold.events;
+      fold.baselineTooLarge = fold.tooLarge;
       fold.events = [];
       fold.tooLarge = [];
     }
@@ -83,6 +101,8 @@ export function foldObservationReads(
     kind: "continuous",
     epoch: fold.epoch,
     baselineSequence: fold.baselineSequence,
+    baselineEvents: fold.baselineEvents,
+    baselineTooLarge: fold.baselineTooLarge,
     events: fold.events,
     tooLarge: fold.tooLarge,
     backendDisconnected: fold.disconnected,

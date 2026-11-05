@@ -110,9 +110,17 @@ export type PromptCaseVerdict =
       readonly turnId: string;
       readonly inputId: string;
       readonly reply: string;
+      /**
+       * How the single provider dispatch was witnessed: the controlled peer's independent
+       * receipt, or "unavailable" for a real provider, which keeps none. Unavailable is a named
+       * limit of this case, never a passed dispatch-count check.
+       */
+      readonly dispatchWitness: DispatchWitness;
     }
   | { readonly kind: "failed"; readonly reason: string }
   | { readonly kind: "inconclusive"; readonly reason: string };
+
+export type DispatchWitness = "controlledReceipt" | "unavailable";
 
 const failed = (reason: string): PromptCaseVerdict => ({ kind: "failed", reason });
 const inconclusive = (reason: string): PromptCaseVerdict => ({ kind: "inconclusive", reason });
@@ -144,7 +152,13 @@ export function decidePromptCase(evidence: PromptCaseEvidence): PromptCaseVerdic
     (peer.releases !== evidence.expectedPeerReleases || !peer.releasesFollowPrompt)
   )
     return failed("the controlled peer's release did not follow exactly this prompt");
-  return { kind: "qualified", turnId: turn.turnId, inputId: turn.inputId, reply };
+  return {
+    kind: "qualified",
+    turnId: turn.turnId,
+    inputId: turn.inputId,
+    reply,
+    dispatchWitness: peer === null ? "unavailable" : "controlledReceipt",
+  };
 }
 
 /**

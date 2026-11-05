@@ -12,14 +12,23 @@
 import { z } from "zod";
 import { encode } from "../../exact-json.ts";
 import { sameSession, sessionRefSchema, type SessionRef } from "./observation-models.ts";
+import { foldObservationReads, type ObservationRead } from "./observation-ledger.ts";
+import {
+  decideNoReplay,
+  decideReplayedHistory,
+  type RecordedExchange,
+} from "./history-replay-oracle.ts";
 import * as requests from "./journey-requests.ts";
 import {
   answered,
   callTool,
   observedGeneration,
+  observeReplayBaseline,
   operationShow,
+  operationWait,
   requireSettled,
 } from "./journey-steps.ts";
+import { reattachSettlement } from "./operation-settlement.ts";
 import type { McpCallOutcome } from "./streaming-mcp-client.ts";
 import {
   attachedPrompt,
@@ -28,8 +37,10 @@ import {
   createSession,
   peerDelta,
   peerSnapshot,
+  segmentPrompt,
   type CaseInputs,
   type CaseResult,
+  type CaseVerdict,
 } from "./journey-cases.ts";
 
 const typedRefusalSchema = z.looseObject({
@@ -215,11 +226,16 @@ export async function wrongRoleCase(inputs: CaseInputs): Promise<CaseResult> {
   };
 }
 
-async function reattach(
+export type ReattachTool = "conversation_load" | "conversation_resume";
+const inconclusive = (reason: string): CaseVerdict => ({ kind: "inconclusive", reason });
+const failed = (reason: string): CaseVerdict => ({ kind: "failed", reason });
+
+/** Reattaches by `tool` and reads its actual settlement; null when it settled as that tool must. */
+export async function reattach(
   inputs: CaseInputs,
   target: SessionRef,
-  tool: "conversation_load" | "conversation_resume",
-): Promise<string | null> {
+  tool: ReattachTool,
+): Promise<CaseVerdict | null> {
   const operationId = requests.newOperationId();
   const arguments_ =
     tool === "conversation_load"
@@ -228,7 +244,8 @@ async function reattach(
   const outcome = await callTool(inputs.context, `reattach-${tool}`, tool, arguments_, {
     timeoutMs: 70_000,
   });
-  if (outcome.kind === "refused") return `${tool} was refused: ${encode(outcome.value)}`;
+  if (outcome.kind === "refused")
+    return inconclusive(`${tool} was refused: ${encode(outcome.value)}`);
   await requireSettled(
     inputs.context,
     `reattach-${tool}`,
@@ -236,24 +253,89 @@ async function reattach(
     operationId,
     target,
   );
-  return null;
+  const settled = reattachSettlement(
+    await operationWait(inputs.context, `reattach-${tool}-settlement`, operationId, 5),
+    operationId,
+    target,
+    tool === "conversation_load" ? "loaded" : "resumed",
+  );
+  if (settled.kind === "unknown") return inconclusive(settled.reason);
+  return settled.kind === "refused" ? failed(settled.reason) : null;
 }
 
-/** Close, reattach by resume and then by load, and require a new correlated reply each time. */
+export type ReattachedHistory =
+  | { readonly kind: "history"; readonly reads: ObservationRead[]; readonly epoch: bigint }
+  | { readonly kind: "verdict"; readonly verdict: CaseVerdict };
+
+/**
+ * The new epoch's baseline read whole, and its history decided before any new input: none after
+ * resume, exactly the recorded exchanges in order after load.
+ */
+export async function reattachedHistory(
+  inputs: CaseInputs,
+  target: SessionRef,
+  tool: ReattachTool,
+  recorded: readonly RecordedExchange[],
+): Promise<ReattachedHistory> {
+  const stop = (verdict: CaseVerdict): ReattachedHistory => ({ kind: "verdict", verdict });
+  const reads = await observeReplayBaseline(
+    inputs.context,
+    `reattach-after-${tool}-history`,
+    target,
+  );
+  if (reads === null)
+    return stop(inconclusive("the replayed history exceeded its declared read bound"));
+  const ledger = foldObservationReads(target, reads, reads.length);
+  if (ledger.kind === "resyncRequired")
+    return stop(inconclusive("the history baseline needs resync"));
+  if (ledger.kind === "rejected")
+    return stop(failed(`history read ${ledger.read}: ${ledger.reason}`));
+  if (ledger.baselineTooLarge.length > 0)
+    return stop(inconclusive("an oversized event hid replayed history"));
+  const decision =
+    tool === "conversation_load"
+      ? decideReplayedHistory(ledger.baselineEvents, recorded)
+      : decideNoReplay(ledger.baselineEvents);
+  if (decision.kind === "failed") return stop(failed(decision.reason));
+  return { kind: "history", reads, epoch: ledger.epoch };
+}
+
+/**
+ * Close, resume and prompt; close, load and prompt; close. Each reattach must settle as itself,
+ * expose the history it owes (none after resume, the recorded conversation after load, in a new
+ * replay epoch) and then carry a new correlated reply on the same exact Session.
+ */
 export async function loadResumeCase(inputs: CaseInputs): Promise<CaseResult> {
   const target = await createSession(inputs, "reattach-create");
   const first = await attachedPrompt(inputs, target, "reattach-first");
   if (first.kind !== "qualified") return { name: "loadResume", target, verdict: first };
-  const replies: string[] = [first.reply];
+  // The exact submitted text of each segment, so replayed history is compared in order.
+  const recorded: RecordedExchange[] = [
+    { prompt: segmentPrompt(inputs, "reattach-first"), reply: first.reply },
+  ];
+  let resumedEpoch: bigint | null = null;
   for (const tool of ["conversation_resume", "conversation_load"] as const) {
     await closeSession(inputs, target, `reattach-close-before-${tool}`);
-    const refused = await reattach(inputs, target, tool);
-    if (refused !== null)
-      return { name: "loadResume", target, verdict: { kind: "inconclusive", reason: refused } };
-    const next = await attachedPrompt(inputs, target, `reattach-after-${tool}`);
+    const unsettled = await reattach(inputs, target, tool);
+    if (unsettled !== null) return { name: "loadResume", target, verdict: unsettled };
+    const history = await reattachedHistory(inputs, target, tool, recorded);
+    if (history.kind === "verdict") return { name: "loadResume", target, verdict: history.verdict };
+    if (tool === "conversation_load" && history.epoch === resumedEpoch)
+      return {
+        name: "loadResume",
+        target,
+        verdict: failed("load did not open a new replay epoch"),
+      };
+    resumedEpoch = history.epoch;
+    const step = `reattach-after-${tool}`;
+    const next = await attachedPrompt(inputs, target, step, history.reads);
     if (next.kind !== "qualified") return { name: "loadResume", target, verdict: next };
-    replies.push(next.reply);
+    recorded.push({ prompt: segmentPrompt(inputs, step), reply: next.reply });
   }
   await closeSession(inputs, target, "reattach-close");
-  return { name: "loadResume", target, verdict: { ...first, reply: replies.join(" | ") } };
+  return {
+    name: "loadResume",
+    target,
+    verdict: { ...first, reply: recorded.map((exchange) => exchange.reply).join(" | ") },
+  };
 }
