@@ -164,14 +164,14 @@ struct Forwarding {
     client: reqwest::Client,
     requests: Arc<AtomicUsize>,
 }
-struct FailFirstPublication {
-    endpoint: String,
-    requests: Arc<AtomicUsize>,
+pub(super) struct FailFirstPublication {
+    pub endpoint: String,
+    pub requests: Arc<AtomicUsize>,
     stop: oneshot::Sender<()>,
     running: JoinHandle<std::io::Result<()>>,
 }
 impl FailFirstPublication {
-    async fn start(upstream: &str) -> TestResult<Self> {
+    pub async fn start(upstream: &str) -> TestResult<Self> {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let endpoint = format!("http://{}", listener.local_addr()?);
         let requests = Arc::new(AtomicUsize::new(0));
@@ -203,7 +203,7 @@ impl FailFirstPublication {
             running,
         })
     }
-    async fn shutdown(self) -> TestResult {
+    pub async fn shutdown(self) -> TestResult {
         let _ = self.stop.send(());
         self.running.await??;
         Ok(())

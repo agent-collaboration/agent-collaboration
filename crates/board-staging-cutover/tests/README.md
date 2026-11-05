@@ -35,6 +35,13 @@ and import on rerun. A held committed Fleet answer checks that the helper
 retains the source Host lock throughout publication. Changing a frozen claim
 request refuses the rerun without changing the bundle or backup.
 
+Saved-bundle cases refuse both content written after sealing and an obsolete
+selection already present at seal time, before any new owner import request.
+The latter simulates a pre-fix sealer using real e1 pages and a whole-directory
+fingerprint that already includes a real e2 writer with unique content. It does
+not execute a historical helper. Refusal preserves the source, sealed bytes and
+request identities; the exact archived replay remains covered separately.
+
 The installed-content process case starts an actual isolated Host with the
 shared native-protocol and router-health fixtures. Its public Claim installs
 e2. After orderly Host and native-child exit, cold inspection compares the

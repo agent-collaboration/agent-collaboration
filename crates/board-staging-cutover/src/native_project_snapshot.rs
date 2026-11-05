@@ -95,24 +95,9 @@ impl<'host> NativeProjectSnapshot<'host> {
         host: &'host mut OfflineHost,
         selected: SelectedWriterFile,
     ) -> Result<Self, NativeSourceError> {
+        let retained = admit_selected_source(host, &selected).await?;
         let path = selected_path(host, &selected)?;
-        let database_id = DatabaseId::try_from(selected.project.as_str().to_owned())
-            .map_err(|_| NativeSourceError::FileIdentityMismatch)?;
-        require_current_source(&path, database_id, selected.file_epoch).await?;
-        let retained = RetainedFile::open_read_only(&path, BoardProjectSchema::new()?).await?;
-        let origin = retained.origin();
-        if origin.database != database_id || origin.epoch != selected.file_epoch {
-            return Err(NativeSourceError::FileIdentityMismatch);
-        }
-        if retained.authority().is_some()
-            || matches!(
-                retained.registration_outcome(),
-                fleet_sync_writer::WriterRegistrationOutcome::Refused { .. }
-                    | fleet_sync_writer::WriterRegistrationOutcome::Failed { .. }
-            )
-        {
-            return Err(NativeSourceError::AuthorityLost);
-        }
+        let database_id = retained.origin().database;
         // Unsupported application epochs refuse before a writable owner opens.
         let application_epoch = read_application_epoch(&retained).await?;
         drop(retained);
@@ -176,6 +161,31 @@ impl<'host> NativeProjectSnapshot<'host> {
         // The same pinned SDK snapshot accepts the original cursor again.
         self.cursor = SourceCursor::Start;
     }
+}
+
+pub(crate) async fn admit_selected_source(
+    host: &OfflineHost,
+    selected: &SelectedWriterFile,
+) -> Result<RetainedFile, NativeSourceError> {
+    let path = selected_path(host, selected)?;
+    let database_id = DatabaseId::try_from(selected.project.as_str().to_owned())
+        .map_err(|_| NativeSourceError::FileIdentityMismatch)?;
+    require_current_source(&path, database_id, selected.file_epoch).await?;
+    let retained = RetainedFile::open_read_only(&path, BoardProjectSchema::new()?).await?;
+    let origin = retained.origin();
+    if origin.database != database_id || origin.epoch != selected.file_epoch {
+        return Err(NativeSourceError::FileIdentityMismatch);
+    }
+    if retained.authority().is_some()
+        || matches!(
+            retained.registration_outcome(),
+            fleet_sync_writer::WriterRegistrationOutcome::Refused { .. }
+                | fleet_sync_writer::WriterRegistrationOutcome::Failed { .. }
+        )
+    {
+        return Err(NativeSourceError::AuthorityLost);
+    }
+    Ok(retained)
 }
 
 pub(crate) fn selected_path(

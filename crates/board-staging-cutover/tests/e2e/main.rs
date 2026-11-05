@@ -15,6 +15,7 @@ mod host_process;
 mod inspect_cli;
 mod installed_claim;
 mod intent_recovery_proof;
+mod legacy_bundle_resume;
 mod native_epoch_admission;
 #[path = "../../src/native_snapshot_fixture.rs"]
 mod native_snapshot_fixture;

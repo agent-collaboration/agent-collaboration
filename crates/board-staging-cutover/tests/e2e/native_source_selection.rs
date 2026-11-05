@@ -155,7 +155,7 @@ fn origin(fixture: &CutoverHostFixture) -> TestResult<ActorOrigin> {
     })
 }
 
-async fn newer_writer(
+pub(super) async fn newer_writer(
     fixture: &CutoverHostFixture,
     source: &NativeFixture,
     central: &TestCentral,
@@ -284,7 +284,7 @@ impl fleet_sync_tokio_runner::CallRouter for NoCalls {
     }
 }
 
-fn source_files(
+pub(super) fn source_files(
     root: &std::path::Path,
 ) -> TestResult<std::collections::BTreeMap<std::path::PathBuf, Option<Vec<u8>>>> {
     let mut result = std::collections::BTreeMap::new();

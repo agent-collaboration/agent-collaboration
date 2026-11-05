@@ -34,6 +34,8 @@ pub enum PublicationError {
     SourceHostMismatch,
     #[error("the source directory changed after immutable preparation")]
     SourceChanged,
+    #[error("selected native source is unavailable: {0}")]
+    Source(#[from] crate::NativeSourceError),
     #[error("central status differs from the prepared import")]
     StatusMismatch,
     #[error("central did not finish project publication")]
@@ -127,6 +129,16 @@ impl StagingPublisher {
         // A valid seal cannot authorize replay after local content advances.
         // Check before Fleet import as well as the project publication requests.
         require_unchanged_source_or_backup(bundle)?;
+        if bundle
+            .manifest()
+            .source_directory
+            .try_exists()
+            .map_err(ProjectBundleError::Io)?
+        {
+            // Pre-fix seals could fingerprint a newer sibling without exporting
+            // it. Recheck the same native admission used by fresh preparation.
+            drop(crate::native_project_snapshot::admit_selected_source(host, selected).await?);
+        }
         let fleet: FleetImportResult = self
             .post(
                 "/admin/v1/import/fleet",
