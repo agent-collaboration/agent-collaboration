@@ -25,3 +25,28 @@ fn provision_organization_result_wire_contract() {
         false,
     );
 }
+
+// Keep the old literal inputs as negatives after removing the retired command types.
+// Better Auth owns these changes; accepting them at central would recreate that owner.
+#[test]
+fn retired_people_commands_are_not_provisioning_requests() {
+    let retired: std::collections::BTreeMap<String, Vec<serde_json::Value>> =
+        serde_json::from_str(include_str!("../fixtures/retired_people_commands.json")).unwrap();
+    let schema = serde_json::to_value(schemars::schema_for!(ProvisionOrganization)).unwrap();
+    let validator = crate::schema_validation::contract_validator(&schema).unwrap();
+    assert_eq!(retired.len(), 4, "keep every retired people-command oracle");
+
+    for (command, requests) in retired {
+        assert!(!requests.is_empty(), "retired {command} has no literal input");
+        for request in requests {
+            assert!(
+                serde_json::from_value::<ProvisionOrganization>(request.clone()).is_err(),
+                "retired {command} became a provisioning request"
+            );
+            assert!(
+                !validator.is_valid(&request),
+                "provisioning schema accepted retired {command}"
+            );
+        }
+    }
+}

@@ -1,0 +1,26 @@
+{
+  "CreateOrganization": [
+    {
+      "organizationId": "019a3dce-2000-7000-8000-000000000001",
+      "ownerVerifiedEmail": "owner@example.invalid"
+    }
+  ],
+  "SetOrganizationOwner": [
+    {
+      "organizationId": "019a3dce-2000-7000-8000-000000000001",
+      "ownerVerifiedEmail": "owner@example.invalid"
+    }
+  ],
+  "AllowSignIn": [
+    {
+      "organizationId": "019a3dce-2000-7000-8000-000000000001",
+      "verifiedEmail": "member@example.invalid"
+    }
+  ],
+  "RemoveSignIn": [
+    {
+      "organizationId": "019a3dce-2000-7000-8000-000000000001",
+      "verifiedEmail": "member@example.invalid"
+    }
+  ]
+}
