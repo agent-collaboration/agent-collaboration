@@ -10,14 +10,14 @@ Use the peer's explicit `lifecycle` profile for this full controlled journey. Ot
 
 ## What it proves and what it does not
 
-| Proves, on the declared target | Does not prove |
-| --- | --- |
-| Create stores the declared creator and Approver, read back from the owning store | Authenticated identity. Identities are reported, not authenticated |
+| Proves, on the declared target                                                                                                                                                                                                                                  | Does not prove                                                                                                                                                                           |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Create stores the declared creator and Approver, read back from the owning store                                                                                                                                                                                | Authenticated identity. Identities are reported, not authenticated                                                                                                                       |
 | One isolated prompt: a baseline, exactly one new started and ended turn with no other accepted input, its reconstructed reply equal to the operation's own reply, a settled operation and, on the controlled peer, exactly one provider dispatch in its receipt | An operation-to-turn join. The public surface has none, so concurrent streams are not attributed. A real provider's dispatch count: it keeps no receipt, so verdicts name it unavailable |
-| A dropped waiter detaches; the held work completes once, with no redispatch and no implied cancel | Network attachment before the input. The baseline earns reconstructed output only |
-| Explicit exact cancellation settles that prompt as cancelled, with one provider cancellation | Every intermediate delta. Snapshots retain the latest item state |
-| A stale cancellation gets the typed "not active" refusal and changes nothing; a declared wrong-role actor's setting change gets the typed `wrongActor` refusal and changes nothing | Who requested an operation, after the fact. The operation's requester is not persisted. Prompts have no creator/Approver guard, so the wrong-role case uses the settings gate |
-| Resume and load each carry a new correlated reply on the same exact Session | Media or embedded-context input, other config categories, client MCP setup, extensions |
+| A dropped waiter detaches; the held work completes once, with no redispatch and no implied cancel                                                                                                                                                               | Network attachment before the input. The baseline earns reconstructed output only                                                                                                        |
+| Explicit exact cancellation settles that prompt as cancelled, with one provider cancellation                                                                                                                                                                    | Every intermediate delta. Snapshots retain the latest item state                                                                                                                         |
+| A stale cancellation gets the typed "not active" refusal and changes nothing; a declared wrong-role actor's setting change gets the typed `wrongActor` refusal and changes nothing                                                                              | Who requested an operation, after the fact. The operation's requester is not persisted. Prompts have no creator/Approver guard, so the wrong-role case uses the settings gate            |
+| Resume and load each carry a new correlated reply on the same exact Session                                                                                                                                                                                     | Media or embedded-context input, other config categories, client MCP setup, extensions                                                                                                   |
 
 The coverage inventory `verification/observations/mcp-control/acp-inventory.json` maps every member of the locked ACP schema (agent-client-protocol-schema 1.9.1, protocol v1) to its MCP representation or its unsupported, host-owned or compile-gated disposition. A `qualified` row is claimed only when its named case passes on the declared target.
 
@@ -38,6 +38,7 @@ The plan's schema is `controlPlanSchema` in `verification/observations/mcp-contr
 - **Continuation (two-lifetime profile only):** `continuation` is `null` for every other profile. `{phase: "retain", record}` runs `continuationRetain` as the only case and writes the record exclusively inside this lifetime's evidence. `{phase: "reload", record, recordSha256}` runs `continuationReload` as the only case against the kept record, bound by its digest and kept outside the new evidence.
 
 **Controlled peer.** The normal-dependency `automation-debug-host` launches it through its existing Cursor selectors:
+
 - `--cursor-acp-executable <node>`;
 - `--cursor-acp-arguments` set to `crates/acp-client-runtime/tests/support/behavior-agent.ts <receipt> lifecycle cursor_login <release-sentinel>`.
 
@@ -53,6 +54,7 @@ node verification/observations/mcp-control/run.ts PLAN.json
 ```
 
 `--check` reads files and runs only read-only local commands: `git`, the owner lookup and, on macOS, `lsof` for the declared Host process. It opens no socket, calls no tool and signals nothing. It checks:
+
 - the source head and a clean tree;
 - the Host and Router as the normal manifest's own artifacts, the selected Host kind, and the live Host process running the Host artifact;
 - for a continuation: its lone case, the automation Host and its context, and the provider launch; for reload, the kept record's digest and continuity (same service, endpoint, Session, working directory, Host and Router build, provider launch and caller, and a new service epoch);
@@ -64,23 +66,23 @@ node verification/observations/mcp-control/run.ts PLAN.json
 
 The run sends only ordinary MCP: `initialize`, `tools/list` (checked against the inventory), then the declared cases. Each case creates its own Session except `continuationReload`, which must load the exact Session retained by the first lifetime.
 
-| Case | Deciding observation |
-| --- | --- |
-| `lifecycle` | Create, stored roles, baseline, one attached prompt, continuation reads to the turn's end, operation readback, peer receipt, then close |
-| `callerLoss` | The prompt call is aborted after HOLDING is observed. The outcome must be `callerAborted` and the operation not yet terminal. Then the sentinel releases the work, and the operation wait reply, one prompt, zero cancels and one release follow |
-| `explicitCancel` | No release marker may remain. `conversation_cancel` for the held prompt's exact operation, naming the binding generation the latest observation reported (the backend refuses any other); the cancel settles, and the prompt settles `cancelled` with one peer cancellation |
-| `staleCancel` | After a settled prompt, a cancellation aimed at it, with the real generation, must get `notFound`/`validation`/effect `none` for its own operation and target, change nothing and reach no provider |
-| `wrongRole` | `conversation_settings_accept` from the declared wrong-role actor must get `wrongActor` at the exact target, with effective settings and stored roles unchanged and no peer prompt |
-| `loadResume` | Close and `conversation_resume`: the operation wait's settlement is `resumed` with history `historyUnavailable`, and the new epoch's baseline holds no turn. Then a new reply. Close and `conversation_load`: the settlement is `loaded`, the baseline is a new replay epoch holding exactly the earlier exchanges in order as historical turns ending `{unknown: "replayed"}`, read whole across result-limited reads (at most 10), then a new reply. Then close. A profile refusal or an unretained settlement is inconclusive, not a pass |
-| `continuationRetain` | Lifetime one of the two-lifetime profile: create, one isolated prompt, then `conversation_resume` and `conversation_close` each refused as `unsupportedCapability`/`binding`/`none` on its own operation and target with no owning-store record; then the record of target, service epoch, working directory, Host, Router, provider launch, caller, stored roles, history and operation IDs |
-| `continuationReload` | Lifetime two, after the owned controller has settled lifetime one and reopened its context with `--resume-run-directory`. Before any effect: the record's digest and continuity, the same stored roles, and the Session `unloaded` in `provider_session_inspect`. Then a real `conversation_load` settled `loaded` and bound in the new service epoch, the recorded history replayed in order, and one new isolated prompt. No new Session |
+| Case                 | Deciding observation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lifecycle`          | Create, stored roles, baseline, one attached prompt, continuation reads to the turn's end, operation readback, peer receipt, then close                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `callerLoss`         | The prompt call is aborted after HOLDING is observed. The outcome must be `callerAborted` and the operation not yet terminal. Then the sentinel releases the work, and the operation wait reply, one prompt, zero cancels and one release follow                                                                                                                                                                                                                                                                                             |
+| `explicitCancel`     | No release marker may remain. `conversation_cancel` for the held prompt's exact operation, naming the binding generation the latest observation reported (the backend refuses any other); the cancel settles, and the prompt settles `cancelled` with one peer cancellation                                                                                                                                                                                                                                                                  |
+| `staleCancel`        | After a settled prompt, a cancellation aimed at it, with the real generation, must get `notFound`/`validation`/effect `none` for its own operation and target, change nothing and reach no provider                                                                                                                                                                                                                                                                                                                                          |
+| `wrongRole`          | `conversation_settings_accept` from the declared wrong-role actor must get `wrongActor` at the exact target, with effective settings and stored roles unchanged and no peer prompt                                                                                                                                                                                                                                                                                                                                                           |
+| `loadResume`         | Close and `conversation_resume`: the operation wait's settlement is `resumed` with history `historyUnavailable`, and the new epoch's baseline holds no turn. Then a new reply. Close and `conversation_load`: the settlement is `loaded`, the baseline is a new replay epoch holding exactly the earlier exchanges in order as historical turns ending `{unknown: "replayed"}`, read whole across result-limited reads (at most 10), then a new reply. Then close. A profile refusal or an unretained settlement is inconclusive, not a pass |
+| `continuationRetain` | Lifetime one of the two-lifetime profile: create, one isolated prompt, then `conversation_resume` and `conversation_close` each refused as `unsupportedCapability`/`binding`/`none` on its own operation and target with no owning-store record; then the record of target, service epoch, working directory, Host, Router, provider launch, caller, stored roles, history and operation IDs                                                                                                                                                 |
+| `continuationReload` | Lifetime two, after the owned controller has settled lifetime one and reopened its context with `--resume-run-directory`. Before any effect: the record's digest and continuity, the same stored roles, and the Session `unloaded` in `provider_session_inspect`. Then a real `conversation_load` settled `loaded` and bound in the new service epoch, the recorded history replayed in order, and one new isolated prompt. No new Session                                                                                                   |
 
-| Profile | Cases | Effects |
-| --- | --- | --- |
-| Full controlled peer | `lifecycle`, `callerLoss`, `explicitCancel`, `staleCancel`, `wrongRole`, `loadResume` | 6 Sessions, 7 peer prompts |
-| Claude full reattach | `loadResume` | 1 Session, 3 prompts, no hold or cancel |
-| Cursor retain | `continuationRetain` | 1 Session, 1 prompt, 2 refused controls |
-| Cursor reload | `continuationReload` | 0 new Sessions, 1 load, 1 prompt |
+| Profile              | Cases                                                                                 | Effects                                 |
+| -------------------- | ------------------------------------------------------------------------------------- | --------------------------------------- |
+| Full controlled peer | `lifecycle`, `callerLoss`, `explicitCancel`, `staleCancel`, `wrongRole`, `loadResume` | 6 Sessions, 7 peer prompts              |
+| Claude full reattach | `loadResume`                                                                          | 1 Session, 3 prompts, no hold or cancel |
+| Cursor retain        | `continuationRetain`                                                                  | 1 Session, 1 prompt, 2 refused controls |
+| Cursor reload        | `continuationReload`                                                                  | 0 new Sessions, 1 load, 1 prompt        |
 
 Each attached prompt submits the declared harmless prompt marked with its case step, `<promptText> [<step>]`, for example `[reattach-first]`, `[retain]` or `[reload]`. Replayed history is compared in order against that exact submitted text and the observed reply, so a reordered or foreign replay fails even when replies repeat. The continuation record keeps the exact text.
 
@@ -91,6 +93,7 @@ Close, resume and load answer with an admission that may still be open. The driv
 ## Evidence
 
 Under the plan's evidence directory:
+
 - `exchanges.jsonl` holds every call's exact arguments and raw outcome, including streamed `notifications/codexRouter/observationEvent` frames in arrival order;
 - `verdicts.json` holds each case's verdict and the store's non-terminal count.
 
@@ -110,6 +113,7 @@ Integers stay exact. A verdict can be rechecked from these files alone.
 - A positive inference case (stop reason endTurn) needs an actual agent-message reply with non-whitespace text, beyond cross-view equality. A cancelled outcome may end with no output.
 
 Sensitivity is permanent in the colocated tests:
+
 - wrong target, including the same raw ID on another endpoint;
 - the recorded mcf11 direct-prompt shape, an invented camelCase outcome and a turn start with an empty ID;
 - a lost turn, an unknown stop reason and a Router-local cause;
