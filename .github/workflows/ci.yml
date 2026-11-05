@@ -28,7 +28,7 @@ permissions:
 jobs:
   static:
     name: Static validation
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-8vcpu-ubuntu-2404
     # Keep Linux test profiles out of the macOS release cache environment.
     env:
       CARGO_TERM_COLOR: always
@@ -56,7 +56,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: static
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          save-if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.head_ref == 'ci/blacksmith-experiment' }}
       - name: Restore pinned Rust tools
         id: rust_tools
         uses: actions/cache/restore@v4
@@ -204,7 +204,7 @@ jobs:
 
   test:
     name: Test Rust workspace
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-16vcpu-ubuntu-2404
     timeout-minutes: 360
     # Keep Linux test profiles out of the macOS release cache environment.
     env:
@@ -253,7 +253,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: test
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          save-if: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.head_ref == 'ci/blacksmith-experiment' }}
       # The dependency-structure tests use offline Cargo metadata for all
       # targets, so fetch target-specific packages even on this Linux runner.
       - name: Fetch dependencies for all targets
@@ -290,6 +290,16 @@ jobs:
       # Keep each build selection and feature set identical to its run.
       # Real Host, importer and forwarding-timer roots run in e2e below.
       # Keep the build/run exclusions and slower-job inventory identical.
+      # Experiment only: record per-unit compile and link times for the test-organization design.
+      - name: Record test build timings
+        run: cargo test --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness --no-run --timings
+      - name: Upload test build timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-test
+          path: target/cargo-timings/cargo-timing.html
+          retention-days: 7
       - name: Build test binaries
         run: |
           cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not((package(=agent-collaboration) & binary(=e2e)) | (package(=board-legacy-upgrade) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/)))' --no-run
