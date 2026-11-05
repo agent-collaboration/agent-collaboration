@@ -49,7 +49,7 @@ flowchart TB
 
 | Option | What changes | Gain | Cost | Selected |
 | --- | --- | --- | --- | --- |
-| S · Schedule better on one machine | `priority` overrides, 8 threads, causal waits | the run-alone tests drain once, at the start; the heavy lane overlaps everything else; no new machine; proof unchanged | its runtime effect is unmeasured; 8 threads expose load-sensitive tests, which then need causal fixes | **yes** |
+| S · Schedule better on one machine | `priority` overrides, CPU-count threads, causal waits | the run-alone tests drain once, at the start; the heavy lane overlaps everything else; no new machine; proof unchanged | load-sensitive failures need classification before repair | **yes** |
 | B · Partition across two test machines | `nextest --partition hash:k/2` in two `test` jobs | a shorter test step | breaks R2 | no; only if Q1 is reached and the owner picks it |
 | C · Lighter inputs on PRs | heavy tests take PR-size inputs | a shorter test step | breaks R4 on PRs | no; only if Q1 is reached and the owner picks it |
 
@@ -91,7 +91,7 @@ An invocation is identified by nextest's own run total: the `<total>` in each re
 | `ci-test-profile` (TypeScript, `verification/tooling/`, beside the other TS tooling and its `*.test.ts`) | turns a test job log into per-invocation inventories and profiles | nothing persistent | the nextest log format changes |
 | `ci.yml` `test` job | builds and runs both invocations | job and step order | **unchanged under S** |
 
-- **Thread count:** `test-threads = 8` in `profile.ci` applies to both invocations. The quota invocation also runs at 8 slots during its roughly 2 minutes beside the workspace run. That's accepted, because it is part of the measured load.
+- **Thread count:** 8 threads on the 4-vCPU runner saved about 1.5 minutes and starved capped causal waits (runs 42044814131, 42062794131); test-threads follows the CPU count.
 - **Forbidden:** the profile tool never edits config and is never a CI gate (R1 is judged from GitHub's timestamps). No priority block may set a deadline, retry or group; priority blocks only order tests (R4).
 
 ## How a run goes, before and after (workspace invocation)
@@ -101,12 +101,12 @@ An invocation is identified by nextest's own run total: the `<total>` in each re
 | Start | binaries in order; short tests fill slots; the quota invocation runs beside | the run-alone tests start first and take this pool's slots one at a time; the quota invocation still runs beside |
 | Heavy lane | starts when its binary comes up (+21 min) | starts as soon as the run-alone tests have drained; about 15 min of one-at-a-time work beside everything else |
 | Long ordinary tests (≥ 30 s) | scattered | start early, beside the heavy lane |
-| Everything else | fills slots | fills the remaining slots of 8 |
+| Everything else | fills slots | fills the remaining CPU-count slots |
 | End | about 18 min of heavy-lane tail with one test running | ends when the heavy lane or the ordinary pool finishes, whichever is later |
 
 ## Failure and load
 
-**A test that fails only at 8 threads is a load-sensitive wait.** Under R5 it gets a causal fix. The known case is `oversized_initialize_frame_is_rejected_and_reaps_owned_process` (`crates/codex-router-host/src/external_provider_runtime/tests/admission_lifecycle_test.rs:444`, identical on main and at D1 `71e466dbf`).
+**A load-exposed failure needs classification before repair.** A capped causal wait can expire under CPU starvation; that does not establish an ordering race. The proven ordering-race case is `oversized_initialize_frame_is_rejected_and_reaps_owned_process` (`crates/codex-router-host/src/external_provider_runtime/tests/admission_lifecycle_test.rs:444`, identical on main and at D1 `71e466dbf`).
 
 - **What it does today:** it calls `initialize_with_timeout(fixture, 2 s, …)`, and the runtime races the fixture's readiness against that 2 s deadline (`provider_connection_task.rs:708-725`).
 - **The fixture** `verification/fixtures/host-failing-initialization-agent.ts` writes its process ID when it starts (line 9). It sends the oversized frame only after it receives initialize (lines 33–39).
