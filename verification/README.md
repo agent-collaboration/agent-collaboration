@@ -21,7 +21,14 @@ not installed-provider, hosted, release or delivery acceptance.
 The isolated Tailnet Host driver is entirely Rust. Build and check
 `codex-router-tailnet-verification-host` as described in its
 [runbook](../crates/tailnet-verification-host/README.md). The TypeScript Tailnet
-peer and readback commands remain under `observations/`.
+peer and readback commands remain under `observations/tailnet/`.
+
+Within `observations/`, choose the journey family: `central/` for D1 central and
+mail, `tailnet/` for cross-machine peer/readback, `runtime/` for process lifecycle
+and native correlation, `providers/acp/` and `providers/claude/` for provider
+observations, `callbacks/` for typed interactions, `configuration/` for config
+section comparisons, and `harness/` for evidence reports. `shared/` holds common
+observation contracts. Tests and their original baselines live with each family.
 
 The wrappers retired in 0.1.102 have these retained entries:
 

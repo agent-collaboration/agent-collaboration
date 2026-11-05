@@ -3,7 +3,7 @@ import { decode, encode } from "../exact-json.ts";
 import {
   parseFleetSchemaReadback,
   type FleetSchemaReadback,
-} from "../observations/d1-fleet-schema.ts";
+} from "../observations/central/d1-fleet-schema.ts";
 
 export class CentralOwner {
   readonly origin: URL;

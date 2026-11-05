@@ -48,7 +48,7 @@ function verificationRouterIdentity(pid: number): Record<string, unknown> {
 			'--input-type=module',
 			'-e',
 			PRODUCER,
-			join(VERIFICATION, 'observations/runtime-processes.ts'),
+			join(VERIFICATION, 'observations/runtime/runtime-processes.ts'),
 			String(pid),
 		],
 		{ cwd: VERIFICATION, encoding: 'utf8', timeout: 10_000 },
