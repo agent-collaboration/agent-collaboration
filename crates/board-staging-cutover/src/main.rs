@@ -1,6 +1,7 @@
 //! Operator entry point; inspection never takes the running Host's authority.
 use board_staging_cutover::{
-    ClaimRunReport, HostInspection, OfflineHost, OfflineRunPlan, OfflineRunReport,
+    ClaimRunReport, HostInspection, InstalledVerificationReport, OfflineHost, OfflineRunPlan,
+    OfflineRunReport,
 };
 use std::io::Write;
 use std::process::ExitCode;
@@ -8,7 +9,12 @@ use std::process::ExitCode;
 mod cutover_arguments;
 use cutover_arguments::CutoverCommand;
 
-const USAGE: &str = "codex-router-board-staging-cutover inspect --router-root <absolute-path> --service-id <uuid> --peer-id <uuid>\ncodex-router-board-staging-cutover offline --plan <private-file> (--owner-credential-file <private-file> | --owner-access)\ncodex-router-board-staging-cutover claim --plan <private-file> (--owner-credential-file <private-file> | --owner-access)\n";
+const USAGE: &str = concat!(
+    "codex-router-board-staging-cutover inspect --router-root <absolute-path> --service-id <uuid> --peer-id <uuid>\n",
+    "codex-router-board-staging-cutover offline --plan <private-file> (--owner-credential-file <private-file> | --owner-access)\n",
+    "codex-router-board-staging-cutover claim --plan <private-file> (--owner-credential-file <private-file> | --owner-access)\n",
+    "codex-router-board-staging-cutover verify --plan <private-file>\n",
+);
 
 #[derive(serde::Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -32,6 +38,14 @@ enum HelperOutput {
     ClaimsIncomplete {
         #[serde(flatten)]
         report: ClaimRunReport,
+    },
+    ContentVerified {
+        #[serde(flatten)]
+        report: InstalledVerificationReport,
+    },
+    ContentUnverified {
+        #[serde(flatten)]
+        report: InstalledVerificationReport,
     },
 }
 
@@ -65,6 +79,26 @@ async fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
                 HelperOutput::OfflineCompleted { report }
             } else {
                 HelperOutput::OfflineIncomplete { report }
+            };
+            let mut stdout = std::io::stdout().lock();
+            serde_json::to_writer(&mut stdout, &output)?;
+            stdout.write_all(b"\n")?;
+            return Ok(if complete {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            });
+        }
+        CutoverCommand::Verify { plan } => {
+            let plan = OfflineRunPlan::read(&plan)?;
+            let owner = nix::unistd::User::from_uid(nix::unistd::geteuid())?
+                .ok_or("cannot determine the Host owner's home directory")?;
+            let report = plan.verify_installed_projects(&owner.dir).await?;
+            let complete = report.all_verified();
+            let output = if complete {
+                HelperOutput::ContentVerified { report }
+            } else {
+                HelperOutput::ContentUnverified { report }
             };
             let mut stdout = std::io::stdout().lock();
             serde_json::to_writer(&mut stdout, &output)?;

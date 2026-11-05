@@ -25,3 +25,4 @@ mod rich_project_cutover;
 mod rich_source_messages;
 mod rich_source_readback;
 mod rich_source_records;
+mod verification_extra_write;

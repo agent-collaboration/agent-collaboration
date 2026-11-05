@@ -88,5 +88,14 @@ remain exact. Public readback preserves a fact integer above 2^53 and escaped
 Unicode text; replaying the old task request adds no history. A seeded loss of
 task-link rows prevents publication.
 
+The offline `verify` command holds the existing Host lock, checks the same sealed
+run and original backup, and compares the actual installed e2 tables plus
+application history metadata. Exact equality returns `contentVerified`.
+Changed content returns `contentUnverified` with both manifests and nonzero
+exit. Tests reject selecting the old source epoch and falsely accepting an
+unrelated public write. Named legitimate startup recovery is not yet accepted
+by this operator phase; it remains changed/unverified until semantic support
+lands. This command does not declare the whole cutover complete.
+
 Host lifecycle orchestration, the full process-crash matrix, frozen
 mail/cancel state, remote hardware and staging corpus remain unverified.

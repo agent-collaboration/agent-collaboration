@@ -34,12 +34,35 @@ async fn compiled_claim_command_replays_the_sealed_request_and_installs_actual_e
     cold_claim_case(SourceContents::ProjectOnlyViaHelperClaim).await
 }
 
+#[tokio::test]
+async fn compiled_verification_compares_actual_cold_e2_tables_with_the_source() -> TestResult {
+    cold_claim_case(SourceContents::ProjectOnlyViaHelperVerification).await
+}
+
+#[tokio::test]
+async fn compiled_verification_refuses_an_unexplained_public_application_write() -> TestResult {
+    cold_claim_case(SourceContents::UnexplainedPublicWrite).await
+}
+
 #[derive(Clone, Copy)]
 enum SourceContents {
     ProjectOnly,
     EmittedIntent,
     EmittedIntentWithRemoteReadback,
     ProjectOnlyViaHelperClaim,
+    ProjectOnlyViaHelperVerification,
+    UnexplainedPublicWrite,
+}
+
+impl SourceContents {
+    fn uses_helper_claim(self) -> bool {
+        matches!(
+            self,
+            Self::ProjectOnlyViaHelperClaim
+                | Self::ProjectOnlyViaHelperVerification
+                | Self::UnexplainedPublicWrite
+        )
+    }
 }
 
 async fn cold_claim_case(contents: SourceContents) -> TestResult {
@@ -78,7 +101,7 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
             String::from_utf8_lossy(&published.stderr)
         );
         let bundle = PreparedProjectBundle::open(&run.bundle)?;
-        if matches!(contents, SourceContents::ProjectOnlyViaHelperClaim) {
+        if contents.uses_helper_claim() {
             super::direct_central_enrollment::install(&central, &fixture)?;
         } else {
             std::fs::create_dir_all(fixture.root.join("fleet"))?;
@@ -89,7 +112,7 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
             OwnedHost::start(&fixture.root, &bundle.manifest().header.declared_owner).await?;
         let claimed = async {
             host.await_ready().await?;
-            if matches!(contents, SourceContents::ProjectOnlyViaHelperClaim) {
+            if contents.uses_helper_claim() {
                 run.renew_owner(central.base_url())?;
                 let claimed = run.execute_claim().await?;
                 super::recovery_rows::require(
@@ -135,6 +158,9 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
                     serde_json::from_slice::<serde_json::Value>(&replayed.stdout)? == first,
                     "compiled Claim replay changed request or authority",
                 )?;
+                if matches!(contents, SourceContents::UnexplainedPublicWrite) {
+                    super::verification_extra_write::append(&fixture, &bundle).await?;
+                }
                 return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
             }
             let directory = codex_router_host::router_collaboration_directory(&fixture.root);
@@ -174,6 +200,62 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
         let stopped = host.stop().await;
         claimed?;
         stopped?;
+        if matches!(
+            contents,
+            SourceContents::ProjectOnlyViaHelperVerification
+                | SourceContents::UnexplainedPublicWrite
+        ) {
+            let verified = run.execute_verification().await?;
+            let report: serde_json::Value = serde_json::from_slice(&verified.stdout)?;
+            let projects = report
+                .get("projects")
+                .and_then(serde_json::Value::as_array)
+                .ok_or("verification project report missing")?;
+            let [project] = projects.as_slice() else {
+                return Err("one verification project required".into());
+            };
+            super::recovery_rows::require(
+                report.get("runId") == Some(&serde_json::to_value(bundle.manifest().run_id)?)
+                    && project.get("project")
+                        == Some(&serde_json::to_value(&source.selected.project)?),
+                "verification report changed the frozen run or project",
+            )?;
+            if matches!(contents, SourceContents::UnexplainedPublicWrite) {
+                super::recovery_rows::require(
+                    !verified.status.success(),
+                    "verification accepted unexplained application writes",
+                )?;
+                super::recovery_rows::require(
+                    report.get("kind").and_then(serde_json::Value::as_str)
+                        == Some("contentUnverified")
+                        && project.get("kind").and_then(serde_json::Value::as_str)
+                            == Some("changed"),
+                    "unexplained data was not reported as changed",
+                )?;
+                super::recovery_rows::require(
+                    bundle
+                        .manifest()
+                        .source_fingerprint
+                        .matches(&bundle.manifest().backup_directory)?,
+                    "verification changed the original backup",
+                )?;
+                return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
+            }
+            super::recovery_rows::require(
+                verified.status.success(),
+                "compiled verification refused unchanged content",
+            )?;
+            super::recovery_rows::require(
+                report.get("kind").and_then(serde_json::Value::as_str) == Some("contentVerified")
+                    && project.get("kind").and_then(serde_json::Value::as_str) == Some("verified")
+                    && project
+                        .get("installed")
+                        .and_then(|value| value.get("manifest"))
+                        .and_then(|value| value.get("tables"))
+                        == Some(&serde_json::to_value(&source.manifest.tables)?),
+                "verification did not compare actual tables with the original source",
+            )?;
+        }
         // Assert exact installed content only after the actual Host and native child exit.
         let mut offline = fixture
             .acquire()

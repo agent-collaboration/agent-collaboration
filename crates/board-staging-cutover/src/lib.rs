@@ -3,6 +3,8 @@ mod bundle_files;
 mod source_archive;
 pub use source_archive::{SourceArchiveError, SourceArchiveOutcome, archive_confirmed_source};
 mod imported_project_claims;
+mod installed_project_verification;
+pub use installed_project_verification::{InstalledVerificationError, InstalledVerificationReport};
 mod offline_host;
 mod offline_run;
 mod offline_run_plan;

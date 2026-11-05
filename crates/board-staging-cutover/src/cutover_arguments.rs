@@ -15,6 +15,9 @@ pub(super) enum CutoverCommand {
         plan: PathBuf,
         authentication: OwnerAuthentication,
     },
+    Verify {
+        plan: PathBuf,
+    },
 }
 
 pub(super) struct InspectRequest {
@@ -47,6 +50,16 @@ impl CutoverCommand {
                 return Ok(Self::Claim {
                     plan,
                     authentication,
+                });
+            }
+            Some("verify") => {
+                let flag = arguments.next().ok_or(ArgumentError)?;
+                let plan = arguments.next().ok_or(ArgumentError)?;
+                if flag != "--plan" || arguments.next().is_some() {
+                    return Err(ArgumentError);
+                }
+                return Ok(Self::Verify {
+                    plan: PathBuf::from(plan),
                 });
             }
             _ => return Err(ArgumentError),
