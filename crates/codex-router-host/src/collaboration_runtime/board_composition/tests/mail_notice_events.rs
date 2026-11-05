@@ -31,6 +31,8 @@ mod relay_items;
 mod relay_paths;
 #[path = "mail_status_catch_up.rs"]
 mod status_catch_up;
+#[path = "mail_status_reset_test.rs"]
+mod status_reset;
 #[path = "mail_submission_epochs.rs"]
 mod submission_epochs;
 
