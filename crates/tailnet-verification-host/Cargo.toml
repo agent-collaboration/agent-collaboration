@@ -10,13 +10,13 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-board-fleet-sync = { path = "../board-fleet-sync" }
+board-fleet-sync = { version = "0.1.126", path = "../board-fleet-sync" }
 codex-native-integration.workspace = true
 codex-router-host.workspace = true
-collaboration-central-core = { path = "../collaboration-central-core", features = ["conformance"] }
-collaboration-central-conformance = { path = "../collaboration-central-conformance", features = ["client"] }
-collaboration-central-tokio = { path = "../collaboration-central-tokio", features = ["conformance"] }
-collaboration-runtime = { path = "../collaboration-runtime" }
+collaboration-central-core = { version = "0.1.126", path = "../collaboration-central-core", features = ["conformance"] }
+collaboration-central-conformance = { version = "0.1.126", path = "../collaboration-central-conformance", features = ["client"] }
+collaboration-central-tokio = { version = "0.1.126", path = "../collaboration-central-tokio", features = ["conformance"] }
+collaboration-runtime = { version = "0.1.126", path = "../collaboration-runtime" }
 fleet-sync-lease.workspace = true
 fleet-sync-protocol.workspace = true
 fleet-sync-session.workspace = true
