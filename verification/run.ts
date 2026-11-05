@@ -15,9 +15,9 @@ import {
 import { ObservationOpen, Receipt } from "./receipt.ts";
 import { prepareRun, type PreparedRun } from "./run-setup.ts";
 import { RunLifetime } from "./run-lifetime.ts";
-import { assessD1Coverage, d1Observations } from "./observations/d1-coverage.ts";
-import { readD1HarnessDeclaration, runD1Harness } from "./observations/d1-harness.ts";
-import { d1ReadbackSchema, readD1Stores } from "./observations/d1-sqlite-readback.ts";
+import { assessD1Coverage, d1Observations } from "./observations/central/d1-coverage.ts";
+import { readD1HarnessDeclaration, runD1Harness } from "./observations/central/d1-harness.ts";
+import { d1ReadbackSchema, readD1Stores } from "./observations/central/d1-sqlite-readback.ts";
 
 async function declarationFromArguments(): Promise<Declaration> {
   const path = process.argv[2];

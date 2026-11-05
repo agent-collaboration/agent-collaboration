@@ -6,7 +6,7 @@ import { z } from "zod";
 import { sourceShellWords } from "./source-shell-words.ts";
 import { requireArgument, wireJson } from "./acp-stdio.ts";
 import { field, textField } from "../exact-json.ts";
-import { readObservedJson } from "../observations/evidence-models.ts";
+import { readObservedJson } from "../observations/shared/evidence-models.ts";
 
 function managedResult(request: Record<string, unknown>, mode: string): unknown {
   const operation = readObservedJson(wireJson(request.operation));
