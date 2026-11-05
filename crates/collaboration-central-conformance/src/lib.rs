@@ -135,3 +135,8 @@ pub use transaction_reopen::ComposedTransactionScenario;
 mod archive_runtime;
 #[cfg(feature = "client")]
 pub use archive_runtime::run_archive_report_with_clock;
+
+#[cfg(feature = "client")]
+mod mutation_revocation_scenario;
+#[cfg(feature = "client")]
+pub use mutation_revocation_scenario::run_mutation_revocation_conformance;

@@ -101,6 +101,16 @@ where
                                 }
                                 return Ok(ForwardDeliveryResult::Delivered);
                             }
+                            if crate::machine_enrollment::admission::read_current_enrolled_machine(
+                                scope,
+                                request.holder,
+                                now,
+                            )
+                            .await?
+                            .is_none()
+                            {
+                                return Ok(ForwardDeliveryResult::NoConnection);
+                            }
                             for (connection, registration) in scope.registrations.clone() {
                                 let ConnectionRegistration::Attached { session_id, .. } =
                                     registration

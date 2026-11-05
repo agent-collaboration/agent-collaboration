@@ -91,10 +91,10 @@ where
     ) -> Result<(), StoreError> {
         use runtime_primitives::Clock;
         let (store, shared_host) = self.session_store_for(binding.connection).await?;
-        let now = shared_host.now();
         store
             .transaction(move |scope| {
                 Box::pin(async move {
+                    let now = shared_host.now();
                     crate::machine_notice_store::remember_peer(scope, binding.peer, now).await?;
                     let effects = fleet_sync_session::connection_opened(scope, &binding, now)
                         .await
@@ -127,10 +127,10 @@ where
             runtime_primitives::IdSource::new_id(shared_host.as_ref()),
         )
         .map_err(StoreError::backend)?;
-        let now = shared_host.now();
         store
             .transaction(move |scope| {
                 Box::pin(async move {
+                    let now = shared_host.now();
                     crate::machine_notice_store::remember_peer(scope, binding.peer, now).await?;
                     let effects = fleet_sync_session::frame_received(scope, &binding, &frame, now)
                         .await

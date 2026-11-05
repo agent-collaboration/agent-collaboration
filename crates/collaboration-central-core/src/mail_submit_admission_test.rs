@@ -71,7 +71,7 @@ async fn enrollment_expiry_refuses_at_its_exact_boundary_and_preserves_historica
             },
             limits: crate::fleet_outbox_limits()?,
             relay: PeerId::new(durable_steps::Uuid::now_v7())?,
-            now,
+            clock: std::sync::Arc::new(crate::object_bootstrap::FixedBootstrapClock(now)),
         };
         fixture
             .object

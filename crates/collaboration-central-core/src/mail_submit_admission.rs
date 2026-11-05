@@ -9,7 +9,7 @@ use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScop
 use fleet_sync_delivery::{DeliveryLimits, Outbox};
 use fleet_sync_protocol::{DatabaseId, DeliveryRefusal, SubmitResult};
 use message_board::ServiceId;
-use runtime_primitives::SyncTime;
+use runtime_primitives::Clock;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -25,7 +25,7 @@ pub(crate) struct AdmitMailSubmit {
     pub request: MailSubmitRequest,
     pub limits: DeliveryLimits,
     pub relay: fleet_sync_protocol::PeerId,
-    pub now: SyncTime,
+    pub clock: std::sync::Arc<dyn Clock>,
 }
 
 impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for AdmitMailSubmit
@@ -49,34 +49,14 @@ where
                 item,
                 origin_epoch,
             } = self.request;
-            let mut senders = crate::generated_enrollment::read_enrollments(
+            let now = self.clock.now();
+            let Some(sender) = crate::machine_enrollment::admission::read_current_enrolled_machine(
                 scope,
-                None,
-                None,
-                None,
-                Some(session.peer.to_string()),
+                session.peer,
+                now,
             )
-            .await
-            .map_err(StoreError::backend)?;
-            if senders.len() > 1 {
-                return Err(crate::machine_enrollment_record::corrupt("peer_id"));
-            }
-            let sender = senders
-                .pop()
-                .map(crate::machine_enrollment_record::StoredMachine::decode)
-                .transpose()?;
-            if sender
-                .as_ref()
-                .is_some_and(|sender| sender.peer != session.peer)
-            {
-                return Err(crate::machine_enrollment_record::corrupt("peer_id"));
-            }
-            // Enrollment authority and custody admission share this scope.
-            // Historical sender resolution deliberately keeps revoked rows.
-            let Some(sender) = sender.filter(|sender| {
-                sender.state == crate::machine_enrollment_record::EnrollmentState::Enrolled
-                    && sender.expires_at.timestamp_millis() > self.now.unix_millis()
-            }) else {
+            .await?
+            else {
                 return reply(MailSubmitReply::Answer(MailSubmitAnswer::Submitted(
                     SubmitResult::Refused {
                         reason: DeliveryRefusal::SenderNotEnrolled,
@@ -174,7 +154,7 @@ where
                 &crate::fleet_sender_binding::FleetSenderBinding,
             );
             if recipient_revoked
-                && !fleet_sync_delivery::item_is_too_old(item.id(), self.now)
+                && !fleet_sync_delivery::item_is_too_old(item.id(), now)
                 && matches!(
                     outbox
                         .status(item.id())
@@ -196,7 +176,7 @@ where
                 .submit_relay::<
                     crate::fleet_mail_tasks::FleetPushTask<Store, Driver>,
                     crate::fleet_mail_tasks::FleetMailRemoval<Store, Driver>,
-                >(submitter, *item, self.relay, origin.installation, self.now)
+                >(submitter, *item, self.relay, origin.installation, now)
                 .await
                 .map_err(fleet_sync_delivery::delivery_rollback)?;
             Ok((

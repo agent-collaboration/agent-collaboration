@@ -24,6 +24,7 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 use std::convert::Infallible;
+pub(crate) mod admission;
 mod readmission;
 mod revocation;
 pub(crate) use readmission::ReadmissionTask;

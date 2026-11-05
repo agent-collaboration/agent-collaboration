@@ -145,6 +145,7 @@ enum Scenario {
     AccessSessions,
     RevocationRace,
     SenderRevocation,
+    MutationRevocation,
     FleetMailObserver,
     ReadmissionActivation,
     ReadmissionOpen,
@@ -233,6 +234,7 @@ async fn main() -> ConformanceResult<()> {
         Some("access-sessions") => Scenario::AccessSessions,
         Some("revocation-race") => Scenario::RevocationRace,
         Some("sender-revocation") => Scenario::SenderRevocation,
+        Some("mutation-revocation") => Scenario::MutationRevocation,
         Some("fleet-mail-observer") => Scenario::FleetMailObserver,
         Some("readmission-activation") => Scenario::ReadmissionActivation,
         Some("readmission-open") => Scenario::ReadmissionOpen,
@@ -427,6 +429,10 @@ async fn main() -> ConformanceResult<()> {
         Scenario::SenderRevocation => {
             let shared = collaboration_central_conformance::ConformanceClient::new(&format!("http://127.0.0.1:{port}"))?;
             collaboration_central_conformance::run_sender_revocation_conformance(&shared).await
+        }
+        Scenario::MutationRevocation => {
+            let shared = collaboration_central_conformance::ConformanceClient::new(&format!("http://127.0.0.1:{port}"))?;
+            collaboration_central_conformance::run_mutation_revocation_conformance(&shared).await
         }
         Scenario::FleetMailObserver => {
             let shared = collaboration_central_conformance::ConformanceClient::new(&format!("http://127.0.0.1:{port}"))?;

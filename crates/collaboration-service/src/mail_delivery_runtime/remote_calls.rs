@@ -235,6 +235,16 @@ impl MailCallRouter {
                             OperationAnswer::Delivery(DeliveryAnswer::Settle(answer)) => {
                                 encode_answer(submit_settlement_outcome(answer))
                             }
+                            OperationAnswer::Delivery(DeliveryAnswer::DeliveryUnavailable {
+                                reason: fleet_sync_protocol::DeliveryRefusal::SenderNotEnrolled,
+                            }) => Err(CallFailure::Retryable {
+                                reason: durable_steps::CallRetryReason {
+                                    code: "callerNotEnrolled".into(),
+                                    detail:
+                                        "Machine is not enrolled or its enrollment has expired."
+                                            .into(),
+                                },
+                            }),
                             _ => Err(CallFailure::AnswerLost),
                         }
                     }

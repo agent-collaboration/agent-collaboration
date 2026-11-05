@@ -337,7 +337,7 @@ where
                 request,
                 limits: crate::fleet_outbox_limits().map_err(|_| CallFailure::AnswerLost)?,
                 relay: delivery.relay_peer,
-                now: io.now(),
+                clock: io.clone(),
             })
             .await
             .map_err(|_| CallFailure::AnswerLost)?;
@@ -512,7 +512,7 @@ where
                 .run(ResolvePush {
                     reference,
                     limits,
-                    now: io.now(),
+                    clock: io.clone(),
                 })
                 .await
                 .map_err(crate::mail_push_dispatch::store_failure)?;
@@ -558,7 +558,7 @@ where
 struct ResolvePush {
     reference: DeliveryItemRef,
     limits: DeliveryLimits,
-    now: runtime_primitives::SyncTime,
+    clock: Arc<dyn runtime_primitives::Clock>,
 }
 impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for ResolvePush
 where
@@ -580,39 +580,22 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
+            let now = self.clock.now();
             let item = Outbox::<_, BoardDeliveryTypes, _>::new(
                 scope,
                 self.limits,
                 &crate::fleet_sender_binding::FleetSenderBinding,
             )
-            .resolve_push(&self.reference, self.now)
+            .resolve_push(&self.reference, now)
             .await
             .map_err(fleet_sync_delivery::delivery_rollback)?;
             if let Some(item) = &item {
                 let recipient = item.item.recipient().peer;
-                let mut enrolled = crate::generated_enrollment::read_enrollments(
-                    scope,
-                    None,
-                    None,
-                    None,
-                    Some(recipient.to_string()),
+                if crate::machine_enrollment::admission::read_current_enrolled_machine(
+                    scope, recipient, now,
                 )
-                .await
-                .map_err(StoreError::backend)?;
-                if enrolled.len() > 1 {
-                    return Err(crate::machine_enrollment_record::corrupt("peer_id"));
-                }
-                let Some(row) = enrolled.pop() else {
-                    return Ok((None, Vec::new()));
-                };
-                let machine = crate::machine_enrollment_record::StoredMachine::decode(row)?;
-                if machine.peer != recipient {
-                    return Err(crate::machine_enrollment_record::corrupt("peer_id"));
-                }
-                // Revocation admission precedes its EndSessions task. Older
-                // queued work must respect the committed gate during that gap.
-                if machine.state != crate::machine_enrollment_record::EnrollmentState::Enrolled
-                    || machine.expires_at.timestamp_millis() <= self.now.unix_millis()
+                .await?
+                .is_none()
                 {
                     return Ok((None, Vec::new()));
                 }

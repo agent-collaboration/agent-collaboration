@@ -293,3 +293,106 @@ async fn report_admission_captures_its_post_commit_wake_in_the_session_adapter()
     );
     fixture.close().await
 }
+
+async fn revoked_recipient_report(handoff: bool) -> TestResult {
+    use collaboration_central_core::{AccessCaller, OwnerIdentity, RevocationDecision};
+    use durable_steps::storage::TransactionScope;
+    use sqlx_core::{query::query, row::Row};
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path(), NOW).await?;
+    let mut recipient = Socket::open(&fixture, B, SERVICE_B).await?;
+    let item = envelope(B, SERVICE_B)?;
+    submit(&fixture, &item).await?;
+    if handoff {
+        let (drive, ()) = tokio::try_join!(fixture.runtime.on_alarm(), async {
+            let frame = recipient
+                .push(item.id())
+                .await
+                .map_err(StoreError::backend)?;
+            recipient
+                .answer(
+                    &fixture,
+                    frame,
+                    PushResult::Accepted {
+                        accepted_at: fixture.io.now(),
+                    },
+                )
+                .await
+                .map_err(StoreError::backend)
+        })?;
+        if !drive.failed.is_empty() {
+            return Err("handoff control failed".into());
+        }
+    }
+    let id = item.id();
+    let before = fixture.store.transaction(move |scope|Box::pin(async move {
+        let row=query::<sqlx_turso::Turso>("SELECT handed_off_at IS NOT NULL AS handed_off FROM _fleet_sync_outbox_items WHERE item_id=?")
+            .bind(id.as_uuid().to_string()).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
+        row.try_get::<i64,_>("handed_off").map_err(StoreError::backend)
+    })).await?;
+    if (before == 1) != handoff {
+        return Err("report fixture has the wrong handoff state".into());
+    }
+    let owner = OwnerIdentity::from_access(AccessCaller::Owner {
+        email: "fixture@example.test".into(),
+    })?;
+    if fixture
+        .runtime
+        .revoke_machine(&owner, SERVICE_B.to_owned().try_into()?)
+        .await?
+        != RevocationDecision::MachineRevoked
+    {
+        return Err("recipient revoke was not admitted".into());
+    }
+    let revoked = fixture
+        .store
+        .transaction(|scope| {
+            Box::pin(async move {
+                let row = query::<sqlx_turso::Turso>(
+                    "SELECT state FROM machine_enrollments WHERE machine_id=?",
+                )
+                .bind(B)
+                .fetch_one(scope.executor())
+                .await
+                .map_err(StoreError::backend)?;
+                row.try_get::<String, _>("state")
+                    .map_err(StoreError::backend)
+            })
+        })
+        .await?;
+    if revoked != "revoked" {
+        return Err("recipient row was not committed revoked".into());
+    }
+    let outcome = RecipientOutcome::Delivered {
+        acceptance: serde_json::from_value(json!("queued"))?,
+    };
+    if report(&fixture, &mut recipient, id, 1, outcome.clone()).await?
+        != (ReportResult::Ack {
+            report_seq: ReportSeq::new(1),
+        })
+    {
+        return Err("revoked recipient could not finish its addressed item".into());
+    }
+    if custody(&fixture, id).await? != ("delivered".into(), false) {
+        return Err("allowed report did not advance status and release payload".into());
+    }
+    let events = sender_statuses(&fixture).await?;
+    if report(&fixture, &mut recipient, id, 1, outcome).await?
+        != (ReportResult::Replayed {
+            report_seq: ReportSeq::new(1),
+        })
+        || sender_statuses(&fixture).await? != events
+    {
+        return Err("allowed report replay duplicated sender status".into());
+    }
+    fixture.close().await
+}
+#[tokio::test]
+async fn revoked_live_recipient_can_report_an_addressed_item_after_handoff() -> TestResult {
+    Box::pin(revoked_recipient_report(true)).await
+}
+#[tokio::test]
+async fn revoked_live_recipient_can_report_an_addressed_item_without_a_handoff_witness()
+-> TestResult {
+    Box::pin(revoked_recipient_report(false)).await
+}

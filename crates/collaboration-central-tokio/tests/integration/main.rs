@@ -268,3 +268,7 @@ mod mail_push_transport;
 #[path = "../support/fleet_ledger_rows.rs"]
 #[cfg(feature = "conformance")]
 mod fleet_ledger_rows;
+#[cfg(feature = "conformance")]
+mod revocation_clock;
+#[cfg(feature = "conformance")]
+mod revocation_writer_recovery;
