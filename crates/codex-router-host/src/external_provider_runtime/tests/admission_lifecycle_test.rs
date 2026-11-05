@@ -454,12 +454,15 @@ async fn oversized_initialize_frame_is_rejected_and_reaps_owned_process() {
             frame_written_path.to_string_lossy().into_owned(),
         ],
     );
-    // Keep virtual time paused through cold startup and the complete frame write.
-    // The existing watcher validates the pid recorded by the write callback.
-    let fixture_wrote_frame = tokio::task::spawn_blocking({
+    // Reaping can beat the write callback, so either marker or child exit releases
+    // the clock. The codec-owned counter below proves why initialization failed.
+    let fixture_wrote_frame_or_exited = tokio::task::spawn_blocking({
         let frame_written_path = frame_written_path.clone();
-        move || wait_for_recorded_process_id(&frame_written_path)
+        let process_id_path = process_id_path.clone();
+        move || wait_for_frame_marker_or_child_exit(&frame_written_path, &process_id_path)
     });
+    let frame_limit_count_before =
+        acp_client_runtime::provider_frame_limit_exceeded_count_for_test();
     let error = ExternalProviderRuntime::initialize_with_timeout(
         fixture,
         Duration::from_secs(2),
@@ -469,14 +472,48 @@ async fn oversized_initialize_frame_is_rejected_and_reaps_owned_process() {
     .expect_err("oversized frame must fail initialization");
 
     assert!(
-        fixture_wrote_frame.await.expect("frame watcher finished"),
-        "fixture wrote its complete oversized frame before the timeout"
+        fixture_wrote_frame_or_exited
+            .await
+            .expect("frame or child-exit watcher finished"),
+        "fixture recorded its frame-written marker or exited before the timeout"
     );
     assert!(
         matches!(error, ExternalProviderRuntimeError::Initialize(_)),
         "expected oversized frame rejection, got {error:?}"
     );
+    assert_eq!(
+        acp_client_runtime::provider_frame_limit_exceeded_count_for_test(),
+        frame_limit_count_before + 1,
+        "the incoming codec rejected exactly one oversized frame"
+    );
     assert_process_reaped(&process_id_path).await;
+}
+
+#[cfg(unix)]
+fn wait_for_frame_marker_or_child_exit(
+    frame_written_path: &std::path::Path,
+    process_id_path: &std::path::Path,
+) -> bool {
+    let real_deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while std::time::Instant::now() < real_deadline {
+        if std::fs::read_to_string(frame_written_path)
+            .is_ok_and(|value| value.trim().parse::<i32>().is_ok())
+        {
+            return true;
+        }
+        if let Ok(value) = std::fs::read_to_string(process_id_path)
+            && let Ok(raw) = value.trim().parse::<i32>()
+            && let Some(process_id) = rustix::process::Pid::from_raw(raw)
+            && matches!(
+                rustix::process::test_kill_process(process_id),
+                Err(rustix::io::Errno::SRCH)
+            )
+        {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    false
 }
 
 #[cfg(unix)]

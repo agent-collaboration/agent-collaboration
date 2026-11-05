@@ -140,10 +140,10 @@ export function inventoryCiTests(log: string): InventoryResult {
       endSeconds: lineTimestampSeconds(line),
     });
   }
-  if (!sawResult) return { kind: "noTimings", reason: "logMissingResultLines" };
-  for (const runTotal of outcomesByTotal.keys()) {
+  for (const runTotal of new Set([...startsByTotal, ...outcomesByTotal.keys()])) {
     if (!completedByTotal.has(runTotal)) return { kind: "noTimings", reason: "summaryNotFound" };
   }
+  if (!sawResult) return { kind: "noTimings", reason: "logMissingResultLines" };
   for (const { inventory } of completedByTotal.values()) {
     const passed = inventory.outcomes.filter((outcome) => outcome.result === "pass").length;
     const failed = inventory.outcomes.length - passed;

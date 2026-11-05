@@ -114,8 +114,8 @@ An invocation is identified by nextest's own run total: the `<total>` in each re
 
 The fix reuses the seam the neighboring `held_initialize_times_out_and_reaps_owned_process` test already uses in the same file (from line 401):
 1. The test runs on a paused tokio clock (`start_paused = true`).
-2. A `spawn_blocking` watcher keeps the clock from auto-advancing until the fixture has **written the oversized frame**. The fixture records that after the `stdout.write` callback, as a marker next to the existing process-ID file.
-3. So the simulated 2 s deadline can't elapse during Node startup or before the frame exists. Once the marker exists the frame bytes are already in the pipe, and the runtime reads them before the paused clock advances.
+2. A `spawn_blocking` watcher keeps the clock from auto-advancing until the fixture has written the oversized frame, or until the fixture's child process has exited (the parent rejects the frame and reaps the child, which may happen before the fixture's write callback runs). The fixture records its frame-written marker next to the existing process-ID file.
+3. The simulated 2 s deadline cannot elapse during cold Node startup, before either causal signal. The watcher releases on the marker or child exit; the test then requires the codec's frame-limit count to advance by exactly one, so EOF or another initialization failure cannot pass. The consumer-side proof is the codec owner's test-observation frame-limit counter.
 4. The real parser path, `Initialize(_)`, and the reaping assertion stay unchanged. So does the 2 s value.
 
 The timeout path stays proven by `held_initialize_times_out_and_reaps_owned_process`.
@@ -141,7 +141,7 @@ The timeout path stays proven by `held_initialize_times_out_and_reaps_owned_proc
 | U2 | R2 no extra machines | E3 | `ci.yml` | job list | `ci.yml`, unchanged under S | none | any added job → reject | the run's job count |
 | U3 | R3 same tests | E4 | nextest `ci` profile | selection is unaffected by `priority` and `test-threads` | `.config/nextest.toml` | none | an identity-set mismatch → defect | same-revision list pair per invocation, and its Summary match |
 | U3 | R4 proof kept | E5 | each test's own file | test source | test files and fixtures | none | a fixture shrunk, an assertion dropped or a deadline lengthened → reject | test diff |
-| U4 | R5 causal waits | E4, E6 | each test's own file; run-alone membership in `.config/nextest.toml` | the awaited signal (for the known case: the fixture's frame-written marker and the paused-clock watcher) | test source; fixture; override blocks | run-alone → shared | a load failure → causal fix only | pre-fix and fixed under a controlled delayed start |
+| U4 | R5 causal waits | E4, E6 | each test's own file; run-alone membership in `.config/nextest.toml` | the awaited signal (for the known case: the fixture's frame-written marker or the child's exit, with the paused-clock watcher) | test source; fixture; override blocks | run-alone → shared | a load failure → causal fix only | pre-fix and fixed under a controlled delayed start |
 | U5 | R6 ratchet stays | E2 | `ci.yml` `static` | ratchet step | `ci.yml`, unchanged | none | step removed → reject | `static` job steps |
 | U6 | R7 D1 compatibility | E4 | the change author | merge and per-selector resolution | appended blocks only | none | conflict, or a selector matching nothing or the wrong set → fix before merge | merge-forward of D1's head (merge-tree first), plus per-selector lists on the merged head |
 

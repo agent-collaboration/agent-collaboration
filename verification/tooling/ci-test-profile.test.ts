@@ -42,6 +42,17 @@ const failures = [
     expected: { kind: "noTimings", reason: "summaryNotFound" },
   },
   {
+    name: "a started invocation without results or Summary cannot be dropped",
+    log: [
+      "2026-01-01T00:00:00Z Starting 4 tests across 1 binary",
+      "2026-01-01T00:00:00Z Starting 2 tests across 1 binary",
+      "2026-01-01T00:00:01Z PASS [ 1.000s] (1/2) quota::lib first",
+      "2026-01-01T00:00:02Z PASS [ 1.000s] (2/2) quota::lib second",
+      "2026-01-01T00:00:02Z Summary [ 2.000s] 2 tests run: 2 passed, 0 skipped",
+    ].join("\n"),
+    expected: { kind: "noTimings", reason: "summaryNotFound" },
+  },
+  {
     name: "no result lines cannot produce a profile",
     log: "unrelated build output\n",
     expected: { kind: "noTimings", reason: "logMissingResultLines" },
