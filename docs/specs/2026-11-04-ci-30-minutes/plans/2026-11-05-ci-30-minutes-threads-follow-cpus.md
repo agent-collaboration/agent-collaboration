@@ -23,6 +23,8 @@ delivery context:
 ## Changed from the 2026-11-05 on-D1 plan
 
 - **Threads.** `[profile.ci] test-threads` follows the CPU count (`"num-cpus"`), not 8. On the same post-D1 code, 8 threads on the 4-vCPU runner saved about 1.5 minutes: the workspace test step went from 28.7 to 27.2 minutes. It also starved capped causal waits: four runs gave four different load failures, and run 42062794131's workspace step took 51.5 minutes. The 8-thread choice was the Lead's assumption, not an owner decision. It invalidates S3's thread line and the goal's "run 8 threads"; nothing else changes.
+- **Proof overrides carried into S3 and S5.** Every inherited proof row that says '8 threads' or 'at 8 threads' now reads 'with threads following the CPU count'. That covers the U4/R5 PR-run row and S5's '8-thread PR run'. S5's U3/R3 Summary half, inherited from the 2026-11-04 plan, is replaced. It no longer requires the CI Summary counts to equal S3's build-machine list. Instead, the PR run's per-invocation run identity set and skip count must equal main run 42023755753 at 614c03b75. S3's build-machine list pair stays the same-revision config proof.
+- **Goal wording.** 'Run 8 threads' in the inherited goal reads 'run as many threads as the runner has CPUs'.
 - **Oversized-frame seam (S2).**
   - **Clock release:** the watcher releases the paused clock when the frame-written marker exists, or when the child whose process ID was recorded at startup has exited.
   - **Proof of cause:** the consumer-side proof that the oversized frame caused the failure is the frame-limit counter, which acp-client-runtime exposes under its existing `test-observation` feature.

@@ -127,7 +127,7 @@ The timeout path stays proven by `held_initialize_times_out_and_reaps_owned_proc
 ## Proof seams
 
 - **R1 and R2:** the GitHub API run and job records of the PR's own runs.
-- **R3:** at one source revision, `cargo nextest list --profile ci` with the same package, feature and filter selections, once with the changed config and once with the pre-change config, for each invocation. That gives the complete run and skipped identity sets. Each CI invocation's own `Summary` must match the list for its config.
+- **R3:** at one source revision, `cargo nextest list --profile ci` with the same package, feature and filter selections, once with the changed config and once with the pre-change config, for each invocation. That gives the complete run and skipped identity sets. On Linux CI, the PR run's per-invocation run identity set and skip count must equal those of main's last pre-change run (42023755753 at 614c03b75); the build machine's lists are never equated with Linux counts.
 - **R4:** the diff of each changed test.
 - **R5:** each changed test under a controlled delayed start, in its pre-fix and fixed versions.
 - **R6:** the `static` job's ratchet step.
