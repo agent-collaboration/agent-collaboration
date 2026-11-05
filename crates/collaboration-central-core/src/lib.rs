@@ -6,6 +6,17 @@ pub mod organization_authority;
 mod organization_provisioning_http;
 pub use organization_provisioning_http::organization_provisioning_router;
 
+mod issuer_key_cache;
+mod issuer_key_resolution;
+mod issuer_signature_verifier;
+mod signature_verification;
+pub use issuer_key_cache::{
+    IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeySet, IssuerVerificationKey,
+};
+pub use issuer_key_resolution::{IssuerKeyResolutionRefusal, IssuerKeySource, resolve_issuer_key};
+pub use issuer_signature_verifier::{IssuerSignatureRefusal, IssuerSignatureVerifier};
+pub use signature_verification::Ed25519Verification;
+
 mod admin_import_columns;
 mod admin_import_contract;
 mod admin_import_copy;

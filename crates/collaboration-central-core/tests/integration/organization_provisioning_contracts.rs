@@ -37,7 +37,10 @@ fn retired_people_commands_are_not_provisioning_requests() {
     assert_eq!(retired.len(), 4, "keep every retired people-command oracle");
 
     for (command, requests) in retired {
-        assert!(!requests.is_empty(), "retired {command} has no literal input");
+        assert!(
+            !requests.is_empty(),
+            "retired {command} has no literal input"
+        );
         for request in requests {
             assert!(
                 serde_json::from_value::<ProvisionOrganization>(request.clone()).is_err(),
