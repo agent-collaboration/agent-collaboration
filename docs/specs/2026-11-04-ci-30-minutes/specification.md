@@ -46,13 +46,13 @@ erDiagram
 | R4 | No proof input is weakened: no fixture is made smaller, no assertion is removed and no deadline is lengthened. | U3 (E5) | V4: every changed test's diff keeps its fixture sizes and assertions, and any deadline it touches is either unchanged or replaced by a wait for a causal signal. Reference: the test at its pre-change commit. |
 | R5 | A test that waited on wall-clock time and is touched by this work waits on a causal signal or injected clock afterward. A test that fails under the new scheduling is fixed by a causal wait, never by a longer timeout or by moving it to a run-alone group. | U4 (E4, E6) | V5: each changed test names the signal it now awaits, and a version that waits on the clock instead is shown to fail or flake under load. Reference: the owner's no-wall-clock rule. |
 | R6 | The module-cycle ratchet stays a step of a required check. | U5 (E2) | V6: the run's Static validation job contains the ratchet step and it passes. |
-| R7 | Every CI configuration change applies cleanly to D1's current branch, and every test it names exists under that name on both main and D1. | U6 (E4) | V7: the change's files merge with `feat/central-storage-reset-d1-router` without conflicts, and every name a filter selects resolves to at least one test on both branches. Reference: D1 at its current head (`7901d6740` when this was written). |
+| R7 | The change is built on D1's current code and stays current with it: it carries D1's latest head without conflicts, and every test it names exists under that name on that head. | U6 (E4) | V7: D1's head at the time of the check merges into the change's branch without conflicts, and every name a filter selects resolves to the tests it is meant to on the merged head. Reference: D1 at its current head (`71e466dbf` when the base moved to D1, 2026-11-05). |
 
 ### Failure cases
 
 - **R1 exceeded with R2–R5 held:** the run is reported as over its cap, with its measured time. That is Q1's trigger. R2 and R4 are never relaxed to make R1 pass without the owner's decision.
 - **A test fails only under the new scheduling:** that is a real defect under R5, fixed causally. It is never retried or grouped away.
-- **D1 changes a named test after this is written:** R7 is checked again at D1's head when D1's PR opens.
+- **D1 changes a named test after this is written:** R7 is checked again each time D1's head moves, and once more after D1 lands on main (as a squash commit) and main is merged into the change's branch.
 
 ## Cross-cutting qualities
 

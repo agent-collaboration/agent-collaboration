@@ -105,13 +105,13 @@ Each inventory is checked against its own nextest `Summary` line. A mismatch is 
 
 ## Failure and load
 
-**A test that fails only at 8 threads is a load-sensitive wait.** Under R5 it gets a causal fix. The known case is `oversized_initialize_frame_is_rejected_and_reaps_owned_process` (main `admission_lifecycle_test.rs:444`, D1 `admission_lifecycle_tests.rs:415`).
+**A test that fails only at 8 threads is a load-sensitive wait.** Under R5 it gets a causal fix. The known case is `oversized_initialize_frame_is_rejected_and_reaps_owned_process` (`crates/codex-router-host/src/external_provider_runtime/tests/admission_lifecycle_test.rs:444`, identical on main and at D1 `71e466dbf`).
 
 - **What it does today:** it calls `initialize_with_timeout(fixture, 2 s, …)`, and the runtime races the fixture's readiness against that 2 s deadline (`provider_connection_task.rs:708-725`).
 - **The fixture** `verification/fixtures/host-failing-initialization-agent.ts` writes its process ID when it starts (line 9). It sends the oversized frame only after it receives initialize (lines 33–39).
 - **Why it failed:** in #213 the cold Node start outlasted the 2 s, so the test got `InitializeTimeout` instead of the frame rejection it exists to prove.
 
-The fix reuses the seam the neighboring `held_initialize_times_out_and_reaps_owned_process` test already uses on D1 (lines 374–411):
+The fix reuses the seam the neighboring `held_initialize_times_out_and_reaps_owned_process` test already uses in the same file (from line 401):
 1. The test runs on a paused tokio clock (`start_paused = true`).
 2. A `spawn_blocking` watcher keeps the clock from auto-advancing until the fixture has **written the oversized frame**. The fixture records that after the `stdout.write` callback, as a marker next to the existing process-ID file.
 3. So the simulated 2 s deadline can't elapse during Node startup or before the frame exists. Once the marker exists the frame bytes are already in the pipe, and the runtime reads them before the paused clock advances.
@@ -130,7 +130,7 @@ The timeout path stays proven by `held_initialize_times_out_and_reaps_owned_proc
 - **R4:** the diff of each changed test.
 - **R5:** each changed test under a controlled delayed start, in its pre-fix and fixed versions.
 - **R6:** the `static` job's ratchet step.
-- **R7:** `git merge-tree` against D1's head, plus each priority filter's member selectors listed separately on main and on D1.
+- **R7:** the change's branch starts from D1's head and merges D1's later heads forward (`git merge-tree` first to show no conflict), plus each priority filter's member selectors listed separately on the merged head. After D1 lands on main as a squash commit, main is merged into the branch (no rebase) and the listing is repeated.
 
 ## Trace table
 
@@ -142,7 +142,7 @@ The timeout path stays proven by `held_initialize_times_out_and_reaps_owned_proc
 | U3 | R4 proof kept | E5 | each test's own file | test source | test files and fixtures | none | a fixture shrunk, an assertion dropped or a deadline lengthened → reject | test diff |
 | U4 | R5 causal waits | E4, E6 | each test's own file; run-alone membership in `.config/nextest.toml` | the awaited signal (for the known case: the fixture's frame-written marker and the paused-clock watcher) | test source; fixture; override blocks | run-alone → shared | a load failure → causal fix only | pre-fix and fixed under a controlled delayed start |
 | U5 | R6 ratchet stays | E2 | `ci.yml` `static` | ratchet step | `ci.yml`, unchanged | none | step removed → reject | `static` job steps |
-| U6 | R7 D1 compatibility | E4 | the change author | merge and per-selector resolution | appended blocks only | none | conflict, or a selector matching nothing or the wrong set → fix before merge | merge-tree, plus per-selector lists on both branches |
+| U6 | R7 D1 compatibility | E4 | the change author | merge and per-selector resolution | appended blocks only | none | conflict, or a selector matching nothing or the wrong set → fix before merge | merge-forward of D1's head (merge-tree first), plus per-selector lists on the merged head |
 
 Deviations and unresolved decisions:
 - Q1 is reached only if measured S runs stay over 30.
