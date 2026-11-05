@@ -77,6 +77,9 @@ impl BoardOperations {
             // once; never forward its refusal recursively or retry automatically.
             ForwardOutcome::SenderHolds => return Ok(None),
             ForwardOutcome::NotHeld => public::RequestResult::NotHeld,
+            ForwardOutcome::CallerNotEnrolled => public::RequestResult::ScopeUnavailable(
+                message_board::ScopeRefusal::CallerNotEnrolled {},
+            ),
             ForwardOutcome::HolderUnreachable { last_seen } => {
                 let last_seen = last_seen
                     .map(|time| {

@@ -127,6 +127,7 @@ pub enum BoardNotice {
     deny_unknown_fields
 )]
 pub enum ForwardOutcome {
+    CallerNotEnrolled,
     Answered {
         reply: BoardPayload,
     },

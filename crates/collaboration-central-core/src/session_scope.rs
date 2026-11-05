@@ -21,6 +21,7 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 use std::marker::PhantomData;
+mod enrollment_gate;
 mod fleet_reads;
 mod forwards;
 mod operations;
@@ -144,6 +145,18 @@ where
         };
         use fleet_sync_session::SessionEffect;
         for effect in effects {
+            if let SessionEffect::Route {
+                session,
+                frame,
+                operation,
+            } = &effect
+                && let Some(answer) = self
+                    .refuse_unenrolled_mutation(session.peer, operation, now)
+                    .await?
+            {
+                self.stage_operation_answer(connection, *frame, answer)?;
+                continue;
+            }
             match effect {
                 SessionEffect::Route {
                     session,
@@ -404,3 +417,7 @@ where
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "session_enrollment_gate_test.rs"]
+mod enrollment_gate_tests;

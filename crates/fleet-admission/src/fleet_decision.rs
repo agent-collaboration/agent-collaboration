@@ -72,6 +72,7 @@ pub struct FleetDecision {
     deny_unknown_fields
 )]
 pub enum FleetRequestResult {
+    CallerNotEnrolled,
     Decided(RequestDecision),
     ConflictingRequest,
 }

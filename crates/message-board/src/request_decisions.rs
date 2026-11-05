@@ -228,6 +228,7 @@ pub enum RequestResult {
     deny_unknown_fields
 )]
 pub enum ScopeRefusal {
+    CallerNotEnrolled {},
     Refused {
         reason: Box<Refusal>,
     },
