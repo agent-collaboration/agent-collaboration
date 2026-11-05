@@ -66,6 +66,11 @@ async fn compiled_verification_refuses_a_settled_frontier_with_another_target() 
     cold_claim_case(SourceContents::EmittedIntentWrongCustodyTarget).await
 }
 
+#[tokio::test]
+async fn compiled_canary_appends_after_recovery_and_replays_the_sealed_request() -> TestResult {
+    cold_claim_case(SourceContents::EmittedIntentViaHelperCanary).await
+}
+
 #[derive(Clone, Copy)]
 enum SourceContents {
     ProjectOnly,
@@ -78,6 +83,7 @@ enum SourceContents {
     EmittedIntentWithUnexplainedDecision,
     EmittedIntentMissingCustody,
     EmittedIntentWrongCustodyTarget,
+    EmittedIntentViaHelperCanary,
 }
 
 impl SourceContents {
@@ -91,6 +97,7 @@ impl SourceContents {
                 | Self::EmittedIntentWithUnexplainedDecision
                 | Self::EmittedIntentMissingCustody
                 | Self::EmittedIntentWrongCustodyTarget
+                | Self::EmittedIntentViaHelperCanary
         )
     }
 }
@@ -115,6 +122,7 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
             | SourceContents::EmittedIntentWithUnexplainedDecision
             | SourceContents::EmittedIntentMissingCustody
             | SourceContents::EmittedIntentWrongCustodyTarget
+            | SourceContents::EmittedIntentViaHelperCanary
     ) {
         Some(super::pending_intent_fixture::add_pending_intent(&fixture, &mut source).await?)
     } else {
@@ -415,7 +423,10 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
         if let Some(recovered) = recovered {
             let head = recovered.head;
             let before = pending.as_ref().ok_or("recovery source missing")?;
-            super::canary_proof::append_and_read(&fixture, &bundle, before, recovered).await?;
+            let operator =
+                matches!(contents, SourceContents::EmittedIntentViaHelperCanary).then_some(&run);
+            super::canary_proof::append_and_read(&fixture, &bundle, before, recovered, operator)
+                .await?;
             let mut offline = fixture
                 .acquire()
                 .map_err(|e| std::io::Error::other(e.to_string()))?;
@@ -458,7 +469,11 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
             counts?;
             closed?;
             drop(offline);
-            if matches!(contents, SourceContents::EmittedIntentWithRemoteReadback) {
+            if matches!(
+                contents,
+                SourceContents::EmittedIntentWithRemoteReadback
+                    | SourceContents::EmittedIntentViaHelperCanary
+            ) {
                 super::cross_machine_canary::read_on_another_machine(
                     &root, &fixture, &central, &bundle, head,
                 )

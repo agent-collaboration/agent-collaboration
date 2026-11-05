@@ -1,7 +1,7 @@
 //! Operator entry point; inspection never takes the running Host's authority.
 use board_staging_cutover::{
-    ClaimRunReport, HostInspection, InstalledVerificationReport, OfflineHost, OfflineRunPlan,
-    OfflineRunReport,
+    CanaryRunReport, ClaimRunReport, HostInspection, InstalledVerificationReport, OfflineHost,
+    OfflineRunPlan, OfflineRunReport,
 };
 use std::io::Write;
 use std::process::ExitCode;
@@ -14,6 +14,7 @@ const USAGE: &str = concat!(
     "codex-router-board-staging-cutover offline --plan <private-file> (--owner-credential-file <private-file> | --owner-access)\n",
     "codex-router-board-staging-cutover claim --plan <private-file> (--owner-credential-file <private-file> | --owner-access)\n",
     "codex-router-board-staging-cutover verify --plan <private-file>\n",
+    "codex-router-board-staging-cutover canary --plan <private-file>\n",
 );
 
 #[derive(serde::Serialize)]
@@ -47,6 +48,14 @@ enum HelperOutput {
         #[serde(flatten)]
         report: InstalledVerificationReport,
     },
+    CanariesVerified {
+        #[serde(flatten)]
+        report: CanaryRunReport,
+    },
+    CanariesUnverified {
+        #[serde(flatten)]
+        report: CanaryRunReport,
+    },
 }
 
 async fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
@@ -79,6 +88,26 @@ async fn run() -> Result<ExitCode, Box<dyn std::error::Error>> {
                 HelperOutput::OfflineCompleted { report }
             } else {
                 HelperOutput::OfflineIncomplete { report }
+            };
+            let mut stdout = std::io::stdout().lock();
+            serde_json::to_writer(&mut stdout, &output)?;
+            stdout.write_all(b"\n")?;
+            return Ok(if complete {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            });
+        }
+        CutoverCommand::Canary { plan } => {
+            let plan = OfflineRunPlan::read(&plan)?;
+            let owner = nix::unistd::User::from_uid(nix::unistd::geteuid())?
+                .ok_or("cannot determine the Host owner's home directory")?;
+            let report = plan.run_canaries(&owner.dir).await?;
+            let complete = report.all_verified();
+            let output = if complete {
+                HelperOutput::CanariesVerified { report }
+            } else {
+                HelperOutput::CanariesUnverified { report }
             };
             let mut stdout = std::io::stdout().lock();
             serde_json::to_writer(&mut stdout, &output)?;

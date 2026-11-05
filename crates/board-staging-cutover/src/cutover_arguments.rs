@@ -18,6 +18,9 @@ pub(super) enum CutoverCommand {
     Verify {
         plan: PathBuf,
     },
+    Canary {
+        plan: PathBuf,
+    },
 }
 
 pub(super) struct InspectRequest {
@@ -52,14 +55,20 @@ impl CutoverCommand {
                     authentication,
                 });
             }
-            Some("verify") => {
+            Some(command @ ("verify" | "canary")) => {
                 let flag = arguments.next().ok_or(ArgumentError)?;
                 let plan = arguments.next().ok_or(ArgumentError)?;
                 if flag != "--plan" || arguments.next().is_some() {
                     return Err(ArgumentError);
                 }
-                return Ok(Self::Verify {
-                    plan: PathBuf::from(plan),
+                return Ok(if command == "canary" {
+                    Self::Canary {
+                        plan: PathBuf::from(plan),
+                    }
+                } else {
+                    Self::Verify {
+                        plan: PathBuf::from(plan),
+                    }
                 });
             }
             _ => return Err(ArgumentError),

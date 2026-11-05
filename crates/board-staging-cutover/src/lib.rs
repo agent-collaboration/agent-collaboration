@@ -2,7 +2,10 @@
 mod bundle_files;
 mod source_archive;
 pub use source_archive::{SourceArchiveError, SourceArchiveOutcome, archive_confirmed_source};
+mod canary_record;
+mod cutover_canary;
 mod imported_project_claims;
+pub use cutover_canary::{CanaryRunError, CanaryRunReport};
 mod installed_project_verification;
 mod intent_recovery_feed;
 mod intent_recovery_rows;

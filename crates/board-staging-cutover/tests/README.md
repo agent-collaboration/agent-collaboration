@@ -103,5 +103,16 @@ write through the observer connection must fail. Remote or unresolved recovery
 and other unexplained progressions remain unverified. This command does not
 declare the whole cutover complete.
 
+The running-Host `canary --plan` phase reopens the same frozen bundle and backup,
+requires the declared Host's e2 writer, and sends the sealed WorkTrail request.
+A new row must appear at the observed recovered head plus one; its decision is
+replayed with the same identity and its exact body and cursor read publicly.
+A subsequent command invocation reports the original cursor and adds no history.
+Lost write answers remain unknown and retain the sealed request. Tests reject a
+plausible success report with no write and fresh identities on replay; a distinct
+enrolled Host reads the CLI-created row through its Central copy. Offline content
+verification precedes this write phase. The command reports canary evidence only,
+without claiming lifecycle completion or post-canary source equality.
+
 Host lifecycle orchestration, the full process-crash matrix, frozen
 mail/cancel state, remote hardware and staging corpus remain unverified.

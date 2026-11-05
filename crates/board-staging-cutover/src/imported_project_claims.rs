@@ -90,11 +90,10 @@ impl ClaimRunReport {
 }
 
 impl OfflineRunPlan {
-    pub async fn claim_imported_projects(
+    pub(crate) fn inspect_enrolled_host(
         &self,
         home: &Path,
-        authentication: OwnerAuthentication,
-    ) -> Result<ClaimRunReport, ClaimRunError> {
+    ) -> Result<crate::HostInspection, ClaimRunError> {
         self.validate()?;
         let host = OfflineHost::inspect(&self.router_root, &self.service_id, self.peer_id, home)?;
         let root = host.router_root();
@@ -113,6 +112,16 @@ impl OfflineRunPlan {
         {
             return Err(ClaimRunError::RestartRequired);
         }
+        Ok(host)
+    }
+
+    pub async fn claim_imported_projects(
+        &self,
+        home: &Path,
+        authentication: OwnerAuthentication,
+    ) -> Result<ClaimRunReport, ClaimRunError> {
+        let host = self.inspect_enrolled_host(home)?;
+        let root = host.router_root();
         let publisher = match authentication {
             OwnerAuthentication::OwnerAccess => {
                 StagingPublisher::from_owner_access(self.target.clone()).await?

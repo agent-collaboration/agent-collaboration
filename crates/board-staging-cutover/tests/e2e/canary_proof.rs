@@ -18,6 +18,7 @@ pub(super) async fn append_and_read(
     bundle: &PreparedProjectBundle,
     before: &NotifyIntent,
     recovered: RecoveredIntent,
+    operator: Option<&super::offline_cli_fixture::RunFixture>,
 ) -> TestResult {
     let host = OwnedHost::start(&host_root.root, &bundle.manifest().header.declared_owner).await?;
     let observed = async {
@@ -40,6 +41,9 @@ pub(super) async fn append_and_read(
             actor:Identity::Human { human_id:bundle.manifest().header.declared_owner.clone() },acting_for:None,protocol_version:ProtocolVersion::CURRENT,
             operation:BoardOperation::WorkTrailAdd { row_id:row_id.clone(),subject:Some(message_board::TrailSubject::Project),text:text.clone(),tags:vec![],links:vec![] },
         };
+        if let Some(run) = operator {
+            super::compiled_canary_proof::verify(&client, bundle, run, head).await?;
+        }
         let written = client.work_trail_add(request.clone()).await?;
         if !matches!(written.result,RequestResult::Decided(RequestDecision::Accepted { .. })) {
             std::fs::write(host_root.root.join("canary-outcome.json"),serde_json::to_vec(&written.result)?)?;
