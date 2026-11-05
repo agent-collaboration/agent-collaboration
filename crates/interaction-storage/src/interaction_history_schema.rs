@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(super) enum SchemaAdmission {
     Pristine,
     Owned,
+    LegacyMailbox,
 }
 
 struct SchemaObjectRow {
@@ -209,11 +210,11 @@ pub(super) async fn inspect_schema(
         .filter(|object| object.object_type == "table")
         .map(|object| object.name.as_str())
         .collect();
-    let (library_indexes, has_library_backfills) =
+    let (library_indexes, has_library_backfills, has_legacy_mailbox) =
         if tables.contains("_fleet_sync_delivery_migrations") {
             delivery_schema_lineage(connection).await?
         } else {
-            (BTreeMap::new(), false)
+            (BTreeMap::new(), false, false)
         };
     let has_delivery_retries = tables.contains("local_delivery_retries");
     let has_installation_directory = tables.contains("installation_peer_directory");
@@ -509,14 +510,18 @@ pub(super) async fn inspect_schema(
     }
     read_revision(connection).await?;
     read_records(connection).await?;
-    Ok(SchemaAdmission::Owned)
+    Ok(if has_legacy_mailbox {
+        SchemaAdmission::LegacyMailbox
+    } else {
+        SchemaAdmission::Owned
+    })
 }
 
 // SDK indexes and its startup-marker table belong to the exact applied prefix.
 // Later migrations must not invalidate genuine stores from an earlier prefix.
 async fn delivery_schema_lineage(
     connection: &mut TursoConnection,
-) -> Result<(BTreeMap<String, String>, bool), StorageError> {
+) -> Result<(BTreeMap<String, String>, bool, bool), StorageError> {
     let applied = sqlx::query_as::<_, MigrationProofRow>(
         "SELECT version, CAST(success AS INTEGER) AS success, checksum, typeof(version) AS version_storage, typeof(success) AS success_storage, typeof(checksum) AS checksum_storage FROM _fleet_sync_delivery_migrations ORDER BY version"
     ).fetch_all(connection).await.map_err(|_| StorageError::InvalidSchema)?;
@@ -563,5 +568,8 @@ async fn delivery_schema_lineage(
         }
     }
     let has_backfills = applied.iter().any(|migration| migration.version == 11);
-    Ok((indexes, has_backfills))
+    let has_legacy_mailbox = applied
+        .last()
+        .is_some_and(|migration| migration.version < 4);
+    Ok((indexes, has_backfills, has_legacy_mailbox))
 }
