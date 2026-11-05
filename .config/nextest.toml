@@ -2,6 +2,7 @@
 retries = 0
 
 [profile.ci]
+test-threads = 8
 fail-fast = false
 retries = 0
 status-level = "slow"
@@ -107,3 +108,223 @@ threads-required = "num-test-threads"
 filter = "(package(=agent-collaboration) & binary(=e2e)) | (package(=board-legacy-upgrade) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
+
+# Drain existing process reservations first, then overlap the heavy lane and
+# long shared tests. These overrides only set priority; the rules above retain
+# their groups, slot reservations, retries and deadlines. The 50 band comes
+# from D1 CI run 41994005347 (at least 30 seconds per test).
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & binary(=integration) & (test(/^auth_file_reload::/) | test(/^external_provider_composition::/) | test(/^global_harness_selection::/))"
+priority = 100
+
+[[profile.ci.overrides]]
+filter = "(package(=codex-router-host) & binary(=integration) & test(/^update_reexec::/)) | (package(=codex-router-host) & binary(=integration) & test(/^runtime_restart::/)) | (package(=codex-router-cli) & binary(=integration) & test(/^compiled_cli_host_acceptance::/)) | (package(=codex-router-quota-reset-test-harness) & binary(=e2e)) | (package(=codex-router-auth) & test(=claude_oauth::tests::refresh_timeout_is_ambiguous_and_never_returns_the_old_token)) | (package(=codex-router-proxy) & test(=tests::tunnel_affinity_tests::async_websocket_tunnel_does_not_gate_forwarding_on_slow_affinity_recorder))"
+priority = 100
+
+[[profile.ci.overrides]]
+filter = "(package(=agent-collaboration) & binary(=integration) & test(/^board_request_effects_cli::/)) | (package(=codex-router-host) & (test(=collaboration_runtime::board_composition::machine_session::mail_notice_events::harness::notification_owner::authority_recovery::real_renewal_republishes_after_paused_pass_and_not_writer_reports_confirmed_and_lost_authority) | test(tailscale_exposure::) | test(tailscale_process::) | test(collaboration_runtime::startup_contract_tests::)))"
+priority = 100
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & binary(=integration) & test(/^production_enrollment::/)"
+priority = 100
+
+[[profile.ci.overrides]]
+filter = "(package(=codex-router-host) | package(=collaboration-service)) & binary(=integration) & test(/^native_claude_catalogue::/)"
+priority = 100
+
+[[profile.ci.overrides]]
+filter = "(package(=codex-router-cli) & binary(=integration) & test(/^proxy_overload_passthrough::/)) | (package(=codex-router-host) & binary(=integration) & test(=process_lifecycle::app_server_force_escalation_signals_and_reaps_once))"
+priority = 100
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=external_provider_supervisor::tests::router_queue_drains_provider_prompts_in_fifo_order)"
+priority = 100
+
+[[profile.ci.overrides]]
+filter = "(package(=collaboration-service) & binary(=integration) & test(=request_effects_public::a_large_fleet_write_returns_a_signed_public_continuation))"
+priority = 100
+
+[[profile.ci.overrides]]
+filter = "package(=collaboration-service) & (test(=mail_push_delivery::tests::local_runtime::crash::crash_between_attribution_and_sdk_admission_leaves_neither_after_reopen) | test(/^mail_push_delivery::tests::remote_assembly::project_admission::crash::sigkill_between_/))"
+priority = 100
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(collaboration_runtime::board_composition::tests::claim_restart::)"
+priority = 100
+
+[[profile.ci.overrides]]
+filter = "(package(=agent-collaboration) & binary(=e2e)) | (package(=board-legacy-upgrade) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/))"
+priority = 100
+
+[[profile.ci.overrides]]
+filter = "(package(=collaboration-service) & binary(=integration) & test(/^held_queue_depth::/)) | (package(=collaboration-service) & binary(=integration) & test(/^project_description_encoded_sizes::/)) | (package(=message-board-storage) & test(=project_record_size_tests::history_growing_records_are_measured_without_capping_or_truncating))"
+priority = 90
+
+[[profile.ci.overrides]]
+filter = "(package(=collaboration-service) & (test(=subscription_delivery::subscription_service::intent_progress_tests::deferred_history_does_not_grow_the_next_intent_pass) | (package(=collaboration-service) & binary(=integration) & test(=board_control_path::control_thread_list_pages_escape_heavy_holders_without_skips_or_repeats)) | (package(=collaboration-service) & binary(=integration) & test(=board_metadata_records::large_metadata_lists_continue_before_the_control_frame_limit)) | (package(=collaboration-service) & binary(=integration) & test(/^board_write_scale::/)) | (package(=collaboration-service) & binary(=integration) & test(/^bounded_fleet_reads::/)) | (package(=collaboration-service) & binary(=integration) & test(=bounded_post_lookup::post_lookup_costs_ignore_unopened_project_files))))"
+priority = 90
+
+[[profile.ci.overrides]]
+filter = "package(=acp-client-runtime) & binary(=integration) & test(=create_settings_order::settings_tail_tests::silent_setting_response_expires_to_unknown_and_gates_session)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=agent-collaboration) & binary(=integration) & test(=local_mail_failures_cli_mcp::full_inbox_refuses_cli_and_mcp_sends_and_replies_without_effect_or_target)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=board-legacy-upgrade) & binary(=integration) & test(=upload_publication::real_store_failures_resume_before_and_after_publication_across_server_reopen)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=board-staging-cutover) & binary(=e2e) & test(=installed_claim::compiled_canary_appends_after_recovery_and_replays_the_sealed_request)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=board-staging-cutover) & binary(=e2e) & test(=installed_claim::ordinary_host_cutover_canary_reaches_a_distinct_enrolled_host)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=board-staging-cutover) & binary(=e2e) & test(=rich_project_cutover::rich_real_l2_history_survives_cutover_without_resetting_line_two_or_replaying_writes)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-cli) & test(=host_command::stop_tests::stop_times_out_without_claiming_success_or_signalling_an_unresponsive_peer)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::accepted_directory_registration_waits_for_welcome_and_grant_before_the_first_record)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::attaching_server_calls::native_release_and_withdrawal_are_answered_before_welcome)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::forwarded_post_sender::unknown_answer::non_holder_sender_unknown_answer_retries_the_original_post_identity)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::native_registration_refusal_moves_an_empty_file_and_replays_the_original_reason)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::notice_reactions::a_noncontiguous_read_page_refuses_before_applying_or_saving_the_jump)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::notice_reactions::archive_sync_barrier::archive_observer_waits_for_a_fresh_sync_while_admission_is_busy)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::notice_reactions::central_read_copies::restart::a_fresh_nonholder_without_any_local_project_reads_unknown_authority_from_central)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::notice_reactions::central_read_copies::restart::a_position_move_between_actual_snapshot_pages_never_publishes_a_mixed_generation)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::notice_reactions::central_read_copies::restart::an_interrupted_native_page_install_is_refetched_after_owning_reopen)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::notice_reactions::central_read_copies::restart::registry_close_removes_a_released_central_read_generation)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::notice_reactions::central_read_copies::restart::startup_sweep_removes_stale_root_and_keeps_an_open_reader_generation)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::notice_reactions::duplicate_next_and_cold_restart_use_machine_progress_without_repeating_a_renewal)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::notice_reactions::expired_cursor_prompts_real_native_renewal_and_synchronizes_before_the_pruned_floor)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::notice_reactions::central_read_copies::superseded_local_file_reads_native_central_copy_with_distinct_authority_and_pinned_generations)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::notice_reactions::failed_handling_does_not_save_the_position_and_retry_uses_the_same_hint)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::notice_reactions::hint_authority::granted_hint_with_a_different_epoch_cannot_replace_authoritative_writer)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::notice_reactions::hint_authority::superseded_hint_for_the_still_current_lease_does_not_stop_the_writer)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::notice_reactions::invalid_cursor_recovers_then_reads_without_after_from_the_retained_start)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::notice_reactions::persisted_supersession::cold_welcome_and_notice_recovery_skip_superseded_project_and_initialize_next)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::notice_reactions::progress_write_failure_rehandles_the_hint_without_changing_lease_authority)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::notice_reactions::pushed_gap_reads_after_machine_progress_and_handles_the_missing_prefix)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::project_creation_replies::accepted_creation_waits_for_real_ready_inside_the_bound_and_replays)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::project_creation_replies::accepted_creation_past_the_ready_bound_returns_pending_then_local_and_replays)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=collaboration_runtime::board_composition::tests::received_grants::received_higher_epoch_replaces_a_held_seed_with_a_new_attempt)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & binary(=integration) & test(=remote_wake::remote_wake_is_owned_and_fires_on_the_recipient_installation)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=collaboration-central-tokio) & binary(=integration) & test(=native_http::full_holder_attempt_finishes_inside_the_original_drive_lease_without_waiter_overlap)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=collaboration-central-tokio) & binary(=integration) & test(=native_http::sequential_release_and_copy_wait_keep_live_drive_replay_pending)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=collaboration-central-tokio) & binary(=integration) & test(=process_restart::fleet_notice_finishes_once_after_the_server_process_dies_before_dispatch)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=collaboration-central-tokio) & binary(=integration) & test(=process_restart::fleet_notice_outbox::archived_workspace_notices_recover_after_process_death_before_dispatch)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=collaboration-central-tokio) & binary(=integration) & test(=process_restart::fleet_notice_outbox::archived_workspace_notices_recover_after_real_ack_loss_without_duplicate_positions)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=collaboration-central-tokio) & binary(=integration) & test(=process_restart::copy_staged_parts::copy_staged_part_expires_automatically_after_process_death_and_restages_freshly)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=collaboration-central-tokio) & binary(=integration) & test(=process_restart::retirement::retirement_resumes_its_stored_step_after_the_server_process_dies)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=collaboration-service) & binary(=integration) & test(=bounded_membership_reads::writes_reconcile_only_their_project_and_reader_wide_reads_probe_once)"
+priority = 50
+
+[[profile.ci.overrides]]
+filter = "package(=collaboration-service) & binary(=integration) & test(=bounded_window_reads::subscription_and_content_pages_bound_their_body_and_followup_reads)"
+priority = 50
