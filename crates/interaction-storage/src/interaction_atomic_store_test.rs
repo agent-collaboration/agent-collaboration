@@ -128,6 +128,8 @@ type NativeSubmit = SubmitItem<
     NoDeliveryConsumer,
 >;
 
+#[path = "central_mail_cursor_test.rs"]
+mod central_mail_cursor;
 #[path = "composed_schema_upgrade_test.rs"]
 mod composed_schema_upgrade;
 #[path = "local_cancel_delivery_storage_tests.rs"]

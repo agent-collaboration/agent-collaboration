@@ -36,7 +36,6 @@ async fn interrupted_reset_resumes_before_activation_and_preserves_router_owned_
         message_board_storage::FleetCache::open(&storage.join("fleet-cache.sqlite")).await?;
     cache.close().await;
     let owned_files = [
-        "interaction.sqlite",
         "fleet-outbox.sqlite",
         "installation-peer.json",
         "local-history.json",
@@ -44,6 +43,11 @@ async fn interrupted_reset_resumes_before_activation_and_preserves_router_owned_
     for name in owned_files {
         tokio::fs::write(storage.join(name), name.as_bytes()).await?;
     }
+    // Reset now clears central stream progress through this real file owner.
+    interaction_storage::InteractionStore::open(storage.join("interaction.sqlite"))
+        .await?
+        .close()
+        .await?;
     drop(record_pending_enrollment_reset(&journal)?);
     let (entered, observed) = oneshot::channel();
     let (_release, released) = oneshot::channel::<()>();

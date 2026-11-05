@@ -144,6 +144,11 @@ async fn resume_with_barrier(
     }
     if matches!(reset.phase, ResetPhase::Pending) {
         clear_router_state(storage_directory).await?;
+    }
+    // Older reset journals may already have cleared Router state without this
+    // central observation. Neither unfinished phase may carry it into attach.
+    clear_mail_status_cursor(storage_directory).await?;
+    if matches!(reset.phase, ResetPhase::Pending) {
         persist_phase(journal_directory, &reset, ResetPhase::RouterStateCleared).await?;
     }
     // Cancellation here leaves the committed stage for the next Host start.
@@ -181,6 +186,27 @@ async fn clear_router_state(directory: &Path) -> io::Result<()> {
         }
     }
     tokio::fs::File::open(directory).await?.sync_all().await
+}
+
+async fn clear_mail_status_cursor(directory: &Path) -> io::Result<()> {
+    let interaction_path = directory.join("interaction.sqlite");
+    if !tokio::fs::try_exists(&interaction_path).await? {
+        return Ok(());
+    }
+    let interactions = interaction_storage::InteractionStore::open(&interaction_path)
+        .await
+        .map_err(io::Error::other)?;
+    let cleared = interactions.clear_central_mail_status_cursor().await;
+    interactions.close().await.map_err(io::Error::other)?;
+    cleared.map_err(io::Error::other)?;
+    // A crash after the cursor commit must replay the Pending phase safely.
+    #[cfg(all(test, debug_assertions, feature = "runtime-test-support"))]
+    crate::debug_runtime_barrier::wait_at_socket(
+        "CODEX_ROUTER_TEST_MAIL_CURSOR_RESET_BARRIER_SOCKET",
+        b"mail-status-cursor-cleared\n",
+    )
+    .await?;
+    Ok(())
 }
 
 #[cfg(all(debug_assertions, feature = "runtime-test-support"))]

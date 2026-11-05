@@ -228,9 +228,18 @@ impl MailHarness {
         &self,
         item: fleet_sync_protocol::ItemId,
     ) -> Result<(), TestError> {
+        self.report_outcome(item, fleet_sync_protocol::RecipientOutcome::Held)
+            .await
+    }
+    pub(super) async fn report_outcome(
+        &self,
+        item: fleet_sync_protocol::ItemId,
+        outcome: fleet_sync_protocol::RecipientOutcome<
+            collaboration_mail_protocol::CarrierAcceptance,
+        >,
+    ) -> Result<(), TestError> {
         use fleet_sync_protocol::{
-            DeliveryAnswer, DeliveryRequest, RecipientOutcome, RecipientReport, ReportResult,
-            ReportSeq,
+            DeliveryAnswer, DeliveryRequest, RecipientReport, ReportResult, ReportSeq,
         };
         let report_seq = ReportSeq::new(1);
         let call = runtime_primitives::CallId {
@@ -244,7 +253,7 @@ impl MailHarness {
                 report: RecipientReport {
                     item,
                     report_seq,
-                    outcome: RecipientOutcome::Held,
+                    outcome,
                 },
             }))
             .await?

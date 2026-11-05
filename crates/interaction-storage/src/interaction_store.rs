@@ -26,6 +26,14 @@ impl InteractionStore {
         Ok(())
     }
 
+    /// Forgets the central status stream before a new enrollment attaches.
+    pub async fn clear_central_mail_status_cursor(&self) -> Result<(), StorageError> {
+        sqlx::query::<sqlx_turso::Turso>("DELETE FROM _fleet_sync_outbox_status")
+            .execute(&mut *self.writer.lock().await)
+            .await?;
+        Ok(())
+    }
+
     /// Imports the legacy file's full route set in one transaction.
     pub async fn import_approval_routes(
         &self,
