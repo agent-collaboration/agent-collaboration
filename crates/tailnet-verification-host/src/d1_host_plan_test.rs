@@ -69,7 +69,8 @@ fn d1_plan_rejects_expired_deadline_and_malformed_artifact() {
 }
 
 #[test]
-fn short_runtime_allocation_requires_private_real_owned_parent_and_named_machine() {
+#[cfg(target_os = "macos")]
+fn macos_short_socket_allocation_requires_private_real_owned_parent_and_named_machine() {
     use std::os::unix::fs::{PermissionsExt, symlink};
     let root = tempfile::Builder::new()
         .prefix("d1v-")
