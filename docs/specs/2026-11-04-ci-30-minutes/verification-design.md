@@ -30,7 +30,7 @@ Every requirement is proven on the real target: a GitHub-hosted CI run of the PR
 - **O1 · run timing and jobs:** read once per run from the GitHub API: creation time, each job's name and times, and its conclusion.
 - **O2 · test identities and profile:** two inputs.
   - Same-revision `cargo nextest list` pairs, per invocation. These are the R3 oracle.
-  - The CI log, parsed by `ci-test-profile` into one inventory per invocation (PASS and FAIL), with each inventory checked against that invocation's own `Summary`. A run where the tool can't reproduce the Summary counts yields `inventoryMismatch`, and its profile is not used. The profile is evidence of where time goes, not the R1 verdict.
+  - The CI log, parsed by `ci-test-profile` into one inventory per invocation (PASS and FAIL), grouped by nextest's own run total (`(<n>/<total>)`), with each inventory checked against the `Summary` reporting the same total. A run where the tool can't reproduce the Summary counts yields `inventoryMismatch`, and its profile is not used. The profile is evidence of where time goes, not the R1 verdict.
 - **O3 · test diff:** the PR diff of every test and fixture file it touches, read against the pre-change file.
 - **O4 · D1 merge-forward and selector check:** `git merge-tree` of `feat/central-storage-reset-d1-router` at its head (later, of main after D1's squash) against the change's branch, the merge itself (never a rebase), then the per-selector listings on the merged head.
 - **O5 · delayed-start comparison:** each changed test is run twice under the same induced delay before its fixture starts, once in its pre-fix version and once in its fixed version, on Sunclaw.

@@ -49,7 +49,10 @@ Unchanged from the 2026-11-04 plan. Make the workspace nextest invocation start 
 
 ### S1 · Profile tool
 
-As in the 2026-11-04 plan: reads, writes, behavior, pre-change signal, oracle and stop all carry forward. The profile is run on D1 run 41994005347 and on main run 41826050980.
+Reads, writes, pre-change signal and oracle carry forward from the 2026-11-04 plan. The profile is run on D1 run 41994005347 and on main run 41826050980.
+
+- **Behavior (corrected 2026-11-05 after the Implementer's S1 stop):** the downloaded log of 41994005347 has `UNKNOWN STEP` in every line, so step names can't separate invocations. The tool groups result lines by nextest's run total, the `<total>` in `(<n>/<total>)`, and checks each group against the `Summary` with the same `N tests run`. That log has three: 60, 6806 and 1. The shapes are in Program Design "Entity binding". The #213-style fixture still models two concurrent invocations, now told apart by their totals, plus one case with two equal totals that must return `ambiguousInvocations`.
+- **Stop:** a log whose result lines carry no `(<n>/<total>)` counter returns to the Lead.
 
 ### S2 · Causal fix for the oversized-frame test
 

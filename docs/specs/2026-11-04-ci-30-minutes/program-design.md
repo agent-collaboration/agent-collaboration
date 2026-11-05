@@ -21,7 +21,7 @@ flowchart TB
       p100 --> p90 --> p50 --> p0
     end
   end
-  ws --> log["CI log: per-test PASS/FAIL lines and Summary,<br/>one step per invocation"]
+  ws --> log["CI log: per-test PASS/FAIL lines and Summary,<br/>one invocation per run counter total"]
   quota --> log
   log --> prof["ci-test-profile (read-only tool)<br/>per-invocation inventory and concurrency profile"]
 ```
@@ -62,24 +62,25 @@ S is the only option that keeps R2 and R4, and B or C could each be added later 
 | E1 CI run | GitHub Actions | existing: workflow `CI` (`.github/workflows/ci.yml`) | the GitHub API run record: `id`, `created_at`, `head_sha`, `event`, `conclusion` | external |
 | E2 Required check | `ci.yml` jobs `static`, `test`, `e2e`, `wasm` | existing | the API job record: `name`, `started_at`, `completed_at`, `conclusion` | external |
 | E3 Machine | GitHub-hosted runner | existing: one per job | counted from the jobs in a run | external |
-| E4 Test | nextest | existing: test binaries | log line `PASS\|FAIL [<secs>s] (<n>/<total>) <binary-id> <test-name>` within one invocation's step; `cargo nextest list` output for selection | derived |
+| E4 Test | nextest | existing: test binaries | log line `PASS\|FAIL [<secs>s] (<n>/<total>) <binary-id> <test-name>`, where `<total>` is that invocation's run count and matches its `Summary … <total> tests run`; `cargo nextest list` output for selection | derived |
 | E5 Proof input | each test's own source | existing: the test file | the Rust source | existing |
 | E6 Run-alone test | `.config/nextest.toml` `[[profile.ci.overrides]]` with `threads-required = "num-test-threads"` | existing, modified (members leave as they turn causal) | a nextest filter expression; its scope is one invocation | config |
 
 The profiling tool adds derived shapes only:
 
 ```text
-InvocationInventory { step: string, summaryRun: number, summaryPassed: number, summaryFailed: number, summarySkipped: number,
+InvocationInventory { runTotal: number, summaryRun: number, summaryPassed: number, summaryFailed: number, summarySkipped: number,
                       outcomes: Array<{ binaryId: string, testName: string, result: "pass" | "fail", startSeconds: number, endSeconds: number }> }
-InvocationProfile   { step: string, wallMinutes: number, elapsedTestMinutes: number,
+InvocationProfile   { runTotal: number, wallMinutes: number, elapsedTestMinutes: number,
                       minutesAtConcurrency: Map<number, number>,
                       soloOwners: Array<{ binaryId: string, testName: string, soloSeconds: number }> }
 ProfileResult       = { kind: "profiled", invocations: InvocationProfile[] }
-                    | { kind: "inventoryMismatch", step: string, counted: number, summaryRun: number }
-                    | { kind: "noTimings", reason: "logMissingResultLines" | "stepNotFound" }
+                    | { kind: "inventoryMismatch", runTotal: number, counted: number, summaryRun: number }
+                    | { kind: "ambiguousInvocations", runTotal: number }
+                    | { kind: "noTimings", reason: "logMissingResultLines" | "summaryNotFound" }
 ```
 
-Each inventory is checked against its own nextest `Summary` line. A mismatch is reported, never smoothed over.
+An invocation is identified by nextest's own run total: the `<total>` in each result line's `(<n>/<total>)` counter, which equals the `N` in that invocation's `Summary … N tests run`. GitHub's per-step names are not used, for two reasons: a downloaded job log can carry `UNKNOWN STEP` for every line, and the CI test job runs two invocations at once in background steps. Each inventory is checked against the `Summary` with the same total. A mismatch is reported, never smoothed over. Two invocations with the same total in one log are `ambiguousInvocations`, never merged.
 
 ## Components
 
