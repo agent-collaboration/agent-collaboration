@@ -12,6 +12,7 @@ import { z } from "zod";
 import { decode, encode } from "../../exact-json.ts";
 import { controlPlanSchema, type ControlPlan } from "./control-plan.ts";
 import { lifecycleCase } from "./journey-cases.ts";
+import { runCases } from "./run.ts";
 import { ProviderStoreReadback } from "./role-readback.ts";
 import { StreamingMcpClient } from "./streaming-mcp-client.ts";
 
@@ -19,18 +20,24 @@ const SERVICE = "11111111-1111-4111-8111-111111111111";
 const TARGET = { endpoint: { serviceId: SERVICE, endpointId: "cursor-local" }, sessionId: "s-1" };
 const OWNER = userInfo().username;
 const item = (text: string): unknown => ({ itemId: "i-1", kind: { kind: "agentMessage" }, text });
-const TURN = [
-  { kind: "turnStarted", turnId: "t-1", inputId: "in-1" },
-  { kind: "inputAccepted", inputId: "in-1", turnId: "t-1" },
-  { kind: "itemStarted", item: item("before") },
-  { kind: "itemUpdated", item: item("beforeafter") },
-  { kind: "itemCompleted", itemId: "i-1" },
-  {
-    kind: "turnEnded",
-    turnId: "t-1",
-    outcome: { kind: "ended", stopReason: "endTurn", localCause: null },
-  },
-].map((event, index) => ({ sequence: BigInt(index + 3), event }));
+// A direct prompt in the producer's shape: no inputAccepted (steer only) and snake_case
+// TurnOutcome fields (session_event.rs:141-151), as the first controlled Host run recorded.
+function turn(outcome: unknown): { sequence: bigint; event: unknown }[] {
+  return [
+    { kind: "turnStarted", turnId: "t-1", inputId: "in-1" },
+    {
+      kind: "itemStarted",
+      item: { itemId: "u-1", kind: { kind: "userMessage" }, text: "ordinary" },
+    },
+    { kind: "itemStarted", item: item("before") },
+    { kind: "itemUpdated", item: item("beforeafter") },
+    { kind: "itemCompleted", itemId: "i-1" },
+    { kind: "turnEnded", turnId: "t-1", outcome },
+  ].map((event, index) => ({ sequence: BigInt(index + 3), event }));
+}
+const TURN = turn({ kind: "ended", stop_reason: "endTurn", local_cause: null });
+// The camelCase outcome the driver once invented; the real Host never sends it.
+const INVENTED_TURN = turn({ kind: "ended", stopReason: "endTurn", localCause: null });
 
 const callSchema = z.object({
   id: z.string(),
@@ -45,6 +52,10 @@ interface StandIn {
   readonly receipt: string;
   readonly duplicateDispatch: boolean;
   readonly createAnswer: CreateAnswer;
+  /** Answers the post-prompt observation with the invented outcome, failing after create. */
+  readonly inventedTurnEnd: boolean;
+  /** Answers create faithfully but leaves no owning-store record, failing the role readback. */
+  readonly omitStoreRecord: boolean;
   readonly calls: string[];
   promptOperation: string | null;
 }
@@ -69,7 +80,9 @@ function answer(standIn: StandIn, name: string, args: Readonly<Record<string, un
       args["afterSequence"] === undefined
         ? [{ sequence: 2n, event: { kind: "stateChanged", state: {} } }]
         : args["afterSequence"] === 2n
-          ? TURN
+          ? standIn.inventedTurnEnd
+            ? INVENTED_TURN
+            : TURN
           : [],
     endReason: "deadlineReached",
     continuationGap: true,
@@ -81,15 +94,16 @@ function answer(standIn: StandIn, name: string, args: Readonly<Record<string, un
       // self-consistent and only a check against the plan can catch it.
       const target = createdTarget(standIn.createAnswer);
       const database = new DatabaseSync(standIn.store);
-      database
-        .prepare("INSERT INTO provider_session_records VALUES (?, ?, ?, ?, ?)")
-        .run(
-          target.endpoint.serviceId,
-          target.endpoint.endpointId,
-          target.sessionId,
-          encode({ humanId: OWNER }),
-          encode({ humanId: OWNER }),
-        );
+      if (!standIn.omitStoreRecord)
+        database
+          .prepare("INSERT INTO provider_session_records VALUES (?, ?, ?, ?, ?)")
+          .run(
+            target.endpoint.serviceId,
+            target.endpoint.endpointId,
+            target.sessionId,
+            encode({ humanId: OWNER }),
+            encode({ humanId: OWNER }),
+          );
       database.close();
       const operationId =
         standIn.createAnswer === "foreignOperation"
@@ -142,7 +156,12 @@ function answer(standIn: StandIn, name: string, args: Readonly<Record<string, un
 }
 
 async function withStandIn(
-  options: { readonly duplicateDispatch?: boolean; readonly createAnswer?: CreateAnswer },
+  options: {
+    readonly duplicateDispatch?: boolean;
+    readonly createAnswer?: CreateAnswer;
+    readonly inventedTurnEnd?: boolean;
+    readonly omitStoreRecord?: boolean;
+  },
   body: (
     plan: ControlPlan,
     client: StreamingMcpClient,
@@ -156,6 +175,8 @@ async function withStandIn(
     receipt: join(root, "receipt.jsonl"),
     duplicateDispatch: options.duplicateDispatch ?? false,
     createAnswer: options.createAnswer ?? "faithful",
+    inventedTurnEnd: options.inventedTurnEnd ?? false,
+    omitStoreRecord: options.omitStoreRecord ?? false,
     calls: [],
     promptOperation: null,
   };
@@ -236,6 +257,7 @@ test("the lifecycle case qualifies one isolated prompt from the driver's own cal
       context,
       plan,
       store,
+      knownTargets: [],
       promptText: "ordinary",
       holdText: "hold",
     });
@@ -260,6 +282,7 @@ test("the same driver refuses a duplicate provider dispatch it did not cause", a
       context,
       plan,
       store,
+      knownTargets: [],
       promptText: "ordinary",
       holdText: "hold",
     });
@@ -290,7 +313,14 @@ test("a self-consistent create answer for another endpoint, service or operation
       };
       mkdirSync(context.evidence);
       await assert.rejects(
-        lifecycleCase({ context, plan, store, promptText: "ordinary", holdText: "hold" }),
+        lifecycleCase({
+          context,
+          plan,
+          store,
+          knownTargets: [],
+          promptText: "ordinary",
+          holdText: "hold",
+        }),
         /create/,
         createAnswer,
       );
@@ -302,4 +332,67 @@ test("a self-consistent create answer for another endpoint, service or operation
       );
     });
   }
+});
+
+test("a failure after a validated create keeps that Session as the case's known target", async () => {
+  await withStandIn({ inventedTurnEnd: true }, async (plan, client, store, standIn) => {
+    const context = {
+      client,
+      evidence: join(plan.repository, "evidence"),
+      deadline: Date.parse(plan.deadline),
+    };
+    mkdirSync(context.evidence);
+    const [result, ...rest] = await runCases(plan, context, store);
+    assert.deepEqual(rest, []);
+    assert.equal(result?.verdict.kind, "failed");
+    assert.deepEqual(result?.target, TARGET);
+    // The failing observation is the last input: no retry, close or other later mutation.
+    const afterPrompt = standIn.calls.slice(standIn.calls.indexOf("conversation_prompt") + 1);
+    assert.deepEqual(
+      afterPrompt.filter((tool) => MUTATING_TOOLS.has(tool)),
+      [],
+    );
+  });
+});
+
+test("a self-consistently wrong create answer is never kept as a known target", async () => {
+  for (const createAnswer of ["otherEndpoint", "otherService", "foreignOperation"] as const) {
+    await withStandIn({ createAnswer }, async (plan, client, store, standIn) => {
+      const context = {
+        client,
+        evidence: join(plan.repository, "evidence"),
+        deadline: Date.parse(plan.deadline),
+      };
+      mkdirSync(context.evidence);
+      const [result] = await runCases(plan, context, store);
+      assert.equal(result?.verdict.kind, "failed", createAnswer);
+      assert.equal(result?.target, null, createAnswer);
+      const afterCreate = standIn.calls.slice(standIn.calls.indexOf("conversation_create") + 1);
+      assert.deepEqual(
+        afterCreate.filter((tool) => MUTATING_TOOLS.has(tool)),
+        [],
+        createAnswer,
+      );
+    });
+  }
+});
+
+test("a store failure after a validated create still names that Session, with no later input", async () => {
+  await withStandIn({ omitStoreRecord: true }, async (plan, client, store, standIn) => {
+    const context = {
+      client,
+      evidence: join(plan.repository, "evidence"),
+      deadline: Date.parse(plan.deadline),
+    };
+    mkdirSync(context.evidence);
+    const [result] = await runCases(plan, context, store);
+    assert.equal(result?.verdict.kind, "failed");
+    assert.match(result?.verdict.kind === "failed" ? result.verdict.reason : "", /owning store/);
+    assert.deepEqual(result?.target, TARGET);
+    const afterCreate = standIn.calls.slice(standIn.calls.indexOf("conversation_create") + 1);
+    assert.deepEqual(
+      afterCreate.filter((tool) => MUTATING_TOOLS.has(tool)),
+      [],
+    );
+  });
 });

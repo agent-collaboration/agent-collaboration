@@ -3,7 +3,12 @@
 // item (acp-client-runtime provider_item_projection.rs:293-341), and a retained snapshot keeps
 // latest state rather than every delta. So a missed intermediate update is not lost output; a
 // final text that disagrees with the operation's own reply is.
-import type { SessionItem } from "./observation-models.ts";
+//
+// A direct prompt is accepted at its turnStarted, which carries its own input ID. inputAccepted is
+// published only when a steer is injected into an already active turn
+// (provider_session_actor.rs:398-407), so every one seen is another input; it is kept, never
+// folded into the turn it names, and the isolation rule decides what it means.
+import type { SessionItem, TurnOutcome } from "./observation-models.ts";
 import type { NumberedEvent } from "./observation-ledger.ts";
 
 export interface ObservedItem {
@@ -16,28 +21,41 @@ export interface ObservedItem {
 export interface ObservedTurn {
   readonly turnId: string;
   readonly inputId: string;
-  readonly accepted: boolean;
-  /** `{kind: "ended", stopReason}` or `{kind: "lost", reason}` as the hub reported it. */
-  readonly outcome: unknown;
+  /** The turn's end as the hub reported it; null while the turn is still open. */
+  readonly outcome: TurnOutcome | null;
   readonly items: readonly ObservedItem[];
 }
 
+/** An injected input the Session accepted, named by the turn it joined. */
+export interface AcceptedInput {
+  readonly turnId: string;
+  readonly inputId: string;
+}
+
 export type TurnReconstruction =
-  | { readonly kind: "reconstructed"; readonly turns: readonly ObservedTurn[] }
+  | {
+      readonly kind: "reconstructed";
+      readonly turns: readonly ObservedTurn[];
+      readonly acceptedInputs: readonly AcceptedInput[];
+    }
   | { readonly kind: "rejected"; readonly sequence: bigint; readonly reason: string };
 
 interface MutableTurn {
   turnId: string;
   inputId: string;
-  accepted: boolean;
-  outcome: unknown;
+  outcome: TurnOutcome | null;
   items: Map<string, { kind: string; text: string | null; completed: boolean }>;
 }
 
 export function reconstructTurns(events: readonly NumberedEvent[]): TurnReconstruction {
   const turns: MutableTurn[] = [];
+  const acceptedInputs: AcceptedInput[] = [];
   let active: MutableTurn | null = null;
   for (const { sequence, event } of events) {
+    if (event.kind === "inputAccepted") {
+      acceptedInputs.push({ turnId: event.turnId, inputId: event.inputId });
+      continue;
+    }
     const reason = applyEvent(turns, active, event);
     if (typeof reason === "string") return { kind: "rejected", sequence, reason };
     active = reason.active;
@@ -47,10 +65,10 @@ export function reconstructTurns(events: readonly NumberedEvent[]): TurnReconstr
     turns: turns.map((turn): ObservedTurn => ({
       turnId: turn.turnId,
       inputId: turn.inputId,
-      accepted: turn.accepted,
       outcome: turn.outcome,
       items: [...turn.items].map(([itemId, item]): ObservedItem => ({ itemId, ...item })),
     })),
+    acceptedInputs,
   };
 }
 
@@ -73,17 +91,11 @@ function applyEvent(
       const turn: MutableTurn = {
         turnId: event.turnId,
         inputId: event.inputId,
-        accepted: false,
         outcome: null,
         items: new Map(),
       };
       turns.push(turn);
       return { active: turn };
-    }
-    case "inputAccepted": {
-      const turn = turns.find((candidate): boolean => candidate.turnId === event.turnId);
-      if (turn !== undefined) turn.accepted = turn.inputId === event.inputId || turn.accepted;
-      return { active };
     }
     case "turnEnded": {
       if (active === null || active.turnId !== event.turnId)

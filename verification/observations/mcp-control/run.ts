@@ -52,26 +52,33 @@ async function discover(context: JourneyContext): Promise<readonly string[]> {
   return names;
 }
 
-async function runCases(
+/** Runs the declared cases in order and stops all later input after the first that does not pass. */
+export async function runCases(
   plan: ControlPlan,
   context: JourneyContext,
   store: ProviderStoreReadback,
 ): Promise<CaseResult[]> {
-  const inputs: CaseInputs = {
-    context,
-    plan,
-    store,
-    promptText: plan.promptText,
-    holdText: plan.holdText ?? "",
-  };
   const results: CaseResult[] = [];
   for (const [index, name] of plan.cases.entries()) {
+    const inputs: CaseInputs = {
+      context,
+      plan,
+      store,
+      promptText: plan.promptText,
+      holdText: plan.holdText ?? "",
+      knownTargets: [],
+    };
     let result: CaseResult;
     try {
       result = await CASES[name](inputs);
     } catch (error) {
-      // A case that cannot reach its deciding observation is a finding, never retried.
-      result = { name, target: null, verdict: { kind: "failed", reason: String(error) } };
+      // A case that cannot reach its deciding observation is a finding, never retried. The
+      // Session its validated create returned stays named, so its owner can find it.
+      result = {
+        name,
+        target: inputs.knownTargets.at(-1) ?? null,
+        verdict: { kind: "failed", reason: String(error) },
+      };
     }
     results.push(result);
     record(context, { step: `verdict-${name}`, result });
@@ -128,4 +135,4 @@ async function main(): Promise<number> {
   }
 }
 
-process.exitCode = await main();
+if (import.meta.main) process.exitCode = await main();

@@ -60,6 +60,12 @@ export interface CaseInputs {
   readonly store: ProviderStoreReadback;
   readonly promptText: string;
   readonly holdText: string;
+  /**
+   * Sessions this case created whose answer passed the plan check, appended as soon as it does.
+   * A later failure (store, observation, readback, close) must still name the Session it
+   * left behind; a create answer that failed the check never enters this list.
+   */
+  readonly knownTargets: SessionRef[];
 }
 
 const PROMPT_SECONDS = 120;
@@ -104,6 +110,7 @@ export async function createSession(inputs: CaseInputs, step: string): Promise<S
     throw new Error(
       `${step}: the create answer is for another service or endpoint than the plan declares`,
     );
+  inputs.knownTargets.push(created.target);
   const roles = store.sessionRoles(created.target);
   if (roles === null)
     throw new Error(`${step}: the owning store has no record of the created Session`);

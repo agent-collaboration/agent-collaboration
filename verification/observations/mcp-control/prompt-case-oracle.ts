@@ -1,11 +1,12 @@
 // Decides one isolated MCP prompt case under the Lead's G2 rule (push 01a1a94f): one Session, a
-// real epoch/sequence baseline, exactly one known operation, exactly one new accepted, started
-// and ended turn, the turn's reconstructed reply equal to the operation's own terminal reply,
-// and exactly one provider prompt in the controlled peer's receipt. The public surface has no
-// operation-to-turn join (prompt input has no input ID, the Host generates one, the operation
-// snapshot reports `inputId: None`, PromptCompleted has no turn ID), so this earns causal
-// correlation for the isolated case only, never a concurrent join.
+// real epoch/sequence baseline, exactly one known operation, exactly one new started and ended
+// turn with no other accepted input, the turn's reconstructed reply equal to the operation's own
+// terminal reply, and exactly one provider prompt in the controlled peer's receipt. The public
+// surface has no operation-to-turn join (prompt input has no input ID, the Host generates one,
+// the operation snapshot reports `inputId: None`, PromptCompleted has no turn ID), so this earns
+// causal correlation for the isolated case only, never a concurrent join.
 import { z } from "zod";
+import { encode } from "../../exact-json.ts";
 import { sameSession, sessionRefSchema, type SessionRef } from "./observation-models.ts";
 import type { ObservationLedger } from "./observation-ledger.ts";
 import { agentReplyText, reconstructTurns, type ObservedTurn } from "./observation-turns.ts";
@@ -127,15 +128,11 @@ export function decidePromptCase(evidence: PromptCaseEvidence): PromptCaseVerdic
     if (reply.trim() === "")
       return failed("the positive case's agent reply has no non-whitespace text");
   }
-  const outcome = z
-    .looseObject({ kind: z.literal("ended"), stopReason: z.string() })
-    .safeParse(turn.outcome);
-  if (!outcome.success) return failed("the observed turn did not end with an agent stop reason");
-  if (outcome.data.stopReason !== evidence.expectedStopReason)
-    return failed(`the turn ended ${outcome.data.stopReason}, not ${evidence.expectedStopReason}`);
-  const result = checkPromptResult(evidence, reply, outcome.data.stopReason);
+  const ended = endedStopReason(turn, evidence.expectedStopReason);
+  if (typeof ended !== "string") return ended;
+  const result = checkPromptResult(evidence, reply, ended);
   if (result !== null) return result;
-  const operation = checkOperation(evidence, outcome.data.stopReason);
+  const operation = checkOperation(evidence, ended);
   if (operation !== null) return operation;
   const peer = evidence.peerReceipt;
   if (peer !== null && peer.prompts !== 1)
@@ -148,6 +145,29 @@ export function decidePromptCase(evidence: PromptCaseEvidence): PromptCaseVerdic
   )
     return failed("the controlled peer's release did not follow exactly this prompt");
   return { kind: "qualified", turnId: turn.turnId, inputId: turn.inputId, reply };
+}
+
+/**
+ * The agent-confirmed stop reason the turn ended with, in canonical form, or the verdict when it
+ * did not end that way. A lost turn carries no agent claim; an unknown reason is compared as
+ * `unknown:<text>` and so never matches an expected known one; a Router-local cause means the
+ * output the Router kept may not be the agent's whole reply, so no positive claim is earned.
+ */
+function endedStopReason(
+  turn: ObservedTurn,
+  expectedStopReason: string,
+): string | PromptCaseVerdict {
+  const { outcome } = turn;
+  if (outcome === null) return failed("the observed turn has no end");
+  if (outcome.kind === "lost")
+    return failed(`the observed turn was lost (${outcome.reason}), not ended by the agent`);
+  if (outcome.local_cause !== null)
+    return inconclusive(`the turn ended with a Router-local cause ${encode(outcome.local_cause)}`);
+  const stopReason = canonicalStopReason(outcome.stop_reason);
+  if (stopReason === null) return failed("the observed turn has no recognizable stop reason");
+  if (stopReason !== expectedStopReason)
+    return failed(`the turn ended ${stopReason}, not ${expectedStopReason}`);
+  return stopReason;
 }
 
 type IsolatedTurn =
@@ -171,7 +191,9 @@ function singleIsolatedTurn(evidence: PromptCaseEvidence): IsolatedTurn {
   const [turn, ...extra] = reconstruction.turns;
   if (turn === undefined) return stop(failed("no turn followed the baseline (false completion)"));
   if (extra.length > 0) return stop(inconclusive("more than one turn followed the baseline"));
-  if (!turn.accepted) return stop(failed("the turn's input was never accepted"));
+  // The prompt's own acceptance is its turnStarted; any accepted input is a second one.
+  if (reconstruction.acceptedInputs.length > 0)
+    return stop(inconclusive("another input was accepted on the isolated Session"));
   return { kind: "turn", turn };
 }
 

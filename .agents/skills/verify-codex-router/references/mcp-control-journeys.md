@@ -2,7 +2,11 @@
 
 An ordinary MCP caller controls a Claude or Cursor Session through the existing typed tools over a declared Host: create, prompt with bounded observation, exact cancellation, caller loss, reattach and close. The caller never speaks ACP. This journey qualifies the first facade deliverable's V23 rows (plan `docs/specs/2026-11-02-acp-shared-control/plans/2026-11-05-mcp-facade-lifecycle.md`, VD F). It does not cover the bound-ACP or full-facade obligations.
 
-**Status: draft.** The driver, oracles and sensitivity tests exist and pass under `node --test`. The journey has not yet driven a real Host. It stays draft until a declared controlled-peer Host run and then real Claude and Cursor runs pass, each under its own exact-target commission.
+**Status: draft.** The driver, oracles and sensitivity tests exist and pass under `node --test`.
+
+The first controlled Host run (mcf11, 2026-11-05) reached create and one completed prompt. It then stopped on the driver's own wire schema, which was since corrected against the recorded shapes. No case has qualified yet.
+
+The controlled peer advertises `loadSession` only, so close and resume are refused before dispatch on that profile; this is an open fixture prerequisite. The journey stays draft until a declared controlled-peer Host run and then real Claude and Cursor runs pass, each under its own exact-target commission.
 
 ## What it proves and what it does not
 
@@ -80,13 +84,20 @@ Integers stay exact. A verdict can be rechecked from these files alone.
 - Bounded reads continue only from the last observed `{epoch, afterSequence}`. A replayed or fabricated sequence fails.
 - A stale epoch's resync is inconclusive, never complete output. `continuationGap: true` alone is not loss.
 - Each notification must equal its result's event and carry that event's own cursor.
-- Stop reasons are compared across their vocabularies: the turn event and settlement are camelCase, the operation snapshot is snake_case.
-- An extra turn or operation on the isolated Session makes the case inconclusive.
-- A create answer must name the operation that was submitted and a Session on the plan's own service and endpoint before anything else uses it. A self-consistently wrong answer stops the case with no further input. The Session ID is provider-generated and taken as returned.
+- A turn ends in `turnEnded.outcome` exactly as the producer serializes it: `{kind: "ended", stop_reason, local_cause}` or `{kind: "lost", reason}`. The field names are snake_case: serde renames only the variant tag (session_event.rs:141-151). A camelCase form is refused.
+- Stop-reason values are compared across their vocabularies. The turn event and the prompt settlement use camelCase values; the operation snapshot and wait settlement use snake_case values; an unknown reason is `{unknown: text}` in each and never matches a known one.
+- A lost turn fails. A turn ended for a Router-local cause is inconclusive.
+- A direct prompt is accepted at its `turnStarted`, which carries its own input ID. `inputAccepted` is published only for a steer injected into an active turn (provider_session_actor.rs:398-407).
+- On the isolated Session, an injected `inputAccepted` event, an extra turn or an extra operation makes the case inconclusive.
+- A create answer must name the operation that was submitted and a Session on the plan's own service and endpoint before anything else uses it. A self-consistently wrong answer stops the case with no further input. The Session ID is provider-generated and taken as returned. Once a create answer passes that check, its Session stays named in the case verdict even when a later step fails.
 - A positive inference case (stop reason endTurn) needs an actual agent-message reply with non-whitespace text, beyond cross-view equality. A cancelled outcome may end with no output.
 
 Sensitivity is permanent in the colocated tests:
 - wrong target, including the same raw ID on another endpoint;
+- the recorded mcf11 direct-prompt shape, an invented camelCase outcome and a turn start with an empty ID;
+- a lost turn, an unknown stop reason and a Router-local cause;
+- an injected input on the isolated Session;
+- a validated target kept after a later store or observation failure, and never kept after a wrong-target answer;
 - false completion;
 - lost or truncated reply;
 - duplicate dispatch;

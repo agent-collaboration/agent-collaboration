@@ -25,18 +25,28 @@ function numbered(sequence: number, event: RawEvent): RawEvent {
 function agentItem(text: string): RawEvent {
   return { itemId: "item-1", kind: { kind: "agentMessage" }, text };
 }
+function userItem(text: string): RawEvent {
+  return { itemId: "user-1", kind: { kind: "userMessage" }, text };
+}
+/** A turnEnded event in the producer's own shape (see MCF11_PROMPT_EVENTS for provenance). */
+function turnEnded(turnId: string, stopReason: unknown, localCause: unknown = null): RawEvent {
+  return {
+    kind: "turnEnded",
+    turnId,
+    outcome: { kind: "ended", stop_reason: stopReason, local_cause: localCause },
+  };
+}
+// A direct prompt as the producer publishes it: the turn starts with its own input ID and there
+// is no separate inputAccepted (that event is an injected steer only), then the user's message
+// item, the agent's cumulative reply item and the snake_case outcome.
 function promptTurn(first: number, turnId: string, inputId: string): readonly RawEvent[] {
   return [
     numbered(first, { kind: "turnStarted", turnId, inputId }),
-    numbered(first + 1, { kind: "inputAccepted", inputId, turnId }),
+    numbered(first + 1, { kind: "itemStarted", item: userItem("ordinary") }),
     numbered(first + 2, { kind: "itemStarted", item: agentItem("before") }),
     numbered(first + 3, { kind: "itemUpdated", item: agentItem("beforeafter") }),
     numbered(first + 4, { kind: "itemCompleted", itemId: "item-1" }),
-    numbered(first + 5, {
-      kind: "turnEnded",
-      turnId,
-      outcome: { kind: "ended", stopReason: "endTurn", localCause: null },
-    }),
+    numbered(first + 5, turnEnded(turnId, "endTurn")),
   ];
 }
 const PROMPT_TURN = promptTurn(3, "turn-1", "input-1");
@@ -333,13 +343,9 @@ test("a cursor that skips past a second turn is refused, though the visible chai
 function silentTurn(stopReason: string, items: readonly RawEvent[]): readonly RawEvent[] {
   return [
     numbered(3, { kind: "turnStarted", turnId: "turn-1", inputId: "input-1" }),
-    numbered(4, { kind: "inputAccepted", inputId: "input-1", turnId: "turn-1" }),
+    numbered(4, { kind: "itemStarted", item: userItem("ordinary") }),
     ...items.map((item, index) => numbered(5 + index, { kind: "itemStarted", item })),
-    numbered(5 + items.length, {
-      kind: "turnEnded",
-      turnId: "turn-1",
-      outcome: { kind: "ended", stopReason, localCause: null },
-    }),
+    numbered(5 + items.length, turnEnded("turn-1", stopReason)),
   ];
 }
 
@@ -385,4 +391,121 @@ test("a cancelled outcome with no output still qualifies where no reply is requi
     }),
   );
   assert.equal(verdict.kind, "qualified");
+});
+
+// Observation fields from the first controlled Host run (mcf11, 2026-11-05, exchanges.jsonl:
+// the baseline and post-prompt reads). IDs and texts are substituted; capability metadata that
+// this oracle does not read is omitted. It preserves what the earlier stand-ins invented away: no inputAccepted
+// for a direct prompt, snake_case TurnOutcome fields, epoch 0, the retained-state gap 8 to 10 and
+// a userMessage item. The terminal readback was not reached in that run, so its snapshot here is
+// the stand-in SETTLED_OPERATION.
+const MCF11_BASELINE: readonly RawEvent[] = [
+  numbered(1, {
+    kind: "settingsChanged",
+    settings: { mode: null, model: null, effort: null, config: [] },
+  }),
+  numbered(2, {
+    kind: "capabilitiesChanged",
+    capabilities: { load: true, resume: false, close: false, list: false, steer: false },
+  }),
+  numbered(3, { kind: "stateChanged", state: { kind: "idle" } }),
+  numbered(4, {
+    kind: "itemStarted",
+    item: { itemId: "notice-1", kind: { kind: "notice" }, text: '{"availableCommands":[]}' },
+  }),
+  numbered(5, { kind: "itemCompleted", itemId: "notice-1" }),
+];
+const MCF11_PROMPT_EVENTS: readonly RawEvent[] = [
+  numbered(6, { kind: "turnStarted", turnId: "turn-1", inputId: "input-1" }),
+  numbered(7, { kind: "itemStarted", item: userItem("facade-controlled-proof") }),
+  numbered(8, { kind: "itemCompleted", itemId: "user-1" }),
+  numbered(10, { kind: "itemUpdated", item: agentItem("beforeafter") }),
+  numbered(11, { kind: "itemCompleted", itemId: "item-1" }),
+  numbered(12, turnEnded("turn-1", "endTurn")),
+];
+
+test("the oracle accepts the recorded observation shape with a stand-in terminal readback", () => {
+  const exact = decidePromptCase({
+    ...evidence([], {}, []),
+    ledger: foldObservationReads(TARGET, [
+      read({ after: null, events: MCF11_BASELINE, epoch: 0 }, true),
+      read({ after: 5, events: MCF11_PROMPT_EVENTS, epoch: 0, requestEpoch: 0 }, false),
+    ]),
+  });
+  assert.deepEqual(exact, {
+    kind: "qualified",
+    turnId: "turn-1",
+    inputId: "input-1",
+    reply: "beforeafter",
+  });
+});
+
+test("the invented camelCase outcome and a turn start without its input are refused at the wire", () => {
+  const parseOne = (event: RawEvent): unknown =>
+    boundedObservationResultSchema.parse({
+      target: TARGET,
+      generation: {},
+      attached: true,
+      events: [numbered(3, event)],
+      endReason: "deadlineReached",
+      continuationGap: true,
+      epoch: 7n,
+    });
+  assert.throws(() =>
+    parseOne({
+      kind: "turnEnded",
+      turnId: "turn-1",
+      outcome: { kind: "ended", stopReason: "endTurn", localCause: null },
+    }),
+  );
+  assert.throws(() => parseOne({ kind: "turnStarted", turnId: "turn-1", inputId: "" }));
+  assert.throws(() => parseOne({ kind: "turnStarted", turnId: "", inputId: "input-1" }));
+});
+
+test("an input injected into the isolated turn, or accepted for an unseen turn, is inconclusive", () => {
+  const withSteer = [
+    ...PROMPT_TURN.slice(0, 5),
+    numbered(8, { kind: "inputAccepted", inputId: "input-steer", turnId: "turn-1" }),
+    numbered(9, turnEnded("turn-1", "endTurn")),
+  ];
+  assert.deepEqual(decidePromptCase(evidence([{ after: 2, events: withSteer }])), {
+    kind: "inconclusive",
+    reason: "another input was accepted on the isolated Session",
+  });
+  const foreign = [
+    numbered(3, { kind: "inputAccepted", inputId: "input-x", turnId: "turn-unseen" }),
+    ...promptTurn(4, "turn-1", "input-1"),
+  ];
+  assert.deepEqual(decidePromptCase(evidence([{ after: 2, events: foreign }])), {
+    kind: "inconclusive",
+    reason: "another input was accepted on the isolated Session",
+  });
+});
+
+test("a lost turn or an unknown stop reason never qualifies", () => {
+  const lost = [
+    ...PROMPT_TURN.slice(0, 5),
+    numbered(8, {
+      kind: "turnEnded",
+      turnId: "turn-1",
+      outcome: { kind: "lost", reason: "providerTurnFailed" },
+    }),
+  ];
+  assert.deepEqual(decidePromptCase(evidence([{ after: 2, events: lost }])), {
+    kind: "failed",
+    reason: "the observed turn was lost (providerTurnFailed), not ended by the agent",
+  });
+  const unknown = [...PROMPT_TURN.slice(0, 5), numbered(8, turnEnded("turn-1", { unknown: "x" }))];
+  assert.deepEqual(decidePromptCase(evidence([{ after: 2, events: unknown }])), {
+    kind: "failed",
+    reason: "the turn ended unknown:x, not endTurn",
+  });
+});
+
+test("a turn the Router ended for a local cause is inconclusive, not a positive reply", () => {
+  for (const cause of ["outputOverflow", { other: "limit" }]) {
+    const events = [...PROMPT_TURN.slice(0, 5), numbered(8, turnEnded("turn-1", "endTurn", cause))];
+    const verdict = decidePromptCase(evidence([{ after: 2, events }]));
+    assert.equal(verdict.kind, "inconclusive", JSON.stringify(cause));
+  }
 });

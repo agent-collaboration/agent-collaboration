@@ -26,15 +26,47 @@ const sessionItemSchema = z.looseObject({
 });
 export type SessionItem = z.infer<typeof sessionItemSchema>;
 
-const turnOutcomeSchema = z.discriminatedUnion("kind", [
-  z.looseObject({ kind: z.literal("ended"), stopReason: z.string().min(1) }),
-  z.looseObject({ kind: z.literal("lost"), reason: z.unknown() }),
+// TurnOutcome (session_event.rs:141-151) renames only its variant tag, so the ended variant's
+// fields stay snake_case on the wire, unlike the camelCase event fields around them; it denies
+// unknown fields, so an invented camelCase form is refused here too. StopReason and LocalCause
+// are externally tagged: a known value is a camelCase string, `Unknown(text)` is
+// `{unknown: text}` and `Other(text)` is `{other: text}` (session_event.rs:5-29).
+const stopReasonSchema = z.union([
+  z.enum(["endTurn", "maxTokens", "maxTurnRequests", "refusal", "cancelled"]),
+  z.strictObject({ unknown: z.string() }),
 ]);
+const localCauseSchema = z.union([
+  z.literal("outputOverflow"),
+  z.strictObject({ other: z.string() }),
+]);
+export const turnOutcomeSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("ended"),
+    stop_reason: stopReasonSchema,
+    local_cause: localCauseSchema.nullable(),
+  }),
+  z.strictObject({
+    kind: z.literal("lost"),
+    reason: z.enum(["providerRetired", "providerTurnFailed", "endNotObservable"]),
+  }),
+]);
+export type TurnOutcome = z.infer<typeof turnOutcomeSchema>;
 
 // Every SessionEvent kind is named so an unknown kind fails loudly instead of being skipped.
+// A direct prompt's acceptance is its turnStarted (its own input ID at dispatch); inputAccepted
+// is published only for a steer injected into an already active turn
+// (acp-client-runtime provider_session_actor.rs:398-407).
 export const sessionEventSchema = z.discriminatedUnion("kind", [
-  z.looseObject({ kind: z.literal("turnStarted"), turnId: z.string(), inputId: z.string() }),
-  z.looseObject({ kind: z.literal("inputAccepted"), inputId: z.string(), turnId: z.string() }),
+  z.looseObject({
+    kind: z.literal("turnStarted"),
+    turnId: z.string().min(1),
+    inputId: z.string().min(1),
+  }),
+  z.looseObject({
+    kind: z.literal("inputAccepted"),
+    inputId: z.string().min(1),
+    turnId: z.string().min(1),
+  }),
   z.looseObject({ kind: z.literal("turnEnded"), turnId: z.string(), outcome: turnOutcomeSchema }),
   z.looseObject({ kind: z.literal("itemStarted"), item: sessionItemSchema }),
   z.looseObject({ kind: z.literal("itemUpdated"), item: sessionItemSchema }),
