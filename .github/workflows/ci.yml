@@ -290,6 +290,16 @@ jobs:
       # Keep each build selection and feature set identical to its run.
       # Real Host, importer and forwarding-timer roots run in e2e below.
       # Keep the build/run exclusions and slower-job inventory identical.
+      # Experiment only: record per-unit compile and link times for the test-organization design.
+      - name: Record test build timings
+        run: cargo test --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness --no-run --timings
+      - name: Upload test build timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-test
+          path: target/cargo-timings/cargo-timing.html
+          retention-days: 7
       - name: Build test binaries
         run: |
           cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not((package(=agent-collaboration) & binary(=e2e)) | (package(=board-legacy-upgrade) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/)))' --no-run
