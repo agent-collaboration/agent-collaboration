@@ -76,7 +76,7 @@ Before extraction, every file to be moved is checked for `#[test]`, `#[tokio::te
 
 ## Enforcement (workspace-architecture-check)
 
-- **R2, shipping-closure check:** run `cargo tree --locked -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade -e normal,build,features`, the release build's own selection (`release.yml:147`), and fail if a `*-test-support` crate or a `test-support` feature appears. This extends the release workflow's existing guard (`release.yml:184-193`), which uses the same method for `codex-router-secret-store`. It lives in CI's Static job next to that guard, not in `crate_layers.rs`. That reader drops node features (`crate_layers.rs:115-119`), and Cargo metadata merges dev units, so neither can tell a dev-only activation from a shipping one.
+- **R2, shipping-closure check, on the shipping platform:** the authoritative check runs natively on Apple Silicon. It runs in the release job, beside its existing guard, and on every main push in the existing Apple Silicon warm-up job (`ci.yml:512`, `macos-15`), so it doesn't wait for a release. A PR gets only the early warning below until it merges. A default Linux `cargo tree` would miss a macOS-conditioned dependency. As an early warning, CI Static may also run the same command with `--target aarch64-apple-darwin`. That view evaluates target dependencies for the shipping target, but build-script and proc-macro dependencies for the Linux build host, so it is labelled an early warning, never the shipping evidence. The command: `cargo tree --locked -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade -e normal,build,features`, the release build's own selection (`release.yml:147`), and fail if a `*-test-support` crate or a `test-support` feature appears. This extends the release workflow's existing guard (`release.yml:184-193`), which uses the same method for `codex-router-secret-store`. It isn't a `crate_layers.rs` check, because that reader drops node features (`crate_layers.rs:115-119`), and Cargo metadata merges dev units, so neither can tell a dev-only activation from a shipping one.
 - **R3, layout check:** in `crate_layers.rs`, read from Cargo metadata, which is right for manifest facts. For each package: `autotests = false`, at most one integration and one e2e target, and a README present. The 17-crate layer table also grows a rule: no production crate depends on a `*-test-support` crate.
 - **R1, source-path check, only if the owner accepts it (Q1):** reads `#[path = "…"]` attributes, resolves each against its declaring file, and fails on any target outside the declaring crate, other than the two R1 exceptions. It also fails on a stale exception. If the owner declines it, R1 rests on rule 2 and on review.
 
@@ -85,7 +85,7 @@ Before extraction, every file to be moved is checked for `#[test]`, `#[tokio::te
 - **R1:** the source-path check, if accepted. Otherwise the include inventory recomputed at review.
 - **R2:** the `cargo tree` shipping-closure check.
 - **R3:** the layout check.
-- **R4:** `cargo nextest list` inventories from the pinned pre-extraction and post-extraction trees, for the five affected CI selections.
+- **R4:** `cargo nextest list` inventories from the pinned pre-extraction and post-extraction trees, for the six affected CI selections.
 - **R5:** E5 pairs, built on the same CI machine type with identical toolchain, features and inventory.
 - **R6:** the AGENTS.md text, plus a seeded violation per check, kept in the working tree only.
 
@@ -94,7 +94,7 @@ Before extraction, every file to be moved is checked for `#[test]`, `#[tokio::te
 | U | R | Owner | Seam |
 | --- | --- | --- | --- |
 | U1, U3 | R1 | each support unit | source-path check (if Q1 accepted), else review inventory |
-| U1, U3 | R2 | CI Static job, beside the release guard | `cargo tree -e normal,build,features` on the release selection |
+| U1, U3 | R2 | native Apple Silicon release job, beside its existing guard (plus a labelled `--target` early warning in Static) | `cargo tree -e normal,build,features` on the release selection |
 | U1, U3 | R3 | `crate_layers.rs` (layout) | package metadata |
 | U4 | R4 | nextest config, unchanged | list pairs |
 | U2 | R5 | the Lead | E5 measurements |
@@ -106,4 +106,4 @@ The first timing report of the whole test build, on 16 vCPU (run 42045129233; `t
 - **Test units:** 98, with 962 s of summed unit time.
 - **Dependency units:** 892, with 956 s.
 - **Longest units:** collaboration-central-tokio's integration test binary at 122 s, collaboration-service's lib tests at 58 s and its integration tests at 56 s.
-- **Two caveats:** that step's selection included e2e targets the nextest build excludes, and `turso_core` 0.8.1 compiled four times with identical features. So it isn't yet a clean "before" sample for R5. Its value is pointing at the central-tokio integration binary as the one place where Option A (splitting a target) could pay off. That remains a phase-2 candidate, measured like Q2.
+- **Two caveats:** that step's selection included e2e targets the nextest build excludes, and `turso_core` 0.8.1 has four timing entries with matching features, two of them library builds (58 s and 60 s). So it isn't yet a clean "before" sample for R5. Its value is pointing at the central-tokio integration binary as the one place where Option A (splitting a target) could pay off. That remains a phase-2 candidate, measured like Q2.

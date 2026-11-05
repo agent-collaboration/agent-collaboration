@@ -17,16 +17,16 @@ Each requirement is proven on the real build: Cargo's dependency views, nextest'
 | U | R | Observation | Target | Passes when | Fails for |
 | --- | --- | --- | --- | --- | --- |
 | U1, U3 | R1 | O1 source-path inventory | the PR head | exactly the two R1 exceptions remain | a third cross-crate edge; an exception whose file or target is gone |
-| U1, U3 | R2 | O2 shipping closure | `cargo tree --locked -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade -e normal,build,features`, the release selection (`release.yml:147`) | no `*-test-support` crate and no `test-support` feature in the output; a dev-only activation, such as collaboration-mcp's `collaboration-service/test-support`, is absent from it | the same activation moved into a normal dependency of any of the three roots |
+| U1, U3 | R2 | O2 shipping closure | natively on Apple Silicon (release job, and the main-push warm-up job at `ci.yml:512`): `cargo tree --locked -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade -e normal,build,features`, the release selection (`release.yml:147`) | no `*-test-support` crate and no `test-support` feature in the output; a dev-only activation, such as collaboration-mcp's `collaboration-service/test-support`, is absent from it | the same activation moved into a normal dependency of any of the three roots |
 | U1, U3 | R3 | O3 manifest facts | `cargo metadata` for every package | `autotests = false`; integration and e2e targets ≤ 1 each; README present | a second integration target |
-| U4 | R4 | O4 inventory pair | pinned pre-extraction tree P and post-extraction tree Q, same toolchain, five selections: workspace (`ci.yml:295`), quota-reset (`:310`), and the three e2e runs (`:389-391`) | for each selection, the run and skipped identity sets observed on Q equal those observed on P | a case dropped or renamed, for example the loopback case or a `scenario_finalization` case; a dropped e2e case |
+| U4 | R4 | O4 inventory pair | pinned pre-extraction tree P and post-extraction tree Q, same toolchain, six selections: workspace (`ci.yml:310`, build `:295`), quota-reset (`:304`, build `:299`), isolated port cutover (`:316`), and the three e2e runs (`:389-391`) | for each selection, the run and skipped identity sets observed on Q equal those observed on P | a case dropped or renamed, for example the loopback case or a `scenario_finalization` case; a dropped e2e case |
 | U2 | R5 | O5 measurement pairs | the CI machine type in use (Blacksmith 16 vCPU if adopted), two samples per side per scenario | the decision rule below | a clear CPU, link or cache regression; a "gain" inside the noise |
 | U3 | R6 | O6 seeded red | working tree only, never committed | each enforced check fails on one planted violation, and passes after it's removed | a check that can't fail |
 
 ## Observations
 
 - **O1:** the include inventory, resolving each `#[path]` against its declaring file. It's the R1 check's output if the owner accepts Q1, and otherwise a review-time command.
-- **O2:** the `cargo tree` output above. Cargo metadata isn't used for R2, because its resolver merges dev units.
+- **O2:** the `cargo tree` output above, from the native Apple Silicon release job. A Static `--target aarch64-apple-darwin` view is an early warning only: its build-script and proc-macro side is the Linux host. A Darwin-conditioned production activation must fail the native check. Cargo metadata isn't used for R2, because its resolver merges dev units.
 - **O3:** `cargo metadata --format-version 1 --no-deps`.
 - **O4:** `cargo nextest list --message-format json` per selection, once on P and once on Q, and the two identity sets compared. P's inventory is recorded before any edit.
 - **O5:** each scenario sets its starting state explicitly, as follows.
