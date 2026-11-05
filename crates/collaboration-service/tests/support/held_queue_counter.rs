@@ -12,7 +12,14 @@ impl SqlCounter {
     #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     pub fn install(&self) {
         tracing_subscriber::registry()
-            .with(self.clone())
+            // Reject other targets before Turso selects its per-opcode traced
+            // interpreter; ignoring their events in on_event is too late.
+            .with(
+                self.clone()
+                    .with_filter(tracing_subscriber::filter::filter_fn(|metadata| {
+                        metadata.target() == "sqlx::query"
+                    })),
+            )
             .try_init()
             .unwrap();
     }
