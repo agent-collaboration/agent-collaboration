@@ -8,15 +8,15 @@ import {
 	hostedRow,
 	inventoryPage,
 	inventoryStandIn,
-} from '../../../../verification/observations/claude-route-fixture.ts';
+} from '../../../../verification/observations/providers/claude/claude-route-fixture.ts';
 import {
 	captureClaudeRouteBaseline,
 	readClaudeRouteWindow,
-} from '../../../../verification/observations/claude-route-window.ts';
+} from '../../../../verification/observations/providers/claude/claude-route-window.ts';
 import type {
 	ClaudeRouteBaseline,
 	ClaudeRouteBinding,
-} from '../../../../verification/observations/claude-route-window.ts';
+} from '../../../../verification/observations/providers/claude/claude-route-window.ts';
 import { sourceBinding } from '../evidence/source-binding.ts';
 import {
 	controlledExecutable,

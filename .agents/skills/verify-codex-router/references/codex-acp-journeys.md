@@ -8,7 +8,7 @@
 - **J2 `model` with `apply: default`:** the earlier Claude free-navigation journey changed the model against the hardcoded catalogue. On `6b9d2c20f`, the typed refreshed-catalogue journey and same-session `model-catalogue` readback separately passed for Sonnet/low and Haiku/low, preserving all five advertised model IDs and showing the then-expected default-save refusal (pre-M1; that refusal now fails the default-apply witness). Each had six original terminal captures and normal quit. This qualifies selection/current-value readback only: both subsequent skill/image prompts failed to produce their required replies, later returning ACP `-32603/server_error`. The cause and the complete model-plus-prompt gate remain open.
 - **J2 `compact` on Cursor:** an explicit unsupported error, with no compaction effect, unchanged history, a usable empty composer and normal exit. This needs a Router build that reports unsupported compaction without closing Codex; on an older build the refusal ends the CLI.
 - **J2 `information` on Claude:** on `c00692d8e`, `/hooks` and `/mcp` each showed their command-specific refusal, returned to an empty usable composer and quit normally. Each paired same-session observer confirmed the exact native error and a subsequent supported read. This proves refusal recovery only, not hook discovery or provider MCP inventory. Cursor is unqualified.
-- **Readback route:** the Claude J1 and J2 `model` readbacks, both picker readbacks and the Cursor compact readbacks ran through the observer's CLI entry (`acp-journey-observation.ts PLAN.json`).
+- **Readback route:** the Claude J1 and J2 `model` readbacks, both picker readbacks and the Cursor compact readbacks ran through the observer's CLI entry (`verification/observations/providers/acp/acp-journey-observation.ts PLAN.json`).
 
 Not yet qualified:
 
@@ -49,7 +49,7 @@ Declare these before any input:
 
 ## Drive
 
-1. Write the run plan (`codexAcpRunPlanSchema` in `scripts/verification/tui/codex-acp/codex-acp-run.ts`) and the observer plan (`journeyObservationPlanSchema` in `verification/observations/acp-journey-models.ts`).
+1. Write the run plan (`codexAcpRunPlanSchema` in `scripts/verification/tui/codex-acp/codex-acp-run.ts`) and the observer plan (`journeyObservationPlanSchema` in `verification/observations/providers/acp/acp-journey-models.ts`).
 2. Qualify without launching Codex:
    `node scripts/verification/tui/capture/capture-run.ts --codex-acp-only --codex-acp-plan PLAN.json --check`.
    This checks the source head, artifacts, the driver signature and test entry, the emulator (including DSR, DA1 and OSC replies), and the target. The target check covers the binary hash and `--version`, Host service/epoch, endpoint socket, trusted cwd, raw→alias and observer correlation.
@@ -99,7 +99,7 @@ Declare these before any input:
    - **J3 `reopen`:** no input. The resume screen reaches `history-replayed`: every declared line of the reply this Session already holds. Only the visible screen is read, not scrollback, so declare the latest reply of a short Session. The run plan and the observer address the same raw Session and native alias.
    - Every journey ends with Codex's own exit: type `/quit`, wait for its slash-popup row (`exit Codex`), then Enter, then a bounded wait for PTY EOF. The Codex child must stay one process, and checkpoints must arrive in declared order.
 4. Read back the same Session:
-   `node verification/observations/acp-journey-observation.ts OBSERVER_PLAN.json`.
+   `node verification/observations/providers/acp/acp-journey-observation.ts OBSERVER_PLAN.json`.
    Run it directly. Its own bounds cover every wait: `events observe` 20 s, WebSocket handshake 10 s, 15 s per response. Do not wrap it in `timeout`, which macOS lacks.
    - `idle-bind`, only after the TUI step is idle, checks `skills-listed`, `skill-effect`, `ordinary-reply`, `information-refused`, `compacted` / `compact-refused`, `effective-model` and `model-catalogue`. With `model-catalogue` it also reads native `model/list` before and after its own resume and the provider Session's own catalogue through public `session inspect`, keeping every raw response. The check requires every provider model in the bound list (only the declared delegation may be extra), a bootstrap list of the delegation alone, and the provider's current model as the native one. For `effort.kind: qualified` the selected model's native choices must equal the provider's effort options, its default must be an offered value, and the current values must agree. For `provider-settings` the row must carry exactly the declared action, which is never accepted as the effective effort. The native list is never its own reference.
    - `ordinary-reply` (idle-bind only) requires all of these:

@@ -6,7 +6,7 @@ The outcome comes from [Tailnet Specification R1–R7](../../../../docs/specs/20
 
 ## Entry and required inputs
 
-Run from the repository root. The [Rust Host driver](../../../../crates/tailnet-verification-host/README.md) owns the Host lifetime, profile guard and process cleanup. The TypeScript [peer/readback CLI](../../../../verification/observations/tailnet-mcp.ts), [BoardPlan](../../../../verification/observations/tailnet-plans.ts) and [transport](../../../../verification/observations/tailnet-transport.ts) own peer operations. One agent owns each instance for its whole run. The caller sequences the two machines and any separately authorized transport.
+Run from the repository root. The [Rust Host driver](../../../../crates/tailnet-verification-host/README.md) owns the Host lifetime, profile guard and process cleanup. The TypeScript [peer/readback CLI](../../../../verification/observations/tailnet/tailnet-mcp.ts), [BoardPlan](../../../../verification/observations/tailnet/tailnet-plans.ts) and [transport](../../../../verification/observations/tailnet/tailnet-transport.ts) own peer operations. One agent owns each instance for its whole run. The caller sequences the two machines and any separately authorized transport.
 
 Install the pinned Node dependencies with `pnpm --dir verification install --frozen-lockfile` and build the Host with `cargo build -p codex-router-tailnet-verification-host`. Bind source and executable hashes on both machines; the Host records them in `driver-binding.json`.
 
@@ -49,7 +49,7 @@ The adopted path is CLI Host configuration → `HostCollaborationInputs` → pre
 On the allowed peer, run exactly one operation for that direction:
 
 ```sh
-node verification/observations/tailnet-mcp.ts peer "$BOARD_PLAN"
+node verification/observations/tailnet/tailnet-mcp.ts peer "$BOARD_PLAN"
 ```
 
 The driver checks service ID/epoch, actual `tools/list`, Origin-free success, and 403 for the destination’s actual HTTPS Origin plus a foreign Origin. It reads the seeded root and requires the exact root ID/topic/Session actor and Topic placement that identifies the root. It saves exclusive `peer-intent.json`, including exact post arguments, before one `board_message_post` with `placement: {kind: thread, rootMessageId: <the seeded root>}`. Session actors cannot post directly at Topic placement; [the storage owner](../../../../crates/message-board-storage/src/message_write_operations.rs) rejects that before insertion and requires an open participant for Thread replies.
@@ -61,7 +61,7 @@ The caller allocation is checked at peer entry and rechecked immediately before 
 On the **destination machine**, use the destination-local BoardPlan/evidence path:
 
 ```sh
-node verification/observations/tailnet-mcp.ts readback "$BOARD_PLAN"
+node verification/observations/tailnet/tailnet-mcp.ts readback "$BOARD_PLAN"
 ```
 
 This independently checks the destination manifest/service/epoch, reads the exact message through its owner-only Unix MCP socket, then opens that root’s existing `agent-communication/project-board.sqlite` read-only and verifies the persisted message joined to its actual actor, including `board_messages.root_id` matching the seeded Thread. Wrong or null root fails even when ID/topic/text/actor match. Keep `destination-readback.json`. Two reads through the proxy alone cannot establish this destination-store binding; no database copy or source-machine substitute is an input. This proves the scoped persisted marker, not persistence across a Host restart.

@@ -10,8 +10,8 @@ import { decodeEvidenceJson, evidenceJson } from "../evidence-json.ts";
 import { textField } from "../exact-json.ts";
 import { createFixtureDirectory } from "../test-support/fixture-directory.ts";
 import { withinFixtureDeadline } from "./fixture-control-socket.ts";
-import { readObservedJson } from "../observations/evidence-models.ts";
-import { processExit } from "../observations/runtime-plan.ts";
+import { readObservedJson } from "../observations/shared/evidence-models.ts";
+import { processExit } from "../observations/runtime/runtime-plan.ts";
 
 export interface OrderedTurnRequest {
   readonly command: readonly string[];
