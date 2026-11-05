@@ -1,0 +1,12 @@
+job	UNKNOWN STEP	2026-01-01T00:00:00Z Starting 4 tests across 1 binary
+job	UNKNOWN STEP	2026-01-01T00:00:00Z Starting 2 tests across 1 binary
+job	UNKNOWN STEP	2026-01-01T00:00:03Z ^[[32;1mPASS^[[0m [ 3.000s] (1/4) workspace::lib first
+job	UNKNOWN STEP	2026-01-01T00:00:02Z PASS [ 2.000s] (1/2) quota::e2e quota_first
+job	UNKNOWN STEP	2026-01-01T00:00:04Z PASS [ 3.000s] (2/4) workspace::lib second
+job	UNKNOWN STEP	2026-01-01T00:00:04Z PASS [ 2.000s] (2/2) quota::e2e quota_second
+job	UNKNOWN STEP	2026-01-01T00:00:04Z Summary [ 4.000s] 2 tests run: 2 passed, 0 skipped
+job	UNKNOWN STEP	2026-01-01T00:00:04Z PASS [ 2.000s] (1/2) quota::e2e quota_first
+job	UNKNOWN STEP	2026-01-01T00:00:08Z FAIL [ 4.000s] (3/4) workspace::lib third
+job	UNKNOWN STEP	2026-01-01T00:00:08Z PASS [ 1.000s] (4/4) workspace::lib fourth
+job	UNKNOWN STEP	2026-01-01T00:00:08Z Summary [ 8.000s] 4 tests run: 3 passed, 1 failed, 2 skipped
+job	UNKNOWN STEP	2026-01-01T00:00:08Z PASS [ 3.000s] (1/4) workspace::lib first
