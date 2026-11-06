@@ -4,24 +4,9 @@ use crate::object_bootstrap::workspace_columns_tests::{prepare, workspace, write
 use durable_steps::{AtomicStore, StoreError};
 use fleet_admission::{FleetNameScope, FleetReadKey, FleetReads};
 use message_board::{Record, RecordRef};
-use std::sync::{Arc, Mutex};
-use tracing::instrument::WithSubscriber;
-use tracing_subscriber::{Layer, layer::Context, prelude::*};
-
-#[derive(Clone, Default)]
-struct SqlCount(Arc<Mutex<usize>>);
-impl<S: tracing::Subscriber> Layer<S> for SqlCount {
-    fn on_event(&self, event: &tracing::Event<'_>, _: Context<'_, S>) {
-        if event.metadata().target() == "sqlx::query" {
-            *self.0.lock().expect("SQL counter lock") += 1;
-        }
-    }
-}
-impl SqlCount {
-    fn get(&self) -> usize {
-        *self.0.lock().expect("SQL counter lock")
-    }
-}
+#[path = "fleet_statement_count.rs"]
+mod statement_count;
+use statement_count::StatementCountScope;
 
 async fn seeded_mixed(count: usize) -> Result<(FleetStorageFixture, Vec<Record>), TestError> {
     use crate::object_bootstrap::{adr_columns_tests, ledger_columns_tests};
@@ -82,29 +67,30 @@ async fn mixed_typed_children_and_reason_trees_use_fixed_statement_ranges() -> R
                 ]
             })
             .collect();
-        let snapshot_cost = SqlCount::default();
-        let bundle_cost = SqlCount::default();
-        let snapshot_observer = snapshot_cost.clone();
-        let bundle_observer = bundle_cost.clone();
         let record_count = expected.len();
-        let (page, bundle) = fixture
+        let (page, bundle, statement_counts) = fixture
             .object
             .transaction(move |scope| {
                 Box::pin(async move {
-                    let page = super::records(scope, None, record_count)
-                        .with_subscriber(tracing_subscriber::registry().with(snapshot_observer))
-                        .await?;
-                    let bundle = crate::fleet_scope_snapshot::read(scope, FleetReads { keys })
-                        .with_subscriber(tracing_subscriber::registry().with(bundle_observer))
-                        .await?;
-                    Ok((page, bundle))
+                    let mut snapshot_scope = StatementCountScope::new(scope);
+                    let page = super::records(&mut snapshot_scope, None, record_count).await?;
+                    let snapshot_count = snapshot_scope.statement_count();
+                    let mut bundle_scope = StatementCountScope::new(scope);
+                    let bundle =
+                        crate::fleet_scope_snapshot::read(&mut bundle_scope, FleetReads { keys })
+                            .await?;
+                    Ok((
+                        page,
+                        bundle,
+                        (snapshot_count, bundle_scope.statement_count()),
+                    ))
                 })
             })
             .await?;
         assert_eq!(page, (expected.clone(), None));
         assert_eq!(bundle.records, expected);
         assert_eq!(bundle.imports.len(), size * 2);
-        counts.push((snapshot_cost.get(), bundle_cost.get()));
+        counts.push(statement_counts);
         // The cursor still selects a global identity prefix across all three owners.
         let expected_first = expected[..size].to_vec();
         let after = expected_first.last().ok_or("empty prefix")?.reference();
@@ -208,23 +194,21 @@ async fn snapshot_hydration_statement_count_is_independent_of_page_size() -> Res
     let mut counts = Vec::new();
     for size in [2, 8] {
         let (fixture, expected) = seeded(size).await?;
-        let cost = SqlCount::default();
-        let measured = cost.clone();
         // Act: observe only the actual page read inside its owning transaction.
-        let (records, next) = fixture
+        let ((records, next), statement_count) = fixture
             .object
             .transaction(move |scope| {
                 Box::pin(async move {
-                    super::records(scope, None, size)
-                        .with_subscriber(tracing_subscriber::registry().with(measured))
-                        .await
+                    let mut counted = StatementCountScope::new(scope);
+                    let result = super::records(&mut counted, None, size).await?;
+                    Ok((result, counted.statement_count()))
                 })
             })
             .await?;
         // Assert: exact original bodies, children and end cursor, plus fixed SQL budget.
         assert_eq!(records, expected);
         assert_eq!(next, None);
-        counts.push(cost.get());
+        counts.push(statement_count);
         fixture.close().await?;
     }
     eprintln!("Q2 actual statements for page sizes [2,8]: {counts:?}");
@@ -267,15 +251,15 @@ async fn import_hydration_statement_count_is_independent_of_bundle_size() -> Res
         keys.push(FleetReadKey::Record {
             record: absent.clone(),
         });
-        let cost = SqlCount::default();
-        let measured = cost.clone();
-        let snapshot = fixture
+        let (snapshot, statement_count) = fixture
             .object
             .transaction(move |scope| {
                 Box::pin(async move {
-                    crate::fleet_scope_snapshot::read(scope, FleetReads { keys })
-                        .with_subscriber(tracing_subscriber::registry().with(measured))
-                        .await
+                    let mut counted = StatementCountScope::new(scope);
+                    let snapshot =
+                        crate::fleet_scope_snapshot::read(&mut counted, FleetReads { keys })
+                            .await?;
+                    Ok((snapshot, counted.statement_count()))
                 })
             })
             .await?;
@@ -297,7 +281,7 @@ async fn import_hydration_statement_count_is_independent_of_bundle_size() -> Res
                 .ok_or_else(|| StoreError::backend("missing original import digest"))?;
             assert_eq!(imported.digest.as_str(), "ab".repeat(32));
         }
-        counts.push(cost.get());
+        counts.push(statement_count);
         fixture.close().await?;
     }
     eprintln!("Q4 actual statements for bundle sizes [2,8]: {counts:?}");
