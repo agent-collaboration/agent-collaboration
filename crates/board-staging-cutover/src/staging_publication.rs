@@ -16,7 +16,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::path::Path;
 use url::Url;
 
-#[cfg(test)]
+#[cfg(all(test, debug_assertions))]
 #[path = "staging_publication_test.rs"]
 mod tests;
 
@@ -63,6 +63,7 @@ pub enum PublicationError {
     Json(#[from] serde_json::Error),
 }
 
+#[cfg(debug_assertions)]
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicationDiagnostic {
@@ -72,6 +73,7 @@ pub struct PublicationDiagnostic {
     io: Option<PublicationIoFailure>,
 }
 
+#[cfg(debug_assertions)]
 #[derive(Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 enum PublicationRequestFailure {
@@ -86,6 +88,7 @@ enum PublicationRequestFailure {
     Other,
 }
 
+#[cfg(debug_assertions)]
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 enum PublicationTimeoutContext {
@@ -94,6 +97,7 @@ enum PublicationTimeoutContext {
     Request,
 }
 
+#[cfg(debug_assertions)]
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PublicationIoFailure {
@@ -101,6 +105,7 @@ struct PublicationIoFailure {
     os_error: Option<i32>,
 }
 
+#[cfg(debug_assertions)]
 impl PublicationError {
     pub fn diagnostic(&self) -> Option<PublicationDiagnostic> {
         match self {
@@ -124,6 +129,7 @@ impl PublicationError {
     }
 }
 
+#[cfg(debug_assertions)]
 impl PublicationRequestFailure {
     fn classify(error: &reqwest::Error) -> Self {
         if error.is_timeout() {
@@ -157,6 +163,7 @@ impl PublicationRequestFailure {
     }
 }
 
+#[cfg(debug_assertions)]
 fn safe_io_cause(error: &reqwest::Error) -> Option<PublicationIoFailure> {
     use std::error::Error;
     let mut cause = error.source();

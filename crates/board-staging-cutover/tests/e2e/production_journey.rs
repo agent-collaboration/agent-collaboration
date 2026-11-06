@@ -65,7 +65,11 @@ async fn compiled_production_mode_publishes_backs_up_claims_verifies_and_writes_
         let claim = async {
             host.await_ready().await?;
             run.renew_owner(central.base_url())?;
-            let claimed = execute(&run, &fixture, "claim", central.base_url()).await?;
+            let claimed = execute(&run, &fixture, "claim", central.base_url())
+                .await
+                .map_err(|error| {
+                    std::io::Error::other(format!("initial compiled Claim: {error}"))
+                })?;
             assert_eq!(claimed["kind"], "projectsClaimed");
             assert_eq!(claimed["projects"][0]["epoch"], 2);
             assert_eq!(claimed["projects"][0]["request"], run.claim.as_str());
@@ -89,7 +93,11 @@ async fn compiled_production_mode_publishes_backs_up_claims_verifies_and_writes_
             host.await_ready().await?;
             // Restart reattaches the writer through the same frozen Claim as the existing proof.
             run.renew_owner(central.base_url())?;
-            let claimed = execute(&run, &fixture, "claim", central.base_url()).await?;
+            let claimed = execute(&run, &fixture, "claim", central.base_url())
+                .await
+                .map_err(|error| {
+                    std::io::Error::other(format!("reopened compiled Claim: {error}"))
+                })?;
             assert_eq!(claimed["projects"][0]["request"], run.claim.as_str());
             let client = collaboration_client::CollaborationClient::connect(
                 &codex_router_host::router_collaboration_directory(&fixture.root),

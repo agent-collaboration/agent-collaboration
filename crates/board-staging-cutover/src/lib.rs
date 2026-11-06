@@ -30,8 +30,10 @@ pub use owner_publication_access::OwnerPublicationAccessError;
 pub use prepared_project_bundle::{
     PreparedProjectBundle, ProjectBundleManifest, ProjectPreparation,
 };
+#[cfg(debug_assertions)]
+pub use staging_publication::PublicationDiagnostic;
 pub use staging_publication::{
-    PublicationDiagnostic, PublicationError, PublicationStage, PublishedProject, StagingPublisher,
+    PublicationError, PublicationStage, PublishedProject, StagingPublisher,
 };
 
 pub use offline_host::{HostInspection, OfflineHost, OfflineHostError};

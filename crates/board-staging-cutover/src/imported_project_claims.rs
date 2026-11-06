@@ -12,7 +12,7 @@ use std::{path::Path, time::Duration};
 pub enum ClaimRunError {
     #[error("the sealed cutover run plan is invalid")]
     Plan(#[from] crate::ProjectBundleError),
-    #[error("the declared Host identity is unavailable")]
+    #[error("the declared Host identity is unavailable: {0}")]
     Host(#[from] crate::OfflineHostError),
     #[error("the declared Host enrollment is unavailable")]
     Enrollment,

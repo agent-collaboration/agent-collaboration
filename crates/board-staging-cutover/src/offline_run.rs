@@ -46,6 +46,7 @@ enum OfflineProjectOutcome {
         project: ProjectId,
         stage: OfflineStage,
         reason: String,
+        #[cfg(debug_assertions)]
         #[serde(skip_serializing_if = "Option::is_none")]
         diagnostic: Option<crate::staging_publication::PublicationDiagnostic>,
     },
@@ -99,31 +100,34 @@ impl OfflineRunPlan {
         publisher: &StagingPublisher,
         project: &PlannedProject,
     ) -> OfflineProjectOutcome {
-        let refused = |stage, error: String, diagnostic| OfflineProjectOutcome::Refused {
+        let refused = |stage, error: String| OfflineProjectOutcome::Refused {
             project: project.selected.project.clone(),
             stage,
             reason: error,
-            diagnostic,
+            #[cfg(debug_assertions)]
+            diagnostic: None,
         };
         let bundle = match self.prepare_or_reopen(host, project).await {
             Ok(bundle) => bundle,
-            Err(error) => return refused(OfflineStage::Preparation, error.to_string(), None),
+            Err(error) => return refused(OfflineStage::Preparation, error.to_string()),
         };
         let confirmed = match publisher.publish(host, &bundle).await {
             Ok(confirmed) => confirmed,
             Err(error) => {
-                return refused(
-                    OfflineStage::Publication,
-                    error.to_string(),
-                    error.diagnostic(),
-                );
+                return OfflineProjectOutcome::Refused {
+                    project: project.selected.project.clone(),
+                    stage: OfflineStage::Publication,
+                    reason: error.to_string(),
+                    #[cfg(debug_assertions)]
+                    diagnostic: error.diagnostic(),
+                };
             }
         };
         let import_id = confirmed.import_id();
         let head = confirmed.head();
         let archive = match archive_confirmed_source(host, &bundle, confirmed) {
             Ok(archive) => archive,
-            Err(error) => return refused(OfflineStage::Archive, error.to_string(), None),
+            Err(error) => return refused(OfflineStage::Archive, error.to_string()),
         };
         OfflineProjectOutcome::ReadyToClaim {
             project: project.selected.project.clone(),

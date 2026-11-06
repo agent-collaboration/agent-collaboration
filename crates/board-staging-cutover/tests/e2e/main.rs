@@ -29,6 +29,7 @@ mod production_journey;
 mod production_mode;
 mod production_workerd;
 mod public_claim;
+#[cfg(debug_assertions)]
 mod publication_diagnostics;
 mod publication_hold;
 mod publication_wire;
