@@ -11,6 +11,11 @@ name = "codex-router-quota-reset-test-harness"
 path = "src/main.rs"
 required-features = ["quota-reset-test-harness"]
 
+[[bin]]
+name = "quota-login-recording-standin"
+path = "src/bin/quota-login-recording-standin.rs"
+required-features = ["quota-reset-test-harness"]
+
 [[test]]
 name = "integration"
 path = "tests/integration/main.rs"
@@ -21,7 +26,7 @@ path = "tests/e2e/main.rs"
 
 [features]
 default = ["quota-reset-test-harness"]
-quota-reset-test-harness = ["agent-collaboration/quota-reset-test-harness", "dep:codex-router-cli"]
+quota-reset-test-harness = ["agent-collaboration/quota-reset-test-harness", "dep:codex-router-cli", "dep:nix"]
 
 [lints]
 workspace = true
@@ -30,7 +35,7 @@ workspace = true
 agent-collaboration = { version = "0.1.105", path = "../agent-collaboration", optional = true, features = ["quota-reset-test-harness"] }
 codex-router-cli = { path = "../codex-router-cli", version = "0.1.4", optional = true, default-features = false, features = ["quota-reset-test-harness", "keychain-test-support"] }
 tokio.workspace = true
-nix = { workspace = true, features = ["term", "process"] }
+nix = { workspace = true, optional = true, features = ["term", "process"] }
 serde.workspace = true
 serde_json.workspace = true
 
