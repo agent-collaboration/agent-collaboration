@@ -11,6 +11,14 @@ pub enum OfflineHostError {
     RelativeRoot,
     #[error("production and standing debug Router roots are not cutover targets")]
     ProtectedRoot,
+    #[error("--production requires the exact home-default production Router root")]
+    ProductionRootRequired,
+    #[error("the explicit production target differs from the run plan")]
+    TargetMismatch,
+    #[error("production confirmation differs from the current dry-run plan; run --dry-run again")]
+    ConfirmationMismatch,
+    #[error("cannot read the current cutover plan without side effects")]
+    PlanUnavailable,
     #[error("the declared Router root must be an owner-private directory")]
     UnsafeRoot,
     #[error("the declared Host has no existing service identity")]
@@ -33,6 +41,13 @@ pub struct OfflineHost {
     service: UuidIdentity,
     peer: PeerId,
     _authority: HostInstanceLock,
+}
+
+#[derive(Clone, Copy, Default)]
+pub(crate) enum RootMode {
+    #[default]
+    Isolated,
+    Production,
 }
 
 #[derive(serde::Serialize)]
@@ -65,18 +80,32 @@ impl OfflineHost {
         expected_peer: PeerId,
         home: &Path,
     ) -> Result<HostInspection, OfflineHostError> {
+        Self::inspect_mode(
+            root,
+            expected_service,
+            expected_peer,
+            home,
+            RootMode::Isolated,
+        )
+    }
+
+    pub(crate) fn inspect_mode(
+        root: &Path,
+        expected_service: &UuidIdentity,
+        expected_peer: PeerId,
+        home: &Path,
+        mode: RootMode,
+    ) -> Result<HostInspection, OfflineHostError> {
         if !root.is_absolute() {
             return Err(OfflineHostError::RelativeRoot);
         }
-        if protected_root(root, home) {
-            return Err(OfflineHostError::ProtectedRoot);
+        if matches!(mode, RootMode::Isolated) {
+            require_allowed_root(root, home, mode)?;
         }
         require_private_directory(root)?;
         let root = std::fs::canonicalize(root)?;
         let home = std::fs::canonicalize(home)?;
-        if protected_root(&root, &home) {
-            return Err(OfflineHostError::ProtectedRoot);
-        }
+        require_allowed_root(&root, &home, mode)?;
         let collaboration = codex_router_host::router_collaboration_directory(&root);
         require_private_directory(&collaboration)?;
         let service = collaboration_runtime::read_service_identity(&collaboration)?
@@ -102,11 +131,28 @@ impl OfflineHost {
         expected_peer: PeerId,
         home: &Path,
     ) -> Result<Self, OfflineHostError> {
-        let declared = Self::inspect(root, expected_service, expected_peer, home)?;
+        Self::acquire_mode(
+            root,
+            expected_service,
+            expected_peer,
+            home,
+            RootMode::Isolated,
+        )
+    }
+
+    pub(crate) fn acquire_mode(
+        root: &Path,
+        expected_service: &UuidIdentity,
+        expected_peer: PeerId,
+        home: &Path,
+        mode: RootMode,
+    ) -> Result<Self, OfflineHostError> {
+        let declared = Self::inspect_mode(root, expected_service, expected_peer, home, mode)?;
         let authority =
             HostInstanceLock::acquire(&HostCoordinationPaths::for_router_root(&declared.root))?;
         // Re-read immutable identities under the acquired authority before any export.
-        let declared = Self::inspect(&declared.root, expected_service, expected_peer, home)?;
+        let declared =
+            Self::inspect_mode(&declared.root, expected_service, expected_peer, home, mode)?;
         Ok(Self {
             collaboration: codex_router_host::router_collaboration_directory(&declared.root),
             root: declared.root,
@@ -130,10 +176,19 @@ impl OfflineHost {
     }
 }
 
-fn protected_root(root: &Path, home: &Path) -> bool {
-    [".codex", ".codex-router", ".codex-router-debug"]
+fn require_allowed_root(root: &Path, home: &Path, mode: RootMode) -> Result<(), OfflineHostError> {
+    if [".codex", ".codex-router-debug"]
         .iter()
         .any(|name| root.starts_with(home.join(name)))
+    {
+        return Err(OfflineHostError::ProtectedRoot);
+    }
+    let production = home.join(".codex-router");
+    match mode {
+        RootMode::Isolated if root.starts_with(&production) => Err(OfflineHostError::ProtectedRoot),
+        RootMode::Production if root != production => Err(OfflineHostError::ProductionRootRequired),
+        RootMode::Isolated | RootMode::Production => Ok(()),
+    }
 }
 
 fn require_private_directory(path: &Path) -> Result<(), OfflineHostError> {

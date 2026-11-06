@@ -8,6 +8,7 @@ mod cross_machine_canary;
 mod custody_fault_fixture;
 #[path = "../../src/cutover_host_fixture.rs"]
 mod cutover_host_fixture;
+mod cutover_preview;
 mod direct_central_enrollment;
 mod host_entrypoints;
 mod host_operator;
@@ -24,8 +25,14 @@ mod offline_cli;
 mod offline_cli_fixture;
 #[path = "../../src/pending_intent_fixture.rs"]
 mod pending_intent_fixture;
+mod production_journey;
+mod production_mode;
+mod production_workerd;
 mod public_claim;
+#[cfg(debug_assertions)]
+mod publication_diagnostics;
 mod publication_hold;
+mod publication_wire;
 mod recovery_rows;
 mod rich_project_cutover;
 mod rich_source_messages;

@@ -174,6 +174,7 @@ impl ClaimFixture {
         let area = tempfile::tempdir()?;
         std::fs::set_permissions(area.path(), std::fs::Permissions::from_mode(0o700))?;
         let plan = OfflineRunPlan {
+            admission: crate::offline_run_plan::RunAdmission::Isolated,
             run_id: input.run_id,
             router_root: host.root.clone(),
             service_id: host.service.clone(),

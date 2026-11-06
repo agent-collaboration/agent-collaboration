@@ -26,6 +26,10 @@ enum CanaryDisposition {
 
 type CanaryResult<T> = Result<T, CanaryFailure>;
 
+#[cfg(test)]
+#[path = "canary_record_test.rs"]
+mod tests;
+
 pub(crate) async fn run_canary(
     client: &CollaborationClient,
     bundle: &PreparedProjectBundle,
@@ -44,7 +48,7 @@ pub(crate) async fn run_canary(
     let before = client.view_work(view_request.clone()).await.map_err(|_| {
         CanaryFailure::invalid(CanaryStage::Writer, "cannot observe the current writer")
     })?;
-    check_writer(&before)?;
+    check_writer(&before, project, manifest.source.high_water)?;
     let head_before = before.as_of;
     let row_id: WorkTrailRowId = manifest
         .canary_request
@@ -123,7 +127,12 @@ pub(crate) async fn run_canary(
     }
     let cursor = entry.cursor;
     let (disposition, expected_head) = if cursor.position > head_before.position {
-        if cursor != next_position(head_before)? {
+        // Authority is e2 even when no application row has advanced the inherited e1 seed yet.
+        let writer_head = FeedCursor {
+            epoch: cursor.epoch,
+            position: head_before.position,
+        };
+        if cursor != next_position(writer_head)? {
             return Err(CanaryFailure::invalid(
                 CanaryStage::Head,
                 "canary did not append at the observed recovered head plus one",
@@ -145,7 +154,7 @@ pub(crate) async fn run_canary(
             "the frozen canary replay changed its decision",
         ));
     }
-    let previous = FeedCursor {
+    let preceding = FeedCursor {
         epoch: cursor.epoch,
         position: cursor
             .position
@@ -156,6 +165,12 @@ pub(crate) async fn run_canary(
                 CanaryStage::Readback,
                 "invalid canary cursor",
             ))?,
+    };
+    // The predecessor of the first e2 write remains in the sealed e1 history, including on replay.
+    let previous = if preceding.position == manifest.source.high_water.position {
+        manifest.source.high_water
+    } else {
+        preceding
     };
     let shown = client
         .work_trail_show(WorkTrailShowRequest {
@@ -209,7 +224,7 @@ pub(crate) async fn run_canary(
     let after = client.view_work(view_request).await.map_err(|_| {
         CanaryFailure::invalid(CanaryStage::Head, "cannot observe the post-canary writer")
     })?;
-    check_writer(&after)?;
+    check_writer(&after, project, manifest.source.high_water)?;
     if after.as_of != expected_head {
         return Err(CanaryFailure::invalid(
             CanaryStage::Head,
@@ -224,10 +239,18 @@ pub(crate) async fn run_canary(
     })
 }
 
-fn check_writer(view: &message_board::WorkView) -> CanaryResult<()> {
-    if !matches!(view.source, CopySource::Writer {})
+fn check_writer(
+    view: &message_board::WorkView,
+    project: &message_board::ProjectId,
+    source_head: FeedCursor,
+) -> CanaryResult<()> {
+    let current_history = matches!(view.as_of.epoch.get(), 1 | 2)
+        && (view.as_of == source_head
+            || view.as_of.epoch.get() == 2 && view.as_of.position > source_head.position);
+    if view.project != *project
+        || !matches!(view.source, CopySource::Writer {})
         || !matches!(view.current_writer,CurrentWriter::Held {epoch} if epoch.get()==2)
-        || view.as_of.epoch.get() != 2
+        || !current_history
     {
         return Err(CanaryFailure::invalid(
             CanaryStage::Writer,
