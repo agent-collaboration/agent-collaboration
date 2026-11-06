@@ -1,4 +1,4 @@
-//! Closed calls for routing a post and returning its transient opaque answer.
+//! Closed calls for routing and delivering forwarded posts.
 use board_sync_protocol::VerifiedForwardedPost;
 use durable_steps::CallTarget;
 use fleet_sync_protocol::{FrameId, PeerId};
