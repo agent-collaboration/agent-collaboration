@@ -16,6 +16,10 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::path::Path;
 use url::Url;
 
+#[cfg(all(test, debug_assertions))]
+#[path = "staging_publication_test.rs"]
+mod tests;
+
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum PublicationStage {
@@ -59,6 +63,124 @@ pub enum PublicationError {
     Json(#[from] serde_json::Error),
 }
 
+#[cfg(debug_assertions)]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PublicationDiagnostic {
+    stage: PublicationStage,
+    failure: PublicationRequestFailure,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    io: Option<PublicationIoFailure>,
+}
+
+#[cfg(debug_assertions)]
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+enum PublicationRequestFailure {
+    Timeout { during: PublicationTimeoutContext },
+    HttpStatus { status: u16 },
+    Connect,
+    Decode,
+    Body,
+    Request,
+    Builder,
+    Redirect,
+    Other,
+}
+
+#[cfg(debug_assertions)]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+enum PublicationTimeoutContext {
+    Connect,
+    Body,
+    Request,
+}
+
+#[cfg(debug_assertions)]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PublicationIoFailure {
+    kind: String,
+    os_error: Option<i32>,
+}
+
+#[cfg(debug_assertions)]
+impl PublicationError {
+    pub fn diagnostic(&self) -> Option<PublicationDiagnostic> {
+        match self {
+            Self::OutcomeUnknown { stage, source } => Some(PublicationDiagnostic {
+                stage: *stage,
+                failure: PublicationRequestFailure::classify(source),
+                io: safe_io_cause(source),
+            }),
+            Self::TargetMismatch
+            | Self::SourceHostMismatch
+            | Self::SourceChanged
+            | Self::Source(_)
+            | Self::StatusMismatch
+            | Self::Incomplete { .. }
+            | Self::FleetRefused { .. }
+            | Self::OwnerFailure { .. }
+            | Self::Access(_)
+            | Self::Bundle(_)
+            | Self::Json(_) => None,
+        }
+    }
+}
+
+#[cfg(debug_assertions)]
+impl PublicationRequestFailure {
+    fn classify(error: &reqwest::Error) -> Self {
+        if error.is_timeout() {
+            let during = if error.is_connect() {
+                PublicationTimeoutContext::Connect
+            } else if error.is_decode() || error.is_body() {
+                PublicationTimeoutContext::Body
+            } else {
+                PublicationTimeoutContext::Request
+            };
+            Self::Timeout { during }
+        } else if let Some(status) = error.status() {
+            Self::HttpStatus {
+                status: status.as_u16(),
+            }
+        } else if error.is_connect() {
+            Self::Connect
+        } else if error.is_decode() {
+            Self::Decode
+        } else if error.is_body() {
+            Self::Body
+        } else if error.is_request() {
+            Self::Request
+        } else if error.is_builder() {
+            Self::Builder
+        } else if error.is_redirect() {
+            Self::Redirect
+        } else {
+            Self::Other
+        }
+    }
+}
+
+#[cfg(debug_assertions)]
+fn safe_io_cause(error: &reqwest::Error) -> Option<PublicationIoFailure> {
+    use std::error::Error;
+    let mut cause = error.source();
+    // Emit only fixed IO classifications and OS numbers, never arbitrary URLs, headers or body text.
+    for _ in 0..8 {
+        let current = cause?;
+        if let Some(error) = current.downcast_ref::<std::io::Error>() {
+            return Some(PublicationIoFailure {
+                kind: format!("{:?}", error.kind()),
+                os_error: error.raw_os_error(),
+            });
+        }
+        cause = current.source();
+    }
+    None
+}
+
 /// Only a reconciled complete import can authorize the subsequent archive step.
 pub struct PublishedProject {
     bundle_digest: CanonicalHash,
@@ -87,6 +209,19 @@ pub struct StagingPublisher {
 }
 
 impl StagingPublisher {
+    /// Debug-only read of an existing sealed import; never starts or advances publication.
+    #[cfg(debug_assertions)]
+    pub async fn inspect_import_status(
+        &self,
+        bundle: &PreparedProjectBundle,
+    ) -> Result<Option<AdminImportRecord>, PublicationError> {
+        if bundle.manifest().target_origin != self.endpoint.origin().ascii_serialization() {
+            return Err(PublicationError::TargetMismatch);
+        }
+        require_unchanged_bundle(bundle)?;
+        self.status(bundle).await
+    }
+
     pub fn from_owner_file(endpoint: Url, path: &Path) -> Result<Self, PublicationError> {
         validate_endpoint(&endpoint)?;
         let headers = headers_from_private_file(&endpoint, path, &SystemClock)?;

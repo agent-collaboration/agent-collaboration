@@ -46,6 +46,9 @@ enum OfflineProjectOutcome {
         project: ProjectId,
         stage: OfflineStage,
         reason: String,
+        #[cfg(debug_assertions)]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        diagnostic: Option<crate::staging_publication::PublicationDiagnostic>,
     },
 }
 
@@ -72,8 +75,7 @@ impl OfflineRunPlan {
         authentication: OwnerAuthentication,
     ) -> Result<OfflineRunReport, OfflineRunError> {
         self.validate()?;
-        let mut host =
-            OfflineHost::acquire(&self.router_root, &self.service_id, self.peer_id, home)?;
+        let mut host = self.acquire_host(home)?;
         let publisher = match authentication {
             OwnerAuthentication::OwnerAccess => {
                 StagingPublisher::from_owner_access(self.target.clone()).await?
@@ -102,6 +104,8 @@ impl OfflineRunPlan {
             project: project.selected.project.clone(),
             stage,
             reason: error,
+            #[cfg(debug_assertions)]
+            diagnostic: None,
         };
         let bundle = match self.prepare_or_reopen(host, project).await {
             Ok(bundle) => bundle,
@@ -109,7 +113,15 @@ impl OfflineRunPlan {
         };
         let confirmed = match publisher.publish(host, &bundle).await {
             Ok(confirmed) => confirmed,
-            Err(error) => return refused(OfflineStage::Publication, error.to_string()),
+            Err(error) => {
+                return OfflineProjectOutcome::Refused {
+                    project: project.selected.project.clone(),
+                    stage: OfflineStage::Publication,
+                    reason: error.to_string(),
+                    #[cfg(debug_assertions)]
+                    diagnostic: error.diagnostic(),
+                };
+            }
         };
         let import_id = confirmed.import_id();
         let head = confirmed.head();
