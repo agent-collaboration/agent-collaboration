@@ -7998,9 +7998,12 @@ dependencies = [
 name = "workspace-architecture-check"
 version = "0.1.126"
 dependencies = [
+ "proc-macro2",
  "serde",
  "serde_json",
+ "syn 2.0.118",
  "thiserror 2.0.18",
+ "toml 1.1.2+spec-1.1.0",
 ]
 
 [[package]]
