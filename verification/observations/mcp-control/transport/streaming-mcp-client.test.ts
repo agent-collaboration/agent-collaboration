@@ -3,7 +3,8 @@
 // an abort really closes the request. It never stands in for a Host or provider.
 import assert from "node:assert/strict";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { test } from "node:test";
+import { test, mock } from "node:test";
+import { once } from "node:events";
 import { z } from "zod";
 import { decode, encode } from "../../../exact-json.ts";
 import { StreamingMcpClient } from "./streaming-mcp-client.ts";
@@ -94,29 +95,92 @@ test("SSE notifications before the answer are kept in arrival order", async () =
   );
 });
 
-test("an abort closes the open request and is reported as the caller's, not as an answer", async () => {
-  let closedByCaller = false;
+async function assertAbortDisconnects(localOnly: boolean): Promise<void> {
+  const ready = Promise.withResolvers<void>();
+  const closed = Promise.withResolvers<void>();
   const aborter = new AbortController();
-  await withServer(
-    (_id, response, request) => {
-      request.on("close", () => (closedByCaller = !response.writableEnded));
-      response.setHeader("content-type", "text/event-stream");
-      sse(response, notification(1n));
-      setTimeout(() => aborter.abort(), 50);
-    },
-    async (client) => {
-      const outcome = await client.callTool(
-        "conversation_operation_wait",
-        {},
-        { timeoutMs: 5_000, abort: aborter.signal },
+  let openResponse: ServerResponse | null = null;
+  let premature = false;
+  const realFetch = globalThis.fetch;
+  // Observe the first real response chunk reaching the consumer; keep its HTTP connection real.
+  const fetchObservation = mock.method(
+    globalThis,
+    "fetch",
+    async (...args: Parameters<typeof fetch>): Promise<Response> => {
+      const reply = await realFetch(...args);
+      if (reply.body === null) throw new Error("missing response stream");
+      return new Response(
+        reply.body.pipeThrough(
+          new TransformStream<Uint8Array, Uint8Array>({
+            transform(chunk, controller): void {
+              controller.enqueue(chunk);
+              ready.resolve();
+            },
+          }),
+        ),
+        { status: reply.status, headers: reply.headers },
       );
-      assert.equal(outcome.kind, "unconfirmed");
-      assert.equal(outcome.kind === "unconfirmed" ? outcome.reason : null, "callerAborted");
-      assert.equal(outcome.kind === "unconfirmed" ? outcome.notifications.length : -1, 1);
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      assert.equal(closedByCaller, true);
     },
   );
+  try {
+    await withServer(
+      (_id, response) => {
+        openResponse = response;
+        response.once("close", () => {
+          premature = !response.writableEnded;
+          closed.resolve();
+        });
+        response.setHeader("content-type", "text/event-stream");
+        sse(response, notification(1n));
+      },
+      async (client) => {
+        const pending = client.callTool(
+          "conversation_operation_wait",
+          {},
+          {
+            timeoutMs: 5_000,
+            ...(localOnly ? {} : { abort: aborter.signal }),
+          },
+        );
+        await Promise.race([
+          ready.promise,
+          once(AbortSignal.timeout(2_000), "abort").then((): never => {
+            throw new Error("response chunk did not arrive");
+          }),
+        ]);
+        assert.ok(openResponse);
+        assert.equal(openResponse.writableEnded, false);
+        assert.equal(openResponse.destroyed, false);
+        aborter.abort();
+        // The wrong implementation returns locally but deliberately leaves the HTTP call attached.
+        const outcome = localOnly
+          ? { kind: "unconfirmed", reason: "callerAborted" }
+          : await pending;
+        assert.equal(outcome.kind, "unconfirmed");
+        assert.equal("reason" in outcome ? outcome.reason : null, "callerAborted");
+        if (!localOnly) {
+          assert.equal("notifications" in outcome ? outcome.notifications.length : -1, 1);
+        }
+        await Promise.race([
+          closed.promise,
+          once(AbortSignal.timeout(2_000), "abort").then((): never => {
+            throw new Error("unfinished response did not close after caller abort");
+          }),
+        ]);
+        assert.equal(premature, true);
+      },
+    );
+  } finally {
+    fetchObservation.mock.restore();
+  }
+}
+
+test("a local-only abort fails the real disconnect check", async () => {
+  await assert.rejects(assertAbortDisconnects(true), /unfinished response did not close/);
+});
+
+test("an abort closes the open response and is reported as the caller's, not as an answer", async () => {
+  await assertAbortDisconnects(false);
 });
 
 test("a structured tool error is a refusal and a repeated or missing answer is unconfirmed", async () => {
