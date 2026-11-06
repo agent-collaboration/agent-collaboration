@@ -20,6 +20,10 @@ pub(crate) struct QuotaControlBrowseProps {
     pub(crate) list: ListSelectionControl,
 }
 
+#[cfg(test)]
+#[path = "quota_control_browse_view_test.rs"]
+mod tests;
+
 #[component]
 pub(crate) fn QuotaControlBrowse(
     props: &QuotaControlBrowseProps,
@@ -75,10 +79,11 @@ pub(crate) fn QuotaControlBrowse(
         .unwrap_or_default();
     let counts = toolbar.caption;
     let keyboard_target = Some(props.list.id().clone());
+    // A definite width keeps grouped headings from inflating intrinsic row height.
     let rendered_rows = props.list.rows().into_iter().enumerate().filter_map(|(index,key)| {
         let row=rows.iter().find(|row|row.account_id.as_str()==key.as_str())?;
         let focused=props.list.selected().as_ref()==Some(&key) && surface.is_focused(props.list.id());
-        Some(element!(View(flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,margin_top:if index==0 {0}else{2}) {
+        Some(element!(View(key:key.as_str().to_owned(),width:u32::try_from(row_width).unwrap_or(u32::MAX),flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,margin_top:if index==0 {0}else{2}) {
             ListRow(control:props.list.clone(),row:key,marker_offset:if super::quota_account_groups::group_widths(row_width.saturating_sub(2)).is_some(){0u16}else{2u16}) {
                 #(super::quota_account_groups::render_account_groups(row,row_width.saturating_sub(2),focused))
             }
