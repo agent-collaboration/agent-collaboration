@@ -28,7 +28,15 @@ impl MailDeliveryRuntime {
         let DeliveryEnvelope::Item(item) = envelope else {
             return Err(StoreError::backend("frozen handoff is not an original"));
         };
-        if item.recipient().address.endpoint.service_id == self.service {
+        if item
+            .recipient()
+            .address
+            .session()
+            .map_err(StoreError::backend)?
+            .endpoint
+            .service_id
+            == self.service
+        {
             if item.recipient().peer != self.config.owner {
                 return Err(StoreError::backend("local frozen handoff peer"));
             }
@@ -63,7 +71,15 @@ impl MailDeliveryRuntime {
             item: item.id(),
             digest: item.digest().clone(),
         };
-        if item.recipient().address.endpoint.service_id == self.service {
+        if item
+            .recipient()
+            .address
+            .session()
+            .map_err(StoreError::backend)?
+            .endpoint
+            .service_id
+            == self.service
+        {
             if item.recipient().peer != self.config.owner {
                 return Err(StoreError::backend("local retirement peer"));
             }
@@ -81,7 +97,15 @@ impl MailDeliveryRuntime {
         let DeliveryEnvelope::Cancel(control) = envelope else {
             return Err(StoreError::backend("retired expansion is not a control"));
         };
-        if control.recipient().address.endpoint.service_id == self.service {
+        if control
+            .recipient()
+            .address
+            .session()
+            .map_err(StoreError::backend)?
+            .endpoint
+            .service_id
+            == self.service
+        {
             // The public local retirement contract intentionally retains controls.
             return Ok(control.recipient().peer == self.config.owner);
         }

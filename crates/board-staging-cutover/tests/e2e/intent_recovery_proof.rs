@@ -212,7 +212,11 @@ pub(super) async fn verify_recovered_intent(
         return Err("source recipient is not a declared session".into());
     };
     require(
-        delivery.recipient().address == session,
+        delivery
+            .recipient()
+            .address
+            .session()
+            .is_ok_and(|address| address == &session),
         "handoff changed the recipient address",
     )?;
     let BoardDeliveryBody::Notification(body) = delivery.body() else {

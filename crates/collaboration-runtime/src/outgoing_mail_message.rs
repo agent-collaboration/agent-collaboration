@@ -30,7 +30,7 @@ pub fn outgoing_mail_message(
         PushOrigin::OwnerUnverified => MailSender::HumanUser {
             installation: submitting_installation.clone(),
         },
-        PushOrigin::Router(_) => return Err(invalid()),
+        PushOrigin::Router(_) | PushOrigin::Fleet => return Err(invalid()),
     };
     let PushHeaderFacts::DirectMessage {
         sender_display_name,
@@ -68,7 +68,9 @@ pub fn outgoing_mail_message(
         sender,
         Recipient {
             peer: recipient_peer,
-            address: draft.target.clone().try_into().map_err(|_| invalid())?,
+            address: message_board::SessionRef::try_from(draft.target.clone())
+                .map_err(|_| invalid())?
+                .into(),
         },
         None,
         BoardDeliveryBody::Message(body),

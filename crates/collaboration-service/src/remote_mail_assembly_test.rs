@@ -13,7 +13,7 @@ use tokio::sync::watch;
 
 #[path = "remote_direct_send_tests.rs"]
 mod direct_send;
-#[path = "project_mail_admission_tests.rs"]
+#[path = "project_mail_admission_test.rs"]
 mod project_admission;
 
 pub(super) async fn unwelcomed_session(directory: &Path, peer: PeerId) -> MailDeliverySession {

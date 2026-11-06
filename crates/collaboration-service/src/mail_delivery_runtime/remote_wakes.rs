@@ -127,7 +127,9 @@ impl MailDeliveryRuntime {
             sender,
             fleet_sync_protocol::Recipient {
                 peer,
-                address: convert(request.target).map_err(|_| RemoteWakeRefusal::InvalidRecord)?,
+                address: convert::<message_board::SessionRef>(request.target)
+                    .map_err(|_| RemoteWakeRefusal::InvalidRecord)?
+                    .into(),
             },
             Some(SyncTime::from_unix_millis(request.valid_until_ms)),
             board_sync_protocol::BoardDeliveryBody::Wake(request.body),
@@ -308,9 +310,11 @@ impl LocalWakeOwner {
         body: &WakeBody,
     ) -> RemoteWakeResult {
         let fail = |reason| refused(reason, RemoteWakeMutationState::None);
+        let Ok(recipient) = item.recipient().address.session() else {
+            return fail(RemoteWakeRefusal::InvalidRecord);
+        };
         if body.validate_sender(item.sender()).is_err()
-            || item.recipient().address.endpoint.service_id.as_str()
-                != String::from(self.service.clone())
+            || recipient.endpoint.service_id.as_str() != String::from(self.service.clone())
         {
             return fail(RemoteWakeRefusal::InvalidRecord);
         }
@@ -338,7 +342,7 @@ impl LocalWakeOwner {
                     )
                     .ok()
                     .as_ref()
-                        == Some(&item.recipient().address) => {}
+                        == Some(recipient) => {}
                 Ok(_) => return fail(RemoteWakeRefusal::ResourceNotFound),
                 Err(error) => return remote_failure(error),
             }
@@ -352,7 +356,7 @@ impl LocalWakeOwner {
                     timing,
                     expiry,
                 } => {
-                    if message.target != item.recipient().address {
+                    if &message.target != recipient {
                         return Ok(fail(RemoteWakeRefusal::InvalidRecord));
                     }
                     let request = collaboration_protocol::WakeSendRequest {

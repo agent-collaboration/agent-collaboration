@@ -79,7 +79,7 @@ pub(super) async fn freeze_intent_handoff(
         sender,
         Recipient {
             peer: input.enrollment.peer,
-            address: session.clone(),
+            address: session.clone().into(),
         },
         None,
         body,

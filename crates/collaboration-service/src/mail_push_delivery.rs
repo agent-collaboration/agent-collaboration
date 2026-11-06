@@ -148,5 +148,5 @@ fn storage_error(error: interaction_storage::StorageError) -> DeliveryError {
 }
 
 #[cfg(test)]
-#[path = "mail_push_delivery_tests.rs"]
+#[path = "mail_push_delivery_test.rs"]
 mod tests;

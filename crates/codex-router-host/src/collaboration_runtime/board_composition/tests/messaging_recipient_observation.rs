@@ -12,7 +12,7 @@ struct CommittedInboxHeader {
     id: ItemId,
     digest: ItemDigest,
     sender: collaboration_mail_protocol::MailSender,
-    recipient: Recipient<message_board::SessionRef>,
+    recipient: Recipient<board_sync_protocol::DeliveryAddress>,
     cancel_target: Option<ItemId>,
     valid_until: Option<runtime_primitives::SyncTime>,
     stream: DeliveryStream,

@@ -8,6 +8,9 @@ cargo nextest run --locked --profile ci -p agent-collaboration --features quota-
 
 - `integration/main.rs` gathers the 61 former CLI, protocol, fixture and opt-in
   live-debug roots. Each root retains its module namespace and ignore policy.
+- `integration/conversation_remote_create_cli.rs` exercises remote admission and
+  status JSON, frozen request-id retry, first-input files and requester refusals
+  through the CLI and an owner-only Router socket with a typed Fleet stand-in.
 - `e2e/main.rs` gathers the eight real local Host/central/CLI/MCP journey roots:
   board records, central, takeover, installation directory, messaging rules,
   local mail, reconciliation and retirement. CI prepares the CLI and

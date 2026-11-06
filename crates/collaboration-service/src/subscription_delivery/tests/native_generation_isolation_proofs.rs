@@ -241,7 +241,7 @@ async fn local_generation_replacement_reaches_native_delivery_while_another_read
         .into_iter()
         .filter(|item| {
             matches!(&fixture.reader, Identity::Session { session }
-            if item.recipient().address == *session)
+            if item.recipient().address.session().is_ok_and(|address| address == session))
         })
         .collect();
     let store = fixture

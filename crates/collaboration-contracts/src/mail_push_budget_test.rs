@@ -40,7 +40,10 @@ pub(crate) fn largest_message(peer: PeerId) -> DeliveryItem<RouterDeliveryTypes>
     DeliveryItem::new(
         ItemId::new(uuid::Uuid::now_v7()).unwrap(),
         sender,
-        Recipient { peer, address },
+        Recipient {
+            peer,
+            address: address.into(),
+        },
         Some(SyncTime::from_unix_millis(i64::MAX)),
         BoardDeliveryBody::Message(MessageBody {
             // C0 controls other than tab/newline are invalid. Every legal byte
@@ -92,7 +95,7 @@ pub(crate) fn largest_notification(peer: PeerId) -> DeliveryItem<RouterDeliveryT
         },
         Recipient {
             peer,
-            address: address.clone(),
+            address: address.clone().into(),
         },
         Some(SyncTime::from_unix_millis(i64::MAX)),
         BoardDeliveryBody::Notification(NotificationBody {
@@ -140,6 +143,7 @@ fn maximal_accepted_message_and_twenty_root_notification_fit_the_push_unit() {
                 Submitter::Project(project.as_str().to_owned().try_into().unwrap())
             }
             MailSender::Session(_) | MailSender::HumanUser { .. } => Submitter::Machine(peer),
+            MailSender::Fleet => panic!("ordinary mail budget fixtures cannot originate at Fleet"),
         };
         let entry = ServerFrame::<RouterConsumerProtocol>::Request {
             frame: FrameId::new(uuid::Uuid::now_v7()).unwrap(),

@@ -82,7 +82,7 @@ impl BoardConsumerRequest {
         recipient_peer: PeerId,
     ) -> Result<Self, MailValidationError> {
         validate_mail_submit(&item, origin_epoch)?;
-        if item.recipient().address.endpoint.service_id != *recipient_installation {
+        if item.recipient().address.session()?.endpoint.service_id != *recipient_installation {
             return Err(MailValidationError {
                 field: "recipient.address.endpoint.serviceId",
             });
@@ -104,9 +104,12 @@ fn validate_mail_submit(
     origin_epoch: Option<Epoch>,
 ) -> Result<(), MailValidationError> {
     if let DeliveryEnvelope::Item(item) = item {
-        item.body().validate_sender(item.sender())?;
+        crate::validate_delivery_address(item.sender(), item.body(), &item.recipient().address)?;
+    } else {
+        item.recipient().address.session()?;
     }
     match (item.sender(), origin_epoch) {
+        (MailSender::Fleet, _) => Err(MailValidationError { field: "sender" }),
         (MailSender::Project { .. }, Some(_))
         | (MailSender::Session(_) | MailSender::HumanUser { .. }, None) => Ok(()),
         (MailSender::Project { .. }, None)

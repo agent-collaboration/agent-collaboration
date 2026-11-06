@@ -65,7 +65,7 @@ async fn lost_receipt_hold_targets_submit_while_sender_query_completes() -> Test
         let submit = OperationRequest::Consumer(BoardConsumerRequest::mail_submit(
             envelope,
             Some(Epoch::new(2)?),
-            &recipient.address.endpoint.service_id,
+            &recipient.address.session()?.endpoint.service_id,
             recipient.peer,
         )?);
         let (submit_finished, mut submit_ready) = tokio::sync::watch::channel(false);
@@ -149,7 +149,7 @@ async fn lost_receipt_reply_stays_bound_when_a_cancel_submit_finishes_first() ->
         let cancel = BoardConsumerRequest::mail_submit(
             cancel,
             Some(Epoch::new(2)?),
-            &recipient.address.endpoint.service_id,
+            &recipient.address.session()?.endpoint.service_id,
             recipient.peer,
         )?;
         let answer = timeout(
@@ -286,7 +286,7 @@ async fn hold_original_with_cancel(
     let submit = BoardConsumerRequest::mail_submit(
         DeliveryEnvelope::Item(seed.item),
         Some(Epoch::new(2)?),
-        &recipient.address.endpoint.service_id,
+        &recipient.address.session()?.endpoint.service_id,
         recipient.peer,
     )?;
     let requests = fixture.holder.projects.clone();

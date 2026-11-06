@@ -147,7 +147,7 @@ impl PendingLocalCancelFixture {
             },
             Recipient {
                 peer,
-                address: target.clone().try_into()?,
+                address: message_board::SessionRef::try_from(target.clone())?.into(),
             },
             None,
             CancelBody { target: original },

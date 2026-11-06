@@ -16,6 +16,8 @@ pub use message_board::SubscriptionPolicy as FollowDeliveryPolicy;
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum MailSender {
+    #[serde(deserialize_with = "crate::remote_create::deserialize_closed_unit")]
+    Fleet,
     Session(SessionRef),
     #[serde(rename_all = "camelCase")]
     HumanUser {
@@ -30,6 +32,7 @@ impl MailSender {
     #[must_use]
     pub fn matches_submitting_installation(&self, installation: &InstallationId) -> bool {
         match self {
+            Self::Fleet => false,
             Self::Session(session) => session.endpoint.service_id == *installation,
             Self::HumanUser {
                 installation: sender,

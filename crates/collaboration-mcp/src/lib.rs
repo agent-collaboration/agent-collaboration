@@ -15,7 +15,7 @@ pub use collaboration_api_router::{
 };
 pub use loopback_bind_address::{LoopbackBindAddress, LoopbackBindAddressError};
 pub use native_schema_definitions::NativeSchemaDefinitions;
-#[cfg(feature = "test-support")]
+#[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 
 #[cfg(test)]
@@ -55,6 +55,9 @@ mod provider_stdio_diagnostic_http_tests;
 mod proxy_authority;
 #[cfg(test)]
 mod proxy_authority_tests;
+#[cfg(test)]
+#[path = "remote_create_requester_test.rs"]
+mod remote_create_requester_tests;
 #[cfg(test)]
 mod thread_subscription_entry_tests;
 #[cfg(test)]

@@ -37,7 +37,7 @@ async fn poll_has_no_push_or_native_call_at_the_delivery_entry() {
     };
     *policy = collaboration_mail_protocol::FollowDeliveryPolicy::new(
         &message_board::Identity::Session {
-            session: template.recipient().address.clone(),
+            session: template.recipient().address.clone().into_session().unwrap(),
         },
         message_board::SubscriptionMode::Poll,
         message_board::WhenIdle::Hold,
@@ -77,7 +77,7 @@ mod direct;
 mod local_runtime;
 #[path = "mail_materialized_session_test.rs"]
 mod materialized_session;
-#[path = "remote_mail_assembly_tests.rs"]
+#[path = "remote_mail_assembly_test.rs"]
 mod remote_assembly;
 #[path = "remote_wake_replay_tests.rs"]
 mod remote_wakes;

@@ -10,6 +10,7 @@ impl SenderBinding<ServiceScope<'_>, board_sync_protocol::BoardDeliveryTypes> fo
     ) -> Result<Submitter, SenderBindingFailure> {
         use collaboration_mail_protocol::MailSender;
         let service = match sender {
+            MailSender::Fleet => return Err(SenderBindingFailure::Unknown),
             MailSender::Project { project } => {
                 return DatabaseId::try_from(project.as_str().to_owned())
                     .map(Submitter::Project)

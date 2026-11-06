@@ -57,6 +57,7 @@ where
     {
         async move {
             let service = match sender {
+                MailSender::Fleet => return Err(SenderBindingFailure::Unknown),
                 MailSender::Project { project } => {
                     return DatabaseId::try_from(project.as_str().to_owned())
                         .map(Submitter::Project)

@@ -42,6 +42,8 @@ pub async fn project_received_mail<THost: Host>(
                     .recipient()
                     .address
                     .clone()
+                    .into_session()
+                    .map_err(|_| invalid_projection())?
                     .try_into()
                     .map_err(|_| invalid_projection())?,
                 membership: membership

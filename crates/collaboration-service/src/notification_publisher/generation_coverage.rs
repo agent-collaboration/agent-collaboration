@@ -141,7 +141,13 @@ impl NotificationPublisher {
                 // Neither a project snapshot nor a reader window gate spans SDK/network I/O.
                 for (group_sequence, child_sequence, group, target, cancel) in candidates {
                     let mut replay = RemoteCancelReplay::QueryOnly;
-                    if target.recipient().address.endpoint.service_id
+                    if target
+                        .recipient()
+                        .address
+                        .session()
+                        .map_err(|_| BoardError::board_unavailable())?
+                        .endpoint
+                        .service_id
                         != self.inner.admission.installation
                     {
                         let marks = runtime.acknowledged_mail_changes(project).await?;

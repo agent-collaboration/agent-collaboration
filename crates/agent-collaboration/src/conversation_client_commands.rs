@@ -27,6 +27,22 @@ use reporting::{
 mod lifecycle;
 pub(super) use lifecycle::{run_close, run_resume};
 
+pub(super) fn report_remote_create_failure(
+    error: ClientError,
+    operation_id: &OperationId,
+    json: bool,
+) -> i32 {
+    if error.conversation_failure().is_some() {
+        report_create_client_error(ConversationClientError::Client(error), operation_id, json)
+    } else {
+        report_conversation_failure(
+            operation_failure_from_client_error(error, OperationEffect::Unknown),
+            None,
+            json,
+        )
+    }
+}
+
 pub(super) fn run_create(args: CreateArguments) -> i32 {
     if let Err(failure) = validate_create_endpoint_options(&args) {
         return crate::endpoint_commands::report_failure(
@@ -35,6 +51,9 @@ pub(super) fn run_create(args: CreateArguments) -> i32 {
             failure.exit_code,
             args.json,
         );
+    }
+    if args.machine.is_some() {
+        return args.run_remote();
     }
     let directory = match crate::endpoint_commands::resolve_directory(args.service_directory) {
         Ok(value) => value,

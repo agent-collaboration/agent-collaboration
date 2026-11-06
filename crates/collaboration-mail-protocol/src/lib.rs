@@ -1,7 +1,9 @@
 //! Portable mail contracts shared by the Router facade and central custody.
 mod mail_delivery_mode;
+pub mod remote_create;
 mod remote_wake;
 pub use mail_delivery_mode::MailDeliveryMode;
+pub use remote_create::*;
 pub use remote_wake::*;
 mod generation_guard;
 pub use generation_guard::{GenerationGuard, GenerationGuardError};

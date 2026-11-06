@@ -11,7 +11,7 @@ const INSTALLATION: &str = "00000000-0000-4000-8000-000000000001";
     clippy::unwrap_used,
     reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
 )]
-fn recipient() -> wire::Recipient<message_board::SessionRef> {
+fn recipient() -> wire::Recipient<board_sync_protocol::DeliveryAddress> {
     serde_json::from_value(json!({"peer":PEER,"address":{
         "endpoint":{"serviceId":INSTALLATION,"endpointId":"codex-local"},
         "sessionId":"recipient"

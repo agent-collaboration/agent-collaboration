@@ -50,7 +50,7 @@ async fn remote_incoming_poll_uses_its_frozen_policy_without_opening_the_senders
         },
         Recipient {
             peer,
-            address: target.clone(),
+            address: target.clone().into(),
         },
         None,
         BoardDeliveryBody::Notification(NotificationBody {

@@ -61,6 +61,16 @@ impl PushRecordRow {
                 }
                 PushOrigin::OwnerUnverified
             }
+            "fleet" => {
+                if self.origin_service_id.is_some()
+                    || self.origin_endpoint_id.is_some()
+                    || self.origin_session_id.is_some()
+                    || self.origin_router_ref.is_some()
+                {
+                    return Err(StorageError::InvalidRecord);
+                }
+                PushOrigin::Fleet
+            }
             "router" => {
                 if self.origin_service_id.is_some()
                     || self.origin_endpoint_id.is_some()
@@ -148,12 +158,12 @@ pub(crate) fn validate_router_origin_reference(
     let origin_kind = match origin {
         PushOrigin::Router(origin_kind) if *origin_kind == kind => *origin_kind,
         PushOrigin::Router(_) => return Err(StorageError::InvalidRecord),
-        PushOrigin::Session(_) | PushOrigin::OwnerUnverified
+        PushOrigin::Session(_) | PushOrigin::OwnerUnverified | PushOrigin::Fleet
             if encoded_origin_reference.is_none() =>
         {
             return Ok(());
         }
-        PushOrigin::Session(_) | PushOrigin::OwnerUnverified => {
+        PushOrigin::Session(_) | PushOrigin::OwnerUnverified | PushOrigin::Fleet => {
             return Err(StorageError::InvalidRecord);
         }
     };
@@ -199,9 +209,14 @@ pub(crate) fn serialize_origin(origin: &PushOrigin) -> (&'static str, Option<&Se
     match origin {
         PushOrigin::Session(session) => ("session", Some(session)),
         PushOrigin::OwnerUnverified => ("owner", None),
+        PushOrigin::Fleet => ("fleet", None),
         PushOrigin::Router(_) => ("router", None),
     }
 }
+
+#[cfg(test)]
+#[path = "push_record_rows_fleet_test.rs"]
+mod fleet_tests;
 
 pub(crate) fn serialize_timestamp(value: DateTime<Utc>) -> String {
     value.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)

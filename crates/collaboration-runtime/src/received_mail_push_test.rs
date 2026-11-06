@@ -90,7 +90,7 @@ fn follow_item(
         MailSender::Project { project },
         Recipient {
             peer: PeerId::new(uuid::Uuid::now_v7()).unwrap(),
-            address: target,
+            address: target.into(),
         },
         None,
         board_sync_protocol::BoardDeliveryBody::Notification(body),
@@ -266,7 +266,7 @@ fn send_producer_copies_the_exact_label_through_shared_wire_and_recipient_projec
             "sessionId":"sender-session"
         })).unwrap()),
         origin_router_ref:None,
-        target:template.recipient().address.clone().try_into().unwrap(),
+        target:template.recipient().address.clone().into_session().unwrap().try_into().unwrap(),
         mode:Some(collaboration_protocol::MessageDelivery::Queue),
         guard:Some(serde_json::from_value(json!({"serviceEpoch":"00000000-0000-4000-8000-000000000003","generation":17})).unwrap()),
         reply_to_push_id:None,
@@ -307,5 +307,69 @@ fn send_producer_copies_the_exact_label_through_shared_wire_and_recipient_projec
     assert!(
         matches!(human.sender(),MailSender::HumanUser {installation:origin} if origin==&installation)
     );
-    assert_ne!(installation, human.recipient().address.endpoint.service_id);
+    assert_ne!(
+        installation,
+        human
+            .recipient()
+            .address
+            .session()
+            .unwrap()
+            .endpoint
+            .service_id
+    );
+}
+
+#[test]
+fn machine_commands_refuse_projection_and_fleet_results_have_fleet_display_origin() {
+    let id = "019f0000-0000-7000-8000-000000000001";
+    let request_id = "019f0000-0000-7000-8000-000000000002";
+    let session =
+        json!({"endpoint":{"serviceId":id,"endpointId":"codex-local"},"sessionId":"requester"});
+    for (body, address) in [
+        (
+            json!({"kind":"createSession","requestId":id,"requester":session,
+            "command":{"endpoint":"codex-local","workingDirectory":"/tmp","access":"workspace-write",
+                "model":null,"effort":null,"mode":null,"firstInput":null}}),
+            json!({"machine":id}),
+        ),
+        (
+            json!({"kind":"remoteCreateResult","requestId":request_id,"outcome":{"kind":"expired"}}),
+            session,
+        ),
+    ] {
+        let item = DeliveryItem::<RouterDeliveryTypes>::new(
+            id.to_owned().try_into().unwrap(),
+            MailSender::Fleet,
+            Recipient {
+                peer: id.parse().unwrap(),
+                address: serde_json::from_value(address).unwrap(),
+            },
+            None,
+            serde_json::from_value(body).unwrap(),
+        )
+        .unwrap();
+        if matches!(
+            item.body(),
+            board_sync_protocol::BoardDeliveryBody::CreateSession(_)
+        ) {
+            assert!(received_mail_push(&item, Utc::now()).is_err());
+        } else {
+            let push = received_mail_push(&item, Utc::now()).unwrap().unwrap();
+            assert_eq!(push.origin, PushOrigin::Fleet);
+            assert_eq!(String::from(push.push_id.clone()), id);
+            assert_ne!(id, request_id);
+            let projected: serde_json::Value =
+                serde_json::from_str(push.body.as_deref().unwrap()).unwrap();
+            assert_eq!(projected["requestId"], request_id);
+            let line = render_push_line(&PushLineInput {
+                link: RouterLink::new(id.to_owned().try_into().unwrap(), push.push_id.clone()),
+                machine_label: "A".to_owned().try_into().unwrap(),
+                origin: push.origin,
+                header_facts: push.header_facts,
+                body: push.body,
+            })
+            .unwrap();
+            assert!(line.contains("Fleet @A"), "{line}");
+        }
+    }
 }

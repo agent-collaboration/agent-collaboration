@@ -85,6 +85,7 @@ impl PushRecordDraft {
         }
         match (&self.kind, &self.origin) {
             (PushKind::DirectMessage, PushOrigin::Session(_))
+            | (PushKind::DirectMessage, PushOrigin::Fleet)
             | (PushKind::DirectMessage, PushOrigin::OwnerUnverified) => {
                 if self.origin_router_ref.is_some() {
                     return Err(PushRecordValidationError::InvalidOriginReference);

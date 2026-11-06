@@ -4,6 +4,7 @@ use collaboration_runtime::EndpointDirectory;
 
 #[derive(Clone)]
 pub struct ApplicationFixture {
+    pub(crate) remote_fleet: Option<std::sync::Arc<dyn collaboration_contracts::RemoteCreateFleet>>,
     pub(crate) notification_publisher: Option<std::sync::Arc<crate::NotificationPublisher>>,
     pub(crate) mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
     pub(crate) project_claim: Option<std::sync::Arc<dyn collaboration_contracts::ProjectClaim>>,
@@ -49,6 +50,13 @@ pub struct ApplicationFixture {
         Option<std::sync::Arc<dyn collaboration_contracts::ProviderConversationBackend>>,
 }
 impl ApplicationFixture {
+    pub fn with_remote_create_fleet(
+        mut self,
+        fleet: std::sync::Arc<dyn collaboration_contracts::RemoteCreateFleet>,
+    ) -> Self {
+        self.remote_fleet = Some(fleet);
+        self
+    }
     pub fn with_mail_delivery_runtime(
         mut self,
         runtime: std::sync::Arc<crate::MailDeliveryRuntime>,
@@ -380,6 +388,7 @@ impl ApplicationFixture {
             collaboration_contracts::MachineIdentity::new(service_id.clone(), None)
                 .map_err(|error| error.to_string())?;
         Ok(Self {
+            remote_fleet: None,
             notification_publisher: None,
             project_replication: std::sync::Arc::new(
                 collaboration_contracts::UnacknowledgedProjectReplication,
@@ -505,7 +514,8 @@ impl ApplicationFixture {
             self.provider_operations.clone(),
             self.codex_conversation_recorder.clone(),
             self.directory.clone(),
-        );
+        )
+        .with_remote_create_fleet(self.remote_fleet.clone());
         let observation = crate::collaboration_application::ObservationOperations::new(
             self.router_identity(),
             self.provider_session_hub.clone(),

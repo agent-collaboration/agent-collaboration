@@ -307,24 +307,31 @@ impl PublisherInner {
             .mail
             .upgrade()
             .ok_or_else(BoardError::board_unavailable)?;
-        let replay =
-            if target.recipient().address.endpoint.service_id == self.admission.installation {
-                RemoteCancelReplay::QueryOnly
-            } else {
-                let marks = mail.acknowledged_mail_changes(project).await?;
-                if !marks
-                    .max_handoff_seq
-                    .is_some_and(|mark| mark >= group_sequence.get())
-                    || !marks
-                        .max_expansion_seq
-                        .is_some_and(|mark| mark >= child.sequence.get())
-                {
-                    return Ok(FrozenCancelSettlement::Pending);
-                }
-                RemoteCancelReplay::Eligible {
-                    epoch: context.epoch,
-                }
-            };
+        let replay = if target
+            .recipient()
+            .address
+            .session()
+            .map_err(|_| BoardError::board_unavailable())?
+            .endpoint
+            .service_id
+            == self.admission.installation
+        {
+            RemoteCancelReplay::QueryOnly
+        } else {
+            let marks = mail.acknowledged_mail_changes(project).await?;
+            if !marks
+                .max_handoff_seq
+                .is_some_and(|mark| mark >= group_sequence.get())
+                || !marks
+                    .max_expansion_seq
+                    .is_some_and(|mark| mark >= child.sequence.get())
+            {
+                return Ok(FrozenCancelSettlement::Pending);
+            }
+            RemoteCancelReplay::Eligible {
+                epoch: context.epoch,
+            }
+        };
         mail.replay_frozen_cancel_and_observe(target, &child.expansion.envelope, replay)
             .await
             .map_err(|_| BoardError::board_unavailable())

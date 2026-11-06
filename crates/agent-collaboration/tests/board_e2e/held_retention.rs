@@ -83,7 +83,12 @@ async fn hold_and_prune(
         serde_json::from_value(serde_json::to_value(target)?)?;
     let items = deliveries(handoffs(&stopped, &fixture.project, 1).await?)
         .into_iter()
-        .filter(|item| item.recipient().address == recipient)
+        .filter(|item| {
+            item.recipient()
+                .address
+                .session()
+                .is_ok_and(|address| address == &recipient)
+        })
         .collect();
     let item = only_item(items)?;
     follow.assert_frozen(&item, &range)?;

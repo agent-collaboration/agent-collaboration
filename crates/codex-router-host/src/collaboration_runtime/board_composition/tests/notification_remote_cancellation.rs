@@ -54,7 +54,8 @@ async fn remote_children_wait_for_their_own_final_ack_and_reopen_reuses_every_fr
                     endpoint_id: "codex-local".to_owned().try_into()?,
                 },
                 session_id: "remote-cancel-recipient".to_owned().try_into()?,
-            },
+            }
+            .into(),
         },
     )
     .await?;
@@ -81,7 +82,7 @@ async fn remote_children_wait_for_their_own_final_ack_and_reopen_reuses_every_fr
                 },
                 Recipient {
                     peer: fixture.harness.peer(),
-                    address: local_recipient.clone(),
+                    address: local_recipient.clone().into(),
                 },
                 None,
                 BoardDeliveryBody::Notification(NotificationBody {

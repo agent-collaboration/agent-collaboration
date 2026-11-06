@@ -427,7 +427,7 @@ pub(super) fn follow(
         },
         Recipient {
             peer: runtime.fixture.host.config.local.owner,
-            address: address.clone(),
+            address: address.clone().into(),
         },
         None,
         board_sync_protocol::BoardDeliveryBody::Notification(NotificationBody {

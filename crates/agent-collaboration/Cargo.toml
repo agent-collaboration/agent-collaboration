@@ -50,7 +50,7 @@ unicode-width.workspace = true
 agent-session-inventory = { version = "0.1.105", path = "../agent-session-inventory", features = ["test-support"] }
 node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime", features = ["test-support"] }
-collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
+collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts", features = ["test-support"] }
 collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance" }
 durable-steps.workspace = true
 fleet-sync-delivery = { workspace = true, features = ["test-support"] }

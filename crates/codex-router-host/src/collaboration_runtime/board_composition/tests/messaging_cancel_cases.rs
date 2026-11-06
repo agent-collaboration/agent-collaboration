@@ -590,7 +590,7 @@ async fn replay_after_reconnect(
             let request = BoardConsumerRequest::mail_submit(
                 item,
                 Some(Epoch::new(3)?),
-                &recipient.address.endpoint.service_id,
+                &recipient.address.session()?.endpoint.service_id,
                 recipient.peer,
             )?;
             match fixture

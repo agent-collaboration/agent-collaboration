@@ -74,11 +74,21 @@ pub(crate) async fn verify_frontier(
             require(
                 item.id().as_uuid().to_string() == text(row, 0)?
                     && item.recipient().peer == peer
-                    && item.recipient().address.endpoint.service_id == *service,
+                    && item
+                        .recipient()
+                        .address
+                        .session()
+                        .is_ok_and(|session| session.endpoint.service_id == *service),
                 "frontier local handoff",
             )?;
             custody
-                .terminal(item.id(), &item.recipient().address)
+                .terminal(
+                    item.id(),
+                    item.recipient()
+                        .address
+                        .session()
+                        .map_err(|_| RecoveryError::Invalid("frontier session address"))?,
+                )
                 .await?;
         }
         Ok(())

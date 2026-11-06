@@ -145,6 +145,8 @@ impl MailCallRouter {
                             .item
                             .recipient()
                             .address
+                            .session()
+                            .map_err(|_| unavailable())?
                             .endpoint
                             .service_id
                             .clone();

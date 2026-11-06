@@ -34,7 +34,7 @@ impl ExpansionFixture {
         };
         let recipient = Recipient {
             peer: PeerId::new(uuid::Uuid::now_v7())?,
-            address: session.clone(),
+            address: session.clone().into(),
         };
         let membership = MembershipId::try_from(RecordId::generate().as_str().to_owned())?;
         let activated_at = FeedCursor {

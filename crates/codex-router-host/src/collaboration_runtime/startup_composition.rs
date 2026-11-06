@@ -547,6 +547,14 @@ impl CollaborationRuntime {
                     provider_store.clone(),
                     codex_recorder.clone(),
                     endpoint_directory.clone(),
+                )
+                .with_remote_create_fleet(
+                    prepared_board
+                        .as_ref()
+                        .and_then(board_composition::BoardComposition::fleet_client)
+                        .map(|fleet| {
+                            fleet as std::sync::Arc<dyn collaboration_contracts::RemoteCreateFleet>
+                        }),
                 );
             let observation =
                 collaboration_service::collaboration_application::ObservationOperations::new(

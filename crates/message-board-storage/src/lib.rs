@@ -37,9 +37,11 @@ mod project_inbox_reader_positions;
 mod project_intent_io;
 mod project_ledger_reader;
 #[cfg(test)]
+#[path = "project_mail_cancel_expansion_test.rs"]
 mod project_mail_cancel_expansion_tests;
 mod project_mail_cancel_expansions;
 #[cfg(test)]
+#[path = "project_mail_handoff_test.rs"]
 mod project_mail_handoff_tests;
 mod project_mail_handoffs;
 mod project_membership_io;

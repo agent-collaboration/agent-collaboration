@@ -14,6 +14,9 @@ mod admission_overload;
 mod api_connection;
 mod collaboration_access;
 mod collaboration_client;
+pub use collaboration_mail_protocol::{
+    FirstInput, RemoteCreateAdmission, RemoteCreateRequest, RemoteCreateStatus,
+};
 mod message_operation;
 mod message_submission;
 mod provider_conversations;

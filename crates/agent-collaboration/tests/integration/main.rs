@@ -48,6 +48,7 @@ mod central_cli;
 mod claude_background_cli;
 mod conversation_carriers;
 mod conversation_fault_entry_paths;
+mod conversation_remote_create_cli;
 mod debug_luna_acceptance;
 mod delivery_matrix_debug_acceptance;
 mod endpoint_discovery_command;

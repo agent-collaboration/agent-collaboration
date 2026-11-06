@@ -111,7 +111,7 @@ impl ProjectAdmission {
             },
             Recipient {
                 peer: proposal.enrollment.peer,
-                address: session.clone(),
+                address: session.clone().into(),
             },
             None,
             body,

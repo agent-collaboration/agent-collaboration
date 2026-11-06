@@ -20,7 +20,10 @@ fn project_item(
     let template = runtime.fixture.item(&runtime.fixture.draft());
     let mut recipient = template.recipient().clone();
     recipient.peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();
-    recipient.address.endpoint.service_id = "00000000-0000-4000-8000-000000000002"
+    let board_sync_protocol::DeliveryAddress::Session(address) = &mut recipient.address else {
+        panic!("session fixture");
+    };
+    address.endpoint.service_id = "00000000-0000-4000-8000-000000000002"
         .to_owned()
         .try_into()
         .unwrap();
