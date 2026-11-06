@@ -97,7 +97,7 @@ export const controlPlanSchema = z.strictObject({
       receipt: absolutePath,
       releaseSentinel: absolutePath,
     }),
-    z.strictObject({ kind: z.literal("provider") }),
+    z.strictObject({ kind: z.literal("provider"), model: z.string().trim().min(1) }),
   ]),
   cases: z.array(controlCaseSchema).min(1),
   // The harmless prompt each case submits. The controlled peer answers any text but "hold",

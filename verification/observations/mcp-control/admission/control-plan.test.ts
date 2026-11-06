@@ -321,7 +321,12 @@ test("a real provider cannot run the held caller-loss or explicit-cancel cases",
       assert.throws(
         () =>
           checkControlPlan(
-            { ...plan, peer: { kind: "provider" }, cases: [held], holdText: "hold" },
+            {
+              ...plan,
+              peer: { kind: "provider", model: "claude-haiku-5-5" },
+              cases: [held],
+              holdText: "hold",
+            },
             NOW,
           ),
         /actual causal hold/,

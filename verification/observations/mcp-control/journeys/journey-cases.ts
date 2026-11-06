@@ -4,7 +4,11 @@
 // A case that cannot reach its deciding observation reports why; nothing here invents success.
 import { z } from "zod";
 import { reattachSettlement } from "../observations/operation-settlement.ts";
-import { sessionRefSchema, type SessionRef } from "../observations/observation-models.ts";
+import {
+  sameSession,
+  sessionRefSchema,
+  type SessionRef,
+} from "../observations/observation-models.ts";
 import type { ObservationRead } from "../observations/observation-ledger.ts";
 import { foldObservationReads } from "../observations/observation-ledger.ts";
 import {
@@ -99,7 +103,13 @@ export async function createSession(inputs: CaseInputs, step: string): Promise<S
     requests.createArguments(plan, operationId, 60),
     { timeoutMs: 70_000 },
   );
-  const created = createdSchema.parse(answered(outcome, `${step} create`));
+  const answer = answered(outcome, `${step} create`);
+  const settings = z
+    .looseObject({ kind: z.string(), notApplied: z.array(z.unknown()).optional() })
+    .parse(answer);
+  if (settings.kind === "createdWithoutSettings" || (settings.notApplied?.length ?? 0) > 0)
+    throw new Error(`${step}: creation did not apply all declared settings`);
+  const created = createdSchema.parse(answer);
   if (created.operationId !== operationId)
     throw new Error(
       `${step}: the create answer names operation ${created.operationId}, not the one submitted`,
@@ -207,6 +217,52 @@ export function segmentPrompt(inputs: CaseInputs, step: string): string {
  * After a reattach the caller passes the replay baseline it already read whole, so replayed
  * history stays baseline and only the new input's turn is decided.
  */
+const modelInspectSchema = z.looseObject({
+  target: sessionRefSchema,
+  settingsCatalog: z.looseObject({
+    configOptions: z.array(
+      z.looseObject({
+        category: z.string().optional(),
+        currentValue: z.discriminatedUnion("kind", [
+          z.object({ kind: z.literal("select"), value: z.string() }),
+          z.object({ kind: z.literal("boolean"), value: z.boolean() }),
+        ]),
+      }),
+    ),
+  }),
+});
+
+async function requireDeclaredModel(
+  inputs: CaseInputs,
+  target: SessionRef,
+  step: string,
+): Promise<void> {
+  if (inputs.plan.peer.kind !== "provider") return;
+  const inspected = modelInspectSchema.parse(
+    answered(
+      await callTool(
+        inputs.context,
+        `${step}-model-inspect`,
+        "provider_session_inspect",
+        { target },
+        { timeoutMs: 15_000 },
+      ),
+      "model inspect",
+    ),
+  );
+  if (!sameSession(inspected.target, target))
+    throw new Error("model inspect names another Session");
+  const models = inspected.settingsCatalog.configOptions.filter(
+    (option) => option.category === "model",
+  );
+  const selected = models.length === 1 ? models[0]?.currentValue : undefined;
+  if (selected?.kind !== "select") throw new Error("model inspect has no unique selected model");
+  if (selected.value !== inputs.plan.peer.model)
+    throw new Error(
+      `current model ${selected.value} differs from declared model ${inputs.plan.peer.model}`,
+    );
+}
+
 export async function attachedPrompt(
   inputs: CaseInputs,
   target: SessionRef,
@@ -221,6 +277,7 @@ export async function attachedPrompt(
       : [...takenBaseline];
   const baselineReads = reads.length;
   const operationId = requests.newOperationId();
+  await requireDeclaredModel(inputs, target, step);
   const outcome = await callTool(
     inputs.context,
     `${step}-prompt`,
@@ -292,6 +349,7 @@ export async function callerLossCase(inputs: CaseInputs): Promise<CaseResult> {
   const reads = [await baseline(inputs, "caller-loss-baseline", target)];
   const operationId = requests.newOperationId();
   const waiter = new AbortController();
+  await requireDeclaredModel(inputs, target, "caller-loss");
   const dropped = callTool(
     inputs.context,
     "caller-loss-prompt",
@@ -355,6 +413,7 @@ export async function explicitCancelCase(inputs: CaseInputs): Promise<CaseResult
   const before = inputs.store.operations(target).map((row) => row.operationId);
   const reads = [await baseline(inputs, "cancel-baseline", target)];
   const operationId = requests.newOperationId();
+  await requireDeclaredModel(inputs, target, "cancel");
   const prompt = callTool(
     inputs.context,
     "cancel-prompt",

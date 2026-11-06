@@ -42,6 +42,7 @@ export function createArguments(
     endpoint: { serviceId: plan.expectedServiceId, endpointId: plan.endpointId },
     workingDirectory: plan.workingDirectory,
     access: "write-restricted",
+    ...(plan.peer.kind === "provider" ? { model: plan.peer.model } : {}),
     createdBy: conversationActor(plan.actor),
     approver: conversationActor(plan.approver),
     timeoutSeconds,

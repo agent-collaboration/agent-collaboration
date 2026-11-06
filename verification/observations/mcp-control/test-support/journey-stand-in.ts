@@ -37,6 +37,11 @@ export type ReplayShape =
   | "foreign";
 
 export interface StandInOptions {
+  readonly currentModel?: string;
+  readonly modelAfterResume?: string;
+  readonly modelAfterLoad?: string;
+  readonly createNotApplied?: boolean;
+  readonly createdWithoutSettings?: boolean;
   readonly endpointId?: string;
   /** What resume publishes; the real Host publishes no history after resume. */
   readonly resumeReplay?: ReplayShape;
@@ -104,6 +109,7 @@ export interface StandIn {
   readonly receipt: string;
   readonly root: string;
   readonly calls: string[];
+  readonly requests: { readonly name: string; readonly arguments: Json }[];
   readonly sessions: Map<string, SessionState>;
   close(): Promise<void>;
 }
@@ -175,12 +181,14 @@ class ScriptedHost {
   private readonly settlements = new Map<string, Json>();
   private readonly kinds = new Map<string, string>();
   private created = 0;
+  private currentModel: string;
   private readonly options: StandInOptions;
   readonly store: string;
   readonly receipt: string;
 
   constructor(options: StandInOptions, store: string, receipt: string) {
     this.options = options;
+    this.currentModel = options.currentModel ?? "claude-haiku-5-5";
     this.store = store;
     this.receipt = receipt;
     const database = new DatabaseSync(store);
@@ -225,6 +233,17 @@ class ScriptedHost {
           result: {
             target: this.target(this.options.inspectSessionId ?? this.session(name, sessionId).id),
             state: this.options.sessionState ?? "unloaded",
+            settingsCatalog: {
+              configOptions: [
+                {
+                  id: "model",
+                  name: "Model",
+                  category: "model",
+                  currentValue: { kind: "select", value: this.currentModel },
+                  choices: [],
+                },
+              ],
+            },
             capabilities: {},
             history: "available",
           },
@@ -255,7 +274,17 @@ class ScriptedHost {
     this.openEpoch(fresh, [], null);
     this.recordSession(id);
     this.recordOperation(operationId, "conversationCreate", id);
-    return { result: { kind: "created", operationId, target: this.target(id) } };
+    return {
+      result: {
+        kind: this.options.createdWithoutSettings ? "createdWithoutSettings" : "created",
+        operationId,
+        target: this.target(id),
+        ...(this.options.createdWithoutSettings ? { applied: [], failed: [] } : {}),
+        ...(this.options.createNotApplied
+          ? { notApplied: [{ setting: "model", value: "claude-haiku-5-5" }] }
+          : {}),
+      },
+    };
   }
 
   private observe(session: SessionState & { id: string }, args: Json): Answer {
@@ -335,6 +364,7 @@ class ScriptedHost {
       });
     }
     if (tool === "resume") {
+      this.currentModel = this.options.modelAfterResume ?? this.currentModel;
       this.openEpoch(session, replayed(session.history, this.options.resumeReplay ?? "none"), {
         unknown: "replayed",
       });
@@ -355,6 +385,7 @@ class ScriptedHost {
       return this.refuse(operationId, session.id, "load");
     this.recordOperation(operationId, "conversationLoad", session.id);
     this.receiptRow("session/load", session.id);
+    this.currentModel = this.options.modelAfterLoad ?? this.currentModel;
     const shape = this.options.loadReplay ?? "faithful";
     this.openEpoch(
       session,
@@ -540,12 +571,14 @@ export async function startStandIn(options: StandInOptions = {}): Promise<StandI
     join(root, "receipt.jsonl"),
   );
   const calls: string[] = [];
+  const requests: { name: string; arguments: Json }[] = [];
   const server: Server = createServer((request, response) => {
     let text = "";
     request.on("data", (chunk: Buffer) => (text += chunk.toString("utf8")));
     request.on("end", () => {
       const call = callSchema.parse(decode(text));
       calls.push(call.params.name);
+      requests.push({ name: call.params.name, arguments: call.params.arguments });
       const answered = host.answer(call.params.name, call.params.arguments);
       response.setHeader("content-type", "application/json");
       response.end(
@@ -567,6 +600,7 @@ export async function startStandIn(options: StandInOptions = {}): Promise<StandI
     receipt: host.receipt,
     root,
     calls,
+    requests,
     sessions: host.sessions,
     async close(): Promise<void> {
       server.closeAllConnections();
