@@ -1,4 +1,4 @@
-use collaboration_central_conformance::ConformanceResult;
+use crate::ConformanceResult;
 use std::{path::PathBuf, process::Stdio, time::Duration};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},

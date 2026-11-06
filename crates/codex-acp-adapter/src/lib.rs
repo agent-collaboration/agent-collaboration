@@ -1,4 +1,6 @@
 //! ACP-agent connection routing and Codex Session translation.
+#[cfg(feature = "test-support")]
+extern crate self as codex_acp_adapter;
 mod acp_connection_dispatch;
 mod acp_connection_router;
 mod acp_connection_transport;
@@ -21,6 +23,8 @@ mod queued_frame_budget;
 mod session_connection_registry;
 mod session_creation;
 mod stored_session_listing;
+#[cfg(feature = "test-support")]
+pub mod test_support;
 pub use acp_connection_dispatch::{AcpConnectionInputs, AcpStoredSessions, serve_acp_connection};
 pub use acp_connection_router::{
     AcpConnectionContext, AcpRouteFuture, AcpSessionRoute, serve_acp_router_connection,

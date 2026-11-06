@@ -2,7 +2,6 @@
 use super::super::SubscriptionClock;
 use super::super::subscription_push::target_session;
 use super::owner_fixture::*;
-use crate as mail_service;
 use crate::ApplicationFixture;
 use crate::CollaborationApplication;
 use collaboration_contracts::TargetPresence;
@@ -41,10 +40,6 @@ mod native_held_mail_proofs;
 #[path = "native_intent_publisher_proofs.rs"]
 mod native_intent_publisher_proofs;
 #[path = "../../../tests/support/native_mail_owner.rs"]
-#[expect(
-    dead_code,
-    reason = "The shared fixture also exposes deferred worker startup used by Host takeover tests."
-)]
 pub(super) mod native_mail_owner;
 #[path = "native_owed_transfer_proofs.rs"]
 mod native_owed_transfer_proofs;
@@ -80,7 +75,7 @@ fn native_application(
     peer: PeerId,
 ) -> (Arc<CollaborationApplication>, NativeMailOwner) {
     let interactions = fixture.interactions.clone();
-    let (identity, owner) = NativeMailOwner::start(
+    let (identity, owner) = native_mail_owner::start(
         ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
             .unwrap()
             .with_automation_store(fixture.automation.clone())

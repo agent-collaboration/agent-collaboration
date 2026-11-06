@@ -206,6 +206,7 @@ dependencies = [
  "codex-native-integration",
  "codex-router-host",
  "codex-router-test-support",
+ "collaboration-application-test-support",
  "collaboration-central-admin-protocol",
  "collaboration-central-conformance",
  "collaboration-client",
@@ -229,10 +230,12 @@ dependencies = [
  "iocraft",
  "jsonc-parser",
  "jsonschema",
+ "legacy-upgrade-test-support",
  "lifecycle-observation",
  "message-board",
  "message-board-storage",
  "node-test-fixture",
+ "owned-process-test-support",
  "reqwest 0.12.28",
  "rmcp",
  "runtime-primitives",
@@ -968,7 +971,6 @@ dependencies = [
  "clap",
  "codex-router-host",
  "codex-router-secret-store",
- "codex-router-test-support",
  "collaboration-central-admin-protocol",
  "collaboration-central-conformance",
  "collaboration-central-core",
@@ -985,9 +987,11 @@ dependencies = [
  "fleet-sync-writer",
  "futures-util",
  "interaction-storage",
+ "legacy-upgrade-test-support",
  "message-board",
  "message-board-storage",
  "nix",
+ "owned-process-test-support",
  "reqwest 0.12.28",
  "reqwest-websocket",
  "runtime-primitives",
@@ -1420,6 +1424,7 @@ dependencies = [
  "codex-router-core",
  "codex-router-host",
  "codex-router-proxy",
+ "codex-router-quota-reset-test-harness",
  "codex-router-quota-service",
  "codex-router-secret-store",
  "codex-router-selection",
@@ -1445,6 +1450,7 @@ dependencies = [
  "opentelemetry-appender-tracing",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
+ "owned-process-test-support",
  "reqwest 0.12.28",
  "rustix 1.1.4",
  "serde",
@@ -1500,7 +1506,9 @@ dependencies = [
  "codex-router-host",
  "codex-router-secret-store",
  "codex-router-test-support",
+ "collaboration-application-test-support",
  "collaboration-central-conformance",
+ "collaboration-central-tokio",
  "collaboration-client",
  "collaboration-contracts",
  "collaboration-mail-protocol",
@@ -1527,6 +1535,7 @@ dependencies = [
  "nix",
  "node-test-fixture",
  "opentelemetry",
+ "owned-process-test-support",
  "reqwest 0.12.28",
  "reqwest-websocket",
  "runtime-primitives",
@@ -1732,6 +1741,7 @@ dependencies = [
  "collaboration-client",
  "futures-util",
  "node-test-fixture",
+ "owned-process-test-support",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -1747,6 +1757,41 @@ name = "codex-router-ux-prototype"
 version = "0.1.126"
 dependencies = [
  "iocraft",
+]
+
+[[package]]
+name = "collaboration-application-test-support"
+version = "0.1.126"
+dependencies = [
+ "automation-storage",
+ "board-central-test-support",
+ "board-fleet-sync",
+ "board-sync-protocol",
+ "codex-native-integration",
+ "collaboration-contracts",
+ "collaboration-mail-protocol",
+ "collaboration-mcp",
+ "collaboration-protocol",
+ "collaboration-runtime",
+ "collaboration-service",
+ "durable-steps",
+ "fleet-admission",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-receiver",
+ "fleet-sync-tokio-runner",
+ "fleet-sync-writer",
+ "futures-util",
+ "interaction-storage",
+ "message-board",
+ "message-board-storage",
+ "runtime-primitives",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "uuid",
 ]
 
 [[package]]
@@ -1919,6 +1964,7 @@ dependencies = [
  "board-sync-protocol",
  "codex-acp-adapter",
  "codex-native-integration",
+ "collaboration-application-test-support",
  "collaboration-central-admin-protocol",
  "collaboration-contracts",
  "collaboration-mcp",
@@ -1997,6 +2043,7 @@ dependencies = [
  "codex-acp-adapter",
  "codex-native-integration",
  "codex-router-host",
+ "collaboration-application-test-support",
  "collaboration-client",
  "collaboration-contracts",
  "collaboration-protocol",
@@ -2109,6 +2156,7 @@ dependencies = [
  "claude-code-peer-messaging",
  "codex-acp-adapter",
  "codex-native-integration",
+ "collaboration-application-test-support",
  "collaboration-client",
  "collaboration-contracts",
  "collaboration-mail-protocol",
@@ -4158,6 +4206,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
+name = "legacy-upgrade-test-support"
+version = "0.1.126"
+dependencies = [
+ "message-board",
+ "owned-process-test-support",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4681,6 +4739,14 @@ name = "outref"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a80800c0488c3a21695ea981a54918fbb37abf04f4d0720c453632255e2ff0e"
+
+[[package]]
+name = "owned-process-test-support"
+version = "0.1.126"
+dependencies = [
+ "futures-util",
+ "tokio",
+]
 
 [[package]]
 name = "owo-colors"
@@ -7932,9 +7998,12 @@ dependencies = [
 name = "workspace-architecture-check"
 version = "0.1.126"
 dependencies = [
+ "proc-macro2",
  "serde",
  "serde_json",
+ "syn 2.0.118",
  "thiserror 2.0.18",
+ "toml 1.1.2+spec-1.1.0",
 ]
 
 [[package]]

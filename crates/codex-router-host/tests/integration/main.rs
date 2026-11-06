@@ -1,11 +1,6 @@
 //! Original test roots retain their case namespaces.
 
-#[path = "../../../collaboration-service/tests/support/board_fixture.rs"]
-#[expect(
-    dead_code,
-    reason = "The external service fixture also serves capabilities unused by Host cases."
-)]
-mod board_fixture;
+use collaboration_application_test_support::board_fixture;
 #[path = "../support/host_replacement_cleanup.rs"]
 mod host_replacement_cleanup;
 #[path = "../support/operator_client.rs"]

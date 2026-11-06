@@ -4,16 +4,16 @@ use crate::support;
 use crate::upload_support;
 use board_legacy_upgrade::{PreparedUpgrade, UpgradePublisher};
 use central_fixture::{RestartableCentral, owner_client};
-use codex_router_test_support::scenario_finalization::run_scenario;
 use collaboration_central_core::{
     AdminImportPhase, AdminProjectImportAnswer, AdminProjectImportRequest,
 };
+use owned_process_test_support::scenario_finalization::run_scenario;
 use std::{error::Error, fmt::Display, time::Duration};
 use support::*;
 #[path = "../upload_support/publication_faults.rs"]
 mod publication_faults;
 
-type SafeResult<Value = ()> = codex_router_test_support::FixtureResult<Value>;
+type SafeResult<Value = ()> = owned_process_test_support::FixtureResult<Value>;
 
 struct UploadScenario {
     central: RestartableCentral,

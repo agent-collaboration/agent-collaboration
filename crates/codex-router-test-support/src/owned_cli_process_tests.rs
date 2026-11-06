@@ -1,6 +1,6 @@
 //! Permanent child-process proof using this same integration-test executable only.
-use super::{CliProcessError, run_until_deadline};
 use crate::FixtureResult as ProofResult;
+use owned_process_test_support::owned_cli_process::{CliProcessError, run_until_deadline};
 use std::{
     future::pending,
     io::{self, Write as _},
@@ -16,7 +16,6 @@ use tokio::{
 };
 
 const CONTROL_SOCKET_ENV: &str = "U6_CLI_PROCESS_FIXTURE_SOCKET";
-const CHILD_TEST: &str = "owned_cli_process::tests::controlled_cli_child_entrypoint";
 const HANDSHAKE_BOUND: Duration = Duration::from_secs(5);
 type ReadyWitness = ProofResult<(u32, UnixStream)>;
 
@@ -39,12 +38,16 @@ impl ChildFixture {
     }
 
     fn command(&self) -> ProofResult<Command> {
+        let (_, test_module) = module_path!()
+            .split_once("::")
+            .ok_or("controlled child test module omitted its crate prefix")?;
+        let child_test = format!("{test_module}::controlled_cli_child_entrypoint");
         let mut command = Command::new(std::env::current_exe()?);
         command
             .args([
                 "--ignored",
                 "--exact",
-                CHILD_TEST,
+                child_test.as_str(),
                 "--nocapture",
                 "--test-threads=1",
             ])

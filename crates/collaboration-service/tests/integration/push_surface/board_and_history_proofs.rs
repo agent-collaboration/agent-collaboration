@@ -94,7 +94,7 @@ impl BoardControlFixture {
             .with_automation_store(automation.clone())
             .with_session_delivery(delivery)
             .with_subscription_delivery_service(owner.clone(), presence.clone());
-        let (identity, mail) = native_mail_owner::NativeMailOwner::start(
+        let (identity, mail) = native_mail_owner::start(
             identity,
             board_fixture::fixture_peer().expect("fixture installation"),
             collaboration_service::MailPushDeliveryProps {

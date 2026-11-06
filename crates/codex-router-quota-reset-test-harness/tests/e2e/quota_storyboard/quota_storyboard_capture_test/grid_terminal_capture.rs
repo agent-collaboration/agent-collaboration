@@ -3,8 +3,8 @@
 use super::isolated_fixture_test::{
     ProviderFilterFixtureScenario, QuotaResetFixture, TestResult, ensure,
 };
-use super::loopback_provider_test::HeldLoopbackProvider;
 use super::terminal_interaction_test::{KeyboardProtocol, TerminalDriver};
+use codex_router_quota_reset_test_harness::loopback_provider::HeldLoopbackProvider;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, Write};
 use std::path::Path;

@@ -4,6 +4,7 @@ members = [
     "crates/tailnet-verification-host",
     "crates/board-central-test-support",
     "crates/board-legacy-upgrade",
+    "crates/legacy-upgrade-test-support",
     "crates/board-staging-cutover",
     "crates/board-fleet-sync",
     "crates/board-sync-protocol",
@@ -24,6 +25,7 @@ members = [
     "crates/collaboration-client",
     "crates/collaboration-mcp",
     "crates/collaboration-service",
+    "crates/collaboration-application-test-support",
     "crates/collaboration-contracts",
     "crates/collaboration-runtime",
     "crates/collaboration-protocol",
@@ -53,6 +55,7 @@ members = [
     "crates/codex-router-selection",
     "crates/codex-router-state",
     "crates/codex-router-test-support",
+    "crates/owned-process-test-support",
     "prototypes/ux_prototype",
     "crates/workspace-architecture-check",
 ]

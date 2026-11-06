@@ -1,8 +1,7 @@
 //! Real workerd sockets and attachments around the core session composition.
 #![forbid(unsafe_code)]
 
-#[path = "../../collaboration-central-conformance/examples/support/workerd_process.rs"]
-mod workerd_process;
+use collaboration_central_conformance::workerd_process;
 
 use collaboration_central_conformance::{ConformanceResult, JwksFixtureServer, owner_assertion};
 use futures_util::FutureExt as _;
@@ -94,7 +93,7 @@ mod normal_session_cases;
 mod normal_session_support;
 #[path = "../tests/support/owner_registry_scenarios.rs"]
 mod owner_registry_scenarios;
-#[path = "../tests/support/mail_relay_transport.rs"]
+#[path = "../src/test_support/mail_relay_transport.rs"]
 mod relay_transport;
 #[path = "../tests/support/retirement_claim_scenarios.rs"]
 mod retirement_claim_scenarios;

@@ -153,7 +153,7 @@ impl Surfaces {
             Some(session) => session.peer,
             None => fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,
         };
-        let (identity, native) = native_mail_owner::NativeMailOwner::start_with_session(
+        let (identity, native) = native_mail_owner::start_with_session(
             identity,
             peer,
             collaboration_service::MailPushDeliveryProps {

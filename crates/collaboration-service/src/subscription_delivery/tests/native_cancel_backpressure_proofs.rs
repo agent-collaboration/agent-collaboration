@@ -189,7 +189,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
             .with_automation_store(fixture.automation.clone())
             .with_subscription_delivery_service(runtime.service.clone(), fixture.presence.clone());
         let (identity, native) =
-            NativeMailOwner::start_prepared(identity, peer, fixture.interactions.clone(), mail)
+            native_mail_owner::start_prepared(identity, peer, fixture.interactions.clone(), mail)
                 .unwrap();
         let publisher = Arc::new(crate::NotificationPublisher::new(
             fixture.admission.clone(),

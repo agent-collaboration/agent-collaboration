@@ -58,7 +58,7 @@ where
             return Err(error);
         }
     };
-    codex_router_test_support::scenario_finalization::run_scenario(
+    owned_process_test_support::scenario_finalization::run_scenario(
         (host, router),
         async |(host, _): &mut (
             OwnedHost,
