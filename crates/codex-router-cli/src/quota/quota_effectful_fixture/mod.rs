@@ -8,8 +8,7 @@ mod grouping_reopen;
 mod loopback_provider;
 mod owned_state;
 mod receipts;
-#[path = "../../../../agent-collaboration-tui/src/test_support/recording_backend.rs"]
-mod recording_backend;
+use agent_collaboration_tui::test_support::recording_backend;
 mod refresh_fixture;
 mod validation;
 mod isolated_fixture_test {

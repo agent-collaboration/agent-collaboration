@@ -76,6 +76,7 @@ unicode-width.workspace = true
 ui-preference-store = { path = "../ui-preference-store", version = "0.1.118" }
 
 [dev-dependencies]
+agent-collaboration-tui = { workspace = true, features = ["test-support"] }
 owned-process-test-support = { path = "../owned-process-test-support", version = "0.1.126" }
 agent-router-quota-tui = { version = "0.1.105", path = "../agent-router-quota-tui", features = ["test-support"] }
 codex-router-quota-service = { version = "0.1.105", path = "../codex-router-quota-service", features = ["test-support"] }

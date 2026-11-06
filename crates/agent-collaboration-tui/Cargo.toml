@@ -13,13 +13,15 @@ path = "tests/integration/main.rs"
 workspace = true
 
 [features]
-test-support = ["dep:serde", "dep:serde_json", "iocraft/unstable-output-streams"]
+test-support = ["dep:serde", "dep:serde_json", "iocraft/unstable-output-streams", "dep:futures-util", "dep:tokio"]
 
 [dependencies]
 iocraft.workspace = true
 unicode-width.workspace = true
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
+futures-util = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
 
 [dev-dependencies]
 futures-util.workspace = true
