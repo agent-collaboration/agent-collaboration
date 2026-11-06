@@ -322,7 +322,7 @@ async fn fleet_consumed_wake_recovers_its_saved_notice_after_prune_begin_failure
         })).await?;
         let key = RequestKey::new("retained-fleet-notice-alarm")?;
         let saved_key = key.clone();
-        let input = json!({"installation":installation,"notice":{"kind":"fleetFeedAdvanced","value":{"through":1}}});
+        let input = json!({"installation":installation,"notice":{"kind":"projectListChanged","value":{}}});
         let operation = host.object.transaction(move |scope| Box::pin(async move {
             Ok(scope.admit::<SavedFleetNotice>(&saved_key, &input).await.map_err(StoreError::backend)?.id())
         })).await?;
@@ -337,11 +337,11 @@ async fn fleet_consumed_wake_recovers_its_saved_notice_after_prune_begin_failure
         let rows = target_host.object.transaction(|scope| Box::pin(async move {
             use durable_steps::storage::TransactionScope;
             use sqlx_core::{query::query, row::Row};
-            let rows = query::<sqlx_turso::Turso>("SELECT position,kind,feed_through FROM machine_control_notices ORDER BY position").fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
-            rows.into_iter().map(|row| Ok((row.try_get::<i64, _>("position").map_err(StoreError::backend)?, row.try_get::<String, _>("kind").map_err(StoreError::backend)?, row.try_get::<i64, _>("feed_through").map_err(StoreError::backend)?))).collect::<Result<Vec<_>, _>>()
+            let rows = query::<sqlx_turso::Turso>("SELECT position,kind FROM machine_control_project_notices ORDER BY position").fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
+            rows.into_iter().map(|row| Ok((row.try_get::<i64, _>("position").map_err(StoreError::backend)?, row.try_get::<String, _>("kind").map_err(StoreError::backend)?))).collect::<Result<Vec<_>, _>>()
         })).await?;
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows, vec![(1, "fleet_feed_advanced".to_owned(), 1)]);
+        assert_eq!(rows, vec![(1, "project_list_changed".to_owned())]);
         Ok(())
     }.await;
     objects.shutdown().await?;

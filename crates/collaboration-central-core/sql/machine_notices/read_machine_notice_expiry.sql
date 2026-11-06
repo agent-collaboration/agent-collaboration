@@ -1,1 +1,1 @@
-SELECT CAST(MIN(expires_at) AS TEXT) AS expires_at FROM machine_control_notices;
+SELECT CAST(MIN(expires_at) AS TEXT) AS expires_at FROM machine_control_project_notices;

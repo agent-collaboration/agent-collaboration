@@ -143,8 +143,9 @@ pub(super) fn validate_alarm(sql: &[String], dispatches: usize, appends: usize) 
     let maintenance = [
         include_str!("../../../collaboration-central-core/sql/fleet/read_fleet_feed_state.sql"),
         include_str!("../../../collaboration-central-core/sql/fleet/read_expired_fleet_feed.sql"),
-        include_str!("../../../collaboration-central-core/sql/forwards/read_forward_rows.sql"),
-        include_str!("../../../collaboration-central-core/sql/forwards/read_forward_rows.sql"),
+        include_str!(
+            "../../../collaboration-central-core/sql/project_requests/read_project_requests.sql"
+        ),
         include_str!(
             "../../../collaboration-central-core/sql/machine_notices/read_machine_notice_peers.sql"
         ),

@@ -164,10 +164,9 @@ fn answers_server_calls_notices_and_annotations_use_the_real_frame_codec() {
     let answer: BoardClientAnswer = serde_json::from_value(reply.clone()).unwrap();
     assert_eq!(serde_json::to_value(answer).unwrap(), reply);
     for notice in [
-        json!({"kind":"fleetFeedAdvanced","value":{"through":11}}),
+        json!({"kind":"projectListChanged","value":{}}),
         json!({"kind":"leaseSuperseded","value":{"project":PROJECT,"epoch":7}}),
         json!({"kind":"leaseGranted","value":{"project":PROJECT,"epoch":7}}),
-        json!({"kind":"boardArchiving","value":{"board":PROJECT}}),
     ] {
         let expected = json!({"kind":"notice","value":{"position":3,"body":{"kind":"consumer","value":{"position":73,"kind":notice}}}});
         let frame: wire::ServerFrame<BoardConsumerProtocol> =

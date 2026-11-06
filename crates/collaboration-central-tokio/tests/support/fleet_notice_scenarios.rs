@@ -95,18 +95,18 @@ async fn decide(
         _ => Err("mutation did not receive its Fleet decision".into()),
     }
 }
-async fn hint(socket: &mut WebSocket, position: u64, through: u64) -> ConformanceResult<()> {
+async fn hint(socket: &mut WebSocket, position: u64) -> ConformanceResult<()> {
     match next(socket).await? {
         ServerFrame::Notice {
             body:
                 Notice::Consumer(PositionedBoardNotice {
                     position: actual,
-                    kind: BoardNotice::FleetFeedAdvanced { through: head },
+                    kind: BoardNotice::ProjectListChanged {},
                 }),
             ..
-        } if actual.value() == position && head.get() == through => Ok(()),
+        } if actual.value() == position => Ok(()),
         other => Err(format!(
-            "expected machine notice {position} through {through}, got {}",
+            "expected ProjectListChanged machine notice {position}, got {}",
             serde_json::to_string(&other)?
         )
         .into()),
@@ -158,12 +158,12 @@ pub async fn feed_advancement_reaches_reader_once(base: &str) -> ConformanceResu
         if !matches!(&accepted, FleetRequestResult::Decided(RequestDecision::Accepted {change: ChangeOutcome::Changed,..})) {
             return Err(format!("notice source was not committed: {accepted:?}").into());
         }
-        hint(&mut reader.socket, 1, 2).await?;
-        hint(&mut other_reader.socket, 1, 2).await?;
+        hint(&mut reader.socket, 1).await?;
+        hint(&mut other_reader.socket, 1).await?;
         if decide(&mut writer.socket, &request).await? != accepted {
             return Err("replaying the mutation changed its decision".into());
         }
-        let expected_notice = BoardNotice::FleetFeedAdvanced {through: FleetPosition::try_from(2)?};
+        let expected_notice = BoardNotice::ProjectListChanged {};
         match operation(&mut reader.socket, BoardConsumerRequest::Read {scope: BoardReadScope::Notices, cursor: None}).await? {
             BoardConsumerAnswer::Read(BoardReadPage::Notices(NoticeRead::Page {notices,..}))
                 if matches!(notices.as_slice(), [notice] if notice.position.value()==1 && notice.kind == expected_notice) => {},
@@ -180,11 +180,16 @@ pub async fn feed_advancement_reaches_reader_once(base: &str) -> ConformanceResu
         if !matches!(decide(&mut writer.socket, &update).await?, FleetRequestResult::Decided(RequestDecision::Accepted {change: ChangeOutcome::Changed,..})) {
             return Err("second notice source was not committed".into());
         }
-        hint(&mut reader.socket, 2, 4).await?;
-        hint(&mut other_reader.socket, 2, 4).await?;
+        hint(&mut reader.socket, 2).await?;
+        hint(&mut other_reader.socket, 2).await?;
+        if !matches!(feed(&mut reader.socket, 2).await?, FleetFeedRead::Page {records,through,head,..}
+            if records.len()==2 && through.get()==4 && head.get()==4) {
+            return Err("project-list hint did not lead to the second exact committed prefix".into());
+        }
+
         let expected = vec![
             PositionedBoardNotice {position: fleet_sync_protocol::NoticePosition::new(1),kind: expected_notice},
-            PositionedBoardNotice {position: fleet_sync_protocol::NoticePosition::new(2),kind: BoardNotice::FleetFeedAdvanced {through: FleetPosition::try_from(4)?}},
+            PositionedBoardNotice {position: fleet_sync_protocol::NoticePosition::new(2),kind: BoardNotice::ProjectListChanged {}},
         ];
         for socket in [&mut reader.socket, &mut other_reader.socket] {
             if !matches!(operation(socket, BoardConsumerRequest::Read {scope: BoardReadScope::Notices, cursor: None}).await?,
@@ -192,6 +197,7 @@ pub async fn feed_advancement_reaches_reader_once(base: &str) -> ConformanceResu
                 return Err("installations did not retain their own two exact numbered hints".into());
             }
         }
+        archive_hint(&mut writer.socket, &request).await?;
         eprintln!("FLEET_NOTICE_CASE committed_feed_advancement_delivers_once passed");
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }.await;
@@ -211,5 +217,112 @@ pub async fn feed_advancement_reaches_reader_once(base: &str) -> ConformanceResu
     reader_closed?;
     writer_closed?;
     other_closed?;
+    Ok(())
+}
+
+async fn archive_hint(socket: &mut WebSocket, template: &FleetRequest) -> ConformanceResult<()> {
+    use fleet_sync_protocol::{
+        DatabaseId, Epoch, NoticePosition, PeerId, RequestId as LeaseRequestId,
+    };
+    let board = message_board::BoardId::generate();
+    let project = message_board::ProjectId::generate();
+    let mut request = template.clone();
+    for operation in [
+        FleetOperation::BoardCreate {
+            board: board.clone(),
+            name: "Notice archive board".to_owned().try_into()?,
+            description: "Normal holder archive hint".to_owned().try_into()?,
+            board_kind: message_board::BoardKind::Area {},
+        },
+        FleetOperation::ProjectDirectoryCreate {
+            project: project.clone(),
+            board: board.clone(),
+            title: "Notice archive project".to_owned().try_into()?,
+        },
+    ] {
+        request.request_id = RequestId::generate();
+        request.operation = operation;
+        if !matches!(
+            decide(socket, &request).await?,
+            FleetRequestResult::Decided(RequestDecision::Accepted {
+                change: ChangeOutcome::Changed,
+                ..
+            })
+        ) {
+            return Err("archive notice setup was not committed".into());
+        }
+    }
+    let holder = PeerId::try_from("019f0000-0000-7000-8000-000000004981".to_owned())?;
+    let registered = crate::creation_scenarios::register(
+        socket,
+        DatabaseId::try_from(project.as_str().to_owned())?,
+        holder,
+        LeaseRequestId::new(Uuid::now_v7())?,
+    )
+    .await?;
+    crate::creation_scenarios::registered(&registered, holder)?;
+    let grant = PositionedBoardNotice {
+        position: NoticePosition::new(1),
+        kind: BoardNotice::LeaseGranted {
+            project,
+            epoch: Epoch::new(1)?,
+        },
+    };
+    request.request_id = RequestId::generate();
+    request.operation = FleetOperation::BoardArchive { board };
+    let accepted = decide(socket, &request).await?;
+    if !matches!(
+        accepted,
+        FleetRequestResult::Decided(RequestDecision::Accepted {
+            change: ChangeOutcome::Changed,
+            ..
+        })
+    ) {
+        return Err("held board archive was not committed".into());
+    }
+    let expected = vec![
+        grant.clone(),
+        PositionedBoardNotice {
+            position: NoticePosition::new(2),
+            kind: BoardNotice::ProjectListChanged {},
+        },
+    ];
+    tokio::time::timeout(Duration::from_secs(8), async {
+        loop {
+            let BoardConsumerAnswer::Read(BoardReadPage::Notices(NoticeRead::Page {
+                notices, ..
+            })) = operation(
+                socket,
+                BoardConsumerRequest::Read {
+                    scope: BoardReadScope::Notices,
+                    cursor: None,
+                },
+            )
+            .await?
+            else {
+                return Err("archive notice read returned another page".into());
+            };
+            if notices == expected {
+                return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
+            }
+            if notices != vec![grant.clone()] {
+                return Err(format!(
+                    "archive did not preserve its grant and one project-list hint: {notices:?}"
+                )
+                .into());
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .map_err(|_| "board archive did not deliver its project-list hint")??;
+    if decide(socket, &request).await? != accepted {
+        return Err("archive replay changed its decision".into());
+    }
+    if !matches!(operation(socket, BoardConsumerRequest::Read {scope: BoardReadScope::Notices,cursor:None}).await?, BoardConsumerAnswer::Read(BoardReadPage::Notices(NoticeRead::Page {notices,..})) if notices == expected)
+    {
+        return Err("archive replay duplicated its project-list hint".into());
+    }
+    eprintln!("FLEET_NOTICE_CASE board_archive_delivers_project_list_changed_once passed");
     Ok(())
 }

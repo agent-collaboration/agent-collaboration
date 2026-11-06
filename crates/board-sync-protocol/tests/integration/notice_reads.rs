@@ -19,7 +19,7 @@ fn pushed_notice(consumer: Value) -> Value {
 #[test]
 fn notice_reads_preserve_pages_and_distinct_expired_and_invalid_answers() {
     for result in [
-        json!({"kind":"page","value":{"notices":[{"position":73,"kind":{"kind":"fleetFeedAdvanced","value":{"through":91}}}],"asOf":AS_OF}}),
+        json!({"kind":"page","value":{"notices":[{"position":73,"kind":{"kind":"projectListChanged","value":{}}}],"asOf":AS_OF}}),
         json!({"kind":"page","value":{"notices":[],"asOf":AS_OF}}),
         json!({"kind":"cursorExpired","value":{"floor":70}}),
         json!({"kind":"cursorInvalid"}),
@@ -33,19 +33,17 @@ fn notice_reads_preserve_pages_and_distinct_expired_and_invalid_answers() {
 
 #[test]
 fn pushed_consumer_notice_keeps_machine_position_separate_from_transport_position() {
-    let expected = pushed_notice(
-        json!({"position":73,"kind":{"kind":"fleetFeedAdvanced","value":{"through":91}}}),
-    );
+    let expected =
+        pushed_notice(json!({"position":73,"kind":{"kind":"projectListChanged","value":{}}}));
     let decoded: wire::ServerFrame<BoardConsumerProtocol> =
         serde_json::from_value(expected.clone()).unwrap();
     assert_eq!(serde_json::to_value(decoded).unwrap(), expected);
 }
 
 #[test]
-fn four_control_notice_kinds_roundtrip_on_push_and_catch_up() {
+fn three_control_notice_kinds_roundtrip_on_push_and_catch_up() {
     for kind in [
-        json!({"kind":"fleetFeedAdvanced","value":{"through":91}}),
-        json!({"kind":"boardArchiving","value":{"board":FRAME}}),
+        json!({"kind":"projectListChanged","value":{}}),
         json!({"kind":"leaseGranted","value":{"project":FRAME,"epoch":7}}),
         json!({"kind":"leaseSuperseded","value":{"project":FRAME,"epoch":8}}),
     ] {
@@ -123,9 +121,9 @@ fn notice_read_refuses_the_removed_flat_shape_and_incomplete_or_unknown_answers(
 #[test]
 fn consumer_notice_refuses_a_missing_machine_position_or_unknown_fields() {
     for consumer in [
-        json!({"kind":"fleetFeedAdvanced","value":{"through":91}}),
-        json!({"kind":{"kind":"fleetFeedAdvanced","value":{"through":91}}}),
-        json!({"position":73,"kind":{"kind":"fleetFeedAdvanced","value":{"through":91}},"extra":true}),
+        json!({"kind":"projectListChanged","value":{}}),
+        json!({"kind":{"kind":"projectListChanged","value":{}}}),
+        json!({"position":73,"kind":{"kind":"projectListChanged","value":{}},"extra":true}),
     ] {
         assert!(
             serde_json::from_value::<wire::ServerFrame<BoardConsumerProtocol>>(pushed_notice(

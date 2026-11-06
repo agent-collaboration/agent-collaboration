@@ -200,7 +200,7 @@ async fn timestamps(root: &std::path::Path) -> ConformanceResult<Option<(i64, i6
         .connect()
         .await?;
     let rows = query::<sqlx_turso::Turso>(
-        "SELECT created_at,expires_at FROM machine_control_notices ORDER BY position",
+        "SELECT created_at,expires_at FROM machine_control_project_notices ORDER BY position",
     )
     .fetch_all(&mut connection)
     .await?;

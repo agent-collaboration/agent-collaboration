@@ -69,24 +69,6 @@ impl CallTarget for DeliverForward {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct AnswerForward {
-    pub installation: ServiceId,
-}
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ForwardAnswerRequest {
-    pub forward_frame: FrameId,
-    pub project: ProjectId,
-    pub reply: board_sync_protocol::BoardPayload,
-}
-impl CallTarget for AnswerForward {
-    const KIND: &'static str = "central.answer-forward";
-    type Request = ForwardAnswerRequest;
-    type Answer = ();
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct InstallationPeerRegistry {
     pub installation: ServiceId,
 }

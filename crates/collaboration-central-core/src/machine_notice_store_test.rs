@@ -20,6 +20,21 @@ async fn machines_keep_independent_notice_positions_and_retention_floors() -> Re
         .enroll(second, "019f0000-0000-7000-8000-000000008102")
         .await?;
     let later = NOW.after(std::time::Duration::from_secs(60));
+    let first_notice = BoardNotice::LeaseGranted {
+        project: "019f0000-0000-7000-8000-000000008199"
+            .to_owned()
+            .try_into()?,
+        epoch: fleet_sync_protocol::Epoch::new(12)?,
+    };
+    let second_notice = BoardNotice::LeaseSuperseded {
+        project: "019f0000-0000-7000-8000-000000008199"
+            .to_owned()
+            .try_into()?,
+        epoch: fleet_sync_protocol::Epoch::new(20)?,
+    };
+    let expected_first = first_notice.clone();
+    let expected_second = second_notice.clone();
+
     fixture
         .object
         .transaction(move |scope| {
@@ -29,9 +44,7 @@ async fn machines_keep_independent_notice_positions_and_retention_floors() -> Re
                     scope,
                     first,
                     durable_steps::Uuid::now_v7().to_string(),
-                    BoardNotice::FleetFeedAdvanced {
-                        through: 12_u64.try_into().map_err(StoreError::backend)?,
-                    },
+                    first_notice,
                     NOW,
                 )
                 .await?;
@@ -39,9 +52,7 @@ async fn machines_keep_independent_notice_positions_and_retention_floors() -> Re
                     scope,
                     second,
                     durable_steps::Uuid::now_v7().to_string(),
-                    BoardNotice::FleetFeedAdvanced {
-                        through: 20_u64.try_into().map_err(StoreError::backend)?,
-                    },
+                    second_notice,
                     later,
                 )
                 .await?;
@@ -110,18 +121,14 @@ async fn machines_keep_independent_notice_positions_and_retention_floors() -> Re
         first_notices,
         vec![PositionedBoardNotice {
             position: NoticePosition::new(1),
-            kind: BoardNotice::FleetFeedAdvanced {
-                through: 12_u64.try_into()?
-            }
+            kind: expected_first
         }]
     );
     assert_eq!(
         second_notices,
         vec![PositionedBoardNotice {
             position: NoticePosition::new(1),
-            kind: BoardNotice::FleetFeedAdvanced {
-                through: 20_u64.try_into()?
-            }
+            kind: expected_second
         }]
     );
     assert_eq!(

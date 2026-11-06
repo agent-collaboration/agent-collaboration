@@ -117,22 +117,12 @@
           "nullable": false
         },
         {
-          "name": "board_id",
-          "kind": "text",
-          "nullable": true
-        },
-        {
           "name": "project_id",
           "kind": "text",
           "nullable": true
         },
         {
           "name": "epoch",
-          "kind": "text",
-          "nullable": true
-        },
-        {
-          "name": "feed_through",
           "kind": "text",
           "nullable": true
         },

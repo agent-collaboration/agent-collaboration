@@ -171,7 +171,7 @@ async fn reconcile_notice(
         BoardNotice::LeaseSuperseded { project, .. } => {
             projects.prompt_superseded_writer(project).await
         }
-        BoardNotice::FleetFeedAdvanced { .. } | BoardNotice::BoardArchiving { .. } => {
+        BoardNotice::ProjectListChanged {} => {
             super::archive_observation::synchronize_and_observe(projects, admission, fleet).await
         }
     }

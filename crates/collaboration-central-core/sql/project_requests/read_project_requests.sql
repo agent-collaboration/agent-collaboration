@@ -1,0 +1,1 @@
+SELECT id, request_frame_id, requester_machine_id, requester_session_id, requester_connection_id, project_id, holder_machine_id, phase, CAST(deadline_at AS TEXT) AS deadline_at, CAST(created_at AS TEXT) AS created_at, CAST(updated_at AS TEXT) AS updated_at FROM machine_project_requests ORDER BY id;

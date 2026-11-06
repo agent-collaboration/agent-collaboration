@@ -48,24 +48,28 @@ where
         }
         return Ok(None);
     };
-    if required(row.machine_id, "machine_control_progress.machine_id")? != peer.to_string() {
+    if required(
+        row.machine_id,
+        "machine_control_project_progress.machine_id",
+    )? != peer.to_string()
+    {
         return Err(corrupt(
-            "machine_control_progress.machine_id",
+            "machine_control_project_progress.machine_id",
             "identity differs",
         ));
     }
     integer(
         row.created_at,
         row.created_class,
-        "machine_control_progress.created_at",
+        "machine_control_project_progress.created_at",
     )?;
     integer(
         row.updated_at,
         row.updated_class,
-        "machine_control_progress.updated_at",
+        "machine_control_project_progress.updated_at",
     )?;
-    let head = position(row.last_position, row.position_class)?;
-    let floor = position(row.pruned_through, row.floor_class)?;
+    let head = position(row.last_issued_position, row.position_class)?;
+    let floor = position(row.expired_through, row.floor_class)?;
     if floor > head {
         return Err(corrupt("machine_notices.floor", "floor exceeds head"));
     }
@@ -171,11 +175,14 @@ where
         .await
         .map_err(StoreError::backend)?
     {
-        let machine_id = required(row.machine_id, "machine_control_progress.machine_id")?;
-        check_private_id(&machine_id, "machine_control_progress.machine_id")?;
+        let machine_id = required(
+            row.machine_id,
+            "machine_control_project_progress.machine_id",
+        )?;
+        check_private_id(&machine_id, "machine_control_project_progress.machine_id")?;
         let peer = machine_id
             .try_into()
-            .map_err(|error| corrupt("machine_control_progress.machine_id", error))?;
+            .map_err(|error| corrupt("machine_control_project_progress.machine_id", error))?;
         prune_peer(scope, peer, now).await?;
     }
     Ok(())
@@ -225,10 +232,8 @@ where
         peer.to_string(),
         next.to_string(),
         columns.kind.into(),
-        columns.board,
         columns.project,
         columns.epoch,
-        columns.feed_through,
         now.unix_millis().to_string(),
         expires_at.to_string(),
     )
@@ -355,8 +360,8 @@ fn bound_position(value: Option<String>, class: Option<String>) -> Result<Option
 }
 fn decode(row: queries::StoredMachineNotice) -> Result<PositionedBoardNotice, StoreError> {
     check_private_id(
-        &required(row.machine_id, "machine_control_notices.machine_id")?,
-        "machine_control_notices.machine_id",
+        &required(row.machine_id, "machine_control_project_notices.machine_id")?,
+        "machine_control_project_notices.machine_id",
     )?;
     check_private_id(
         &required(row.notice_id, "machine_notices.notice_id")?,
@@ -382,11 +387,11 @@ fn decode(row: queries::StoredMachineNotice) -> Result<PositionedBoardNotice, St
     if integer(
         row.updated_at,
         row.updated_class,
-        "machine_control_notices.updated_at",
+        "machine_control_project_notices.updated_at",
     )? != created
     {
         return Err(corrupt(
-            "machine_control_notices.updated_at",
+            "machine_control_project_notices.updated_at",
             "an immutable notice has a different update time",
         ));
     }
@@ -398,13 +403,7 @@ fn decode(row: queries::StoredMachineNotice) -> Result<PositionedBoardNotice, St
     }
     Ok(PositionedBoardNotice {
         position: NoticePosition::new(position),
-        kind: decode_notice(
-            row.kind,
-            row.board_id,
-            row.project_id,
-            row.epoch,
-            row.feed_through,
-        )?,
+        kind: decode_notice(row.kind, row.project_id, row.epoch)?,
     })
 }
 

@@ -419,9 +419,7 @@ async fn failed_handling_does_not_save_the_position_and_retry_uses_the_same_hint
     let mut reactions = runtime.reactions().await?;
     let notice = PositionedBoardNotice {
         position: NoticePosition::new(6),
-        kind: BoardNotice::FleetFeedAdvanced {
-            through: FleetPosition::ZERO,
-        },
+        kind: serde_json::from_value(serde_json::json!({"kind":"projectListChanged","value":{}}))?,
     };
     assert!(
         reactions

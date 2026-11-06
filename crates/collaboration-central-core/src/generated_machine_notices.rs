@@ -10,9 +10,9 @@ use sqlx_core::{
 #[derive(Debug)]
 pub(crate) struct StoredMachineNoticeState {
     pub machine_id: Option<String>,
-    pub last_position: Option<String>,
+    pub last_issued_position: Option<String>,
     pub position_class: Option<String>,
-    pub pruned_through: Option<String>,
+    pub expired_through: Option<String>,
     pub floor_class: Option<String>,
     pub created_at: Option<String>,
     pub created_class: Option<String>,
@@ -41,9 +41,9 @@ where
             .map(|row| {
                 Ok(StoredMachineNoticeState {
                     machine_id: row.try_get("machine_id")?,
-                    last_position: row.try_get("last_position")?,
+                    last_issued_position: row.try_get("last_issued_position")?,
                     position_class: row.try_get("position_class")?,
-                    pruned_through: row.try_get("pruned_through")?,
+                    expired_through: row.try_get("expired_through")?,
                     floor_class: row.try_get("floor_class")?,
                     created_at: row.try_get("created_at")?,
                     created_class: row.try_get("created_class")?,
@@ -156,10 +156,8 @@ pub(crate) fn append_machine_notice<S>(
     machine_id: String,
     position: String,
     kind: String,
-    board_id: Option<String>,
     project_id: Option<String>,
     epoch: Option<String>,
-    feed_through: Option<String>,
     created_at: String,
     expires_at: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
@@ -178,10 +176,8 @@ where
         .bind(machine_id)
         .bind(position)
         .bind(kind)
-        .bind(board_id)
         .bind(project_id)
         .bind(epoch)
-        .bind(feed_through)
         .bind(created_at)
         .bind(expires_at);
         statement.execute(scope.executor()).await?;
@@ -196,10 +192,8 @@ pub(crate) struct StoredMachineNotice {
     pub position: Option<String>,
     pub position_class: Option<String>,
     pub kind: Option<String>,
-    pub board_id: Option<String>,
     pub project_id: Option<String>,
     pub epoch: Option<String>,
-    pub feed_through: Option<String>,
     pub created_at: Option<String>,
     pub created_class: Option<String>,
     pub expires_at: Option<String>,
@@ -235,10 +229,8 @@ where
                     position: row.try_get("position")?,
                     position_class: row.try_get("position_class")?,
                     kind: row.try_get("kind")?,
-                    board_id: row.try_get("board_id")?,
                     project_id: row.try_get("project_id")?,
                     epoch: row.try_get("epoch")?,
-                    feed_through: row.try_get("feed_through")?,
                     created_at: row.try_get("created_at")?,
                     created_class: row.try_get("created_class")?,
                     expires_at: row.try_get("expires_at")?,
@@ -278,10 +270,8 @@ where
                     position: row.try_get("position")?,
                     position_class: row.try_get("position_class")?,
                     kind: row.try_get("kind")?,
-                    board_id: row.try_get("board_id")?,
                     project_id: row.try_get("project_id")?,
                     epoch: row.try_get("epoch")?,
-                    feed_through: row.try_get("feed_through")?,
                     created_at: row.try_get("created_at")?,
                     created_class: row.try_get("created_class")?,
                     expires_at: row.try_get("expires_at")?,
