@@ -16,8 +16,7 @@ mod board_read_setup;
 mod native_authority;
 #[path = "../support/native_delivery.rs"]
 mod native_delivery;
-#[path = "../../../codex-acp-adapter/tests/support/native_permission_echo.rs"]
-mod native_permission_echo;
+use codex_acp_adapter::test_support::native_permission_echo;
 #[path = "../support/project_description.rs"]
 mod project_description_fixture;
 #[path = "../support/read_cost_counter.rs"]

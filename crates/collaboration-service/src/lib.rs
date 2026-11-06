@@ -59,8 +59,7 @@ mod delivery_projection;
 #[cfg(test)]
 mod frozen_mail_query_fixture;
 #[cfg(test)]
-#[path = "../../collaboration-runtime/tests/support/native_worker_faults.rs"]
-mod native_worker_faults;
+use collaboration_runtime::test_support::native_worker_faults;
 mod operation_receipt_projection;
 mod run_projection;
 mod schedule_activation;

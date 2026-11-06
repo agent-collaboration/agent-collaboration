@@ -1,11 +1,13 @@
 use crate::native_permission_echo;
 use codex_acp_adapter::NativeStoredSessions;
+use codex_acp_adapter::test_support::conversation_operation_recorder;
 use collaboration_contracts::HubEvent;
 use collaboration_contracts::SessionCommandPort;
 use collaboration_contracts::SessionEventHub;
 use collaboration_runtime::AcpChannelListener;
 use collaboration_runtime::NativeGenerationGate;
 use collaboration_runtime::UnmaterializedThreadHolder;
+use conversation_operation_recorder::AcceptingConversationRecorder;
 use message_board::Identity;
 use native_permission_echo::applied_router_sandbox;
 use session_event_model::{
@@ -18,9 +20,6 @@ use std::{
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio_util::sync::CancellationToken;
-#[path = "../../../codex-acp-adapter/tests/support/conversation_operation_recorder.rs"]
-mod conversation_operation_recorder;
-use conversation_operation_recorder::AcceptingConversationRecorder;
 
 use crate::acp_provider_backend;
 use acp_provider_backend::ScriptedProviderBackend;
