@@ -12,6 +12,11 @@ Host, cold-verifies e2 tables, writes and replays the public canary, and then
 rejects post-canary content equality. These are local proofs; a separately
 commissioned Verifier owns hosted staging rehearsal.
 
+After restart, that journey awaits the existing public Claim reattachment
+barrier before taking the reopened compiled Claim's fresh dry run. This keeps
+normal writer attachment from invalidating confirmation between preview and
+Claim; the initial compiled Claim and cold-table proof still run first.
+
 Two ignored `production_workerd` cases run the same compiled production publisher
 against the CI conformance-faults Worker build: fresh Fleet state, and an existing
 recorded Fleet reader to exercise notice/alarm debt. Supply absolute pinned
