@@ -2,7 +2,7 @@ use crate::e2e_support::{
     CentralHarness, CliImportFixture, E2eResult, SourceSnapshot, feed_rows, post_rows,
     project_state_rows, published_snapshot, read_report, run_cli,
 };
-use codex_router_test_support::scenario_finalization::run_scenario;
+use owned_process_test_support::scenario_finalization::run_scenario;
 use serde_json::json;
 use std::path::Path;
 

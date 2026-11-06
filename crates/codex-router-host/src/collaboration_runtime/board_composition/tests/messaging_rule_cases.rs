@@ -11,12 +11,7 @@ use serde_json::json;
 mod cancel_cases;
 #[path = "messaging_local_cancel_case.rs"]
 mod local_cancel_case;
-#[path = "../../../../../collaboration-central-tokio/tests/support/mail_relay_transport.rs"]
-#[expect(
-    dead_code,
-    reason = "Only the shared CallId request constructor is used; recipient transport is the actual Router pump."
-)]
-mod relay_transport;
+use collaboration_central_tokio::test_support::mail_relay_transport as relay_transport;
 #[path = "messaging_rule_fixture.rs"]
 mod rule_fixture;
 #[path = "messaging_settlement_test.rs"]

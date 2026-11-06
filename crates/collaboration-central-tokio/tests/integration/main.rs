@@ -40,7 +40,7 @@ mod imported_board_fixture;
 )]
 mod imported_claim_scenarios;
 #[cfg(feature = "conformance")]
-#[path = "../support/mail_relay_transport.rs"]
+#[path = "../../src/test_support/mail_relay_transport.rs"]
 mod mail_relay_transport;
 #[cfg(feature = "conformance")]
 #[path = "../fleet_storage/support.rs"]

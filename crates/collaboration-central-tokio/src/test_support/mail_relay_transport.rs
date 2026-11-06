@@ -7,7 +7,7 @@ use futures_util::{SinkExt, StreamExt};
 use reqwest_websocket::{Message, WebSocket};
 use serde_json::{Value, json};
 use std::time::Duration;
-pub(super) async fn operation(socket: &mut WebSocket, body: Value) -> ConformanceResult<Value> {
+pub async fn operation(socket: &mut WebSocket, body: Value) -> ConformanceResult<Value> {
     let frame = FrameId::new(Uuid::now_v7())?;
     socket
         .send(Message::Text(
@@ -43,7 +43,7 @@ pub(super) async fn operation(socket: &mut WebSocket, body: Value) -> Conformanc
     })
     .await?
 }
-pub(super) fn relay_request(kind: &str, value: Value) -> Value {
+pub fn relay_request(kind: &str, value: Value) -> Value {
     #[derive(serde::Serialize)]
     struct CallFields {
         call: Value,

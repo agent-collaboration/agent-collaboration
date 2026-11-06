@@ -47,7 +47,7 @@ pub(super) async fn follow_application_with_replication(
     let peer = PeerId::new(uuid::Uuid::parse_str("0192a1b2-c3d4-7000-8000-000000000001").unwrap())
         .unwrap();
     let interactions = fixture.interactions.clone();
-    let (identity, native) = NativeMailOwner::start_with_session(
+    let (identity, native) = native_mail_owner::start_with_session(
         ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
             .unwrap()
             .with_project_replication(replication)

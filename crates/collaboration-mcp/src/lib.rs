@@ -21,8 +21,6 @@ pub mod test_support;
 #[cfg(test)]
 mod api_test_harness;
 #[cfg(test)]
-use collaboration_service as mail_service;
-#[cfg(test)]
 mod board_argument_rejection_tests;
 #[cfg(test)]
 mod carrier_response_loss_http_tests;
@@ -33,15 +31,9 @@ mod collaboration_api_router_tests;
 #[cfg(test)]
 mod mcp_remediation_tests;
 #[cfg(test)]
-#[path = "../../collaboration-service/tests/support/native_registry.rs"]
-mod native_board_test_fixture;
+use collaboration_application_test_support::native_mail_owner;
 #[cfg(test)]
-#[path = "../../collaboration-service/tests/support/native_mail_owner.rs"]
-#[expect(
-    dead_code,
-    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
-)]
-mod native_mail_owner;
+use collaboration_application_test_support::native_registry as native_board_test_fixture;
 #[cfg(test)]
 mod observation_streaming_tests;
 #[cfg(test)]

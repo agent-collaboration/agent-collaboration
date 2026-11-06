@@ -587,3 +587,131 @@ struct MailCallRouter {
 #[cfg(test)]
 #[path = "startup_constructor_tests.rs"]
 mod startup_constructor_tests;
+
+/// Own the fixture's mail runtime task without constructing an application.
+#[cfg(any(test, feature = "test-support"))]
+pub struct NativeMailOwner {
+    pub interactions: Arc<InteractionStore>,
+    mail: Arc<MailDeliveryRuntime>,
+    shutdown: CancellationToken,
+    running: tokio::task::JoinHandle<Result<(), durable_steps::StoreError>>,
+    pending_start: Option<tokio::sync::oneshot::Sender<()>>,
+}
+
+#[cfg(any(test, feature = "test-support"))]
+impl NativeMailOwner {
+    pub fn start_prepared(
+        interactions: Arc<InteractionStore>,
+        mail: Arc<MailDeliveryRuntime>,
+        deferred_start: Option<(
+            tokio::sync::oneshot::Sender<()>,
+            tokio::sync::oneshot::Receiver<()>,
+        )>,
+    ) -> Self {
+        let shutdown = CancellationToken::new();
+        let worker_mail = mail.clone();
+        let worker_shutdown = shutdown.clone();
+        let (pending_start, waiting) = match deferred_start {
+            Some((release, waiting)) => (Some(release), Some(waiting)),
+            None => (None, None),
+        };
+        let running = tokio::spawn(async move {
+            if let Some(waiting) = waiting {
+                tokio::select! {
+                    () = worker_shutdown.cancelled() => return Ok(()),
+                    started = waiting => if started.is_err() { return Ok(()); },
+                }
+            }
+            worker_mail.run(worker_shutdown).await
+        });
+        Self {
+            interactions,
+            mail,
+            shutdown,
+            running,
+            pending_start,
+        }
+    }
+    pub fn start_worker(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.pending_start
+            .take()
+            .ok_or_else(|| std::io::Error::other("mail worker was not deferred"))?
+            .send(())
+            .map_err(|_| std::io::Error::other("deferred mail worker stopped"))?;
+        Ok(())
+    }
+
+    // Only lifecycle proofs inspect SDK custody through its owning runtime.
+    pub fn runtime(&self) -> &MailDeliveryRuntime {
+        &self.mail
+    }
+
+    // Host composition keeps the same owner behind its weak session port.
+    pub fn runtime_handle(&self) -> Arc<MailDeliveryRuntime> {
+        self.mail.clone()
+    }
+
+    // Only the shutdown lifecycle proof stops the owner before its client returns.
+    pub fn begin_shutdown(&self) {
+        self.shutdown.cancel();
+    }
+
+    // The lifecycle proof checks the actual tracked runtime task.
+    pub fn is_stopped(&self) -> bool {
+        self.running.is_finished()
+    }
+
+    /// Stop native work while a caller still owns the shared physical database.
+    pub async fn stop(
+        self,
+    ) -> Result<Arc<InteractionStore>, Box<dyn std::error::Error + Send + Sync>> {
+        let Self {
+            interactions,
+            mail,
+            shutdown,
+            running,
+            pending_start: _,
+        } = self;
+        shutdown.cancel();
+        let joined = tokio::time::timeout(std::time::Duration::from_secs(10), running).await?;
+        joined??;
+        drop(mail);
+        Ok(interactions)
+    }
+
+    // Only interrupted-handover proofs abandon an active SDK drive.
+    pub async fn abort_for_crash(
+        self,
+    ) -> Result<Arc<InteractionStore>, Box<dyn std::error::Error + Send + Sync>> {
+        let Self {
+            interactions,
+            mail,
+            shutdown,
+            running,
+            pending_start: _,
+        } = self;
+        running.abort();
+        match running.await {
+            Err(error) if error.is_cancelled() => {}
+            _ => {
+                return Err(std::io::Error::other(
+                    "SDK drive ended before the interruption checkpoint",
+                )
+                .into());
+            }
+        }
+        shutdown.cancel();
+        drop(mail);
+        Ok(interactions)
+    }
+
+    /// Stop the served application and reader actors before closing their physical owner.
+    // Host fixtures stop first, then check and close each store owner separately.
+    pub async fn close(self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        Arc::try_unwrap(self.stop().await?)
+            .map_err(|_| std::io::Error::other("fixture retained the native interaction owner"))?
+            .close()
+            .await?;
+        Ok(())
+    }
+}

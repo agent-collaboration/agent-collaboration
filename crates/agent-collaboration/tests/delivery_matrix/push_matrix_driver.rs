@@ -1,7 +1,6 @@
 //! CLI producers and recipient observations for the isolated push matrix.
 use super::owned_resources::OwnedMatrixResources;
 use super::{OBSERVATION_TIMEOUT, ProofContext, ProofResult};
-use codex_router_test_support::owned_cli_process::run_cli_output;
 use collaboration_client::{
     ConversationClient, ConversationCreateActor, ConversationCreateInput,
     protocol::{
@@ -16,6 +15,7 @@ use collaboration_protocol::{
     RouterOriginRef, render_push_line,
 };
 use interaction_storage::InteractionStore;
+use owned_process_test_support::owned_cli_process::run_cli_output;
 use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
 use tokio::process::Command;

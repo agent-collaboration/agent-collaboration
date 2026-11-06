@@ -78,6 +78,9 @@ toml = "1.1.2"
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
+collaboration-central-tokio = { path = "../collaboration-central-tokio", version = "0.1.126", features = ["test-support"] }
+collaboration-application-test-support = { path = "../collaboration-application-test-support", version = "0.1.126" }
+owned-process-test-support = { path = "../owned-process-test-support", version = "0.1.126" }
 node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
 collaboration-service = { path = "../collaboration-service", version = "0.1.14", features = ["test-support"] }
 codex-router-host = { path = ".", features = ["runtime-test-support"] }

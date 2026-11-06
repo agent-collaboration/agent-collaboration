@@ -39,7 +39,7 @@ cargo nextest run -p workspace-architecture-check --run-ignored only --no-captur
 The ordinary, tool-free nextest run also checks normal/build dependency adjacency
 for `collaboration-contracts`, `collaboration-runtime`, `collaboration-service`,
 and `codex-router-host`, in that order from lowest to highest layer. The small
-table in [crate_layers.rs](../crates/workspace-architecture-check/tests/crate_layers.rs)
+table in [crate_layers.rs](../crates/workspace-architecture-check/tests/integration/crate_layers.rs)
 allows lower layers and rejects upward edges.
 Only present workspace packages are checked; dev edges are reported separately
 and allowed. Synthetic metadata covers upward normal/build rejection, downward

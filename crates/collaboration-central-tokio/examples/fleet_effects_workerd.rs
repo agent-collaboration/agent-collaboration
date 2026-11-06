@@ -5,8 +5,7 @@ use collaboration_central_conformance::{ConformanceResult, JwksFixtureServer};
 #[path = "../tests/support/fleet_effects_scenarios.rs"]
 mod scenarios;
 
-#[path = "../../collaboration-central-conformance/examples/support/workerd_process.rs"]
-mod workerd_harness;
+use collaboration_central_conformance::workerd_process as workerd_harness;
 use workerd_harness::{WorkerdProcess, WorkerdSettings};
 
 #[tokio::main]

@@ -1,11 +1,10 @@
 //! A later native local-store failure cannot strand an earlier known-unsent selection.
 use crate::board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
+use collaboration_runtime::test_support::native_worker_faults;
 use message_board::*;
 use serde_json::json;
 use std::sync::Arc;
-#[path = "../../../collaboration-runtime/tests/support/native_worker_faults.rs"]
-mod native_worker_faults;
 
 #[tokio::test]
 #[expect(

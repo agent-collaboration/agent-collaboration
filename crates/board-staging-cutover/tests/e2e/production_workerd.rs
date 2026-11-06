@@ -4,7 +4,7 @@ use super::{
     production_mode::{execute, production_fixture},
 };
 use board_staging_cutover::PreparedProjectBundle;
-use collaboration_central_conformance::JwksFixtureServer;
+use collaboration_central_conformance::{JwksFixtureServer, workerd_process};
 use collaboration_central_core::{
     AdminImportPhase, AdminProjectImportAnswer, AdminProjectImportRequest,
 };
@@ -13,9 +13,6 @@ use std::{
     path::PathBuf,
     time::{Duration, Instant},
 };
-
-#[path = "../../../collaboration-central-conformance/examples/support/workerd_process.rs"]
-mod workerd_process;
 
 #[tokio::test]
 #[ignore = "requires the CI conformance Worker build and explicit pinned Node/Miniflare paths"]
