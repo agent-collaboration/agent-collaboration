@@ -24,6 +24,7 @@ fn reported_credential_expiry_matches_the_signed_jwt_and_its_adopted_lifetime()
     let directory = tempfile::tempdir()?;
     let root = directory.path().to_owned();
     configuration::initialize(&ServeArguments {
+        legacy_organization_id: "019f0000-0000-7000-8000-00000000ac01".into(),
         root: root.clone(),
         listen: "127.0.0.1:29843".parse()?,
         public_url: None,

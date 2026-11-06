@@ -42,7 +42,7 @@ async fn call_claim_gate(
         )
     };
     let answer=fixture.runtime.on_call(serde_json::to_vec(&json!({
-        "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},"destination":{"kind":"fleet"},"destinationFace":"fleet",
+        "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"registry","authority":{"kind":"object"},"destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"claim_columns"},"kind":kind,"target":null,"request":request
     }))?).await.map_err(|error|format!("claim gate: {error:?}"))?;
     Ok(serde_json::from_slice(&answer)?)
@@ -286,7 +286,7 @@ async fn untrusted_source_and_invalid_digest_create_no_typed_claim_rows() -> Tes
     fixture.arrange_registered().await?;
     let before = fixture.lease_and_notices().await?;
     let projection: Value = serde_json::from_str(before.1.as_deref().ok_or("hook view absent")?)?;
-    let valid = json!({"source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},"destination":{"kind":"fleet"},"destinationFace":"fleet",
+    let valid = json!({"organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"registry","authority":{"kind":"object"},"destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"claim_columns"},"kind":"central.claim-granted","target":null,"request":{"attempt":durable_steps::Uuid::now_v7(),"projection":projection}});
     let mut untrusted = valid.clone();
     untrusted["source"] = json!({"kind":"copy","value":PROJECT});

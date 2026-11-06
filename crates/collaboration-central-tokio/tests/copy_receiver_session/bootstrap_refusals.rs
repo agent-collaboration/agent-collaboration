@@ -49,6 +49,7 @@ async fn bootstrap_full_preserves_correlated_no_effect_while_an_unrelated_copy_p
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
     let server = TokioServer::start(TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         root: root.path().into(),
         access_policy: fixture_policy(),
         jwks_url: jwks.url.clone(),
@@ -95,7 +96,7 @@ async fn bootstrap_full_preserves_correlated_no_effect_while_an_unrelated_copy_p
             assert_eq!(after.pointer(&pointer),Some(original),"bootstrap rollback changed {field}");
         }
         assert_eq!(request(&mut holder.socket,ReplicationRequest::Piece(schema_piece(healthy,2)?)).await?,ReplicationAnswer::Applied {through:ReplicationPosition::new(Epoch::new(1)?,CommitSequence::new(2))});
-        control(server.base_url(),ObjectAddress::Fleet,RuntimeControl::DropNextObjectReply {destination:ObjectAddress::Copy(healthy)}).await?;
+        control(server.base_url(),collaboration_central_conformance::legacy_fleet_address(),RuntimeControl::DropNextObjectReply {destination:ObjectAddress::Copy(healthy)}).await?;
         assert!(matches!(request(&mut holder.socket,ReplicationRequest::CopyStatus {database:healthy}).await?,ReplicationAnswer::OutcomeUnknown {..}));
         assert!(matches!(request(&mut holder.socket,ReplicationRequest::CopyStatus {database:healthy}).await?,ReplicationAnswer::CopyStatus(CopyStatusAnswer::Status(status)) if status.acked.sequence.value()==2));
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())

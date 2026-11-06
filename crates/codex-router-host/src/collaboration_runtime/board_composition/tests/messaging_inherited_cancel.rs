@@ -65,7 +65,7 @@ async fn inherited_handoff_cancel_reaches_the_remote_hold_before_any_local_submi
     let _ = fixture
         .holder
         .central
-        .release_held_dispatches(ObjectAddress::Fleet)
+        .release_held_dispatches(collaboration_central_conformance::legacy_fleet_address())
         .await;
     let closed = fixture.close().await;
     match (proof, closed) {
@@ -87,10 +87,10 @@ async fn hold_old_cancel_submit(
         .holder
         .central
         .runtime_control(
-            ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             RuntimeControl::HoldNextDispatch {
                 key: board_central_test_support::DispatchKey::new(
-                    ObjectAddress::Fleet,
+                    collaboration_central_conformance::legacy_fleet_address(),
                     DispatchCallSelector::FleetMailSubmit,
                 ),
             },
@@ -101,10 +101,10 @@ async fn hold_old_cancel_submit(
         .holder
         .central
         .runtime_control(
-            ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             RuntimeControl::AwaitHeldDispatch {
                 key: board_central_test_support::DispatchKey::new(
-                    ObjectAddress::Fleet,
+                    collaboration_central_conformance::legacy_fleet_address(),
                     DispatchCallSelector::FleetMailSubmit,
                 ),
             },
@@ -112,7 +112,7 @@ async fn hold_old_cancel_submit(
         .await?;
     let board_central_test_support::DispatchFaultObservation::Held { request, .. } =
         held.dispatch(&board_central_test_support::DispatchKey::new(
-            ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             DispatchCallSelector::FleetMailSubmit,
         ))
     else {

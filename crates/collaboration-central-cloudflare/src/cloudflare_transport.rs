@@ -1,6 +1,6 @@
 //! Durable Object addressing and byte transport, without caller policy.
 
-use collaboration_central_core::ObjectAddress;
+use collaboration_central_core::{FleetLocationPolicy, ObjectAddress};
 use durable_steps::{CallFailure, NotSentReason};
 use worker::{Env, Headers, Method, Request, RequestInit, Result, Stub, js_sys};
 
@@ -51,9 +51,25 @@ impl From<WireCallFailure> for CallFailure {
     }
 }
 
+pub(crate) fn locations(env: &worker::Env) -> worker::Result<FleetLocationPolicy> {
+    let organization = env
+        .var("CENTRAL_LEGACY_ORGANIZATION_ID")?
+        .to_string()
+        .try_into()
+        .map_err(|_| worker::Error::RustError("invalid configured legacy organization".into()))?;
+    Ok(FleetLocationPolicy::new(organization))
+}
+
+#[cfg(feature = "conformance")]
+pub(crate) fn legacy_address(env: &Env) -> Result<ObjectAddress> {
+    Ok(ObjectAddress::Fleet {
+        organization: locations(env)?.legacy_organization().clone(),
+    })
+}
 pub(crate) use crate::object_location::location;
 pub(crate) fn stub(env: &Env, address: &ObjectAddress) -> Result<Stub> {
-    let (binding, name) = location(address);
+    let locations = locations(env)?;
+    let (binding, name) = location(address, &locations);
     env.durable_object(binding)?.id_from_name(&name)?.get_stub()
 }
 pub(crate) fn address_header(headers: &Headers, address: &ObjectAddress) -> Result<()> {

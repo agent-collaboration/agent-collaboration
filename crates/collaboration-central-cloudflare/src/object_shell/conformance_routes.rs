@@ -60,7 +60,12 @@ impl ShellActor {
                 self.faults.restore_clock(Some(*now)).map_err(error)?;
                 host.wake()
                     .wake_at(SyncTime::from_unix_millis(
-                        chrono::Utc::now().timestamp_millis(),
+                        runtime_primitives::Clock::now(
+                            &crate::conformance_capabilities::ConformanceCapabilities::from_env(
+                                &self.env,
+                            )?,
+                        )
+                        .unix_millis(),
                     ))
                     .await
                     .map_err(error)?;

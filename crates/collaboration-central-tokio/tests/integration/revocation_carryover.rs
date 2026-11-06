@@ -12,6 +12,7 @@ async fn revocation_gates_readmission_and_a_late_duplicate_cannot_end_its_new_se
     let jwks = JwksFixtureServer::start().await?;
     let root = tempfile::tempdir()?;
     let server = TokioServer::start(TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
@@ -39,6 +40,7 @@ async fn a_saved_activation_cannot_undo_revocation_while_enrollment_finish_was_p
     let jwks = JwksFixtureServer::start().await?;
     let root = tempfile::tempdir()?;
     let server = TokioServer::start(TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
@@ -69,6 +71,7 @@ async fn two_real_readmissions_keep_reserved_credentials_inactive_until_activati
     let jwks = JwksFixtureServer::start().await?;
     let root = tempfile::tempdir()?;
     let server = TokioServer::start(TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
@@ -98,6 +101,7 @@ async fn revoked_live_sender_cannot_submit_items_or_cancellations() -> Conforman
     let jwks = JwksFixtureServer::start().await?;
     let root = tempfile::tempdir()?;
     let server = TokioServer::start(TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
@@ -127,6 +131,7 @@ async fn revoked_live_session_cannot_select_new_shared_mutations() -> Conformanc
     let jwks = JwksFixtureServer::start().await?;
     let root = tempfile::tempdir()?;
     let server = TokioServer::start(TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),

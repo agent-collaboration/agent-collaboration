@@ -1,6 +1,6 @@
 //! Registry calls publish lease facts and discharge claim debt at the Fleet owner.
 use crate::{
-    CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, FleetKind, ObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     fleet_lease_step::StoreClaimGrant,
     lease_projection::{ClaimGrantedUpdate, LeaseProjectionResult},
@@ -65,7 +65,7 @@ where
 }
 
 fn require_registry(call: &ObjectCallEnvelope) -> Result<(), CallFailure> {
-    if call.source == ObjectAddress::Fleet
+    if call.has_fleet_source()
         && call.source_face == CallerKind::Registry
         && matches!(call.authority, CallAuthority::Object)
     {

@@ -11,6 +11,7 @@ async fn real_registry_and_fleet_apply_all_four_creation_gate_outcomes() -> Conf
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
     let server = TokioServer::start(TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),

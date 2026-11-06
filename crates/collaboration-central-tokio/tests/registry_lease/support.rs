@@ -78,6 +78,7 @@ impl RegistryFixture {
         let runtime = ObjectRuntime::fleet(
             Arc::new(TokioStorageHost::new(registry.clone())),
             io.clone(),
+collaboration_central_conformance::legacy_organization(),
             config,
             collaboration_central_tokio::DeliveryConfig {
                 relay_peer: fleet_sync_protocol::PeerId::try_from(
@@ -154,7 +155,7 @@ impl PlatformIo for RoutingIo {
         destination: ObjectAddress,
         bytes: Vec<u8>,
     ) -> Result<Vec<u8>, CallFailure> {
-        if destination != ObjectAddress::Fleet {
+        if destination != collaboration_central_conformance::legacy_fleet_address() {
             let deliver = self
                 .notice_delivery
                 .lock()

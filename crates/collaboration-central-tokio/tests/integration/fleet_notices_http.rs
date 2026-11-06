@@ -13,6 +13,7 @@ async fn committed_feed_advancement_delivers_one_positioned_notice_to_its_reader
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
     let server = TokioServer::start(TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         root: root.path().into(),
         access_policy: fixture_policy(),
         jwks_url: jwks.url.clone(),

@@ -109,7 +109,7 @@ impl Host for GrantHost {
             | "fleet-sync.copy-status"
             | "fleet-sync.copy-retire" => {
                 let bytes = serde_json::to_vec(&json!({
-                    "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
+                    "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"registry","authority":{"kind":"object"},
                     "destination":{"kind":"copy","value":self.database},"destinationFace":"copy",
                     "identity":call,"kind":C::KIND,"target":target,"request":request
                 }))
@@ -248,6 +248,7 @@ impl GrantFixture {
         let runtime = ObjectRuntime::<collaboration_central_core::FleetKind, _, _>::fleet(
             Arc::new(TokioStorageHost::new(registry.clone())),
             SetupIo,
+            collaboration_central_conformance::legacy_organization(),
             config,
             collaboration_central_tokio::DeliveryConfig {
                 relay_peer: fleet_sync_protocol::PeerId::try_from(
@@ -272,6 +273,7 @@ impl GrantFixture {
             config.authoritative_receiver,
             database,
             Duration::from_secs(2),
+            std::sync::Arc::new(collaboration_central_core::InMemoryCopyFleetReferences::default()),
         );
         copy.initialize().await?;
         let host = Arc::new(GrantHost { copy, database });
@@ -331,6 +333,7 @@ pub(super) async fn import_unheld(
         Arc::new(SetupIo),
         |_| {},
         root,
+        collaboration_central_conformance::legacy_organization(),
         config,
         collaboration_central_tokio::DeliveryConfig {
             relay_peer: "019f0000-0000-7000-8000-000000005240"

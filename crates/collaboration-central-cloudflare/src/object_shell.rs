@@ -21,7 +21,11 @@ mod conformance_routes;
 
 pub(crate) struct CloudflareObjectIo {
     env: Arc<SendWrapper<Env>>,
+    #[cfg(feature = "conformance")]
+    address: ObjectAddress,
     wake: AlarmOwner,
+    #[cfg(feature = "conformance")]
+    capabilities: crate::conformance_capabilities::ConformanceCapabilities,
     #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
 }
@@ -31,11 +35,17 @@ impl Clock for CloudflareObjectIo {
         if let Some(now) = self.faults.clock() {
             return SyncTime::from_unix_millis(now.0.timestamp_millis());
         }
+        #[cfg(feature = "conformance")]
+        return self.capabilities.now();
+        #[cfg(not(feature = "conformance"))]
         SyncTime::from_unix_millis(chrono::Utc::now().timestamp_millis())
     }
 }
 impl IdSource for CloudflareObjectIo {
     fn new_id(&self) -> durable_steps::Uuid {
+        #[cfg(feature = "conformance")]
+        return self.capabilities.new_id();
+        #[cfg(not(feature = "conformance"))]
         durable_steps::Uuid::now_v7()
     }
 }
@@ -58,14 +68,14 @@ impl PlatformIo for CloudflareObjectIo {
     #[cfg(feature = "conformance")]
     async fn before_local_call(&self, request: &[u8]) -> std::result::Result<(), CallFailure> {
         self.faults
-            .before_dispatch(&ObjectAddress::Fleet, request)
+            .before_dispatch(&self.address, request)
             .await
             .map_err(|_| CallFailure::AnswerLost)
     }
     #[cfg(feature = "conformance")]
     fn drop_local_reply(&self, request: &[u8]) -> std::result::Result<bool, CallFailure> {
         self.faults
-            .drop_successful_object_reply(&ObjectAddress::Fleet, request)
+            .drop_successful_object_reply(&self.address, request)
             .map_err(|_| CallFailure::AnswerLost)
     }
     fn object_call(
@@ -129,7 +139,7 @@ impl PhysicalKind {
     fn matches(self, address: &ObjectAddress) -> bool {
         matches!(
             (self, address),
-            (Self::Copy, ObjectAddress::Copy(_)) | (Self::Fleet, ObjectAddress::Fleet)
+            (Self::Copy, ObjectAddress::Copy(_)) | (Self::Fleet, ObjectAddress::Fleet { .. })
         )
     }
 }
@@ -139,6 +149,7 @@ struct ShellActor {
     kind: PhysicalKind,
     host: OnceCell<Arc<StoreHost>>,
     runtime: OnceCell<Arc<RuntimeFace>>,
+    fleet_references: Arc<collaboration_central_core::InMemoryCopyFleetReferences>,
     #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
 }
@@ -150,6 +161,7 @@ impl ShellActor {
             kind,
             host: OnceCell::new(),
             runtime: OnceCell::new(),
+            fleet_references: Arc::default(),
             #[cfg(feature = "conformance")]
             faults: Arc::default(),
         }
@@ -162,18 +174,27 @@ impl ShellActor {
         serde_json::from_str(&self.env.var("CENTRAL_DELIVERY_CONFIG")?.to_string())
             .map_err(Into::into)
     }
-    fn host(&self, config: RegistryConfig) -> Result<Arc<StoreHost>> {
+    fn host(&self, config: RegistryConfig, _address: &ObjectAddress) -> Result<Arc<StoreHost>> {
         if let Some(host) = self.host.get() {
             return Ok(host.clone());
         }
         let env = self.env.clone();
         #[cfg(feature = "conformance")]
+        let address = _address.clone();
+        #[cfg(feature = "conformance")]
         let faults = self.faults.clone();
+        #[cfg(feature = "conformance")]
+        let capabilities =
+            crate::conformance_capabilities::ConformanceCapabilities::from_env(&self.env)?;
         let shared_host = move |wake| {
             Arc::new(CoreHost::for_store(
                 CloudflareObjectIo {
                     env,
+                    #[cfg(feature = "conformance")]
+                    address,
                     wake,
+                    #[cfg(feature = "conformance")]
+                    capabilities,
                     #[cfg(feature = "conformance")]
                     faults,
                 },
@@ -208,7 +229,8 @@ impl ShellActor {
         if !self.kind.matches(&address) {
             return Err(error("wrong physical object kind"));
         }
-        let (binding, name) = cloudflare_transport::location(&address);
+        let locations = crate::cloudflare_transport::locations(&self.env)?;
+        let (binding, name) = cloudflare_transport::location(&address, &locations);
         if self
             .env
             .durable_object(binding)?
@@ -228,13 +250,19 @@ impl ShellActor {
         address: ObjectAddress,
     ) -> Result<(Arc<StoreHost>, Arc<RuntimeFace>)> {
         let config = self.config()?;
-        let host = self.host(config)?;
+        let host = self.host(config, &address)?;
         if let Some(runtime) = self.runtime.get() {
             return Ok((host, runtime.clone()));
         }
         let io = CloudflareObjectIo {
             env: self.env.clone(),
+            #[cfg(feature = "conformance")]
+            address: address.clone(),
             wake: host.wake().clone(),
+            #[cfg(feature = "conformance")]
+            capabilities: crate::conformance_capabilities::ConformanceCapabilities::from_env(
+                &self.env,
+            )?,
             #[cfg(feature = "conformance")]
             faults: self.faults.clone(),
         };
@@ -245,11 +273,13 @@ impl ShellActor {
                 config.authoritative_receiver,
                 project,
                 serde_json::from_str(&self.env.var("CENTRAL_COPY_ACK_WAIT")?.to_string())?,
+                self.fleet_references.clone(),
             )),
-            ObjectAddress::Fleet => RuntimeFace::Fleet(
+            ObjectAddress::Fleet { organization } => RuntimeFace::Fleet(
                 ObjectRuntime::fleet(
                     host.clone(),
                     io,
+                    organization,
                     config,
                     self.delivery_config()?,
                     serde_json::from_str(
@@ -393,7 +423,7 @@ impl ShellActor {
                     .decode(encoded)
                     .map_err(error)?;
                 let attachment: BindingAttachment = serde_json::from_slice(&bytes)?;
-                if address != ObjectAddress::Fleet
+                if !matches!(address, ObjectAddress::Fleet { .. })
                     || attachment.registration
                         != fleet_sync_session::ConnectionRegistration::Opening
                 {

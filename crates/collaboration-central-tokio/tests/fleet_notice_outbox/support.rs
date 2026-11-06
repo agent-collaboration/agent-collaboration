@@ -89,9 +89,12 @@ impl PlatformIo for Io {
         bytes: Vec<u8>,
     ) -> Result<Vec<u8>, CallFailure> {
         let call: Value = serde_json::from_slice(&bytes).map_err(|_| CallFailure::AnswerLost)?;
-        if destination != ObjectAddress::Fleet
+        if destination != collaboration_central_conformance::legacy_fleet_address()
             || call.get("kind").and_then(Value::as_str) != Some("central.machine-notice")
-            || call.get("source") != Some(&json!({"kind":"fleet"}))
+            || call.get("source")
+                != Some(
+                    &json!({"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}}),
+                )
         {
             return Err(CallFailure::NotSent {
                 reason: NotSentReason::Overloaded,
@@ -151,6 +154,7 @@ impl Fixture {
         let runtime = ObjectRuntime::fleet(
             host.clone(),
             io.clone(),
+            collaboration_central_conformance::legacy_organization(),
             fleet_sync_lease::RegistryConfig {
                 authoritative_receiver: receiver,
                 lease: fleet_sync_lease::LeasePolicy {
@@ -179,8 +183,8 @@ impl Fixture {
     }
     pub async fn feed_from(&self, installation: &str, after: u64) -> TestResult<BoardReadPage> {
         let bytes=self.runtime.on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":installation}},
-            "destination":{"kind":"fleet"},"destinationFace":"fleet", "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"read_feed"},
+            "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":installation}},
+            "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet", "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"read_feed"},
             "kind":"central.fleet-read","target":null,"request":{"kind":"feed","value":{"after":after}}
         }))?).await.map_err(|error|format!("feed read failed: {error:?}"))?;
         Ok(serde_json::from_slice(&bytes)?)
@@ -225,8 +229,8 @@ pub fn workspace_update() -> TestResult<FleetRequest> {
 }
 pub fn mutation(request: &FleetRequest) -> TestResult<Vec<u8>> {
     Ok(serde_json::to_vec(&json!({
-        "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":SERVICE}},
-        "destination":{"kind":"fleet"},"destinationFace":"fleet","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"mutate"},
+        "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":SERVICE}},
+        "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"mutate"},
         "kind":"central.fleet-metadata","target":null,"request":{"request":request,"origin":{"installation":SERVICE,"machine":"notice owner"}}
     }))?)
 }

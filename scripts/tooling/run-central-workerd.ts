@@ -4,8 +4,17 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import publicTemplate from "../../crates/collaboration-central-cloudflare/cloudflare.config.ts";
 
-const [miniflareEntrypoint, persistence, portText, jwksUrl, holderTimeout, copyWait, relayPeer] =
-  process.argv.slice(2);
+const [
+  miniflareEntrypoint,
+  persistence,
+  portText,
+  jwksUrl,
+  holderTimeout,
+  copyWait,
+  relayPeer,
+  legacyOrganization,
+  fixedAccessTime,
+] = process.argv.slice(2);
 if (
   !miniflareEntrypoint ||
   !persistence ||
@@ -13,10 +22,11 @@ if (
   !jwksUrl ||
   !holderTimeout ||
   !copyWait ||
-  !relayPeer
+  !relayPeer ||
+  !legacyOrganization
 ) {
   throw new Error(
-    "Miniflare entrypoint, isolated persistence, port, fixture JWKS URL, explicit holder/copy timeout JSON and relay peer required",
+    "Miniflare entrypoint, isolated persistence, port, fixture JWKS URL, explicit holder/copy timeout JSON, relay peer and legacy organization required",
   );
 }
 const fixture = new URL(jwksUrl);
@@ -25,30 +35,36 @@ if (fixture.protocol !== "http:" || fixture.hostname !== "127.0.0.1") {
 }
 // Fill the shipped template, so a missing public binding cannot be masked by
 // the harness's own independent list of production settings.
-const replacements = {
-  ACCESS_TEAM_DOMAIN: "conformance-test.cloudflareaccess.com",
-  ACCESS_SESSION_AUD: "test-session-aud",
-  ACCESS_ADMIN_AUD: "test-admin-aud",
-  ACCESS_OWNER_IDENTITY: "owner@example.test",
-  CENTRAL_HOLDER_ANSWER_TIMEOUT: holderTimeout,
-  CENTRAL_COPY_ACK_WAIT: copyWait,
-  CENTRAL_REGISTRY_CONFIG: JSON.stringify({
-    lease: { leaseDuration: { secs: 14400, nanos: 0 }, renewInterval: { secs: 900, nanos: 0 } },
-    authoritativeReceiver: "019f0000-0000-7000-8000-000000000010",
-    releaseUnsentFor: { secs: 0, nanos: 0 },
-    moveNeedsRenewalWithin: { secs: 1800, nanos: 0 },
+const replacements = new Map(
+  Object.entries({
+    ACCESS_TEAM_DOMAIN: "conformance-test.cloudflareaccess.com",
+    ACCESS_SESSION_AUD: "test-session-aud",
+    ACCESS_ADMIN_AUD: "test-admin-aud",
+    ACCESS_OWNER_IDENTITY: "owner@example.test",
+    CENTRAL_HOLDER_ANSWER_TIMEOUT: holderTimeout,
+    CENTRAL_COPY_ACK_WAIT: copyWait,
+    CENTRAL_LEGACY_ORGANIZATION_ID: legacyOrganization,
+    CENTRAL_REGISTRY_CONFIG: JSON.stringify({
+      lease: { leaseDuration: { secs: 14400, nanos: 0 }, renewInterval: { secs: 900, nanos: 0 } },
+      authoritativeReceiver: "019f0000-0000-7000-8000-000000000010",
+      releaseUnsentFor: { secs: 0, nanos: 0 },
+      moveNeedsRenewalWithin: { secs: 1800, nanos: 0 },
+    }),
+    CENTRAL_DELIVERY_CONFIG: relayPeer.startsWith("{") ? relayPeer : JSON.stringify({ relayPeer }),
   }),
-  CENTRAL_DELIVERY_CONFIG: relayPeer.startsWith("{") ? relayPeer : JSON.stringify({ relayPeer }),
-};
-const templateBindings = Object.fromEntries(
-  Object.entries(publicTemplate.worker.env)
-    .filter(([, binding]) => binding.type === "text")
-    .map(([name, binding]) => [name, replacements[name] ?? binding.value]),
 );
-for (const name of Object.keys(replacements)) {
+const templateBindings = Object.fromEntries(
+  Object.entries(publicTemplate.worker.env).flatMap(([name, binding]) =>
+    "value" in binding && binding.type === "text"
+      ? [[name, replacements.get(name) ?? binding.value]]
+      : [],
+  ),
+);
+for (const name of replacements.keys()) {
   if (!(name in templateBindings))
     throw new Error(`public central template missing required ${name}`);
 }
+if (fixedAccessTime) templateBindings.CENTRAL_CONFORMANCE_FIXED_TIME = fixedAccessTime;
 const { Miniflare, Response, Log, LogLevel, convertV4MiniflareOptions } = await import(
   pathToFileURL(miniflareEntrypoint).href
 );
@@ -81,7 +97,7 @@ const runtime = new Miniflare(
         },
         bindings: templateBindings,
         cacheAPI: true,
-        outboundService: async (request) => {
+        outboundService: async (request: Request) => {
           if (
             request.url !== "https://conformance-test.cloudflareaccess.com/cdn-cgi/access/certs"
           ) {

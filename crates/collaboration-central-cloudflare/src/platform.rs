@@ -16,8 +16,10 @@ pub(crate) struct CloudflareCentralPlatform {
     key_source: String,
     labels: InvocationLabels,
     layer: VerificationLayer,
-    clock: CloudflareClock,
+    clock: Arc<dyn Clock>,
+    ids: Arc<dyn runtime_primitives::IdSource>,
     env: Arc<SendWrapper<Env>>,
+    legacy_organization: fleet_identity_protocol::OrganizationId,
 }
 
 #[derive(Clone, Copy)]
@@ -35,18 +37,31 @@ impl runtime_primitives::IdSource for CloudflareClock {
 }
 
 impl CloudflareCentralPlatform {
+    #[cfg(feature = "conformance")]
+    pub(crate) fn with_capabilities(
+        mut self,
+        capabilities: crate::conformance_capabilities::ConformanceCapabilities,
+    ) -> Self {
+        self.clock = Arc::new(capabilities);
+        self.ids = Arc::new(capabilities);
+        self
+    }
+
     pub(crate) fn new(
         key_source: String,
         labels: InvocationLabels,
         layer: VerificationLayer,
         env: Env,
+        legacy_organization: fleet_identity_protocol::OrganizationId,
     ) -> Self {
         Self {
             key_source,
             labels,
             layer,
-            clock: CloudflareClock,
+            clock: Arc::new(CloudflareClock),
+            ids: Arc::new(CloudflareClock),
             env: Arc::new(SendWrapper::new(env)),
+            legacy_organization,
         }
     }
 }
@@ -56,10 +71,10 @@ impl CentralPlatform for CloudflareCentralPlatform {
         collaboration_central_core::CoreHost<crate::object_shell::CloudflareObjectIo>,
     >;
     fn clock(&self) -> &dyn Clock {
-        &self.clock
+        self.clock.as_ref()
     }
     fn ids(&self) -> &dyn runtime_primitives::IdSource {
-        &self.clock
+        self.ids.as_ref()
     }
     fn transport_object(
         &self,
@@ -109,7 +124,9 @@ impl CentralPlatform for CloudflareCentralPlatform {
                         .map_err(|_| UpgradeFailure::NotAnUpgrade)?;
                 }
             }
-            let address = ObjectAddress::Fleet;
+            let address = ObjectAddress::Fleet {
+                organization: self.legacy_organization.clone(),
+            };
             let attachment = crate::binding_attachment::BindingAttachment {
                 connection: binding.connection,
                 peer: binding.peer,

@@ -15,6 +15,7 @@ struct RunningTargetSession {
 impl RunningTargetSession {
     async fn open(stopped: &fixture::StoppedFixture) -> ConformanceResult<Self> {
         let server = TokioServer::start(TokioSettings {
+            legacy_organization: collaboration_central_conformance::legacy_organization(),
             root: stopped.root.path().into(),
             access_policy: fixture_policy(),
             jwks_url: stopped.keys.url.clone(),

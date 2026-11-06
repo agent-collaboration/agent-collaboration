@@ -13,8 +13,6 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
-#[path = "../../tests/native_http/support.rs"]
-mod configuration;
 async fn open(root: &Path) -> TestResult<Arc<NativeObjects>> {
     open_with_clock(root, Arc::new(runtime_primitives::SystemClock)).await
 }
@@ -22,6 +20,10 @@ async fn open_with_clock(root: &Path, clock: Arc<dyn Clock>) -> TestResult<Arc<N
     Ok(NativeObjects::open_with_controls(
         root,
         clock,
+        Arc::new(runtime_primitives::UuidV7Ids),
+        collaboration_central_core::FleetLocationPolicy::new(
+            collaboration_central_conformance::legacy_organization(),
+        ),
         configuration::registry_config()?,
         crate::DeliveryConfig {
             relay_peer: "019f0000-0000-7000-8000-000000005240"
@@ -54,7 +56,7 @@ async fn ready(slot: &ObjectSlot) -> TestResult {
     Ok(())
 }
 fn envelope(database: DatabaseId, kind: &str, target: Value, request: Value) -> Value {
-    json!({"source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},"destination":{"kind":"copy","value":database},"destinationFace":"copy","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"alarm_test"},"kind":kind,"target":target,"request":request})
+    json!({"organization":collaboration_central_conformance::legacy_organization(),"source":{"kind":"fleet","value":{"organization":collaboration_central_conformance::legacy_organization()}},"sourceFace":"registry","authority":{"kind":"object"},"destination":{"kind":"copy","value":database},"destinationFace":"copy","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"alarm_test"},"kind":kind,"target":target,"request":request})
 }
 
 #[expect(
@@ -148,7 +150,11 @@ async fn registry_consumed_wake_recovers_its_saved_operation_after_two_begin_fai
         Arc::new(TokioClock(tokio::time::Instant::now())),
     )
     .await?;
-    let slot = objects.slot(ObjectAddress::Fleet).await?;
+    let slot = objects
+        .slot(ObjectAddress::Fleet {
+            organization: collaboration_central_conformance::legacy_organization(),
+        })
+        .await?;
     ready(&slot).await?;
     let host = slot.host.get().ok_or("Registry host missing")?;
     let database = DatabaseId::new(durable_steps::Uuid::now_v7())?;
@@ -307,9 +313,9 @@ async fn fleet_consumed_wake_recovers_its_saved_notice_after_prune_begin_failure
         let installation = message_board::ServiceId::try_from(durable_steps::Uuid::now_v7().to_string())?;
         // Initialize the real destination before fault injection, without a
         // connected transport. The same notice must survive missing admission.
-        let target = objects.slot(ObjectAddress::Fleet).await?;
+        let target = objects.slot(ObjectAddress::Fleet { organization: collaboration_central_conformance::legacy_organization() }).await?;
         ready(&target).await?;
-        let slot = objects.slot(ObjectAddress::Fleet).await?;
+        let slot = objects.slot(ObjectAddress::Fleet { organization: collaboration_central_conformance::legacy_organization() }).await?;
         ready(&slot).await?;
         let host = slot.host.get().ok_or("Fleet host missing")?;
         let peer = fleet_sync_protocol::PeerId::new(durable_steps::Uuid::now_v7())?;

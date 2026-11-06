@@ -1,8 +1,8 @@
 //! Fleet reads stay inside the canonical Fleet owner after leaving the session.
 use crate::{
-    CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
-    caller_context::CallAuthority, fleet_read_step::ReadFleet,
-    object_call_envelope::ObjectCallEnvelope, object_runtime::ObjectWork, step_driver::StepDriver,
+    CallerKind, FleetKind, ObjectHost, ObjectRuntime, PlatformIo, caller_context::CallAuthority,
+    fleet_read_step::ReadFleet, object_call_envelope::ObjectCallEnvelope,
+    object_runtime::ObjectWork, step_driver::StepDriver,
 };
 use board_sync_protocol::{BoardReadPage, FleetSnapshotCursor};
 use durable_steps::{
@@ -57,7 +57,7 @@ where
         call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if call.source_face != CallerKind::Session
-            || !matches!(call.source, ObjectAddress::Fleet)
+            || !call.has_fleet_source()
             || !matches!(call.authority, CallAuthority::Machine { .. })
         {
             return Err(refused());

@@ -36,7 +36,7 @@ impl RuleFixture {
 
     pub fn submit_key(peer: PeerId, item: ItemId) -> board_central_test_support::DispatchKey {
         board_central_test_support::DispatchKey::new(
-            ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             board_central_test_support::DispatchCallSelector::FleetMailSubmitFor { peer, item },
         )
     }
@@ -226,7 +226,7 @@ impl RuleFixture {
         let _ = self
             .holder
             .central
-            .release_held_dispatches(ObjectAddress::Fleet)
+            .release_held_dispatches(collaboration_central_conformance::legacy_fleet_address())
             .await;
         self.recipient.close().await?;
         self.successor.close().await?;

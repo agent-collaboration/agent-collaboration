@@ -54,7 +54,7 @@ async fn registration_replays_the_committed_answer_after_the_server_process_dies
     let connection = ConformanceClient::new(&first.base)?
         .active_connection(SERVICE, PeerId::new(peer.peer)?)
         .await?;
-    let address = ObjectAddress::Fleet;
+    let address = collaboration_central_conformance::legacy_fleet_address();
     control(
         &first.base,
         address.clone(),

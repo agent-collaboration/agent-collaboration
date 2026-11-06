@@ -332,7 +332,11 @@ impl Fixture {
         let io = Transport::default();
         let receiver = ReceiverId::new(durable_steps::Uuid::now_v7())?;
         let objects = ObjectStore::open(path).await?;
-        let shared = Arc::new(CoreHost::conformance_registry(io.clone(), receiver));
+        let shared = Arc::new(CoreHost::conformance_registry(
+            io.clone(),
+            collaboration_central_conformance::legacy_organization(),
+            receiver,
+        ));
         let object = objects
             .object(ObjectKey::new("fleet")?, Default::default(), shared)
             .await?;
@@ -352,6 +356,7 @@ impl Fixture {
         let runtime = Arc::new(Runtime::fleet(
             host.clone(),
             io.clone(),
+            collaboration_central_conformance::legacy_organization(),
             fleet_sync_lease::RegistryConfig {
                 authoritative_receiver: receiver,
                 lease: fleet_sync_lease::LeasePolicy {

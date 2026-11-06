@@ -1,7 +1,7 @@
 //! Owner-authenticated conformance controls on actual admission and runtime state.
 
 use crate::{access_verification, cloudflare_transport};
-use collaboration_central_core::{AccessCaller, ObjectAddress};
+use collaboration_central_core::AccessCaller;
 use serde::Deserialize;
 use worker::{Env, Headers, Method, Request, RequestInit, Response, Result};
 
@@ -70,13 +70,17 @@ pub(crate) async fn fetch(mut request: Request, env: Env) -> Result<Response> {
 
 async fn forward_command(command: Command, env: Env) -> Result<Response> {
     let (address, path, body) = match command {
-        Command::FleetSchema => (ObjectAddress::Fleet, "/test/fleet-schema", None),
+        Command::FleetSchema => (
+            crate::cloudflare_transport::legacy_address(&env)?,
+            "/test/fleet-schema",
+            None,
+        ),
         #[cfg(feature = "conformance-faults")]
         Command::SessionBarrier {
             service: _service,
             connection,
         } => (
-            ObjectAddress::Fleet,
+            crate::cloudflare_transport::legacy_address(&env)?,
             "/test/session-finalize-barrier",
             Some(serde_json::to_string(&connection)?),
         ),
@@ -85,18 +89,20 @@ async fn forward_command(command: Command, env: Env) -> Result<Response> {
             service: _service,
             operation,
         } => (
-            ObjectAddress::Fleet,
+            crate::cloudflare_transport::legacy_address(&env)?,
             "/test/session-finalize-journal",
             Some(serde_json::to_string(&operation)?),
         ),
-        Command::HolderObservation { service: _service } => {
-            (ObjectAddress::Fleet, "/test/holder-observation", None)
-        }
+        Command::HolderObservation { service: _service } => (
+            crate::cloudflare_transport::legacy_address(&env)?,
+            "/test/holder-observation",
+            None,
+        ),
         Command::HolderSessionIdentity {
             service: _service,
             connection,
         } => (
-            ObjectAddress::Fleet,
+            crate::cloudflare_transport::legacy_address(&env)?,
             "/test/holder-session-identity",
             Some(serde_json::to_string(&connection)?),
         ),
@@ -104,12 +110,12 @@ async fn forward_command(command: Command, env: Env) -> Result<Response> {
             service: _service,
             command,
         } => (
-            ObjectAddress::Fleet,
+            crate::cloudflare_transport::legacy_address(&env)?,
             "/test/session-faults",
             Some(serde_json::to_string(&command)?),
         ),
         Command::SessionConnections { service } => (
-            ObjectAddress::Fleet,
+            crate::cloudflare_transport::legacy_address(&env)?,
             "/test/session-connections",
             Some(serde_json::to_string(&service)?),
         ),
@@ -117,7 +123,7 @@ async fn forward_command(command: Command, env: Env) -> Result<Response> {
             service: _service,
             connection,
         } => (
-            ObjectAddress::Fleet,
+            crate::cloudflare_transport::legacy_address(&env)?,
             "/test/session-attachment-codec",
             Some(serde_json::to_string(&connection)?),
         ),
@@ -125,21 +131,27 @@ async fn forward_command(command: Command, env: Env) -> Result<Response> {
             service: _service,
             connection,
         } => (
-            ObjectAddress::Fleet,
+            crate::cloudflare_transport::legacy_address(&env)?,
             "/test/session-alarm",
             Some(serde_json::to_string(&connection)?),
         ),
-        Command::ForwardState { service: _service } => {
-            (ObjectAddress::Fleet, "/test/forward-state", None)
-        }
-        Command::HolderFrames { service: _service } => {
-            (ObjectAddress::Fleet, "/test/holder-frames", None)
-        }
-        Command::Origins { service: _service } => {
-            (ObjectAddress::Fleet, "/test/admission-origins", None)
-        }
+        Command::ForwardState { service: _service } => (
+            crate::cloudflare_transport::legacy_address(&env)?,
+            "/test/forward-state",
+            None,
+        ),
+        Command::HolderFrames { service: _service } => (
+            crate::cloudflare_transport::legacy_address(&env)?,
+            "/test/holder-frames",
+            None,
+        ),
+        Command::Origins { service: _service } => (
+            crate::cloudflare_transport::legacy_address(&env)?,
+            "/test/admission-origins",
+            None,
+        ),
         Command::SchemaReport { peer } => (
-            ObjectAddress::Fleet,
+            crate::cloudflare_transport::legacy_address(&env)?,
             "/test/schema-report",
             Some(serde_json::to_string(&peer)?),
         ),
@@ -189,7 +201,7 @@ pub(crate) async fn fleet_mail_custody(mut request: Request, env: Env) -> Result
     };
     crate::composed_control::forward(
         &env,
-        &ObjectAddress::Fleet,
+        &crate::cloudflare_transport::legacy_address(&env)?,
         "/test/fleet-mail-custody",
         Some(serde_json::to_string(&input)?),
     )
@@ -197,7 +209,7 @@ pub(crate) async fn fleet_mail_custody(mut request: Request, env: Env) -> Result
 }
 
 async fn owner_allowed(request: &Request, env: &Env) -> Result<bool> {
-    let labels = access_verification::InvocationLabels::for_request(request)?;
+    let labels = access_verification::InvocationLabels::for_request(request, env)?;
     let assertion = request.headers().get("Cf-Access-Jwt-Assertion")?;
     match access_verification::verify(
         env,

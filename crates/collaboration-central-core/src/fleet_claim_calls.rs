@@ -1,6 +1,6 @@
 //! Only Registry object calls may reserve or settle a native claim attempt.
 use crate::{
-    CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, FleetKind, ObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     fleet_claim_step::{ClaimStep, ClaimStepResult},
     object_call_envelope::ObjectCallEnvelope,
@@ -34,7 +34,7 @@ where
         &self,
         call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
-        if call.source != ObjectAddress::Fleet
+        if !call.has_fleet_source()
             || call.source_face != CallerKind::Registry
             || !matches!(call.authority, CallAuthority::Object)
         {

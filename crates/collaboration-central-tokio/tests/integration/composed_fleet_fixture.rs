@@ -99,7 +99,10 @@ impl WakeScheduler for Io {
 impl PlatformIo for Io {
     async fn before_local_call(&self, request: &[u8]) -> Result<(), CallFailure> {
         self.local_call_faults
-            .before_dispatch(&ObjectAddress::Fleet, request)
+            .before_dispatch(
+                &collaboration_central_conformance::legacy_fleet_address(),
+                request,
+            )
             .await
             .map_err(|_| CallFailure::AnswerLost)?;
         let call: Value = serde_json::from_slice(request).map_err(|_| CallFailure::AnswerLost)?;
@@ -119,7 +122,10 @@ impl PlatformIo for Io {
     fn drop_local_reply(&self, request: &[u8]) -> Result<bool, CallFailure> {
         if self
             .local_call_faults
-            .drop_successful_object_reply(&ObjectAddress::Fleet, request)
+            .drop_successful_object_reply(
+                &collaboration_central_conformance::legacy_fleet_address(),
+                request,
+            )
             .map_err(|_| CallFailure::AnswerLost)?
         {
             return Ok(true);
@@ -165,7 +171,7 @@ impl PlatformIo for Io {
             .clone()
             .ok_or_else(no_route)?;
         match destination {
-            ObjectAddress::Fleet => fleet(bytes).await,
+            ObjectAddress::Fleet { .. } => fleet(bytes).await,
             ObjectAddress::Copy(database) if database.to_string() == PROJECT => {
                 project(bytes).await
             }
@@ -218,6 +224,7 @@ impl Fixture {
         let runtime = Arc::new(ObjectRuntime::fleet(
             fault_host,
             io.clone(),
+            collaboration_central_conformance::legacy_organization(),
             fleet_sync_lease::RegistryConfig {
                 authoritative_receiver: receiver,
                 lease: fleet_sync_lease::LeasePolicy {
@@ -251,6 +258,7 @@ impl Fixture {
             receiver,
             database,
             Duration::from_secs(2),
+            std::sync::Arc::new(collaboration_central_core::InMemoryCopyFleetReferences::default()),
         ));
         project.initialize().await?;
         let fleet_weak = Arc::downgrade(&runtime);
@@ -296,7 +304,7 @@ impl Fixture {
             json!({"kind":"machine","value":{"installation":SERVICE_A}})
         };
         let bytes = serde_json::to_vec(
-            &json!({"source":{"kind":"fleet"},"sourceFace":face,"authority":authority,"destination":{"kind":"fleet"},"destinationFace":if matches!(kind,"central.owner-registry" | "central.session-lease") {"registry"} else {"fleet"},"identity":{"operation":durable_steps::Uuid::now_v7(),"step":"component_call"},"kind":kind,"target":target,"request":request}),
+            &json!({"organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":face,"authority":authority,"destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":if matches!(kind,"central.owner-registry" | "central.session-lease") {"registry"} else {"fleet"},"identity":{"operation":durable_steps::Uuid::now_v7(),"step":"component_call"},"kind":kind,"target":target,"request":request}),
         )?;
         let answer = self
             .runtime

@@ -1,5 +1,6 @@
 //! Addresses and time at the shared application boundary.
 use chrono::{DateTime, Utc};
+use fleet_identity_protocol::OrganizationId;
 use fleet_sync_protocol::DatabaseId;
 use serde::{Deserialize, Serialize};
 
@@ -35,14 +36,14 @@ pub struct RegistryTime(pub DateTime<Utc>);
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum ObjectAddress {
     Copy(DatabaseId),
-    Fleet,
+    Fleet { organization: OrganizationId },
 }
 impl ObjectAddress {
     #[must_use]
     pub const fn primary_face(&self) -> crate::CallerKind {
         match self {
             Self::Copy(_) => crate::CallerKind::Copy,
-            Self::Fleet => crate::CallerKind::Fleet,
+            Self::Fleet { .. } => crate::CallerKind::Fleet,
         }
     }
 }

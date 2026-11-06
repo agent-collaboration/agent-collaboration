@@ -103,7 +103,7 @@ async fn control(
         .post(format!("{base}/admin/v1/conformance/runtime"))
         .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
         .json(&RuntimeControlRequest {
-            address: ObjectAddress::Fleet,
+            address: collaboration_central_conformance::legacy_fleet_address(),
             command,
         })
         .send()
@@ -155,7 +155,10 @@ fn validate_fence(
             .cloned()
             .ok_or("held Fence omitted target")?,
     )?;
-    if envelope.get("source") != Some(&json!(ObjectAddress::Fleet))
+    if envelope.get("source")
+        != Some(&json!(
+            collaboration_central_conformance::legacy_fleet_address()
+        ))
         || envelope.get("destination") != Some(&json!(ObjectAddress::Copy(database)))
         || envelope.get("kind") != Some(&json!(<fleet_sync_lease::CopyFence as CallTarget>::KIND))
         || target.copy != configuration::registry_config()?.authoritative_receiver
@@ -426,6 +429,7 @@ async fn recover_same_transfer(
 }
 fn settings(root: &Path, keys: &JwksFixtureServer) -> ConformanceResult<TokioSettings> {
     Ok(TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         root: root.into(),
         access_policy: fixture_policy(),
         jwks_url: keys.url.clone(),
@@ -454,13 +458,13 @@ async fn takeover_replays_committed_lost_fence_after_owning_reopen_without_secon
             settings(root.path(), &keys)?,
             vec![
                 RuntimeControlRequest {
-                    address: ObjectAddress::Fleet,
+                    address: collaboration_central_conformance::legacy_fleet_address(),
                     command: RuntimeControl::SetTime {
                         now: RegistryTime("2030-03-17T17:46:41Z".parse()?),
                     },
                 },
                 RuntimeControlRequest {
-                    address: ObjectAddress::Fleet,
+                    address: collaboration_central_conformance::legacy_fleet_address(),
                     command: RuntimeControl::HoldNextDispatch {
                         key: DispatchKey::any(ObjectAddress::Copy(interrupted.database)),
                     },

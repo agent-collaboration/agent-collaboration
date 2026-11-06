@@ -1,6 +1,6 @@
 //! Retirement admission reads the canonical parent board in Fleet's own step.
 use crate::{
-    CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, FleetKind, ObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     fleet_record_codec::corrupt,
     fleet_record_store,
@@ -35,7 +35,7 @@ where
         &self,
         call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
-        if call.source != ObjectAddress::Fleet
+        if !call.has_fleet_source()
             || call.source_face != CallerKind::Registry
             || !matches!(call.authority, CallAuthority::Object)
         {

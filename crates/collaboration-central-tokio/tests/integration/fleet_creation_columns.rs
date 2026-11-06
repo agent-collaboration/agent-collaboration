@@ -33,8 +33,8 @@ async fn binding(fixture: &Fixture, project: &ProjectId) -> TestResult<ProjectCr
     let bytes = fixture
         .runtime
         .on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
-            "destination":{"kind":"fleet"},"destinationFace":"fleet",
+            "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"registry","authority":{"kind":"object"},
+            "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet",
             "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"creation_read"},
             "kind":"central.creation-decision","target":null,"request":project
         }))?)

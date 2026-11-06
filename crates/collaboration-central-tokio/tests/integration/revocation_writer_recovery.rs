@@ -178,6 +178,7 @@ async fn run_recovery(case: RecoveryCase) -> ConformanceResult<()> {
     let jwks = JwksFixtureServer::start().await?;
     let root = tempfile::tempdir()?;
     let server = TokioServer::start(TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         root: root.path().join("central"),
         access_policy: fixture_policy(),
         jwks_url: jwks.url.clone(),

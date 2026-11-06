@@ -64,6 +64,7 @@ impl Fixture {
         let objects = ObjectStore::open(path).await?;
         let shared = Arc::new(CoreHost::conformance_registry(
             ProbeIo,
+            collaboration_central_conformance::legacy_organization(),
             ReceiverId::new(durable_steps::Uuid::now_v7())?,
         ));
         let object = objects
@@ -325,6 +326,7 @@ async fn receiver_rollback_is_unavailable_but_a_failed_store_boundary_is_unknown
         ReceiverId::new(durable_steps::Uuid::now_v7())?,
         database,
         std::time::Duration::from_secs(2),
+        std::sync::Arc::new(collaboration_central_core::InMemoryCopyFleetReferences::default()),
     );
 
     // No receiver schema is installed: the real receiver query fails and the

@@ -190,6 +190,7 @@ mod tests {
         let directory = tempfile::tempdir()?;
         std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o755))?;
         let args = ServeArguments {
+            legacy_organization_id: "019f0000-0000-7000-8000-00000000ac01".into(),
             root: directory.path().join("central"),
             listen: "127.0.0.1:29843".parse()?,
             public_url: None,

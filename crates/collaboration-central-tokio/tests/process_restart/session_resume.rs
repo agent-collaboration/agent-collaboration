@@ -37,7 +37,7 @@ async fn lost_piece_and_renewal_answers_replay_after_the_server_process_dies()
         }
     };
     let initial = [RuntimeControlRequest {
-        address: ObjectAddress::Fleet,
+        address: collaboration_central_conformance::legacy_fleet_address(),
         command: RuntimeControl::SetTime {
             now: RegistryTime(saved.at.0 + chrono::TimeDelta::seconds(2)),
         },
@@ -175,7 +175,7 @@ async fn drop_committed_answer(
             fleet_sync_protocol::PeerId::try_from(PEER.to_owned())?,
         )
         .await?;
-    let address = ObjectAddress::Fleet;
+    let address = collaboration_central_conformance::legacy_fleet_address();
     control(
         base,
         address.clone(),
@@ -282,6 +282,11 @@ fn expected_lease(saved: &SavedSession, remaining_ms: u64) -> ConformanceResult<
 }
 
 async fn pin_registry(base: &str, now: RegistryTime) -> ConformanceResult<()> {
-    control(base, ObjectAddress::Fleet, RuntimeControl::SetTime { now }).await?;
+    control(
+        base,
+        collaboration_central_conformance::legacy_fleet_address(),
+        RuntimeControl::SetTime { now },
+    )
+    .await?;
     Ok(())
 }

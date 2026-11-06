@@ -1,7 +1,6 @@
 //! Authenticated Session writes and owner seed publication enter the same copy rules.
 use crate::{
-    CallerKind, CopyDirectorySummary, CopyKind, CoreHost, ObjectAddress, ObjectHost, ObjectRuntime,
-    PlatformIo,
+    CallerKind, CopyDirectorySummary, CopyKind, CoreHost, ObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork,
@@ -178,7 +177,7 @@ where
     ) -> Result<Vec<u8>, CallFailure> {
         if !matches!(call.authority, CallAuthority::Machine { .. })
             || call.source_face != CallerKind::Session
-            || !matches!(call.source, ObjectAddress::Fleet)
+            || !call.has_fleet_source()
         {
             return Err(refused());
         }
@@ -283,6 +282,7 @@ impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io> {
             io,
             receiver,
             database,
+            fleet_references,
             ..
         } = &self.work
         else {
@@ -290,7 +290,11 @@ impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io> {
                 reason: "copy alarm reached another face".into(),
             });
         };
-        let shared = CoreHost::for_copy(io.clone(), *receiver, *database)
+        let organization = fleet_references
+            .resolve(*database)
+            .await
+            .map_err(StoreError::backend)?;
+        let shared = CoreHost::for_copy(io.clone(), *receiver, *database, organization)
             .map_err(|error| StoreError::backend(format!("{error:?}")))?;
         let mut engine = Engine::new(host.store().clone(), Arc::new(shared));
         engine.register(ApplyFollowUp::<Host::Store, CopyDirectorySummary>::new())?;

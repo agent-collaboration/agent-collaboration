@@ -12,6 +12,7 @@ pub(super) async fn run(case: ForwardCase) -> ConformanceResult<()> {
     let proof = async {
         server = Some(
             TokioServer::start(TokioSettings {
+                legacy_organization: collaboration_central_conformance::legacy_organization(),
                 root: root.path().into(),
                 access_policy: fixture_policy(),
                 jwks_url: jwks.url.clone(),

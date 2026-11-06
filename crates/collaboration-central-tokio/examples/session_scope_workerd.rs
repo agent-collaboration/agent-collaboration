@@ -278,6 +278,8 @@ async fn main() -> ConformanceResult<()> {
         JwksFixtureServer::start().await?
     };
     let settings = WorkerdSettings {
+        fixed_access_time: None,
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         relay_peer: match &scenario {
             Scenario::DeliveryConfig { relay_peer } => *relay_peer,
             _ => fleet_sync_protocol::PeerId::try_from(

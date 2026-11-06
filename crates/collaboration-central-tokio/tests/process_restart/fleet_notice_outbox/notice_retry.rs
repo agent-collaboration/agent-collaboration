@@ -19,7 +19,7 @@ pub(super) async fn resume_at_committed_retry(
         .to_owned();
     control(
         base,
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         RuntimeControl::ResumeDispatchAndHoldNext {
             key: notice_key(),
             next: notice_key(),
@@ -41,7 +41,12 @@ pub(super) async fn resume_at_committed_retry(
         let deadline = row.try_get::<Option<i64>, _>("next_attempt_at")?;
         connection.close().await?;
         if state == "completed" {
-            let observed = control(base, ObjectAddress::Fleet, RuntimeControl::Observe).await?;
+            let observed = control(
+                base,
+                collaboration_central_conformance::legacy_fleet_address(),
+                RuntimeControl::Observe,
+            )
+            .await?;
             if let ObjectReplyFaultObservation::Dropped { request, .. } = observed.object_reply {
                 let dropped: Value = serde_json::from_slice(&request)?;
                 let lost_operation = dropped
@@ -68,16 +73,19 @@ pub(super) async fn resume_at_committed_retry(
         }
         tokio::task::yield_now().await;
     };
-    let collaboration_central_conformance::ClockObservation::Pinned { now } =
-        control(base, ObjectAddress::Fleet, RuntimeControl::Observe)
-            .await?
-            .clock
+    let collaboration_central_conformance::ClockObservation::Pinned { now } = control(
+        base,
+        collaboration_central_conformance::legacy_fleet_address(),
+        RuntimeControl::Observe,
+    )
+    .await?
+    .clock
     else {
         return Err("notice recovery fixture lost its injected clock".into());
     };
     control(
         base,
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         RuntimeControl::SetTime {
             now: RegistryTime(
                 chrono::DateTime::from_timestamp_millis(next.max(now.0.timestamp_millis()))

@@ -16,15 +16,18 @@ fn copy_identity_keeps_the_original_json_worker_name_and_native_key()
     let original = br#"{"kind":"copy","value":"019f0000-0000-7000-8000-000000000001"}"#;
     let address: ObjectAddress = serde_json::from_slice(original)?;
     assert_eq!(serde_json::to_vec(&address)?, original);
-    let (namespace, name) = worker_location::location(&address);
+    let locations = collaboration_central_core::FleetLocationPolicy::new(
+        collaboration_central_conformance::legacy_organization(),
+    );
+    let (namespace, name) = worker_location::location(&address, &locations);
     assert_eq!(namespace, "PROJECT_COPIES");
     assert_eq!(name, "019f0000-0000-7000-8000-000000000001");
     assert_eq!(
-        native_keys::address_key(&address)?,
+        native_keys::address_key(&address, &locations)?,
         "copy-019f0000-0000-7000-8000-000000000001"
     );
     assert_eq!(
-        native_keys::address_from_key("copy-019f0000-0000-7000-8000-000000000001")?,
+        native_keys::address_from_key("copy-019f0000-0000-7000-8000-000000000001", &locations)?,
         address
     );
     Ok(())

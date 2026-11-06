@@ -56,9 +56,9 @@ async fn another_verified_peer_cannot_consume_a_known_forward_identity() -> Resu
     // Enter the actual delivery face to select the holder and store its identity.
     // The transport fixture records outgoing callbacks but does not run a sender.
     let delivered = fixture.runtime.delivery()?.on_call(serde_json::to_vec(&json!({
-        "source":{"kind":"fleet"},"sourceFace":"session",
+        "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"session",
         "authority":{"kind":"machine","value":{"installation":sender}},
-        "destination":{"kind":"fleet"},"destinationFace":"delivery",
+        "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"delivery",
         "identity":identity,"kind":"central.deliver-forward","target":{"installation":installation},
         "request":{"forwardFrame":forward,"holder":holder.peer,
             "deadline":fixture.io.now().after(Duration::from_secs(30)),

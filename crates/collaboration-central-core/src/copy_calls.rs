@@ -47,9 +47,8 @@ where
         else {
             return Err(refused());
         };
-        let address = ObjectAddress::Copy(*database);
-        let call = ObjectCallEnvelope::decode(&bytes, address, CallerKind::Copy)?;
-        if call.source != ObjectAddress::Fleet {
+        let call = self.admit_copy_call(&bytes).await?;
+        if !call.has_fleet_source() {
             return Err(refused());
         }
         if matches!(self.copy_call_class(&bytes)?, crate::CopyCallClass::Health) {
@@ -87,9 +86,9 @@ where
             return Err(refused());
         }
         if call.kind == CopySessionRead::KIND {
-            let target: CopySessionRead = decode(call.target)?;
+            let target: CopySessionRead = decode(call.target.clone())?;
             if call.source_face != CallerKind::Session
-                || !matches!(call.source, ObjectAddress::Fleet)
+                || !call.has_fleet_source()
                 || target.copy != *receiver
                 || target.database != *database
             {
@@ -112,7 +111,7 @@ where
             }
             return encode(answer);
         }
-        if call.source_face != CallerKind::Registry || call.source != ObjectAddress::Fleet {
+        if call.source_face != CallerKind::Registry || !call.has_fleet_source() {
             return Err(refused());
         }
         #[cfg(feature = "conformance")]
@@ -212,7 +211,7 @@ where
             copy_write_calls::{CopyAdminSeed, FleetProjectSeed},
             owner_operation_calls::{CopyOperations, FleetProjectOperations},
         };
-        if call.source != ObjectAddress::Fleet
+        if !call.has_fleet_source()
             || call.source_face != CallerKind::Edge
             || !matches!(call.authority, CallAuthority::Owner(_))
         {
@@ -310,5 +309,95 @@ where
             recorded.map_err(|_| CallFailure::AnswerLost)?;
         }
         Ok(answer)
+    }
+}
+
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io>
+where
+    for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
+        TransactionScope<Database = Host::Database>,
+    <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'blob, Host::Database>
+        + sqlx_core::decode::Decode<'blob, Host::Database>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Host::Database> + sqlx_core::decode::Decode<'blob, Host::Database>,
+    for<'scalar> Option<i64>:
+        sqlx_core::types::Type<Host::Database> + sqlx_core::decode::Decode<'scalar, Host::Database>,
+    for<'value> String:
+        Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
+    for<'value> Option<String>:
+        Type<Host::Database> + Decode<'value, Host::Database> + Encode<'value, Host::Database>,
+    for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
+{
+    pub(crate) async fn admit_copy_call(
+        &self,
+        bytes: &[u8],
+    ) -> Result<ObjectCallEnvelope, CallFailure> {
+        let ObjectWork::Copy {
+            database,
+            receiver,
+            fleet_references,
+            ..
+        } = &self.work
+        else {
+            return Err(refused());
+        };
+        let call = ObjectCallEnvelope::decode_copy_candidate(bytes, *database)?;
+        match fleet_references.resolve(*database).await {
+            Ok(organization) if organization == call.organization => return Ok(call),
+            Ok(_) => return Err(refused()),
+            Err(crate::CopyFleetReferenceRefusal::Missing) => {}
+            Err(_) => return Err(refused()),
+        }
+        // Only a validated creation/seed admission can establish the private
+        // reference. Reads, health, writers and repairs never guess a Fleet.
+        let admission = if call.kind == CopyCreate::KIND
+            && call.source_face == CallerKind::Registry
+            && matches!(call.authority, CallAuthority::Object)
+        {
+            let target: CopyCreate = decode(call.target.clone())?;
+            let request: CreateCopy = decode(call.request.clone())?;
+            target.copy == *receiver && request.database == *database
+        } else if call.source_face == CallerKind::Fleet
+            && matches!(call.authority, CallAuthority::Owner(_))
+            && call.kind == crate::copy_write_calls::CopyAdminSeed::KIND
+        {
+            let target: crate::copy_write_calls::CopyAdminSeed = decode(call.target.clone())?;
+            let request: crate::copy_write_calls::AdminCopySeedRequest =
+                decode(call.request.clone())?;
+            target.copy == *receiver
+                && target.database == *database
+                && matches!(request, crate::copy_write_calls::AdminCopySeedRequest::Begin { database: requested, .. } if requested == *database)
+        } else if call.source_face == CallerKind::Fleet
+            && matches!(call.authority, CallAuthority::Owner(_))
+            && call.kind == crate::admin_import_copy::AdminCopySeed::KIND
+        {
+            let target: crate::admin_import_copy::AdminCopySeed = decode(call.target.clone())?;
+            let request: crate::admin_import_copy::AdminSeedRequest = decode(call.request.clone())?;
+            target.database == *database
+                && matches!(
+                    request,
+                    crate::admin_import_copy::AdminSeedRequest::Begin { .. }
+                )
+        } else {
+            false
+        };
+        if !admission
+            || !matches!(
+                self.inspection().await.map_err(|_| refused())?,
+                fleet_sync_receiver::CopyInspection::Uninitialized
+            )
+        {
+            return Err(refused());
+        }
+        fleet_references
+            .bind(*database, call.organization.clone())
+            .await
+            .map_err(|_| refused())?;
+        Ok(call)
     }
 }

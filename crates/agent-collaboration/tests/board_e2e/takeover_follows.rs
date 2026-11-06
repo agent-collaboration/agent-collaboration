@@ -9,7 +9,7 @@ use super::{
     takeover_readbacks as readbacks,
     takeover_recipients::{self as recipients, Recipients},
 };
-use board_central_test_support::{DispatchCallSelector, ObjectAddress};
+use board_central_test_support::DispatchCallSelector;
 use board_sync_protocol::BoardDeliveryTypes;
 use codex_router_test_support::FixtureResult;
 use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, ReplicationPosition};
@@ -49,8 +49,8 @@ async fn prove_transfer(
     settled_view(fixture.host()?, &fixture.project).await?;
     controls::hold_selected(
         fixture,
-        board_central_test_support::ObjectAddress::Fleet,
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
+        collaboration_central_conformance::legacy_fleet_address(),
         DispatchCallSelector::InstallationPeer,
     )
     .await?;
@@ -62,7 +62,7 @@ async fn prove_transfer(
     )?;
     let lookup = controls::held_call(
         fixture,
-        board_central_test_support::ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         controls::peer_lookup_key(),
         "central.installation-peer",
     )
@@ -133,7 +133,7 @@ async fn transfer_unallocated_range(
             transfer_to_second(fixture, second, kind).await?;
             controls::resume(
                 fixture,
-                board_central_test_support::ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 controls::peer_lookup_key(),
             )
             .await?;
@@ -142,7 +142,7 @@ async fn transfer_unallocated_range(
             transfer_to_second(fixture, second, kind).await?;
             controls::resume(
                 fixture,
-                board_central_test_support::ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 controls::peer_lookup_key(),
             )
             .await?;

@@ -258,7 +258,12 @@ pub(super) async fn register(
     }
 }
 pub(super) async fn pin_registry_clock(base_url: &str, now: RegistryTime) -> ConformanceResult<()> {
-    pin_object_clock(base_url, ObjectAddress::Fleet, now).await
+    pin_object_clock(
+        base_url,
+        collaboration_central_conformance::legacy_fleet_address(),
+        now,
+    )
+    .await
 }
 async fn pin_object_clock(
     base_url: &str,

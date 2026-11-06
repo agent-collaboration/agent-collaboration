@@ -9,7 +9,7 @@ use super::{
     takeover_readbacks as readbacks,
     takeover_recipients::{self as recipients, Recipients},
 };
-use board_central_test_support::{DispatchCallSelector, ObjectAddress};
+use board_central_test_support::DispatchCallSelector;
 use board_sync_protocol::{BoardAnnotation, BoardDeliveryTypes};
 use codex_router_test_support::FixtureResult;
 use fleet_sync_protocol::{DeliveryItem, ReplicationPosition, ReplicationRequest};
@@ -91,7 +91,7 @@ async fn prove_prefix(
         ReplicatedPrefix::Neither => {
             controls::hold_selected(
                 fixture,
-                board_central_test_support::ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 controls::copy(fixture)?,
                 DispatchCallSelector::CopyWrite,
             )
@@ -100,8 +100,8 @@ async fn prove_prefix(
         ReplicatedPrefix::CauseOnly => {
             controls::hold_selected(
                 fixture,
-                board_central_test_support::ObjectAddress::Fleet,
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
+                collaboration_central_conformance::legacy_fleet_address(),
                 DispatchCallSelector::InstallationPeer,
             )
             .await?
@@ -109,8 +109,8 @@ async fn prove_prefix(
         ReplicatedPrefix::Both => {
             controls::hold_selected(
                 fixture,
-                ObjectAddress::Fleet,
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
+                collaboration_central_conformance::legacy_fleet_address(),
                 DispatchCallSelector::FleetMailSubmit,
             )
             .await?
@@ -171,7 +171,7 @@ async fn prove_prefix(
         ReplicatedPrefix::Neither | ReplicatedPrefix::CauseOnly => {
             controls::resume(
                 fixture,
-                board_central_test_support::ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 controls::copy_write_key(fixture)?,
             )
             .await?;
@@ -206,7 +206,7 @@ async fn commit_and_hold_prior_piece(fixture: &BoardFixture) -> FixtureResult {
     accepted(&committed)?;
     controls::held(
         fixture,
-        board_central_test_support::ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         controls::copy_write_key(fixture)?,
     )
     .await?;
@@ -228,7 +228,7 @@ async fn acknowledged_cut(
                 LocalCaptureCut::HoldPriorPiece => {
                     controls::held(
                         fixture,
-                        board_central_test_support::ObjectAddress::Fleet,
+                        collaboration_central_conformance::legacy_fleet_address(),
                         controls::copy_write_key(fixture)?,
                     )
                     .await?;
@@ -244,7 +244,7 @@ async fn acknowledged_cut(
         ReplicatedPrefix::CauseOnly => {
             let lookup = controls::held_call(
                 fixture,
-                board_central_test_support::ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 controls::peer_lookup_key(),
                 "central.installation-peer",
             )
@@ -257,14 +257,14 @@ async fn acknowledged_cut(
             controls::confirm_prefix(fixture, fixture.host()?, at(range, "/through")?).await?;
             controls::advance_hold(
                 fixture,
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 controls::peer_lookup_key(),
                 controls::copy_write_key(fixture)?,
             )
             .await?;
             controls::held(
                 fixture,
-                board_central_test_support::ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 controls::copy_write_key(fixture)?,
             )
             .await?;
@@ -278,7 +278,7 @@ async fn acknowledged_cut(
         ReplicatedPrefix::Both => {
             let submitted = controls::held_call(
                 fixture,
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 controls::submit_key(),
                 "central.mail-submit",
             )
@@ -298,7 +298,7 @@ async fn hold_post_capture(fixture: &BoardFixture, range: &Value) -> FixtureResu
         loop {
             let held = controls::held(
                 fixture,
-                board_central_test_support::ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 controls::copy_write_key(fixture)?,
             )
             .await?;
@@ -333,7 +333,7 @@ async fn hold_post_capture(fixture: &BoardFixture, range: &Value) -> FixtureResu
             // Release only that earlier Piece, atomically holding the next one.
             controls::advance_hold(
                 fixture,
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 controls::copy_write_key(fixture)?,
                 controls::copy_write_key(fixture)?,
             )
@@ -521,7 +521,7 @@ async fn assert_successor(
                 // outer peer owner checks the count after central fully joins.
                 let stale = controls::held_call(
                     fixture,
-                    ObjectAddress::Fleet,
+                    collaboration_central_conformance::legacy_fleet_address(),
                     controls::submit_key(),
                     "central.mail-submit",
                 )
@@ -530,7 +530,12 @@ async fn assert_successor(
                     serde_json::to_value(submitted_item(&stale)?)?,
                     serde_json::to_value(&item)?
                 );
-                controls::resume(fixture, ObjectAddress::Fleet, controls::submit_key()).await?;
+                controls::resume(
+                    fixture,
+                    collaboration_central_conformance::legacy_fleet_address(),
+                    controls::submit_key(),
+                )
+                .await?;
                 second.reopen_host().await?;
                 delivered(
                     second.host()?,

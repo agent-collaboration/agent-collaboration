@@ -50,7 +50,7 @@ async fn prove_takeover(case: PrefixCase) -> TestResult {
             Some(owner) => Some(owner.hold_progress_writer().await?),
             None => None,
         };
-        let connection = ObjectAddress::Fleet;
+        let connection = collaboration_central_conformance::legacy_fleet_address();
         if matches!(case, PrefixCase::Neither) {
             fixture
                 .holder
@@ -144,7 +144,7 @@ async fn take_over_and_confirm(
             .holder
             .central
             .runtime_control(
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 RuntimeControl::ResumeDispatch {
                     key: fixture.copy_write_key()?,
                 },

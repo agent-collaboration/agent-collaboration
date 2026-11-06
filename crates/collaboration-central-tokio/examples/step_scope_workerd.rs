@@ -403,6 +403,8 @@ async fn main() -> ConformanceResult<()> {
     drop(std::net::TcpListener::bind(("127.0.0.1", port))?);
     let jwks = JwksFixtureServer::start().await?;
     let settings = WorkerdSettings {
+        fixed_access_time: None,
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         relay_peer: fleet_sync_protocol::PeerId::try_from(
             "019f0000-0000-7000-8000-000000005240".to_owned(),
         )?,

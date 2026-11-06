@@ -10,7 +10,6 @@ use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     DispatchCallSelector, DispatchFaultObservation, RuntimeControl,
 };
-use collaboration_central_core::ObjectAddress;
 use fleet_sync_protocol::{
     ClientFrame, DeliveryEnvelope, FrameId, OperationAnswer, OperationRequest, ServerFrame,
     SubmitResult,
@@ -48,7 +47,7 @@ async fn fleet_selector_holds_the_produced_session_call_while_another_item_answe
     faults
         .control(RuntimeControl::HoldNextDispatch {
             key: DispatchKey::new(
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 DispatchCallSelector::FleetMailSubmitFor {
                     peer: A.to_owned().try_into()?,
                     item: selected_item,
@@ -68,7 +67,7 @@ async fn fleet_selector_holds_the_produced_session_call_while_another_item_answe
             CAP,
             faults.control(RuntimeControl::AwaitHeldDispatch {
                 key: DispatchKey::new(
-                    collaboration_central_core::ObjectAddress::Fleet,
+                    collaboration_central_conformance::legacy_fleet_address(),
                     DispatchCallSelector::FleetMailSubmitFor {
                         peer: A.to_owned().try_into()?,
                         item: selected_item,
@@ -81,7 +80,7 @@ async fn fleet_selector_holds_the_produced_session_call_while_another_item_answe
             destination,
             request,
         } = observed.dispatch(&DispatchKey::new(
-            collaboration_central_core::ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             DispatchCallSelector::FleetMailSubmitFor {
                 peer: A.to_owned().try_into()?,
                 item: selected_item,
@@ -90,7 +89,10 @@ async fn fleet_selector_holds_the_produced_session_call_while_another_item_answe
         else {
             return Err("produced Fleet call was not held".into());
         };
-        assert_eq!(destination, ObjectAddress::Fleet);
+        assert_eq!(
+            destination,
+            collaboration_central_conformance::legacy_fleet_address()
+        );
         let request: Value = serde_json::from_slice(&request)?;
         assert_eq!(request["kind"], json!("central.mail-submit"));
         assert_eq!(request.pointer("/request/session/peer"), Some(&json!(A)));
@@ -113,7 +115,7 @@ async fn fleet_selector_holds_the_produced_session_call_while_another_item_answe
         );
         assert!(matches!(
             faults.observe()?.dispatch(&DispatchKey::new(
-                collaboration_central_core::ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 DispatchCallSelector::FleetMailSubmitFor {
                     peer: A.to_owned().try_into()?,
                     item: selected_item
@@ -124,7 +126,7 @@ async fn fleet_selector_holds_the_produced_session_call_while_another_item_answe
         faults
             .control(RuntimeControl::ResumeDispatch {
                 key: DispatchKey::new(
-                    collaboration_central_core::ObjectAddress::Fleet,
+                    collaboration_central_conformance::legacy_fleet_address(),
                     DispatchCallSelector::FleetMailSubmitFor {
                         peer: A.to_owned().try_into()?,
                         item: selected_item,

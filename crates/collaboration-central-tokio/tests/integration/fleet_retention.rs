@@ -70,6 +70,7 @@ impl Fixture {
         let runtime = ObjectRuntime::fleet(
             Arc::new(TokioStorageHost::new(object)),
             io.clone(),
+            collaboration_central_conformance::legacy_organization(),
             fleet_sync_lease::RegistryConfig {
                 authoritative_receiver: receiver,
                 lease: fleet_sync_lease::LeasePolicy {
@@ -95,8 +96,8 @@ impl Fixture {
     }
     async fn call(&self, kind: &str, request: serde_json::Value) -> TestResult<Vec<u8>> {
         self.runtime.on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":SERVICE}},
-            "destination":{"kind":"fleet"},"destinationFace":"fleet",
+            "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":SERVICE}},
+            "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet",
             "identity":{"operation":Uuid::now_v7(),"step":"clock_read"},
             "kind":kind,"target":null,"request":request
         }))?).await.map_err(|error|format!("Fleet Clock case did not answer: {error:?}").into())

@@ -1,8 +1,7 @@
 //! Canonical Fleet calls keep ServiceId distinct from the legacy installation type.
 
 use crate::{
-    CallerKind, FleetCall, FleetKind, FleetResult, ObjectAddress, ObjectHost, ObjectRuntime,
-    PlatformIo, WireCall,
+    CallerKind, FleetCall, FleetKind, FleetResult, ObjectHost, ObjectRuntime, PlatformIo, WireCall,
     caller_context::CallAuthority,
     fleet_metadata_step::{DecideFleet, ImportFleet},
     object_call_envelope::ObjectCallEnvelope,
@@ -105,10 +104,11 @@ where
         {
             return Err(refused());
         }
+        let fleet_source = invocation.has_fleet_source();
         let _: FleetMetadata = serde_json::from_value(invocation.target).map_err(|_| refused())?;
         let bound: FleetMetadataRequest =
-            serde_json::from_value(invocation.request).map_err(|_| refused())?;
-        if invocation.source != ObjectAddress::Fleet
+            serde_json::from_value(invocation.request.clone()).map_err(|_| refused())?;
+        if !fleet_source
             || !matches!(&invocation.authority, CallAuthority::Machine { installation } if installation == &bound.origin.installation)
             || !bound.actor_matches_origin()
         {

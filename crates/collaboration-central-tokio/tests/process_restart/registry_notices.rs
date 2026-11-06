@@ -158,7 +158,7 @@ fn clock(
     millis: i64,
 ) -> ConformanceResult<collaboration_central_conformance::RuntimeControlRequest> {
     Ok(collaboration_central_conformance::RuntimeControlRequest {
-        address: ObjectAddress::Fleet,
+        address: collaboration_central_conformance::legacy_fleet_address(),
         command: RuntimeControl::SetTime {
             now: RegistryTime(
                 chrono::DateTime::from_timestamp_millis(millis)

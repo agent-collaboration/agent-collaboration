@@ -33,6 +33,7 @@ pub struct TokioCentralPlatform {
     observe: Arc<dyn Fn(CentralObservation) + Send + Sync>,
     objects: Arc<crate::native_objects::NativeObjects>,
     ids: runtime_primitives::UuidV7Ids,
+    pub(crate) legacy_organization: fleet_identity_protocol::OrganizationId,
 }
 
 impl TokioCentralPlatform {
@@ -67,6 +68,7 @@ impl TokioCentralPlatform {
         clock: Arc<dyn Clock>,
         observe: impl Fn(CentralObservation) + Send + Sync + 'static,
         root: &std::path::Path,
+        legacy_organization: fleet_identity_protocol::OrganizationId,
         registry: fleet_sync_lease::RegistryConfig,
         delivery: crate::DeliveryConfig,
         holder_answer_timeout: Duration,
@@ -77,6 +79,7 @@ impl TokioCentralPlatform {
             clock,
             observe,
             root,
+            legacy_organization,
             registry,
             delivery,
             holder_answer_timeout,
@@ -97,6 +100,7 @@ impl TokioCentralPlatform {
         clock: Arc<dyn Clock>,
         observe: impl Fn(CentralObservation) + Send + Sync + 'static,
         root: &std::path::Path,
+        legacy_organization: fleet_identity_protocol::OrganizationId,
         registry: fleet_sync_lease::RegistryConfig,
         delivery: crate::DeliveryConfig,
         holder_answer_timeout: Duration,
@@ -108,6 +112,7 @@ impl TokioCentralPlatform {
             clock,
             observe,
             root,
+            legacy_organization,
             registry,
             delivery,
             holder_answer_timeout,
@@ -126,6 +131,7 @@ impl TokioCentralPlatform {
         clock: Arc<dyn Clock>,
         observe: impl Fn(CentralObservation) + Send + Sync + 'static,
         root: &std::path::Path,
+        legacy_organization: fleet_identity_protocol::OrganizationId,
         registry: fleet_sync_lease::RegistryConfig,
         delivery: crate::DeliveryConfig,
         holder_answer_timeout: Duration,
@@ -145,10 +151,13 @@ impl TokioCentralPlatform {
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(TokioPlatformError::HttpClient)?;
+        let ids: Arc<dyn runtime_primitives::IdSource> = Arc::new(runtime_primitives::UuidV7Ids);
         #[cfg(not(feature = "conformance"))]
         let objects = crate::native_objects::NativeObjects::open(
             root,
             clock.clone(),
+            ids.clone(),
+            collaboration_central_core::FleetLocationPolicy::new(legacy_organization.clone()),
             registry,
             delivery,
             holder_answer_timeout,
@@ -159,6 +168,8 @@ impl TokioCentralPlatform {
         let objects = crate::native_objects::NativeObjects::open_with_controls(
             root,
             clock.clone(),
+            ids.clone(),
+            collaboration_central_core::FleetLocationPolicy::new(legacy_organization.clone()),
             registry,
             delivery,
             holder_answer_timeout,
@@ -173,6 +184,7 @@ impl TokioCentralPlatform {
             observe: Arc::new(observe),
             objects,
             ids: runtime_primitives::UuidV7Ids,
+            legacy_organization,
         })
     }
 

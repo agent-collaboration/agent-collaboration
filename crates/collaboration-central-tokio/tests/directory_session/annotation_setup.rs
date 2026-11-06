@@ -6,7 +6,7 @@ use board_sync_protocol::{
 use collaboration_central_conformance::{
     ConformanceClient, RuntimeControl, RuntimeControlRequest, fixture_policy,
 };
-use collaboration_central_core::{CoreHost, ObjectAddress, RegistryTime};
+use collaboration_central_core::{CoreHost, RegistryTime};
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 use durable_steps::{AtomicStore, JournalScope, StoreError};
 use fleet_admission::{FleetOperation, FleetRequest, FleetRequestResult};
@@ -18,6 +18,7 @@ pub(super) const NOW: i64 = 1_792_281_600_000;
 pub(super) async fn start(root: &Path, jwks: &str, now: i64) -> ConformanceResult<TokioServer> {
     Ok(TokioServer::start_with_controls(
         TokioSettings {
+            legacy_organization: collaboration_central_conformance::legacy_organization(),
             delivery: collaboration_central_tokio::DeliveryConfig {
                 relay_peer: "019f0000-0000-7000-8000-000000005240"
                     .to_owned()
@@ -31,7 +32,7 @@ pub(super) async fn start(root: &Path, jwks: &str, now: i64) -> ConformanceResul
             copy_ack_wait: Duration::from_secs(2),
         },
         vec![RuntimeControlRequest {
-            address: ObjectAddress::Fleet,
+            address: collaboration_central_conformance::legacy_fleet_address(),
             command: RuntimeControl::SetTime {
                 now: RegistryTime(
                     chrono::DateTime::from_timestamp_millis(now)

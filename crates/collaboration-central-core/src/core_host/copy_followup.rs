@@ -13,11 +13,15 @@ impl<Io: PlatformIo> CoreHost<Io> {
         io: std::sync::Arc<Io>,
         receiver: ReceiverId,
         database: DatabaseId,
+        organization: fleet_identity_protocol::OrganizationId,
     ) -> Result<Self, CallFailure> {
         Ok(Self {
             io,
             caller: SharedTaskCaller::Copy {
-                caller: CallerContext::for_object(database),
+                caller: CallerContext::for_object(crate::CopyAddress {
+                    organization,
+                    database,
+                }),
                 database,
             },
             publication: None,

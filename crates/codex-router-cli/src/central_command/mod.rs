@@ -50,6 +50,13 @@ pub(crate) async fn run_central_command(
             writeln!(stdout, "credential ready; expires at {expiry}")?;
         }
         CentralCommand::Serve(arguments) => {
+            let legacy_organization = arguments
+                .legacy_organization_id
+                .clone()
+                .try_into()
+                .map_err(|_| {
+                    CentralCommandError::InvalidInput("invalid legacy organization UUIDv7")
+                })?;
             let listen = arguments.listen;
             let root = arguments.root.clone();
             let (config, issuer, _root_lock) = tokio::task::spawn_blocking(move || {
@@ -64,6 +71,7 @@ pub(crate) async fn run_central_command(
             let server = TokioServer::start_with_jwks(
                 TokioSettings {
                     root: root.join("objects"),
+                    legacy_organization,
                     jwks_url: config.policy.jwks_url.clone(),
                     access_policy: config.policy,
                     registry: fleet_sync_lease::RegistryConfig {

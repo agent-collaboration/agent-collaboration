@@ -67,8 +67,8 @@ pub fn notice(through: u64) -> Result<BoardNotice, TestError> {
 }
 pub fn invocation(kind: &BoardNotice) -> Result<Vec<u8>, TestError> {
     Ok(serde_json::to_vec(&serde_json::json!({
-        "source":{"kind":"fleet"},"sourceFace":"fleet","authority":{"kind":"object"},
-        "destination":{"kind":"fleet"},"destinationFace":"delivery",
+        "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"fleet","authority":{"kind":"object"},
+        "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"delivery",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"deliver_machine_notice"},
         "kind":"central.machine-notice","target":{"installation":"019f0000-0000-7000-8000-000000000001"},"request":kind
     }))?)

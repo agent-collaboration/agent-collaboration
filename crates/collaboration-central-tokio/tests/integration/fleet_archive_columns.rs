@@ -43,8 +43,8 @@ async fn prepare(fixture: &Fixture) -> TestResult {
 }
 fn report_call() -> TestResult<Vec<u8>> {
     Ok(serde_json::to_vec(&json!({
-        "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":SERVICE_A}},
-        "destination":{"kind":"fleet"},"destinationFace":"fleet",
+        "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":SERVICE_A}},
+        "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"typed_archive_report"},
         "kind":"central.archive-report","target":null,
         "request":{"board":"019f0000-0000-7000-8000-000000008182","project":PROJECT,"position":{"epoch":u64::MAX,"sequence":u64::MAX}}

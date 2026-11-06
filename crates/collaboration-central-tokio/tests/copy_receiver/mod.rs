@@ -68,7 +68,7 @@ impl PlatformIo for Io {
         // A fixed future type breaks the test transport/runtime type cycle.
         let response: durable_steps::BoxFuture<'_, Result<Vec<u8>, CallFailure>> =
             Box::pin(async move {
-                if destination != ObjectAddress::Fleet {
+                if destination != collaboration_central_conformance::legacy_fleet_address() {
                     return Err(no_route());
                 }
                 let call: Value =
@@ -136,6 +136,7 @@ impl Fixture {
         let fleet_runtime = Arc::new(ObjectRuntime::fleet(
             Arc::new(TokioStorageHost::new(fleet.clone())),
             io.clone(),
+            collaboration_central_conformance::legacy_organization(),
             fleet_sync_lease::RegistryConfig {
                 authoritative_receiver: receiver,
                 lease: fleet_sync_lease::LeasePolicy {
@@ -157,8 +158,8 @@ impl Fixture {
             .set(Arc::downgrade(&fleet_runtime))
             .map_err(|_| "route already set")?;
         fleet_runtime.on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"fleet"},"sourceFace":"edge","authority":{"kind":"owner","value":"fixture@example.test"},
-            "destination":{"kind":"fleet"},"destinationFace":"fleet","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"import"},
+            "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"edge","authority":{"kind":"owner","value":"fixture@example.test"},
+            "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"import"},
             "kind":"central.object","target":null,"request":{"kind":"fleet","value":{"kind":"import","value":{"bundle":{
                 "provenance":{"installation":"550e8400-e29b-41d4-a716-4466554400a8","machine":"copy fixture"},"declaredOwner":"owner","records":[
                     {"kind":"workspace","id":"019f0000-0000-7000-8000-000000000a81","name":"copy workspace","description":"copy fixture","repositories":[],"time":{"kind":"legacyUnknown"}},
@@ -182,6 +183,7 @@ impl Fixture {
             receiver,
             database,
             std::time::Duration::from_secs(2),
+            std::sync::Arc::new(collaboration_central_core::InMemoryCopyFleetReferences::default()),
         );
         runtime.initialize().await?;
         Ok(Self {
@@ -200,7 +202,7 @@ impl Fixture {
     }
     pub async fn create_as(&self, seed: bool, admin: bool) -> TestResult {
         self.runtime.on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
+            "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"registry","authority":{"kind":"object"},
             "destination":{"kind":"copy","value":self.database},"destinationFace":"copy","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"create"},
             "kind":"fleet-sync.copy-create","target":{"copy":self.receiver},"request":{
                 "database":self.database,"epoch":1,"holder":if admin {None} else {Some("019f0000-0000-7000-8000-000000000901")},
@@ -214,7 +216,7 @@ impl Fixture {
         piece: Piece<board_sync_protocol::BoardAnnotation>,
     ) -> TestResult<ReplicationAnswer> {
         let response=self.runtime.on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":"550e8400-e29b-41d4-a716-4466554400a8"}},
+            "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":"550e8400-e29b-41d4-a716-4466554400a8"}},
             "destination":{"kind":"copy","value":self.database},"destinationFace":"copy","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"apply"},
             "kind":"central.copy-session-write","target":{"copy":self.receiver,"database":self.database},"request":{"sender":"019f0000-0000-7000-8000-000000000901","request":{"kind":"piece","value":piece}}
         }))?).await.map_err(|error|format!("Copy apply did not answer: {error:?}"))?;
@@ -223,13 +225,13 @@ impl Fixture {
     pub async fn seed_call(&self, admin: bool, request: Value) -> TestResult<ReplicationAnswer> {
         let call = if admin {
             json!({
-                "source":{"kind":"fleet"},"sourceFace":"fleet","authority":{"kind":"owner","value":"fixture@example.test"},
+                "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"fleet","authority":{"kind":"owner","value":"fixture@example.test"},
                 "destination":{"kind":"copy","value":self.database},"destinationFace":"copy","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"seed"},
                 "kind":"central.copy-admin-seed","target":{"copy":self.receiver,"database":self.database},"request":request
             })
         } else {
             json!({
-                "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":"550e8400-e29b-41d4-a716-4466554400a8"}},
+                "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":"550e8400-e29b-41d4-a716-4466554400a8"}},
                 "destination":{"kind":"copy","value":self.database},"destinationFace":"copy","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"seed"},
                 "kind":"central.copy-session-write","target":{"copy":self.receiver,"database":self.database},"request":{"sender":"019f0000-0000-7000-8000-000000000901","request":request}
             })

@@ -5,9 +5,7 @@ use crate::collaboration_runtime::board_composition::{
     project_writers::ProjectWriterSlot,
     tests::{identity, origin, project_claim::imported_snapshot, wait_welcome},
 };
-use board_central_test_support::{
-    DispatchFaultObservation, ObjectAddress, RuntimeControl, TestCentral,
-};
+use board_central_test_support::{DispatchFaultObservation, RuntimeControl, TestCentral};
 use board_sync_protocol::{ProjectClaimReply, ProjectClaimRequest};
 use collaboration_contracts::ProjectClaim;
 use fleet_sync_protocol::*;
@@ -23,12 +21,15 @@ const BOUND: Duration = Duration::from_secs(20);
 
 fn held_renewal(observation: DispatchFaultObservation) -> Result<RenewRequest, io::Error> {
     let DispatchFaultObservation::Held {
-        destination: ObjectAddress::Fleet,
+        destination,
         request,
     } = observation
     else {
         return Err(io::Error::other("expected held Registry renewal"));
     };
+    if destination != collaboration_central_conformance::legacy_fleet_address() {
+        return Err(io::Error::other("held renewal reached another Fleet"));
+    }
     let invocation: serde_json::Value = serde_json::from_slice(&request)?;
     let request = invocation
         .pointer("/request/request")
@@ -139,7 +140,7 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
             },
         )
         .await?;
-    let connection = ObjectAddress::Fleet;
+    let connection = collaboration_central_conformance::legacy_fleet_address();
     let install = Arc::new(
         SnapshotInstallation::start(
             &projects
@@ -171,7 +172,7 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
             connection.clone(),
             RuntimeControl::HoldNextDispatch {
                 key: board_central_test_support::DispatchKey::any(
-                    board_central_test_support::ObjectAddress::Fleet,
+                    collaboration_central_conformance::legacy_fleet_address(),
                 ),
             },
         )
@@ -184,14 +185,14 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
             connection.clone(),
             RuntimeControl::AwaitHeldDispatch {
                 key: board_central_test_support::DispatchKey::any(
-                    board_central_test_support::ObjectAddress::Fleet,
+                    collaboration_central_conformance::legacy_fleet_address(),
                 ),
             },
         )
         .await?;
     let runner_renewal = held_renewal(observed.dispatch(
         &board_central_test_support::DispatchKey::any(
-            board_central_test_support::ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
         ),
     ))?;
     assert_eq!(
@@ -224,9 +225,9 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
         }).await??;
         assert!(matches!(registry.existing_project(&project).await, Err(collaboration_runtime::ProjectRegistryError::Installing { .. })));
         println!("CLAIM_ORDER held-runner-renewal drain-entered registry-unpublished");
-        central.runtime_control(connection.clone(), RuntimeControl::ResumeDispatchAndHoldNext { key: board_central_test_support::DispatchKey::any(board_central_test_support::ObjectAddress::Fleet), next: board_central_test_support::DispatchKey::any(board_central_test_support::ObjectAddress::Fleet) }).await?;
-        let observed = central.runtime_control(connection.clone(), RuntimeControl::AwaitHeldDispatch { key: board_central_test_support::DispatchKey::any(board_central_test_support::ObjectAddress::Fleet) }).await?;
-        let bootstrap = held_renewal(observed.dispatch(&board_central_test_support::DispatchKey::any(board_central_test_support::ObjectAddress::Fleet)))?;
+        central.runtime_control(connection.clone(), RuntimeControl::ResumeDispatchAndHoldNext { key: board_central_test_support::DispatchKey::any(collaboration_central_conformance::legacy_fleet_address()), next: board_central_test_support::DispatchKey::any(collaboration_central_conformance::legacy_fleet_address()) }).await?;
+        let observed = central.runtime_control(connection.clone(), RuntimeControl::AwaitHeldDispatch { key: board_central_test_support::DispatchKey::any(collaboration_central_conformance::legacy_fleet_address()) }).await?;
+        let bootstrap = held_renewal(observed.dispatch(&board_central_test_support::DispatchKey::any(collaboration_central_conformance::legacy_fleet_address())))?;
         assert_eq!((bootstrap.database, bootstrap.epoch), (database_id, epoch));
         assert_ne!(bootstrap.attempt, runner_renewal.attempt);
         let drained = install.tasks.lock().await;
@@ -237,7 +238,7 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
         assert!(!claimed.is_finished());
         assert!(matches!(registry.existing_project(&project).await, Err(collaboration_runtime::ProjectRegistryError::Installing { .. })));
         println!("CLAIM_ORDER fresh-bootstrap-renewal held install-tasks-drained registry-unpublished");
-        central.runtime_control(connection.clone(), RuntimeControl::ResumeDispatch { key: board_central_test_support::DispatchKey::any(board_central_test_support::ObjectAddress::Fleet) }).await?;
+        central.runtime_control(connection.clone(), RuntimeControl::ResumeDispatch { key: board_central_test_support::DispatchKey::any(collaboration_central_conformance::legacy_fleet_address()) }).await?;
         assert!(matches!(timeout(BOUND, &mut claimed).await???, ProjectClaimReply::Claimed { epoch: actual, start: actual_start, .. } if actual == epoch && actual_start == start));
         assert!(registry.existing_project(&project).await?.is_some());
         assert!(matches!(database.writer_state().await?, fleet_sync_lease::WriterState::Writing { epoch: actual } if actual == epoch));
@@ -275,7 +276,7 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
             connection,
             RuntimeControl::ResumeDispatch {
                 key: board_central_test_support::DispatchKey::any(
-                    board_central_test_support::ObjectAddress::Fleet,
+                    collaboration_central_conformance::legacy_fleet_address(),
                 ),
             },
         )

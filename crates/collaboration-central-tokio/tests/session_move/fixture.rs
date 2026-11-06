@@ -5,7 +5,6 @@ use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, JwksFixtureServer, RuntimeControl, RuntimeControlRequest,
     RuntimeFaultObservation, enroll_admitted_peer, fixture_policy, owner_assertion,
 };
-use collaboration_central_core::ObjectAddress;
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 use durable_steps::Uuid;
 use fleet_admission::FleetOperation;
@@ -61,6 +60,7 @@ impl Fixture {
         let root = tempfile::tempdir()?;
         let keys = JwksFixtureServer::start().await?;
         let server = TokioServer::start(TokioSettings {
+            legacy_organization: collaboration_central_conformance::legacy_organization(),
             root: root.path().into(),
             access_policy: fixture_policy(),
             jwks_url: keys.url.clone(),
@@ -170,7 +170,7 @@ impl Fixture {
             .post(format!("{}/admin/v1/conformance/runtime", self.base()))
             .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
             .json(&RuntimeControlRequest {
-                address: ObjectAddress::Fleet,
+                address: collaboration_central_conformance::legacy_fleet_address(),
                 command,
             })
             .send()

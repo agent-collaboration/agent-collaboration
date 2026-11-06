@@ -137,8 +137,8 @@ where
         if !matches!(invocation.authority, CallAuthority::Object)
             || !matches!(
                 (invocation.source_face, &invocation.source),
-                (CallerKind::Registry, ObjectAddress::Fleet)
-                    | (CallerKind::Fleet, ObjectAddress::Fleet)
+                (CallerKind::Registry, ObjectAddress::Fleet { .. })
+                    | (CallerKind::Fleet, ObjectAddress::Fleet { .. })
             )
         {
             return Err(CallFailure::AnswerLost);

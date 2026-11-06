@@ -2,8 +2,8 @@
 use crate::FleetKind;
 
 use crate::{
-    AccessCaller, CallerKind, CentralApplication, CentralPlatform, ObjectAddress, ObjectHost,
-    ObjectRuntime, PlatformIo,
+    AccessCaller, CallerKind, CentralApplication, CentralPlatform, ObjectHost, ObjectRuntime,
+    PlatformIo,
     caller_context::CallAuthority,
     conformance_copy_wait::{ControlCopyWait, CopyWaitInput, CopyWaitTarget},
     conformance_holder::{ProbeAnswer, invoke_probe, probe_response},
@@ -353,7 +353,7 @@ impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for Admit
 }
 fn check_owner(invocation: &ObjectCallEnvelope) -> Result<(), CallFailure> {
     if invocation.source_face == CallerKind::Edge
-        && invocation.source == ObjectAddress::Fleet
+        && invocation.has_fleet_source()
         && matches!(invocation.authority, CallAuthority::Owner(_))
     {
         Ok(())

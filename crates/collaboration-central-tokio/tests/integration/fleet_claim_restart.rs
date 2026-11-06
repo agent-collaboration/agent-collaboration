@@ -46,7 +46,12 @@ async fn restart_drives_a_committed_registry_task_and_keeps_its_result() -> Test
     hold_next_settlement(&reopened).await?;
     let controller = async {
         let call = held_settlement_kind(&reopened, fleet_sync_lease::ClaimSettlement::KIND).await?;
-        assert_eq!(call.get("source"), Some(&json!({"kind":"fleet"})));
+        assert_eq!(
+            call.get("source"),
+            Some(
+                &json!({"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}})
+            )
+        );
         assert_eq!(call.get("sourceFace"), Some(&json!("registry")));
         assert_eq!(call.get("destinationFace"), Some(&json!("fleet")));
         assert_eq!(call.get("request"), Some(&expected_request));

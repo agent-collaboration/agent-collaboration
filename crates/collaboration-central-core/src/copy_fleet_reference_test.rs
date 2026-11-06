@@ -76,6 +76,7 @@ async fn copy_fleet_reference_keeps_distinct_projects_and_fleets_separate() {
 
 #[tokio::test(start_paused = true)]
 async fn copy_fleet_reference_stand_in_does_not_claim_process_restart_durability() {
+    // Catch a global/static map leaking a previous host's bindings into a new host.
     let before = InMemoryCopyFleetReferences::default();
     before
         .bind(project(PROJECT), organization(FIRST))

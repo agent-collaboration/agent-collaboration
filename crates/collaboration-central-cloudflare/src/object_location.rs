@@ -1,8 +1,11 @@
-//! Physical namespace and Durable Object name for a core address.
-use collaboration_central_core::ObjectAddress;
-pub(crate) fn location(address: &ObjectAddress) -> (&'static str, String) {
+//! Physical namespace and Durable Object name under explicit deployment policy.
+use collaboration_central_core::{FleetLocationPolicy, ObjectAddress};
+pub(crate) fn location(
+    address: &ObjectAddress,
+    locations: &FleetLocationPolicy,
+) -> (&'static str, String) {
     match address {
         ObjectAddress::Copy(project) => ("PROJECT_COPIES", project.to_string()),
-        ObjectAddress::Fleet => ("FLEET", "fleet".into()),
+        ObjectAddress::Fleet { organization } => ("FLEET", locations.cloudflare_name(organization)),
     }
 }

@@ -74,7 +74,11 @@ where
             .admission_origin(connection)
             .await
             .map_err(StoreError::backend)?;
-        let shared = Arc::new(shared_host.session_for(origin.installation));
+        let shared = Arc::new(
+            shared_host
+                .session_for(origin.installation)
+                .map_err(|_| StoreError::backend("Fleet session context unavailable"))?,
+        );
         Ok((
             Arc::new(CoreSessionStore::new(
                 host.clone(),

@@ -33,12 +33,24 @@ impl CopyFleetReferencePort for InMemoryCopyFleetReferences {
         organization: OrganizationId,
     ) -> BoxFuture<'_, Result<(), CopyFleetReferenceRefusal>> {
         Box::pin(async move {
-            // RED checkpoint: the immutable-binding test must catch overwrite.
-            self.references
+            let mut references = self
+                .references
                 .lock()
-                .map_err(|_| CopyFleetReferenceRefusal::Unavailable)?
-                .insert(project, organization);
-            Ok(())
+                .map_err(|_| CopyFleetReferenceRefusal::Unavailable)?;
+            match references.entry(project) {
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(organization);
+                    Ok(())
+                }
+                std::collections::btree_map::Entry::Occupied(entry)
+                    if entry.get() == &organization =>
+                {
+                    Ok(())
+                }
+                std::collections::btree_map::Entry::Occupied(_) => {
+                    Err(CopyFleetReferenceRefusal::OrganizationMismatch)
+                }
+            }
         })
     }
 

@@ -178,7 +178,11 @@ async fn revoke<Platform: CentralPlatform>(
     Json(RevocationBody::RevokeMachine { installation }): Json<RevocationBody>,
 ) -> Response {
     match application
-        .call_from_edge::<RegistryKind>(caller, (), RegistryCall::RevokeEnrollment { installation })
+        .call_from_edge::<RegistryKind>(
+            caller,
+            application.legacy_fleet_address(),
+            RegistryCall::RevokeEnrollment { installation },
+        )
         .await
     {
         CallOutcome::Answered(RegistryResult::EnrollmentRevoked(result)) => {
@@ -211,7 +215,11 @@ async fn enroll<Platform: CentralPlatform>(
     Json(EnrollmentBody::EnrollMachine(request)): Json<EnrollmentBody>,
 ) -> Response {
     match application
-        .call_from_edge::<RegistryKind>(caller, (), RegistryCall::EnrollMachine(request))
+        .call_from_edge::<RegistryKind>(
+            caller,
+            application.legacy_fleet_address(),
+            RegistryCall::EnrollMachine(request),
+        )
         .await
     {
         CallOutcome::Answered(RegistryResult::Enrollment(result)) => Json(result).into_response(),
@@ -248,7 +256,7 @@ async fn open_session<Platform: CentralPlatform>(
     let admitted = match application
         .call_from_edge::<RegistryKind>(
             caller,
-            (),
+            application.legacy_fleet_address(),
             RegistryCall::AuthenticateEnrollment { credential_hash },
         )
         .await

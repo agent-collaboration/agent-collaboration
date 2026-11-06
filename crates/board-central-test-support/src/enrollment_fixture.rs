@@ -15,6 +15,7 @@ impl EnrollmentTestCentral {
     pub async fn start(root: &Path) -> FixtureResult<Self> {
         let jwks = JwksFixtureServer::start().await?;
         let server = TokioServer::start(TokioSettings {
+            legacy_organization: collaboration_central_conformance::legacy_organization(),
             root: root.into(),
             access_policy: fixture_policy(),
             jwks_url: jwks.url.clone(),

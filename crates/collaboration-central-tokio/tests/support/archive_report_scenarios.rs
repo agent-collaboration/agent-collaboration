@@ -4,7 +4,6 @@ use collaboration_central_conformance::{
     ClockObservation, ConformanceClient, ConformanceResult, RuntimeControl, RuntimeControlRequest,
     RuntimeFaultObservation, run_archive_report_with_clock,
 };
-use collaboration_central_core::ObjectAddress;
 use std::time::Duration;
 
 pub(super) async fn run(base: &str) -> ConformanceResult<()> {
@@ -21,7 +20,7 @@ pub(super) async fn run(base: &str) -> ConformanceResult<()> {
                 base,
                 "runtime",
                 serde_json::to_value(RuntimeControlRequest {
-                    address: ObjectAddress::Fleet,
+                    address: collaboration_central_conformance::legacy_fleet_address(),
                     command: RuntimeControl::SetTime { now },
                 })?,
             )

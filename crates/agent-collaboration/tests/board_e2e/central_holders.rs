@@ -106,7 +106,7 @@ pub async fn directory_expiry(
     fixture: &mut BoardFixture,
     second: &mut SecondHost,
 ) -> FixtureResult {
-    use board_central_test_support::{ObjectAddress, RuntimeControl};
+    use board_central_test_support::RuntimeControl;
     fixture.create().await?;
     let before = settled_view(fixture.host()?, &fixture.project).await?;
     let copied = await_view(second.host()?, &fixture.project, at(&before, "/asOf")?).await?;
@@ -121,7 +121,7 @@ pub async fn directory_expiry(
     let boundary = expires.with_timezone(&chrono::Utc);
     central(fixture)?
         .runtime_control(
-            ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             RuntimeControl::SetTime {
                 now: serde_json::from_value(json!(boundary - chrono::TimeDelta::milliseconds(1)))?,
             },
@@ -137,7 +137,7 @@ pub async fn directory_expiry(
     );
     central(fixture)?
         .runtime_control(
-            ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             RuntimeControl::SetTime {
                 now: serde_json::from_value(json!(boundary))?,
             },

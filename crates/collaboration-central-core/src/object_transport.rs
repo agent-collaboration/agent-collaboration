@@ -39,6 +39,9 @@ where
     From: ObjectKind + MayCall<To>,
     To: WireKind,
 {
+    if caller.organization() != To::organization(&call.to) {
+        return Err(refused());
+    }
     let identity = durable_steps::CallId {
         operation: durable_steps::OperationId::new(
             durable_steps::Uuid::parse_str(call.call_id.as_str()).map_err(encode_refusal)?,
@@ -47,6 +50,7 @@ where
         step: durable_steps::StepName::new("object").map_err(encode_refusal)?,
     };
     encode_envelope(ObjectCallEnvelope {
+        organization: caller.organization().clone(),
         source: caller.address(),
         source_face: From::KIND,
         authority: caller.authority.clone(),
@@ -68,9 +72,36 @@ impl ObjectCallEnvelope {
         bytes: &[u8],
         destination: ObjectAddress,
         face: CallerKind,
+        organization: &fleet_identity_protocol::OrganizationId,
     ) -> Result<Self, CallFailure> {
         let call: Self = serde_json::from_slice(bytes).map_err(|_| refused())?;
-        if call.destination != destination
+        call.validate(destination, face, organization)
+    }
+
+    // Classification does not authorize a Copy operation. The private reference
+    // is checked asynchronously before health reads or ordinary dispatch.
+    pub(crate) fn decode_copy_candidate(
+        bytes: &[u8],
+        database: fleet_sync_protocol::DatabaseId,
+    ) -> Result<Self, CallFailure> {
+        let call: Self = serde_json::from_slice(bytes).map_err(|_| refused())?;
+        let organization = call.organization.clone();
+        call.validate(
+            ObjectAddress::Copy(database),
+            CallerKind::Copy,
+            &organization,
+        )
+    }
+
+    fn validate(
+        self,
+        destination: ObjectAddress,
+        face: CallerKind,
+        organization: &fleet_identity_protocol::OrganizationId,
+    ) -> Result<Self, CallFailure> {
+        let call = self;
+        if &call.organization != organization
+            || call.destination != destination
             || call.destination_face != face
             || !(call.source_face.may_call(face)
                 || (call.source_face == CallerKind::Copy
@@ -85,26 +116,33 @@ impl ObjectCallEnvelope {
     }
 }
 fn source_matches(call: &ObjectCallEnvelope) -> bool {
+    let fleet = ObjectAddress::Fleet {
+        organization: call.organization.clone(),
+    };
     match &call.authority {
         CallAuthority::Owner(_) => {
-            call.source == ObjectAddress::Fleet
-                && matches!(call.source_face, CallerKind::Edge | CallerKind::Fleet)
+            call.source == fleet && matches!(call.source_face, CallerKind::Edge | CallerKind::Fleet)
         }
         CallAuthority::AccessMachine(_) => {
-            call.source_face == CallerKind::Edge && call.source == ObjectAddress::Fleet
+            call.source_face == CallerKind::Edge && call.source == fleet
         }
-        CallAuthority::Object => matches!(
-            (&call.source, call.source_face),
-            (ObjectAddress::Fleet, CallerKind::Registry)
-                | (ObjectAddress::Fleet, CallerKind::Fleet)
-                | (ObjectAddress::Copy(_), CallerKind::Copy)
-                | (ObjectAddress::Fleet, CallerKind::Delivery)
-        ),
+        CallAuthority::Object => {
+            (call.source == fleet
+                && matches!(
+                    call.source_face,
+                    CallerKind::Registry | CallerKind::Fleet | CallerKind::Delivery
+                ))
+                || matches!(
+                    (&call.source, call.source_face),
+                    (ObjectAddress::Copy(_), CallerKind::Copy)
+                )
+        }
         CallAuthority::Machine { .. } => {
-            call.source == ObjectAddress::Fleet && call.source_face == CallerKind::Session
+            call.source == fleet && call.source_face == CallerKind::Session
         }
     }
 }
+
 fn refused() -> CallFailure {
     CallFailure::NotSent {
         reason: NotSentReason::Unreachable { last_seen: None },
@@ -130,8 +168,14 @@ where
     for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
 {
     pub(crate) async fn on_registry_call(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
-        let invocation =
-            ObjectCallEnvelope::decode(&bytes, ObjectAddress::Fleet, CallerKind::Registry)?;
+        let invocation = ObjectCallEnvelope::decode(
+            &bytes,
+            ObjectAddress::Fleet {
+                organization: self.fleet_address()?.organization,
+            },
+            CallerKind::Registry,
+            &self.fleet_address()?.organization,
+        )?;
         if invocation.kind == crate::owner_registry_calls::OwnerRegistryOperations::KIND {
             return self.owner_registry_call(invocation).await;
         }

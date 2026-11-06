@@ -76,7 +76,7 @@ async fn archive_with_held_copy(fixture: &claim_fixture::ClaimFixture) -> TestRe
         }
     })
     .await??;
-    let connection = ObjectAddress::Fleet;
+    let connection = collaboration_central_conformance::legacy_fleet_address();
     let copy = ObjectAddress::Copy(fleet_sync_protocol::DatabaseId::try_from(
         project.as_str().to_owned(),
     )?);
@@ -205,7 +205,7 @@ async fn archiving_a_held_project_records_its_own_fact_then_finalizes_the_board(
     let proof = AssertUnwindSafe(archive_with_held_copy(&fixture))
         .catch_unwind()
         .await;
-    let connection = ObjectAddress::Fleet;
+    let connection = collaboration_central_conformance::legacy_fleet_address();
     let released = fixture.central.release_held_dispatches(connection).await;
     let closed = fixture.shutdown().await;
     let cleanup = match (released, closed) {

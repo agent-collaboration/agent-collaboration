@@ -352,28 +352,31 @@ pub(super) async fn observe_restart_renewal(
     central: &board_central_test_support::TestCentral,
     inputs: &ChildInputs,
 ) -> TestResult {
-    use board_central_test_support::{DispatchFaultObservation, ObjectAddress, RuntimeControl};
+    use board_central_test_support::{DispatchFaultObservation, RuntimeControl};
     timeout(BOUND, async {
         loop {
             let observed = central
                 .runtime_control(
-                    ObjectAddress::Fleet,
+                    collaboration_central_conformance::legacy_fleet_address(),
                     RuntimeControl::AwaitHeldDispatch {
                         key: board_central_test_support::DispatchKey::any(
-                            board_central_test_support::ObjectAddress::Fleet,
+                            collaboration_central_conformance::legacy_fleet_address(),
                         ),
                     },
                 )
                 .await?;
             let DispatchFaultObservation::Held {
-                destination: ObjectAddress::Fleet,
+                destination,
                 request,
             } = observed.dispatch(&board_central_test_support::DispatchKey::any(
-                board_central_test_support::ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
             ))
             else {
                 return Err("restart Registry dispatch was not held".into());
             };
+            if destination != collaboration_central_conformance::legacy_fleet_address() {
+                return Err("restart renewal reached another Fleet".into());
+            }
             let invocation: serde_json::Value = serde_json::from_slice(&request)?;
             eprintln!(
                 "RECEIVING_RESTART_HELD kind={}",
@@ -401,10 +404,10 @@ pub(super) async fn observe_restart_renewal(
                 );
                 central
                     .runtime_control(
-                        ObjectAddress::Fleet,
+                        collaboration_central_conformance::legacy_fleet_address(),
                         RuntimeControl::ResumeDispatch {
                             key: board_central_test_support::DispatchKey::any(
-                                board_central_test_support::ObjectAddress::Fleet,
+                                collaboration_central_conformance::legacy_fleet_address(),
                             ),
                         },
                     )
@@ -414,13 +417,13 @@ pub(super) async fn observe_restart_renewal(
             }
             central
                 .runtime_control(
-                    ObjectAddress::Fleet,
+                    collaboration_central_conformance::legacy_fleet_address(),
                     RuntimeControl::ResumeDispatchAndHoldNext {
                         key: board_central_test_support::DispatchKey::any(
-                            board_central_test_support::ObjectAddress::Fleet,
+                            collaboration_central_conformance::legacy_fleet_address(),
                         ),
                         next: board_central_test_support::DispatchKey::any(
-                            board_central_test_support::ObjectAddress::Fleet,
+                            collaboration_central_conformance::legacy_fleet_address(),
                         ),
                     },
                 )

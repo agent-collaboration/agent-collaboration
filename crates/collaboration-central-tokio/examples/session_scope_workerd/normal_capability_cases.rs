@@ -105,7 +105,7 @@ pub(super) async fn codec(base: &str) -> ConformanceResult<()> {
 async fn alarm_owner(base: &str) -> ConformanceResult<()> {
     use super::holder_writer_retry::{read_status, received, send, start};
     use collaboration_central_conformance::{RuntimeControl, RuntimeControlRequest};
-    use collaboration_central_core::{ObjectAddress, RegistryTime};
+    use collaboration_central_core::RegistryTime;
     use fleet_sync_protocol::{ReleaseAnswer, ReplicationPosition, ServerCall, ServerCallAnswer};
     use tokio::task::JoinSet;
 
@@ -138,7 +138,7 @@ async fn alarm_owner(base: &str) -> ConformanceResult<()> {
         let time = chrono::DateTime::from_timestamp_millis(1_900_000_000_000)
             .ok_or("invalid fixed alarm time")?;
         let pin = RuntimeControlRequest {
-            address: ObjectAddress::Fleet,
+            address: collaboration_central_conformance::legacy_fleet_address(),
             command: RuntimeControl::SetTime { now: RegistryTime(time) },
         };
         http.post(format!("{base}/admin/v1/conformance/runtime")).header("Cf-Access-Jwt-Assertion", owner_assertion()?).json(&pin).send().await?.error_for_status()?.bytes().await?;

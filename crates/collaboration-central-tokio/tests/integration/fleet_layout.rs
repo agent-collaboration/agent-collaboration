@@ -95,6 +95,7 @@ async fn three_machine_sockets_share_the_fleet_store() -> ConformanceResult<()> 
     let jwks = JwksFixtureServer::start().await?;
     let directory = tempfile::tempdir()?;
     let server = TokioServer::start(TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         root: directory.path().into(),
         access_policy: fixture_policy(),
         jwks_url: jwks.url.clone(),
@@ -153,7 +154,7 @@ async fn three_machine_sockets_share_the_fleet_store() -> ConformanceResult<()> 
             .await?;
         let mut fleet_admissions = Vec::new();
         for owner in inventory {
-            if owner.address == collaboration_central_core::ObjectAddress::Fleet {
+            if owner.address == collaboration_central_conformance::legacy_fleet_address() {
                 fleet_admissions.extend(owner.admissions);
             } else if !owner.admissions.is_empty() {
                 return Err(format!("machine sockets belong to {:?}", owner.address).into());

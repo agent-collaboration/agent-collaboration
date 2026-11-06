@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct ObjectCallEnvelope {
+    pub organization: fleet_identity_protocol::OrganizationId,
     pub source: ObjectAddress,
     pub source_face: CallerKind,
     pub authority: CallAuthority,
@@ -21,6 +22,15 @@ pub(crate) struct ObjectCallEnvelope {
     // these fields into the registered upstream target and request together.
     pub target: serde_json::Value,
     pub request: serde_json::Value,
+}
+
+impl ObjectCallEnvelope {
+    pub(crate) fn has_fleet_source(&self) -> bool {
+        self.source
+            == ObjectAddress::Fleet {
+                organization: self.organization.clone(),
+            }
+    }
 }
 
 pub(crate) fn encode_shared_call<From, To, Call>(
@@ -35,8 +45,12 @@ where
     To: ObjectKind,
     Call: CallTarget,
 {
+    if caller.organization() != To::organization(&destination) {
+        return Err(encode_refusal("object call crosses organizations"));
+    }
     let destination = To::address(&destination);
     let envelope = ObjectCallEnvelope {
+        organization: caller.organization().clone(),
         source: caller.address(),
         source_face: From::KIND,
         authority: caller.authority.clone(),
@@ -73,10 +87,13 @@ pub(crate) fn encode_summary_delivery(
     identity: CallId,
 ) -> Result<SerializedObjectCall, CallFailure> {
     encode_envelope(ObjectCallEnvelope {
+        organization: caller.organization().clone(),
         source: caller.address(),
         source_face: CallerKind::Copy,
         authority: caller.authority.clone(),
-        destination: ObjectAddress::Fleet,
+        destination: ObjectAddress::Fleet {
+            organization: caller.organization().clone(),
+        },
         destination_face: CallerKind::Fleet,
         identity,
         kind: crate::copy_directory_summary::DirectorySummaryUpdate::KIND.into(),

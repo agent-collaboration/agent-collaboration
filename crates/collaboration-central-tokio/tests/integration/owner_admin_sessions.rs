@@ -10,6 +10,7 @@ async fn normal_fleet_creation_owner_move_takeover_and_migrate()
     let keys = collaboration_central_conformance::JwksFixtureServer::start().await?;
     let server = collaboration_central_tokio::TokioServer::start(
         collaboration_central_tokio::TokioSettings {
+            legacy_organization: collaboration_central_conformance::legacy_organization(),
             delivery: collaboration_central_tokio::DeliveryConfig {
                 relay_peer: fleet_sync_protocol::PeerId::try_from(
                     "019f0000-0000-7000-8000-000000005240".to_owned(),

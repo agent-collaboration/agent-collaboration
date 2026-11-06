@@ -13,6 +13,7 @@ workspace = true
 conformance = ["collaboration-central-core/conformance", "dep:collaboration-central-conformance", "dep:sqlx-core"]
 
 [dependencies]
+fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
 collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance", optional = true, default-features = false }
 sqlx-core = { workspace = true, optional = true }
 serde_json.workspace = true
@@ -84,6 +85,10 @@ required-features = ["conformance"]
 
 [[example]]
 name = "composed_scope_workerd"
+required-features = ["conformance"]
+
+[[example]]
+name = "organization_location_workerd"
 required-features = ["conformance"]
 
 [[test]]

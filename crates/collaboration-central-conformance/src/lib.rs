@@ -1,5 +1,7 @@
 //! Shared scenarios over the one asynchronous application on each runtime.
 #![forbid(unsafe_code)]
+mod legacy_fleet_fixture;
+pub use legacy_fleet_fixture::{legacy_fleet_address, legacy_organization};
 #[cfg(feature = "client")]
 mod admin_import_scenario;
 #[cfg(feature = "client")]

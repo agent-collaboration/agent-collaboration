@@ -108,8 +108,7 @@ async fn unchanged_copy(fixture: &Fixture) -> TestResult {
     let response = fixture
         .runtime
         .on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"fleet"},
-            "sourceFace":"session","authority":{"kind":"machine","value":{"installation":"550e8400-e29b-41d4-a716-4466554400a8"}},
+            "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":"550e8400-e29b-41d4-a716-4466554400a8"}},
             "destination":{"kind":"copy","value":fixture.database},"destinationFace":"copy",
             "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"read_rollback"},
             "kind":"central.copy-session-read",

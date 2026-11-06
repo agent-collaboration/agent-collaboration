@@ -78,8 +78,8 @@ async fn corrupt_epoch_history_cannot_be_reported_as_not_writer() -> TestResult 
             "source":{"kind":"intent","intent":durable_steps::Uuid::now_v7()}}))?,
     )?);
     let invocation = serde_json::to_vec(&json!({
-        "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":origin.installation}},
-        "destination":{"kind":"fleet"},"destinationFace":"fleet",
+        "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":origin.installation}},
+        "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"mail_submit"},
         "kind":"central.mail-submit","target":null,"request":{
             "session":{"peer":sender,"sessionId":durable_steps::Uuid::now_v7()},

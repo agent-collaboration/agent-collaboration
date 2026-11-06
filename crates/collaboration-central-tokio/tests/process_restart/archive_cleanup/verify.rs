@@ -45,7 +45,7 @@ pub(super) async fn verify_cleanup(
         claim_proof?;claimant_closed?;
         let terminal=operation(&path,&input.operation).await?;
         let later=RegistryTime(journal.ready_at.0+chrono::TimeDelta::seconds(60));
-        control(base,ObjectAddress::Fleet,RuntimeControl::SetTime {now:later}).await?;
+        control(base,collaboration_central_conformance::legacy_fleet_address(),RuntimeControl::SetTime {now:later}).await?;
         if read_fleet(&mut reader).await?!=expected || exact_ledger_decision(base,input.archive.request_id.clone()).await?!=before_ledger {
             return Err("later wake repeated archive records/feed or changed the stored request ledger".into());
         }
@@ -69,7 +69,7 @@ async fn observe_exact_recovered_call(base: &str, input: &CleanupInput) -> Confo
         RECOVERY_BOUND,
         control(
             base,
-            ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             RuntimeControl::AwaitHeldDispatch {
                 key: settlement_key(),
             },
@@ -85,7 +85,7 @@ async fn observe_exact_recovered_call(base: &str, input: &CleanupInput) -> Confo
         return Err("startup retry never reached its exact pre-armed settlement gate".into());
     };
     let call: Value = serde_json::from_slice(&request)?;
-    if destination != ObjectAddress::Fleet
+    if destination != collaboration_central_conformance::legacy_fleet_address()
         || call != input.call
         || call.get("kind")
             != Some(&json!(
@@ -99,7 +99,7 @@ async fn observe_exact_recovered_call(base: &str, input: &CleanupInput) -> Confo
     }
     control(
         base,
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         RuntimeControl::ResumeDispatch {
             key: settlement_key(),
         },

@@ -46,6 +46,7 @@ async fn check(
         platform.clone(),
         configured,
         Arc::new(AccessKeyCache::default()),
+        collaboration_central_conformance::legacy_organization(),
     )?;
     let observed = application.verify_access(Some(assertion), route).await;
     platform.shutdown().await?;
@@ -151,6 +152,7 @@ async fn generated_key_roundtrips_through_pkcs8_and_issues_verifiable_rs256() ->
         platform.clone(),
         policy(),
         Arc::new(AccessKeyCache::default()),
+        collaboration_central_conformance::legacy_organization(),
     )?;
     let now = Utc::now();
     let token = issuer.mint(&owner(), now, now + Duration::minutes(15))?;

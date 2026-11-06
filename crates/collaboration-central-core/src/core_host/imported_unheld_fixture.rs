@@ -180,10 +180,21 @@ pub(super) async fn fixture_seed<Io: PlatformIo>(
     target: &CopyAdminSeed,
     request: AdminCopySeedRequest,
 ) -> Result<ReplicationAnswer, StoreError> {
-    let caller = CallerContext::<EdgeKind>::for_owner(owner.clone());
+    let caller = CallerContext::<EdgeKind>::for_owner(
+        owner.clone(),
+        host.organization()
+            .map_err(|failure| StoreError::backend(format!("fixture organization: {failure:?}")))?
+            .clone(),
+    );
     let call = crate::object_call_envelope::encode_shared_call::<EdgeKind, FleetKind, _>(
         &caller,
-        (),
+        crate::FleetAddress::new(
+            host.organization()
+                .map_err(|failure| {
+                    StoreError::backend(format!("fixture organization: {failure:?}"))
+                })?
+                .clone(),
+        ),
         crate::copy_write_calls::FleetProjectSeed {
             copy: target.copy,
             database: target.database,
@@ -262,11 +273,24 @@ pub(super) async fn fixture_fleet<Io: PlatformIo>(
         ],
     };
     let call = crate::serialize_object_call(
-        &CallerContext::<EdgeKind>::for_owner(owner.clone()),
+        &CallerContext::<EdgeKind>::for_owner(
+            owner.clone(),
+            host.organization()
+                .map_err(|failure| {
+                    StoreError::backend(format!("fixture organization: {failure:?}"))
+                })?
+                .clone(),
+        ),
         crate::Dispatch::<crate::FleetKind> {
             call_id: crate::ObjectCallId::new(host.new_id().to_string())
                 .map_err(StoreError::backend)?,
-            to: (),
+            to: crate::FleetAddress::new(
+                host.organization()
+                    .map_err(|failure| {
+                        StoreError::backend(format!("fixture organization: {failure:?}"))
+                    })?
+                    .clone(),
+            ),
             call: crate::FleetCall::Import {
                 bundle: Box::new(bundle),
             },

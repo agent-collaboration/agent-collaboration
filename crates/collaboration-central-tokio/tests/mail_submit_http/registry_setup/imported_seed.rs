@@ -138,7 +138,7 @@ async fn invoke(
 ) -> ConformanceResult<ReplicationAnswer> {
     // This is the existing Fleet-to-project Copy call seam, not HTTP import orchestration.
     let answer = copy.on_call(serde_json::to_vec(&json!({
-        "source":{"kind":"fleet"},"sourceFace":"fleet",
+        "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"fleet",
         "authority":{"kind":"owner","value":"fixture@example.test"},
         "destination":{"kind":"copy","value":database},"destinationFace":"copy",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"imported_claim_seed"},

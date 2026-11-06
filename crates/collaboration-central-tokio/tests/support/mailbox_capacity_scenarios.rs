@@ -35,7 +35,7 @@ pub(super) async fn run(base: &str) -> ConformanceResult<()> {
     )
     .await?;
     let proof=async {
-        control(base,json!({"kind":"fleet"}),json!({"kind":"setTime","value":{"now":chrono::DateTime::from_timestamp_millis(NOW).ok_or("invalid capacity clock")?}})).await?;
+        control(base,json!({"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}}),json!({"kind":"setTime","value":{"now":chrono::DateTime::from_timestamp_millis(NOW).ok_or("invalid capacity clock")?}})).await?;
         let original=pair.item(&durable_steps::Uuid::now_v7().to_string(),"literal original mailbox body")?;
         let rejected=pair.item(&durable_steps::Uuid::now_v7().to_string(),"must never enter full recipient custody")?;
         if pair.submit(&original).await?.pointer("/value/value/value/kind")!=Some(&json!("accepted")) {return Err("original not admitted to Fleet".into());}

@@ -36,3 +36,11 @@ that existing overlap and the timer case's process-runtime reservation.
 Test names map from binary `<root>` / test `<case>` to the appropriate aggregate
 binary / test `<root>::<case>`. Library test identities do not change. Integration
 and e2e cases run under nextest with one process per test.
+
+- `src/native_objects/organization_routing_test.rs` checks actual per-organization
+  Fleet files/stores and reopen data, legacy-alias refusal, and a missing private
+  Copy reference after restart. Its clock and IDs are controlled.
+- The `organization_location_workerd` product example checks new-shape Fleet
+  Durable Object metadata isolation and process restart using event-only process
+  support and a fixed Access clock. It does not establish durable Copy references
+  or organization provisioning, whose SQL remains separately gated.

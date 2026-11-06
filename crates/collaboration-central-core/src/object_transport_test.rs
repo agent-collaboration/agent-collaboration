@@ -1,5 +1,16 @@
 use super::*;
 use serde_json::json;
+fn organization() -> fleet_identity_protocol::OrganizationId {
+    "019f0000-0000-7000-8000-00000000ac01"
+        .to_owned()
+        .try_into()
+        .expect("fixed UUIDv7 organization")
+}
+fn fleet() -> ObjectAddress {
+    ObjectAddress::Fleet {
+        organization: organization(),
+    }
+}
 
 fn object_envelope(
     source: serde_json::Value,
@@ -7,10 +18,11 @@ fn object_envelope(
     destination: &str,
 ) -> serde_json::Result<Vec<u8>> {
     serde_json::to_vec(&json!({
+        "organization": organization(),
         "source": source,
         "sourceFace": source_face,
         "authority": if source_face == "session" { json!({"kind":"machine", "value":{"installation":"019f0000-0000-7000-8000-000000000807"}}) } else {json!({"kind":"object"})},
-        "destination": {"kind": "fleet"},
+        "destination": {"kind": "fleet", "value": {"organization": organization()}},
         "destinationFace": destination,
         "identity": {"operation": "019f0000-0000-7000-8000-000000000806", "step": "object"},
         "kind": "central.installation-peer",
@@ -31,7 +43,7 @@ fn decoder_refuses_the_well_formed_copy_to_registry_edge() -> serde_json::Result
         "registry",
     )?;
     assert!(matches!(
-        ObjectCallEnvelope::decode(&bytes, ObjectAddress::Fleet, CallerKind::Registry),
+        ObjectCallEnvelope::decode(&bytes, fleet(), CallerKind::Registry, &organization()),
         Err(CallFailure::NotSent {
             reason: NotSentReason::Unreachable { last_seen: None }
         })
@@ -45,8 +57,14 @@ fn decoder_refuses_the_well_formed_copy_to_registry_edge() -> serde_json::Result
 )]
 #[test]
 fn decoder_allows_the_session_to_registry_edge() -> serde_json::Result<()> {
-    let bytes = object_envelope(json!({"kind": "fleet"}), "session", "registry")?;
-    assert!(ObjectCallEnvelope::decode(&bytes, ObjectAddress::Fleet, CallerKind::Registry).is_ok());
+    let bytes = object_envelope(
+        json!({"kind": "fleet", "value": {"organization": organization()}}),
+        "session",
+        "registry",
+    )?;
+    assert!(
+        ObjectCallEnvelope::decode(&bytes, fleet(), CallerKind::Registry, &organization()).is_ok()
+    );
     Ok(())
 }
 
@@ -61,7 +79,9 @@ fn decoder_refuses_a_synchronous_copy_to_fleet_call() -> serde_json::Result<()> 
         "copy",
         "fleet",
     )?;
-    assert!(ObjectCallEnvelope::decode(&bytes, ObjectAddress::Fleet, CallerKind::Fleet).is_err());
+    assert!(
+        ObjectCallEnvelope::decode(&bytes, fleet(), CallerKind::Fleet, &organization()).is_err()
+    );
     Ok(())
 }
 
@@ -75,7 +95,7 @@ fn project_calls_require_the_fleet_physical_owner() -> serde_json::Result<()> {
     let project = "019f0000-0000-7000-8000-000000000806";
     for (source, face, authority, expected) in [
         (
-            json!({"kind":"fleet"}),
+            json!({"kind":"fleet","value":{"organization": organization()}}),
             "edge",
             json!({"kind":"owner","value":"fixture@example.test"}),
             false,
@@ -87,13 +107,13 @@ fn project_calls_require_the_fleet_physical_owner() -> serde_json::Result<()> {
             false,
         ),
         (
-            json!({"kind":"fleet"}),
+            json!({"kind":"fleet","value":{"organization": organization()}}),
             "registry",
             json!({"kind":"object"}),
             true,
         ),
         (
-            json!({"kind":"fleet"}),
+            json!({"kind":"fleet","value":{"organization": organization()}}),
             "session",
             json!({"kind":"machine","value":{"installation":"019f0000-0000-7000-8000-000000000807"}}),
             true,
@@ -112,7 +132,7 @@ fn project_calls_require_the_fleet_physical_owner() -> serde_json::Result<()> {
                 .map_err(serde::de::Error::custom)?,
         );
         assert_eq!(
-            ObjectCallEnvelope::decode(&bytes, address, CallerKind::Copy).is_ok(),
+            ObjectCallEnvelope::decode(&bytes, address, CallerKind::Copy, &organization()).is_ok(),
             expected,
             "source facet: {face}"
         );
@@ -131,7 +151,10 @@ fn removed_mailbox_addresses_and_faces_are_rejected_before_dispatch() -> serde_j
             json!({"kind":"mailbox","value":"019f0000-0000-7000-8000-000000000807"}),
             "registry",
         ),
-        (json!({"kind":"fleet"}), "mailbox"),
+        (
+            json!({"kind":"fleet","value":{"organization": organization()}}),
+            "mailbox",
+        ),
     ] {
         let bytes = object_envelope(source, face, "copy")?;
         assert!(serde_json::from_slice::<ObjectCallEnvelope>(&bytes).is_err());
@@ -152,7 +175,9 @@ fn a_project_can_deliver_only_its_durable_directory_summary_to_fleet() -> serde_
     )?)?;
     call["kind"] = json!("central.directory-summary");
     let bytes = serde_json::to_vec(&call)?;
-    assert!(ObjectCallEnvelope::decode(&bytes, ObjectAddress::Fleet, CallerKind::Fleet).is_ok());
+    assert!(
+        ObjectCallEnvelope::decode(&bytes, fleet(), CallerKind::Fleet, &organization()).is_ok()
+    );
     for kind in [
         "central.admin-import-workflow",
         "central.fleet-request-effects",
@@ -162,11 +187,82 @@ fn a_project_can_deliver_only_its_durable_directory_summary_to_fleet() -> serde_
         assert!(
             ObjectCallEnvelope::decode(
                 &serde_json::to_vec(&call)?,
-                ObjectAddress::Fleet,
-                CallerKind::Fleet
+                fleet(),
+                CallerKind::Fleet,
+                &organization()
             )
             .is_err()
         );
     }
     Ok(())
+}
+
+// Each case keeps a valid DAG edge and varies only the organization binding.
+// A decoder that accepts a body from another Fleet would pass it to the wrong store.
+#[test]
+fn organization_binding_refuses_a_foreign_fleet_before_dispatch() {
+    let bytes = object_envelope(
+        json!({"kind":"fleet","value":{"organization":organization()}}),
+        "session",
+        "registry",
+    )
+    .unwrap();
+    let foreign: fleet_identity_protocol::OrganizationId = "019f0000-0000-7000-8000-00000000ac02"
+        .to_owned()
+        .try_into()
+        .unwrap();
+    let address = ObjectAddress::Fleet {
+        organization: foreign.clone(),
+    };
+    let mut body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    body["destination"] = serde_json::to_value(&address).unwrap();
+    assert!(
+        ObjectCallEnvelope::decode(
+            &serde_json::to_vec(&body).unwrap(),
+            address,
+            CallerKind::Registry,
+            &foreign
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn organization_binding_refuses_global_and_missing_organization_shapes() {
+    let bytes = object_envelope(
+        json!({"kind":"fleet","value":{"organization":organization()}}),
+        "session",
+        "registry",
+    )
+    .unwrap();
+    let mut body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    body.as_object_mut().unwrap().remove("organization");
+    assert!(serde_json::from_value::<ObjectCallEnvelope>(body).is_err());
+    assert!(serde_json::from_value::<ObjectAddress>(json!({"kind":"fleet"})).is_err());
+}
+
+#[test]
+fn organization_binding_refuses_encoding_a_cross_fleet_dispatch() {
+    let caller = CallerContext::<crate::SessionKind>::for_machine(
+        organization(),
+        "019f0000-0000-7000-8000-00000000ac04"
+            .to_owned()
+            .try_into()
+            .unwrap(),
+    );
+    let foreign: fleet_identity_protocol::OrganizationId = "019f0000-0000-7000-8000-00000000ac02"
+        .to_owned()
+        .try_into()
+        .unwrap();
+    let call = Dispatch::<crate::RegistryKind> {
+        call_id: crate::ObjectCallId::new("019f0000-0000-7000-8000-00000000ac03").unwrap(),
+        to: crate::FleetAddress::new(foreign),
+        call: crate::RegistryCall::RevokeEnrollment {
+            installation: "019f0000-0000-7000-8000-00000000ac05"
+                .to_owned()
+                .try_into()
+                .unwrap(),
+        },
+    };
+    assert!(serialize_object_call(&caller, call).is_err());
 }

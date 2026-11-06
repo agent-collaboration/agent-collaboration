@@ -147,6 +147,7 @@ async fn failure_after_all_import_writes_rolls_back_every_canonical_table() -> T
             }),
         }),
         Io::default(),
+        collaboration_central_conformance::legacy_organization(),
         fleet_sync_lease::RegistryConfig {
             authoritative_receiver: fixture.receiver,
             lease: fleet_sync_lease::LeasePolicy {
@@ -222,12 +223,13 @@ async fn creation_directory_ledger_and_binding_roll_back_together_then_retry_onc
             store:Arc::new(FaultStore {object:fixture.object.clone(),armed:Arc::new(AtomicBool::new(true)),injected:injected.clone()}),
         }),
 Io::default(),
+collaboration_central_conformance::legacy_organization(),
 fleet_sync_lease::RegistryConfig { authoritative_receiver: fixture.receiver, lease: fleet_sync_lease::LeasePolicy { lease_duration: std::time::Duration::from_secs(60), renew_interval: std::time::Duration::from_secs(20) }, release_unsent_for: std::time::Duration::from_secs(10), move_needs_renewal_within: None },
 collaboration_central_tokio::DeliveryConfig { relay_peer: "019f0000-0000-7000-8000-000000005240".to_owned().try_into()? },
 std::time::Duration::from_secs(2))?;
         let call=serde_json::to_vec(&json!({
-            "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":"550e8400-e29b-41d4-a716-4466554400a9"}},
-            "destination":{"kind":"fleet"},"destinationFace":"fleet",
+            "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":"550e8400-e29b-41d4-a716-4466554400a9"}},
+            "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet",
             "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"atomic_creation"},
             "kind":"central.fleet-metadata","target":null,"request":{"request":creation,"origin":{"installation":"550e8400-e29b-41d4-a716-4466554400a9","machine":"live router"}}
         }))?;

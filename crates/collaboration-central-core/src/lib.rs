@@ -9,6 +9,8 @@ mod copy_fleet_reference;
 pub use copy_fleet_reference::{
     CopyFleetReferencePort, CopyFleetReferenceRefusal, InMemoryCopyFleetReferences,
 };
+mod organization_addresses;
+pub use organization_addresses::{CopyAddress, FleetAddress, SessionAddress};
 mod organization_provisioning_http;
 pub use organization_provisioning_http::organization_provisioning_router;
 

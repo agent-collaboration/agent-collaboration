@@ -24,8 +24,8 @@ pub(super) fn settlement_call(
     projection: Value,
 ) -> TestResult<Vec<u8>> {
     Ok(serde_json::to_vec(&json!({
-        "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
-        "destination":{"kind":"fleet"},"destinationFace":"fleet",
+        "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"registry","authority":{"kind":"object"},
+        "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet",
         "identity":{"operation":operation,"step":"settle_claim"},
         "kind":"central.claim-granted","target":null,"request":{"attempt":attempt,"projection":projection}
     }))?)
