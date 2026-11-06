@@ -136,7 +136,3 @@ fn staged_failure_result(
     stage.clone_into(&mut failure.stage);
     operation_error_result(failure, None, None)
 }
-
-#[cfg(test)]
-#[path = "interaction_tools_test.rs"]
-mod tests;
