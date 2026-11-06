@@ -16,6 +16,10 @@ use serde::{Serialize, de::DeserializeOwned};
 use std::path::Path;
 use url::Url;
 
+#[cfg(test)]
+#[path = "staging_publication_test.rs"]
+mod tests;
+
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum PublicationStage {
@@ -57,6 +61,117 @@ pub enum PublicationError {
     Bundle(#[from] ProjectBundleError),
     #[error("cannot encode the prepared request")]
     Json(#[from] serde_json::Error),
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PublicationDiagnostic {
+    stage: PublicationStage,
+    failure: PublicationRequestFailure,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    io: Option<PublicationIoFailure>,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+enum PublicationRequestFailure {
+    Timeout { during: PublicationTimeoutContext },
+    HttpStatus { status: u16 },
+    Connect,
+    Decode,
+    Body,
+    Request,
+    Builder,
+    Redirect,
+    Other,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+enum PublicationTimeoutContext {
+    Connect,
+    Body,
+    Request,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PublicationIoFailure {
+    kind: String,
+    os_error: Option<i32>,
+}
+
+impl PublicationError {
+    pub(crate) fn diagnostic(&self) -> Option<PublicationDiagnostic> {
+        match self {
+            Self::OutcomeUnknown { stage, source } => Some(PublicationDiagnostic {
+                stage: *stage,
+                failure: PublicationRequestFailure::classify(source),
+                io: safe_io_cause(source),
+            }),
+            Self::TargetMismatch
+            | Self::SourceHostMismatch
+            | Self::SourceChanged
+            | Self::Source(_)
+            | Self::StatusMismatch
+            | Self::Incomplete { .. }
+            | Self::FleetRefused { .. }
+            | Self::OwnerFailure { .. }
+            | Self::Access(_)
+            | Self::Bundle(_)
+            | Self::Json(_) => None,
+        }
+    }
+}
+
+impl PublicationRequestFailure {
+    fn classify(error: &reqwest::Error) -> Self {
+        if error.is_timeout() {
+            let during = if error.is_connect() {
+                PublicationTimeoutContext::Connect
+            } else if error.is_decode() || error.is_body() {
+                PublicationTimeoutContext::Body
+            } else {
+                PublicationTimeoutContext::Request
+            };
+            Self::Timeout { during }
+        } else if let Some(status) = error.status() {
+            Self::HttpStatus {
+                status: status.as_u16(),
+            }
+        } else if error.is_connect() {
+            Self::Connect
+        } else if error.is_decode() {
+            Self::Decode
+        } else if error.is_body() {
+            Self::Body
+        } else if error.is_request() {
+            Self::Request
+        } else if error.is_builder() {
+            Self::Builder
+        } else if error.is_redirect() {
+            Self::Redirect
+        } else {
+            Self::Other
+        }
+    }
+}
+
+fn safe_io_cause(error: &reqwest::Error) -> Option<PublicationIoFailure> {
+    use std::error::Error;
+    let mut cause = error.source();
+    // Emit only fixed IO classifications and OS numbers, never arbitrary URLs, headers or body text.
+    for _ in 0..8 {
+        let current = cause?;
+        if let Some(error) = current.downcast_ref::<std::io::Error>() {
+            return Some(PublicationIoFailure {
+                kind: format!("{:?}", error.kind()),
+                os_error: error.raw_os_error(),
+            });
+        }
+        cause = current.source();
+    }
+    None
 }
 
 /// Only a reconciled complete import can authorize the subsequent archive step.

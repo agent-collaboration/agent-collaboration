@@ -28,6 +28,7 @@ mod pending_intent_fixture;
 mod production_journey;
 mod production_mode;
 mod public_claim;
+mod publication_diagnostics;
 mod publication_hold;
 mod recovery_rows;
 mod rich_project_cutover;
