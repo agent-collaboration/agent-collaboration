@@ -18,12 +18,8 @@
 <ex-callout title="Decisions for you in D4a and D4b" tone="decision" icon="clock">
 <p>D4a: what an offline target gets across several firings (latest only, or all); the notification coverage record. D4b: whether overlapping runs are prevented; schedule lifetime; continuity between fresh runs. Each has a recommendation in its section below; both designs also list the design work still remaining before they are planned.</p>
 </ex-callout>
-<ex-callout title="One choice for you (D3)" tone="decision" icon="users">
-<p>Moving each machine to its UUIDv7 id means rewriting stored session addresses that carry the old UUIDv4 service id. Local stores are rewritten at upgrade. But <strong>project content also stores session addresses</strong> (thread participants, watches, actors), it replicates between machines, and project tables are out of scope.</p>
-<ul>
-<li><strong>A (recommended): ended, like wakes.</strong> Frozen content keeps the old id as history, and the Fleet records <code>former_service_id</code> so old records still show the right machine. What stops working at cutover: (1) messages still queued with the old id: the Router first stops new sends and lets its outbox drain, and anything left after that expires with the sender told “expired”; (2) subscriptions and watches whose reader carries the old id lapse, and agents subscribe again, the same way you chose for wakes (“no moves, we just message the agents”). Project content stays untouched.</li>
-<li><strong>B: carried over.</strong> Rewrite the live reader references in project content (subscriptions, watches) so they keep working, and re-issue queued messages under new ids. Cost: a coordinated change of replicated project content on every machine and in central (actor identities are UNIQUE; project mail handoffs carry content hashes), re-sent messages arrive as new messages, and project tables come into scope.</li>
-</ul>
+<ex-callout title="Decided (D3)" tone="note" icon="users">
+<p>Your decision (2026-11-03, “yes they end”): work still tied to a machine's old id ends at the switch to its UUIDv7 id. Queued messages drain, then expire; old subscriptions lapse and agents subscribe again; project content is untouched and keeps the old id as history.</p>
 </ex-callout>
 <h2 id="d2">D2: Fleet sends and remote create</h2>
 <ex-markdown id="d2-spec" label="D2 obligations" src="./specification/remote-sessions.md"></ex-markdown>
