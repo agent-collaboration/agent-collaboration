@@ -83,3 +83,14 @@ ID source replace wall time; production clock behavior is unchanged. Three
 independent persisted DO metadata markers must survive process restart through
 the new address shape. This is physical routing and metadata continuity proof,
 not SQL-gated organization provisioning or Fleet domain-transaction proof.
+
+At exact `0337d264907f6a987612f3eb314086d346199afa`, the Sunclaw CF run
+passed: Worker build, bundle guard and example each exited 0. Three independent
+Fleet metadata markers survived the real owned process restart; both processes
+were reaped. The raw logs and artifact hashes were directly inspected. This
+closes that bounded physical Fleet proof and leaves the Copy hold unchanged.
+
+The CLI cases live in the library, not the binary target. The exact filter
+`cargo test --locked -p codex-router-cli --lib central_command::arguments::tests -- --nocapture`
+ran both required cases at the same clean head: 2 passed, 0 failed, 312 filtered
+out, exit 0. The earlier binary filter selected no tests and provides no proof.
