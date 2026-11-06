@@ -1848,6 +1848,7 @@ dependencies = [
  "http",
  "jsonschema",
  "message-board",
+ "ring",
  "runtime-primitives",
  "schemars 1.2.2",
  "serde",
