@@ -10,15 +10,19 @@
 // Typed failures reach MCP as `{mcpResult: "error", kind, message, stage?, effect?, target?,
 // operationId?, ...}` (collaboration-mcp tool_output_contract.rs McpToolError::from_existing).
 import { z } from "zod";
-import { encode } from "../../exact-json.ts";
-import { sameSession, sessionRefSchema, type SessionRef } from "./observation-models.ts";
-import { foldObservationReads, type ObservationRead } from "./observation-ledger.ts";
+import { encode } from "../../../exact-json.ts";
+import {
+  sameSession,
+  sessionRefSchema,
+  type SessionRef,
+} from "../observations/observation-models.ts";
+import { foldObservationReads, type ObservationRead } from "../observations/observation-ledger.ts";
 import {
   decideNoReplay,
   decideReplayedHistory,
   type RecordedExchange,
-} from "./history-replay-oracle.ts";
-import * as requests from "./journey-requests.ts";
+} from "../observations/history-replay-oracle.ts";
+import * as requests from "../transport/journey-requests.ts";
 import {
   answered,
   callTool,
@@ -28,8 +32,8 @@ import {
   operationWait,
   requireSettled,
 } from "./journey-steps.ts";
-import { reattachSettlement } from "./operation-settlement.ts";
-import type { McpCallOutcome } from "./streaming-mcp-client.ts";
+import { reattachSettlement } from "../observations/operation-settlement.ts";
+import type { McpCallOutcome } from "../transport/streaming-mcp-client.ts";
 import {
   attachedPrompt,
   baseline,

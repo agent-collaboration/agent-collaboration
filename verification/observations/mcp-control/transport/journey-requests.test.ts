@@ -8,7 +8,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { newOperationId } from "./journey-requests.ts";
 
-const repository = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+const repository = join(dirname(fileURLToPath(import.meta.url)), "../../../..");
 
 function consumerPattern(): RegExp {
   const source = readFileSync(

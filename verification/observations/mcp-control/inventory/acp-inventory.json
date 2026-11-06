@@ -4,7 +4,7 @@
   "protocol": "v1",
   "enabledFeatures": [],
   "dispositions": {
-    "qualified": "First-PR representation with a deciding lifecycle case; claimed only when that case passes on the declared target.",
+    "qualified": "First-PR representation with a deciding lifecycle case; claimed only when that case passes on the declared target, currently the controlled peer. Actual provider profiles still require F3.",
     "represented": "An existing MCP tool or observation represents it, but the first PR does not qualify it.",
     "hostOwned": "The Host performs it on its own provider connection; MCP neither forwards nor exposes it.",
     "unsupported": "No facade offer exists; the current profile does not advertise it.",
@@ -121,10 +121,10 @@
       "kind": "notification",
       "direction": "clientToAgent",
       "gate": null,
-      "disposition": "qualified",
+      "disposition": "represented",
       "tools": ["conversation_cancel", "conversation_operation_show"],
-      "proof": "lifecycle.cancel",
-      "note": "Exact target operation; an MCP call cancellation is never converted into it."
+      "proof": null,
+      "note": "Exact target operation; positive proof is the controlled causal hold only. An MCP transport cancellation never means an exact operation cancel."
     },
     {
       "name": "session/list",
@@ -161,20 +161,20 @@
       "kind": "method",
       "direction": "clientToAgent",
       "gate": null,
-      "disposition": "qualified",
+      "disposition": "represented",
       "tools": ["conversation_resume"],
-      "proof": "lifecycle.resume",
-      "note": "Resume without provider replay."
+      "proof": null,
+      "note": "Resume without provider replay; positive proof is the full controlled peer only. The selected Claude profile advertises it with its actual F3 pending; Cursor native methods are unsupported and refuse with a typed binding or none refusal."
     },
     {
       "name": "session/close",
       "kind": "method",
       "direction": "clientToAgent",
       "gate": null,
-      "disposition": "qualified",
+      "disposition": "represented",
       "tools": ["conversation_close"],
-      "proof": "lifecycle.close",
-      "note": "Current close owner and observed result; no deletion or shared-process shutdown promise."
+      "proof": null,
+      "note": "Current close owner and observed result; no deletion or shared-process shutdown promise. Positive proof is the full controlled peer only; the selected Claude profile advertises it with its actual F3 pending; Cursor native methods are unsupported and refuse with a typed binding or none refusal."
     },
     {
       "name": "logout",

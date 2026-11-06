@@ -6,11 +6,11 @@
 // the operation snapshot reports `inputId: None`, PromptCompleted has no turn ID), so this earns
 // causal correlation for the isolated case only, never a concurrent join.
 import { z } from "zod";
-import { encode } from "../../exact-json.ts";
+import { encode } from "../../../exact-json.ts";
 import { sameSession, sessionRefSchema, type SessionRef } from "./observation-models.ts";
 import type { ObservationLedger } from "./observation-ledger.ts";
 import { agentReplyText, reconstructTurns, type ObservedTurn } from "./observation-turns.ts";
-import type { PeerReceiptCounts } from "./peer-receipt.ts";
+import type { PeerReceiptCounts } from "../evidence/peer-receipt.ts";
 
 // conversation_prompt success: ConversationOperationResult (collaboration-client
 // conversation_operation_result.rs:13-80,104-140).

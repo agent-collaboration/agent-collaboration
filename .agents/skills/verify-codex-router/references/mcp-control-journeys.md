@@ -19,11 +19,11 @@ Use the peer's explicit `lifecycle` profile for this full controlled journey. Ot
 | A stale cancellation gets the typed "not active" refusal and changes nothing; a declared wrong-role actor's setting change gets the typed `wrongActor` refusal and changes nothing                                                                              | Who requested an operation, after the fact. The operation's requester is not persisted. Prompts have no creator/Approver guard, so the wrong-role case uses the settings gate            |
 | Resume and load each carry a new correlated reply on the same exact Session                                                                                                                                                                                     | Media or embedded-context input, other config categories, client MCP setup, extensions                                                                                                   |
 
-The coverage inventory `verification/observations/mcp-control/acp-inventory.json` maps every member of the locked ACP schema (agent-client-protocol-schema 1.9.1, protocol v1) to its MCP representation or its unsupported, host-owned or compile-gated disposition. A `qualified` row is claimed only when its named case passes on the declared target.
+The coverage inventory `verification/observations/mcp-control/inventory/acp-inventory.json` maps every member of the locked ACP schema (agent-client-protocol-schema 1.9.1, protocol v1) to its MCP representation or its unsupported, host-owned or compile-gated disposition. A `qualified` row is claimed only when its named case passes on the declared target.
 
 ## Declare the target
 
-The plan's schema is `controlPlanSchema` in `verification/observations/mcp-control/control-plan.ts`. Declare:
+The plan's schema is `controlPlanSchema` in `verification/observations/mcp-control/admission/control-plan.ts`. Each folder's responsibility is in `verification/observations/mcp-control/README.md`. Declare:
 
 - **Source and build:** a clean committed source head, the normal build manifest (no `test_guard_features`), and the Host and Router artifacts. Both must be that manifest's own entries at their recorded paths and hashes.
 - **Host artifact:** select it explicitly with `host.kind`. `automationDebugHost` is the manifest's `automation-debug-host`; `foregroundRouterHost` is the Router's own foreground Host, the manifest's `codex-router` and the declared Router itself. The declared Host PID must be live and running that artifact (`/proc/<pid>/exe` on Linux, the first `lsof -d txt` path on macOS).

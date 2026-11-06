@@ -12,14 +12,22 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { decode } from "../../exact-json.ts";
-import { continuationRecordSchema } from "./continuation-record.ts";
+import { decode } from "../../../exact-json.ts";
+import { continuationRecordSchema } from "../admission/continuation-record.ts";
 import type { CaseResult } from "./journey-cases.ts";
-import { STAND_IN_EPOCH, startStandIn, type StandInOptions } from "./journey-stand-in.ts";
-import { preparedLayout, standInPlan, writeHostContext } from "./journey-stand-in-plan.ts";
-import { ProviderStoreReadback } from "./role-readback.ts";
-import { runCases } from "./run.ts";
-import { StreamingMcpClient } from "./streaming-mcp-client.ts";
+import {
+  STAND_IN_EPOCH,
+  startStandIn,
+  type StandInOptions,
+} from "../test-support/journey-stand-in.ts";
+import {
+  preparedLayout,
+  standInPlan,
+  writeHostContext,
+} from "../test-support/journey-stand-in-plan.ts";
+import { ProviderStoreReadback } from "../evidence/role-readback.ts";
+import { runCases } from "../run.ts";
+import { StreamingMcpClient } from "../transport/streaming-mcp-client.ts";
 
 const SECOND_EPOCH = "33333333-3333-4333-8333-333333333333";
 const sha = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");

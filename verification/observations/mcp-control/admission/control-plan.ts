@@ -8,7 +8,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "n
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, sep } from "node:path";
 import { z } from "zod";
-import { decode } from "../../exact-json.ts";
+import { decode } from "../../../exact-json.ts";
 import {
   preparedContextBinding,
   readKeptRecord,
@@ -21,9 +21,9 @@ import {
   loadAcpInventory,
   lockedCoverageDefects,
   lockedSchemaVersion,
-} from "./acp-inventory.ts";
-import { sessionRefSchema } from "./observation-models.ts";
-import { PROTECTED_PORTS } from "./streaming-mcp-client.ts";
+} from "../inventory/acp-inventory.ts";
+import { sessionRefSchema } from "../observations/observation-models.ts";
+import { PROTECTED_PORTS } from "../transport/streaming-mcp-client.ts";
 
 const absolutePath = z.string().refine(isAbsolute, "absolute path required");
 const artifactSchema = z.strictObject({

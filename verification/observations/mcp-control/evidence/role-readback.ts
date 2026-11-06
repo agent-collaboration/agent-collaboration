@@ -10,8 +10,8 @@
 // open it the same way. `immutable=1` would ignore the WAL and miss fresh rows, so it is unused.
 import { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
-import { decode } from "../../exact-json.ts";
-import { sessionRefSchema, type SessionRef } from "./observation-models.ts";
+import { decode } from "../../../exact-json.ts";
+import { sessionRefSchema, type SessionRef } from "../observations/observation-models.ts";
 
 // ProviderIdentity is untagged: a Session is bare SessionRef JSON, a Human is {"humanId": ...}
 // (collaboration-protocol provider_identity.rs:8-16).

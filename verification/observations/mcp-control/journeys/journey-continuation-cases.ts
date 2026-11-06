@@ -12,15 +12,19 @@
 //   epoch; then a real load settled as Loaded on that same binding with the recorded history
 //   replayed in order, then one new isolated prompt. No new Session.
 import { existsSync, writeFileSync } from "node:fs";
-import { encode } from "../../exact-json.ts";
+import { encode } from "../../../exact-json.ts";
 import {
   preparedContextBinding,
   readKeptRecord,
   reloadContinuityProblem,
   type ContinuationRecord,
-} from "./continuation-record.ts";
-import { sameSession, sessionRefSchema, type SessionRef } from "./observation-models.ts";
-import * as requests from "./journey-requests.ts";
+} from "../admission/continuation-record.ts";
+import {
+  sameSession,
+  sessionRefSchema,
+  type SessionRef,
+} from "../observations/observation-models.ts";
+import * as requests from "../transport/journey-requests.ts";
 import { answered, callTool, operationShow } from "./journey-steps.ts";
 import {
   attachedPrompt,

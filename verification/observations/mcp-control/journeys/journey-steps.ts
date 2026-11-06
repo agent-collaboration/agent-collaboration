@@ -4,19 +4,19 @@
 // returned, and only operation show/wait reads learn what happened.
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { encode } from "../../exact-json.ts";
+import { encode } from "../../../exact-json.ts";
 import {
   boundedObservationResultSchema,
   OBSERVATION_NOTIFICATION_METHOD,
   observationNotificationSchema,
   type SessionRef,
-} from "./observation-models.ts";
-import { foldObservationReads, type ObservationRead } from "./observation-ledger.ts";
-import { reconstructTurns } from "./observation-turns.ts";
-import { observeArguments } from "./journey-requests.ts";
-import { immediateAnswerProblem, settlementState } from "./operation-settlement.ts";
+} from "../observations/observation-models.ts";
+import { foldObservationReads, type ObservationRead } from "../observations/observation-ledger.ts";
+import { reconstructTurns } from "../observations/observation-turns.ts";
+import { observeArguments } from "../transport/journey-requests.ts";
+import { immediateAnswerProblem, settlementState } from "../observations/operation-settlement.ts";
 import { z } from "zod";
-import type { McpCallOutcome, StreamingMcpClient } from "./streaming-mcp-client.ts";
+import type { McpCallOutcome, StreamingMcpClient } from "../transport/streaming-mcp-client.ts";
 
 export interface JourneyContext {
   readonly client: StreamingMcpClient;

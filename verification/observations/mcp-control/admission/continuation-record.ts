@@ -20,8 +20,8 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { z } from "zod";
-import { decode, encode } from "../../exact-json.ts";
-import { sameSession, sessionRefSchema } from "./observation-models.ts";
+import { decode, encode } from "../../../exact-json.ts";
+import { sameSession, sessionRefSchema } from "../observations/observation-models.ts";
 import type { ControlPlan } from "./control-plan.ts";
 
 const absolutePath = z.string().refine(isAbsolute, "absolute path required");

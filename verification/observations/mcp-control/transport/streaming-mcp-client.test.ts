@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { test } from "node:test";
 import { z } from "zod";
-import { decode, encode } from "../../exact-json.ts";
+import { decode, encode } from "../../../exact-json.ts";
 import { StreamingMcpClient } from "./streaming-mcp-client.ts";
 
 type Handler = (id: unknown, response: ServerResponse, request: IncomingMessage) => void;

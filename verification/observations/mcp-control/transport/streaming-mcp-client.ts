@@ -7,7 +7,7 @@
 // whole body and keeps only the answer, so it cannot observe either.
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { decode, encode } from "../../exact-json.ts";
+import { decode, encode } from "../../../exact-json.ts";
 
 const PROTOCOL_VERSION = "2025-11-25";
 const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;

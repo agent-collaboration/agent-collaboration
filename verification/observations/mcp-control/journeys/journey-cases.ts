@@ -3,22 +3,22 @@
 // come from the owning store; replies, cursors and terminal facts from the actual MCP results.
 // A case that cannot reach its deciding observation reports why; nothing here invents success.
 import { z } from "zod";
-import { sessionRefSchema, type SessionRef } from "./observation-models.ts";
-import type { ObservationRead } from "./observation-ledger.ts";
-import { foldObservationReads } from "./observation-ledger.ts";
+import { sessionRefSchema, type SessionRef } from "../observations/observation-models.ts";
+import type { ObservationRead } from "../observations/observation-ledger.ts";
+import { foldObservationReads } from "../observations/observation-ledger.ts";
 import {
   decidePromptCase,
   type PromptCaseEvidence,
   type PromptCaseVerdict,
-} from "./prompt-case-oracle.ts";
-import { readPeerReceipt } from "./peer-receipt.ts";
+} from "../observations/prompt-case-oracle.ts";
+import { readPeerReceipt } from "../evidence/peer-receipt.ts";
 import {
   storedIdentityIs,
   type ProviderStoreReadback,
   type StoredIdentity,
-} from "./role-readback.ts";
-import type { ControlCase, ControlPlan } from "./control-plan.ts";
-import * as requests from "./journey-requests.ts";
+} from "../evidence/role-readback.ts";
+import type { ControlCase, ControlPlan } from "../admission/control-plan.ts";
+import * as requests from "../transport/journey-requests.ts";
 import {
   answered,
   callTool,
@@ -31,12 +31,12 @@ import {
   observedGeneration,
   requireSettled,
 } from "./journey-steps.ts";
-import type { PeerReceiptCounts } from "./peer-receipt.ts";
+import type { PeerReceiptCounts } from "../evidence/peer-receipt.ts";
 import {
   releaseHeldWork,
   requireNoReleaseMarker,
   retireReleaseMarker,
-} from "./release-sentinel.ts";
+} from "../evidence/release-sentinel.ts";
 
 /** A prompt case's oracle verdict, or a negative case that met exactly its required typed refusal. */
 export type CaseVerdict =

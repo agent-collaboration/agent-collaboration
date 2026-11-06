@@ -9,12 +9,12 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { z } from "zod";
-import { decode, encode } from "../../exact-json.ts";
-import { controlPlanSchema, type ControlPlan } from "./control-plan.ts";
+import { decode, encode } from "../../../exact-json.ts";
+import { controlPlanSchema, type ControlPlan } from "../admission/control-plan.ts";
 import { lifecycleCase } from "./journey-cases.ts";
-import { runCases } from "./run.ts";
-import { ProviderStoreReadback } from "./role-readback.ts";
-import { StreamingMcpClient } from "./streaming-mcp-client.ts";
+import { runCases } from "../run.ts";
+import { ProviderStoreReadback } from "../evidence/role-readback.ts";
+import { StreamingMcpClient } from "../transport/streaming-mcp-client.ts";
 
 const SERVICE = "11111111-1111-4111-8111-111111111111";
 const TARGET = { endpoint: { serviceId: SERVICE, endpointId: "cursor-local" }, sessionId: "s-1" };

@@ -16,7 +16,7 @@ import {
   type LockedName,
 } from "./acp-inventory.ts";
 
-const repository = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+const repository = join(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const inventory = loadAcpInventory();
 const lockedFromInventory = (rows: AcpInventory["rows"]): LockedName[] =>
   rows.flatMap((row): LockedName[] =>

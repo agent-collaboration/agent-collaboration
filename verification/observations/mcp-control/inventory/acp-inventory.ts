@@ -7,7 +7,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { decodeAuthoredJson } from "../../exact-json.ts";
+import { decodeAuthoredJson } from "../../../exact-json.ts";
 
 const rowSchema = z.strictObject({
   name: z.string().min(1),

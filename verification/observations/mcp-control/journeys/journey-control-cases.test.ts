@@ -4,17 +4,17 @@ import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { test } from "node:test";
 import type { CaseResult } from "./journey-cases.ts";
-import { startStandIn, type StandInOptions } from "./journey-stand-in.ts";
-import { standInPlan } from "./journey-stand-in-plan.ts";
-import { ProviderStoreReadback } from "./role-readback.ts";
-import { runCases } from "./run.ts";
-import { StreamingMcpClient } from "./streaming-mcp-client.ts";
+import { startStandIn, type StandInOptions } from "../test-support/journey-stand-in.ts";
+import { standInPlan } from "../test-support/journey-stand-in-plan.ts";
+import { ProviderStoreReadback } from "../evidence/role-readback.ts";
+import { runCases } from "../run.ts";
+import { StreamingMcpClient } from "../transport/streaming-mcp-client.ts";
 import {
   isStaleCancelRefusal,
   isWrongActorRefusal,
   typedRefusal,
 } from "./journey-control-cases.ts";
-import type { McpCallOutcome } from "./streaming-mcp-client.ts";
+import type { McpCallOutcome } from "../transport/streaming-mcp-client.ts";
 
 const TARGET = { endpoint: { serviceId: "svc", endpointId: "cursor-local" }, sessionId: "s-1" };
 const OTHER = { ...TARGET, endpoint: { ...TARGET.endpoint, endpointId: "claude-local" } };

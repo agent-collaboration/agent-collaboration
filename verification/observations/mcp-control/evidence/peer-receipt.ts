@@ -5,7 +5,7 @@
 // was dispatched, cancelled or released, and in which order.
 import { readFileSync } from "node:fs";
 import { z } from "zod";
-import { decode } from "../../exact-json.ts";
+import { decode } from "../../../exact-json.ts";
 
 export interface PeerReceiptCounts {
   readonly prompts: number;

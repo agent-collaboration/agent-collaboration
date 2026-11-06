@@ -6,13 +6,13 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { decodeAuthoredJson, encode } from "../../exact-json.ts";
-import { loadAcpInventory, toolCoverageDefects } from "./acp-inventory.ts";
+import { loadAcpInventory, toolCoverageDefects } from "./inventory/acp-inventory.ts";
 import {
   checkControlPlan,
   controlPlanSchema,
   type ControlCase,
   type ControlPlan,
-} from "./control-plan.ts";
+} from "./admission/control-plan.ts";
 import {
   callerLossCase,
   casePassed,
@@ -20,12 +20,19 @@ import {
   lifecycleCase,
   type CaseInputs,
   type CaseResult,
-} from "./journey-cases.ts";
-import { loadResumeCase, staleCancelCase, wrongRoleCase } from "./journey-control-cases.ts";
-import { continuationReloadCase, continuationRetainCase } from "./journey-continuation-cases.ts";
-import { openEvidence, record, type JourneyContext } from "./journey-steps.ts";
-import { ProviderStoreReadback } from "./role-readback.ts";
-import { StreamingMcpClient } from "./streaming-mcp-client.ts";
+} from "./journeys/journey-cases.ts";
+import {
+  loadResumeCase,
+  staleCancelCase,
+  wrongRoleCase,
+} from "./journeys/journey-control-cases.ts";
+import {
+  continuationReloadCase,
+  continuationRetainCase,
+} from "./journeys/journey-continuation-cases.ts";
+import { openEvidence, record, type JourneyContext } from "./journeys/journey-steps.ts";
+import { ProviderStoreReadback } from "./evidence/role-readback.ts";
+import { StreamingMcpClient } from "./transport/streaming-mcp-client.ts";
 import { z } from "zod";
 
 const CASES: Readonly<Record<ControlCase, (inputs: CaseInputs) => Promise<CaseResult>>> = {

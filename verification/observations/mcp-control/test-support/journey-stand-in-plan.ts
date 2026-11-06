@@ -3,7 +3,7 @@
 // temporary root and is never Host, runtime or provider proof.
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { controlPlanSchema, type ControlPlan } from "./control-plan.ts";
+import { controlPlanSchema, type ControlPlan } from "../admission/control-plan.ts";
 import {
   STAND_IN_EPOCH,
   STAND_IN_OWNER,

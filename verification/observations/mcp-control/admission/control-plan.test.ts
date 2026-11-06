@@ -17,14 +17,14 @@ import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { z } from "zod";
-import { loadAcpInventory } from "./acp-inventory.ts";
+import { loadAcpInventory } from "../inventory/acp-inventory.ts";
 import type { ContinuationRecord, LaunchBinding } from "./continuation-record.ts";
 import {
   preparedLayout,
   STAND_IN_PROXY_PORT,
   writeHostContext,
   type PreparedLayout,
-} from "./journey-stand-in-plan.ts";
+} from "../test-support/journey-stand-in-plan.ts";
 import {
   checkControlPlan,
   controlPlanSchema,

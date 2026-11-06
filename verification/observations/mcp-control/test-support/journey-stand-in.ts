@@ -10,8 +10,8 @@ import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { z } from "zod";
-import { decode, encode } from "../../exact-json.ts";
-import type { RecordedExchange } from "./history-replay-oracle.ts";
+import { decode, encode } from "../../../exact-json.ts";
+import type { RecordedExchange } from "../observations/history-replay-oracle.ts";
 
 export const STAND_IN_SERVICE = "11111111-1111-4111-8111-111111111111";
 export const STAND_IN_EPOCH = "22222222-2222-4222-8222-222222222222";
@@ -23,7 +23,7 @@ export interface StandInTarget {
   readonly endpoint: { readonly serviceId: string; readonly endpointId: string };
   readonly sessionId: string;
 }
-export type { RecordedExchange } from "./history-replay-oracle.ts";
+export type { RecordedExchange } from "../observations/history-replay-oracle.ts";
 
 /** How a reattach publishes history in its new epoch; "faithful" is what the real Host does. */
 export type ReplayShape =

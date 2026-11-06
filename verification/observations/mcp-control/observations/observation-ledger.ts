@@ -9,7 +9,7 @@
 // unnumbered resync marker; every result has `continuationGap: true`, which alone is not loss;
 // each streamed notification is the result's event "exactly as the call's result lists it",
 // with cursor `{epoch, afterSequence: <its own sequence>}`, or null for a resync marker.
-import { encode } from "../../exact-json.ts";
+import { encode } from "../../../exact-json.ts";
 import {
   eventSequence,
   sameSession,
