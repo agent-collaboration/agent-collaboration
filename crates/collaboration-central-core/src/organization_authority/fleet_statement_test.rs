@@ -72,7 +72,7 @@ fn signing_key() -> Ed25519KeyPair {
     Ed25519KeyPair::from_seed_unchecked(&[7; 32]).unwrap()
 }
 
-fn claims() -> Value {
+pub(super) fn claims() -> Value {
     serde_json::from_str(include_str!(
         "../../tests/fixtures/fleet_organization_statement.json"
     ))
@@ -82,7 +82,7 @@ fn header() -> Value {
     json!({"typ":"fleet-organization-stamp+jwt", "alg":"EdDSA", "kid":"stamp-fixture"})
 }
 
-fn signed_statement(header: &Value, claims: &Value) -> String {
+pub(super) fn signed_statement(header: &Value, claims: &Value) -> String {
     let signed = format!(
         "{}.{}",
         URL_SAFE_NO_PAD.encode(serde_json::to_vec(header).unwrap()),
@@ -125,6 +125,14 @@ pub(super) async fn verified_fixture() -> VerifiedFleetOrganizationStatement {
     verifier()
         .0
         .verify(&signed_statement(&header(), &claims()))
+        .await
+        .unwrap()
+}
+
+pub(super) async fn verified_claims(input: Value) -> VerifiedFleetOrganizationStatement {
+    verifier()
+        .0
+        .verify(&signed_statement(&header(), &input))
         .await
         .unwrap()
 }
