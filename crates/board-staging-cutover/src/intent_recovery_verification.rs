@@ -356,7 +356,11 @@ fn check_handoff(
     require(
         session.endpoint.service_id == *service
             && delivery.recipient().peer == peer
-            && delivery.recipient().address == session,
+            && delivery
+                .recipient()
+                .address
+                .session()
+                .is_ok_and(|address| address == &session),
         "local recipient enrollment",
     )?;
     delivery

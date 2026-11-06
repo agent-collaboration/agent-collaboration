@@ -121,6 +121,11 @@ where
                 });
             };
             let submitter = match (item.sender(), origin_epoch) {
+                (collaboration_mail_protocol::MailSender::Fleet, _) => {
+                    return reply(MailSubmitReply::InvalidShape {
+                        field: "sender".into(),
+                    });
+                }
                 (collaboration_mail_protocol::MailSender::Project { project }, Some(epoch)) => {
                     let database = DatabaseId::try_from(project.as_str().to_owned())
                         .map_err(StoreError::backend)?;

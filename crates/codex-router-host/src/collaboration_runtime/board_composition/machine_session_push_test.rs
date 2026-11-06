@@ -30,7 +30,10 @@ fn message(
         MailSender::HumanUser {
             installation: address.endpoint.service_id.clone(),
         },
-        Recipient { peer, address },
+        Recipient {
+            peer,
+            address: address.into(),
+        },
         None,
         BoardDeliveryBody::Message(MessageBody {
             text: text.to_owned().try_into()?,
@@ -47,6 +50,7 @@ pub(super) fn push_frame(
     item: DeliveryEnvelope<BoardDeliveryTypes>,
 ) -> Result<(FrameId, Vec<u8>), TestError> {
     let submitter = match item.sender() {
+        MailSender::Fleet => return Err("Fleet sender is not wired".into()),
         MailSender::Project { project } => {
             fleet_sync_protocol::Submitter::Project(project.as_str().to_owned().try_into()?)
         }

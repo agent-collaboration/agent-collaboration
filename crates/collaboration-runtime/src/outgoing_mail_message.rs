@@ -68,7 +68,9 @@ pub fn outgoing_mail_message(
         sender,
         Recipient {
             peer: recipient_peer,
-            address: draft.target.clone().try_into().map_err(|_| invalid())?,
+            address: message_board::SessionRef::try_from(draft.target.clone())
+                .map_err(|_| invalid())?
+                .into(),
         },
         None,
         BoardDeliveryBody::Message(body),

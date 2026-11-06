@@ -82,7 +82,14 @@ impl PublisherInner {
         let fleet_sync_protocol::DeliveryEnvelope::Item(item) = *envelope else {
             return Err(BoardError::board_unavailable());
         };
-        let local = item.recipient().address.endpoint.service_id == self.admission.installation;
+        let local = item
+            .recipient()
+            .address
+            .session()
+            .map_err(|_| BoardError::board_unavailable())?
+            .endpoint
+            .service_id
+            == self.admission.installation;
         if !local
             && !runtime
                 .acknowledged_mail_changes(project)

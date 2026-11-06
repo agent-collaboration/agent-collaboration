@@ -91,6 +91,9 @@ pub fn prepare_mail_push_with_load_policy(
         return Err(invalid_preparation());
     }
     let load_policy = match item.body() {
+        BoardDeliveryBody::CreateSession(_) | BoardDeliveryBody::RemoteCreateResult(_) => {
+            return Err(invalid_preparation());
+        }
         BoardDeliveryBody::Wake(_) => {
             return Err(DeliveryError::Corrupt {
                 field: "wake cannot become a direct push",
@@ -233,5 +236,5 @@ fn invalid_preparation() -> DeliveryError {
 }
 
 #[cfg(test)]
-#[path = "mail_push_preparation_tests.rs"]
+#[path = "mail_push_preparation_test.rs"]
 mod tests;

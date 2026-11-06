@@ -46,7 +46,15 @@ impl MailDeliveryRuntime {
         }
         let config = self.config;
         let item = original.id();
-        if original.recipient().address.endpoint.service_id == self.service {
+        if original
+            .recipient()
+            .address
+            .session()
+            .map_err(StoreError::backend)?
+            .endpoint
+            .service_id
+            == self.service
+        {
             if original.recipient().peer != config.owner {
                 return Err(StoreError::backend("local frozen cancellation peer"));
             }

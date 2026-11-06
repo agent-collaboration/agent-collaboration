@@ -12,6 +12,7 @@ pub enum CarrierAcceptance {
     Queued,
     PeerMessageWritten,
     Wake(Box<crate::RemoteWakeResult>),
+    CreateSession(Box<crate::CreateSessionResult>),
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]

@@ -160,7 +160,7 @@ impl RuleFixture {
             },
             Recipient {
                 peer,
-                address: session,
+                address: session.into(),
             },
             None,
             BoardDeliveryBody::Notification(NotificationBody {

@@ -273,6 +273,9 @@ impl MailOwner {
     ) -> Result<(ItemId, runtime_primitives::OperationId), TestError> {
         let id = item.id();
         let submitter = match item.sender() {
+            collaboration_mail_protocol::MailSender::Fleet => {
+                return Err("Fleet sender is not wired".into());
+            }
             collaboration_mail_protocol::MailSender::Project { project } => {
                 fleet_sync_protocol::Submitter::Project(project.as_str().to_owned().try_into()?)
             }

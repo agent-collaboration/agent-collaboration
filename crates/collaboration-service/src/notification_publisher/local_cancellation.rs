@@ -54,7 +54,12 @@ impl NotificationPublisher {
             return Err(BoardError::board_unavailable());
         };
         if envelope.digest() != &reference.digest
-            || envelope.recipient().address != target
+            || envelope
+                .recipient()
+                .address
+                .session()
+                .map_err(|_| BoardError::board_unavailable())?
+                != &target
             || target.endpoint.service_id != self.inner.admission.installation
         {
             return Err(BoardError::board_unavailable());
@@ -155,7 +160,14 @@ impl PublisherInner {
                 let BoardDeliveryBody::Notification(notification) = item.body() else {
                     continue;
                 };
-                if item.recipient().address.endpoint.service_id == self.admission.installation
+                if item
+                    .recipient()
+                    .address
+                    .session()
+                    .map_err(|_| BoardError::board_unavailable())?
+                    .endpoint
+                    .service_id
+                    == self.admission.installation
                     && group_covers(group, &notification.source)
                 {
                     let id = item
@@ -187,6 +199,8 @@ impl PublisherInner {
             .envelope
             .recipient()
             .address
+            .session()
+            .map_err(|_| BoardError::board_unavailable())?
             .endpoint
             .service_id
             != self.admission.installation

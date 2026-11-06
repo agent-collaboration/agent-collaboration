@@ -51,6 +51,8 @@ fn received_mail_push_for(
         .recipient()
         .address
         .clone()
+        .into_session()
+        .map_err(|_| invalid_projection())?
         .try_into()
         .map_err(|_| invalid_projection())?;
     let push_id: PushId = item
@@ -60,6 +62,10 @@ fn received_mail_push_for(
         .try_into()
         .map_err(|_| invalid_projection())?;
     let draft = match item.body() {
+        board_sync_protocol::BoardDeliveryBody::CreateSession(_)
+        | board_sync_protocol::BoardDeliveryBody::RemoteCreateResult(_) => {
+            return Err(invalid_projection());
+        }
         board_sync_protocol::BoardDeliveryBody::Wake(_) => return Ok(None),
         board_sync_protocol::BoardDeliveryBody::Message(body) => {
             let origin = match item.sender() {
@@ -70,7 +76,7 @@ fn received_mail_push_for(
                         .map_err(|_| invalid_projection())?,
                 ),
                 MailSender::HumanUser { .. } => PushOrigin::OwnerUnverified,
-                MailSender::Project { .. } => return Err(invalid_projection()),
+                MailSender::Project { .. } | MailSender::Fleet => return Err(invalid_projection()),
             };
             PushRecordDraft {
                 push_id,
@@ -214,5 +220,5 @@ fn invalid_projection() -> DeliveryError {
 }
 
 #[cfg(test)]
-#[path = "received_mail_push_tests.rs"]
+#[path = "received_mail_push_test.rs"]
 mod tests;

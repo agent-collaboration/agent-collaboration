@@ -114,7 +114,14 @@ async fn a_failed_follow_projection_keeps_one_frozen_item_for_the_next_project_h
                 roots: roots.clone(),
                 item: fleet_sync_protocol::ItemId::new(uuid::Uuid::now_v7()).unwrap(),
                 enrollment: crate::IntentRecipientEnrollment {
-                    service: frozen[0].recipient().address.endpoint.service_id.clone(),
+                    service: frozen[0]
+                        .recipient()
+                        .address
+                        .session()
+                        .unwrap()
+                        .endpoint
+                        .service_id
+                        .clone(),
                     peer: frozen[0].recipient().peer,
                 },
                 preventions: Vec::new(),

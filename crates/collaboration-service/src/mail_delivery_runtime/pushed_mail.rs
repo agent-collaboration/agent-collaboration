@@ -52,6 +52,9 @@ impl MailDeliveryRuntime {
             serde_json::from_value(serde_json::to_value(item).map_err(StoreError::backend)?)
                 .map_err(StoreError::backend)?;
         let sender_service = match item.sender() {
+            super::MailSender::Fleet => {
+                return Err(StoreError::backend("Fleet sender is not wired"));
+            }
             super::MailSender::Session(session) => Some(session.endpoint.service_id.clone()),
             super::MailSender::HumanUser { installation } => Some(installation.clone()),
             super::MailSender::Project { .. } => None,

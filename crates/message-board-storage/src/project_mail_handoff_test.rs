@@ -270,7 +270,8 @@ fn notification(
                         endpoint_id: EndpointId::try_from("codex-local".to_owned())?,
                     },
                     session_id: SessionId::try_from("handoff-recipient".to_owned())?,
-                },
+                }
+                .into(),
             },
             None,
             BoardDeliveryBody::Notification(NotificationBody {

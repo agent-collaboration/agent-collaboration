@@ -440,10 +440,16 @@ impl DeliveryConsumer<TursoScope<'_, MailHost>> for MailConsumer {
     ) -> Result<(), DeliveryError> {
         project_received_mail(scope, item, self.clock.now()).await?;
         if collaboration_runtime::received_mail_push::is_poll_mail(item) {
-            let target = item.recipient().address.clone().try_into().map_err(|_| {
-                DeliveryError::Corrupt {
+            let session = item
+                .recipient()
+                .address
+                .clone()
+                .into_session()
+                .map_err(|_| DeliveryError::Corrupt {
                     field: "Poll recipient",
-                }
+                })?;
+            let target = session.try_into().map_err(|_| DeliveryError::Corrupt {
+                field: "Poll recipient",
             })?;
             // This hint waits behind the receive transaction. It also discovers
             // new remote items for a wait that was already registered.

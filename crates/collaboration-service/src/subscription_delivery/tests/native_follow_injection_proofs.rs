@@ -255,7 +255,7 @@ async fn a_follow_recipient_with_no_sender_project_file_can_still_inject_normall
         },
         Recipient {
             peer: PeerId::try_from("0192a1b2-c3d4-7000-8000-000000000001".to_owned()).unwrap(),
-            address: address.clone(),
+            address: address.clone().into(),
         },
         None,
         BoardDeliveryBody::Notification(NotificationBody {

@@ -9,7 +9,10 @@ impl SubscriptionDeliveryService {
         &self,
         item: Box<fleet_sync_protocol::DeliveryItem<collaboration_contracts::RouterDeliveryTypes>>,
     ) -> collaboration_contracts::NativeDeliveryResult {
-        let target: SessionRef = match item.recipient().address.clone().try_into() {
+        let Ok(session) = item.recipient().address.clone().into_session() else {
+            return poll_unsent("invalid Poll recipient");
+        };
+        let target: SessionRef = match session.try_into() {
             Ok(target) => target,
             Err(_) => return poll_unsent("invalid Poll recipient"),
         };

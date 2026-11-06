@@ -114,7 +114,9 @@ async fn session_and_human_submissions_carry_no_project_epoch() -> Result<(), Te
     let human = relay_items::ordinary_message(harness.peer());
     let session = fleet_sync_protocol::DeliveryItem::new(
         fleet_sync_protocol::ItemId::new(uuid::Uuid::now_v7())?,
-        collaboration_mail_protocol::MailSender::Session(human.recipient().address.clone()),
+        collaboration_mail_protocol::MailSender::Session(
+            human.recipient().address.clone().into_session()?,
+        ),
         human.recipient().clone(),
         None,
         human.body().clone(),

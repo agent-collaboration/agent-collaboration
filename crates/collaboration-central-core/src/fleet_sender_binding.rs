@@ -36,6 +36,7 @@ where
     {
         async move {
             let installation = match sender {
+                MailSender::Fleet => return Err(SenderBindingFailure::Unknown),
                 MailSender::Project { project } => {
                     return fleet_sync_protocol::DatabaseId::try_from(project.as_str().to_owned())
                         .map(Submitter::Project)

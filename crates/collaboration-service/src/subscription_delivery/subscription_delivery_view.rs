@@ -110,6 +110,8 @@ impl SubscriptionWindowStore {
                             .recipient()
                             .address
                             .clone()
+                            .into_session()
+                            .map_err(unavailable)?
                             .try_into()
                             .map_err(unavailable)?,
                         mode: policy.mode(),

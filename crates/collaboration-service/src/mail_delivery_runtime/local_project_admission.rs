@@ -44,7 +44,11 @@ impl MailDeliveryRuntime {
                 board_sync_protocol::BoardDeliveryBody::Notification(_)
             )
             || item.recipient().peer != self.config.owner
-            || item.recipient().address.endpoint.service_id != self.service
+            || !item
+                .recipient()
+                .address
+                .session()
+                .is_ok_and(|session| session.endpoint.service_id == self.service)
         {
             return Err(DeliveryTransactionFailure::Corrupt {
                 field: "local project notification".to_owned(),

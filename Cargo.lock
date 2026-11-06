@@ -1976,6 +1976,8 @@ name = "collaboration-mail-protocol"
 version = "0.1.126"
 dependencies = [
  "chrono",
+ "fleet-identity-protocol",
+ "fleet-sync-protocol",
  "message-board",
  "schemars 1.2.2",
  "serde",

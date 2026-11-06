@@ -17,7 +17,7 @@ pub struct FrozenFollowCancels {
     pub targets: Vec<MailItemRef>,
     pub group: MailItemRef,
     sender: MailSender,
-    recipient: Recipient<SessionRef>,
+    recipient: Recipient<board_sync_protocol::DeliveryAddress>,
 }
 
 impl FrozenFollowCancels {
@@ -38,7 +38,7 @@ impl FrozenFollowCancels {
             project,
             Recipient {
                 peer: PeerId::new(uuid::Uuid::now_v7())?,
-                address: session,
+                address: session.into(),
             },
         )
         .await
@@ -47,9 +47,9 @@ impl FrozenFollowCancels {
     pub async fn arrange_for_recipient(
         write: &mut ProjectWriteTransaction,
         project: &ProjectId,
-        recipient: Recipient<SessionRef>,
+        recipient: Recipient<board_sync_protocol::DeliveryAddress>,
     ) -> Result<Self, TestError> {
-        let session = recipient.address.clone();
+        let session = recipient.address.clone().into_session()?;
         let sender = MailSender::Project {
             project: project.clone(),
         };

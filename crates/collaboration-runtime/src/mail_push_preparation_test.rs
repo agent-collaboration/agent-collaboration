@@ -21,7 +21,7 @@ fn machine() -> MachineIdentity {
     )
     .unwrap()
 }
-fn recipient() -> Recipient<message_board::SessionRef> {
+fn recipient() -> Recipient<board_sync_protocol::DeliveryAddress> {
     Recipient {
         peer: PeerId::new(uuid::Uuid::now_v7()).unwrap(),
         address: serde_json::from_value(json!({
@@ -97,7 +97,7 @@ fn follow(mode: SubscriptionMode, idle: WhenIdle) -> DeliveryItem<RouterDelivery
                 roots,
                 policy: FollowDeliveryPolicy::new(
                     &Identity::Session {
-                        session: recipient.address,
+                        session: recipient.address.into_session().unwrap(),
                     },
                     mode,
                     idle,

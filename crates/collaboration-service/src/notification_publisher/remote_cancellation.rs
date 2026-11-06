@@ -72,7 +72,14 @@ impl PublisherInner {
                 let BoardDeliveryBody::Notification(body) = item.body() else {
                     continue;
                 };
-                if item.recipient().address.endpoint.service_id == self.admission.installation
+                if item
+                    .recipient()
+                    .address
+                    .session()
+                    .map_err(|_| BoardError::board_unavailable())?
+                    .endpoint
+                    .service_id
+                    == self.admission.installation
                     || !super::local_cancellation::group_covers(group, &body.source)
                 {
                     continue;
