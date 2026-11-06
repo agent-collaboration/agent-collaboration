@@ -103,7 +103,7 @@ export const publicLifecycleSchema = z
 	.readonly();
 
 /**
- * The runtime `router-identity.json` record. Its producer is verification/observations/owned-runtime.ts
+ * The runtime `router-identity.json` record. Its producer is verification/observations/runtime/owned-runtime.ts
  * (identityRecord of a process-table row), so both packages share one real-owner shape.
  */
 export const routerIdentityRecordSchema = processIdentitySchema

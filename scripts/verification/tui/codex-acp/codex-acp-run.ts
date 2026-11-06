@@ -4,7 +4,7 @@
  * It qualifies the target before launch, renders same-byte original PNGs per checkpoint, requires
  * one unchanged Codex child and the declared checkpoint order, then exits Codex normally. Provider
  * effects, history and settings are decided separately by the same-session observer
- * (verification/observations/acp-journey-observation.ts); this run never claims them.
+ * (verification/observations/providers/acp/acp-journey-observation.ts); this run never claims them.
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -13,14 +13,14 @@ import { isAbsolute, join } from 'node:path';
 
 import { z } from 'zod';
 
-import { normalBuildManifestSchema } from '../../../../verification/observations/acp-metadata-models.ts';
+import { normalBuildManifestSchema } from '../../../../verification/observations/providers/acp/acp-metadata-models.ts';
 import {
 	MAX_ROUTE_PREFIX_BYTES,
 	MAX_ROUTE_SEGMENT_BYTES,
 	captureClaudeRouteBaseline,
 	requireClaudeRouteBinding,
-} from '../../../../verification/observations/claude-route-window.ts';
-import type { ClaudeRouteBinding } from '../../../../verification/observations/claude-route-window.ts';
+} from '../../../../verification/observations/providers/claude/claude-route-window.ts';
+import type { ClaudeRouteBinding } from '../../../../verification/observations/providers/claude/claude-route-window.ts';
 import { artifactBindingSchema } from '../evidence/evidence-schema.ts';
 import type { ProcessIdentity } from '../evidence/evidence-schema.ts';
 import { sourceBinding, verifyArtifact } from '../evidence/source-binding.ts';

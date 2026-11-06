@@ -247,8 +247,21 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
             Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
         }
         .await;
+        // Claim promises Ready installation; recovery has its own public completion.
+        let recovered = match (&claimed, &pending) {
+            (Ok(()), Some(before)) => {
+                super::intent_recovery_proof::await_recovered_intent_handoff(
+                    &fixture.root,
+                    &source.selected.project,
+                    before,
+                )
+                .await
+            }
+            _ => Ok(()),
+        };
         let stopped = host.stop().await;
         claimed?;
+        recovered?;
         stopped?;
         if matches!(
             contents,

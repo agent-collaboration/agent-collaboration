@@ -15,7 +15,7 @@ The package currently supports **Quota and Sessions**. `capture-run.ts` exposes 
 | `cua-readback.ts`, `original-artifacts.ts` | Same-child/PTY identity and original capture/readback checks | Actual Codex keyboard scenarios and checkpoints, preserving original PTY/captures and matching native requests |
 | `scene-contracts.ts`, `capture-selection.ts` | Explicit scenes and accepted input/selection | Bounded Codex ACP scenario and checkpoint oracle; no generic second capture framework |
 | Shared `TerminalDriver` in `crates/codex-router-quota-reset-test-harness/tests/quota_reset_pty_test/terminal_interaction_test.rs` | Existing Rust PTY owner; shared backend supplies streaming reads, explicit-environment launch, keys, resize and exact-child cleanup | Keep Codex journeys in this harness crate and use its shared TS wterm bridge; no second PTY/renderer or generic support crate |
-| `verification/observations/acp-metadata-observation.ts` | Public target/session/native API/history readback | Supporting skill/command effect observation correlated with that same TUI child/session; it remains an observer, not the TUI driver |
+| `verification/observations/providers/acp/acp-metadata-observation.ts` | Public target/session/native API/history readback | Supporting skill/command effect observation correlated with that same TUI child/session; it remains an observer, not the TUI driver |
 
 The extension is **needed**, not an existing option claimed to work. Actual keyboard selection, submitted native input, original artifacts and provider result must refer to the same declared child/session. Receipts alone establish neither visible UI nor a provider effect. Keep existing Quota/Sessions scenarios and rejection tests intact.
 

@@ -12,7 +12,7 @@ import { isAbsolute, join } from 'node:path';
 import { z } from 'zod';
 
 // The one alias rule, owned by the same-session observer's pure oracle.
-import { nativeThreadAlias } from '../../../../verification/observations/acp-journey-oracle.ts';
+import { nativeThreadAlias } from '../../../../verification/observations/providers/acp/acp-journey-oracle.ts';
 import { artifactBindingSchema, viewportSchema } from '../evidence/evidence-schema.ts';
 import { readJson, verifyArtifact } from '../evidence/source-binding.ts';
 
@@ -40,7 +40,7 @@ export const codexAcpTargetSchema = z
 		cwd: absoluteDirectorySchema,
 		alternate_screen: z.boolean(),
 		viewport: viewportSchema,
-		// The same-session supporting observer plan (verification/observations/acp-journey-models.ts).
+		// The same-session supporting observer plan (verification/observations/providers/acp/acp-journey-models.ts).
 		observer_plan: absoluteDirectorySchema,
 	})
 	.readonly();
