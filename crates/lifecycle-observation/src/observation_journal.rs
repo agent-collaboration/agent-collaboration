@@ -9,6 +9,8 @@ use sqlx::{
 };
 use std::{path::Path, time::Duration};
 
+const JOURNAL_BUSY_TIMEOUT: Duration = Duration::from_secs(1);
+
 #[derive(Debug, thiserror::Error)]
 pub enum JournalError {
     #[error("address snapshot expired")]
@@ -47,10 +49,10 @@ impl ObservationJournal {
                 .create_if_missing(true)
                 .journal_mode(SqliteJournalMode::Wal)
                 .synchronous(SqliteSynchronous::Full)
-                .busy_timeout(Duration::from_secs(1)),
+                .busy_timeout(JOURNAL_BUSY_TIMEOUT),
             path,
         )?;
-        let mut connection = SqliteConnection::connect_with(&options).await?;
+        let mut connection = connect_journal(options).await?;
         prepare_existing_database(&mut connection, path).await?;
         let journal_id =
             crate::journal_migrations::initialize(&mut connection, new_identity).await?;
@@ -186,3 +188,33 @@ impl ObservationJournal {
         let _closed = self.connection.close().await;
     }
 }
+
+async fn connect_journal(options: SqliteConnectOptions) -> Result<SqliteConnection, sqlx::Error> {
+    let deadline = tokio::time::Instant::now() + JOURNAL_BUSY_TIMEOUT;
+    // SQLx runs this last, restoring the normal busy timeout on a successful
+    // connection after establishment used only the remaining retry budget.
+    let options = options.pragma("busy_timeout", JOURNAL_BUSY_TIMEOUT.as_millis().to_string());
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        match SqliteConnection::connect_with(&options.clone().busy_timeout(remaining)).await {
+            Ok(connection) => return Ok(connection),
+            Err(error) => {
+                let is_busy = error
+                    .as_database_error()
+                    .is_some_and(|database| database.code().as_deref() == Some("5"));
+                let now = tokio::time::Instant::now();
+                if !is_busy || now >= deadline {
+                    return Err(error);
+                }
+                // SQLite's WAL-mode transition can return SQLITE_BUSY without
+                // invoking its busy handler. Drop that connection (and its
+                // locks), then retry establishment within the original budget.
+                tokio::time::sleep_until((now + Duration::from_millis(10)).min(deadline)).await;
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "observation_journal_test.rs"]
+mod tests;
