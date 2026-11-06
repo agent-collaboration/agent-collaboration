@@ -91,7 +91,20 @@ async fn compiled_production_mode_publishes_backs_up_claims_verifies_and_writes_
             OwnedHost::start(&fixture.root, &bundle.manifest().header.declared_owner).await?;
         let canary = async {
             host.await_ready().await?;
-            // Restart reattaches the writer through the same frozen Claim as the existing proof.
+            let client = collaboration_client::CollaborationClient::connect(
+                &codex_router_host::router_collaboration_directory(&fixture.root),
+                "production-canary-proof",
+                "1",
+            )
+            .await?;
+            // Settle the restarted writer before previewing its physical project tree.
+            // The compiled replay below then confirms that fresh, reattached state.
+            let reattached = super::public_claim::claim(&client, &bundle).await?;
+            assert!(matches!(
+                reattached,
+                board_sync_protocol::ProjectClaimReply::Claimed { epoch, .. }
+                    if epoch.value() == 2
+            ));
             run.renew_owner(central.base_url())?;
             let claimed = execute(&run, &fixture, "claim", central.base_url())
                 .await
@@ -99,12 +112,6 @@ async fn compiled_production_mode_publishes_backs_up_claims_verifies_and_writes_
                     std::io::Error::other(format!("reopened compiled Claim: {error}"))
                 })?;
             assert_eq!(claimed["projects"][0]["request"], run.claim.as_str());
-            let client = collaboration_client::CollaborationClient::connect(
-                &codex_router_host::router_collaboration_directory(&fixture.root),
-                "production-canary-proof",
-                "1",
-            )
-            .await?;
             let before = client
                 .view_work(message_board::ProjectViewRequest {
                     project_id: source.selected.project.clone(),
