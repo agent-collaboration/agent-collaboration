@@ -4,7 +4,9 @@ use super::{
 };
 use crate::organization_authority::{
     VerifiedFleetOrganizationStatement,
-    fleet_statement_test_support::{claims, verified_claims, verified_fixture},
+    fleet_statement_test_support::{
+        claims, verified_claims, verified_fixture, verified_foreign_organization, verified_next_key,
+    },
 };
 use serde_json::json;
 
@@ -89,7 +91,10 @@ async fn fleet_replacement_two_candidates_for_one_predecessor_have_one_decision_
 #[tokio::test(start_paused = true)]
 async fn fleet_replacement_original_setup_replay_preserves_the_replacement() {
     let original = verified_fixture().await;
-    let stored = replacement_for(&original, 1_799_999_950).await;
+    let mut input = claims();
+    input["replaces"] = json!(original.digest().as_str());
+    let stored = verified_next_key(input).await;
+    assert_ne!(original.key_id(), stored.key_id());
     let before_digest = stored.digest().clone();
     let before_key = stored.key_id().to_owned();
 
@@ -99,4 +104,14 @@ async fn fleet_replacement_original_setup_replay_preserves_the_replacement() {
     assert_eq!(stored.digest(), &before_digest);
     assert_eq!(stored.key_id(), before_key);
     // The decision cannot mutate a record count: no storage or apply operation exists here.
+}
+
+#[tokio::test(start_paused = true)]
+async fn fleet_replacement_never_changes_the_stored_organization() {
+    let stored = verified_fixture().await;
+    let foreign = verified_foreign_organization().await;
+
+    let decision = decide_organization_statement_replacement(Some(&stored), &foreign);
+
+    assert_eq!(decision, Err(Refusal::OrganizationMismatch));
 }

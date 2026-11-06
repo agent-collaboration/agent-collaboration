@@ -30,6 +30,26 @@ async fn fleet_statement_refuses_a_forged_signature() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn fleet_statement_refuses_an_edited_signed_predecessor() {
+    let (verifier, _) = verifier();
+    let mut input = claims();
+    input["replaces"] = json!("ab".repeat(32));
+    let original = signed_statement(&header(), &input);
+    let (_, signature) = original.rsplit_once('.').unwrap();
+    input["replaces"] = json!("cd".repeat(32));
+    let edited = format!(
+        "{}.{}.{}",
+        URL_SAFE_NO_PAD.encode(serde_json::to_vec(&header()).unwrap()),
+        URL_SAFE_NO_PAD.encode(serde_json::to_vec(&input).unwrap()),
+        signature
+    );
+
+    let result = verifier.verify(&edited).await;
+
+    assert_eq!(result.unwrap_err(), Refusal::BadSignature);
+}
+
+#[tokio::test(start_paused = true)]
 async fn fleet_statement_refuses_a_person_token_header() {
     let (verifier, _) = verifier();
     let mut input = header();

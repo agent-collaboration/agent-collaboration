@@ -56,10 +56,15 @@ impl IssuerKeySource for FixtureKeys {
     }
     async fn fetch_issuer_keys(&self) -> Result<RawJwks, KeyFetchFailure> {
         let key = signing_key();
+        let next_key = Ed25519KeyPair::from_seed_unchecked(&[8; 32])
+            .map_err(|_| KeyFetchFailure::Unreachable)?;
         Ok(RawJwks {
             body: serde_json::to_vec(&json!({"keys":[{
                 "kid":"stamp-fixture", "kty":"OKP", "crv":"Ed25519", "alg":"EdDSA",
                 "x":URL_SAFE_NO_PAD.encode(key.public_key().as_ref())
+            }, {
+                "kid":"next-stamp-fixture", "kty":"OKP", "crv":"Ed25519", "alg":"EdDSA",
+                "x":URL_SAFE_NO_PAD.encode(next_key.public_key().as_ref())
             }]}))
             .map_err(|_| KeyFetchFailure::Unreachable)?,
             cache_control: None,
@@ -83,6 +88,11 @@ pub(crate) fn header() -> Value {
 }
 
 pub(crate) fn signed_statement(header: &Value, claims: &Value) -> String {
+    let key = if header.get("kid").and_then(Value::as_str) == Some("next-stamp-fixture") {
+        Ed25519KeyPair::from_seed_unchecked(&[8; 32]).unwrap()
+    } else {
+        signing_key()
+    };
     let signed = format!(
         "{}.{}",
         URL_SAFE_NO_PAD.encode(serde_json::to_vec(header).unwrap()),
@@ -90,7 +100,7 @@ pub(crate) fn signed_statement(header: &Value, claims: &Value) -> String {
     );
     format!(
         "{signed}.{}",
-        URL_SAFE_NO_PAD.encode(signing_key().sign(signed.as_bytes()).as_ref())
+        URL_SAFE_NO_PAD.encode(key.sign(signed.as_bytes()).as_ref())
     )
 }
 
@@ -135,4 +145,36 @@ pub(crate) async fn verified_claims(input: Value) -> VerifiedFleetOrganizationSt
         .verify(&signed_statement(&header(), &input))
         .await
         .unwrap()
+}
+
+pub(crate) async fn verified_next_key(input: Value) -> VerifiedFleetOrganizationStatement {
+    let mut next_header = header();
+    next_header["kid"] = json!("next-stamp-fixture");
+    verifier()
+        .0
+        .verify(&signed_statement(&next_header, &input))
+        .await
+        .unwrap()
+}
+
+pub(crate) async fn verified_foreign_organization() -> VerifiedFleetOrganizationStatement {
+    let mut input = claims();
+    input["sub"] = json!(FOREIGN_ORGANIZATION);
+    input["organization_id"] = json!(FOREIGN_ORGANIZATION);
+    let trust = FleetOrganizationStatementTrust::new(
+        "https://sign-in.example.invalid".into(),
+        "https://central.example.invalid/identity".into(),
+        organization(FOREIGN_ORGANIZATION),
+    )
+    .unwrap();
+    FleetOrganizationStatementVerifier::new(
+        RealEd25519,
+        FixtureKeys,
+        Arc::default(),
+        Arc::new(ControlledClock(AtomicI64::new(NOW))),
+        trust,
+    )
+    .verify(&signed_statement(&header(), &input))
+    .await
+    .unwrap()
 }
