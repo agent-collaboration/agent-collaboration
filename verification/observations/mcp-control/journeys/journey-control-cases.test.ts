@@ -127,58 +127,92 @@ test("loadResume qualifies the faithful reattach shapes, including a result-limi
 });
 
 test("loadResume refuses load history that is not the recorded conversation in order", async () => {
-  for (const loadReplay of [
-    "none",
-    "canned",
-    "reordered",
-    "missing",
-    "foreign",
-    "liveLooking",
+  for (const [loadReplay, reason] of [
+    ["none", "the replay holds 0 turns, not the 2 recorded"],
+    ["canned", "replayed turn 0 is not the recorded input"],
+    ["reordered", "replayed turn 0 is not the recorded input"],
+    ["missing", "the replay holds 1 turns, not the 2 recorded"],
+    ["foreign", "replayed turn 0 is not the recorded reply"],
+    ["liveLooking", "replayed turn 0 does not end as replayed history"],
   ] as const) {
     const { result } = await loadResume({ loadReplay });
-    assert.equal(result.verdict.kind, "failed", loadReplay);
+    assert.deepEqual(result.verdict, { kind: "failed", reason }, loadReplay);
   }
 });
 
 test("loadResume refuses history after resume and a resume settlement that reports history", async () => {
-  assert.equal((await loadResume({ resumeReplay: "faithful" })).result.verdict.kind, "failed");
-  assert.equal((await loadResume({ resumeHistory: "available" })).result.verdict.kind, "failed");
+  assert.deepEqual((await loadResume({ resumeReplay: "faithful" })).result.verdict, {
+    kind: "failed",
+    reason: "resume exposed 1 historical turns; it replays none",
+  });
+  assert.deepEqual((await loadResume({ resumeHistory: "available" })).result.verdict, {
+    kind: "failed",
+    reason: "resume reported history available",
+  });
 });
 
-test("loadResume refuses a reattach settled as another kind", async () => {
-  assert.equal(
-    (await loadResume({ reattachSettlementKind: "closed" })).result.verdict.kind,
-    "failed",
-  );
+test("loadResume refuses a resume settlement of another kind", async () => {
+  const { result } = await loadResume({ resumeSettlementKind: "closed" });
+  assert.deepEqual(result.verdict, {
+    kind: "failed",
+    reason: "the operation settled closed, not resumed",
+  });
 });
 
-test("an unretained reattach settlement is inconclusive, never a pass", async () => {
-  const { result } = await loadResume({ settlementUnretained: true });
+test("an unretained resume settlement is inconclusive, never a pass", async () => {
+  const { result } = await loadResume({ unretainedSettlement: "resumed" });
   assert.deepEqual(result.verdict, {
     kind: "inconclusive",
     reason: "the resumed settlement is outputUnavailable",
   });
 });
 
+test("loadResume refuses a load settlement of another kind after a valid resume", async () => {
+  const { result, calls } = await loadResume({ loadSettlementKind: "closed" });
+  assert.equal(calls.includes("conversation_load"), true);
+  assert.deepEqual(result.verdict, {
+    kind: "failed",
+    reason: "the operation settled closed, not loaded",
+  });
+});
+
+test("an unretained load settlement after a valid resume is inconclusive, never a pass", async () => {
+  const { result, calls } = await loadResume({ unretainedSettlement: "loaded" });
+  assert.equal(calls.includes("conversation_load"), true);
+  assert.deepEqual(result.verdict, {
+    kind: "inconclusive",
+    reason: "the loaded settlement is outputUnavailable",
+  });
+});
+
 test("after load, an old terminal is not new work and an injected input is not isolated", async () => {
-  assert.equal((await loadResume({ afterLoadPrompt: "stale" })).result.verdict.kind, "failed");
-  assert.equal(
-    (await loadResume({ afterLoadPrompt: "injected" })).result.verdict.kind,
-    "inconclusive",
-  );
+  assert.deepEqual((await loadResume({ afterLoadPrompt: "stale" })).result.verdict, {
+    kind: "failed",
+    reason: "no turn followed the baseline (false completion)",
+  });
+  assert.deepEqual((await loadResume({ afterLoadPrompt: "injected" })).result.verdict, {
+    kind: "inconclusive",
+    reason: "another input was accepted on the isolated Session",
+  });
 });
 
 test("a replay baseline that never completes within its bound is inconclusive and sends no prompt after it", async () => {
   const { result, calls } = await loadResume({ alwaysLimited: true });
-  assert.equal(result.verdict.kind, "inconclusive", JSON.stringify(result.verdict));
+  assert.deepEqual(result.verdict, {
+    kind: "inconclusive",
+    reason: "the replayed history exceeded its declared read bound",
+  });
   const afterResume = calls.slice(calls.indexOf("conversation_resume") + 1);
   assert.equal(afterResume.includes("conversation_prompt"), false);
 });
 
 test("each segment's submitted text is distinct, so a reordered replay fails even when every reply repeats", async () => {
   assert.equal((await loadResume({ repeatedReply: true })).result.verdict.kind, "qualified");
-  for (const loadReplay of ["reordered", "foreign"] as const) {
+  for (const [loadReplay, reason] of [
+    ["reordered", "replayed turn 0 is not the recorded input"],
+    ["foreign", "replayed turn 0 is not the recorded reply"],
+  ] as const) {
     const { result } = await loadResume({ repeatedReply: true, loadReplay });
-    assert.equal(result.verdict.kind, "failed", loadReplay);
+    assert.deepEqual(result.verdict, { kind: "failed", reason }, loadReplay);
   }
 });

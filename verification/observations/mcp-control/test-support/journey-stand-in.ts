@@ -43,8 +43,10 @@ export interface StandInOptions {
   readonly loadReplay?: ReplayShape;
   /** The Resumed settlement's history field; the real Host reports historyUnavailable. */
   readonly resumeHistory?: string;
-  /** Overrides the settlement kind an operation wait reports for resume or load. */
-  readonly reattachSettlementKind?: string;
+  /** Overrides only the resume settlement kind. */
+  readonly resumeSettlementKind?: string;
+  /** Overrides only the load settlement kind, leaving resume valid. */
+  readonly loadSettlementKind?: string;
   /** Every prompt gets the same reply, as a real provider may give; only the inputs differ. */
   readonly repeatedReply?: boolean;
   /** Observation reads return at most this many events. */
@@ -69,8 +71,8 @@ export interface StandInOptions {
   };
   /** The binding the load operation's snapshot names, when it differs from the live one. */
   readonly loadBinding?: { readonly epoch?: string; readonly bindingId?: string };
-  /** An operation wait finds no retained settlement, as after Host restart or eviction. */
-  readonly settlementUnretained?: boolean;
+  /** Which reattach loses its retained settlement, as after Host restart or eviction. */
+  readonly unretainedSettlement?: "resumed" | "loaded";
   /** The prompt after a load: a live turn, no new turn (a stale terminal) or one with an injected input. */
   readonly afterLoadPrompt?: "live" | "stale" | "injected";
   /** Sessions that already exist, as after a settled first Host lifetime. */
@@ -328,7 +330,7 @@ class ScriptedHost {
         unknown: "replayed",
       });
       this.settlements.set(operationId, {
-        kind: this.options.reattachSettlementKind ?? "resumed",
+        kind: this.options.resumeSettlementKind ?? "resumed",
         target: this.target(session.id),
         effectiveSettings: {},
         history: this.options.resumeHistory ?? "historyUnavailable",
@@ -352,7 +354,7 @@ class ScriptedHost {
     );
     session.loaded = true;
     this.settlements.set(operationId, {
-      kind: this.options.reattachSettlementKind ?? "loaded",
+      kind: this.options.loadSettlementKind ?? "loaded",
       target: this.target(session.id),
       effectiveSettings: {},
     });
@@ -370,8 +372,12 @@ class ScriptedHost {
   }
 
   private wait(operationId: string): Answer {
+    const retained = this.settlements.get(operationId);
     const settlement =
-      this.options.settlementUnretained === true ? undefined : this.settlements.get(operationId);
+      this.options.unretainedSettlement !== undefined &&
+      retained?.kind === this.options.unretainedSettlement
+        ? undefined
+        : retained;
     return {
       result: {
         operation: this.snapshot(operationId),
