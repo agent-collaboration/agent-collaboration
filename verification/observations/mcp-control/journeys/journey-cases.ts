@@ -72,7 +72,8 @@ export interface CaseInputs {
 
 const PROMPT_SECONDS = 120;
 const createdSchema = z.looseObject({
-  kind: z.literal("created"),
+  kind: z.enum(["created", "createdWithoutSettings"]),
+  notApplied: z.array(z.unknown()).optional(),
   operationId: z.string(),
   target: sessionRefSchema,
 });
@@ -100,13 +101,7 @@ export async function createSession(inputs: CaseInputs, step: string): Promise<S
     requests.createArguments(plan, operationId, 60),
     { timeoutMs: 70_000 },
   );
-  const answer = answered(outcome, `${step} create`);
-  const settings = z
-    .looseObject({ kind: z.string(), notApplied: z.array(z.unknown()).optional() })
-    .parse(answer);
-  if (settings.kind === "createdWithoutSettings" || (settings.notApplied?.length ?? 0) > 0)
-    throw new Error(`${step}: creation did not apply all declared settings`);
-  const created = createdSchema.parse(answer);
+  const created = createdSchema.parse(answered(outcome, `${step} create`));
   if (created.operationId !== operationId)
     throw new Error(
       `${step}: the create answer names operation ${created.operationId}, not the one submitted`,
@@ -119,6 +114,8 @@ export async function createSession(inputs: CaseInputs, step: string): Promise<S
       `${step}: the create answer is for another service or endpoint than the plan declares`,
     );
   inputs.knownTargets.push(created.target);
+  if (created.kind === "createdWithoutSettings" || (created.notApplied?.length ?? 0) > 0)
+    throw new Error(`${step}: creation did not apply all declared settings`);
   const roles = store.sessionRoles(created.target);
   if (roles === null)
     throw new Error(`${step}: the owning store has no record of the created Session`);

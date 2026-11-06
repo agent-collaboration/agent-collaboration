@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { startStandIn, type StandInOptions } from "../test-support/journey-stand-in.ts";
+import {
+  startStandIn,
+  STAND_IN_SERVICE,
+  type StandInOptions,
+} from "../test-support/journey-stand-in.ts";
 import { standInPlan } from "../test-support/journey-stand-in-plan.ts";
 import { ProviderStoreReadback } from "../evidence/role-readback.ts";
 import { StreamingMcpClient } from "../transport/streaming-mcp-client.ts";
@@ -127,6 +131,13 @@ for (const [label, options, prompts, reason] of [
       observed.result.verdict.reason,
     );
     assert.equal(observed.calls.filter((name) => name === "conversation_prompt").length, prompts);
+    if (label === "notApplied" || label === "createdWithoutSettings") {
+      assert.deepEqual(observed.result.target, {
+        endpoint: { serviceId: STAND_IN_SERVICE, endpointId: "cursor-local" },
+        sessionId: "session-1",
+      });
+      assert.deepEqual(observed.calls, ["conversation_create"]);
+    }
   });
 }
 

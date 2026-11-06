@@ -96,7 +96,7 @@ export function cliPromptReadback(inputs: {
 		requireSelectedModel(answered(outcome, step), session, selection);
 	};
 	async function retainReply(attempt: number): Promise<void> {
-		if (attempt >= 10) throw new Error('CLI MCP turn remained unsettled at its read bound');
+		if (attempt >= 10) throw new Error('CLI MCP reply history is incomplete at its read bound');
 		binding();
 		reads.push(
 			await observe(
@@ -116,7 +116,12 @@ export function cliPromptReadback(inputs: {
 		if (reconstruction.acceptedInputs.length > 0 || reconstruction.turns.length > 1)
 			throw new Error('another input or turn shared the CLI Session');
 		const turn = reconstruction.turns[0];
-		if (turn === undefined || turn.outcome === null) return retainReply(attempt + 1);
+		if (
+			turn === undefined ||
+			turn.outcome === null ||
+			reads.at(-1)?.result.endReason === 'resultLimitReached'
+		)
+			return retainReply(attempt + 1);
 		if (
 			turn.outcome.kind !== 'ended' ||
 			turn.outcome.stop_reason !== 'endTurn' ||

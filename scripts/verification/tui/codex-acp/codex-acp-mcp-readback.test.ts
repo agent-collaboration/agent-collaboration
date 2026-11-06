@@ -34,6 +34,10 @@ const inputId = '019a0000-0000-7000-8000-000000000001';
 const turnId = '019a0000-0000-7000-8000-000000000002';
 
 interface CaseOptions {
+	readonly replyPages?: readonly {
+		readonly events: readonly unknown[];
+		readonly endReason: 'resultLimitReached' | 'deadlineReached';
+	}[];
 	readonly models?: readonly unknown[];
 	readonly configOptions?: readonly unknown[];
 	readonly configOptionsAtSecond?: readonly unknown[];
@@ -65,6 +69,7 @@ async function controlledRun(options: CaseOptions = {}): Promise<{
 	const sent: string[] = [];
 	let inspected = 0;
 	let observed = 0;
+	let sequence = 0;
 	const { promise: firstInspect, resolve: markFirst } = Promise.withResolvers<void>();
 	const { promise: secondInspect, resolve: markSecond } = Promise.withResolvers<void>();
 	const answer = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
@@ -161,6 +166,7 @@ async function controlledRun(options: CaseOptions = {}): Promise<{
 										]
 									: []),
 							];
+				const page = observed === 0 ? undefined : options.replyPages?.[observed - 1];
 				value = {
 					target: options.foreignObservation
 						? { ...targetSession, sessionId: 'foreign' }
@@ -169,8 +175,8 @@ async function controlledRun(options: CaseOptions = {}): Promise<{
 					attached: true,
 					continuationGap: true,
 					epoch: options.changedEpoch && observed > 0 ? 2 : 1,
-					endReason: 'deadlineReached',
-					events: events.map((event, index) => ({ sequence: index + 1, event })),
+					endReason: page?.endReason ?? 'deadlineReached',
+					events: (page?.events ?? events).map((event) => ({ sequence: ++sequence, event })),
 				};
 				observed += 1;
 			}
@@ -428,4 +434,106 @@ test('missing or wrong provider model in a run plan fails before any output or t
 			},
 		),
 	);
+});
+
+function completeReplyEvents(): readonly unknown[] {
+	return [
+		{ kind: 'turnStarted', inputId, turnId },
+		{
+			kind: 'itemStarted',
+			item: {
+				itemId: '019a0000-0000-7000-8000-000000000003',
+				kind: { kind: 'userMessage' },
+				text: declaration.prompt,
+			},
+		},
+		{ kind: 'itemCompleted', itemId: '019a0000-0000-7000-8000-000000000003' },
+		{
+			kind: 'itemStarted',
+			item: {
+				itemId: '019a0000-0000-7000-8000-000000000004',
+				kind: { kind: 'agentMessage' },
+				text: declaration.completion,
+			},
+		},
+		{ kind: 'itemCompleted', itemId: '019a0000-0000-7000-8000-000000000004' },
+		{
+			kind: 'turnEnded',
+			turnId,
+			outcome: { kind: 'ended', stop_reason: 'endTurn', local_cause: null },
+		},
+	];
+}
+
+for (const kind of ['turnStarted', 'inputAccepted'] as const) {
+	test(`a limited terminal page cannot hide another ${kind} in its unread tail`, async () => {
+		const fixture = await controlledRun({
+			replyPages: [
+				{ events: completeReplyEvents(), endReason: 'resultLimitReached' },
+				{
+					events: [
+						{
+							kind,
+							inputId: '019a0000-0000-7000-8000-000000000008',
+							turnId: '019a0000-0000-7000-8000-000000000009',
+						},
+					],
+					endReason: 'deadlineReached',
+				},
+			],
+		});
+		try {
+			await expect(fixture.drive()).rejects.toThrow('another input or turn shared the CLI Session');
+			expect(fixture.hasResult()).toBe(false);
+		} finally {
+			await fixture.cleanup();
+		}
+	});
+}
+
+test('a single legitimate turn spans result-limited pages with an exact continuation cursor', async () => {
+	const events = completeReplyEvents();
+	const fixture = await controlledRun({
+		replyPages: [
+			{ events: events.slice(0, 4), endReason: 'resultLimitReached' },
+			{ events: events.slice(4), endReason: 'deadlineReached' },
+		],
+	});
+	try {
+		await expect(fixture.drive()).resolves.toEqual(['prompt-composed', 'prompt-replied']);
+		expect(fixture.result()).toMatchObject({
+			target: targetSession,
+			inputId,
+			turnId,
+			reply: declaration.completion,
+		});
+		const replyReads = fixture
+			.reads()
+			.trim()
+			.split('\n')
+			.map((line) =>
+				z.looseObject({ step: z.string(), arguments: z.unknown().optional() }).parse(decode(line)),
+			)
+			.filter((entry) => entry.step.startsWith('cli-reply-'));
+		expect(replyReads).toHaveLength(2);
+		expect(replyReads[1]?.arguments).toMatchObject({ epoch: 1n, afterSequence: 4n });
+	} finally {
+		await fixture.cleanup();
+	}
+});
+
+test('an unread result-limited tail at the existing read bound cannot write success', async () => {
+	const fixture = await controlledRun({
+		replyPages: Array.from({ length: 10 }, (_unused, index) => ({
+			events: index === 0 ? completeReplyEvents() : [{ kind: 'stateChanged', state: {} }],
+			endReason: 'resultLimitReached' as const,
+		})),
+	});
+	try {
+		await expect(fixture.drive()).rejects.toThrow('incomplete at its read bound');
+		expect(fixture.hasResult()).toBe(false);
+		expect(fixture.reads().split('"step":"cli-reply-').length - 1).toBe(10);
+	} finally {
+		await fixture.cleanup();
+	}
 });

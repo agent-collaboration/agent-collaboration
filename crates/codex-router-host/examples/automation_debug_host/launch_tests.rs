@@ -30,7 +30,7 @@ fn debug_profile(endpoint: &str) -> String {
     format!(
         r#"
 model = "existing-model"
-model_reasoning_effort = "low"
+model_reasoning_effort = "high"
 model_provider = "codex-router-debug"
 [model_providers.codex-router-debug]
 name = "OpenAI"

@@ -47,12 +47,14 @@ const callSchema = z.object({
 
 /** How the stand-in answers conversation_create: faithfully, or self-consistently wrong. */
 type CreateAnswer = "faithful" | "otherEndpoint" | "otherService" | "foreignOperation";
+type CreateSettings = "complete" | "notApplied" | "createdWithoutSettings";
 
 interface StandIn {
   readonly store: string;
   readonly receipt: string;
   readonly duplicateDispatch: boolean;
   readonly createAnswer: CreateAnswer;
+  readonly createSettings: CreateSettings;
   /** Answers the post-prompt observation with the invented outcome, failing after create. */
   readonly inventedTurnEnd: boolean;
   /** Answers create faithfully but leaves no owning-store record, failing the role readback. */
@@ -70,6 +72,14 @@ function createdTarget(answer: CreateAnswer): typeof TARGET {
       endpoint: { ...TARGET.endpoint, serviceId: "99999999-9999-4999-8999-999999999999" },
     };
   return TARGET;
+}
+
+function createSettingsFields(settings: CreateSettings): Readonly<Record<string, unknown>> {
+  return {
+    kind: settings === "createdWithoutSettings" ? "createdWithoutSettings" : "created",
+    ...(settings === "createdWithoutSettings" ? { applied: [], failed: [] } : {}),
+    ...(settings === "notApplied" ? { notApplied: [{ setting: "model", value: "haiku" }] } : {}),
+  };
 }
 
 function answer(standIn: StandIn, name: string, args: Readonly<Record<string, unknown>>): unknown {
@@ -110,7 +120,7 @@ function answer(standIn: StandIn, name: string, args: Readonly<Record<string, un
         standIn.createAnswer === "foreignOperation"
           ? "0190a000-0000-7000-8000-00000000f0f0"
           : args["operationId"];
-      return { kind: "created", operationId, target };
+      return { ...createSettingsFields(standIn.createSettings), operationId, target };
     }
     case "events_observe":
       return observe();
@@ -175,6 +185,7 @@ async function withStandIn(
   options: {
     readonly duplicateDispatch?: boolean;
     readonly createAnswer?: CreateAnswer;
+    readonly createSettings?: CreateSettings;
     readonly inventedTurnEnd?: boolean;
     readonly omitStoreRecord?: boolean;
   },
@@ -191,6 +202,7 @@ async function withStandIn(
     receipt: join(root, "receipt.jsonl"),
     duplicateDispatch: options.duplicateDispatch ?? false,
     createAnswer: options.createAnswer ?? "faithful",
+    createSettings: options.createSettings ?? "complete",
     inventedTurnEnd: options.inventedTurnEnd ?? false,
     omitStoreRecord: options.omitStoreRecord ?? false,
     calls: [],
@@ -375,24 +387,32 @@ test("a failure after a validated create keeps that Session as the case's known 
 });
 
 test("a self-consistently wrong create answer is never kept as a known target", async () => {
-  for (const createAnswer of ["otherEndpoint", "otherService", "foreignOperation"] as const) {
-    await withStandIn({ createAnswer }, async (plan, client, store, standIn) => {
-      const context = {
-        client,
-        evidence: join(plan.repository, "evidence"),
-        deadline: Date.parse(plan.deadline),
-      };
-      mkdirSync(context.evidence);
-      const [result] = await runCases(plan, context, store);
-      assert.equal(result?.verdict.kind, "failed", createAnswer);
-      assert.equal(result?.target, null, createAnswer);
-      const afterCreate = standIn.calls.slice(standIn.calls.indexOf("conversation_create") + 1);
-      assert.deepEqual(
-        afterCreate.filter((tool) => MUTATING_TOOLS.has(tool)),
-        [],
-        createAnswer,
-      );
-    });
+  for (const createSettings of ["complete", "notApplied", "createdWithoutSettings"] as const) {
+    for (const createAnswer of ["otherEndpoint", "otherService", "foreignOperation"] as const) {
+      await withStandIn({ createAnswer, createSettings }, async (plan, client, store, standIn) => {
+        const context = {
+          client,
+          evidence: join(plan.repository, "evidence"),
+          deadline: Date.parse(plan.deadline),
+        };
+        mkdirSync(context.evidence);
+        const [result] = await runCases(plan, context, store);
+        assert.equal(result?.verdict.kind, "failed", createAnswer);
+        assert.equal(result?.target, null, createAnswer);
+        assert.match(
+          result?.verdict.kind === "failed" ? result.verdict.reason : "",
+          createAnswer === "foreignOperation"
+            ? /create answer names operation/
+            : /another service or endpoint/,
+        );
+        const afterCreate = standIn.calls.slice(standIn.calls.indexOf("conversation_create") + 1);
+        assert.deepEqual(
+          afterCreate.filter((tool) => MUTATING_TOOLS.has(tool)),
+          [],
+          createAnswer,
+        );
+      });
+    }
   }
 });
 
