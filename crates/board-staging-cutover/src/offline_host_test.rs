@@ -10,6 +10,48 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 #[test]
 #[expect(
     clippy::panic_in_result_fn,
+    reason = "Production opt-in never admits a standing debug root."
+)]
+fn production_mode_only_admits_the_exact_home_default_root() -> TestResult {
+    for name in [".codex", ".codex-router-debug", "isolated-staging"] {
+        let fixture = CutoverHostFixture::new(Some(name))?;
+        let result = OfflineHost::inspect_mode(
+            &fixture.root,
+            &fixture.service,
+            fixture.peer,
+            &fixture.home,
+            super::RootMode::Production,
+        );
+        assert!(result.is_err());
+        assert!(
+            !HostCoordinationPaths::for_router_root(&fixture.root)
+                .instance_lock()
+                .exists()
+        );
+    }
+    let fixture = CutoverHostFixture::new(Some(".codex-router"))?;
+    let inspection = OfflineHost::inspect_mode(
+        &fixture.root,
+        &fixture.service,
+        fixture.peer,
+        &fixture.home,
+        super::RootMode::Production,
+    )?;
+    assert_eq!(
+        inspection.router_root(),
+        std::fs::canonicalize(&fixture.root)?
+    );
+    assert!(
+        !HostCoordinationPaths::for_router_root(&fixture.root)
+            .instance_lock()
+            .exists()
+    );
+    Ok(())
+}
+
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
     reason = "Read-only inspection cannot create even an inert Host lock file."
 )]
 fn read_only_inspection_of_a_stopped_host_creates_no_lock_artifact() -> TestResult {

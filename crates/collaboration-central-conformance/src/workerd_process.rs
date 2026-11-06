@@ -31,6 +31,7 @@ impl WorkerdProcess {
         relay: &str,
     ) -> ConformanceResult<Self> {
         let mut child = Command::new(&settings.node)
+            .current_dir(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."))
             .arg("scripts/tooling/run-central-workerd.mjs")
             .arg(&settings.miniflare)
             .arg(&settings.persistence)

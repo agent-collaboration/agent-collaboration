@@ -1,8 +1,6 @@
 //! Resume the sealed run through ordinary public Claim after publication and archive.
 use crate::offline_run_plan::PlannedProject;
-use crate::{
-    OfflineHost, OfflineRunPlan, OwnerAuthentication, PreparedProjectBundle, StagingPublisher,
-};
+use crate::{OfflineRunPlan, OwnerAuthentication, PreparedProjectBundle, StagingPublisher};
 use board_sync_protocol::{ProjectClaimRefusal, ProjectClaimReply, ProjectClaimRequest};
 use collaboration_client::{BoardClientError, CollaborationClient};
 use fleet_sync_protocol::{Epoch, ReplicationPosition};
@@ -14,7 +12,7 @@ use std::{path::Path, time::Duration};
 pub enum ClaimRunError {
     #[error("the sealed cutover run plan is invalid")]
     Plan(#[from] crate::ProjectBundleError),
-    #[error("the declared Host identity is unavailable")]
+    #[error("the declared Host identity is unavailable: {0}")]
     Host(#[from] crate::OfflineHostError),
     #[error("the declared Host enrollment is unavailable")]
     Enrollment,
@@ -95,7 +93,7 @@ impl OfflineRunPlan {
         home: &Path,
     ) -> Result<crate::HostInspection, ClaimRunError> {
         self.validate()?;
-        let host = OfflineHost::inspect(&self.router_root, &self.service_id, self.peer_id, home)?;
+        let host = self.inspect_host(home)?;
         let root = host.router_root();
         let enrollment = codex_router_host::read_fleet_enrollment_document(
             &codex_router_host::router_fleet_enrollment_file(root),

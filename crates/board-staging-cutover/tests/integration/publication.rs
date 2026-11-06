@@ -58,6 +58,23 @@ async fn native_bundle_publication_completes_once_with_the_same_import_identity(
             url::Url::parse(central.base_url())?,
             &credential_path,
         )?;
+        #[cfg(debug_assertions)]
+        {
+            // A transport probe must read NotFound without reserving or publishing the import.
+            let seal_before = std::fs::read(prepared.directory().join("manifest.json"))?;
+            assert!(publisher.inspect_import_status(&prepared).await?.is_none());
+            assert_eq!(
+                std::fs::read(prepared.directory().join("manifest.json"))?,
+                seal_before
+            );
+            assert!(
+                prepared
+                    .manifest()
+                    .source_fingerprint
+                    .matches(&prepared.manifest().source_directory)?
+            );
+            assert!(!prepared.manifest().backup_directory.exists());
+        }
         // Act through the new publisher over actual owner-authenticated TCP HTTP.
         let confirmed = publisher.publish(&mut offline, &prepared).await?;
         assert!(confirmed.matches_bundle(&prepared)?);
@@ -90,6 +107,11 @@ async fn native_bundle_publication_completes_once_with_the_same_import_identity(
             return Err("published workflow absent".into());
         };
         assert_eq!(before.header, prepared.manifest().header);
+        #[cfg(debug_assertions)]
+        assert_eq!(
+            publisher.inspect_import_status(&prepared).await?,
+            Some(before.clone())
+        );
         assert_eq!(
             before.phase,
             AdminImportPhase::Complete {

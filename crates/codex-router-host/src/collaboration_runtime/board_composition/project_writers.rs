@@ -31,8 +31,29 @@ pub(super) enum ProjectWriterSlot {
     Installing(Arc<super::snapshot_installation::SnapshotInstallation>),
     Empty,
     Ready(Arc<ProjectWriter>),
-    Terminal { writer: Option<Arc<ProjectWriter>> },
+    Terminal {
+        writer: Option<Arc<ProjectWriter>>,
+        registration_refusal: Option<RegistrationRefusal>,
+    },
 }
+
+impl ProjectWriterSlot {
+    fn registration_refusal(&self) -> Option<&RegistrationRefusal> {
+        match self {
+            Self::Terminal {
+                registration_refusal,
+                ..
+            } => registration_refusal.as_ref(),
+            Self::Installing(_) | Self::Empty | Self::Ready(_) => None,
+        }
+    }
+}
+
+#[cfg(test)]
+type RegistrationReadGate = (
+    tokio::sync::oneshot::Sender<()>,
+    tokio::sync::oneshot::Receiver<()>,
+);
 
 pub(super) enum ProjectLifecycleSignal {
     Superseded {
@@ -67,6 +88,8 @@ pub(super) struct ProjectWriters {
     pub(super) lifecycle_signals: mpsc::UnboundedSender<ProjectLifecycleSignal>,
     lifecycle_requests: Mutex<mpsc::UnboundedReceiver<ProjectLifecycleSignal>>,
     registration_starts: tokio::sync::broadcast::Sender<ProjectId>,
+    #[cfg(test)]
+    pub(super) registration_read_gate: Mutex<Option<RegistrationReadGate>>,
     #[cfg(test)]
     renewal_prompts: tokio::sync::broadcast::Sender<(ProjectId, runtime_primitives::OperationId)>,
     #[cfg(test)]
@@ -110,6 +133,8 @@ impl ProjectWriters {
             lifecycle_signals,
             lifecycle_requests: Mutex::new(lifecycle_requests),
             registration_starts: tokio::sync::broadcast::channel(64).0,
+            #[cfg(test)]
+            registration_read_gate: Mutex::new(None),
             #[cfg(test)]
             renewal_prompts: tokio::sync::broadcast::channel(64).0,
             #[cfg(test)]
@@ -162,6 +187,7 @@ impl ProjectWriters {
         if *self.stopped.borrow() {
             *owner = ProjectWriterSlot::Terminal {
                 writer: Some(writer.clone()),
+                registration_refusal: None,
             };
             writer.stop().await?;
             return Err(io::Error::other("machine session has stopped"));
@@ -280,13 +306,16 @@ impl ProjectWriters {
             ProjectWriterSlot::Ready(writer)
             | ProjectWriterSlot::Terminal {
                 writer: Some(writer),
+                ..
             } if Arc::ptr_eq(&writer.store, &source) => writer.clone(),
             _ => return Ok(()),
         };
         // The subject and the registry close belong to this one project lease.
         // A delayed old signal cannot close a replacement writer between them.
+        let registration_refusal = owner.registration_refusal().cloned();
         *owner = ProjectWriterSlot::Terminal {
             writer: Some(writer.clone()),
+            registration_refusal,
         };
         writer.stop().await?;
         self.registry()?
@@ -378,7 +407,7 @@ impl ProjectWriters {
         let mut failure = self.settle_operations().await.err();
         let slots: Vec<_> = self.writers.lock().await.values().cloned().collect();
         for slot in slots {
-            if let Err(error) = stop_writer_slot(&slot).await {
+            if let Err(error) = stop_writer_slot(&slot, None).await {
                 failure.get_or_insert(error);
             }
         }
@@ -387,7 +416,10 @@ impl ProjectWriters {
     }
 }
 
-async fn stop_writer_slot(slot: &WriterSlot) -> io::Result<()> {
+async fn stop_writer_slot(
+    slot: &WriterSlot,
+    registration_refusal: Option<RegistrationRefusal>,
+) -> io::Result<()> {
     let writer = {
         let mut owner = slot.lock().await;
         if let ProjectWriterSlot::Installing(install) = &*owner {
@@ -395,11 +427,15 @@ async fn stop_writer_slot(slot: &WriterSlot) -> io::Result<()> {
         }
         let writer = match &*owner {
             ProjectWriterSlot::Ready(writer) => Some(writer.clone()),
-            ProjectWriterSlot::Terminal { writer } => writer.clone(),
+            ProjectWriterSlot::Terminal { writer, .. } => writer.clone(),
             ProjectWriterSlot::Installing(_) | ProjectWriterSlot::Empty => None,
         };
+        // Publish the known refusal before stopping or closing its native owner.
+        let registration_refusal =
+            registration_refusal.or_else(|| owner.registration_refusal().cloned());
         *owner = ProjectWriterSlot::Terminal {
             writer: writer.clone(),
+            registration_refusal,
         };
         writer
     };

@@ -18,7 +18,7 @@ mod offline_run;
 mod offline_run_plan;
 pub use imported_project_claims::{ClaimRunError, ClaimRunReport};
 pub use offline_run::{OfflineRunError, OfflineRunReport};
-pub use offline_run_plan::{OfflineRunPlan, OwnerAuthentication};
+pub use offline_run_plan::{CutoverPlanPreview, OfflineRunPlan, OwnerAuthentication};
 mod owner_publication_access;
 mod prepared_project_bundle;
 mod project_bundle_error;
@@ -30,6 +30,8 @@ pub use owner_publication_access::OwnerPublicationAccessError;
 pub use prepared_project_bundle::{
     PreparedProjectBundle, ProjectBundleManifest, ProjectPreparation,
 };
+#[cfg(debug_assertions)]
+pub use staging_publication::PublicationDiagnostic;
 pub use staging_publication::{
     PublicationError, PublicationStage, PublishedProject, StagingPublisher,
 };

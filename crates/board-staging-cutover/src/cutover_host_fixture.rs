@@ -27,7 +27,7 @@ impl CutoverHostFixture {
         )
     }
 
-    fn with_area(
+    pub(crate) fn with_area(
         area: tempfile::TempDir,
         protected: Option<&str>,
     ) -> Result<Self, Box<dyn std::error::Error>> {

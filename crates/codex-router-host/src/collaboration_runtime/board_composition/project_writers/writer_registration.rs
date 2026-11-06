@@ -32,7 +32,7 @@ impl ProjectRegistration for ProjectWriters {
             let _ = self.registration_waits.send(project.clone());
             loop {
                 let slot = self.writers.lock().await.get(project).cloned();
-                let writer = if let Some(slot) = slot {
+                let writer = if let Some(slot) = &slot {
                     let owner = slot.lock().await;
                     match &*owner {
                         ProjectWriterSlot::Ready(writer)
@@ -40,7 +40,20 @@ impl ProjectRegistration for ProjectWriters {
                         {
                             Some(writer.clone())
                         }
-                        ProjectWriterSlot::Terminal { .. } => {
+                        ProjectWriterSlot::Terminal {
+                            registration_refusal: Some(reason),
+                            ..
+                        } => {
+                            return Ok(ProjectRegistrationState::Outcome(
+                                WriterRegistrationOutcome::Refused {
+                                    reason: reason.clone(),
+                                },
+                            ));
+                        }
+                        ProjectWriterSlot::Terminal {
+                            registration_refusal: None,
+                            ..
+                        } => {
                             return Err(ProjectRegistrationError::Runtime {
                                 message: "project registration owner is terminal".to_owned(),
                             });
@@ -51,14 +64,32 @@ impl ProjectRegistration for ProjectWriters {
                     None
                 };
                 if let Some(writer) = writer {
-                    return writer
-                        .runtime
-                        .wait_registration()
-                        .await
-                        .map(ProjectRegistrationState::Outcome)
-                        .map_err(|error| ProjectRegistrationError::Runtime {
-                            message: error.to_string(),
-                        });
+                    #[cfg(test)]
+                    {
+                        let gate = self.registration_read_gate.lock().await.take();
+                        if let Some((entered, release)) = gate {
+                            let _ = entered.send(());
+                            let _ = release.await;
+                        }
+                    }
+                    match writer.runtime.wait_registration().await {
+                        Ok(outcome) => return Ok(ProjectRegistrationState::Outcome(outcome)),
+                        Err(error) => {
+                            if let Some(slot) = slot {
+                                let owner = slot.lock().await;
+                                if let Some(reason) = owner.registration_refusal() {
+                                    return Ok(ProjectRegistrationState::Outcome(
+                                        WriterRegistrationOutcome::Refused {
+                                            reason: reason.clone(),
+                                        },
+                                    ));
+                                }
+                            }
+                            return Err(ProjectRegistrationError::Runtime {
+                                message: error.to_string(),
+                            });
+                        }
+                    }
                 }
                 match starts.recv().await {
                     Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
@@ -150,9 +181,9 @@ impl ProjectWriters {
                                 .map_err(io::Error::other)?;
                         }
                         Ok(WriterRegistrationOutcome::Refused {
-                            reason: RegistrationRefusal::DatabaseRejected { .. },
+                            reason: reason @ RegistrationRefusal::DatabaseRejected { .. },
                         }) => {
-                            stop_writer_slot(&slot).await?;
+                            stop_writer_slot(&slot, Some(reason)).await?;
                             drop(watched);
                             let registry = registry
                                 .upgrade()

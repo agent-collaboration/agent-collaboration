@@ -422,6 +422,20 @@ async fn accepted_directory_registration_waits_for_welcome_and_grant_before_the_
             .await?,
         head
     );
+    writer.stop().await?;
+    projects
+        .registry()?
+        .database(&request.project_id)
+        .await?
+        .close()
+        .await;
+    assert!(
+        matches!(
+            projects.wait_ready(&request.project_id).await,
+            Err(ProjectRegistrationError::Runtime { message }) if message.contains("closed pool")
+        ),
+        "an unrelated native read error must remain a runtime error"
+    );
     drop(writer);
     drop(fleet);
     running.shutdown().await?;
@@ -436,12 +450,18 @@ async fn accepted_directory_registration_waits_for_welcome_and_grant_before_the_
 }
 
 #[tokio::test]
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract asserts; setup may fail."
-)]
 async fn native_registration_refusal_moves_an_empty_file_and_replays_the_original_reason()
 -> TestResult {
+    Box::pin(assert_native_registration_refusal(true)).await
+}
+
+#[tokio::test]
+async fn native_registration_waiter_preserves_refusal_while_orphan_move_is_incomplete() -> TestResult
+{
+    Box::pin(assert_native_registration_refusal(false)).await
+}
+
+async fn assert_native_registration_refusal(cleanup_first: bool) -> TestResult {
     let _ = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::WARN)
         .with_test_writer()
@@ -507,8 +527,49 @@ async fn native_registration_refusal_moves_an_empty_file_and_replays_the_origina
         assert!(read.records(kind).await?.is_empty());
     }
     read.finish().await?;
+    // Hold the waiter after it selected the live writer, before its native read.
+    // The real watcher must close its native owner before this read resumes.
+    let (entered, selected) = tokio::sync::oneshot::channel();
+    let (release, resumed) = tokio::sync::oneshot::channel();
+    *projects.registration_read_gate.lock().await = Some((entered, resumed));
+    let waiter_projects = projects.clone();
+    let waiter_project = request.project_id.clone();
+    let waiter = tokio::spawn(async move { waiter_projects.wait_ready(&waiter_project).await });
+    timeout(BOUND, selected).await??;
+    let database = projects.registry()?.database(&request.project_id).await?;
+    if !cleanup_first {
+        database.hold_move_aside(fleet_sync_writer::MoveAsidePhase::BeforeLink);
+    }
     service.release_registration()?;
-    timeout(BOUND, projects.settle_operations()).await??;
+    if cleanup_first {
+        timeout(BOUND, projects.settle_operations()).await??;
+    } else {
+        assert_eq!(
+            timeout(BOUND, database.wait_move_aside()).await??,
+            fleet_sync_writer::MoveAsidePhase::BeforeLink
+        );
+    }
+    release
+        .send(())
+        .map_err(|()| "registration waiter dropped")?;
+    let expected_registration =
+        ProjectRegistrationState::Outcome(WriterRegistrationOutcome::Refused {
+            reason: RegistrationRefusal::DatabaseRejected {
+                reason: reason.clone(),
+            },
+        });
+    assert_eq!(
+        timeout(BOUND, waiter).await???,
+        expected_registration.clone()
+    );
+    assert_eq!(
+        projects.wait_ready(&request.project_id).await?,
+        expected_registration
+    );
+    if !cleanup_first {
+        database.release_move_aside();
+        timeout(BOUND, projects.settle_operations()).await??;
+    }
     assert_eq!(
         {
             let registry = projects.registry()?;
@@ -552,6 +613,7 @@ async fn native_registration_refusal_moves_an_empty_file_and_replays_the_origina
         "the real rejected Read must remain an error after durable recovery"
     );
     refresh.close().await;
+    drop(database);
     drop(writer);
     drop(fleet);
     running.shutdown().await?;
