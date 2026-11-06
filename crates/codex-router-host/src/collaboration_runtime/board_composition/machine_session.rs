@@ -339,6 +339,7 @@ async fn run_events(
             },
             event = events.recv() => match event {
                 Some(ClientEvent::Welcome { databases }) => {
+                    tracing::info!(event = "fleet.link.connected", peer = %owners.projects.peer, "fleet.link.connected");
                     generation = generation.checked_add(1).ok_or_else(|| io::Error::other("notice generation exhausted"))?;
                     receipts = NoticeReceipts::default();
                     welcomed.send_replace(true);

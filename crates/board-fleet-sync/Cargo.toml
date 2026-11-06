@@ -28,6 +28,7 @@ tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
 fleet-admission = { path = "../fleet-admission", version = "0.1.96" }
 axum = { workspace = true, features = ["http1", "tokio", "ws"] }
 durable-steps.workspace = true

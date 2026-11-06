@@ -4,11 +4,14 @@ use fleet_sync_session::{
     Bytes, ConnectFailure, ConnectionClosed, Endpoint, PeerCredential, SessionTransport,
     TransportConnection,
 };
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{Sink, SinkExt, Stream, StreamExt};
 use reqwest::{Client, StatusCode};
 use reqwest_websocket::{CloseCode, Message, RequestBuilderExt, WebSocket};
 use std::time::Duration;
-use tokio::time::timeout;
+use tokio::time::{Instant, sleep_until, timeout};
+
+const LINK_PING_PERIOD: Duration = Duration::from_secs(20);
+const LINK_IDLE_BOUND: Duration = Duration::from_secs(60);
 
 #[derive(Clone)]
 pub struct ReqwestSessionTransport {
@@ -28,6 +31,7 @@ impl ReqwestSessionTransport {
             .http1_only()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(connect_timeout)
+            .tcp_keepalive(LINK_PING_PERIOD)
             .build()
             .map_err(|_| ConnectFailure::Unavailable)?;
         Ok(Self {
@@ -40,8 +44,34 @@ impl ReqwestSessionTransport {
 }
 
 pub struct ReqwestSessionConnection {
-    socket: Option<WebSocket>,
+    connection: SessionSocket<WebSocket>,
+}
+
+// The socket is the nondeterministic boundary; tests replace it while keeping
+// the transport's frame handling and the library's reconnect pump real.
+struct SessionSocket<S> {
+    socket: Option<S>,
     send_timeout: Duration,
+    next_ping: Instant,
+    idle_deadline: Instant,
+}
+
+impl<S> SessionSocket<S> {
+    fn new(socket: S, send_timeout: Duration) -> Self {
+        let now = Instant::now();
+        Self {
+            socket: Some(socket),
+            send_timeout,
+            next_ping: now + LINK_PING_PERIOD,
+            idle_deadline: now + LINK_IDLE_BOUND,
+        }
+    }
+
+    fn dropped(&mut self, reason: &'static str) {
+        if self.socket.take().is_some() {
+            tracing::warn!(event = "fleet.link.dropped", reason, "fleet.link.dropped");
+        }
+    }
 }
 
 impl SessionTransport for ReqwestSessionTransport {
@@ -78,8 +108,7 @@ impl SessionTransport for ReqwestSessionTransport {
             .map_err(|_| ConnectFailure::Unavailable)?
             .map_err(|_| ConnectFailure::Unavailable)?;
         Ok(ReqwestSessionConnection {
-            socket: Some(socket),
-            send_timeout: self.send_timeout,
+            connection: SessionSocket::new(socket, self.send_timeout),
         })
     }
 }
@@ -98,43 +127,103 @@ fn auth_refusal(headers: &reqwest::header::HeaderMap) -> AuthRefusal {
 
 impl TransportConnection for ReqwestSessionConnection {
     async fn send(&mut self, frame: Bytes) -> Result<(), ConnectionClosed> {
+        self.connection.send(frame).await
+    }
+
+    async fn receive(&mut self) -> Option<Result<Bytes, ConnectionClosed>> {
+        self.connection.receive().await
+    }
+
+    async fn close(self, reason: CloseReason) {
+        self.connection.close(reason).await;
+    }
+}
+
+impl<S, E> TransportConnection for SessionSocket<S>
+where
+    S: Stream<Item = Result<Message, E>> + Sink<Message, Error = E> + Unpin + Send + 'static,
+    E: Send,
+{
+    async fn send(&mut self, frame: Bytes) -> Result<(), ConnectionClosed> {
         let Some(socket) = self.socket.as_mut() else {
             return Err(ConnectionClosed::Transport);
         };
         match timeout(self.send_timeout, socket.send(Message::Binary(frame))).await {
             Ok(Ok(())) => Ok(()),
-            _ => {
-                self.socket = None;
+            Ok(Err(_)) => {
+                self.dropped("transportError");
+                Err(ConnectionClosed::Transport)
+            }
+            Err(_) => {
+                self.dropped("sendTimeout");
                 Err(ConnectionClosed::Transport)
             }
         }
     }
 
     async fn receive(&mut self) -> Option<Result<Bytes, ConnectionClosed>> {
-        let socket = self.socket.as_mut()?;
         loop {
-            match socket.next().await {
+            let socket = self.socket.as_mut()?;
+            // These deadlines belong to the connection: SessionPump cancels
+            // receive whenever a command arrives, without proving peer contact.
+            let incoming = tokio::select! {
+                biased;
+                _ = sleep_until(self.idle_deadline) => {
+                    self.dropped("idleTimeout");
+                    return Some(Err(ConnectionClosed::Transport));
+                }
+                _ = sleep_until(self.next_ping) => {
+                    self.next_ping = Instant::now() + LINK_PING_PERIOD;
+                    match timeout(self.send_timeout, socket.send(Message::Ping(Bytes::new()))).await {
+                        Ok(Ok(())) => continue,
+                        Ok(Err(_)) => self.dropped("transportError"),
+                        Err(_) => self.dropped("sendTimeout"),
+                    }
+                    return Some(Err(ConnectionClosed::Transport));
+                }
+                incoming = socket.next() => incoming,
+            };
+            if matches!(incoming, Some(Ok(_))) {
+                self.idle_deadline = Instant::now() + LINK_IDLE_BOUND;
+            }
+            match incoming {
                 Some(Ok(Message::Binary(frame))) => return Some(Ok(frame)),
                 Some(Ok(Message::Ping(_) | Message::Pong(_))) => {}
                 Some(Ok(Message::Close { .. })) | None => {
-                    self.socket = None;
+                    self.dropped("closed");
                     return None;
                 }
                 Some(Ok(Message::Text(_))) => {
-                    self.socket = None;
+                    self.dropped("transportError");
                     return Some(Err(ConnectionClosed::UnsupportedFrame));
                 }
                 Some(Err(_)) => {
-                    self.socket = None;
+                    self.dropped("transportError");
                     return Some(Err(ConnectionClosed::Transport));
                 }
             }
         }
     }
 
-    async fn close(self, _reason: CloseReason) {
-        if let Some(socket) = self.socket {
-            let _ = timeout(self.send_timeout, socket.close(CloseCode::Normal, None)).await;
+    async fn close(mut self, _reason: CloseReason) {
+        if let Some(mut socket) = self.socket.take() {
+            tracing::info!(
+                event = "fleet.link.dropped",
+                reason = "closed",
+                "fleet.link.dropped"
+            );
+            let _ = timeout(
+                self.send_timeout,
+                socket.send(Message::Close {
+                    code: CloseCode::Normal,
+                    reason: String::new(),
+                }),
+            )
+            .await;
         }
     }
 }
+
+#[cfg(test)]
+#[path = "reqwest_session_transport_test.rs"]
+mod tests;
