@@ -94,7 +94,7 @@ impl CollaborationMcpServer {
         &self,
         Parameters(request): Parameters<ConversationResumeRequest>,
     ) -> CallToolResult {
-        application_result(
+        typed_failure_result::<collaboration_protocol::ConversationOperationFailure, _, _>(
             self.application
                 .conversations()
                 .conversation_resume(request)
@@ -108,7 +108,7 @@ impl CollaborationMcpServer {
         &self,
         Parameters(request): Parameters<ConversationCloseRequest>,
     ) -> CallToolResult {
-        application_result(
+        typed_failure_result::<collaboration_protocol::ConversationOperationFailure, _, _>(
             self.application
                 .conversations()
                 .conversation_close(request)
@@ -136,3 +136,7 @@ fn staged_failure_result(
     stage.clone_into(&mut failure.stage);
     operation_error_result(failure, None, None)
 }
+
+#[cfg(test)]
+#[path = "interaction_tools_test.rs"]
+mod tests;
