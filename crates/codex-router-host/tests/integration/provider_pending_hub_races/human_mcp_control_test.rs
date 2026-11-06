@@ -470,6 +470,10 @@ async fn dropped_human_mcp_waiter_does_not_cancel_or_redispatch_the_released_tur
         } = settled.output
         else {
             // Settle the owned peer even on the old fixture's expected RED.
+            eprintln!(
+                "controlled peer receipt: {:?}",
+                std::fs::read_to_string(&receipt)
+            );
             drop(observer);
             return Err(
                 format!("released detached operation did not complete: {settled:?}").into(),
