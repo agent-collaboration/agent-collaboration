@@ -21,15 +21,20 @@ impl FleetLocationPolicy {
 
     #[must_use]
     pub fn cloudflare_name(&self, organization: &OrganizationId) -> String {
-        // RED checkpoint: fail the organization-isolation naming tests first.
-        let _ = organization;
-        "fleet".into()
+        if organization == &self.legacy_organization {
+            "fleet".into()
+        } else {
+            organization.as_str().to_owned()
+        }
     }
 
     #[must_use]
     pub fn native_key(&self, organization: &OrganizationId) -> String {
-        let _ = organization;
-        "fleet".into()
+        if organization == &self.legacy_organization {
+            "fleet".into()
+        } else {
+            format!("fleet-{}", organization.as_str())
+        }
     }
 
     pub fn organization_from_native_key(
@@ -39,7 +44,16 @@ impl FleetLocationPolicy {
         if key == "fleet" {
             return Ok(self.legacy_organization.clone());
         }
-        Err(FleetLocationRefusal::InvalidPhysicalKey)
+        let organization = key
+            .strip_prefix("fleet-")
+            .ok_or(FleetLocationRefusal::InvalidPhysicalKey)?
+            .to_owned()
+            .try_into()
+            .map_err(|_| FleetLocationRefusal::InvalidPhysicalKey)?;
+        if organization == self.legacy_organization {
+            return Err(FleetLocationRefusal::InvalidPhysicalKey);
+        }
+        Ok(organization)
     }
 }
 
