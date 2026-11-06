@@ -3,12 +3,9 @@
 // come from the owning store; replies, cursors and terminal facts from the actual MCP results.
 // A case that cannot reach its deciding observation reports why; nothing here invents success.
 import { z } from "zod";
+import { requireSelectedModel } from "../observations/declared-model.ts";
 import { reattachSettlement } from "../observations/operation-settlement.ts";
-import {
-  sameSession,
-  sessionRefSchema,
-  type SessionRef,
-} from "../observations/observation-models.ts";
+import { sessionRefSchema, type SessionRef } from "../observations/observation-models.ts";
 import type { ObservationRead } from "../observations/observation-ledger.ts";
 import { foldObservationReads } from "../observations/observation-ledger.ts";
 import {
@@ -217,28 +214,13 @@ export function segmentPrompt(inputs: CaseInputs, step: string): string {
  * After a reattach the caller passes the replay baseline it already read whole, so replayed
  * history stays baseline and only the new input's turn is decided.
  */
-const modelInspectSchema = z.looseObject({
-  target: sessionRefSchema,
-  settingsCatalog: z.looseObject({
-    configOptions: z.array(
-      z.looseObject({
-        category: z.string().optional(),
-        currentValue: z.discriminatedUnion("kind", [
-          z.object({ kind: z.literal("select"), value: z.string() }),
-          z.object({ kind: z.literal("boolean"), value: z.boolean() }),
-        ]),
-      }),
-    ),
-  }),
-});
-
 async function requireDeclaredModel(
   inputs: CaseInputs,
   target: SessionRef,
   step: string,
 ): Promise<void> {
   if (inputs.plan.peer.kind !== "provider") return;
-  const inspected = modelInspectSchema.parse(
+  requireSelectedModel(
     answered(
       await callTool(
         inputs.context,
@@ -249,18 +231,9 @@ async function requireDeclaredModel(
       ),
       "model inspect",
     ),
+    target,
+    inputs.plan.peer.model,
   );
-  if (!sameSession(inspected.target, target))
-    throw new Error("model inspect names another Session");
-  const models = inspected.settingsCatalog.configOptions.filter(
-    (option) => option.category === "model",
-  );
-  const selected = models.length === 1 ? models[0]?.currentValue : undefined;
-  if (selected?.kind !== "select") throw new Error("model inspect has no unique selected model");
-  if (selected.value !== inputs.plan.peer.model)
-    throw new Error(
-      `current model ${selected.value} differs from declared model ${inputs.plan.peer.model}`,
-    );
 }
 
 export async function attachedPrompt(

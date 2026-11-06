@@ -42,6 +42,7 @@ interface Lifetime {
 interface ContextChange {
   readonly profile?: string;
   readonly model?: string;
+  readonly effort?: string;
   readonly port?: number;
   readonly peerRegistryDirectory?: string | null;
 }
@@ -236,6 +237,7 @@ test("lifetime two refuses each broken record, role, context, launch or live bin
       ["changed stored creator", await reload(root, record, { createdBy: "someone-else" })],
       ["changed profile", await reload(root, record, { context: { profile: "other-profile" } })],
       ["changed native model", await reload(root, record, { context: { model: "other-model" } })],
+      ["changed native effort", await reload(root, record, { context: { effort: "high" } })],
       [
         "changed peer registry",
         await reload(root, record, { context: { peerRegistryDirectory: join(root, "registry") } }),

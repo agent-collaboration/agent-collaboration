@@ -67,6 +67,7 @@ export function writeHostContext(
     readonly arguments: readonly string[];
     readonly profile?: string;
     readonly model?: string;
+    readonly effort?: string;
     readonly port?: number;
     readonly peerRegistryDirectory?: string | null;
   },
@@ -79,7 +80,8 @@ export function writeHostContext(
       serviceDirectory: layout.serviceDirectory,
       workspace: layout.workspace,
       profile: props.profile ?? "codex-router-debug",
-      model: props.model ?? "gpt-5.6-luna",
+      model: props.model ?? "gpt-6-luna",
+      effort: props.effort ?? "low",
       port: props.port ?? STAND_IN_PROXY_PORT,
       hostPid: props.hostPid,
       routerRoot: layout.routerRoot,

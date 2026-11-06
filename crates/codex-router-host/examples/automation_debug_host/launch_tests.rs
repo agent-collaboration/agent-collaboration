@@ -78,8 +78,8 @@ fn luna_profile_keeps_its_model_override_after_endpoint_projection() {
         .filter(|pair| pair[0] == "-c")
         .map(|pair| pair[1].to_str().unwrap())
         .collect();
-    assert!(overrides.contains(&"model=\"gpt-5.6-luna\""));
-    assert!(overrides.contains(&"model_reasoning_effort=\"high\""));
+    assert!(overrides.contains(&"model=\"gpt-6-luna\""));
+    assert!(overrides.contains(&"model_reasoning_effort=\"low\""));
     let provider = overrides
         .iter()
         .find(|value| value.starts_with("model_providers="))
@@ -119,7 +119,8 @@ impl TestRunDirectory {
             service_directory: self.0.join("agent-communication"),
             workspace: self.0.join("agent-workspace"),
             profile: "codex-router-debug".to_owned(),
-            model: "gpt-5.6-luna".to_owned(),
+            model: "gpt-6-luna".to_owned(),
+            effort: "low".to_owned(),
             port: 18787,
             host_pid: process_id,
             router_root: None,
@@ -180,13 +181,17 @@ fn resume_rejects_invalid_context_marker() -> Result<(), Box<dyn std::error::Err
     let run = TestRunDirectory::create()?;
     run.write_context(stopped_process_id()?)?;
     let marker_path = run.0.join("debug-host-context.json");
-    let mut marker: DebugHostContext = serde_json::from_slice(&std::fs::read(&marker_path)?)?;
-    marker.model = "not-luna".to_owned();
-    std::fs::write(&marker_path, serde_json::to_vec(&marker)?)?;
+    for (model, effort) in [("gpt-5.6-luna", "low"), ("gpt-6-luna", "high")] {
+        let mut marker: DebugHostContext = serde_json::from_slice(&std::fs::read(&marker_path)?)?;
+        marker.model = model.to_owned();
+        marker.effort = effort.to_owned();
+        std::fs::write(&marker_path, serde_json::to_vec(&marker)?)?;
 
-    let error = validate_resume_run_directory(&run.0, 18787, &run.0.join("agent-communication"))
-        .expect_err("invalid marker must fail");
-    assert!(error.to_string().contains("does not match"));
+        let error =
+            validate_resume_run_directory(&run.0, 18787, &run.0.join("agent-communication"))
+                .expect_err("invalid native model or effort marker must fail");
+        assert!(error.to_string().contains("does not match"));
+    }
     Ok(())
 }
 
@@ -223,7 +228,8 @@ fn resume_replaces_marker_without_changing_service_data() -> Result<(), Box<dyn 
         service_directory: run.0.join("agent-communication"),
         workspace: run.0.join("agent-workspace"),
         profile: "codex-router-debug".to_owned(),
-        model: "gpt-5.6-luna".to_owned(),
+        model: "gpt-6-luna".to_owned(),
+        effort: "low".to_owned(),
         port: 18787,
         host_pid: 4242,
         router_root: None,

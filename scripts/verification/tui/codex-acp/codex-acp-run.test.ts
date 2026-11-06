@@ -100,10 +100,16 @@ const REFRESH = {
 const PROMPT = {
 	kind: 'prompt',
 	provider: 'cursor',
+	expected_model: 'grok-4.7-low',
 	prompt: 'Reply with only the product of 4321 and 5678, digits only',
 	completion: '24534638',
 	reply_deadline_ms: 120_000,
 };
+test('an ordinary provider prompt without a declared model is refused before effects', async () => {
+	const { plan } = await runPlan(CURSOR_SKILL);
+	const { expected_model: _model, ...undeclared } = PROMPT;
+	expect(() => codexAcpRunPlanSchema.parse({ ...plan, journey: undeclared })).toThrow();
+});
 const MODEL = {
 	kind: 'model',
 	provider: 'cursor',
@@ -460,7 +466,7 @@ const CLAUDE_ROUTE = {
 	max_segment_bytes: 4096,
 	collaboration_cli: { path: '/tmp/cxr-agent-collaboration', sha256: 'a'.repeat(64) },
 };
-const CLAUDE_PROMPT = { ...PROMPT, provider: 'claude' };
+const CLAUDE_PROMPT = { ...PROMPT, provider: 'claude', expected_model: 'claude-haiku-5-5' };
 
 test('a Claude route proof is admitted only for a bounded Claude prompt or selected-skill plan', async () => {
 	const { plan } = await runPlan(CURSOR_SKILL);

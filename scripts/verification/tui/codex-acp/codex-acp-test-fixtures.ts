@@ -112,6 +112,7 @@ export function claudeRouteHostFixture(auditPrefix: string): ClaudeRouteHostFixt
 			serviceId: SERVICE,
 			serviceEpoch: EPOCH,
 			routerProxyEndpoint: '127.0.0.1:61613',
+			mcp: { url: 'http://127.0.0.1:61614/mcp' },
 		}),
 	);
 	writeFileSync(
@@ -122,7 +123,8 @@ export function claudeRouteHostFixture(auditPrefix: string): ClaudeRouteHostFixt
 			serviceDirectory,
 			workspace: join(runDirectory, 'agent-workspace'),
 			profile: 'codex-router-debug',
-			model: 'gpt-5.6-luna',
+			model: 'gpt-6-luna',
+			effort: 'low',
 			port: 61613,
 			hostPid: 5446,
 			routerRoot: join(root, 'router'),
