@@ -1,19 +1,12 @@
 //! Integration cases retain one namespace per former Cargo test root.
 
-#[path = "../support/accepted_snapshot.rs"]
-mod accepted_snapshot;
+use collaboration_application_test_support::accepted_snapshot;
 #[path = "../support/acp_provider_backend.rs"]
 mod acp_provider_backend;
-#[path = "../support/board_fixture.rs"]
-#[expect(
-    dead_code,
-    reason = "Shared fixture capabilities also serve other crates."
-)]
-mod board_fixture;
+use collaboration_application_test_support::board_fixture;
 #[path = "../support/board_read_setup.rs"]
 mod board_read_setup;
-#[path = "../support/native_authority.rs"]
-mod native_authority;
+use collaboration_application_test_support::native_authority;
 #[path = "../support/native_delivery.rs"]
 mod native_delivery;
 use codex_acp_adapter::test_support::native_permission_echo;

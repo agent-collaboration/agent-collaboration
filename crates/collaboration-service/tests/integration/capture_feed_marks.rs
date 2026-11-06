@@ -18,8 +18,7 @@ use std::{num::NonZeroUsize, sync::Arc};
 use tokio::sync::Mutex;
 #[path = "capture_feed_marks/cancel_expansions.rs"]
 mod cancel_expansions;
-#[path = "../support/mail_cancel_expansions.rs"]
-mod mail_cancel_expansions;
+use collaboration_application_test_support::mail_cancel_expansions;
 
 #[derive(Default)]
 struct ScriptedCopy {

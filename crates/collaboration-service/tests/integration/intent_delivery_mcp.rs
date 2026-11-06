@@ -142,7 +142,7 @@ async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
     .with_project_admission(admission.clone())
     .with_automation_store(automation.clone())
     .with_subscription_delivery_service(delivery.clone(), routes.clone());
-    let (identity, native) = native_mail_owner::NativeMailOwner::start(
+    let (identity, native) = native_mail_owner::start(
         identity,
         board_fixture::fixture_peer()?,
         MailPushDeliveryProps {

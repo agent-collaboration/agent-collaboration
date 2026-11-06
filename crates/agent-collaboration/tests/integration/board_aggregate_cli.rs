@@ -1,6 +1,5 @@
 //! Aggregate histories, unread continuation and independent acknowledgements through the executable.
-#[path = "../../../collaboration-service/tests/support/native_authority.rs"]
-mod native_authority;
+use collaboration_application_test_support::native_authority;
 
 use crate::board_fixture::native_registry;
 use collaboration_contracts::MachineIdentity;

@@ -56,6 +56,7 @@ thiserror.workspace = true
 
 [dev-dependencies]
 codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.14", features = ["test-support"] }
+collaboration-application-test-support = { path = "../collaboration-application-test-support", version = "0.1.126" }
 node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime", features = ["test-support"] }
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts", features = ["test-support"] }

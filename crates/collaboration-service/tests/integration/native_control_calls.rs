@@ -187,7 +187,7 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
         .with_session_delivery(delivery)
         .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone())
         .with_approval_broker(broker);
-    let (identity, native_mail) = native_mail_owner::NativeMailOwner::start(
+    let (identity, native_mail) = native_mail_owner::start(
         identity,
         fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).unwrap(),
         collaboration_service::MailPushDeliveryProps {

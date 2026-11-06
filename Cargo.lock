@@ -206,6 +206,7 @@ dependencies = [
  "codex-native-integration",
  "codex-router-host",
  "codex-router-test-support",
+ "collaboration-application-test-support",
  "collaboration-central-admin-protocol",
  "collaboration-central-conformance",
  "collaboration-client",
@@ -1502,6 +1503,7 @@ dependencies = [
  "codex-router-host",
  "codex-router-secret-store",
  "codex-router-test-support",
+ "collaboration-application-test-support",
  "collaboration-central-conformance",
  "collaboration-central-tokio",
  "collaboration-client",
@@ -1755,6 +1757,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "collaboration-application-test-support"
+version = "0.1.126"
+dependencies = [
+ "automation-storage",
+ "board-central-test-support",
+ "board-fleet-sync",
+ "board-sync-protocol",
+ "codex-native-integration",
+ "collaboration-contracts",
+ "collaboration-mail-protocol",
+ "collaboration-mcp",
+ "collaboration-protocol",
+ "collaboration-runtime",
+ "collaboration-service",
+ "durable-steps",
+ "fleet-admission",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-receiver",
+ "fleet-sync-tokio-runner",
+ "fleet-sync-writer",
+ "futures-util",
+ "interaction-storage",
+ "message-board",
+ "message-board-storage",
+ "runtime-primitives",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "uuid",
+]
+
+[[package]]
 name = "collaboration-central-admin-protocol"
 version = "0.1.126"
 dependencies = [
@@ -1924,6 +1961,7 @@ dependencies = [
  "board-sync-protocol",
  "codex-acp-adapter",
  "codex-native-integration",
+ "collaboration-application-test-support",
  "collaboration-central-admin-protocol",
  "collaboration-contracts",
  "collaboration-mcp",
@@ -2002,6 +2040,7 @@ dependencies = [
  "codex-acp-adapter",
  "codex-native-integration",
  "codex-router-host",
+ "collaboration-application-test-support",
  "collaboration-client",
  "collaboration-contracts",
  "collaboration-protocol",
@@ -2114,6 +2153,7 @@ dependencies = [
  "claude-code-peer-messaging",
  "codex-acp-adapter",
  "codex-native-integration",
+ "collaboration-application-test-support",
  "collaboration-client",
  "collaboration-contracts",
  "collaboration-mail-protocol",
