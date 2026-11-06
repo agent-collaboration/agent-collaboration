@@ -9,13 +9,15 @@ pub use organization_provisioning_http::organization_provisioning_router;
 mod issuer_key_cache;
 mod issuer_key_resolution;
 mod issuer_signature_verifier;
+mod key_source_capabilities;
 mod signature_verification;
 pub use issuer_key_cache::{
     IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeySet, IssuerVerificationKey,
 };
 pub use issuer_key_resolution::{IssuerKeyResolutionRefusal, IssuerKeySource, resolve_issuer_key};
 pub use issuer_signature_verifier::{IssuerSignatureRefusal, IssuerSignatureVerifier};
-pub use signature_verification::Ed25519Verification;
+pub use key_source_capabilities::{KeyFetchFailure, RawJwks};
+pub use signature_verification::{Ed25519Verification, SignatureValidity, VerifyFailure};
 
 mod admin_import_columns;
 mod admin_import_contract;
@@ -52,8 +54,8 @@ mod connection_admission;
 pub use connection_admission::AdmissionOrigin;
 mod platform_capabilities;
 pub use platform_capabilities::{
-    CallOutcome, CentralPlatform, KeyFetchFailure, LocalSectionFailure, ObjectHost, RawJwks,
-    RegistrationEdits, RegistrationSnapshot, SocketFailure, UpgradeFailure, VerifyFailure,
+    CallOutcome, CentralPlatform, LocalSectionFailure, ObjectHost, RegistrationEdits,
+    RegistrationSnapshot, SocketFailure, UpgradeFailure,
 };
 mod caller_context;
 pub use caller_context::CallerContext;

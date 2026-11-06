@@ -1,6 +1,17 @@
 //! Signature verification needs no object runtime, storage or socket handles.
-use crate::{SignatureValidity, VerifyFailure};
 use std::future::Future;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SignatureValidity {
+    Valid,
+    Invalid,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VerifyFailure {
+    UnsupportedKey,
+    Crypto,
+}
 
 pub trait Ed25519Verification: Clone + Send + Sync + 'static {
     fn verify_ed25519(
