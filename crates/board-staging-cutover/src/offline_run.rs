@@ -72,8 +72,7 @@ impl OfflineRunPlan {
         authentication: OwnerAuthentication,
     ) -> Result<OfflineRunReport, OfflineRunError> {
         self.validate()?;
-        let mut host =
-            OfflineHost::acquire(&self.router_root, &self.service_id, self.peer_id, home)?;
+        let mut host = self.acquire_host(home)?;
         let publisher = match authentication {
             OwnerAuthentication::OwnerAccess => {
                 StagingPublisher::from_owner_access(self.target.clone()).await?

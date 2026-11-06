@@ -1,5 +1,17 @@
 # Staging cutover tests
 
+Production-mode cases use only an isolated fake home-default `.codex-router`
+root through the debug-only `CODEX_ROUTER_CUTOVER_TEST_HOME` seam. The compiled
+dry run snapshots every root/artifact byte, inode and permission with the Host
+lock already held. Compiled refusal cases cover missing opt-in, missing target
+or confirmation, wrong digest/target, source and plan changes, and a competing
+Host lock; they preserve source/artifact/credential bytes and observe no TCP
+connection to the target listener. The compiled TestCentral journey publishes,
+replays, preserves the original backup inode, claims through an actual isolated
+Host, cold-verifies e2 tables, writes and replays the public canary, and then
+rejects post-canary content equality. These are local proofs; a separately
+commissioned Verifier owns hosted staging rehearsal.
+
 Unit tests are colocated with the Rust implementation in `src/*_test.rs`.
 They cover transport reframing, unchanged row bytes, source cursor separation,
 the existing Host singleton lock, private roots and retained source identities.

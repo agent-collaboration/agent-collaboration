@@ -18,7 +18,7 @@ mod offline_run;
 mod offline_run_plan;
 pub use imported_project_claims::{ClaimRunError, ClaimRunReport};
 pub use offline_run::{OfflineRunError, OfflineRunReport};
-pub use offline_run_plan::{OfflineRunPlan, OwnerAuthentication};
+pub use offline_run_plan::{CutoverPlanPreview, OfflineRunPlan, OwnerAuthentication};
 mod owner_publication_access;
 mod prepared_project_bundle;
 mod project_bundle_error;
