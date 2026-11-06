@@ -192,6 +192,11 @@ jobs:
             echo 'release dependency graph includes keychain-test-guard' >&2
             exit 1
           fi
+          production_graph="$(cargo tree --locked --color never -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade -e normal,build,features)"
+          if grep -Eq -- '-test-support v[0-9]|feature "test-support"' <<< "$production_graph"; then
+            echo 'production dependency graph includes a test-support crate or feature' >&2
+            exit 1
+          fi
 
       - name: Wait for release build and checks
         wait-all:

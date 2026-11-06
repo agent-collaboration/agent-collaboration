@@ -176,7 +176,7 @@ impl ClaudePeerSubscriptionFixture {
             clock: clock.clone(),
         });
         drop(application);
-        let (identity, native) = NativeMailOwner::start(
+        let (identity, native) = native_mail_owner::start(
             ApplicationFixture::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")?
                 .with_automation_store(automation_store.clone())
                 .with_project_admission(admission.clone())

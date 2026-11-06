@@ -446,7 +446,7 @@ async fn reject_old_then_finish_current(
 #[tokio::test]
 async fn delayed_archive_observation_cannot_borrow_a_replacement_files_copied_progress()
 -> TestResult {
-    codex_router_test_support::scenario_finalization::run_scenario(
+    owned_process_test_support::scenario_finalization::run_scenario(
         ReplacementFixture::new()?,
         async |fixture: &mut ReplacementFixture| {
             Box::pin(fixture.open()).await?;

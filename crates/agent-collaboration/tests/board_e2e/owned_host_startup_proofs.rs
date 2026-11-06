@@ -1,6 +1,7 @@
 //! Protected-port observations exercise the real owned Host restart boundary.
 use super::owned_host::{BoardHost, protected_listener_port};
-use codex_router_test_support::{FixtureResult, scenario_finalization::run_scenario};
+use codex_router_test_support::FixtureResult;
+use owned_process_test_support::scenario_finalization::run_scenario;
 use std::{os::unix::fs::DirBuilderExt as _, path::PathBuf};
 
 fn private_host_directory() -> FixtureResult<(tempfile::TempDir, PathBuf)> {

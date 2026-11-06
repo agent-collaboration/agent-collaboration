@@ -17,7 +17,7 @@ pub fn command() -> tokio::process::Command {
 }
 
 pub async fn run(command: tokio::process::Command) -> TestResult<Output> {
-    codex_router_test_support::owned_cli_process::run_cli_output(command, Duration::from_secs(60))
+    owned_process_test_support::owned_cli_process::run_cli_output(command, Duration::from_secs(60))
         .await
         .map_err(std::io::Error::other)
         .map_err(Into::into)

@@ -1,5 +1,7 @@
 //! Tokio capabilities for the runtime-independent central core.
 #![forbid(unsafe_code)]
+#[cfg(feature = "test-support")]
+pub mod test_support;
 
 mod access_crypto;
 #[cfg(feature = "conformance")]

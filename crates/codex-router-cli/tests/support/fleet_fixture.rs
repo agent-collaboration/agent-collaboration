@@ -25,7 +25,7 @@ impl ProducerFixture {
     where
         Observe: for<'fixture> std::ops::AsyncFnOnce(&'fixture Self) -> TestResult,
     {
-        codex_router_test_support::scenario_finalization::run_scenario(
+        owned_process_test_support::scenario_finalization::run_scenario(
             self,
             async |fixture: &mut Self| {
                 observe(fixture)

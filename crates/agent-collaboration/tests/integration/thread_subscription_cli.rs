@@ -88,7 +88,7 @@ async fn subscribe_join_wait_and_cancel_use_the_real_api_and_sqlite_paths() -> T
         .with_automation_store(push_store.clone())
         .with_session_delivery(router)
         .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone());
-    let (identity, native) = native_mail_owner::NativeMailOwner::start(
+    let (identity, native) = native_mail_owner::start(
         identity,
         native_registry::fixture_peer()?,
         collaboration_service::MailPushDeliveryProps {

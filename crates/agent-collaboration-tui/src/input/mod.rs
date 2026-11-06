@@ -1,5 +1,5 @@
-#[cfg(all(feature = "test-support", debug_assertions))]
+#[cfg(feature = "test-support")]
 pub(crate) mod dispatch_frame_marker;
-#[cfg(all(feature = "test-support", debug_assertions))]
+#[cfg(feature = "test-support")]
 pub mod input_dispatch_receipt;
 pub mod input_owner;

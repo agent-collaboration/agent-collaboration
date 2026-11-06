@@ -2,9 +2,9 @@
 use super::{
     SEMANTIC_WAIT,
     isolated_fixture_test::{QuotaResetFixture, TestResult, ensure},
-    loopback_provider_test::HeldLoopbackProvider,
     terminal_interaction_test::TerminalDriver,
 };
+use codex_router_quota_reset_test_harness::loopback_provider::HeldLoopbackProvider;
 use portable_pty::CommandBuilder;
 use serde::Deserialize;
 use std::{

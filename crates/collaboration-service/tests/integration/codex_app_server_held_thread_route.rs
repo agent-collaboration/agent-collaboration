@@ -670,7 +670,7 @@ async fn exercise_held_empty_thread(
     .map_err(std::io::Error::other)?
     .with_session_delivery(delivery)
     .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone());
-    let (identity, native_mail) = native_mail_owner::NativeMailOwner::start(
+    let (identity, native_mail) = native_mail_owner::start(
         identity,
         fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,
         collaboration_service::MailPushDeliveryProps {

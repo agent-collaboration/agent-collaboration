@@ -6,10 +6,6 @@ mod central_fixture;
 mod message_support;
 #[path = "../support/mod.rs"]
 mod support;
-#[expect(
-    dead_code,
-    reason = "Upload helpers are shared with sibling integration targets."
-)]
 #[path = "../upload_support/mod.rs"]
 mod upload_support;
 

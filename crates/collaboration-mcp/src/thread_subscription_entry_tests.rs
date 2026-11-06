@@ -141,7 +141,7 @@ async fn subscription_tools_roundtrip_through_mcp_api_native_projects_and_local_
         .with_project_admission(admission.clone())
         .with_automation_store(push_store.clone())
         .with_subscription_delivery_service(subscription_service.clone(), presence.clone());
-    let (service_identity, native) = crate::native_mail_owner::NativeMailOwner::start(
+    let (service_identity, native) = crate::native_mail_owner::start(
         service_identity,
         crate::native_board_test_fixture::fixture_peer().expect("fixture peer"),
         collaboration_service::MailPushDeliveryProps {

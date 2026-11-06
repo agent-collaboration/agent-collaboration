@@ -1,5 +1,5 @@
 //! Native sender acknowledgements must prompt publication without another board write.
-use super::snapshot_restart::board_fixture::native_mail_owner::NativeMailOwner;
+use super::snapshot_restart::board_fixture::native_mail_owner;
 use super::*;
 use collaboration_runtime::SessionDeliveryRouter;
 use collaboration_service::ApplicationFixture;
@@ -107,7 +107,7 @@ async fn an_acknowledged_remote_handoff_is_published_without_another_board_write
     .with_project_admission(admission.clone())
     .with_project_replication(replication.clone())
     .with_subscription_delivery_service(actors.clone(), carrier.clone());
-    let (identity, mail) = NativeMailOwner::start_with_session(
+    let (identity, mail) = native_mail_owner::start_with_session(
         identity,
         central.peer,
         MailPushDeliveryProps {

@@ -12,8 +12,7 @@ use fleet_sync_writer::{ReplicationEvents, ReplicationSender, SenderOptions};
 use message_board::*;
 use message_board_storage::MailHandoffItem;
 use std::num::NonZeroUsize;
-#[path = "../../../../../collaboration-service/tests/support/mail_cancel_expansions.rs"]
-mod frozen_rows;
+use collaboration_application_test_support::mail_cancel_expansions as frozen_rows;
 use super::split_transport;
 
 #[tokio::test]

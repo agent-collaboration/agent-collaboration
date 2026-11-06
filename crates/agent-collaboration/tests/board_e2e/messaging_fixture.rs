@@ -2,10 +2,9 @@
 use super::owned_host::StoppedHost;
 use super::{central_pair, fixture::BoardFixture};
 use board_central_test_support::{ObjectAddress, RuntimeControl};
-use codex_router_test_support::{
-    FixtureResult, owned_peer_fixture::PeerFixture, scenario_finalization::run_scenario,
-};
+use codex_router_test_support::{FixtureResult, owned_peer_fixture::PeerFixture};
 use collaboration_protocol::{EndpointRef, SessionRef};
+use owned_process_test_support::scenario_finalization::run_scenario;
 use serde_json::{Value, json};
 use std::{ops::AsyncFnOnce, os::unix::fs::DirBuilderExt};
 

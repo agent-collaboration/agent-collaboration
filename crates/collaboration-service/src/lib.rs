@@ -48,6 +48,8 @@ pub use provider_session_inventory::ProviderSessionInventory;
 mod wakeup_projection;
 pub use mail_push_delivery::{MailPushDelivery, MailPushDeliveryProps};
 mod mail_delivery_runtime;
+#[cfg(any(test, feature = "test-support"))]
+pub use mail_delivery_runtime::NativeMailOwner;
 pub use mail_delivery_runtime::{LocalCancelReference, MachineSenderBinding, MailDeliveryRuntime};
 mod attempt_history_projection;
 mod automation_collection_cursor;
@@ -59,8 +61,7 @@ mod delivery_projection;
 #[cfg(test)]
 mod frozen_mail_query_fixture;
 #[cfg(test)]
-#[path = "../../collaboration-runtime/tests/support/native_worker_faults.rs"]
-mod native_worker_faults;
+use collaboration_runtime::test_support::native_worker_faults;
 mod operation_receipt_projection;
 mod run_projection;
 mod schedule_activation;

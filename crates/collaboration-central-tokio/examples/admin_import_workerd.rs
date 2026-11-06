@@ -1,10 +1,9 @@
 //! Normal owner HTTP publishes a supplied snapshot through the real Fleet and Copy objects.
 #![forbid(unsafe_code)]
+use collaboration_central_conformance::workerd_process as workerd_harness;
 use collaboration_central_conformance::{
     AdminImportScenario, ConformanceResult, JwksFixtureServer,
 };
-#[path = "../../collaboration-central-conformance/examples/support/workerd_process.rs"]
-mod workerd_harness;
 use workerd_harness::{WorkerdProcess, WorkerdSettings};
 
 #[tokio::main]

@@ -1,0 +1,14 @@
+[package]
+autotests = false
+name = "owned-process-test-support"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+futures-util.workspace = true
+tokio.workspace = true
