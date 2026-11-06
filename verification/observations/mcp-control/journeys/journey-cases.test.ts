@@ -1,6 +1,7 @@
 // Driver wiring through a scripted stand-in MCP server, a real temporary owning store and a peer
 // receipt. A narrower control: it proves the case runner sends the right calls in order and
 // decides from what comes back, including duplicate dispatch, never a Host or provider path.
+import { listenOnTestPort } from "../test-support/loopback-test-port.ts";
 import assert from "node:assert/strict";
 import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
@@ -217,9 +218,7 @@ async function withStandIn(
       );
     });
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  if (address === null || typeof address === "string") throw new Error("no stand-in port");
+  const port = await listenOnTestPort(server);
   const owner = { kind: "human" as const, humanId: OWNER, source: "ownerLookup" as const };
   // Built inside the teardown's reach: a plan that fails to parse must fail the test, not leave
   // the stand-in server listening.
@@ -255,12 +254,7 @@ async function withStandIn(
       continuation: null,
     });
     store = new ProviderStoreReadback(standIn.store);
-    await body(
-      plan,
-      new StreamingMcpClient(`http://127.0.0.1:${address.port}/mcp`),
-      store,
-      standIn,
-    );
+    await body(plan, new StreamingMcpClient(`http://127.0.0.1:${port}/mcp`), store, standIn);
   } finally {
     store?.close();
     server.closeAllConnections();

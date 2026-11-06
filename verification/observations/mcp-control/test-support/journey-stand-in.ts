@@ -4,6 +4,7 @@
 // observations and typed refusals), backed by a real temporary owning store and peer receipt.
 // It decides nothing and stands in only for what a Host would answer; it is never Host,
 // runtime or provider proof.
+import { listenOnTestPort } from "./loopback-test-port.ts";
 import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir, userInfo } from "node:os";
@@ -559,11 +560,9 @@ export async function startStandIn(options: StandInOptions = {}): Promise<StandI
       );
     });
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  if (address === null || typeof address === "string") throw new Error("no stand-in port");
+  const port = await listenOnTestPort(server);
   return {
-    url: `http://127.0.0.1:${address.port}/mcp`,
+    url: `http://127.0.0.1:${port}/mcp`,
     store: host.store,
     receipt: host.receipt,
     root,

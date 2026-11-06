@@ -1,6 +1,7 @@
 // Transport mechanics against an in-process HTTP stand-in shaped like the Router's stateless
 // Streamable HTTP endpoint. Proves only the client: notification order, answer matching and that
 // an abort really closes the request. It never stands in for a Host or provider.
+import { listenOnTestPort } from "../test-support/loopback-test-port.ts";
 import assert from "node:assert/strict";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { test, mock } from "node:test";
@@ -25,10 +26,7 @@ async function withServer(
       handler(id, response, request);
     });
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  if (address === null || typeof address === "string") throw new Error("stand-in has no TCP port");
-  const { port } = address;
+  const port = await listenOnTestPort(server);
   try {
     await body(new StreamingMcpClient(`http://127.0.0.1:${port}/mcp`));
   } finally {
