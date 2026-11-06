@@ -1,8 +1,10 @@
 //! One asynchronous application core shared by every runtime.
 #![forbid(unsafe_code)]
 
+mod fleet_location;
 pub mod identity_contract;
 pub mod organization_authority;
+pub use fleet_location::{FleetLocationPolicy, FleetLocationRefusal};
 mod organization_provisioning_http;
 pub use organization_provisioning_http::organization_provisioning_router;
 
