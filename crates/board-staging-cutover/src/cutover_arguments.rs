@@ -3,23 +3,56 @@ use board_staging_cutover::OwnerAuthentication;
 use collaboration_protocol::UuidIdentity;
 use fleet_sync_protocol::PeerId;
 use std::{ffi::OsString, path::PathBuf};
+use url::Url;
+
+pub(super) enum ExecutionMode {
+    Isolated,
+    Production {
+        target: Url,
+        confirmation: message_board::CanonicalHash,
+    },
+}
+
+impl ExecutionMode {
+    pub fn apply(
+        self,
+        plan: board_staging_cutover::OfflineRunPlan,
+    ) -> Result<board_staging_cutover::OfflineRunPlan, board_staging_cutover::OfflineHostError>
+    {
+        match self {
+            Self::Isolated => Ok(plan),
+            Self::Production {
+                target,
+                confirmation,
+            } => plan.with_production_confirmation(&target, confirmation),
+        }
+    }
+}
 
 pub(super) enum CutoverCommand {
     Help,
     Inspect(InspectRequest),
+    Preview {
+        plan: PathBuf,
+        production_target: Option<Url>,
+    },
     Offline {
         plan: PathBuf,
         authentication: OwnerAuthentication,
+        mode: ExecutionMode,
     },
     Claim {
         plan: PathBuf,
         authentication: OwnerAuthentication,
+        mode: ExecutionMode,
     },
     Verify {
         plan: PathBuf,
+        mode: ExecutionMode,
     },
     Canary {
         plan: PathBuf,
+        mode: ExecutionMode,
     },
 }
 
@@ -41,35 +74,8 @@ impl CutoverCommand {
         match arguments.next().as_deref().and_then(|value| value.to_str()) {
             Some("--help" | "-h") if arguments.next().is_none() => return Ok(Self::Help),
             Some("inspect") => {}
-            Some("offline") => {
-                let (plan, authentication) = Self::parse_authenticated_plan(arguments)?;
-                return Ok(Self::Offline {
-                    plan,
-                    authentication,
-                });
-            }
-            Some("claim") => {
-                let (plan, authentication) = Self::parse_authenticated_plan(arguments)?;
-                return Ok(Self::Claim {
-                    plan,
-                    authentication,
-                });
-            }
-            Some(command @ ("verify" | "canary")) => {
-                let flag = arguments.next().ok_or(ArgumentError)?;
-                let plan = arguments.next().ok_or(ArgumentError)?;
-                if flag != "--plan" || arguments.next().is_some() {
-                    return Err(ArgumentError);
-                }
-                return Ok(if command == "canary" {
-                    Self::Canary {
-                        plan: PathBuf::from(plan),
-                    }
-                } else {
-                    Self::Verify {
-                        plan: PathBuf::from(plan),
-                    }
-                });
+            Some(command @ ("offline" | "claim" | "verify" | "canary")) => {
+                return Self::parse_plan(command, arguments);
             }
             _ => return Err(ArgumentError),
         }
@@ -110,11 +116,16 @@ impl CutoverCommand {
         }))
     }
 
-    fn parse_authenticated_plan(
+    fn parse_plan(
+        command: &str,
         mut arguments: impl Iterator<Item = OsString>,
-    ) -> Result<(PathBuf, OwnerAuthentication), ArgumentError> {
+    ) -> Result<Self, ArgumentError> {
         let mut plan = None;
         let mut authentication = None;
+        let mut production = false;
+        let mut dry_run = false;
+        let mut target = None;
+        let mut confirmation = None;
         while let Some(flag) = arguments.next() {
             match flag.to_str() {
                 Some("--plan") if plan.is_none() => {
@@ -128,12 +139,63 @@ impl CutoverCommand {
                 Some("--owner-access") if authentication.is_none() => {
                     authentication = Some(OwnerAuthentication::OwnerAccess)
                 }
+                Some("--production") if !production => production = true,
+                Some("--dry-run") if !dry_run => dry_run = true,
+                Some("--target") if target.is_none() => {
+                    let value = arguments.next().ok_or(ArgumentError)?;
+                    target = Some(
+                        Url::parse(value.to_str().ok_or(ArgumentError)?)
+                            .map_err(|_| ArgumentError)?,
+                    );
+                }
+                Some("--confirm-production") if confirmation.is_none() => {
+                    let value = arguments.next().ok_or(ArgumentError)?;
+                    confirmation = Some(
+                        value
+                            .into_string()
+                            .map_err(|_| ArgumentError)?
+                            .try_into()
+                            .map_err(|_| ArgumentError)?,
+                    );
+                }
                 _ => return Err(ArgumentError),
             }
         }
-        Ok((
-            plan.ok_or(ArgumentError)?,
-            authentication.ok_or(ArgumentError)?,
-        ))
+        let plan = plan.ok_or(ArgumentError)?;
+        if !production && (target.is_some() || confirmation.is_some()) {
+            return Err(ArgumentError);
+        }
+        if dry_run {
+            if confirmation.is_some() || (production && target.is_none()) {
+                return Err(ArgumentError);
+            }
+            return Ok(Self::Preview {
+                plan,
+                production_target: target,
+            });
+        }
+        let mode = if production {
+            ExecutionMode::Production {
+                target: target.ok_or(ArgumentError)?,
+                confirmation: confirmation.ok_or(ArgumentError)?,
+            }
+        } else {
+            ExecutionMode::Isolated
+        };
+        match command {
+            "offline" => Ok(Self::Offline {
+                plan,
+                authentication: authentication.ok_or(ArgumentError)?,
+                mode,
+            }),
+            "claim" => Ok(Self::Claim {
+                plan,
+                authentication: authentication.ok_or(ArgumentError)?,
+                mode,
+            }),
+            "verify" if authentication.is_none() => Ok(Self::Verify { plan, mode }),
+            "canary" if authentication.is_none() => Ok(Self::Canary { plan, mode }),
+            _ => Err(ArgumentError),
+        }
     }
 }

@@ -79,8 +79,7 @@ impl OfflineRunPlan {
         home: &Path,
     ) -> Result<InstalledVerificationReport, InstalledVerificationError> {
         self.validate()?;
-        let mut host =
-            OfflineHost::acquire(&self.router_root, &self.service_id, self.peer_id, home)?;
+        let mut host = self.acquire_host(home)?;
         let mut projects = Vec::new();
         for project in &self.projects {
             projects.push(self.compare_installed_project(&mut host, project).await);
