@@ -1,8 +1,8 @@
 //! Session callers can reach only these explicit DAG edges.
 use super::{
     CallFailure, CallId, CallTarget, CallerContext, CopyKind, CopyRead, DeliveryKind, FleetKind,
-    MailboxKind, ReceiverId, RegistryKind, SerializedObjectCall, SessionKind, decode,
-    encode_shared_call, no_route,
+    ReceiverId, RegistryKind, SerializedObjectCall, SessionKind, decode, encode_shared_call,
+    no_route,
 };
 
 pub(super) fn classify_session(
@@ -14,18 +14,20 @@ pub(super) fn classify_session(
     identity: CallId,
 ) -> Result<SerializedObjectCall, CallFailure> {
     match kind {
-        crate::mail_sender_calls::SenderMailboxRegistry::KIND => {
-            encode_shared_call::<
-                SessionKind,
-                RegistryKind,
-                crate::mail_sender_calls::SenderMailboxRegistry,
-            >(caller, (), decode(target)?, decode(request)?, identity)
+        crate::mail_sender_calls::SenderFleetMail::KIND => {
+            encode_shared_call::<SessionKind, FleetKind, crate::mail_sender_calls::SenderFleetMail>(
+                caller,
+                (),
+                decode(target)?,
+                decode(request)?,
+                identity,
+            )
         }
         crate::forward_calls::DeliverForward::KIND => {
             let target: crate::forward_calls::DeliverForward = decode(target)?;
             encode_shared_call::<SessionKind, DeliveryKind, crate::forward_calls::DeliverForward>(
                 caller,
-                target.installation.clone(),
+                (),
                 target,
                 decode(request)?,
                 identity,
@@ -35,7 +37,7 @@ pub(super) fn classify_session(
             let target: crate::forward_calls::AnswerForward = decode(target)?;
             encode_shared_call::<SessionKind, DeliveryKind, crate::forward_calls::AnswerForward>(
                 caller,
-                target.installation.clone(),
+                (),
                 target,
                 decode(request)?,
                 identity,
@@ -73,22 +75,14 @@ pub(super) fn classify_session(
                 identity,
             )
         }
-        crate::mailbox_requests::MailboxRequest::KIND => {
-            let target: crate::mailbox_requests::MailboxRequest = decode(target)?;
-            encode_shared_call::<SessionKind, MailboxKind, crate::mailbox_requests::MailboxRequest>(
+        crate::mail_submit_calls::FleetMailSubmit::KIND => {
+            encode_shared_call::<SessionKind, FleetKind, crate::mail_submit_calls::FleetMailSubmit>(
                 caller,
-                target.installation.clone(),
-                target,
+                (),
+                decode(target)?,
                 decode(request)?,
                 identity,
             )
-        }
-        crate::mail_submit_calls::MailSubmitRegistry::KIND => {
-            encode_shared_call::<
-                SessionKind,
-                RegistryKind,
-                crate::mail_submit_calls::MailSubmitRegistry,
-            >(caller, (), decode(target)?, decode(request)?, identity)
         }
         fleet_sync_session::SchemaSupportRegistry::KIND => {
             encode_shared_call::<SessionKind, RegistryKind, fleet_sync_session::SchemaSupportRegistry>(

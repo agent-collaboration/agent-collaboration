@@ -1,2 +1,1 @@
-INSERT INTO fleet_decision_receipts(receipt_id, request_id, ordinal, effect)
-VALUES (?, ?, CAST(? AS INTEGER), ?);
+INSERT INTO fleet_decision_receipts (receipt_id,request_id,ordinal,record_kind,record_id,fleet_position,origin_installation,origin_machine,created_at,updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9);

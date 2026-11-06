@@ -45,7 +45,11 @@ for (const filename of readdirSync(fixtureDirectory).sort()) {
   const entry = baselineSchema.parse(
     JSON.parse(readFileSync(new URL(filename, fixtureDirectory), "utf8")),
   );
-  test(`SQLx ${entry.kind} ${entry.mode} matches original commands, environments, exits and cache bytes`, (context): void => {
+  const scenario = entry.mode === "fail-last" ? "fails at the named package" : entry.mode;
+  const failingPackage = entry.expected.calls.findLast(
+    (call): boolean => call.command[0] === "cargo" && call.command[1] === "check",
+  )?.environment["SQLX_PREPARE_PACKAGE"];
+  test(`SQLx ${entry.kind} ${scenario} matches original commands, environments, exits and cache bytes`, (context): void => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "sqlx-port-")));
     const calls: z.infer<typeof callSchema>[] = [];
     const errors: string[] = [];
@@ -96,7 +100,7 @@ for (const filename of readdirSync(fixtureDirectory).sort()) {
             );
           if (
             (entry.mode === "fail-first" && packageName === targets[0]?.packageName) ||
-            (entry.mode === "fail-last" && packageName === targets.at(-1)?.packageName)
+            (entry.mode === "fail-last" && packageName === failingPackage)
           )
             return { status: 7, stdout: "", stderr: "" };
         }

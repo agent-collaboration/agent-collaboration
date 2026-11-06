@@ -12,7 +12,7 @@ use fleet_sync_session::{
     SessionTransport,
 };
 use fleet_sync_tokio_runner::SessionPump;
-use runtime_primitives::{Backoff, UuidV7Ids};
+use runtime_primitives::{Backoff, SystemClock, UuidV7Ids};
 use std::{
     sync::{Arc, atomic::Ordering},
     time::Duration,
@@ -33,6 +33,7 @@ async fn fleet_service_resumes_the_same_session_after_a_socket_cut() {
     let consumer = Arc::new(SessionConsumer::default());
     let service = FleetService::<NoConsumer, _, _>::open(
         ServiceOptions {
+            clock: Arc::new(SystemClock),
             directory: directory.path().join("service"),
             delivery: None,
             receiver,

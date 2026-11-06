@@ -3,7 +3,7 @@
 use crate::conformance_core_store::{ControlIo, ReceiptStoreHost, new_host};
 use collaboration_central_core::{
     AccessCaller, AccessClientId, BootstrapCommand, EnrollMachine, ObjectBootstrap, ObjectHost,
-    ObjectRuntime, OwnerIdentity, RegistryKind,
+    ObjectRuntime, OwnerIdentity,
 };
 use fleet_sync_lease::{LeasePolicy, RegistryConfig};
 use fleet_sync_protocol::ReceiverId;
@@ -28,10 +28,10 @@ enum Fixture {
     Registry,
     Copy,
     Session,
-    Mailbox,
+    Delivery,
     LateConflict,
     Checksum,
-    Noncanonical,
+    InvalidVersion,
     Unknown,
     Damaged,
     Uncertain,
@@ -44,10 +44,10 @@ impl Fixture {
             Self::Registry => "registry",
             Self::Copy => "copy",
             Self::Session => "session",
-            Self::Mailbox => "mailbox",
+            Self::Delivery => "delivery",
             Self::LateConflict => "lateConflict",
             Self::Checksum => "checksum",
-            Self::Noncanonical => "noncanonical",
+            Self::InvalidVersion => "invalidVersion",
             Self::Unknown => "unknown",
             Self::Damaged => "damaged",
             Self::Uncertain => "uncertain",
@@ -79,12 +79,17 @@ enum Command {
 }
 fn registry(
     host: Arc<ReceiptStoreHost>,
-) -> Result<ObjectRuntime<RegistryKind, ReceiptStoreHost, crate::conformance_core_store::ControlIo>>
-{
+) -> Result<
+    ObjectRuntime<
+        collaboration_central_core::FleetKind,
+        ReceiptStoreHost,
+        crate::conformance_core_store::ControlIo,
+    >,
+> {
     let receiver = ReceiverId::try_from("019f0000-0000-7000-8000-000000000010".to_owned())
         .map_err(|e| Error::RustError(e.to_string()))?;
     let io = crate::conformance_core_store::ControlIo::new(host.wake().clone());
-    ObjectRuntime::registry(
+    ObjectRuntime::fleet(
         host,
         io,
         RegistryConfig {
@@ -102,6 +107,7 @@ fn registry(
             )
             .map_err(|error| worker::Error::RustError(error.to_string()))?,
         },
+        Duration::from_secs(20),
     )
     .map_err(|e| Error::RustError(e.to_string()))
 }
@@ -142,7 +148,7 @@ pub(crate) async fn forward(env: &Env, mut request: Request) -> Result<Response>
         };
         return crate::composed_control::forward(
             env,
-            &collaboration_central_core::ObjectAddress::Registry,
+            &collaboration_central_core::ObjectAddress::Fleet,
             IMPORTED_UNHELD_PATH,
             Some(serde_json::to_string(&(database, owner, board_state))?),
         )
@@ -195,14 +201,15 @@ impl DurableObject for BootstrapObject {
             #[cfg(not(feature = "conformance-faults"))]
             return Response::error("store faults unavailable", 404);
         }
-        let now = runtime_primitives::Clock::now(&ControlIo::new(host.wake().clone()));
         let result = match body.command {
-            Command::Bootstrap(command) => ObjectBootstrap::new(host.clone(), now)
-                .execute(command)
-                .await
-                .and_then(|reply| {
-                    serde_json::to_value(reply).map_err(durable_steps::StoreError::backend)
-                }),
+            Command::Bootstrap(command) => {
+                ObjectBootstrap::new(host.clone(), Arc::new(ControlIo::new(host.wake().clone())))
+                    .execute(command)
+                    .await
+                    .and_then(|reply| {
+                        serde_json::to_value(reply).map_err(durable_steps::StoreError::backend)
+                    })
+            }
             Command::ImportedUnheld { .. } => Err(durable_steps::StoreError::backend(
                 "import fixture must use the composed Registry",
             )),

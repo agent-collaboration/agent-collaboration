@@ -17,9 +17,9 @@ mod socket_host;
 #[cfg(feature = "conformance")]
 mod startup_controls;
 pub use collaboration_central_core::DeliveryConfig;
-#[cfg(feature = "conformance")]
-pub use native_objects::HealthFileSample;
 pub use native_objects::TokioObjectIo;
+#[cfg(feature = "conformance")]
+pub use native_objects::{HealthFileSample, SocketOwnerSnapshot};
 pub use native_server::{TokioServer, TokioServerError, TokioSettings};
 pub use platform::{TokioCentralPlatform, TokioPlatformError};
 pub use socket_host::SocketCommand;
@@ -152,7 +152,7 @@ impl<SharedHost: Host> ObjectHost for TokioStorageHost<SharedHost> {
             && let Some(frame) = identity.answer_frame()
             && self
                 .faults
-                .drop_answer(frame)
+                .drop_answer(to, frame)
                 .map_err(|_| collaboration_central_core::SocketFailure::Closed)?
         {
             return Ok(());

@@ -12,8 +12,7 @@ use fleet_admission::{
 use message_board::{Description, HumanId, MachineLabel, WorkspaceId};
 use support::*;
 
-const COUNTS: &str = "SELECT json_object('workspaces',(SELECT count(*) FROM workspaces),'boards',(SELECT count(*) FROM boards),'directoryEntries',(SELECT count(*) FROM project_directory),'feedRows',(SELECT count(*) FROM fleet_feed)) AS value";
-const APPLICATION_STATE: &str = "SELECT 'workspace:' || json_object('id',workspace_id,'name',name,'payload',payload,'time',router_time,'basis',time_basis,'installation',origin_installation,'machine',origin_machine,'digest',import_digest) AS value FROM workspaces UNION ALL SELECT 'board:' || json_object('id',board_id,'name',name,'payload',payload,'time',router_time,'basis',time_basis,'installation',origin_installation,'machine',origin_machine,'digest',import_digest) FROM boards UNION ALL SELECT 'directory:' || json_object('id',project_id,'name',name,'payload',payload,'time',router_time,'basis',time_basis,'installation',origin_installation,'machine',origin_machine,'digest',import_digest) FROM project_directory UNION ALL SELECT 'feed:' || json_object('id',entry_id,'position',position,'record',record_id,'payload',payload,'time',router_time,'basis',time_basis,'installation',origin_installation,'machine',origin_machine,'asOf',as_of) FROM fleet_feed UNION ALL SELECT 'head:' || json_object('id',state_id,'name',name,'position',last_position,'floor',retained_through) FROM fleet_feed_state ORDER BY value";
+const COUNTS: &str = "SELECT json_object('workspaces',(SELECT count(*) FROM fleet_workspaces),'boards',(SELECT count(*) FROM fleet_boards),'directoryEntries',(SELECT count(*) FROM fleet_project_directory),'feedRows',(SELECT count(*) FROM fleet_feed)) AS value";
 
 #[derive(Debug, PartialEq, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -83,7 +82,7 @@ async fn actual_imported_fleet_bundle_is_atomic_and_retains_first_records_on_rep
         // Fail during real writes too: pure admission rejection alone cannot
         // prove rollback of earlier valid workspace inserts and feed entries.
         upload_support::execute(root.path(), "fleet",
-            "CREATE TRIGGER interrupt_fleet_import BEFORE INSERT ON boards BEGIN SELECT RAISE(ABORT,'Fleet import write interrupted'); END").await?;
+            "CREATE TRIGGER interrupt_fleet_import BEFORE INSERT ON fleet_boards BEGIN SELECT RAISE(ABORT,'Fleet import write interrupted'); END").await?;
         let interrupted = central_fixture::owner_client()?
             .post(format!("{}/admin/v1/import/fleet", server.base_url()))
             .json(&prepared.report.fleet)
@@ -116,7 +115,13 @@ async fn actual_imported_fleet_bundle_is_atomic_and_retains_first_records_on_rep
                 feed_rows: 7,
             }
         );
-        let before = upload_support::read(root.path(), "fleet", APPLICATION_STATE).await?;
+        let before = upload_support::fleet_readback::application_state(root.path()).await?;
+        // Literal source fixture: 2 workspaces + 2 boards + 3 projects, seven
+        // feed entries and one head. An empty observation cannot prove replay.
+        assert_eq!(before.iter().filter(|row| row.starts_with("record:")).count(), 7, "readback must retain seven literal canonical records");
+        assert_eq!(before.iter().filter(|row| row.starts_with("feed:")).count(), 7);
+        assert_eq!(before.iter().filter(|row| row.starts_with("feed-id:")).count(), 7);
+        assert_eq!(before.iter().filter(|row| row.starts_with("head:")).count(), 1);
         let mut relabelled = prepared.report.fleet.clone();
         relabelled.declared_owner = HumanId::try_from("different declared importer".to_owned())?;
         relabelled.provenance.machine =
@@ -129,7 +134,7 @@ async fn actual_imported_fleet_bundle_is_atomic_and_retains_first_records_on_rep
             FleetImportResult::AlreadyImported
         );
         assert_eq!(
-            upload_support::read(root.path(), "fleet", APPLICATION_STATE).await?,
+            upload_support::fleet_readback::application_state(root.path()).await?,
             before
         );
         let mut changed = prepared.report.fleet.clone();
@@ -151,7 +156,7 @@ async fn actual_imported_fleet_bundle_is_atomic_and_retains_first_records_on_rep
             FleetImportResult::Refused { .. }
         ));
         assert_eq!(
-            upload_support::read(root.path(), "fleet", APPLICATION_STATE).await?,
+            upload_support::fleet_readback::application_state(root.path()).await?,
             before
         );
         Ok(())

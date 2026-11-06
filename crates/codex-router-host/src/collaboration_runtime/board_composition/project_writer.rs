@@ -189,6 +189,10 @@ impl ProjectWriter {
                     Err(ProjectStorageError::Writer(fleet_sync_writer::OpenError::Holder {
                         error: HolderError::RegistrationRejected { .. },
                     })) => return Ok(()), // The registration watcher owns orphaning.
+                    Err(ProjectStorageError::Writer(fleet_sync_writer::OpenError::Holder {
+                        error:
+                            HolderError::Refused(fleet_sync_protocol::LeaseRefusal::NotRegistered),
+                    })) => was_writable = false, // This project waits for the cutover import.
                     Err(error) => return Err(io::Error::other(error)),
                     Ok(_) => was_writable = false,
                 }

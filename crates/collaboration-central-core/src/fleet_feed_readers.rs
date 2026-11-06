@@ -20,6 +20,7 @@ pub(crate) async fn record<Scope: TransactionScope>(
     installation: &ServiceId,
     applied: FleetPosition,
     row_id: Uuid,
+    now: chrono::DateTime<chrono::Utc>,
 ) -> Result<(), StoreError>
 where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
@@ -32,6 +33,7 @@ where
         row_id.to_string(),
         installation.as_str().into(),
         applied.get().to_string(),
+        now.timestamp_millis().to_string(),
     )
     .await
     .map_err(StoreError::backend)
@@ -52,6 +54,16 @@ where
         .map_err(StoreError::backend)?
         .into_iter()
         .map(|row| {
+            crate::fleet_record_codec::check_millis(
+                row.created_at,
+                row.created_class,
+                "feed_readers.created_at",
+            )?;
+            crate::fleet_record_codec::check_millis(
+                row.updated_at,
+                row.updated_class,
+                "feed_readers.updated_at",
+            )?;
             check_private_id(
                 &required(row.reader_id, "feed_readers.reader_id")?,
                 "feed_readers.reader_id",

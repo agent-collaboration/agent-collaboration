@@ -1,18 +1,19 @@
 //! Adapt SDK delivery calls onto the already prepared machine session.
 use super::{
-    AtomicStore, CallEnvelope, CallFailure, CallTarget, DeliveryItemRef, MailCallRouter, MailHost,
-    MailSender, NotSentReason, RouterDeliveryTypes, StoreError, TursoScope, Value, Weak,
+    AtomicStore, CallEnvelope, CallFailure, CallTarget, CarrierAcceptance, DeliveryItemRef,
+    MailCallRouter, MailHost, MailSender, NotSentReason, RouterDeliveryTypes, StoreError,
+    TursoScope, Value, Weak,
 };
 use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerRequest, BoardDeliveryTypes, MailSubmitAnswer,
 };
 use fleet_sync_delivery::{
-    DeliveryTransactionFailure, FetchCall, FetchInput, Outbox, ReceiptInput, ReceivedCall,
-    ReportCall, SubmitCall, classify_delivery_store_error, delivery_rollback,
-    submit_settlement_outcome,
+    DeliveryTransactionFailure, DispatchOutcome, Outbox, ReportCall, SubmitCall,
+    classify_delivery_store_error, delivery_rollback, submit_settlement_outcome,
 };
 use fleet_sync_protocol::{
-    DeliveryAnswer, DeliveryEnvelope, DeliveryRequest, OperationAnswer, OperationRequest,
+    DeliveryAnswer, DeliveryEnvelope, DeliveryFailureKind, DeliveryRequest, ItemId,
+    OperationAnswer, OperationRequest, SubmitResult, Submitter,
 };
 use serde::{Serialize, de::DeserializeOwned};
 
@@ -62,13 +63,34 @@ async fn recorded_submission_epoch(
 }
 
 impl MailCallRouter {
+    /// Retained ownership survives payload release and comes from this physical outbox.
+    async fn retained_local_submitter(
+        &self,
+        item: ItemId,
+    ) -> Result<Option<Submitter>, StoreError> {
+        let store = self
+            .store
+            .get()
+            .and_then(Weak::upgrade)
+            .ok_or_else(|| StoreError::backend("local outbox owner is unavailable"))?;
+        let limits = self.config.limits;
+        let binding = self.binding.clone();
+        store
+            .transaction(move |scope| {
+                Box::pin(async move {
+                    Outbox::<_, RouterDeliveryTypes, _>::new(scope, limits, binding.as_ref())
+                        .relay_submitter(item)
+                        .await
+                        .map_err(delivery_rollback)
+                })
+            })
+            .await
+    }
+
     pub(super) async fn dispatch_remote(
         &self,
         envelope: CallEnvelope,
     ) -> Result<Value, CallFailure> {
-        if envelope.kind == super::terminal_retirement::RetireMailCall::KIND {
-            return self.dispatch_retirement(envelope).await;
-        }
         let session = self.session.as_ref().ok_or_else(unavailable)?;
         let CallEnvelope {
             kind,
@@ -91,17 +113,23 @@ impl MailCallRouter {
                     .and_then(Weak::upgrade)
                     .ok_or_else(unavailable)?;
                 let resolved = store
-                    .transaction(move |scope| {
-                        Box::pin(async move {
-                            let resolved =
-                                Outbox::<_, RouterDeliveryTypes>::new(scope, config.limits)
-                                    .resolve_submit(&lookup)
-                                    .await
-                                    .map_err(delivery_rollback)?;
-                            let origin_epoch =
-                                recorded_submission_epoch(scope, &resolved.item).await?;
-                            Ok((resolved, origin_epoch))
-                        })
+                    .transaction({
+                        let binding = self.binding.clone();
+                        move |scope| {
+                            Box::pin(async move {
+                                let resolved = Outbox::<_, RouterDeliveryTypes, _>::new(
+                                    scope,
+                                    config.limits,
+                                    binding.as_ref(),
+                                )
+                                .resolve_submit(&lookup)
+                                .await
+                                .map_err(delivery_rollback)?;
+                                let origin_epoch =
+                                    recorded_submission_epoch(scope, &resolved.item).await?;
+                                Ok((resolved, origin_epoch))
+                            })
+                        }
                     })
                     .await;
                 match resolved {
@@ -141,9 +169,11 @@ impl MailCallRouter {
                         {
                             OperationAnswer::Consumer(BoardConsumerAnswer::MailSubmit(
                                 MailSubmitAnswer::Submitted(answer),
-                            )) => encode_answer(fleet_sync_delivery::DispatchOutcome::Answered(
-                                answer,
-                            )),
+                            )) => {
+                                encode_answer(SubmitCall::<RouterDeliveryTypes>::validated_answer(
+                                    fleet_sync_delivery::DispatchOutcome::Answered(answer),
+                                )?)
+                            }
                             OperationAnswer::Consumer(BoardConsumerAnswer::MailSubmit(
                                 MailSubmitAnswer::NotWriter,
                             )) => {
@@ -171,17 +201,31 @@ impl MailCallRouter {
                         }
                     }
                     Err(error) => {
-                        match classify_delivery_store_error(error) {
+                        match classify_delivery_store_error(error.clone()) {
                             DeliveryTransactionFailure::OutcomeUnknown(_) => {
                                 return Err(CallFailure::AnswerLost);
+                            }
+                            DeliveryTransactionFailure::BindingUnavailable { .. } => {
+                                return Err(self.binding_call_failure(error).await);
                             }
                             DeliveryTransactionFailure::Refused(_)
                             | DeliveryTransactionFailure::Corrupt { .. } => {}
                         }
+                        let submitter = match self.retained_local_submitter(reference.item).await {
+                            Ok(Some(submitter)) => submitter,
+                            Ok(None) | Err(_) => {
+                                return encode_answer(DispatchOutcome::<
+                                    SubmitResult<CarrierAcceptance>,
+                                >::Unresolvable {
+                                    reason: DeliveryFailureKind::CustodyUnresolvable,
+                                });
+                            }
+                        };
                         match session
                             .requests
                             .request(OperationRequest::Delivery(DeliveryRequest::Settle {
                                 call,
+                                submitter,
                                 mailbox: target.mailbox,
                                 item: reference.item,
                                 digest: reference.digest,
@@ -191,54 +235,19 @@ impl MailCallRouter {
                             OperationAnswer::Delivery(DeliveryAnswer::Settle(answer)) => {
                                 encode_answer(submit_settlement_outcome(answer))
                             }
+                            OperationAnswer::Delivery(DeliveryAnswer::DeliveryUnavailable {
+                                reason: fleet_sync_protocol::DeliveryRefusal::SenderNotEnrolled,
+                            }) => Err(CallFailure::Retryable {
+                                reason: durable_steps::CallRetryReason {
+                                    code: "callerNotEnrolled".into(),
+                                    detail:
+                                        "Machine is not enrolled or its enrollment has expired."
+                                            .into(),
+                                },
+                            }),
                             _ => Err(CallFailure::AnswerLost),
                         }
                     }
-                }
-            }
-            FetchCall::<RouterDeliveryTypes>::KIND => {
-                let target: FetchCall<RouterDeliveryTypes> = decode_call(target)?;
-                if target.relay != session.relay || target.mailbox != self.config.owner {
-                    return Err(unavailable());
-                }
-                let request: FetchInput = decode_call(request)?;
-                match session
-                    .requests
-                    .request(OperationRequest::Delivery(DeliveryRequest::Fetch {
-                        call,
-                        stream: request.stream,
-                        after: request.after,
-                        max_items: request.max_items,
-                        max_bytes: request.max_bytes,
-                        inbox_room_bytes: request.inbox_room_bytes,
-                    }))
-                    .await?
-                {
-                    OperationAnswer::Delivery(DeliveryAnswer::Fetch(answer)) => {
-                        encode_answer(answer)
-                    }
-                    _ => Err(CallFailure::AnswerLost),
-                }
-            }
-            ReceivedCall::KIND => {
-                let target: ReceivedCall = decode_call(target)?;
-                if target.relay != session.relay || target.mailbox != self.config.owner {
-                    return Err(unavailable());
-                }
-                let request: ReceiptInput = decode_call(request)?;
-                match session
-                    .requests
-                    .request(OperationRequest::Delivery(DeliveryRequest::Received {
-                        call,
-                        stream: request.stream,
-                        through: request.through,
-                    }))
-                    .await?
-                {
-                    OperationAnswer::Delivery(DeliveryAnswer::Received(answer)) => {
-                        encode_answer(answer)
-                    }
-                    _ => Err(CallFailure::AnswerLost),
                 }
             }
             ReportCall::<RouterDeliveryTypes>::KIND => {
@@ -265,5 +274,22 @@ impl MailCallRouter {
                 reason: NotSentReason::Overloaded,
             }),
         }
+    }
+}
+
+#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+impl super::MailDeliveryRuntime {
+    /// Exercise the real call adapter with a deliberately unresolvable reference.
+    pub async fn runtime_test_submit_reference(
+        &self,
+        mailbox: fleet_sync_protocol::PeerId,
+        reference: DeliveryItemRef,
+    ) -> Result<fleet_sync_delivery::SubmitOutcome<CarrierAcceptance>, CallFailure> {
+        use durable_steps::Host as _;
+        let call = super::remote_status::status_call("test-submit")
+            .map_err(|_| CallFailure::AnswerLost)?;
+        let relay = self.session.as_ref().ok_or_else(unavailable)?.relay;
+        let target = SubmitCall::<RouterDeliveryTypes>::new(relay, mailbox);
+        self.host.dispatch(target, reference, call).await
     }
 }

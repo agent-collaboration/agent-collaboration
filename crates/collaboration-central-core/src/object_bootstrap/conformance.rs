@@ -16,7 +16,7 @@ use fleet_sync_protocol::{
 #[serde(rename_all = "camelCase")]
 pub enum HistoryCorruption {
     Checksum,
-    NoncanonicalVersion,
+    InvalidVersion,
     UnknownVersion,
 }
 
@@ -25,7 +25,7 @@ pub enum HistoryCorruption {
 pub enum BootstrapProbe {
     Registry,
     Copy,
-    Mailbox,
+    Delivery,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -57,8 +57,16 @@ pub enum BootstrapCommand {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BootstrapHistory {
     pub corpus: String,
-    pub version: String,
-    pub checksum: String,
+    pub version: i64,
+    pub description: String,
+    pub installed_on: i64,
+    pub success: i64,
+    pub execution_time: i64,
+    pub checksum: Vec<u8>,
+    pub version_class: String,
+    pub checksum_class: String,
+    pub installed_class: String,
+    pub execution_class: String,
 }
 
 type Acceptance = <BoardDeliveryTypes as DeliveryTypes>::Acceptance;
@@ -72,7 +80,7 @@ type Acceptance = <BoardDeliveryTypes as DeliveryTypes>::Acceptance;
 pub enum BootstrapProbeReply {
     Registry(ReportSchemaSupport),
     Copy(Box<CopyStatusAnswer>),
-    Mailbox(QueryResult<Acceptance>),
+    Delivery(QueryResult<Acceptance>),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -101,6 +109,16 @@ where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'blob, Host::Database>
+        + sqlx_core::decode::Decode<'blob, Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Host::Database> + sqlx_core::decode::Decode<'blob, Host::Database>,
+    for<'scalar> Option<i64>:
+        sqlx_core::types::Type<Host::Database> + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -120,7 +138,13 @@ where
                 Ok(BootstrapReply::CopyStatus(Box::new(answer)))
             }
             command => {
-                let (reply, _effects) = self.driver.run(BootstrapProbeStep { command }).await?;
+                let (reply, _effects) = self
+                    .driver
+                    .run(BootstrapProbeStep {
+                        command,
+                        now: self.now,
+                    })
+                    .await?;
                 Ok(reply)
             }
         }
@@ -129,6 +153,7 @@ where
 
 struct BootstrapProbeStep {
     command: BootstrapCommand,
+    now: runtime_primitives::SyncTime,
 }
 impl<Store, Driver> StepCallback<Store, Driver> for BootstrapProbeStep
 where
@@ -136,6 +161,16 @@ where
     Driver: Database,
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
     Driver::Arguments: IntoArguments<Driver>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Driver>
+        + sqlx_core::encode::Encode<'blob, Driver>
+        + sqlx_core::decode::Decode<'blob, Driver>,
+    for<'scalar> i64: sqlx_core::types::Type<Driver>
+        + sqlx_core::encode::Encode<'scalar, Driver>
+        + sqlx_core::decode::Decode<'scalar, Driver>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Driver> + sqlx_core::decode::Decode<'blob, Driver>,
+    for<'scalar> Option<i64>:
+        sqlx_core::types::Type<Driver> + sqlx_core::decode::Decode<'scalar, Driver>,
     for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'row> &'row str: ColumnIndex<Driver::Row>,
@@ -167,6 +202,28 @@ where
                             history.push(BootstrapHistory {
                                 corpus: row.corpus.ok_or_else(|| corrupt("missing corpus"))?,
                                 version: row.version.ok_or_else(|| corrupt("missing version"))?,
+                                version_class: row
+                                    .version_class
+                                    .ok_or_else(|| corrupt("missing version_class"))?,
+                                checksum_class: row
+                                    .checksum_class
+                                    .ok_or_else(|| corrupt("missing checksum_class"))?,
+                                installed_class: row
+                                    .installed_class
+                                    .ok_or_else(|| corrupt("missing installed_class"))?,
+                                execution_class: row
+                                    .execution_class
+                                    .ok_or_else(|| corrupt("missing execution_class"))?,
+                                description: row
+                                    .description
+                                    .ok_or_else(|| corrupt("missing description"))?,
+                                installed_on: row
+                                    .installed_on
+                                    .ok_or_else(|| corrupt("missing installed_on"))?,
+                                success: row.success.ok_or_else(|| corrupt("missing success"))?,
+                                execution_time: row
+                                    .execution_time
+                                    .ok_or_else(|| corrupt("missing execution_time"))?,
                                 checksum: row
                                     .checksum
                                     .ok_or_else(|| corrupt("missing checksum"))?,
@@ -195,26 +252,17 @@ where
                         HistoryCorruption::Checksum => {
                             queries::bootstrap_probe_checksum(
                                 scope,
-                                "[]".into(),
+                                vec![0; 48],
                                 schema.corpus().into(),
                             )
                             .await
                         }
-                        HistoryCorruption::NoncanonicalVersion => {
-                            queries::bootstrap_probe_version(
-                                scope,
-                                "01".into(),
-                                schema.corpus().into(),
-                            )
-                            .await
+                        HistoryCorruption::InvalidVersion => {
+                            queries::bootstrap_probe_version(scope, 0, schema.corpus().into()).await
                         }
                         HistoryCorruption::UnknownVersion => {
-                            queries::bootstrap_probe_version(
-                                scope,
-                                "999".into(),
-                                schema.corpus().into(),
-                            )
-                            .await
+                            queries::bootstrap_probe_version(scope, 999, schema.corpus().into())
+                                .await
                         }
                     }
                     .map_err(StoreError::backend)?;
@@ -234,7 +282,7 @@ where
                                 attach_seq: AttachSequence::new(1).map_err(StoreError::backend)?,
                                 support: SchemaSupport { max_version: 7 },
                             };
-                            fleet_sync_lease::report_schema_support(scope, &report)
+                            fleet_sync_lease::report_schema_support(scope, &report, self.now)
                                 .await
                                 .map_err(StoreError::backend)?;
                             let stored = fleet_sync_lease::accepted_schema_support(scope, peer)
@@ -263,27 +311,32 @@ where
                                     .map_err(fleet_sync_receiver::receiver_rollback)?,
                             ))
                         }
-                        BootstrapProbe::Mailbox => {
+                        BootstrapProbe::Delivery => {
                             let allowance = fleet_sync_delivery::minimum_settlement_allowance::<
                                 BoardDeliveryTypes,
                             >()
                             .map_err(StoreError::backend)?;
                             let limits =
                                 fleet_sync_delivery::DeliveryLimits::new::<BoardDeliveryTypes>(
-                                    1_000_000, 100, 1_000_000, 100, 1_000_000, allowance,
+                                    1_000_000, 100, 1_000_000, allowance,
                                 )
                                 .map_err(StoreError::backend)?;
                             let item =
                                 ItemId::try_from("019f0000-0000-7000-8000-000000000604".to_owned())
                                     .map_err(StoreError::backend)?;
-                            let result =
-                                fleet_sync_delivery::Mailbox::<_, BoardDeliveryTypes>::new(
-                                    scope, peer, limits,
+                            let status =
+                                fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
+                                    scope,
+                                    limits,
+                                    &crate::fleet_sender_binding::FleetSenderBinding,
                                 )
-                                .query(&[item])
+                                .relay_query(fleet_sync_protocol::Submitter::Machine(peer), item)
                                 .await
                                 .map_err(StoreError::backend)?;
-                            BootstrapProbeReply::Mailbox(result)
+                            let result = QueryResult {
+                                statuses: vec![status],
+                            };
+                            BootstrapProbeReply::Delivery(result)
                         }
                     };
                     BootstrapReply::Probed(Box::new(probe))

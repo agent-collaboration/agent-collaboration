@@ -307,7 +307,7 @@ async fn two_prevented_generations_keep_a_resolved_drain_above_frontier_until_fi
 }
 
 #[tokio::test]
-async fn quiet_local_delivery_advances_frontier_and_only_acknowledgement_retires_its_custody() {
+async fn quiet_local_delivery_releases_acknowledged_frontier_without_erasing_retained_custody() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime().await;
@@ -411,12 +411,11 @@ async fn quiet_local_delivery_advances_frontier_and_only_acknowledgement_retires
         .await
         .is_ok();
     }
-    let absent_after_ack = native
+    let retained_after_ack = native
         .runtime()
         .local_outcome_for_test(frozen[0].id())
         .await
-        .unwrap()
-        .is_none();
+        .unwrap();
     let after_retirement = app.messages().push_show(show).await.unwrap();
     if retired {
         publisher
@@ -449,8 +448,12 @@ async fn quiet_local_delivery_advances_frontier_and_only_acknowledgement_retires
     ));
     assert_eq!(progress_before_ack, HandoffSeq::ZERO);
     assert!(
-        retired && absent_after_ack,
-        "acknowledged frontier did not retire local custody"
+        retired
+            && matches!(
+                retained_after_ack,
+                Some(fleet_sync_protocol::RecipientOutcome::Delivered { .. })
+            ),
+        "acknowledged frontier must release progress while retaining Delivered custody"
     );
     assert_eq!(
         serde_json::to_value(before_retirement).unwrap(),

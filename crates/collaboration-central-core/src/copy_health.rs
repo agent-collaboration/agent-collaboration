@@ -30,6 +30,16 @@ impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for ReadC
 where
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
     Driver::Arguments: IntoArguments<Driver>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Driver>
+        + sqlx_core::encode::Encode<'blob, Driver>
+        + sqlx_core::decode::Decode<'blob, Driver>,
+    for<'scalar> i64: sqlx_core::types::Type<Driver>
+        + sqlx_core::encode::Encode<'scalar, Driver>
+        + sqlx_core::decode::Decode<'scalar, Driver>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Driver> + sqlx_core::decode::Decode<'blob, Driver>,
+    for<'scalar> Option<i64>:
+        sqlx_core::types::Type<Driver> + sqlx_core::decode::Decode<'scalar, Driver>,
     for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'value> Option<String>: Type<Driver> + Decode<'value, Driver> + Encode<'value, Driver>,
     for<'row> &'row str: ColumnIndex<Driver::Row>,
@@ -129,6 +139,16 @@ async fn table_present<Scope: TransactionScope>(
 ) -> Result<bool, StoreError>
 where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::encode::Encode<'blob, Scope::Database>
+        + sqlx_core::decode::Decode<'blob, Scope::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::encode::Encode<'scalar, Scope::Database>
+        + sqlx_core::decode::Decode<'scalar, Scope::Database>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Scope::Database> + sqlx_core::decode::Decode<'blob, Scope::Database>,
+    for<'scalar> Option<i64>: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::decode::Decode<'scalar, Scope::Database>,
     for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
@@ -148,6 +168,16 @@ async fn read_bookkeeping<Scope: TransactionScope>(
 ) -> Result<Vec<CopyBookkeepingVersion>, StoreError>
 where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::encode::Encode<'blob, Scope::Database>
+        + sqlx_core::decode::Decode<'blob, Scope::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::encode::Encode<'scalar, Scope::Database>
+        + sqlx_core::decode::Decode<'scalar, Scope::Database>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Scope::Database> + sqlx_core::decode::Decode<'blob, Scope::Database>,
+    for<'scalar> Option<i64>: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::decode::Decode<'scalar, Scope::Database>,
     for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
     for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
@@ -170,15 +200,16 @@ where
         Vec::new()
     };
     for row in rows {
+        crate::migration_bookkeeping::validate_history_times(&row)?;
         crate::fleet_record_codec::check_private_id(
             &crate::fleet_record_codec::required(row.row_id, "migration row identity")?,
             "migration row identity",
         )?;
-        let encoded = crate::fleet_record_codec::required(row.version, "migration version")?;
-        let version = encoded.parse::<u64>().map_err(StoreError::backend)?;
-        if version == 0 || version.to_string() != encoded {
-            return Err(StoreError::backend("noncanonical migration version"));
-        }
+        let version = u64::try_from(
+            row.version
+                .ok_or_else(|| StoreError::backend("missing migration version"))?,
+        )
+        .map_err(StoreError::backend)?;
         stored = Some(stored.map_or(version, |previous: u64| previous.max(version)));
     }
     Ok(vec![CopyBookkeepingVersion {
@@ -192,6 +223,16 @@ async fn read_failures<Scope: TransactionScope>(
 ) -> Result<Vec<CopyMigrationFailureRecord>, StoreError>
 where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::encode::Encode<'blob, Scope::Database>
+        + sqlx_core::decode::Decode<'blob, Scope::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::encode::Encode<'scalar, Scope::Database>
+        + sqlx_core::decode::Decode<'scalar, Scope::Database>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Scope::Database> + sqlx_core::decode::Decode<'blob, Scope::Database>,
+    for<'scalar> Option<i64>: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::decode::Decode<'scalar, Scope::Database>,
     for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
@@ -204,6 +245,7 @@ where
         .await
         .map_err(StoreError::backend)?
     {
+        let failed_at = crate::migration_bookkeeping::failure_time(&row)?;
         crate::fleet_record_codec::check_private_id(
             &required(row.row_id, "failure row identity")?,
             "failure row identity",
@@ -212,21 +254,16 @@ where
         if corpus.is_empty() {
             return Err(StoreError::backend("empty migration failure corpus"));
         }
-        let encoded = required(row.version, "failure version")?;
-        let version = encoded.parse::<u64>().map_err(StoreError::backend)?;
-        if version == 0 || version.to_string() != encoded {
-            return Err(StoreError::backend("noncanonical failure version"));
-        }
-        let encoded = required(row.at, "failure time")?;
-        let at = encoded.parse::<i64>().map_err(StoreError::backend)?;
-        if at.to_string() != encoded {
-            return Err(StoreError::backend("noncanonical failure time"));
-        }
+        let version = u64::try_from(
+            row.version
+                .ok_or_else(|| StoreError::backend("missing failure version"))?,
+        )
+        .map_err(StoreError::backend)?;
         failures.push(CopyMigrationFailureRecord {
             corpus,
             version,
             reason: required(row.reason, "failure reason")?,
-            at: time(runtime_primitives::SyncTime::from_unix_millis(at))?,
+            at: time(failed_at)?,
         });
     }
     Ok(failures)

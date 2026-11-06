@@ -1,6 +1,7 @@
 //! Normal creation, owner requests and socket controls shared by transfer cases.
 use crate::{configuration, creation_scenarios, owner_registry_scenarios};
 use board_sync_protocol::{BoardAnnotation, BoardConsumerProtocol};
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, DispatchFaultObservation, JwksFixtureServer,
     RuntimeControl, RuntimeControlRequest, RuntimeFaultObservation, enroll_admitted_peer,
@@ -193,6 +194,9 @@ impl Fixture {
                 .into(),
             ))
             .await?;
+        ConformanceClient::new(self.base())?
+            .wake_due_after_hello(session_id)
+            .await?;
         let welcome = tokio::time::timeout(Duration::from_secs(5), replacement.next())
             .await?
             .ok_or("target closed before schema-support Welcome")??;
@@ -275,7 +279,7 @@ impl Fixture {
             .post(format!("{}/admin/v1/conformance/runtime", self.base()))
             .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
             .json(&RuntimeControlRequest {
-                address: ObjectAddress::Registry,
+                address: ObjectAddress::Fleet,
                 command,
             })
             .send()
@@ -289,9 +293,15 @@ impl Fixture {
             destination,
             request,
         } = self
-            .control(RuntimeControl::AwaitHeldDispatch)
+            .control(RuntimeControl::AwaitHeldDispatch {
+                key: DispatchKey::any(collaboration_central_core::ObjectAddress::Copy(
+                    self.database,
+                )),
+            })
             .await?
-            .dispatch
+            .dispatch(&DispatchKey::any(
+                collaboration_central_core::ObjectAddress::Copy(self.database),
+            ))
         else {
             return Err("transfer did not reach its actual held Copy call".into());
         };

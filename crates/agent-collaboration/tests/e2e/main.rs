@@ -29,3 +29,6 @@ mod local_mail_e2e;
 mod mail_reconcile_e2e;
 mod mail_retirement_e2e;
 mod messaging_rules_e2e;
+
+#[path = "../board_e2e/messaging_stopped_owner.rs"]
+mod messaging_stopped_owner;

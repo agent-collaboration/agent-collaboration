@@ -21,9 +21,12 @@ pub use piece_integrity_refusal::PieceIntegrityObservation;
 mod claim_grant_drop;
 mod mail_wire_observer;
 pub use mail_wire_observer::{MailWireEvent, MailWireObservation};
+mod dispatch_cleanup;
 mod lease_notice_gate;
+mod registration_answer_gate;
 pub use claim_grant_drop::{ClaimGrantDropObservation, DroppedClaimGrant};
 pub use lease_notice_gate::LeaseNoticeObservation;
+pub use registration_answer_gate::RegistrationAnswerObservation;
 mod fixture_shutdown;
 mod fleet_observer;
 mod machine_enrollment;
@@ -34,7 +37,8 @@ pub use machine_enrollment::EnrolledTestMachine;
 #[cfg(feature = "conformance")]
 mod payload_input_observer;
 pub use collaboration_central_conformance::{
-    DispatchCallSelector, DispatchFaultObservation, RuntimeControl, RuntimeControlRequest,
+    DispatchCallSelector, DispatchFaultObservation, DispatchKey, RuntimeControl,
+    RuntimeControlRequest,
 };
 pub use collaboration_central_core::{ConformanceBoardState, ObjectAddress};
 pub use machine_session::FleetTestRuntime;
@@ -51,6 +55,13 @@ pub struct TestCentral {
 }
 
 impl TestCentral {
+    pub fn hold_registration_answer(
+        &self,
+        database: fleet_sync_protocol::DatabaseId,
+    ) -> FixtureResult<RegistrationAnswerObservation> {
+        self.machine.edge.hold_registration_answer(database)
+    }
+
     pub fn observe_mail_wire(
         &self,
         drop_terminal: Option<fleet_sync_protocol::ItemId>,

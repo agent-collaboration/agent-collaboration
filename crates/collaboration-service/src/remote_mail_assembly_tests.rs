@@ -16,7 +16,7 @@ mod direct_send;
 #[path = "project_mail_admission_tests.rs"]
 mod project_admission;
 
-async fn unwelcomed_session(directory: &Path, peer: PeerId) -> MailDeliverySession {
+pub(super) async fn unwelcomed_session(directory: &Path, peer: PeerId) -> MailDeliverySession {
     let bound = Duration::from_secs(5);
     let client = SessionClient::<_, _, BoardConsumerProtocol>::load(
         ReqwestSessionTransport::new(

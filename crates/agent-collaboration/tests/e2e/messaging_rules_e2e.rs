@@ -1,11 +1,6 @@
 //! B+ process observations compose the real Router entry points with local central.
 #![deny(clippy::too_many_lines)]
-use crate::central_pair;
-use crate::fixture;
-use crate::native_sql;
-use crate::owned_host;
-use crate::records_reopen;
-
+use crate::{central_pair, fixture, messaging_stopped_owner, owned_host, records_reopen};
 #[path = "../board_e2e/messaging_capacity.rs"]
 mod messaging_capacity;
 #[path = "../board_e2e/messaging_expiry.rs"]
@@ -16,8 +11,6 @@ mod messaging_fixture;
 mod messaging_recovery;
 #[path = "../board_e2e/messaging_replay.rs"]
 mod messaging_replay;
-#[path = "../board_e2e/messaging_stopped_owner.rs"]
-mod messaging_stopped_owner;
 #[path = "../board_e2e/messaging_surface.rs"]
 mod messaging_surface;
 #[path = "../board_e2e/messaging_uncertainty.rs"]
@@ -32,8 +25,8 @@ async fn valid_until_expiry_is_visible_to_the_sender() -> FixtureResult {
 }
 
 #[tokio::test]
-async fn full_mailbox_refuses_before_custody_with_per_item_allowance() -> FixtureResult {
-    mail_scenario(messaging_capacity::full_mailbox).await
+async fn full_inbox_retries_frozen_items_after_recipient_capacity_is_restored() -> FixtureResult {
+    mail_scenario(messaging_capacity::full_inbox).await
 }
 
 #[tokio::test]

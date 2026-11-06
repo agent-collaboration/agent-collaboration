@@ -156,10 +156,6 @@ fn seeded_successor() -> impl std::future::Future<Output = PreparedSuccessor> {
                 .unwrap(),
             baseline
         );
-        assert!(
-            !source_query.retirement_requests().is_empty(),
-            "e1 setup must retire through the real SDK/session route"
-        );
         publisher.shutdown().await;
         drop(publisher);
         drop(app);
@@ -240,7 +236,7 @@ fn seeded_successor() -> impl std::future::Future<Output = PreparedSuccessor> {
 }
 
 #[tokio::test]
-async fn a_successor_starts_retirement_at_the_seeded_frontier_without_replaying_old_custody() {
+async fn a_successor_starts_frontier_cleanup_at_the_seeded_floor_without_replaying_old_custody() {
     tokio::time::timeout(Duration::from_secs(30), async {
         let PreparedSuccessor {
             owner: successor,
@@ -309,7 +305,7 @@ async fn a_successor_starts_retirement_at_the_seeded_frontier_without_replaying_
 }
 
 #[tokio::test]
-async fn a_live_frontier_above_the_seed_retires_new_items_and_a_reheld_owner_keeps_saved_progress()
+async fn a_live_frontier_releases_new_items_without_sender_retire_and_reheld_owner_keeps_progress()
 {
     Box::pin(tokio::time::timeout(Duration::from_secs(45), async {
         let PreparedSuccessor {
@@ -360,12 +356,6 @@ async fn a_live_frontier_above_the_seed_retires_new_items_and_a_reheld_owner_kee
             .mail_retired_through(&project)
             .await
             .unwrap();
-        let retired: std::collections::BTreeSet<_> = query
-            .retirement_requests()
-            .into_iter()
-            .flat_map(|(_, items)| items)
-            .collect();
-        let expected = std::collections::BTreeSet::from([original.item, child.item]);
         publisher.shutdown().await;
         drop(publisher);
         drop(app);
@@ -373,10 +363,6 @@ async fn a_live_frontier_above_the_seed_retires_new_items_and_a_reheld_owner_kee
         runtime.close().await;
         let successor = successor.reopen_native(native).await;
         query.close().await;
-        assert_eq!(
-            retired, expected,
-            "using the live frontier skipped actual post-seed retirements"
-        );
         assert_eq!(
             progress, live,
             "actual post-seed retirement did not persist progress"

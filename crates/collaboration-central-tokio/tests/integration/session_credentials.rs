@@ -6,6 +6,7 @@ use crate::creation_scenarios;
 use crate::session_move_fixture as fixture;
 
 use board_sync_protocol::BoardConsumerProtocol;
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     ConformanceResult, RuntimeControl, RuntimeControlRequest, RuntimeFaultObservation,
     machine_assertion, owner_assertion,
@@ -18,6 +19,8 @@ use reqwest_websocket::{Message, RequestBuilderExt, WebSocket};
 use serde_json::{Value, json};
 use std::time::Duration;
 
+#[path = "credential_expiry_fixture.rs"]
+mod credential_expiry_fixture;
 #[path = "../session_credentials/transport_refusal.rs"]
 mod transport_refusal;
 
@@ -183,9 +186,7 @@ async fn connection_control(
         .post(format!("{base}/admin/v1/conformance/runtime"))
         .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
         .json(&RuntimeControlRequest {
-            address: ObjectAddress::Connection(message_board::ServiceId::try_from(
-                SERVICE.to_owned(),
-            )?),
+            address: ObjectAddress::Fleet,
             command,
         })
         .send()
@@ -207,25 +208,26 @@ async fn replace_registered_socket_before_revocation(
     connection_control(
         fixture.base(),
         RuntimeControl::HoldNextDispatch {
-            destination: ObjectAddress::Registry,
+            key: DispatchKey::any(ObjectAddress::Fleet),
         },
     )
     .await?;
     let proof=async {
         let frame=creation_scenarios::send(&mut fixture.old,OperationRequest::Lease(LeaseRequest::Renew(request.clone()))).await?;
-        let observation=connection_control(fixture.base(),RuntimeControl::AwaitHeldDispatch).await?;
-        let collaboration_central_conformance::DispatchFaultObservation::Held {destination,request:bytes}=observation.dispatch else {return Err("credential replacement did not hold its real renewal".into());};
+        let observation=connection_control(fixture.base(),RuntimeControl::AwaitHeldDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet) }).await?;
+        let collaboration_central_conformance::DispatchFaultObservation::Held {destination,request:bytes}=observation.dispatch(&DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet)) else {return Err("credential replacement did not hold its real renewal".into());};
         let held:Value=serde_json::from_slice(&bytes)?;
-        if destination!=ObjectAddress::Registry || held.get("kind")!=Some(&json!("central.session-lease"))
+        if destination!=ObjectAddress::Fleet || held.get("kind")!=Some(&json!("central.session-lease"))
             || held.pointer("/request/session/peer")!=Some(&json!(fixture::OLD_PEER))
             || held.pointer("/request/request")!=Some(&serde_json::to_value(LeaseRequest::Renew(request))?) {
             return Err("credential replacement captured another holder renewal".into());
         }
         let session_id:SessionId=serde_json::from_value(held.pointer("/request/session/sessionId").cloned().ok_or("credential renewal omitted current session ID")?)?;
-        connection_control(fixture.base(),RuntimeControl::ResumeDispatch).await?;
+        connection_control(fixture.base(),RuntimeControl::ResumeDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet) }).await?;
         if !matches!(next_data(&mut fixture.old).await?,ServerFrame::Answer {frame:actual,body:OperationAnswer::Lease(LeaseAnswer::Renew(answer))} if actual==frame && answer==expected_renewal(fixture.database)?) {return Err("captured current-session renewal did not complete exactly".into());}
         let mut replacement=upgrade(&fixture.http,fixture.base(),CREDENTIAL).await?.into_websocket().await?;
         replacement.send(Message::Binary(serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {session_id,schema_support:SchemaSupport {max_version:1}})?.into())).await?;
+        collaboration_central_conformance::ConformanceClient::new(fixture.base())?.wake_due_after_hello(session_id).await?;
         if !matches!(next_data(&mut replacement).await?,ServerFrame::Welcome {session_id:actual,databases} if actual==session_id && databases==vec![DatabaseStatus::Ready {database:fixture.database,acked:fixture::position(1,1)?,lease:fixture::lease(fixture.database,1,fixture::OLD_PEER)?}]) {return Err("pre-revocation replacement lost the exact registered Welcome".into());}
         if !matches!(next_data(&mut fixture.old).await?,ServerFrame::Closed {reason:CloseReason::ConnectionReplaced}) {return Err("pre-revocation old socket lost typed replacement close".into());}
         if !matches!(tokio::time::timeout(Duration::from_secs(5),fixture.old.next()).await?,Some(Ok(Message::Close {..}))|None) {return Err("pre-revocation old socket did not physically close".into());}
@@ -235,13 +237,17 @@ async fn replace_registered_socket_before_revocation(
         println!("SESSION_CREDENTIAL_STAGE registered_replacement_is_current_before_revocation passed");
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
     }.await;
-    let _ = connection_control(fixture.base(), RuntimeControl::ResumeDispatch).await;
+    let _ = connection_control(
+        fixture.base(),
+        RuntimeControl::ResumeDispatch {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+        },
+    )
+    .await;
     proof
 }
 
-async fn reconnect_unrelated_installation_after_revocation(
-    fixture: &mut fixture::Fixture,
-) -> ConformanceResult<()> {
+async fn reconnect_unrelated_installation(fixture: &mut fixture::Fixture) -> ConformanceResult<()> {
     let response = upgrade(&fixture.http, fixture.base(), "normal Move target").await?;
     if response.status() != reqwest::StatusCode::SWITCHING_PROTOCOLS {
         let status = response.status();
@@ -263,6 +269,7 @@ async fn reconnect_unrelated_installation_after_revocation(
                 .into(),
             ))
             .await?;
+        collaboration_central_conformance::ConformanceClient::new(fixture.base())?.wake_due_after_hello(session_id).await?;
         if !matches!(next_data(&mut socket).await?,ServerFrame::Welcome {session_id:actual,databases} if actual==session_id && databases.is_empty())
         {
             return Err(
@@ -316,6 +323,11 @@ async fn revoked_registered_machine_gets_typed_physical_close_and_cannot_upgrade
             );
         }
         println!("SESSION_CREDENTIAL_STAGE actual_registered_machine_revoked passed");
+        creation_scenarios::pin_registry_clock(
+            fixture.base(),
+            RegistryTime("2030-03-17T17:46:40Z".parse()?),
+        )
+        .await?;
         typed_physical_close(&mut fixture.old, AuthRefusal::Revoked).await?;
         println!(
             "SESSION_CREDENTIAL_STAGE registered_revoked_socket_typed_and_physically_closed passed"
@@ -328,7 +340,7 @@ async fn revoked_registered_machine_gets_typed_physical_close_and_cannot_upgrade
         )
         .await?;
         fixture.copy_from_target_unchanged().await?;
-        reconnect_unrelated_installation_after_revocation(&mut fixture).await?;
+        reconnect_unrelated_installation(&mut fixture).await?;
         println!(
             "SESSION_CREDENTIAL_CASE revoked_registered_close_upgrade_and_retained_Copy passed"
         );
@@ -344,12 +356,13 @@ async fn revoked_registered_machine_gets_typed_physical_close_and_cannot_upgrade
 async fn expired_machine_credential_closes_on_frame_and_refuses_a_fresh_access_verified_upgrade()
 -> ConformanceResult<()> {
     let mut fixture = fixture::Fixture::open().await?;
+    credential_expiry_fixture::retain_unrelated_credential(&mut fixture).await?;
     let proof=async {
         if fixture.renew_old().await?!=expected_renewal(fixture.database)? {return Err("expiry fixture was not a live registered holder".into());}
         // The reused normal enrollment verifies its requested2033 expiry. Only
         // the owning Registry and old Connection clocks advance beyond it.
         let now=RegistryTime("2033-05-18T03:33:20.001Z".parse()?);
-        for address in [ObjectAddress::Registry,ObjectAddress::Connection(message_board::ServiceId::try_from(SERVICE.to_owned())?)] {
+        for address in [ObjectAddress::Fleet,ObjectAddress::Fleet] {
             let observed:RuntimeFaultObservation=fixture.http.post(format!("{}/admin/v1/conformance/runtime",fixture.base()))
                 .header("Cf-Access-Jwt-Assertion",owner_assertion()?)
                 .json(&RuntimeControlRequest {address,command:RuntimeControl::SetTime {now}})

@@ -48,7 +48,7 @@ pub use provider_session_inventory::ProviderSessionInventory;
 mod wakeup_projection;
 pub use mail_push_delivery::{MailPushDelivery, MailPushDeliveryProps};
 mod mail_delivery_runtime;
-pub use mail_delivery_runtime::{LocalCancelReference, MailDeliveryRuntime};
+pub use mail_delivery_runtime::{LocalCancelReference, MachineSenderBinding, MailDeliveryRuntime};
 mod attempt_history_projection;
 mod automation_collection_cursor;
 mod automation_collection_projection;

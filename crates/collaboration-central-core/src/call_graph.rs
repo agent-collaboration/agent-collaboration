@@ -12,7 +12,6 @@ pub enum CallerKind {
     Registry,
     Copy,
     Fleet,
-    Mailbox,
     Delivery,
 }
 
@@ -85,17 +84,12 @@ macro_rules! object_kind {
 pub enum EdgeCall {}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum EdgeResult {}
-// This face accepts shared CallTargets only; it has no legacy WireCall family.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub enum MailboxCall {}
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub enum MailboxResult {}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum SharedCallOnly {}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum SharedAnswerOnly {}
 object_kind!(EdgeKind, 0, Edge, (), EdgeCall, EdgeResult, |_: &()| {
-    ObjectAddress::Registry
+    ObjectAddress::Fleet
 });
 object_kind!(
     SessionKind,
@@ -104,7 +98,7 @@ object_kind!(
     ServiceId,
     SharedCallOnly,
     SharedAnswerOnly,
-    |v: &ServiceId| ObjectAddress::Connection(v.clone())
+    |_: &ServiceId| ObjectAddress::Fleet
 );
 object_kind!(
     RegistryKind,
@@ -113,11 +107,11 @@ object_kind!(
     (),
     RegistryCall,
     RegistryResult,
-    |_: &()| ObjectAddress::Registry
+    |_: &()| ObjectAddress::Fleet
 );
 object_kind!(
     CopyKind,
-    3,
+    6,
     Copy,
     DatabaseId,
     SharedCallOnly,
@@ -131,19 +125,10 @@ object_kind!(
     DeliveryKind,
     5,
     Delivery,
-    ServiceId,
+    (),
     SharedCallOnly,
     SharedAnswerOnly,
-    |v: &ServiceId| ObjectAddress::Connection(v.clone())
-);
-object_kind!(
-    MailboxKind,
-    4,
-    Mailbox,
-    ServiceId,
-    MailboxCall,
-    MailboxResult,
-    |v: &ServiceId| ObjectAddress::Mailbox(v.clone())
+    |_: &()| ObjectAddress::Fleet
 );
 
 macro_rules! allowed_edges {
@@ -160,9 +145,8 @@ macro_rules! allowed_edges {
     }
 }
 allowed_edges!(
-    EdgeKind=>SessionKind, EdgeKind=>RegistryKind, EdgeKind=>CopyKind, EdgeKind=>FleetKind,
+    EdgeKind=>SessionKind, EdgeKind=>RegistryKind, EdgeKind=>FleetKind,
     SessionKind=>RegistryKind, SessionKind=>CopyKind, SessionKind=>FleetKind, SessionKind=>DeliveryKind,
     RegistryKind=>CopyKind, RegistryKind=>FleetKind, RegistryKind=>DeliveryKind,
-    SessionKind=>MailboxKind, RegistryKind=>MailboxKind, MailboxKind=>DeliveryKind,
-    CopyKind=>FleetKind, FleetKind=>DeliveryKind,
+    FleetKind=>CopyKind, FleetKind=>DeliveryKind,
 );

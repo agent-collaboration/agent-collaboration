@@ -99,7 +99,7 @@ impl Client {
 }
 
 fn schemas() -> [(&'static str, EngineSchema, usize, Option<BootstrapProbe>); 4] {
-    let mailbox_migration_count = fleet_sync_delivery::DELIVERY_MIGRATOR
+    let delivery_migration_count = fleet_sync_delivery::DELIVERY_MIGRATOR
         .iter()
         .filter(|migration| migration.migration_type.is_up_migration())
         .count();
@@ -111,12 +111,12 @@ fn schemas() -> [(&'static str, EngineSchema, usize, Option<BootstrapProbe>); 4]
             Some(BootstrapProbe::Registry),
         ),
         ("copy", EngineSchema::Copy, 3, Some(BootstrapProbe::Copy)),
-        ("session", EngineSchema::Session, 4, None),
+        ("session", EngineSchema::Session, 5, None),
         (
-            "mailbox",
-            EngineSchema::Mailbox,
-            mailbox_migration_count,
-            Some(BootstrapProbe::Mailbox),
+            "delivery",
+            EngineSchema::Delivery,
+            delivery_migration_count,
+            Some(BootstrapProbe::Delivery),
         ),
     ]
 }
@@ -199,6 +199,39 @@ async fn first_process(client: &Client) -> ConformanceResult<String> {
                 .any(|name| name == "central_schema_migrations")
         {
             return Err("bootstrap history/table readback missing".into());
+        }
+        for row in &history {
+            if row.version_class != "integer"
+                || row.checksum_class != "blob"
+                || row.installed_class != "integer"
+                || row.execution_class != "integer"
+                || row.description.is_empty()
+                || row.success != 1
+                || row.checksum.len() != 48
+                || row.execution_time < 0
+            {
+                return Err(
+                    format!("invalid sqlx migration history on Durable Object: {row:?}").into(),
+                );
+            }
+            let migrations: Vec<_> = match row.corpus.as_str() {
+                "fleet-sync-lease" => fleet_sync_lease::LEASE_MIGRATOR.sql_migrations().collect(),
+                "fleet-sync-receiver" => fleet_sync_receiver::RECEIVER_MIGRATOR.iter().collect(),
+                "fleet-sync-session" => fleet_sync_session::SESSION_MIGRATOR
+                    .sql_migrations()
+                    .collect(),
+                "fleet-sync-delivery" => fleet_sync_delivery::DELIVERY_MIGRATOR.iter().collect(),
+                _ => continue,
+            };
+            let migration = migrations
+                .into_iter()
+                .find(|migration| migration.version == row.version)
+                .ok_or("unknown SQLx migration in DO history")?;
+            if row.checksum != migration.checksum.as_ref()
+                || row.description != migration.description
+            {
+                return Err("DO history differs from SQLx migration bytes/description".into());
+            }
         }
         if let Some(schema) = probe {
             require_probe(
@@ -411,7 +444,7 @@ fn require_probe(reply: BootstrapReply) -> ConformanceResult<()> {
         BootstrapProbeReply::Copy(answer) if matches!(&*answer, CopyStatusAnswer::Status(status) if status.database.to_string() == "019f0000-0000-7000-8000-000000000603" && status.fence.value() == 1 && status.acked.sequence.value() == 0) => {
             Ok(())
         }
-        BootstrapProbeReply::Mailbox(query)
+        BootstrapProbeReply::Delivery(query)
             if query.statuses.len() == 1
                 && query
                     .statuses
@@ -450,7 +483,7 @@ async fn second_process(client: &Client, expected_peer: &str) -> ConformanceResu
     println!("BOOTSTRAP_CASE owning_process_restart_keeps_all_corpora_and_rule_state passed");
     for (fixture, corruption) in [
         ("checksum", HistoryCorruption::Checksum),
-        ("noncanonical", HistoryCorruption::NoncanonicalVersion),
+        ("invalidVersion", HistoryCorruption::InvalidVersion),
         ("unknown", HistoryCorruption::UnknownVersion),
     ] {
         client

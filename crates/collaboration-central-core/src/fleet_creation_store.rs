@@ -1,5 +1,9 @@
 //! The creation index binds an immutable ledger row; it stores no second decision.
-use crate::{fleet_decision_step, generated_statements as queries};
+use crate::{
+    fleet_decision_step,
+    fleet_row_codec::{check_millis, check_private_id},
+    generated_statements as queries,
+};
 use durable_steps::{StoreError, storage::TransactionScope};
 use fleet_admission::ProjectCreationDecision;
 use message_board::{ProjectId, RequestId, ServiceId};
@@ -25,25 +29,29 @@ where
         return Ok(None);
     };
     let raw_project = required(row.project_id, "project_id")?;
+    check_private_id(&raw_project, "creation_decisions.project_id")?;
+    check_millis(
+        row.created_at,
+        row.created_class,
+        "creation_decisions.created_at",
+    )?;
+    check_millis(
+        row.updated_at,
+        row.updated_class,
+        "creation_decisions.updated_at",
+    )?;
     let stored_project =
         ProjectId::try_from(raw_project.clone()).map_err(|e| corrupt("project_id", e))?;
     let raw_request = required(row.creating_request, "creating_request")?;
+    check_private_id(&raw_request, "creation_decisions.creating_request")?;
     let creating_request =
         RequestId::try_from(raw_request.clone()).map_err(|e| corrupt("creating_request", e))?;
     let raw_carrier = required(row.carrier_installation, "carrier_installation")?;
     let carrier_installation =
         ServiceId::try_from(raw_carrier.clone()).map_err(|e| corrupt("carrier_installation", e))?;
-    let ledger = fleet_decision_step::decode(queries::StoredFleetDecision {
-        request_id: row.request_id,
-        canonical_hash: row.canonical_hash,
-        payload: row.payload,
-        router_time: row.router_time,
-        time_basis: row.time_basis,
-        workspace_id: row.workspace_id,
-        board_id: row.board_id,
-        origin_installation: row.origin_installation,
-        origin_machine: row.origin_machine,
-    })?;
+    let ledger = fleet_decision_step::read_ledger(scope, &creating_request)
+        .await?
+        .ok_or_else(|| corrupt("creating_request", "immutable creation ledger is missing"))?;
     if stored_project != *project
         || stored_project.as_str() != raw_project
         || creating_request.as_str() != raw_request
@@ -73,6 +81,7 @@ pub(crate) async fn insert<Scope: TransactionScope>(
     project: &ProjectId,
     request: &RequestId,
     carrier: &ServiceId,
+    now: chrono::DateTime<chrono::Utc>,
 ) -> Result<(), StoreError>
 where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
@@ -83,6 +92,7 @@ where
         project.as_str().into(),
         request.as_str().into(),
         carrier.as_str().into(),
+        now.timestamp_millis().to_string(),
     )
     .await
     .map_err(StoreError::backend)?;
@@ -93,7 +103,7 @@ fn required(value: Option<String>, field: &str) -> Result<String, StoreError> {
 }
 fn corrupt(field: &str, message: impl std::fmt::Display) -> StoreError {
     StoreError::Corrupt {
-        field: format!("creation_decisions.{field}"),
+        field: format!("fleet_creation_decisions.{field}"),
         message: message.to_string(),
     }
 }

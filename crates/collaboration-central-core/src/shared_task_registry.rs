@@ -12,13 +12,15 @@ use sqlx_core::{
 };
 use std::sync::Arc;
 
-pub(crate) fn registry_engine<Store, Driver, Io>(
+pub(crate) fn registry_engine<Store, Driver, Io, Hook>(
     store: Arc<Store>,
     host: Arc<CoreHost<Io>>,
     config: RegistryConfig,
+    hook: Arc<Hook>,
 ) -> Result<Engine<Store, CoreHost<Io>>, StoreError>
 where
     Store: AtomicStore,
+    for<'transaction> Hook: fleet_sync_lease::LeaseChangeHook<Store::Scope<'transaction>>,
     Driver: Database,
     Io: PlatformIo,
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
@@ -46,27 +48,28 @@ where
     engine.register(crate::conformance_copy::CopyProbeTask::<Store>(
         std::marker::PhantomData,
     ))?;
-    engine.register(RegistrationTask::<Store, Driver>::new(config))?;
-    engine.register(ImportTask::<Store, Driver>::new(config))?;
-    engine.register(RetirementTask::<Store, Driver>::new(config))?;
+    engine.register(RegistrationTask::<Store, Driver, Hook>::new(
+        config,
+        host.clone(),
+        hook.clone(),
+    ))?;
+    engine.register(ImportTask::<Store, Driver, Hook>::new(
+        config,
+        host.clone(),
+        hook.clone(),
+    ))?;
+    engine.register(RetirementTask::<Store, Driver, Hook>::new(
+        config,
+        host.clone(),
+        hook.clone(),
+    ))?;
     engine.register(PreviewTakeoverTask::<Store, Driver>::new(config))?;
-    engine.register(HolderChangeTask::<Store, Driver>::new(config, host.clone()))?;
+    engine.register(HolderChangeTask::<Store, Driver, Hook>::new(
+        config,
+        host.clone(),
+        hook,
+    ))?;
     engine.register(HolderChangeCancelTask::<Store, Driver>::new(config, host))?;
     engine.register(SettleReservationTask::<Store>::new())?;
-    engine.register(crate::machine_notice_outbox::RegistryNoticeTask::<Store>(
-        std::marker::PhantomData,
-    ))?;
-    Ok(engine)
-}
-
-/// Fleet registers one central notice workflow; inbound mutations only admit it.
-pub(crate) fn fleet_engine<Store: AtomicStore, Io: PlatformIo>(
-    store: Arc<Store>,
-    host: Arc<CoreHost<Io>>,
-) -> Result<Engine<Store, CoreHost<Io>>, StoreError> {
-    let mut engine = Engine::new(store, host);
-    engine.register(crate::machine_notice_outbox::FleetNoticeTask::<Store>(
-        std::marker::PhantomData,
-    ))?;
     Ok(engine)
 }

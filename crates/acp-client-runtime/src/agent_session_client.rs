@@ -72,6 +72,8 @@ use provider_cursor_plan_items::ProviderCursorTodoHandler;
 use provider_cursor_question::ProviderCursorQuestionHandler;
 use provider_form_elicitation::ProviderFormElicitationHandler;
 pub(crate) use provider_frame_observation::ProviderFrameObservation;
+#[cfg(any(test, feature = "test-observation"))]
+pub(crate) use provider_frame_observation::frame_limit_exceeded_count_for_test;
 use provider_initialize_request::initialize_provider_connection;
 use provider_request_fallback::{
     ProviderKnownSessions, ProviderRequestFallback, ProviderRequestSessionGuard,

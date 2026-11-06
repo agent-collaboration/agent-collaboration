@@ -89,18 +89,19 @@ async fn prove_prefix(
     let baseline = settled_view(fixture.host()?, &fixture.project).await?;
     match prefix {
         ReplicatedPrefix::Neither => {
-            controls::hold(
+            controls::hold_selected(
                 fixture,
-                controls::connection(fixture)?,
+                board_central_test_support::ObjectAddress::Fleet,
                 controls::copy(fixture)?,
+                DispatchCallSelector::CopyWrite,
             )
             .await?
         }
         ReplicatedPrefix::CauseOnly => {
             controls::hold_selected(
                 fixture,
-                controls::connection(fixture)?,
-                ObjectAddress::Registry,
+                board_central_test_support::ObjectAddress::Fleet,
+                ObjectAddress::Fleet,
                 DispatchCallSelector::InstallationPeer,
             )
             .await?
@@ -108,9 +109,9 @@ async fn prove_prefix(
         ReplicatedPrefix::Both => {
             controls::hold_selected(
                 fixture,
-                ObjectAddress::Registry,
-                ObjectAddress::Mailbox(second.service_id()?.try_into()?),
-                DispatchCallSelector::MailboxSubmit,
+                ObjectAddress::Fleet,
+                ObjectAddress::Fleet,
+                DispatchCallSelector::FleetMailSubmit,
             )
             .await?
         }
@@ -168,7 +169,12 @@ async fn prove_prefix(
     transfer_to_second(fixture, second, TransferKind::Takeover).await?;
     match prefix {
         ReplicatedPrefix::Neither | ReplicatedPrefix::CauseOnly => {
-            controls::resume(fixture, controls::connection(fixture)?).await?;
+            controls::resume(
+                fixture,
+                board_central_test_support::ObjectAddress::Fleet,
+                controls::copy_write_key(fixture)?,
+            )
+            .await?;
         }
         ReplicatedPrefix::Both => {}
     }
@@ -198,7 +204,12 @@ async fn commit_and_hold_prior_piece(fixture: &BoardFixture) -> FixtureResult {
         ])
         .await?;
     accepted(&committed)?;
-    controls::held(fixture, controls::connection(fixture)?).await?;
+    controls::held(
+        fixture,
+        board_central_test_support::ObjectAddress::Fleet,
+        controls::copy_write_key(fixture)?,
+    )
+    .await?;
     Ok(())
 }
 
@@ -215,7 +226,12 @@ async fn acknowledged_cut(
             match capture_cut {
                 LocalCaptureCut::Observe => hold_post_capture(fixture, range).await?,
                 LocalCaptureCut::HoldPriorPiece => {
-                    controls::held(fixture, controls::connection(fixture)?).await?;
+                    controls::held(
+                        fixture,
+                        board_central_test_support::ObjectAddress::Fleet,
+                        controls::copy_write_key(fixture)?,
+                    )
+                    .await?;
                 }
             }
             let observed = work_view(fixture.host()?, &fixture.project).await?;
@@ -228,7 +244,8 @@ async fn acknowledged_cut(
         ReplicatedPrefix::CauseOnly => {
             let lookup = controls::held_call(
                 fixture,
-                controls::connection(fixture)?,
+                board_central_test_support::ObjectAddress::Fleet,
+                controls::peer_lookup_key(),
                 "central.installation-peer",
             )
             .await?;
@@ -240,11 +257,17 @@ async fn acknowledged_cut(
             controls::confirm_prefix(fixture, fixture.host()?, at(range, "/through")?).await?;
             controls::advance_hold(
                 fixture,
-                controls::connection(fixture)?,
-                controls::copy(fixture)?,
+                ObjectAddress::Fleet,
+                controls::peer_lookup_key(),
+                controls::copy_write_key(fixture)?,
             )
             .await?;
-            controls::held(fixture, controls::connection(fixture)?).await?;
+            controls::held(
+                fixture,
+                board_central_test_support::ObjectAddress::Fleet,
+                controls::copy_write_key(fixture)?,
+            )
+            .await?;
             let held = work_view(fixture.host()?, &fixture.project).await?;
             assert_eq!(
                 held.get("replicatedThrough"),
@@ -253,9 +276,13 @@ async fn acknowledged_cut(
             None
         }
         ReplicatedPrefix::Both => {
-            let submitted =
-                controls::held_call(fixture, ObjectAddress::Registry, "central.mailbox-submit")
-                    .await?;
+            let submitted = controls::held_call(
+                fixture,
+                ObjectAddress::Fleet,
+                controls::submit_key(),
+                "central.mail-submit",
+            )
+            .await?;
             let original = submitted_item(&submitted)?;
             follow.assert_frozen(&original, range)?;
             let prefix = settled_view(fixture.host()?, &fixture.project).await?;
@@ -269,7 +296,12 @@ async fn hold_post_capture(fixture: &BoardFixture, range: &Value) -> FixtureResu
     let cursor: message_board::FeedCursor = serde_json::from_value(at(range, "/through")?.clone())?;
     tokio::time::timeout(BOUND, async {
         loop {
-            let held = controls::held(fixture, controls::connection(fixture)?).await?;
+            let held = controls::held(
+                fixture,
+                board_central_test_support::ObjectAddress::Fleet,
+                controls::copy_write_key(fixture)?,
+            )
+            .await?;
             let request: ReplicationRequest<BoardAnnotation> =
                 serde_json::from_value(at(&held, "/request/request")?.clone())?;
             let ReplicationRequest::Piece(piece) = request else {
@@ -301,8 +333,9 @@ async fn hold_post_capture(fixture: &BoardFixture, range: &Value) -> FixtureResu
             // Release only that earlier Piece, atomically holding the next one.
             controls::advance_hold(
                 fixture,
-                controls::connection(fixture)?,
-                controls::copy(fixture)?,
+                ObjectAddress::Fleet,
+                controls::copy_write_key(fixture)?,
+                controls::copy_write_key(fixture)?,
             )
             .await?;
         }
@@ -486,14 +519,18 @@ async fn assert_successor(
                 // The successor's effect precedes release of the old call.
                 // Its dead caller need not receive a successful answer. The
                 // outer peer owner checks the count after central fully joins.
-                let stale =
-                    controls::held_call(fixture, ObjectAddress::Registry, "central.mailbox-submit")
-                        .await?;
+                let stale = controls::held_call(
+                    fixture,
+                    ObjectAddress::Fleet,
+                    controls::submit_key(),
+                    "central.mail-submit",
+                )
+                .await?;
                 assert_eq!(
                     serde_json::to_value(submitted_item(&stale)?)?,
                     serde_json::to_value(&item)?
                 );
-                controls::resume(fixture, ObjectAddress::Registry).await?;
+                controls::resume(fixture, ObjectAddress::Fleet, controls::submit_key()).await?;
                 second.reopen_host().await?;
                 delivered(
                     second.host()?,

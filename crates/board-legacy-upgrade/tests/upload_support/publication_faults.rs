@@ -91,16 +91,25 @@ async fn reserve_project_for_fault(
     project: &str,
 ) -> SafeResult {
     let endpoint = scenario.central.base_url().map_err(promote_error)?;
-    let answer: AdminProjectImportAnswer = http
-        .post(format!("{endpoint}/admin/v1/import/projects/{project}"))
-        .json(&AdminProjectImportRequest::Begin {
-            header: header.clone(),
-        })
+    // Match the actual uploader's Fleet-first order: the lease projection needs
+    // its existing project directory row in the same Fleet owner.
+    let prepared = scenario.prepared.first().ok_or("original import missing")?;
+    let fleet: fleet_admission::FleetImportResult = http
+        .post(format!("{endpoint}/admin/v1/import/fleet"))
+        .json(&prepared.report.fleet)
         .send()
         .await?
         .error_for_status()?
         .json()
         .await?;
+    assert!(matches!(
+        fleet,
+        fleet_admission::FleetImportResult::Imported { .. }
+            | fleet_admission::FleetImportResult::AlreadyImported
+    ));
+    assert_eq!(header.database().to_string(), project);
+    let answer =
+        promote_result(upload_support::await_project_reservation(http, endpoint, header).await)?;
     assert!(matches!(answer, AdminProjectImportAnswer::Ready { .. }));
     Ok(())
 }
@@ -117,11 +126,11 @@ async fn install_store_fault(
         ),
         InterruptedAt::PublicationReceipt => (
             "fleet",
-            "CREATE TRIGGER interrupt_import BEFORE UPDATE OF phase ON admin_imports WHEN json_extract(NEW.phase,'$.kind')='published' BEGIN SELECT RAISE(ABORT,'publication receipt interrupted'); END",
+            "CREATE TRIGGER interrupt_import BEFORE UPDATE OF phase_kind ON fleet_admin_imports WHEN NEW.phase_kind='published' BEGIN SELECT RAISE(ABORT,'publication receipt interrupted'); END",
         ),
         InterruptedAt::CompletionReceipt => (
             "fleet",
-            "CREATE TRIGGER interrupt_import BEFORE UPDATE OF phase ON admin_imports WHEN json_extract(NEW.phase,'$.kind')='complete' BEGIN SELECT RAISE(ABORT,'completion receipt interrupted'); END",
+            "CREATE TRIGGER interrupt_import BEFORE UPDATE OF phase_kind ON fleet_admin_imports WHEN NEW.phase_kind='complete' BEGIN SELECT RAISE(ABORT,'completion receipt interrupted'); END",
         ),
     };
     promote_result(upload_support::execute(root, object, trigger).await)

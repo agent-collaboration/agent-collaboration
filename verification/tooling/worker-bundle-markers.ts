@@ -29,4 +29,6 @@ export const conformanceMarkers: readonly string[] = [
   "/test/runtime-control",
   "_cf_composed_clock",
   "BootstrapObject",
+  "/admin/v1/conformance/fleet-schema",
+  "/test/fleet-schema",
 ];

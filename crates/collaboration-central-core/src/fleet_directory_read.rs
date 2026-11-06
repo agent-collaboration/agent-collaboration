@@ -1,9 +1,7 @@
 //! Directory views decode the committed copy and Registry projections in one Fleet step.
 use crate::{
-    CopyDirectorySummary,
-    fleet_record_codec::{corrupt, decode_json, required},
+    fleet_record_codec::{corrupt, required},
     fleet_record_store, generated_fleet_lease, generated_fleet_record_reads,
-    lease_projection::LeaseProjection,
 };
 use board_sync_protocol::BoardAnnotation;
 use durable_steps::{StoreError, storage::TransactionScope};
@@ -85,14 +83,13 @@ where
                     "directory record disappeared in its transaction",
                 )
             })?;
-        if required(summary.project_id, "directory.summary.project")? != raw {
+        if required(summary.project_id.clone(), "directory.summary.project")? != raw {
             return Err(corrupt(
                 "directory.summary.project",
                 "lookup returned another project",
             ));
         }
-        let copy_side = if let Some(value) = summary.copy_summary {
-            let summary: CopyDirectorySummary = decode_json(&value, "directory.copy_summary")?;
+        let copy_side = if let Some(summary) = crate::fleet_copy_projection::decode(summary)? {
             if summary.database.to_string() != raw {
                 return Err(corrupt(
                     "directory.copy_summary",
@@ -119,14 +116,13 @@ where
                     "directory record disappeared in its transaction",
                 )
             })?;
-        if required(lease.project_id, "directory.lease.project")? != raw {
+        if required(lease.project_id.clone(), "directory.lease.project")? != raw {
             return Err(corrupt(
                 "directory.lease.project",
                 "lookup returned another project",
             ));
         }
-        let lease_side = if let Some(value) = lease.lease_projection {
-            let projection: LeaseProjection = decode_json(&value, "directory.lease_projection")?;
+        let lease_side = if let Some(projection) = crate::fleet_lease_columns::decode(lease)? {
             if projection.database().to_string() != raw {
                 return Err(corrupt(
                     "directory.lease_projection",

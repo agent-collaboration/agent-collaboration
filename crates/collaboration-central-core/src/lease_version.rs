@@ -27,6 +27,9 @@ pub struct LeaseVersionError {
 #[serde(transparent)]
 pub struct LeaseContentDigest(PieceDigest);
 impl LeaseContentDigest {
+    pub(crate) fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
     pub fn new(value: impl Into<String>) -> Result<Self, fleet_sync_protocol::DigestError> {
         PieceDigest::try_from(value.into()).map(Self)
     }

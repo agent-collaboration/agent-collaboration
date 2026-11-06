@@ -40,10 +40,18 @@ pub enum CopySource {
     deny_unknown_fields
 )]
 pub enum CurrentWriter {
-    Held { epoch: EpochNumber },
+    Held {
+        epoch: EpochNumber,
+    },
     Unheld {},
     Unknown {},
+    /// not in central yet (run the cutover import). Local history remains readable.
+    NotInCentral {},
 }
+
+#[cfg(test)]
+#[path = "board_views_test.rs"]
+mod tests;
 
 view!(ContinuationCard {
     subject: RecordRef, plan_revision: Option<PlanRevisionHash>,

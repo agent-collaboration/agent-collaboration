@@ -2,9 +2,7 @@
 #![deny(clippy::too_many_lines)]
 use super::{
     forwarded_post_lifecycle_oracles::POST_MARKER,
-    forwarded_post_scenarios::{
-        HOLDER_PEER, HOLDER_SERVICE, SENDER_PEER, SENDER_SERVICE, SENDER_SESSION,
-    },
+    forwarded_post_scenarios::{HOLDER_PEER, HOLDER_SERVICE, SENDER_PEER, SENDER_SESSION},
 };
 use collaboration_central_conformance::ConformanceResult;
 use fleet_sync_protocol::{ConnectionId, DatabaseId, FrameId};
@@ -37,25 +35,48 @@ pub(super) fn no_retained_state(sender: &Value, holder: &Value) -> ConformanceRe
     Ok(())
 }
 
-pub(super) fn decoded_records(state: &Value, field: &str) -> ConformanceResult<Vec<Value>> {
+pub(super) fn typed_records(state: &Value, field: &str) -> ConformanceResult<Vec<Value>> {
     no_body(state)?;
     records(state, field)?
         .iter()
         .map(|row| {
-            let key = row
-                .get("key")
-                .and_then(Value::as_str)
-                .ok_or("owning record key absent")?;
-            let raw = row
-                .get("record")
-                .and_then(Value::as_str)
-                .ok_or("owning record JSON absent")?;
-            let record: Value = serde_json::from_str(raw)?;
-            if record.get("forwardFrame") != Some(&json!(key)) {
-                return Err("owning correlation key differs from its raw stored record".into());
+            for column in [
+                "id",
+                "forwardFrameId",
+                "requestFrameId",
+                "originMachineId",
+                "originSessionId",
+                "connectionId",
+                "projectId",
+            ] {
+                let value = row
+                    .get(column)
+                    .and_then(Value::as_str)
+                    .ok_or("owning typed identity column absent")?;
+                let identity = durable_steps::Uuid::parse_str(value)?;
+                if identity.get_version_num() != 7 || identity.to_string() != value {
+                    return Err(format!("owning {column} is not canonical UUIDv7").into());
+                }
             }
-            let _valid_frame = FrameId::try_from(key.to_owned())?;
-            Ok(record)
+            for column in ["createdAt", "updatedAt", "deadlineAt"] {
+                let value = row
+                    .get(column)
+                    .and_then(Value::as_str)
+                    .ok_or("owning integer column absent")?;
+                let integer = value.parse::<i64>()?;
+                if integer.to_string() != value {
+                    return Err("noncanonical owning integer column".into());
+                }
+            }
+            let side = if field == "pending" {
+                "origin"
+            } else {
+                "holder"
+            };
+            if row.get("side") != Some(&json!(side)) {
+                return Err("owning correlation has the wrong side".into());
+            }
+            Ok(row.clone())
         })
         .collect()
 }
@@ -66,29 +87,40 @@ pub(super) fn pending_record(
     request: FrameId,
     phase: Value,
 ) -> ConformanceResult<Value> {
-    let pending = decoded_records(state, "pending")?;
-    if pending.len() != 1 || !records(state, "delivered")?.is_empty() {
+    let pending = typed_records(state, "pending")?;
+    if pending.len() != 1 {
         return Err("sender owning state did not contain exactly its one pending request".into());
     }
     let row = pending
         .into_iter()
         .next()
         .ok_or("original pending row absent")?;
-    if row.get("requestFrame") != Some(&json!(request))
-        || row.get("project") != Some(&json!(database))
-        || row.get("session") != Some(&sender_session())
-        || row.get("phase") != Some(&phase)
+    if row.get("requestFrameId") != Some(&json!(request))
+        || row.get("projectId") != Some(&json!(database))
+        || row.get("originMachineId") != Some(&json!(SENDER_PEER))
+        || row.get("originSessionId") != Some(&json!(SENDER_SESSION))
+        || row.get("phase")
+            != Some(&json!(if phase.get("kind") == Some(&json!("routing")) {
+                "routing"
+            } else if phase
+                == json!({"kind":"awaitingHolder","value":{"installation":HOLDER_SERVICE}})
+            {
+                "awaiting_holder"
+            } else {
+                return Err("unexpected oracle phase".into());
+            }))
     {
         return Err("pending row changed the actual request, project, session or phase".into());
     }
     let connection = row
-        .get("connection")
+        .get("connectionId")
         .and_then(Value::as_str)
         .ok_or("connection identity absent")?;
     let _valid_connection = ConnectionId::try_from(connection.to_owned())?;
     if !row
-        .get("deadline")
-        .and_then(Value::as_i64)
+        .get("deadlineAt")
+        .and_then(Value::as_str)
+        .and_then(|value| value.parse::<i64>().ok())
         .is_some_and(|deadline| deadline > 0)
     {
         return Err("pending row omitted the original absolute deadline".into());
@@ -113,19 +145,19 @@ pub(super) fn live_records(
         request,
         json!({"kind":"awaitingHolder","value":{"installation":HOLDER_SERVICE}}),
     )?;
-    let delivered = decoded_records(holder, "delivered")?;
-    if delivered.len() != 1 || !records(holder, "pending")?.is_empty() {
+    let delivered = typed_records(holder, "delivered")?;
+    if delivered.len() != 1 || records(holder, "pending")? != records(sender, "pending")? {
         return Err(
             "holder owning state did not contain exactly its actual delivered request".into(),
         );
     }
     let delivered = delivered.first().ok_or("delivered row absent")?;
-    if pending.get("forwardFrame") != Some(&json!(frame))
-        || delivered.get("forwardFrame") != Some(&json!(frame))
-        || delivered.get("sender") != Some(&json!(SENDER_SERVICE))
-        || delivered.get("holder") != Some(&json!(HOLDER_PEER))
-        || delivered.get("project") != Some(&json!(database))
-        || delivered.get("deadline") != pending.get("deadline")
+    if pending.get("forwardFrameId") != Some(&json!(frame))
+        || delivered.get("forwardFrameId") != Some(&json!(frame))
+        || delivered.get("originMachineId") != Some(&json!(SENDER_PEER))
+        || delivered.get("expectedHolderMachineId") != Some(&json!(HOLDER_PEER))
+        || delivered.get("projectId") != Some(&json!(database))
+        || delivered.get("deadlineAt") != pending.get("deadlineAt")
     {
         return Err(
             "owning rows lost the actual frame, project, sender, holder or deadline".into(),

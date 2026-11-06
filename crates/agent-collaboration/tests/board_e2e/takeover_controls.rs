@@ -6,7 +6,7 @@ use super::{
     takeover_readbacks as readbacks,
 };
 use board_central_test_support::{
-    DispatchCallSelector, DispatchFaultObservation, ObjectAddress, RuntimeControl,
+    DispatchCallSelector, DispatchFaultObservation, DispatchKey, ObjectAddress, RuntimeControl,
 };
 use board_sync_protocol::BoardDeliveryTypes;
 use codex_router_test_support::{FixtureResult, scenario_finalization::run_scenario};
@@ -23,46 +23,73 @@ pub enum EndPrefix {
     LostReceipt,
 }
 
-pub async fn assert_prevented_report_refused(
+pub async fn assert_prevented_push_replayed(
     wire: &mut board_central_test_support::MailWireObservation,
     item: fleet_sync_protocol::ItemId,
-) -> FixtureResult<fleet_sync_protocol::ItemId> {
-    let observed = wire
-        .wait_for(|events| {
-            refused_prevention(events, item).is_some() || report_sends(events, item) > 1
-        })
-        .await;
-    let events = wire.events();
-    let sent = report_sends(&events, item);
-    if sent > 1 {
-        return Err(format!(
-            "prevented report retried without terminal refusal: expected1, observed{sent}"
-        )
-        .into());
-    }
-    observed.map_err(|error| format!("missing correlated typed terminal refusal for item{item:?}/seq3; report sends{sent}: {error}"))?;
-    refused_prevention(&events, item)
-        .ok_or_else(|| "prevented report refusal lost its correlation".into())
-}
-
-fn refused_prevention(
-    events: &[board_central_test_support::MailWireEvent],
-    item: fleet_sync_protocol::ItemId,
-) -> Option<fleet_sync_protocol::ItemId> {
+    cancel: fleet_sync_protocol::ItemId,
+    report_seq: fleet_sync_protocol::ReportSeq,
+) -> FixtureResult {
     use board_central_test_support::MailWireEvent;
     use fleet_sync_protocol::{
-        DeliveryFailureKind, DeliveryRefusal, RecipientOutcome, ReportResult,
+        DeliveryFailureKind, DeliveryRefusal, DeliveryStatus, PushResult, RecipientOutcome,
+        ReportResult,
     };
-    events.iter().find_map(|event| {
-        let MailWireEvent::ReportSent { frame, item: actual, sequence, outcome: RecipientOutcome::Prevented { cancel } } = event else {
-            return None;
-        };
-        (*actual == item && sequence.value() == 3 && events.iter().any(|answer| matches!(answer,
-            MailWireEvent::ReportAnswered { frame: answered, answer: ReportResult::Refused {
-                reason: DeliveryRefusal::ProcessingFailed { kind: DeliveryFailureKind::ExecutionFailed }
-            }} if answered == frame
-        ))).then_some(*cancel)
-    })
+    wire.wait_for(|events| {
+        let replayed = events.iter().any(|event| {
+            let MailWireEvent::PushSent {frame,item:actual} = event else {return false;};
+            *actual == item && events.iter().any(|answer| matches!(answer,
+                MailWireEvent::PushAnswered {frame:answered,result:PushResult::Replayed {status:DeliveryStatus::Cancelled,cancel:None}} if answered==frame))
+        });
+        replayed && events.iter().any(|event| {
+            let MailWireEvent::ReportSent {frame,item:actual,..}=event else {return false;};
+            *actual==item && events.iter().any(|answer| matches!(answer,MailWireEvent::ReportAnswered {frame:answered,..} if answered==frame))
+        })
+    }).await?;
+    let events = wire.events();
+    assert_eq!(
+        report_count(wire, item),
+        1,
+        "promotion must send exactly one preserved outcome Report"
+    );
+    let (frame, sequence, outcome) = events
+        .iter()
+        .find_map(|event| match event {
+            MailWireEvent::ReportSent {
+                frame,
+                item: actual,
+                sequence,
+                outcome,
+            } if *actual == item => Some((frame, sequence, outcome)),
+            _ => None,
+        })
+        .ok_or("promotion Report absent")?;
+    assert_eq!(*sequence, report_seq);
+    assert!(
+        matches!(outcome,RecipientOutcome::Prevented {cancel:actual} if *actual==cancel),
+        "promotion changed preserved outcome: {outcome:?}"
+    );
+    let answer = events
+        .iter()
+        .find_map(|event| match event {
+            MailWireEvent::ReportAnswered {
+                frame: actual,
+                answer,
+            } if actual == frame => Some(answer),
+            _ => None,
+        })
+        .ok_or("promotion Report acknowledgement absent")?;
+    assert!(
+        matches!(
+            answer,
+            ReportResult::Refused {
+                reason: DeliveryRefusal::ProcessingFailed {
+                    kind: DeliveryFailureKind::ExecutionFailed
+                }
+            }
+        ),
+        "Fleet must refuse the local-only cancel with the exact terminal answer: {answer:?}"
+    );
+    Ok(())
 }
 
 fn report_sends(
@@ -81,7 +108,7 @@ pub fn report_count(
     report_sends(&wire.events(), item)
 }
 
-pub async fn assert_report_quiet(
+pub async fn assert_single_promoted_report(
     report_wire: &board_central_test_support::MailWireObservation,
     status_wire: &mut board_central_test_support::MailWireObservation,
     item: fleet_sync_protocol::ItemId,
@@ -114,11 +141,11 @@ pub async fn assert_report_quiet(
             )
         })
         .count();
-    quiet.map_err(|error| format!("post-refusal status barrier failed: item{item:?}, priorEvents{barrier}, laterStatusFetches{fetched}, reportSends{}: {error}", report_count(report_wire, item)))?;
+    quiet.map_err(|error| format!("post-Push replay status barrier failed: item{item:?}, priorEvents{barrier}, laterStatusFetches{fetched}, reportSends{}: {error}", report_count(report_wire, item)))?;
     assert_eq!(
         report_count(report_wire, item),
         1,
-        "terminal refusal must stop Report retries"
+        "replay or reopen duplicated the promotion Report"
     );
     Ok(())
 }
@@ -174,66 +201,43 @@ pub async fn assert_end_cut(
     Ok(())
 }
 
-pub fn connection(fixture: &BoardFixture) -> FixtureResult<ObjectAddress> {
-    Ok(ObjectAddress::Connection(
-        String::from(
-            fixture
-                .installation
-                .as_ref()
-                .ok_or("first installation absent")?
-                .service_id
-                .clone(),
-        )
-        .try_into()?,
-    ))
-}
-
 pub fn copy(fixture: &BoardFixture) -> FixtureResult<ObjectAddress> {
     Ok(ObjectAddress::Copy(fixture.project.clone().try_into()?))
 }
 
-pub async fn hold(
+pub fn copy_write_key(fixture: &BoardFixture) -> FixtureResult<DispatchKey> {
+    Ok(DispatchKey::new(
+        copy(fixture)?,
+        DispatchCallSelector::CopyWrite,
+    ))
+}
+pub fn submit_key() -> DispatchKey {
+    DispatchKey::new(ObjectAddress::Fleet, DispatchCallSelector::FleetMailSubmit)
+}
+pub fn peer_lookup_key() -> DispatchKey {
+    DispatchKey::new(ObjectAddress::Fleet, DispatchCallSelector::InstallationPeer)
+}
+
+pub async fn held(
     fixture: &BoardFixture,
     source: ObjectAddress,
-    destination: ObjectAddress,
-) -> FixtureResult {
+    key: DispatchKey,
+) -> FixtureResult<Value> {
     let observed = central(fixture)?
         .runtime_control(
             source,
-            RuntimeControl::HoldNextDispatch {
-                destination: destination.clone(),
-            },
+            RuntimeControl::AwaitHeldDispatch { key: key.clone() },
         )
-        .await?;
-    assert!(matches!(observed.dispatch,
-        DispatchFaultObservation::Armed { destination: actual } if actual == destination));
-    Ok(())
-}
-
-pub async fn held(fixture: &BoardFixture, source: ObjectAddress) -> FixtureResult<Value> {
-    let observed = central(fixture)?
-        .runtime_control(source, RuntimeControl::AwaitHeldDispatch)
         .await?;
     let DispatchFaultObservation::Held {
         destination,
         request,
-    } = observed.dispatch
+    } = observed.dispatch(&key)
     else {
-        return Err("required real dispatch did not reach its hold".into());
+        return Err("required keyed dispatch did not reach its hold".into());
     };
-    let request: Value = serde_json::from_slice(&request)?;
-    if matches!(destination, ObjectAddress::Copy(_)) {
-        eprintln!(
-            "T held Copy invocation header: {}",
-            json!({"destination":destination,"outerKind":request.get("kind"),
-                "readKind":request.pointer("/request/kind"),
-                "replicationKind":request.pointer("/request/request/kind"),
-                "epoch":request.pointer("/request/request/value/epoch"),
-                "continuesFrom":request.pointer("/request/request/value/continuesFrom"),
-                "through":request.pointer("/request/request/value/through")})
-        );
-    }
-    Ok(request)
+    assert_eq!(destination, key.destination);
+    Ok(serde_json::from_slice(&request)?)
 }
 
 pub async fn hold_selected(
@@ -242,33 +246,38 @@ pub async fn hold_selected(
     destination: ObjectAddress,
     call: DispatchCallSelector,
 ) -> FixtureResult {
+    let key = DispatchKey::new(destination.clone(), call);
     let observed = central(fixture)?
         .runtime_control(
             source,
-            RuntimeControl::HoldNextSelectedDispatch {
-                destination: destination.clone(),
-                call,
-            },
+            RuntimeControl::HoldNextDispatch { key: key.clone() },
         )
         .await?;
-    assert!(matches!(observed.dispatch,
-        DispatchFaultObservation::Armed { destination: actual } if actual == destination));
+    assert!(
+        matches!(observed.dispatch(&key), DispatchFaultObservation::Armed { destination: actual }
+        if actual == destination)
+    );
     Ok(())
 }
 
 pub async fn held_call(
     fixture: &BoardFixture,
     source: ObjectAddress,
+    key: DispatchKey,
     kind: &'static str,
 ) -> FixtureResult<Value> {
-    let request = held(fixture, source).await?;
+    let request = held(fixture, source, key).await?;
     assert_eq!(request.get("kind"), Some(&json!(kind)));
     Ok(request)
 }
 
-pub async fn resume(fixture: &BoardFixture, source: ObjectAddress) -> FixtureResult {
+pub async fn resume(
+    fixture: &BoardFixture,
+    source: ObjectAddress,
+    key: DispatchKey,
+) -> FixtureResult {
     central(fixture)?
-        .runtime_control(source, RuntimeControl::ResumeDispatch)
+        .runtime_control(source, RuntimeControl::ResumeDispatch { key })
         .await?;
     Ok(())
 }
@@ -279,14 +288,15 @@ pub async fn release_and_drop_selected_reply(
     destination: ObjectAddress,
     call: DispatchCallSelector,
 ) -> FixtureResult<Value> {
-    let request = held(fixture, source.clone()).await?;
+    let key = DispatchKey::new(destination, call);
+    let request = held(fixture, source.clone(), key.clone()).await?;
     central(fixture)?
         .runtime_control(
             source.clone(),
-            RuntimeControl::DropNextSelectedObjectReply { destination, call },
+            RuntimeControl::DropHeldDispatchReply { key: key.clone() },
         )
         .await?;
-    resume(fixture, source.clone()).await?;
+    resume(fixture, source.clone(), key).await?;
     let dropped = match central(fixture)?
         .runtime_control(source.clone(), RuntimeControl::AwaitDroppedObjectReply)
         .await
@@ -297,7 +307,7 @@ pub async fn release_and_drop_selected_reply(
                 .runtime_control(source, RuntimeControl::Observe)
                 .await;
             return Err(format!(
-                "selected actual reply did not complete after release: {error}; final control: {observed:?}"
+                "selected reply did not finish: {error}; final control: {observed:?}"
             )
             .into());
         }
@@ -310,24 +320,19 @@ pub async fn release_and_drop_selected_reply(
 }
 
 async fn release_if_held(fixture: &BoardFixture, source: ObjectAddress) -> FixtureResult {
-    let observed = central(fixture)?
-        .runtime_control(source.clone(), RuntimeControl::Observe)
-        .await?;
-    match observed.dispatch {
-        DispatchFaultObservation::Held { .. } => resume(fixture, source).await,
-        DispatchFaultObservation::Idle | DispatchFaultObservation::Armed { .. } => Ok(()),
-    }
+    central(fixture)?.release_held_dispatches(source).await
 }
 
 pub async fn advance_hold(
     fixture: &BoardFixture,
     source: ObjectAddress,
-    destination: ObjectAddress,
+    key: DispatchKey,
+    next: DispatchKey,
 ) -> FixtureResult {
     central(fixture)?
         .runtime_control(
             source,
-            RuntimeControl::ResumeDispatchAndHoldNext { destination },
+            RuntimeControl::ResumeDispatchAndHoldNext { key, next },
         )
         .await?;
     Ok(())
@@ -442,22 +447,18 @@ where
         async |(fixture, second): (&mut BoardFixture, &mut SecondHost)| {
             // Let blocked calls finish before graceful shutdown, then check
             // again after every caller is joined. Keep all independent errors.
-            let before_connection = release_if_held(fixture, connection(fixture)?).await;
-            let before_registry = release_if_held(fixture, ObjectAddress::Registry).await;
+            let before_fleet = release_if_held(fixture, ObjectAddress::Fleet).await;
             let first = match fixture.host.take() {
                 Some(host) => host.stop().await,
                 None => Ok(()),
             };
             let second = second.stop_host().await;
-            let connection = release_if_held(fixture, connection(fixture)?).await;
-            let registry = release_if_held(fixture, ObjectAddress::Registry).await;
+            let fleet = release_if_held(fixture, ObjectAddress::Fleet).await;
             let failures = [
-                ("initial connection release", before_connection),
-                ("initial Registry release", before_registry),
+                ("initial Fleet release", before_fleet),
                 ("first Host", first),
                 ("second Host", second),
-                ("connection release", connection),
-                ("Registry release", registry),
+                ("Fleet release", fleet),
             ]
             .into_iter()
             .filter_map(|(owner, result)| result.err().map(|error| format!("{owner}: {error}")))

@@ -38,6 +38,13 @@ impl WakeScheduler for Io {
     }
 }
 impl PlatformIo for Io {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     async fn object_call(&self, _: ObjectAddress, _: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
         Err(CallFailure::NotSent {
             reason: NotSentReason::Unreachable { last_seen: None },
@@ -86,7 +93,7 @@ impl Fixture {
         origin: message_board::ActorOrigin,
     ) -> TestResult<fleet_admission::FleetRequestResult> {
         let bytes = self.runtime.on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"connection","value":"550e8400-e29b-41d4-a716-4466554400a9"},"sourceFace":"session","authority":{"kind":"object"},
+            "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":origin.installation}},
             "destination":{"kind":"fleet"},"destinationFace":"fleet",
             "identity":{"operation":operation,"step":step},
             "kind":"central.fleet-metadata","target":null,"request":{
@@ -96,18 +103,12 @@ impl Fixture {
         Ok(serde_json::from_slice(&bytes)?)
     }
     pub async fn open(root: &Path) -> TestResult<Self> {
-        Self::open_with(root, true, Io::default()).await
+        Self::open_with(root, Io::default()).await
     }
     pub async fn open_at(root: &Path, now: SyncTime) -> TestResult<Self> {
-        Self::open_with(root, true, Io(now)).await
+        Self::open_with(root, Io(now)).await
     }
-    pub async fn before_fleet_migrations(root: &Path) -> TestResult<Self> {
-        Self::open_with(root, false, Io::default()).await
-    }
-    pub async fn initialize(&self) -> TestResult<usize> {
-        Ok(self.runtime.initialize().await?)
-    }
-    async fn open_with(root: &Path, initialize: bool, io: Io) -> TestResult<Self> {
+    async fn open_with(root: &Path, io: Io) -> TestResult<Self> {
         let objects = ObjectStore::open(root).await?;
         let receiver = ReceiverId::new(durable_steps::Uuid::now_v7())?;
         let object = objects
@@ -120,11 +121,23 @@ impl Fixture {
         let runtime = ObjectRuntime::fleet(
             Arc::new(TokioStorageHost::new(object.clone())),
             io,
-            receiver,
+            fleet_sync_lease::RegistryConfig {
+                authoritative_receiver: receiver,
+                lease: fleet_sync_lease::LeasePolicy {
+                    lease_duration: std::time::Duration::from_secs(60),
+                    renew_interval: std::time::Duration::from_secs(20),
+                },
+                release_unsent_for: std::time::Duration::from_secs(10),
+                move_needs_renewal_within: None,
+            },
+            collaboration_central_tokio::DeliveryConfig {
+                relay_peer: "019f0000-0000-7000-8000-000000005240"
+                    .to_owned()
+                    .try_into()?,
+            },
+            std::time::Duration::from_secs(2),
         )?;
-        if initialize {
-            runtime.initialize().await?;
-        }
+        runtime.initialize().await?;
         Ok(Self {
             receiver,
             objects,
@@ -144,29 +157,28 @@ impl Fixture {
     }
     pub async fn counts(&self) -> TestResult<Vec<i64>> {
         Ok(self.object.transaction(|scope| Box::pin(async move {
-            let row = query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM workspaces) AS workspaces,(SELECT count(*) FROM boards) AS boards,(SELECT count(*) FROM project_directory) AS directory,(SELECT count(*) FROM repository_attachments) AS repositories,(SELECT count(*) FROM fleet_feed) AS feed")
+            let row = query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM fleet_workspaces) AS workspaces,(SELECT count(*) FROM fleet_boards) AS boards,(SELECT count(*) FROM fleet_project_directory) AS directory,(SELECT count(*) FROM fleet_repository_attachments) AS repositories,(SELECT count(*) FROM fleet_feed) AS feed")
                 .fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
             ["workspaces","boards","directory","repositories","feed"].into_iter()
                 .map(|name| row.try_get(name).map_err(StoreError::backend)).collect::<Result<Vec<i64>,_>>()
         })).await?)
     }
     pub async fn assert_import_headers(&self) -> TestResult {
-        let (time, basis, origin, machine, digest, payload) = self.object.transaction(|scope| Box::pin(async move {
-            let row = query::<sqlx_turso::Turso>("SELECT router_time,time_basis,origin_installation,origin_machine,import_digest,payload FROM workspaces")
+        let (time, basis, origin, machine, digest, record) = self.object.transaction(|scope| Box::pin(async move {
+            let row = query::<sqlx_turso::Turso>("SELECT router_time,time_basis,origin_installation,origin_machine,import_digest,workspace_id FROM fleet_workspaces")
                 .fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
             Ok((row.try_get::<Option<String>,_>("router_time").map_err(StoreError::backend)?,
                 row.try_get::<String,_>("time_basis").map_err(StoreError::backend)?,
                 row.try_get::<String,_>("origin_installation").map_err(StoreError::backend)?,
                 row.try_get::<String,_>("origin_machine").map_err(StoreError::backend)?,
                 row.try_get::<Option<String>,_>("import_digest").map_err(StoreError::backend)?,
-                row.try_get::<String,_>("payload").map_err(StoreError::backend)?))
+                collaboration_central_core::read_fleet_record_in_scope(scope, &message_board::WorkspaceId::try_from(row.try_get::<String,_>("workspace_id").map_err(StoreError::backend)?).map_err(StoreError::backend)?.into()).await?.ok_or_else(|| StoreError::backend("workspace missing"))?))
         })).await?;
         assert_eq!(time, None);
         assert_eq!(basis, "legacy_unknown");
         assert_eq!(origin, "550e8400-e29b-41d4-a716-4466554400a8");
         assert_eq!(machine, "legacy importer");
         assert!(digest.is_some_and(|digest| digest.len() == 64));
-        let record: message_board::Record = serde_json::from_str(&payload)?;
         assert_eq!(
             record.envelope().time,
             message_board::RecordTime::LegacyUnknown
@@ -190,7 +202,7 @@ pub fn import_bytes(offered: &FleetImportBundle) -> TestResult<Vec<u8>> {
         email: "fixture@example.test".into(),
     })?;
     Ok(serde_json::to_vec(&json!({
-        "source":{"kind":"registry"},"sourceFace":"edge","authority":{"kind":"owner","value":owner},
+        "source":{"kind":"fleet"},"sourceFace":"edge","authority":{"kind":"owner","value":owner},
         "destination":{"kind":"fleet"},"destinationFace":"fleet",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"import_fleet"},
         "kind":"central.object","target":null,"request":{

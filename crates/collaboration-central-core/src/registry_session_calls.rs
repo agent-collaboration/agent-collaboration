@@ -1,7 +1,8 @@
 //! Session publication and Welcome reads use the registry's real shared rules.
+use crate::FleetKind;
 
 use crate::{
-    CallerKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
+    CallerKind, ObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork,
@@ -33,11 +34,14 @@ enum SessionRegistryReply {
     Refused,
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -49,11 +53,14 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Session
-            || !matches!(invocation.authority, CallAuthority::Object)
+            || !matches!(invocation.authority, CallAuthority::Machine { .. })
         {
             return Err(refused());
         }
-        let ObjectAddress::Connection(service) = invocation.source else {
+        let CallAuthority::Machine {
+            installation: service,
+        } = invocation.authority
+        else {
             return Err(refused());
         };
         let request = match invocation.kind.as_str() {
@@ -73,7 +80,7 @@ where
             }
             _ => return Err(refused()),
         };
-        let ObjectWork::Registry {
+        let ObjectWork::Fleet {
             host, shared_host, ..
         } = &self.work
         else {
@@ -101,7 +108,7 @@ where
         &self,
         peer: PeerId,
     ) -> Result<Option<ReportSchemaSupport>, StoreError> {
-        let ObjectWork::Registry { host, .. } = &self.work else {
+        let ObjectWork::Fleet { host, .. } = &self.work else {
             return Err(StoreError::Aborted {
                 reason: "not a registry runtime".into(),
             });
@@ -176,7 +183,7 @@ where
                     let newly_admitted = previous
                         .as_ref()
                         .is_none_or(|previous| previous.attach_seq < report.attach_seq);
-                    let answer = fleet_sync_lease::report_schema_support(scope, &report)
+                    let answer = fleet_sync_lease::report_schema_support(scope, &report, self.now)
                         .await
                         .map_err(StoreError::backend)?;
                     if newly_admitted {

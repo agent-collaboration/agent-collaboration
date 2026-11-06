@@ -39,6 +39,7 @@ impl CollaborationRuntime {
             relation_receiver,
             None,
             None,
+            None,
         ))
         .await
     }
@@ -58,6 +59,7 @@ impl CollaborationRuntime {
             relation_receiver,
             Some(host_inputs.router_proxy_endpoint),
             prepared_exposure,
+            Some(host_inputs.enrollment_reset_directory),
         ))
         .await
     }
@@ -68,6 +70,7 @@ impl CollaborationRuntime {
         relation_receiver: tokio::sync::watch::Receiver<RouterExecutableRelation>,
         router_proxy_endpoint: Option<SocketAddr>,
         prepared_exposure: Option<crate::tailscale_exposure::PreparedTailscaleExposure>,
+        enrollment_reset_directory: Option<std::path::PathBuf>,
     ) -> io::Result<Self> {
         let mut owner_human_id = inputs.owner_human_id.clone();
         let service_id = load_service_identity(&inputs.directory)?;
@@ -149,10 +152,13 @@ impl CollaborationRuntime {
             dyn collaboration_contracts::ProjectReplicationPosition,
         > = std::sync::Arc::new(collaboration_contracts::UnacknowledgedProjectReplication);
         let mut configuration = collaboration_runtime::AutomationConfigurationHandle::default();
-        let opened_board = board_composition::open_board_admission(
+        let opened_board = board_composition::open_board_admission_with_enrollment(
             &inputs.directory,
             machine_identity.clone(),
             inputs.board_session,
+            enrollment_reset_directory
+                .as_deref()
+                .unwrap_or(&inputs.directory),
         )
         .await;
         let mut prepared_board = None;
@@ -323,8 +329,15 @@ impl CollaborationRuntime {
             dyn collaboration_contracts::ScheduledRunExecution,
         > = message_routes.router.clone();
         let provider_delivery_route = message_routes.provider_route;
+        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+        let mail_clock_control =
+            crate::debug_mail_clock::PreparedMailClock::load(&inputs.directory).await?;
         let subscription_clock: std::sync::Arc<dyn collaboration_service::SubscriptionClock> =
             std::sync::Arc::new(collaboration_service::SystemSubscriptionClock);
+        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+        let subscription_clock = mail_clock_control
+            .as_ref()
+            .map_or(subscription_clock, |control| control.clock());
         let interactions = approval_broker.interaction_store();
         let subscription_delivery = automation_store.as_ref().map(|_| {
             let board_availability = match project_admission.as_ref() {
@@ -362,7 +375,7 @@ impl CollaborationRuntime {
         let mail_delivery = subscription_delivery
             .as_ref()
             .map(|actors| {
-                collaboration_service::MailDeliveryRuntime::new(
+                super::mail_delivery_composition::construct(
                     installation_peer,
                     collaboration_service::MailPushDeliveryProps {
                         interactions: interactions.clone(),
@@ -372,9 +385,9 @@ impl CollaborationRuntime {
                         clock: subscription_clock.clone(),
                     },
                     mail_session,
+                    &inputs.directory,
                 )
                 .map(std::sync::Arc::new)
-                .map_err(io::Error::other)
             })
             .transpose()?;
         if let (Some(board), Some(mail)) = (&mut prepared_board, &mail_delivery) {
@@ -761,6 +774,13 @@ impl CollaborationRuntime {
                 shutdown: shutdown.clone(),
             });
         let mut tasks = JoinSet::new();
+        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+        if let Some(control) = mail_clock_control {
+            let mail = mail_delivery
+                .clone()
+                .ok_or_else(|| io::Error::other("debug mail clock requires mail storage"))?;
+            tasks.spawn(control.run(mail, shutdown.clone()));
+        }
         #[cfg(test)]
         let startup_test_mail = mail_delivery.as_ref().map(std::sync::Arc::downgrade);
         #[cfg(feature = "runtime-test-support")]

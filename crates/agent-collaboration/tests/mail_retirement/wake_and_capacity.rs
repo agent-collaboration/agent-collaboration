@@ -1,4 +1,4 @@
-//! Real remote operations must leave capacity available for the next operation.
+//! Real remote operations retain terminal custody while later operations complete.
 use crate::mail_retirement_e2e::{
     central_pair::SecondHost,
     fixture::{self, BoardFixture},
@@ -66,20 +66,20 @@ pub async fn capacity(fixture: &mut BoardFixture, sender_host: &mut SecondHost) 
         serde_json::from_value(json!({"serviceId":service,"endpointId":"claude-local"}))?;
     run_scenario(start_peer(fixture, &endpoint).await?, async |peer: &mut PeerFixture| {
         let sender=sender(sender_host)?;
-        let mut previous: Option<String>=None;
+        let mut items = Vec::new();
         for index in 0..3 {
-            let compacted=match &previous {Some(item)=>readback::await_compacted(fixture,&service,item).await,None=>Ok(())};
             let item=fixture::identity();
             call(sender_host.host()?,"message_send",json!({"itemId":item,"target":peer.target,
                 "message":{"kind":"agent","sender":sender,"text":format!("capacity marker {index}")},"delivery":"auto"})).await?;
             let status=readback::terminal(sender_host.host()?,&sender,&item).await?;
-            assert_eq!(status.get("kind"),Some(&json!("delivered")),"terminal backlog consumed the only mailbox slot: {status}");
-            compacted?;
+            assert_eq!(status.get("kind"),Some(&json!("delivered")),"later remote item did not deliver: {status}");
             peer.expect_marker(&format!("capacity marker {index}")).await?;
-            previous=Some(item);
+            items.push(item);
         }
         assert_eq!(peer.count_matching_after_barrier("capacity marker").await?,3);
-        readback::await_compacted(fixture,&service,&previous.ok_or("last item")?).await
+        let stopped = sender_host.stop_for_readback().await?;
+        for item in items { readback::require_cold_terminal(&stopped, &item).await?; }
+        Ok(())
     }, PeerFixture::shutdown, || Ok(())).await
 }
 
@@ -100,7 +100,7 @@ pub async fn wakes(fixture: &mut BoardFixture, sender_host: &mut SecondHost) -> 
         .pointer("/definition/wakeupId")
         .ok_or_else(|| format!("wake identity missing: {created}"))?
         .clone();
-    readback::await_compacted(fixture, &service, &operation).await?;
+    let mut operations = vec![operation];
     for (tool, state) in [
         ("wake_pause", "paused"),
         ("wake_resume", "active"),
@@ -116,7 +116,11 @@ pub async fn wakes(fixture: &mut BoardFixture, sender_host: &mut SecondHost) -> 
             Some(&json!(state)),
             "wake mutation did not apply: {result}"
         );
-        readback::await_compacted(fixture, &service, &operation).await?;
+        operations.push(operation);
+    }
+    let stopped = sender_host.stop_for_readback().await?;
+    for operation in operations {
+        readback::require_cold_terminal(&stopped, &operation).await?;
     }
     Ok(())
 }

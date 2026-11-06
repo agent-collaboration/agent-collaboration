@@ -92,7 +92,7 @@ async fn run_claim_after_import(interrupted: bool) -> TestResult {
         // Load/reserve the real Fleet object before arming its write fault.
         let client = collaboration_central_conformance::ConformanceClient::new(central.base_url())?;
         client.import_fleet(&prepared.report.fleet).await?;
-        fault(&central_root,"CREATE TRIGGER hold_import_publication BEFORE UPDATE OF phase ON admin_imports WHEN json_extract(NEW.phase,'$.kind')='published' BEGIN SELECT RAISE(ABORT,'hold completed native seed before workflow receipt'); END").await?;
+        fault(&central_root,"CREATE TRIGGER hold_import_publication BEFORE UPDATE OF phase_kind ON fleet_admin_imports WHEN NEW.phase_kind='published' BEGIN SELECT RAISE(ABORT,'hold completed native seed before workflow receipt'); END").await?;
         assert!(publisher.publish(&prepared).await.is_err());
     } else {
         publisher.publish(&prepared).await?;

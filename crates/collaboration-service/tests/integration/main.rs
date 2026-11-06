@@ -212,3 +212,8 @@ mod watch_history_guidance;
 mod watch_read_lifecycle;
 mod work_view_fact_bound;
 mod work_view_mcp;
+
+mod machine_sender_binding;
+
+#[path = "../support/fleet_maintenance_probe.rs"]
+mod fleet_maintenance_probe;

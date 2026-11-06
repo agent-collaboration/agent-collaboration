@@ -45,6 +45,9 @@ where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String: Type<Host::Database> + Encode<'value, Host::Database>,
     for<'value> Option<String>: Type<Host::Database> + Decode<'value, Host::Database>,
     for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
@@ -54,12 +57,12 @@ where
         call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if call.source_face != CallerKind::Session
-            || !matches!(call.source, ObjectAddress::Connection(_))
-            || !matches!(call.authority, CallAuthority::Object)
+            || !matches!(call.source, ObjectAddress::Fleet)
+            || !matches!(call.authority, CallAuthority::Machine { .. })
         {
             return Err(refused());
         }
-        let ObjectAddress::Connection(installation) = call.source else {
+        let CallAuthority::Machine { installation } = call.authority else {
             return Err(refused());
         };
         let _: FleetRead = serde_json::from_value(call.target).map_err(|_| refused())?;

@@ -1,6 +1,7 @@
 //! The Registry supplies forwarding provenance, holder presence and installation peers.
+use crate::FleetKind;
 use crate::{
-    CallerKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
+    CallerKind, ObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     forward_calls::{
         ForwardRoute, ForwardRouteRequest, ForwardRouteResult, InstallationPeerRegistry,
@@ -9,7 +10,7 @@ use crate::{
     installation_peer_reads::{
         InstallationPeerDirectory, InstallationPeerPageRead, InstallationPeerPageRequest,
     },
-    machine_enrollment::{EnrollmentIdentity, identity_from_stored_enrollment},
+    machine_enrollment_record::{EnrollmentIdentity, identity_from_stored_enrollment},
     object_call_envelope::{ObjectCallEnvelope, encode_refusal},
     object_runtime::ObjectWork,
     registry_peer_lookup::service_for_peer,
@@ -43,11 +44,14 @@ enum RegistryMachineReply {
     Refused,
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -59,11 +63,14 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Session
-            || !matches!(invocation.authority, CallAuthority::Object)
+            || !matches!(invocation.authority, CallAuthority::Machine { .. })
         {
             return Err(refused());
         }
-        let ObjectAddress::Connection(source) = invocation.source else {
+        let CallAuthority::Machine {
+            installation: source,
+        } = invocation.authority
+        else {
             return Err(refused());
         };
         let request = match invocation.kind.as_str() {
@@ -92,7 +99,7 @@ where
             }
             _ => return Err(refused()),
         };
-        let ObjectWork::Registry {
+        let ObjectWork::Fleet {
             host, shared_host, ..
         } = &self.work
         else {

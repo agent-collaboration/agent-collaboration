@@ -26,6 +26,20 @@ mod rebuild;
 pub use rebuild::FleetCacheRebuild;
 
 static CACHE_MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./fleet_cache_migrations");
+
+// Only these central-derived tables are cleared; login and session registrations
+// in this store survive enrollment. D1 removes file-based snapshot install attempts
+// during reset; D3 will move those attempts into a kept table.
+const CENTRAL_CACHE_DELETIONS: [&str; 3] = [
+    "DELETE FROM cached_fleet_records",
+    "DELETE FROM fleet_cache_rebuild_records",
+    "DELETE FROM fleet_cache_checkpoint",
+];
+
+#[cfg(test)]
+#[path = "fleet_cache_reset_test.rs"]
+mod reset_tests;
+
 pub struct FleetCache {
     database: RouterLocalDatabase,
 }
@@ -75,6 +89,31 @@ impl FleetCache {
         Ok(Self {
             database: RouterLocalDatabase::open(path, &CACHE_MIGRATOR).await?,
         })
+    }
+
+    /// Forget learned Fleet data while preserving every non-cache table.
+    pub async fn clear_central_derived_cache(&self) -> Result<(), RouterLocalStorageError> {
+        let _writer = self.database.writer.lock().await;
+        let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let result = async {
+            for statement in CENTRAL_CACHE_DELETIONS {
+                sqlx::query(statement).execute(&mut *transaction).await?;
+            }
+            // The empty projection still needs its valid zero checkpoint singleton.
+            sqlx::query("INSERT INTO fleet_cache_checkpoint(singleton,position) VALUES(1,0)")
+                .execute(&mut *transaction)
+                .await?;
+            Ok::<(), RouterLocalStorageError>(())
+        }
+        .await;
+        match result {
+            Ok(()) => transaction.commit().await?,
+            Err(error) => {
+                transaction.rollback().await?;
+                return Err(error);
+            }
+        }
+        Ok(())
     }
     pub async fn replace_snapshot(
         &self,

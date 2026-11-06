@@ -20,18 +20,23 @@ pub async fn reserve_first_project(
         .as_str()
         .to_owned();
     let client = promote_result(central_fixture::owner_client())?;
-    let response = client
-        .post(format!(
-            "{}/admin/v1/import/projects/{project}",
-            central.base_url()?
-        ))
-        .json(&AdminProjectImportRequest::Begin {
-            header: header.clone(),
-        })
+    // The real uploader imports the Fleet graph before reserving its Copy.
+    let fleet: fleet_admission::FleetImportResult = client
+        .post(format!("{}/admin/v1/import/fleet", central.base_url()?))
+        .json(&prepared.report.fleet)
         .send()
         .await?
-        .error_for_status()?;
-    let answer: AdminProjectImportAnswer = response.json().await?;
+        .error_for_status()?
+        .json()
+        .await?;
+    assert!(matches!(
+        fleet,
+        fleet_admission::FleetImportResult::Imported { .. }
+            | fleet_admission::FleetImportResult::AlreadyImported
+    ));
+    let answer = promote_result(
+        upload_support::await_project_reservation(&client, central.base_url()?, &header).await,
+    )?;
     if !matches!(answer, AdminProjectImportAnswer::Ready { .. }) {
         return Err(promote_error(format!(
             "initial project reservation returned {answer:?}"
@@ -77,7 +82,7 @@ pub async fn install_completion_fault(root: &Path) -> E2eResult<()> {
     promote_result(upload_support::execute(
         root,
         "fleet",
-        "CREATE TRIGGER interrupt_import BEFORE UPDATE OF phase ON admin_imports WHEN json_extract(NEW.phase,'$.kind')='complete' BEGIN SELECT RAISE(ABORT,'completion receipt interrupted'); END",
+        "CREATE TRIGGER interrupt_import BEFORE UPDATE OF phase_kind ON fleet_admin_imports WHEN NEW.phase_kind='complete' BEGIN SELECT RAISE(ABORT,'completion receipt interrupted'); END",
     )
     .await)
 }

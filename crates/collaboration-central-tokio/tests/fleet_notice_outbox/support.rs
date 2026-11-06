@@ -1,5 +1,5 @@
 use super::session_fixture;
-use board_sync_protocol::{BoardNotice, BoardReadPage};
+use board_sync_protocol::BoardReadPage;
 use collaboration_central_core::{CoreHost, FleetKind, ObjectAddress, ObjectRuntime, PlatformIo};
 use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{
@@ -19,9 +19,8 @@ use std::{
         atomic::{AtomicBool, AtomicI64, Ordering},
     },
 };
-#[path = "fault_store.rs"]
-mod fault_store;
-pub use fault_store::{FaultHost, FaultStore};
+pub type FaultHost = crate::fleet_fault_store::FaultHost<Io>;
+pub type FaultStore = crate::fleet_fault_store::FaultStore<Io>;
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 pub type Native = TokioObject<CoreHost<Io>>;
 pub const SERVICE: &str = "550e8400-e29b-41d4-a716-446655440497";
@@ -50,26 +49,9 @@ impl Io {
             wakes: Arc::default(),
         }
     }
-    pub fn advance(&self) {
-        self.time.fetch_add(60_000, Ordering::SeqCst);
-    }
     pub fn age_retention(&self) {
         self.time
             .fetch_add(31 * 24 * 60 * 60 * 1000, Ordering::SeqCst);
-    }
-    pub fn calls(&self) -> TestResult<Vec<Value>> {
-        Ok(self
-            .calls
-            .lock()
-            .map_err(|_| "call mutex poisoned")?
-            .clone())
-    }
-    pub fn wakes(&self) -> TestResult<Vec<SyncTime>> {
-        Ok(self
-            .wakes
-            .lock()
-            .map_err(|_| "wake mutex poisoned")?
-            .clone())
     }
 }
 impl Clock for Io {
@@ -94,14 +76,20 @@ impl WakeScheduler for Io {
     }
 }
 impl PlatformIo for Io {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     async fn object_call(
         &self,
         destination: ObjectAddress,
         bytes: Vec<u8>,
     ) -> Result<Vec<u8>, CallFailure> {
         let call: Value = serde_json::from_slice(&bytes).map_err(|_| CallFailure::AnswerLost)?;
-        if destination
-            != ObjectAddress::Connection(installation().map_err(|_| CallFailure::AnswerLost)?)
+        if destination != ObjectAddress::Fleet
             || call.get("kind").and_then(Value::as_str) != Some("central.machine-notice")
             || call.get("source") != Some(&json!({"kind":"fleet"}))
         {
@@ -118,13 +106,14 @@ impl PlatformIo for Io {
                 reason: NotSentReason::Unreachable { last_seen: None },
             });
         }
-        let answer = self
-            .delivery
-            .runtime
-            .delivery()
-            .map_err(|_| CallFailure::AnswerLost)?
-            .on_call(bytes)
-            .await;
+        let answer = Box::pin(
+            self.delivery
+                .runtime
+                .delivery()
+                .map_err(|_| CallFailure::AnswerLost)?
+                .on_call(bytes),
+        )
+        .await;
         if answer.is_ok()
             && self
                 .lose_after_acknowledgement
@@ -138,9 +127,7 @@ impl PlatformIo for Io {
 pub struct Fixture {
     pub objects: ObjectStore<CoreHost<Io>>,
     pub object: Arc<Native>,
-    pub host: Arc<FaultHost>,
     pub runtime: ObjectRuntime<FleetKind, FaultHost, Io>,
-    pub io: Io,
 }
 impl Fixture {
     pub async fn open(root: &Path, io: Io) -> TestResult<Self> {
@@ -161,14 +148,30 @@ impl Fixture {
                 injected: Arc::default(),
             }),
         });
-        let runtime = ObjectRuntime::fleet(host.clone(), io.clone(), receiver)?;
+        let runtime = ObjectRuntime::fleet(
+            host.clone(),
+            io.clone(),
+            fleet_sync_lease::RegistryConfig {
+                authoritative_receiver: receiver,
+                lease: fleet_sync_lease::LeasePolicy {
+                    lease_duration: std::time::Duration::from_secs(60),
+                    renew_interval: std::time::Duration::from_secs(20),
+                },
+                release_unsent_for: std::time::Duration::from_secs(10),
+                move_needs_renewal_within: None,
+            },
+            collaboration_central_tokio::DeliveryConfig {
+                relay_peer: "019f0000-0000-7000-8000-000000005240"
+                    .to_owned()
+                    .try_into()?,
+            },
+            std::time::Duration::from_secs(2),
+        )?;
         runtime.initialize().await?;
         Ok(Self {
             objects,
             object,
-            host,
             runtime,
-            io,
         })
     }
     pub async fn feed(&self, after: u64) -> TestResult<BoardReadPage> {
@@ -176,7 +179,7 @@ impl Fixture {
     }
     pub async fn feed_from(&self, installation: &str, after: u64) -> TestResult<BoardReadPage> {
         let bytes=self.runtime.on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"connection","value":installation},"sourceFace":"session","authority":{"kind":"object"},
+            "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":installation}},
             "destination":{"kind":"fleet"},"destinationFace":"fleet", "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"read_feed"},
             "kind":"central.fleet-read","target":null,"request":{"kind":"feed","value":{"after":after}}
         }))?).await.map_err(|error|format!("feed read failed: {error:?}"))?;
@@ -190,23 +193,9 @@ impl Fixture {
             .map_err(|error| format!("mutation failed: {error:?}"))?;
         Ok(serde_json::from_slice(&bytes)?)
     }
-    pub async fn deliver(&self) -> TestResult {
-        let admitted = self.runtime.on_alarm().await?;
-        assert_eq!(admitted.retried.len(), 1);
-        self.io.delivery.runtime.on_alarm().await?;
-        self.io.advance();
-        assert_eq!(self.runtime.on_alarm().await?.completed.len(), 1);
-        Ok(())
-    }
-    pub async fn counts(&self) -> TestResult<(i64, i64)> {
-        Ok(self.object.transaction(|scope|Box::pin(async move {
-            let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM workspaces) AS workspaces,(SELECT count(*) FROM fleet_feed) AS feed").fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
-            Ok((row.try_get("workspaces").map_err(StoreError::backend)?,row.try_get("feed").map_err(StoreError::backend)?))
-        })).await?)
-    }
     pub async fn reader_rows(&self) -> TestResult<Vec<(String, String, i64)>> {
         Ok(self.object.transaction(|scope|Box::pin(async move {
-            query::<sqlx_turso::Turso>("SELECT reader_id,installation,last_read_position FROM feed_readers ORDER BY installation").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|Ok((row.try_get("reader_id").map_err(StoreError::backend)?,row.try_get("installation").map_err(StoreError::backend)?,row.try_get("last_read_position").map_err(StoreError::backend)?))).collect()
+            query::<sqlx_turso::Turso>("SELECT reader_id,installation,last_read_position FROM fleet_feed_readers ORDER BY installation").fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|Ok((row.try_get("reader_id").map_err(StoreError::backend)?,row.try_get("installation").map_err(StoreError::backend)?,row.try_get("last_read_position").map_err(StoreError::backend)?))).collect()
         })).await?)
     }
 }
@@ -236,7 +225,7 @@ pub fn workspace_update() -> TestResult<FleetRequest> {
 }
 pub fn mutation(request: &FleetRequest) -> TestResult<Vec<u8>> {
     Ok(serde_json::to_vec(&json!({
-        "source":{"kind":"connection","value":SERVICE},"sourceFace":"session","authority":{"kind":"object"},
+        "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":SERVICE}},
         "destination":{"kind":"fleet"},"destinationFace":"fleet","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"mutate"},
         "kind":"central.fleet-metadata","target":null,"request":{"request":request,"origin":{"installation":SERVICE,"machine":"notice owner"}}
     }))?)
@@ -252,28 +241,4 @@ pub fn assert_accepted(answer: &FleetRequestResult) -> TestResult {
         return Err(format!("fixture not accepted: {answer:?}").into());
     }
     Ok(())
-}
-pub async fn notice_rows(fixture: &session_fixture::Fixture) -> TestResult<i64> {
-    Ok(i64::try_from(notice_kinds(fixture).await?.len())?)
-}
-pub async fn notice_kinds(fixture: &session_fixture::Fixture) -> TestResult<Vec<BoardNotice>> {
-    Ok(fixture
-        .host
-        .store
-        .object
-        .transaction(|scope| {
-            Box::pin(async move {
-                query::<sqlx_turso::Turso>("SELECT kind FROM machine_notices ORDER BY position")
-                    .fetch_all(scope.executor())
-                    .await
-                    .map_err(StoreError::backend)?
-                    .into_iter()
-                    .map(|row| {
-                        let payload: String = row.try_get("kind").map_err(StoreError::backend)?;
-                        serde_json::from_str(&payload).map_err(StoreError::backend)
-                    })
-                    .collect()
-            })
-        })
-        .await?)
 }

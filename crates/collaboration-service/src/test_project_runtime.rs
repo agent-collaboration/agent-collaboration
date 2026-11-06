@@ -118,22 +118,28 @@ pub(crate) async fn expire_lease(
     registry: &ProjectStoreRegistry,
     project: &ProjectId,
 ) -> Result<fleet_sync_protocol::LeaseStatus, FixtureError> {
-    use fleet_sync_protocol::{Epoch, LeaseState, LeaseStatus};
-    use runtime_primitives::{Clock, SyncTime, SystemClock};
-    let started = SyncTime::from_unix_millis(SystemClock.now().unix_millis() - 120_000);
+    use fleet_sync_protocol::{LeaseState, LeaseStatus};
+    use runtime_primitives::{Clock, SystemClock};
+    let database = registry.database(project).await?;
+    let epoch = match database.writer_state().await? {
+        fleet_sync_lease::WriterState::Writing { epoch }
+        | fleet_sync_lease::WriterState::Paused { epoch, .. } => epoch,
+        _ => return Err("lease expiry fixture requires an established writer".into()),
+    };
+    // A fresh zero-remaining answer expires authority immediately. Backdating
+    // the request would now correctly lose to the saved newer observation.
+    let started = SystemClock.now();
     let lease = LeaseStatus {
         database: fleet_sync_protocol::DatabaseId::new(uuid::Uuid::parse_str(project.as_str())?)?,
-        epoch: Epoch::new(1)?,
+        epoch,
         holder: fleet_sync_protocol::PeerId::new(uuid::Uuid::parse_str(
             "0192a1b2-c3d4-7000-8000-000000000001",
         )?)?,
         state: LeaseState::Held,
-        expires_at: SyncTime::from_unix_millis(started.unix_millis() + 60_000),
-        remaining_ms: 60_000,
+        expires_at: started,
+        remaining_ms: 0,
     };
-    registry
-        .database(project)
-        .await?
+    database
         .observe_renewal(
             fleet_sync_protocol::RenewAnswer::Renewed {
                 recorded: fleet_sync_protocol::RenewResult {
@@ -147,6 +153,12 @@ pub(crate) async fn expire_lease(
             started,
         )
         .await?;
+    if !matches!(
+        database.writer_state().await?,
+        fleet_sync_lease::WriterState::Paused { .. }
+    ) {
+        return Err("lease expiry observation did not pause the writer".into());
+    }
     Ok(lease)
 }
 

@@ -11,7 +11,7 @@ import { dirname, join } from 'node:path';
 
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
-import { inventoryStandIn } from '../../../../verification/observations/claude-route-fixture.ts';
+import { inventoryStandIn } from '../../../../verification/observations/providers/claude/claude-route-fixture.ts';
 import { captureArtifact, sourceBinding } from '../evidence/source-binding.ts';
 import {
 	controlledExecutable,

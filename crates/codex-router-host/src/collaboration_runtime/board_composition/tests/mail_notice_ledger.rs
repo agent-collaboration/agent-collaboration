@@ -18,6 +18,18 @@ use std::{collections::BTreeMap, io, path::Path, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
 pub(super) type TestError = Box<dyn std::error::Error + Send + Sync>;
+
+pub(super) fn positioned_notice(position: u64) -> Result<PositionedBoardNotice, TestError> {
+    Ok(PositionedBoardNotice {
+        position: NoticePosition::new(position),
+        kind: BoardNotice::LeaseSuperseded {
+            project: "019f0000-0000-7000-8000-000000091001"
+                .to_owned()
+                .try_into()?,
+            epoch: fleet_sync_protocol::Epoch::new(1)?,
+        },
+    })
+}
 struct NoNoticeCalls;
 impl CallRouter for NoNoticeCalls {
     async fn dispatch(&self, _: CallEnvelope) -> Result<Value, CallFailure> {
@@ -92,14 +104,8 @@ impl NoticeLedger {
         store
             .transaction(|scope| {
                 Box::pin(async move {
-                    let mut migrator = sqlx::migrate::Migrator::with_migrations(
-                        fleet_sync_session::SESSION_MIGRATOR
-                            .iter()
-                            .cloned()
-                            .collect::<Vec<_>>(),
-                    );
-                    migrator.dangerous_set_table_name("_fleet_sync_session_history");
-                    migrator
+                    fleet_sync_session::SESSION_MIGRATOR
+                        .with_history_table("_fleet_sync_session_history")
                         .run_direct(None, scope.executor(), false)
                         .await
                         .map_err(StoreError::backend)
@@ -172,14 +178,15 @@ impl NoticeLedger {
     pub async fn publish(
         &self,
         position: u64,
-        stream: fleet_sync_protocol::DeliveryStream,
     ) -> Result<Vec<fleet_sync_session::Bytes>, TestError> {
         if self.key.lock().await.is_none() {
             return Err(io::Error::other("notice source has not seen Hello").into());
         }
+        let notice = positioned_notice(position)?;
         let mut registrations = self.registrations.lock().await;
         let staged = registrations.clone();
         let peer = self.peer;
+        let now = SystemClock.now();
         let (committed, effects) = self
             .store
             .transaction(move |inner| {
@@ -192,10 +199,8 @@ impl NoticeLedger {
                     let effects = publish_notice_to_peer::<_, BoardConsumerProtocol>(
                         &mut scope,
                         &peer,
-                        Notice::Consumer(PositionedBoardNotice {
-                            position: NoticePosition::new(position),
-                            kind: BoardNotice::MailWaiting { stream },
-                        }),
+                        Notice::Consumer(notice),
+                        now,
                     )
                     .await
                     .map_err(StoreError::backend)?;

@@ -27,6 +27,9 @@ where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -46,6 +49,9 @@ where
         };
         let address = ObjectAddress::Copy(*database);
         let call = ObjectCallEnvelope::decode(&bytes, address, CallerKind::Copy)?;
+        if call.source != ObjectAddress::Fleet {
+            return Err(refused());
+        }
         if matches!(self.copy_call_class(&bytes)?, crate::CopyCallClass::Health) {
             return Err(refused());
         }
@@ -74,13 +80,16 @@ where
         if call.kind == crate::admin_import_copy::AdminCopySeed::KIND {
             return self.admin_copy_seed(call).await;
         }
-        if !matches!(call.authority, CallAuthority::Object) {
+        if !matches!(
+            call.authority,
+            CallAuthority::Object | CallAuthority::Machine { .. }
+        ) {
             return Err(refused());
         }
         if call.kind == CopySessionRead::KIND {
             let target: CopySessionRead = decode(call.target)?;
             if call.source_face != CallerKind::Session
-                || !matches!(call.source, ObjectAddress::Connection(_))
+                || !matches!(call.source, ObjectAddress::Fleet)
                 || target.copy != *receiver
                 || target.database != *database
             {
@@ -103,7 +112,7 @@ where
             }
             return encode(answer);
         }
-        if call.source_face != CallerKind::Registry || call.source != ObjectAddress::Registry {
+        if call.source_face != CallerKind::Registry || call.source != ObjectAddress::Fleet {
             return Err(refused());
         }
         #[cfg(feature = "conformance")]
@@ -175,5 +184,131 @@ fn uninitialized() -> CallFailure {
 fn refused() -> CallFailure {
     CallFailure::NotSent {
         reason: NotSentReason::Unreachable { last_seen: None },
+    }
+}
+
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<crate::FleetKind, Host, Io>
+where
+    for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
+        TransactionScope<Database = Host::Database>,
+    <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
+    for<'value> String:
+        Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
+    for<'value> Option<String>:
+        Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
+    for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
+{
+    pub(crate) async fn owner_project_call(
+        &self,
+        mut call: ObjectCallEnvelope,
+    ) -> Result<Vec<u8>, CallFailure> {
+        use crate::{
+            admin_import_copy::{
+                AdminCopySeed, AdminSeedAnswer, AdminSeedRequest, FleetAdminCopySeed,
+            },
+            copy_write_calls::{CopyAdminSeed, FleetProjectSeed},
+            owner_operation_calls::{CopyOperations, FleetProjectOperations},
+        };
+        if call.source != ObjectAddress::Fleet
+            || call.source_face != CallerKind::Edge
+            || !matches!(call.authority, CallAuthority::Owner(_))
+        {
+            return Err(refused());
+        }
+        let ObjectWork::Fleet { io, host, .. } = &self.work else {
+            return Err(refused());
+        };
+        let (database, kind, target, publication) = match call.kind.as_str() {
+            FleetProjectOperations::KIND => {
+                let target: FleetProjectOperations = decode(call.target)?;
+                let request: crate::owner_operation_calls::CopyOpsCall =
+                    decode(call.request.clone())?;
+                call.request = serde_json::to_value(request).map_err(encode_refusal)?;
+                (
+                    target.database,
+                    CopyOperations::KIND,
+                    serde_json::to_value(CopyOperations {
+                        database: target.database,
+                    })
+                    .map_err(encode_refusal)?,
+                    None,
+                )
+            }
+            FleetAdminCopySeed::KIND => {
+                let target: FleetAdminCopySeed = decode(call.target)?;
+                let request: AdminSeedRequest = decode(call.request.clone())?;
+                let publication = match request {
+                    AdminSeedRequest::Complete(record)
+                    | AdminSeedRequest::ReconcilePublication(record) => {
+                        if record.header.database() != target.database {
+                            return Err(refused());
+                        }
+                        Some(record)
+                    }
+                    AdminSeedRequest::Begin { .. } | AdminSeedRequest::Page { .. } => None,
+                };
+                (
+                    target.database,
+                    AdminCopySeed::KIND,
+                    serde_json::to_value(AdminCopySeed {
+                        database: target.database,
+                    })
+                    .map_err(encode_refusal)?,
+                    publication,
+                )
+            }
+            FleetProjectSeed::KIND => {
+                let target: FleetProjectSeed = decode(call.target)?;
+                let request: crate::copy_write_calls::AdminCopySeedRequest =
+                    decode(call.request.clone())?;
+                call.request = serde_json::to_value(request).map_err(encode_refusal)?;
+                (
+                    target.database,
+                    CopyAdminSeed::KIND,
+                    serde_json::to_value(CopyAdminSeed {
+                        database: target.database,
+                        copy: target.copy,
+                    })
+                    .map_err(encode_refusal)?,
+                    None,
+                )
+            }
+            _ => return Err(refused()),
+        };
+        call.source_face = CallerKind::Fleet;
+        call.destination = ObjectAddress::Copy(database);
+        call.destination_face = CallerKind::Copy;
+        call.kind = kind.into();
+        call.target = target;
+        // No Fleet transaction is held while the project executes.
+        let bytes = serde_json::to_vec(&call).map_err(encode_refusal)?;
+        let answer = io.object_call(call.destination, bytes).await?;
+        if let Some(record) = publication
+            && let AdminSeedAnswer::Published { position } =
+                serde_json::from_slice(&answer).map_err(|_| CallFailure::AnswerLost)?
+        {
+            if position != record.header.manifest.position {
+                return Err(CallFailure::AnswerLost);
+            }
+            // Fleet owns import bookkeeping; the project returns its committed publication evidence.
+            let (recorded, _) = crate::step_driver::StepDriver::new(host.clone())
+                .run(crate::admin_import_store::AdminImportStep {
+                    now: io.now(),
+                    row_ids: crate::fleet_row_ids::FleetRowIds::new(io.clone()),
+                    command: crate::admin_import_store::AdminImportCommand::Published {
+                        database,
+                        digest: record.header.digest.clone(),
+                        import_id: record.import_id,
+                        position,
+                    },
+                })
+                .await
+                .map_err(|_| CallFailure::AnswerLost)?;
+            recorded.map_err(|_| CallFailure::AnswerLost)?;
+        }
+        Ok(answer)
     }
 }

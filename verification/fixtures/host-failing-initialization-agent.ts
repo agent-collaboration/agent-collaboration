@@ -33,12 +33,17 @@ if (scenario === "eof") {
       assert.equal(scenario, "oversized");
       const limit = Number(process.argv[4]);
       assert.ok(Number.isSafeInteger(limit) && limit > 0);
+      const frameWrittenPath = process.argv[5];
+      assert.ok(frameWrittenPath);
       const frame = Buffer.alloc(limit + 2, 0x78);
       frame[limit + 1] = 0x0a;
       await new Promise<void>((resolve, reject): void => {
         process.stdout.write(frame, (error): void => {
           if (error) reject(error);
-          else resolve();
+          else {
+            writeFileSync(frameWrittenPath, String(process.pid));
+            resolve();
+          }
         });
       });
       while (!(await input.next()).done) {

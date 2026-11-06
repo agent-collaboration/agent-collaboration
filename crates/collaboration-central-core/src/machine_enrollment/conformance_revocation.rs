@@ -1,10 +1,11 @@
 //! Hold and replay real enrollment lifecycle calls; observe the owning row and journal.
+use crate::FleetKind;
 
 use super::{
     AtomicStore, BoxFuture, ColumnIndex, Database, Decode, Deserialize, Encode, EnrollmentState,
     Infallible, IntoArguments, ObjectHost, ObjectRuntime, ObjectWork, PeerId, PlatformIo,
-    RegistryKind, Serialize, ServiceId, StepCallback, StepDriver, StepResult, StoreError,
-    StoredMachine, TransactionScope, Type, corrupt, queries,
+    Serialize, ServiceId, StepCallback, StepDriver, StepResult, StoreError, StoredMachine,
+    TransactionScope, Type, corrupt, queries,
 };
 use crate::{
     AccessCaller, CallerKind, CentralApplication, CentralPlatform, ObjectAddress,
@@ -34,8 +35,6 @@ pub enum RevocationControl {
     ReleaseDelivery,
     ArmActivation,
     ReleaseActivation,
-    ArmOpen,
-    ReleaseOpen,
     ArmBeforeActivation,
     ReleaseBeforeActivation,
     Replay { call: CallId },
@@ -61,19 +60,17 @@ pub struct RevocationEnrollmentSnapshot {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RevocationObservation {
+    /// Read from the actual SDK custody table, including retained records.
+    pub outbox_items: u64,
     pub gate_armed: bool,
     pub gate_reached: bool,
     pub calls: Vec<CallId>,
     pub enrollment: Option<RevocationEnrollmentSnapshot>,
     pub operation: Option<OperationStatus>,
     pub activation_pause: LifecyclePauseObservation,
-    pub open_pause: LifecyclePauseObservation,
     pub before_activation_pause: LifecyclePauseObservation,
-    pub open_calls: Vec<CallId>,
-    pub close_calls: Vec<CallId>,
     pub readmission_operation: Option<OperationStatus>,
     pub activation_step: Option<durable_steps::storage::StepRecord>,
-    pub open_step: Option<durable_steps::storage::StepRecord>,
 }
 
 #[derive(Clone)]
@@ -87,15 +84,12 @@ struct ProbeState {
     armed: bool,
     reached: bool,
     calls: Vec<RecordedLifecycleCall>,
-    open_calls: Vec<RecordedLifecycleCall>,
-    close_calls: Vec<RecordedLifecycleCall>,
     release: Vec<oneshot::Sender<()>>,
 }
 #[derive(Default)]
 pub(crate) struct RevocationProbe {
     state: Mutex<ProbeState>,
     pub(crate) activation_pause: lifecycle_pause::LifecyclePause,
-    pub(crate) open_pause: lifecycle_pause::LifecyclePause,
     pub(crate) before_activation_pause: lifecycle_pause::LifecyclePause,
 }
 impl RevocationProbe {
@@ -120,34 +114,10 @@ impl RevocationProbe {
         }
         Ok(())
     }
-    pub(crate) async fn before_open_dispatch(
-        &self,
-        call: RecordedLifecycleCall,
-    ) -> Result<(), StoreError> {
-        self.state
-            .lock()
-            .map_err(StoreError::backend)?
-            .open_calls
-            .push(call);
-        self.open_pause.pause().await
-    }
-    pub(crate) fn record_close_dispatch(
-        &self,
-        call: RecordedLifecycleCall,
-    ) -> Result<(), StoreError> {
-        self.state
-            .lock()
-            .map_err(StoreError::backend)?
-            .close_calls
-            .push(call);
-        Ok(())
-    }
     fn apply(&self, control: &RevocationControl) -> Result<(), StoreError> {
         match control {
             RevocationControl::ArmActivation => return self.activation_pause.arm(),
             RevocationControl::ReleaseActivation => return self.activation_pause.release(),
-            RevocationControl::ArmOpen => return self.open_pause.arm(),
-            RevocationControl::ReleaseOpen => return self.open_pause.release(),
             RevocationControl::ArmBeforeActivation => return self.before_activation_pause.arm(),
             RevocationControl::ReleaseBeforeActivation => {
                 return self.before_activation_pause.release();
@@ -175,8 +145,6 @@ impl RevocationProbe {
                 | RevocationControl::Replay { .. }
                 | RevocationControl::ArmActivation
                 | RevocationControl::ReleaseActivation
-                | RevocationControl::ArmOpen
-                | RevocationControl::ReleaseOpen
                 | RevocationControl::ArmBeforeActivation
                 | RevocationControl::ReleaseBeforeActivation => Vec::new(),
             }
@@ -191,8 +159,6 @@ impl RevocationProbe {
         state
             .calls
             .iter()
-            .chain(&state.open_calls)
-            .chain(&state.close_calls)
             .find(|call| &call.identity == identity)
             .cloned()
             .ok_or_else(|| StoreError::Aborted {
@@ -231,11 +197,14 @@ pub(crate) async fn control<Platform: CentralPlatform>(
     )
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -247,7 +216,7 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Edge
-            || invocation.source != ObjectAddress::Registry
+            || invocation.source != ObjectAddress::Fleet
             || !matches!(invocation.authority, CallAuthority::Owner(_))
         {
             return Err(CallFailure::AnswerLost);
@@ -256,7 +225,7 @@ where
             serde_json::from_value(invocation.target).map_err(|_| CallFailure::AnswerLost)?;
         let input: RevocationControlInput =
             serde_json::from_value(invocation.request).map_err(|_| CallFailure::AnswerLost)?;
-        let ObjectWork::Registry {
+        let ObjectWork::Fleet {
             host, shared_host, ..
         } = &self.work
         else {
@@ -269,7 +238,7 @@ where
         if let RevocationControl::Replay { call } = input.control {
             shared_host.replay_lifecycle_call(&call).await?;
         }
-        let ((enrollment, operation, readmission_operation, activation_step, open_step), _) =
+        let ((enrollment, operation, readmission_operation, activation_step, outbox_items), _) =
             StepDriver::new(host.clone())
                 .run(ReadRevocation {
                     service: input.service,
@@ -280,26 +249,8 @@ where
             .revocation_probe
             .observation()
             .map_err(|_| CallFailure::AnswerLost)?;
-        let (open_calls, close_calls) = {
-            let state = shared_host
-                .revocation_probe
-                .state
-                .lock()
-                .map_err(|_| CallFailure::AnswerLost)?;
-            (
-                state
-                    .open_calls
-                    .iter()
-                    .map(|call| call.identity.clone())
-                    .collect(),
-                state
-                    .close_calls
-                    .iter()
-                    .map(|call| call.identity.clone())
-                    .collect(),
-            )
-        };
         serde_json::to_vec(&RevocationObservation {
+            outbox_items,
             gate_armed,
             gate_reached,
             calls,
@@ -310,21 +261,13 @@ where
                 .activation_pause
                 .observation()
                 .map_err(|_| CallFailure::AnswerLost)?,
-            open_pause: shared_host
-                .revocation_probe
-                .open_pause
-                .observation()
-                .map_err(|_| CallFailure::AnswerLost)?,
             before_activation_pause: shared_host
                 .revocation_probe
                 .before_activation_pause
                 .observation()
                 .map_err(|_| CallFailure::AnswerLost)?,
-            open_calls,
-            close_calls,
             readmission_operation,
             activation_step,
-            open_step,
         })
         .map_err(|_| CallFailure::AnswerLost)
     }
@@ -346,7 +289,7 @@ where
         Option<OperationStatus>,
         Option<OperationStatus>,
         Option<durable_steps::storage::StepRecord>,
-        Option<durable_steps::storage::StepRecord>,
+        u64,
     );
     type Effect = Infallible;
     fn run<'scope, 'transaction>(
@@ -354,6 +297,18 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
+            use sqlx_core::{query::query, row::Row};
+            // Conformance inspects the SDK-owned table without cloning its
+            // schema into Central's checked production query corpus.
+            let count: String = query::<Driver>(
+                "SELECT CAST(count(*) AS TEXT) AS items FROM _fleet_sync_outbox_items",
+            )
+            .fetch_one(scope.executor())
+            .await
+            .map_err(StoreError::backend)?
+            .try_get("items")
+            .map_err(StoreError::backend)?;
+            let outbox_items = count.parse().map_err(StoreError::backend)?;
             let mut rows = queries::read_enrollments(
                 scope,
                 Some(self.service.as_str().into()),
@@ -367,7 +322,7 @@ where
                 return Err(corrupt("service_id"));
             }
             let Some(machine) = rows.pop().map(StoredMachine::decode).transpose()? else {
-                return Ok(((None, None, None, None, None), Vec::new()));
+                return Ok(((None, None, None, None, outbox_items), Vec::new()));
             };
             let fingerprint = format!(
                 "{:x}",
@@ -383,21 +338,19 @@ where
                 ),
                 None => None,
             };
-            let (readmission_operation, activation_step, open_step) =
-                match machine.last_enrollment_operation {
-                    Some(id) => (
-                        Some(
-                            scope
-                                .operation(id)
-                                .await?
-                                .ok_or(StoreError::MissingOperation { id })?
-                                .status(),
-                        ),
-                        scope.step(id, 1).await?,
-                        scope.step(id, 0).await?,
+            let (readmission_operation, activation_step) = match machine.last_enrollment_operation {
+                Some(id) => (
+                    Some(
+                        scope
+                            .operation(id)
+                            .await?
+                            .ok_or(StoreError::MissingOperation { id })?
+                            .status(),
                     ),
-                    None => (None, None, None),
-                };
+                    scope.step(id, 0).await?,
+                ),
+                None => (None, None),
+            };
             Ok((
                 (
                     Some(RevocationEnrollmentSnapshot {
@@ -410,7 +363,7 @@ where
                     operation,
                     readmission_operation,
                     activation_step,
-                    open_step,
+                    outbox_items,
                 ),
                 Vec::new(),
             ))

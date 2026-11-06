@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requireArgument, wireJson } from "./acp-stdio.ts";
 import { sourceShellWords } from "./source-shell-words.ts";
 import { field, textField } from "../exact-json.ts";
-import { readObservedJson } from "../observations/evidence-models.ts";
+import { readObservedJson } from "../observations/shared/evidence-models.ts";
 
 /** An older executor that would resume blindly if it receives a mutation. */
 export function runFixture(configuration: unknown): void {

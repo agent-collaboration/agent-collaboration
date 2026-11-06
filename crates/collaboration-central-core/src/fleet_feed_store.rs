@@ -1,12 +1,11 @@
 //! Contiguous Fleet feed publication and central-time retention in the owned scope.
 
+use crate::fleet_feed_header::timestamp;
 use crate::{
-    fleet_record_codec::{
-        FleetRecordHeader, check_private_id, corrupt, decode_json, required, validate_record,
-    },
+    fleet_record_codec::{check_private_id, corrupt, required},
     generated_fleet_feed as queries,
 };
-use chrono::{DateTime, SecondsFormat, TimeDelta, Utc};
+use chrono::{DateTime, TimeDelta, Utc};
 use durable_steps::{StoreError, storage::TransactionScope};
 use fleet_admission::FleetFeedEntry;
 use message_board::FleetPosition;
@@ -61,6 +60,16 @@ where
         });
     };
     check_private_id(&required(row.state_id, "feed_state.id")?, "feed_state.id")?;
+    crate::fleet_record_codec::check_millis(
+        row.created_at,
+        row.created_class,
+        "feed_state.created_at",
+    )?;
+    crate::fleet_record_codec::check_millis(
+        row.updated_at,
+        row.updated_class,
+        "feed_state.updated_at",
+    )?;
     if required(row.name, "feed_state.name")? != "fleet" {
         return Err(corrupt("feed_state.name", "unknown feed state"));
     }
@@ -100,10 +109,17 @@ where
     let rows = queries::read_fleet_feed_page(scope, after.get().to_string(), count.to_string())
         .await
         .map_err(StoreError::backend)?;
+    let mut children = crate::fleet_feed_rows::read_range(
+        scope,
+        after.get().to_string(),
+        count.to_string(),
+        &rows,
+    )
+    .await?;
     let mut previous = after;
     let mut entries = Vec::with_capacity(rows.len());
     for row in rows {
-        let (entry, _) = decode_entry(row)?;
+        let (entry, _) = decode_entry(row, &mut children)?;
         if previous.successor().map_err(StoreError::backend)? != entry.position
             || entry.position > through
         {
@@ -115,6 +131,7 @@ where
         previous = entry.position;
         entries.push(entry);
     }
+    children.finish()?;
     if previous != through {
         return Err(corrupt(
             "feed.range",
@@ -143,13 +160,16 @@ where
         return Ok(());
     }
     if state.head == FleetPosition::ZERO {
-        queries::initialize_fleet_feed_state(scope, row_ids.next()?.to_string())
-            .await
-            .map_err(StoreError::backend)?;
+        queries::initialize_fleet_feed_state(
+            scope,
+            row_ids.next()?.to_string(),
+            now.timestamp_millis().to_string(),
+        )
+        .await
+        .map_err(StoreError::backend)?;
     }
     let mut previous = state.head;
     for entry in entries {
-        let header = FleetRecordHeader::for_record(&entry.record)?;
         if previous.successor().map_err(StoreError::backend)? != entry.position
             || entry.record.envelope().position.fleet_position() != Some(entry.position)
         {
@@ -159,21 +179,16 @@ where
             ));
         }
         i64::try_from(entry.position.get()).map_err(StoreError::backend)?;
-        queries::append_fleet_feed(
-            scope,
-            row_ids.next()?.to_string(),
-            serde_json::to_string(entry).map_err(StoreError::backend)?,
-            header.router_time(),
-            header.time_basis(),
-            timestamp(now),
-        )
-        .await
-        .map_err(StoreError::backend)?;
+        crate::fleet_feed_rows::append(scope, entry, row_ids.next()?, now, row_ids).await?;
         previous = entry.position;
     }
-    queries::advance_fleet_feed_head(scope, previous.get().to_string())
-        .await
-        .map_err(StoreError::backend)
+    queries::advance_fleet_feed_head(
+        scope,
+        previous.get().to_string(),
+        now.timestamp_millis().to_string(),
+    )
+    .await
+    .map_err(StoreError::backend)
 }
 
 /// Retention is a clock rule even when no new records are appended.
@@ -195,9 +210,14 @@ where
     let expired = queries::read_expired_fleet_feed(scope, cutoff.clone())
         .await
         .map_err(StoreError::backend)?;
+    if expired.is_empty() {
+        return Ok(());
+    }
+    let mut children =
+        crate::fleet_feed_rows::read_expired(scope, cutoff.clone(), &expired).await?;
     let mut floor = state.floor;
     for row in expired {
-        let (entry, _) = decode_entry(row)?;
+        let (entry, _) = decode_entry(row, &mut children)?;
         if floor.successor().map_err(StoreError::backend)? != entry.position
             || entry.position > state.head
         {
@@ -208,8 +228,19 @@ where
         }
         floor = entry.position;
     }
+    children.finish()?;
     if floor != state.floor {
-        queries::advance_fleet_feed_floor(scope, floor.get().to_string())
+        queries::advance_fleet_feed_floor(
+            scope,
+            floor.get().to_string(),
+            now.timestamp_millis().to_string(),
+        )
+        .await
+        .map_err(StoreError::backend)?;
+        crate::generated_fleet_feed_lists::prune_feed_repositories(scope, cutoff.clone())
+            .await
+            .map_err(StoreError::backend)?;
+        crate::generated_fleet_feed_lists::prune_feed_adr_files(scope, cutoff.clone())
             .await
             .map_err(StoreError::backend)?;
         queries::prune_fleet_feed(scope, cutoff)
@@ -220,35 +251,28 @@ where
 }
 
 fn decode_entry(
-    row: queries::StoredFleetFeedEntry,
+    mut row: queries::StoredFleetFeedEntry,
+    children: &mut crate::fleet_feed_rows::FeedLists,
 ) -> Result<(FleetFeedEntry, DateTime<Utc>), StoreError> {
-    check_private_id(&required(row.entry_id, "feed.entry_id")?, "feed.entry_id")?;
-    let position = stored_position(row.position, row.position_class)?;
-    let entry: FleetFeedEntry =
-        decode_json(&required(row.payload, "feed.payload")?, "feed.payload")?;
-    validate_record(&entry.record)?;
-    if entry.position != position
-        || entry.record.envelope().position.fleet_position() != Some(position)
-        || required(row.record_id, "feed.record_id")? != entry.record.reference().id.as_str()
-    {
-        return Err(corrupt(
-            "feed.position",
-            "entry headers disagree with payload",
-        ));
-    }
-    FleetRecordHeader::decode(
-        row.router_time,
-        row.time_basis,
-        row.origin_installation,
-        row.origin_machine,
-    )?
-    .check_record(&entry.record)?;
-    let encoded_time = required(row.as_of, "feed.as_of")?;
-    let as_of: DateTime<Utc> = encoded_time.parse().map_err(StoreError::backend)?;
-    if timestamp(as_of) != encoded_time {
-        return Err(corrupt("feed.as_of", "noncanonical retention timestamp"));
-    }
-    Ok((entry, as_of))
+    let header = crate::fleet_feed_header::decode(&mut row)?;
+    let kind = crate::fleet_feed_snapshot::kind(&mut row)?;
+    let columns = crate::fleet_feed_snapshot::SnapshotColumns::decode(&mut row)?;
+    let (repositories, files) = children.take(&header.entry_id);
+    let record = columns.record(
+        kind,
+        header.envelope,
+        &header.entry_id,
+        repositories,
+        files,
+        &mut children.requests,
+    )?;
+    Ok((
+        FleetFeedEntry {
+            position: header.position,
+            record,
+        },
+        header.as_of,
+    ))
 }
 
 fn stored_position(
@@ -269,7 +293,4 @@ fn stored_position(
         ));
     }
     FleetPosition::try_from(position).map_err(|error| corrupt("feed.position", error))
-}
-fn timestamp(time: DateTime<Utc>) -> String {
-    time.to_rfc3339_opts(SecondsFormat::Nanos, true)
 }

@@ -95,8 +95,6 @@ fn setup_limits() -> TestResult<DeliveryLimits> {
         16 * 1024 * 1024,
         30,
         16 * 1024 * 1024,
-        30,
-        16 * 1024 * 1024,
         minimum_settlement_allowance::<RouterDeliveryTypes>()?,
     )?)
 }
@@ -160,13 +158,18 @@ impl PendingLocalCancelFixture {
         let now = host.now();
         let store = InteractionAtomicStore::new(owner.clone(), host);
         let limits = setup_limits()?;
+        let binding = collaboration_service::MachineSenderBinding::new(
+            String::from(target.endpoint.service_id.clone()).try_into()?,
+            peer,
+        );
         let reference = store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    let admitted = Inbox::<_, RouterDeliveryTypes>::new(scope, peer, limits)
-                        .enqueue_local_cancel(control, &PendingControlSetup, now)
-                        .await
-                        .map_err(delivery_rollback)?;
+                    let admitted =
+                        Inbox::<_, RouterDeliveryTypes, _>::new(scope, peer, limits, &binding)
+                            .enqueue_local_cancel(control, &PendingControlSetup, now)
+                            .await
+                            .map_err(delivery_rollback)?;
                     if !admitted.effects.attempts.is_empty() || !admitted.effects.reports.is_empty()
                     {
                         return Err(StoreError::backend(
@@ -259,10 +262,14 @@ impl PendingLocalCancelFixture {
         let peer = self.peer;
         let item = ItemId::new(uuid::Uuid::parse_str(self.item.as_str())?)?;
         let limits = setup_limits()?;
+        let binding = collaboration_service::MachineSenderBinding::new(
+            String::from(self.target.endpoint.service_id.clone()).try_into()?,
+            peer,
+        );
         let outcome = store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    Inbox::<_, RouterDeliveryTypes>::new(scope, peer, limits)
+                    Inbox::<_, RouterDeliveryTypes, _>::new(scope, peer, limits, &binding)
                         .local_outcome(item)
                         .await
                         .map_err(delivery_rollback)

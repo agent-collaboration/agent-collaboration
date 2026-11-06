@@ -25,10 +25,12 @@ async fn welcome_catch_up_commits_pages_and_resumes_after_a_lost_status_ack()
             .await?,
         SubmitResult::Accepted { .. }
     ));
+    harness.report_held(item_id).await?;
     // These are real central admissions and real status-stream publications.
     // Unknown local items are legal catch-up entries, not fabricated native headers.
     for _ in 0..100 {
         let item = relay_items::ordinary_message(harness.peer());
+        let reported_item = item.id();
         let envelope = serde_json::from_value(serde_json::to_value(item)?)?;
         assert!(matches!(
             harness
@@ -36,7 +38,10 @@ async fn welcome_catch_up_commits_pages_and_resumes_after_a_lost_status_ack()
                 .await?,
             SubmitResult::Accepted { .. }
         ));
+
+        harness.report_held(reported_item).await?;
     }
+
     tokio::time::timeout(BOUND, async {
         loop {
             let batch = harness.status_page(0, 101).await.map_err(|error| {
@@ -57,6 +62,7 @@ async fn welcome_catch_up_commits_pages_and_resumes_after_a_lost_status_ack()
     let first_runtime_event = harness.transport.observer.events().len();
     assert_eq!(harness.mail.status_cursor().await?, 0);
     harness.transport.observer.lose_next_status_ack();
+
     harness.release_welcome()?;
     let events = harness
         .transport
@@ -118,20 +124,13 @@ async fn welcome_catch_up_commits_pages_and_resumes_after_a_lost_status_ack()
         .ok_or("known sender header missing after catch-up")?;
     let header: serde_json::Value =
         serde_json::from_str(row.content.as_ref().ok_or("header missing")?)?;
-    assert_eq!(header["value"]["status"]["kind"], "sent");
+    assert_eq!(header["value"]["status"]["kind"], "held");
     assert_eq!(row.payload_bytes.as_deref(), Some("0"));
     assert_eq!(
         harness.connections(),
         2,
         "the same pump must reconnect after the simulated transport loss"
     );
-    // The separate Welcome receive handlers also commit while status paging runs.
-    let state = harness
-        .mail
-        .state()
-        .await?
-        .ok_or("independent Welcome receives missing")?;
-    assert_eq!(state["items"]["active"]["cycle"], 1);
-    assert_eq!(state["controls"]["active"]["cycle"], 1);
+
     harness.close().await
 }

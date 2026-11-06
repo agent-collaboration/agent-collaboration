@@ -27,6 +27,7 @@ pub(super) struct HolderNotifications {
     pub application: CollaborationApplication,
     pub publisher: Arc<NotificationPublisher>,
     pub owner: Arc<InteractionStore>,
+    binding: Arc<collaboration_service::MachineSenderBinding>,
     actors: SubscriptionDeliveryService,
     mail: NativeMailOwner,
 }
@@ -38,6 +39,10 @@ pub(super) enum MailWorkerStart {
 }
 
 impl HolderNotifications {
+    pub fn mail_runtime(&self) -> &collaboration_service::MailDeliveryRuntime {
+        self.mail.runtime()
+    }
+
     pub async fn hold_progress_writer(
         &self,
     ) -> Result<
@@ -86,6 +91,10 @@ impl HolderNotifications {
     ) -> TestResultOwner {
         let session = board.mail_session().ok_or("holder mail session")?;
         let peer = session.peer;
+        let binding = Arc::new(collaboration_service::MachineSenderBinding::new(
+            String::from(machine.service_id().clone()).try_into()?,
+            peer,
+        ));
         let owner =
             Arc::new(InteractionStore::open(root.join("notification-interactions.sqlite")).await?);
         let carrier = Arc::new(SessionDeliveryRouter::new(Vec::new()));
@@ -135,6 +144,7 @@ impl HolderNotifications {
         board.attach_publisher(&publisher);
         let application = (identity.with_notification_publisher(publisher.clone())).build();
         Ok(Self {
+            binding,
             application,
             publisher,
             owner,
@@ -158,12 +168,21 @@ impl HolderNotifications {
             self.owner.clone(),
             Arc::new(TokioHost::new(Arc::new(NoObservationCalls), SystemClock)),
         );
+        let binding = self.binding.clone();
         Ok(observer
-            .transaction(|scope| {
+            .transaction(move |scope| {
                 Box::pin(async move {
-                    fleet_sync_delivery::test_support::snapshot(scope)
-                        .await
-                        .map_err(StoreError::backend)
+                    fleet_sync_delivery::test_support::snapshot::<
+                        _,
+                        collaboration_contracts::RouterDeliveryTypes,
+                        _,
+                    >(
+                        scope,
+                        fleet_sync_delivery::DeliveryHostRole::Machine,
+                        binding.as_ref(),
+                    )
+                    .await
+                    .map_err(StoreError::backend)
                 })
             })
             .await?)

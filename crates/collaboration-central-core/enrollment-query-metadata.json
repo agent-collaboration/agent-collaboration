@@ -1,16 +1,16 @@
 {
   "producer": "owned sqlx-turso / Turso 0.8.1 describe",
   "sources": {
-    "enrollment-queries.json": "1fe21166202bf38d24d902bb1127735f53f6b9b3c7af5dcac134331eb627e927",
+    "enrollment-queries.json": "f7e228fdbaf79454f12dede4b1377ce5561d552bae86b97fc3c5b24f53276d0c",
     "generator:fleet-sync-query-gen/Cargo.toml": "01210c567dcbccb4ff127626a0ff7625641edd4c5f0787ea41777757b1eaa3e6",
     "generator:fleet-sync-query-gen/src/expression_classes.rs": "14dc40abaec059e437d3e44bc187b9560812b0ed21ee2ad9d558364032fb097e",
     "generator:fleet-sync-query-gen/src/lib.rs": "df50be1a279adf266fdd12d184637b0113740390c0cef7273d1995dea0475152",
     "generator:fleet-sync-query-gen/src/main.rs": "528bf0583d11bde8fc4b7c0d5a2ea21bde8380e452c0c123a22929dfa5635cfd",
-    "generator:fleet-sync-query-gen/src/native_generation.rs": "c50abad4f34d2e0f9fef19d5623c6ce1be2e4064ec17ef2f4fa73cdf83f5733f",
+    "generator:fleet-sync-query-gen/src/native_generation.rs": "621160213c6b6cd17f5ee448c240088269476aa2feea99ef4d75627b0412b2d5",
     "generator:fleet-sync-query-gen/src/query_render.rs": "2584f37650c8355b5537362ff5f66c8cf6a3955eb7a903faa5c5887ec26c880a",
     "generator:fleet-sync-query-gen/src/source_freshness.rs": "8fc73a2d5dcfb3d81f7a10b92507ff0ad2a969c0a5b48c9528b3b5016f58ddb3",
     "generator:fleet-sync-query-gen/src/source_inputs.rs": "8cabacd9d34273e5cf16201c1680b89d755c98b5060ea0004ee1e5dcea4ec622",
-    "generator:fleet-sync-query-gen/src/source_manifest.rs": "770e53cb230b27d44731507738e08f7217dba8fc230617d97bda765c78be8ad8",
+    "generator:fleet-sync-query-gen/src/source_manifest.rs": "311dfe2915aad7ddbf8d1c453f0ad4924603ace53e703b2369221dd46d82165a",
     "generator:sqlx-durable-object-core/Cargo.toml": "5af0f7433ff001c4f2347d0575306bb35da43f53b3b75ae4c0fb2c3a0b5e308f",
     "generator:sqlx-durable-object-core/src/arguments.rs": "d278847139d6d4824d9b59f4c50302b8aad641a549ddbfefa1eba55b499d876f",
     "generator:sqlx-durable-object-core/src/error.rs": "1c1484a9714c5bf4bca07d8faf45413841d86f0bcd1c65dda44bafc362ee8bac",
@@ -54,21 +54,19 @@
     "generator:sqlx-turso/src/lib.rs": "32ec3ac4ca4d0d703a452496262928a3a00ddfdf71eac8cbbe4ce1a3da69d9b5",
     "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
-    "registry_migrations/0001_machine_enrollments.sql": "220f288d9566909f2fbc117dd72ac5494add2dbd7feab2dcfffc34d24974f1f4",
-    "registry_migrations/0002_lease_incarnation.sql": "55945fb64440b5ac2dc5a5c689ca8ce857b26e33567a462743f7e1418e94ca30",
-    "registry_migrations/0003_lease_acknowledgements.sql": "508c8ddbe10b5ac7d82fd67abca61d7ddeba5e0cdaad86af71d7279f0ce5c3c9",
-    "registry_migrations/0004_notice_marks.sql": "6aea832c04abc09175eeca0b41737704bd4c58f6c546653a89ab9ad13e16a8af",
-    "sql/activate_enrollment.sql": "5f617a54c1c93c163d179ffadb5ea52245697e9129a0543ef2499206b42937c7",
-    "sql/admit_readmission.sql": "0b4584311749362b2e1996766663386d5468fa9d6a542dd5260fc87783b629c4",
-    "sql/insert_enrollment.sql": "7dc223b4f8028fcaec8360260a757ae9415a2ac7ae604ad10fb2c911bcd8ce0c",
-    "sql/read_enrollments.sql": "b0afc659b505f24d61b6862c5d82a0246a720f3458b974b75c9a2fcfc912a150",
-    "sql/read_installation_peer_page.sql": "21d794129fc037759410ee79cea7ec323a821bb400925f3c3b101dfcee410b03",
-    "sql/record_machine_presence.sql": "372578f2acb0862e4f6f1bbecfbeefa2f00f346ca7c8962b5dd4a6ef4d65fb36",
-    "sql/revoke_enrollment.sql": "dc0e58d24b69f15328cc65c7638f06d96dd068ec7fe7f8f458e92374e2ee324d",
-    "sql/update_enrollment.sql": "93fbe36d3f2d4595da15e37e1e0b90da108236e60cc69f6267b02bf32f264c89",
-    "src/generated_enrollment.rs": "b3cbf5b6e717c44fc2e819b35604a1f18455ac9a4960fa6354794360bc2ff8c9"
+    "registry_migrations/0001_machine_enrollments.sql": "9ad00775473cd1ab27e95a20396eb7b2426accc95e226441bff409055384f3c7",
+    "registry_migrations/0002_lease_incarnation.sql": "c43062856051d08a1038ff40e89311918873426a1c158c7b55cb19bc8889aa59",
+    "sql/activate_enrollment.sql": "7b0562364b1495faf4b99c9193ca7512c989ef49ce5757881fb6453aed70e7f4",
+    "sql/admit_readmission.sql": "bd401395df0e53628e51d8369af76bc87190890e83956825a652959b29113946",
+    "sql/insert_enrollment.sql": "d210e33d88c7595fa83b548ebb196b6ef2307a7b874c6266bf9dd5e240e2aafe",
+    "sql/read_enrollments.sql": "bcdc398fabbe9286eb0daf4d7999cff000938009cf64b51f69121913b549a3d0",
+    "sql/read_installation_peer_page.sql": "027ac1bddf7cf90a5dd2d87c615101fc23b63d1b7cdffcfa3b621903afb2edac",
+    "sql/record_machine_presence.sql": "765a33252593f528b5fe50713c7a1de6ebd2978f28561c9d88cbc294d7e8ca7f",
+    "sql/revoke_enrollment.sql": "676319736c71705f42d2d1b28bbeb70e5fe2b829ecf70bd824240c1fa5a111f4",
+    "sql/update_enrollment.sql": "1f9526d14cb35354be0bd19d2e9f95a05b4bba38fa5a05741205268941f52123",
+    "src/generated_enrollment.rs": "b7b2eeb92ec921267f5f2f11ad99310ff8fcd17236b48be7f57165e4c664be14"
   },
-  "queries_digest": "9ed491dfc31d9fd48b1d7a805b12163a1fa873545d04b4b9b0638c27f9f335b1",
+  "queries_digest": "4c464014115d5b649bfceb99cad5c82949d229622f393dbfbc1496ee282b36d3",
   "queries": [
     {
       "name": "read_enrollments",
@@ -143,32 +141,46 @@
           "rust_type": "Option<String>",
           "nullable": null,
           "type_source": "driver"
+        },
+        {
+          "name": "created_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "updated_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
         }
       ]
     },
     {
       "name": "insert_enrollment",
-      "bind_slots": 6,
+      "bind_slots": 8,
       "columns": []
     },
     {
       "name": "update_enrollment",
-      "bind_slots": 5,
-      "columns": []
-    },
-    {
-      "name": "revoke_enrollment",
-      "bind_slots": 2,
-      "columns": []
-    },
-    {
-      "name": "admit_readmission",
       "bind_slots": 6,
       "columns": []
     },
     {
+      "name": "revoke_enrollment",
+      "bind_slots": 3,
+      "columns": []
+    },
+    {
+      "name": "admit_readmission",
+      "bind_slots": 7,
+      "columns": []
+    },
+    {
       "name": "activate_enrollment",
-      "bind_slots": 1,
+      "bind_slots": 2,
       "columns": []
     },
     {

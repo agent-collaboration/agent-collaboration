@@ -2,7 +2,7 @@
 
 use crate::registry_peer_lookup::PeerDirectory;
 use crate::{
-    CallerContext, CopyKind, DeliveryKind, FleetKind, MailboxKind, ObjectAddress, RegistryKind,
+    CallerContext, CopyKind, DeliveryKind, FleetKind, ObjectAddress, RegistryKind,
     SerializedObjectCall, SessionKind,
     object_call_envelope::{encode_refusal, encode_shared_call},
 };
@@ -18,12 +18,23 @@ use serde::de::DeserializeOwned;
 use std::future::Future;
 
 mod copy_followup;
-mod lease_publication;
 mod lease_settlement;
 mod registration_gate;
 mod session_routes;
 
 pub trait PlatformIo: Clock + IdSource + WakeScheduler + Send + Sync + 'static {
+    fn reply_deadline(&self, remaining: std::time::Duration) -> impl Future<Output = ()> + Send;
+    #[cfg(feature = "conformance")]
+    fn before_local_call(
+        &self,
+        _request: &[u8],
+    ) -> impl Future<Output = Result<(), CallFailure>> + Send {
+        std::future::ready(Ok(()))
+    }
+    #[cfg(feature = "conformance")]
+    fn drop_local_reply(&self, _request: &[u8]) -> Result<bool, CallFailure> {
+        Ok(false)
+    }
     fn object_call(
         &self,
         destination: ObjectAddress,
@@ -31,10 +42,18 @@ pub trait PlatformIo: Clock + IdSource + WakeScheduler + Send + Sync + 'static {
     ) -> impl Future<Output = Result<Vec<u8>, CallFailure>> + Send;
 }
 
+pub(crate) type LocalFleetCalls = std::sync::Arc<
+    dyn Fn(Vec<u8>) -> durable_steps::BoxFuture<'static, Result<Vec<u8>, CallFailure>>
+        + Send
+        + Sync,
+>;
+
 pub struct CoreHost<Io: PlatformIo> {
+    local_calls: std::sync::Arc<std::sync::OnceLock<LocalFleetCalls>>,
     io: std::sync::Arc<Io>,
     caller: SharedTaskCaller,
     publication: Option<crate::mail_status_dispatch::PublicationDispatcher>,
+    push: Option<crate::mail_push_dispatch::PushDispatcher>,
     authoritative_receiver: ReceiverId,
     #[cfg(feature = "conformance")]
     dispatches: std::sync::Arc<std::sync::Mutex<Vec<ObjectAddress>>>,
@@ -56,8 +75,6 @@ enum SharedTaskCaller {
         database: DatabaseId,
     },
     StoreOnly,
-    Fleet(CallerContext<FleetKind>),
-    Mailbox(CallerContext<MailboxKind>),
     Session(CallerContext<SessionKind>),
     Delivery,
 }
@@ -66,7 +83,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
     #[cfg(feature = "conformance")]
     pub fn conformance_registry(io: Io, authoritative_receiver: ReceiverId) -> Self {
         Self::registry(
-            io,
+            std::sync::Arc::new(io),
             authoritative_receiver,
             std::sync::Arc::new(|_peer| Box::pin(std::future::ready(Err(no_route())))),
             None,
@@ -74,13 +91,13 @@ impl<Io: PlatformIo> CoreHost<Io> {
     }
 
     pub(crate) fn registry(
-        io: Io,
+        io: std::sync::Arc<Io>,
         authoritative_receiver: ReceiverId,
         peer_directory: PeerDirectory,
         lease_store: Option<std::sync::Arc<dyn crate::registry_lease_store::RegistryLeaseStore>>,
     ) -> Self {
         Self {
-            io: std::sync::Arc::new(io),
+            io,
             caller: SharedTaskCaller::Registry {
                 caller: CallerContext::for_object(()),
                 peer_directory,
@@ -88,21 +105,8 @@ impl<Io: PlatformIo> CoreHost<Io> {
             },
             authoritative_receiver,
             publication: None,
-            #[cfg(feature = "conformance")]
-            dispatches: Default::default(),
-            #[cfg(feature = "conformance")]
-            forward_route_probe: Default::default(),
-            #[cfg(feature = "conformance")]
-            revocation_probe: Default::default(),
-        }
-    }
-
-    pub(crate) fn fleet(io: std::sync::Arc<Io>, authoritative_receiver: ReceiverId) -> Self {
-        Self {
-            io,
-            caller: SharedTaskCaller::Fleet(CallerContext::for_object(())),
-            authoritative_receiver,
-            publication: None,
+            push: None,
+            local_calls: Default::default(),
             #[cfg(feature = "conformance")]
             dispatches: Default::default(),
             #[cfg(feature = "conformance")]
@@ -122,6 +126,8 @@ impl<Io: PlatformIo> CoreHost<Io> {
             caller: SharedTaskCaller::StoreOnly,
             authoritative_receiver,
             publication: None,
+            push: None,
+            local_calls: Default::default(),
             #[cfg(feature = "conformance")]
             dispatches: Default::default(),
             #[cfg(feature = "conformance")]
@@ -137,6 +143,8 @@ impl<Io: PlatformIo> CoreHost<Io> {
             caller: SharedTaskCaller::Delivery,
             authoritative_receiver: self.authoritative_receiver,
             publication: self.publication.clone(),
+            push: self.push.clone(),
+            local_calls: self.local_calls.clone(),
             #[cfg(feature = "conformance")]
             dispatches: self.dispatches.clone(),
             #[cfg(feature = "conformance")]
@@ -146,32 +154,41 @@ impl<Io: PlatformIo> CoreHost<Io> {
         }
     }
 
-    pub(crate) fn session(
-        io: std::sync::Arc<Io>,
-        authoritative_receiver: ReceiverId,
-        installation: ServiceId,
-        publication: crate::mail_status_dispatch::PublicationDispatcher,
-    ) -> Self {
+    pub(crate) fn session_for(&self, installation: ServiceId) -> Self {
         Self {
-            io,
-            caller: SharedTaskCaller::Session(CallerContext::for_object(installation)),
-            authoritative_receiver,
-            publication: Some(publication),
+            io: self.io.clone(),
+            caller: SharedTaskCaller::Session(CallerContext::for_machine(installation)),
+            authoritative_receiver: self.authoritative_receiver,
+            publication: self.publication.clone(),
+            push: self.push.clone(),
+            local_calls: self.local_calls.clone(),
             #[cfg(feature = "conformance")]
-            dispatches: Default::default(),
+            dispatches: self.dispatches.clone(),
             #[cfg(feature = "conformance")]
-            forward_route_probe: Default::default(),
+            forward_route_probe: self.forward_route_probe.clone(),
             #[cfg(feature = "conformance")]
-            revocation_probe: Default::default(),
+            revocation_probe: self.revocation_probe.clone(),
         }
     }
-
-    pub(crate) fn mailbox(io: Io, receiver: ReceiverId, installation: ServiceId) -> Self {
-        let mut host = Self::for_store(io, receiver);
-        host.caller = SharedTaskCaller::Mailbox(CallerContext::for_object(installation));
-        host
+    pub(crate) fn with_publication(
+        mut self,
+        publication: crate::mail_status_dispatch::PublicationDispatcher,
+    ) -> Self {
+        self.publication = Some(publication);
+        self
     }
-
+    pub(crate) fn with_push(mut self, push: crate::mail_push_dispatch::PushDispatcher) -> Self {
+        self.push = Some(push);
+        self
+    }
+    pub(crate) fn install_local_calls(
+        &self,
+        calls: LocalFleetCalls,
+    ) -> Result<(), durable_steps::StoreError> {
+        self.local_calls.set(calls).map_err(|_| {
+            durable_steps::StoreError::backend("Fleet local dispatcher already installed")
+        })
+    }
     pub(crate) async fn gather_welcome(
         &self,
         peer: PeerId,
@@ -247,7 +264,12 @@ impl<Io: PlatformIo> CoreHost<Io> {
             .revocation_probe
             .recorded(identity)
             .map_err(|_| no_route())?;
-        let answer = self.io.object_call(call.destination, call.bytes).await?;
+        let answer = self
+            .transmit(SerializedObjectCall {
+                destination: call.destination,
+                bytes: call.bytes,
+            })
+            .await?;
         serde_json::from_slice(&answer).map_err(|_| CallFailure::AnswerLost)
     }
 
@@ -260,59 +282,6 @@ impl<Io: PlatformIo> CoreHost<Io> {
         let target = serde_json::to_value(target).map_err(encode_refusal)?;
         let request = serde_json::to_value(request).map_err(encode_refusal)?;
         match &self.caller {
-            SharedTaskCaller::Fleet(caller) => {
-                use crate::machine_notice_delivery::DeliverMachineNotice;
-                if Call::KIND != DeliverMachineNotice::KIND {
-                    return Err(no_route());
-                }
-                let target: DeliverMachineNotice = decode(target)?;
-                encode_shared_call::<FleetKind, DeliveryKind, DeliverMachineNotice>(
-                    caller,
-                    target.installation.clone(),
-                    target,
-                    decode(request)?,
-                    identity,
-                )
-            }
-            SharedTaskCaller::Mailbox(caller) => {
-                if Call::KIND == crate::machine_notice_delivery::DeliverMachineNotice::KIND {
-                    let target: crate::machine_notice_delivery::DeliverMachineNotice =
-                        decode(target)?;
-                    let notice: board_sync_protocol::BoardNotice = decode(request)?;
-                    if caller.address() != ObjectAddress::Mailbox(target.installation.clone())
-                        || !matches!(notice, board_sync_protocol::BoardNotice::MailWaiting { .. })
-                    {
-                        return Err(no_route());
-                    }
-                    return encode_shared_call::<
-                        MailboxKind,
-                        DeliveryKind,
-                        crate::machine_notice_delivery::DeliverMachineNotice,
-                    >(
-                        caller,
-                        target.installation.clone(),
-                        target,
-                        notice,
-                        identity,
-                    );
-                }
-                if Call::KIND != fleet_sync_delivery::PublishCall::<board_sync_protocol::BoardDeliveryTypes>::KIND {
-                    return Err(no_route());
-                }
-                let target: fleet_sync_delivery::PublishCall<
-                    board_sync_protocol::BoardDeliveryTypes,
-                > = decode(target)?;
-                let fleet_sync_delivery::PublicationTarget::StatusStream { route, .. } =
-                    &target.target
-                else {
-                    return Err(no_route());
-                };
-                encode_shared_call::<
-                    MailboxKind,
-                    DeliveryKind,
-                    fleet_sync_delivery::PublishCall<board_sync_protocol::BoardDeliveryTypes>,
-                >(caller, route.clone(), target, decode(request)?, identity)
-            }
             SharedTaskCaller::Session(caller) => session_routes::classify_session(
                 Call::KIND,
                 caller,
@@ -353,23 +322,30 @@ impl<Io: PlatformIo> CoreHost<Io> {
                         )
                     };
                 }
+                if Call::KIND == fleet_sync_session::SchemaSupportRegistry::KIND
+                    || Call::KIND == crate::session_calls::WelcomeLeases::KIND
+                {
+                    let peer = if Call::KIND == fleet_sync_session::SchemaSupportRegistry::KIND {
+                        decode::<fleet_sync_protocol::ReportSchemaSupport>(request.clone())?.peer
+                    } else {
+                        decode::<PeerId>(request.clone())?
+                    };
+                    let source =
+                        CallerContext::<SessionKind>::for_machine(peer_directory(peer).await?);
+                    return session_routes::classify_session(
+                        Call::KIND,
+                        &source,
+                        self.authoritative_receiver,
+                        target,
+                        request,
+                        identity,
+                    );
+                }
                 match Call::KIND {
                     crate::machine_notice_delivery::DeliverMachineNotice::KIND => {
                         let target: crate::machine_notice_delivery::DeliverMachineNotice = decode(target)?;
                         encode_shared_call::<RegistryKind, DeliveryKind, crate::machine_notice_delivery::DeliverMachineNotice>(
-                            caller, target.installation.clone(), target, decode(request)?, identity,
-                        )
-                    }
-                    crate::mail_submit_calls::MailboxSubmit::KIND => {
-                        let target: crate::mail_submit_calls::MailboxSubmit = decode(target)?;
-                        encode_shared_call::<RegistryKind, MailboxKind, crate::mail_submit_calls::MailboxSubmit>(
-                            caller, target.installation.clone(), target, decode(request)?, identity,
-                        )
-                    }
-                    crate::mailbox_requests::MailboxRequest::KIND => {
-                        let target: crate::mailbox_requests::MailboxRequest = decode(target)?;
-                        encode_shared_call::<RegistryKind, MailboxKind, crate::mailbox_requests::MailboxRequest>(
-                            caller, target.installation.clone(), target, decode(request)?, identity,
+                            caller, (), target, decode(request)?, identity,
                         )
                     }
                     #[cfg(feature = "conformance")]
@@ -404,27 +380,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                         let target: crate::machine_enrollment::EndPeerSessions = decode(target)?;
                         encode_shared_call::<RegistryKind, DeliveryKind, crate::machine_enrollment::EndPeerSessions>(
                             caller,
-                            peer_directory(target.peer).await?,
-                            target,
-                            decode(request)?,
-                            identity,
-                        )
-                    }
-                    crate::mailbox_lifecycle::ClosePeerMailbox::KIND => {
-                        let target: crate::mailbox_lifecycle::ClosePeerMailbox = decode(target)?;
-                        encode_shared_call::<RegistryKind, MailboxKind, crate::mailbox_lifecycle::ClosePeerMailbox>(
-                            caller,
-                            peer_directory(target.peer).await?,
-                            target,
-                            decode(request)?,
-                            identity,
-                        )
-                    }
-                    crate::mailbox_lifecycle::OpenPeerMailbox::KIND => {
-                        let target: crate::mailbox_lifecycle::OpenPeerMailbox = decode(target)?;
-                        encode_shared_call::<RegistryKind, MailboxKind, crate::mailbox_lifecycle::OpenPeerMailbox>(
-                            caller,
-                            peer_directory(target.peer).await?,
+                            (),
                             target,
                             decode(request)?,
                             identity,
@@ -438,7 +394,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                         }
                         encode_shared_call::<RegistryKind, DeliveryKind, HolderRelease>(
                             caller,
-                            peer_directory(target.holder).await?,
+                            (),
                             target,
                             request,
                             identity,
@@ -448,7 +404,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                         let target: HolderWithdrawal = decode(target)?;
                         encode_shared_call::<RegistryKind, DeliveryKind, HolderWithdrawal>(
                             caller,
-                            peer_directory(target.holder).await?,
+                            (),
                             target,
                             decode(request)?,
                             identity,
@@ -458,15 +414,30 @@ impl<Io: PlatformIo> CoreHost<Io> {
                     RetirementAdmission::KIND => to_fleet!(RetirementAdmission),
                     ClaimReservation::KIND => to_fleet!(ClaimReservation),
                     ClaimSettlement::KIND => to_fleet!(ClaimSettlement),
-                    crate::fleet_lease_calls::AdvanceLeaseIncarnation::KIND => to_fleet!(crate::fleet_lease_calls::AdvanceLeaseIncarnation),
                     crate::fleet_lease_calls::ClaimGranted::KIND => to_fleet!(crate::fleet_lease_calls::ClaimGranted),
-                    crate::fleet_lease_calls::PublishLeaseProjection::KIND => to_fleet!(crate::fleet_lease_calls::PublishLeaseProjection),
                     _ => Err(no_route()),
                 }
             }
         }
     }
     async fn transmit(&self, call: SerializedObjectCall) -> Result<Vec<u8>, CallFailure> {
+        if call.destination == ObjectAddress::Fleet
+            && let Some(local) = self.local_calls.get()
+        {
+            #[cfg(feature = "conformance")]
+            {
+                self.io.before_local_call(&call.bytes).await?;
+                let request = call.bytes.clone();
+                let answer = local(call.bytes).await?;
+                if self.io.drop_local_reply(&request)? {
+                    return Err(CallFailure::AnswerLost);
+                }
+                return Ok(answer);
+            }
+            #[cfg(not(feature = "conformance"))]
+            return local(call.bytes).await;
+        }
+        // Observe actual platform calls; in-Fleet calls use the local fault controls above.
         #[cfg(feature = "conformance")]
         if let Ok(mut dispatches) = self.dispatches.lock() {
             dispatches.push(call.destination.clone());
@@ -497,6 +468,15 @@ impl<Io: PlatformIo> Host for CoreHost<Io> {
         request: Call::Request,
         identity: CallId,
     ) -> Result<Call::Answer, CallFailure> {
+        if Call::KIND
+            == fleet_sync_delivery::PushCall::<board_sync_protocol::BoardDeliveryTypes>::KIND
+            && let Some(push) = &self.push
+        {
+            let target = decode(serde_json::to_value(target).map_err(encode_refusal)?)?;
+            let request = decode(serde_json::to_value(request).map_err(encode_refusal)?)?;
+            let answer = push(target, request, identity).await?;
+            return decode(serde_json::to_value(answer).map_err(encode_refusal)?);
+        }
         if Call::KIND == RegistrationAdmission::KIND {
             let _: RegistrationAdmission =
                 decode(serde_json::to_value(&target).map_err(encode_refusal)?)?;
@@ -539,37 +519,12 @@ impl<Io: PlatformIo> Host for CoreHost<Io> {
             self.revocation_probe
                 .before_dispatch(
                     crate::machine_enrollment::conformance_revocation::RecordedLifecycleCall {
-                        identity: recorded_identity.clone(),
-                        destination: call.destination.clone(),
-                        bytes: call.bytes.clone(),
-                    },
-                )
-                .await
-                .map_err(|_| CallFailure::AnswerLost)?;
-        }
-        #[cfg(feature = "conformance")]
-        if Call::KIND == crate::mailbox_lifecycle::OpenPeerMailbox::KIND {
-            self.revocation_probe
-                .before_open_dispatch(
-                    crate::machine_enrollment::conformance_revocation::RecordedLifecycleCall {
-                        identity: recorded_identity.clone(),
-                        destination: call.destination.clone(),
-                        bytes: call.bytes.clone(),
-                    },
-                )
-                .await
-                .map_err(|_| CallFailure::AnswerLost)?;
-        }
-        #[cfg(feature = "conformance")]
-        if Call::KIND == crate::mailbox_lifecycle::ClosePeerMailbox::KIND {
-            self.revocation_probe
-                .record_close_dispatch(
-                    crate::machine_enrollment::conformance_revocation::RecordedLifecycleCall {
                         identity: recorded_identity,
                         destination: call.destination.clone(),
                         bytes: call.bytes.clone(),
                     },
                 )
+                .await
                 .map_err(|_| CallFailure::AnswerLost)?;
         }
         let answer = self.transmit(call).await?;

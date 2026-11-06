@@ -276,7 +276,7 @@ impl<SharedHost: Host> ObjectHost for CloudflareStorageHost<SharedHost> {
                 && let Some(frame) = identity.answer_frame()
                 && self
                     .faults
-                    .drop_answer(frame)
+                    .drop_answer(to, frame)
                     .map_err(|_| SocketFailure::Closed)?
             {
                 return Ok(());

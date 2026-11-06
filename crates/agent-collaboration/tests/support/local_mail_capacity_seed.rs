@@ -114,15 +114,9 @@ pub(super) async fn seed_to_last_slot(
             "fixture requires a positive settlement reserve",
         ));
     }
-    let limits = DeliveryLimits::new::<RouterTypes>(
-        1024 * 1024 * 1024,
-        200_000,
-        256 * 1024 * 1024,
-        50_000,
-        LOCAL_INBOX_BYTES,
-        reserve,
-    )
-    .map_err(StoreError::backend)?;
+    let limits =
+        DeliveryLimits::new::<RouterTypes>(256 * 1024 * 1024, 50_000, LOCAL_INBOX_BYTES, reserve)
+            .map_err(StoreError::backend)?;
     InteractionAtomicStore::new(owner, Arc::new(SqlHost))
         .transaction(move |scope| {
             Box::pin(async move {
@@ -130,10 +124,12 @@ pub(super) async fn seed_to_last_slot(
                     now: chrono::Utc::now(),
                 };
                 let now = SyncTime::from_unix_millis(consumer.now.timestamp_millis());
-                let service = super::super::local_mail_surfaces::SERVICE
+                let service: message_board::ServiceId = super::super::local_mail_surfaces::SERVICE
                     .to_owned()
                     .try_into()
                     .map_err(StoreError::backend)?;
+                let binding =
+                    collaboration_service::MachineSenderBinding::new(service.clone(), peer);
                 let mut used = already_used;
                 let mut count = 0_u32;
                 let mut first = None;
@@ -182,7 +178,8 @@ pub(super) async fn seed_to_last_slot(
                             .ok_or_else(|| StoreError::backend("no pending custody was seeded"))?;
                         let last: DeliveryItemRef =
                             last.ok_or_else(|| StoreError::backend("last seeded item missing"))?;
-                        let mut inbox = Inbox::<_, RouterTypes>::new(scope, peer, limits);
+                        let mut inbox =
+                            Inbox::<_, RouterTypes, _>::new(scope, peer, limits, &binding);
                         for reference in [&first, &last] {
                             if inbox
                                 .local_outcome(reference.item)
@@ -232,7 +229,7 @@ pub(super) async fn seed_to_last_slot(
                         .on_received(scope, &item)
                         .await
                         .map_err(StoreError::backend)?;
-                    let admission = Inbox::<_, RouterTypes>::new(scope, peer, limits)
+                    let admission = Inbox::<_, RouterTypes, _>::new(scope, peer, limits, &binding)
                         .enqueue_local(item, &consumer, now)
                         .await
                         .map_err(StoreError::backend)?;

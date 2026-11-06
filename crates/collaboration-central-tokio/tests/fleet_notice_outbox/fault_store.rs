@@ -1,12 +1,12 @@
 //! Inject a real uniqueness error after the Fleet callback, inside its transaction.
-use super::{Io, Native};
 use collaboration_central_core::{
-    CoreHost, ObjectHost, RegistrationEdits, RegistrationSnapshot, SocketFailure,
+    CoreHost, ObjectHost, PlatformIo, RegistrationEdits, RegistrationSnapshot, SocketFailure,
 };
 use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScope};
 use fleet_sync_protocol::{CloseReason, ConnectionId};
 use fleet_sync_session::Bytes;
+use fleet_sync_tokio_runner::TokioObject;
 use sqlx_core::{query::query, row::Row};
 use std::{
     future::Future,
@@ -15,13 +15,20 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
 };
-pub struct FaultStore {
-    pub object: Arc<Native>,
+pub struct FaultStore<Io: PlatformIo> {
+    pub object: Arc<TokioObject<CoreHost<Io>>>,
     pub armed: Arc<AtomicBool>,
     pub injected: Arc<AtomicBool>,
 }
-impl AtomicStore for FaultStore {
-    type Scope<'transaction> = <Native as AtomicStore>::Scope<'transaction>;
+impl<Io: PlatformIo> durable_steps::ReborrowScope for FaultStore<Io> {
+    fn reborrow<'scope, 'transaction: 'scope>(
+        scope: &'scope mut Self::Scope<'transaction>,
+    ) -> Self::Scope<'scope> {
+        TokioObject::<CoreHost<Io>>::reborrow(scope)
+    }
+}
+impl<Io: PlatformIo> AtomicStore for FaultStore<Io> {
+    type Scope<'transaction> = <TokioObject<CoreHost<Io>> as AtomicStore>::Scope<'transaction>;
     async fn transaction<Output, Callback>(&self, run: Callback) -> Result<Output, StoreError>
     where
         Output: Send + 'static,
@@ -37,11 +44,11 @@ impl AtomicStore for FaultStore {
         self.object.transaction(move |scope|Box::pin(async move {
             let result=run(scope).await?;
             if armed.load(Ordering::SeqCst) {
-                let row=query::<sqlx_turso::Turso>("SELECT count(*) AS count FROM workspaces").fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
+                let row=query::<sqlx_turso::Turso>("SELECT count(*) AS count FROM fleet_workspaces").fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
                 let count:i64=row.try_get("count").map_err(StoreError::backend)?;
                 if count>0 && armed.swap(false,Ordering::SeqCst) {
                     injected.store(true,Ordering::SeqCst);
-                    query::<sqlx_turso::Turso>("INSERT INTO feed_readers(reader_id,installation,last_read_position) SELECT reader_id,installation,last_read_position FROM feed_readers LIMIT 1").execute(scope.executor()).await.map_err(StoreError::backend)?;
+                    query::<sqlx_turso::Turso>("INSERT INTO fleet_feed_readers(reader_id,installation,last_read_position,created_at,updated_at) SELECT reader_id,installation,last_read_position,created_at,updated_at FROM fleet_feed_readers LIMIT 1").execute(scope.executor()).await.map_err(StoreError::backend)?;
                     return Err(StoreError::Aborted {reason:"expected a real feed-reader uniqueness error".into()});
                 }
             }
@@ -49,13 +56,13 @@ impl AtomicStore for FaultStore {
         })).await
     }
 }
-pub struct FaultHost {
+pub struct FaultHost<Io: PlatformIo> {
     pub native: Arc<TokioStorageHost<CoreHost<Io>>>,
-    pub store: Arc<FaultStore>,
+    pub store: Arc<FaultStore<Io>>,
 }
-impl ObjectHost for FaultHost {
+impl<Io: PlatformIo> ObjectHost for FaultHost<Io> {
     type Database = sqlx_turso::Turso;
-    type Store = FaultStore;
+    type Store = FaultStore<Io>;
     type Wake = CoreHost<Io>;
     fn store(&self) -> &Arc<Self::Store> {
         &self.store

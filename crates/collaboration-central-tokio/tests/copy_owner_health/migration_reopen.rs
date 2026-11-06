@@ -187,8 +187,14 @@ async fn create_project(base: &str) -> ConformanceResult<Value> {
 struct MigrationStamp {
     row_id: String,
     corpus: String,
-    version: String,
-    checksum: String,
+    version: i64,
+    checksum: Vec<u8>,
+    created_at: i64,
+    updated_at: i64,
+    installed_on: i64,
+    description: String,
+    success: i64,
+    execution_time: i64,
 }
 
 // The caller has stopped the owning server. Only central's own stamp is changed.
@@ -198,10 +204,10 @@ async fn remove_stamp(root: &Path) -> ConformanceResult<MigrationStamp> {
         .connect()
         .await?;
     let result = async {
-        let rows = query::<sqlx_turso::Turso>("SELECT row_id, corpus, version, checksum FROM central_schema_migrations WHERE corpus='fleet-sync-receiver' AND version='3'").fetch_all(&mut store).await?;
+        let rows = query::<sqlx_turso::Turso>("SELECT row_id,corpus,version,checksum,created_at,updated_at,installed_on,description,success,execution_time FROM central_schema_migrations WHERE corpus='fleet-sync-receiver' AND version='3'").fetch_all(&mut store).await?;
         let [row] = rows.as_slice() else { return Err("fixture did not have exactly one receiver version3 stamp".into()); };
-        let stamp = MigrationStamp { row_id: row.try_get("row_id")?, corpus: row.try_get("corpus")?, version: row.try_get("version")?, checksum: row.try_get("checksum")? };
-        query::<sqlx_turso::Turso>("DELETE FROM central_schema_migrations WHERE corpus=? AND version=? AND checksum=?").bind(&stamp.corpus).bind(&stamp.version).bind(&stamp.checksum).execute(&mut store).await?;
+        let stamp = MigrationStamp { row_id: row.try_get("row_id")?, corpus: row.try_get("corpus")?, version: row.try_get("version")?, checksum: row.try_get("checksum")?,created_at:row.try_get("created_at")?,updated_at:row.try_get("updated_at")?,installed_on:row.try_get("installed_on")?,description:row.try_get("description")?,success:row.try_get("success")?,execution_time:row.try_get("execution_time")? };
+        query::<sqlx_turso::Turso>("DELETE FROM central_schema_migrations WHERE corpus=? AND version=? AND checksum=?").bind(&stamp.corpus).bind(stamp.version).bind(&stamp.checksum).execute(&mut store).await?;
         Ok(stamp)
     }.await;
     store.close().await?;
@@ -214,9 +220,9 @@ async fn restore_stamp(root: &Path, stamp: &MigrationStamp) -> ConformanceResult
         .connect()
         .await?;
     let result = async {
-        query::<sqlx_turso::Turso>("INSERT INTO central_schema_migrations(row_id,corpus,version,checksum) VALUES(?,?,?,?)").bind(&stamp.row_id).bind(&stamp.corpus).bind(&stamp.version).bind(&stamp.checksum).execute(&mut store).await?;
-        let row = query::<sqlx_turso::Turso>("SELECT row_id,corpus,version,checksum FROM central_schema_migrations WHERE corpus=? AND version=?").bind(&stamp.corpus).bind(&stamp.version).fetch_one(&mut store).await?;
-        let restored = MigrationStamp { row_id: row.try_get("row_id")?, corpus: row.try_get("corpus")?, version: row.try_get("version")?, checksum: row.try_get("checksum")? };
+        query::<sqlx_turso::Turso>("INSERT INTO central_schema_migrations(row_id,corpus,version,checksum,created_at,updated_at,installed_on,description,success,execution_time) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(&stamp.row_id).bind(&stamp.corpus).bind(stamp.version).bind(&stamp.checksum).bind(stamp.created_at).bind(stamp.updated_at).bind(stamp.installed_on).bind(&stamp.description).bind(stamp.success).bind(stamp.execution_time).execute(&mut store).await?;
+        let row = query::<sqlx_turso::Turso>("SELECT row_id,corpus,version,checksum,created_at,updated_at,installed_on,description,success,execution_time FROM central_schema_migrations WHERE corpus=? AND version=?").bind(&stamp.corpus).bind(stamp.version).fetch_one(&mut store).await?;
+        let restored = MigrationStamp { row_id: row.try_get("row_id")?, corpus: row.try_get("corpus")?, version: row.try_get("version")?, checksum: row.try_get("checksum")?,created_at:row.try_get("created_at")?,updated_at:row.try_get("updated_at")?,installed_on:row.try_get("installed_on")?,description:row.try_get("description")?,success:row.try_get("success")?,execution_time:row.try_get("execution_time")? };
         if restored != *stamp { return Err("fixture did not restore the exact saved migration stamp".into()); }
         Ok(())
     }.await;
@@ -232,7 +238,7 @@ async fn stored_failure(root: &Path) -> ConformanceResult<Value> {
         .await?;
     let result = async {
         let rows = query::<sqlx_turso::Turso>(
-            "SELECT corpus,version,reason,at FROM central_schema_migration_failures",
+            "SELECT corpus,version,reason,failed_at FROM central_schema_migration_failures",
         )
         .fetch_all(&mut store)
         .await?;
@@ -240,15 +246,15 @@ async fn stored_failure(root: &Path) -> ConformanceResult<Value> {
             return Err("failed bootstrap did not persist exactly one central diagnostic".into());
         };
         let corpus: String = row.try_get("corpus")?;
-        let version: String = row.try_get("version")?;
+        let version: i64 = row.try_get("version")?;
         let reason: String = row.try_get("reason")?;
-        let at: String = row.try_get("at")?;
-        if corpus != "fleet-sync-receiver" || version != "3" || !reason.contains("already exists") {
+        let at: i64 = row.try_get("failed_at")?;
+        if corpus != "fleet-sync-receiver" || version != 3 || !reason.contains("already exists") {
             return Err(
                 format!("unexpected actual migration cause: {corpus}/{version}: {reason}").into(),
             );
         }
-        let at = chrono::DateTime::from_timestamp_millis(at.parse()?)
+        let at = chrono::DateTime::from_timestamp_millis(at)
             .ok_or("stored migration failure time is outside the fixture range")?;
         Ok(json!({"kind":"known","value":[{"corpus":corpus,"version":3,"reason":reason,"at":at}]}))
     }

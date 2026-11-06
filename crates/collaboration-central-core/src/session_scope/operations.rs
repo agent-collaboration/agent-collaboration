@@ -59,22 +59,20 @@ where
             OperationRequest::Delivery(request) => {
                 use fleet_sync_protocol::DeliveryRequest;
                 match request {
-                    request @ (DeliveryRequest::Fetch { .. }
-                    | DeliveryRequest::Received { .. }
-                    | DeliveryRequest::Report { .. }
-                    | DeliveryRequest::Query { .. }
-                    | DeliveryRequest::Settle { .. }
-                    | DeliveryRequest::Retire { .. }) => {
-                        self.transport.push(SessionTransportEffect::MailboxRequest {
-                            connection,
-                            session,
-                            frame,
-                            request: Box::new(request),
-                        })
+                    request @ (DeliveryRequest::Query { .. } | DeliveryRequest::Settle { .. }) => {
+                        self.transport
+                            .push(SessionTransportEffect::SenderMailRequest {
+                                connection,
+                                session,
+                                frame,
+                                request: Box::new(request),
+                            })
                     }
-                    DeliveryRequest::StatusAck { .. } | DeliveryRequest::StatusFetch { .. } => {
+                    DeliveryRequest::StatusAck { .. }
+                    | DeliveryRequest::StatusFetch { .. }
+                    | DeliveryRequest::Report { .. } => {
                         return Err(StoreError::Aborted {
-                            reason: "status-stream request bypassed its local frame handler".into(),
+                            reason: "Fleet mail request bypassed its local frame handler".into(),
                         });
                     }
                     // Board mail must enter MailSubmit's provenance/epoch gate.
@@ -149,6 +147,8 @@ where
                     project,
                     phase: crate::forward_store::ForwardPhase::Routing,
                     deadline: now.after(std::time::Duration::from_secs(30)),
+                    created_at: now,
+                    updated_at: now,
                 };
                 self.stage_forward(pending, post).await?;
             }
@@ -269,7 +269,8 @@ where
                             );
                         }
                     };
-                    let page = crate::machine_notice_store::read(self, after, now).await?;
+                    let page =
+                        crate::machine_notice_store::read(self, session.peer, after, now).await?;
                     self.stage_operation_answer(
                         connection,
                         frame,

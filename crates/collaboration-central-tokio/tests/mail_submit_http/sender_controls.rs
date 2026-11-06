@@ -48,11 +48,3 @@ async fn sender_query_and_settlement_preserve_existing_custody_and_pin_unknown_i
     let proof=sender_control_scenarios::sender_query_and_settlement_preserve_existing_custody_and_pin_unknown_identity(server.base_url()).await;
     finish(server, jwks, proof).await
 }
-
-#[tokio::test]
-async fn retirement_uses_the_verified_sender_and_replays_its_original_call_receipt()
--> ConformanceResult<()> {
-    let (_root, jwks, server) = fixture().await?;
-    let proof=sender_control_scenarios::retirement_uses_the_verified_sender_and_replays_its_original_call_receipt(server.base_url()).await;
-    finish(server, jwks, proof).await
-}

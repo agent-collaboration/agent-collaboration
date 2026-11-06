@@ -19,22 +19,22 @@ Every original file has exactly one disposition. Proof letters are explained bel
 | `scripts/check-release-runtime-guardrails.py` | Ported | `verification/tooling/check-release-runtime-guardrails.ts` (G) |
 | `scripts/proof-tools/socket-permission-probe.py` | Ported | `verification/tooling/socket-permission-probe.ts` (N) |
 | `scripts/publish_homebrew_tap_local.py` | Ported | `verification/tooling/publish-homebrew-tap-local.ts` (H) |
-| `scripts/tests/test_acp_metadata_observation.py` | Ported | `verification/observations/acp-metadata.test.ts` (M) |
+| `scripts/tests/test_acp_metadata_observation.py` | Ported | `verification/observations/providers/acp/acp-metadata.test.ts` (M) |
 | `scripts/tests/test_bootstrap_tools.py` | Ported | `verification/tooling/bootstrap-tools.test.ts` (C) |
 | `scripts/tests/test_prepare_sqlx.py` | Ported | `verification/tooling/sqlx-preparation.test.ts` (C) |
 | `scripts/tests/test_prepare_sqlx_turso.py` | Ported | `verification/tooling/sqlx-preparation.test.ts` (C) |
 | `scripts/tests/test_publish_homebrew_tap_local.py` | Ported | `verification/tooling/release-command-process.test.ts` (H) |
 | `scripts/tests/test_rust_file_size.py` | Ported | `verification/tooling/rust-file-size.test.ts` (C) |
-| `scripts/tests/test_tailnet_mcp_https_transport.py` | Ported | `verification/observations/tailnet-curl-transport.test.ts` (T) |
-| `scripts/tests/test_tailnet_mcp_verification.py` | Ported | `verification/observations/tailnet-oracles.test.ts` (T) |
+| `scripts/tests/test_tailnet_mcp_https_transport.py` | Ported | `verification/observations/tailnet/tailnet-curl-transport.test.ts` (T) |
+| `scripts/tests/test_tailnet_mcp_verification.py` | Ported | `verification/observations/tailnet/tailnet-oracles.test.ts` (T) |
 | `scripts/tests/test_tui_capture.py` | Removed by #161 | Merged in main at `6388b973` |
 | `scripts/tests/test_tui_component_capture.py` | Removed by #161 | Merged in main at `6388b973` |
 | `scripts/tests/test_tui_public_sessions.py` | Removed by #161 | Merged in main at `6388b973` |
 | `scripts/tests/test_tui_verification.py` | Removed by #161 | Merged in main at `6388b973` |
 | `scripts/tests/test_update_homebrew_formula.py` | Ported | `verification/tooling/release-tooling.test.ts` (H) |
-| `scripts/tests/test_verification_lifecycle.py` | Ported | `verification/observations/lifecycle.test.ts` (L) |
+| `scripts/tests/test_verification_lifecycle.py` | Ported | `verification/observations/runtime/lifecycle.test.ts` (L) |
 | `scripts/tests/test_verification_observations.py` | Ported | `verification/observations/observation-core.test.ts` (O) |
-| `scripts/tests/verification_controller_fixture.py` | Ported | `verification/observations/lifecycle-fixture.ts` (L) |
+| `scripts/tests/verification_controller_fixture.py` | Ported | `verification/observations/runtime/lifecycle-fixture.ts` (L) |
 | `scripts/tooling/check-central-worker-bundle.py` | Ported | `verification/tooling/check-central-worker-bundle.ts` (C) |
 | `scripts/tooling/check-rust-file-size.py` | Ported | `verification/tooling/check-rust-file-size.ts` (C) |
 | `scripts/tooling/prepare-sqlx-turso.py` | Ported | `verification/tooling/prepare-sqlx-turso.ts` (C) |
@@ -44,33 +44,33 @@ Every original file has exactly one disposition. Proof letters are explained bel
 | `scripts/tooling/verify-sqlx-contract.py` | Deleted | D |
 | `scripts/update_homebrew_formula.py` | Ported | `verification/tooling/update-homebrew-formula.ts` (H) |
 | `scripts/validate-proxy-db-runtime-isolation-artifact.py` | Ported | `verification/tooling/validate-proxy-db-runtime-isolation-artifact.ts` (G) |
-| `scripts/verification/acp_metadata_observation.py` | Ported | `verification/observations/acp-metadata-observation.ts` (M) |
+| `scripts/verification/acp_metadata_observation.py` | Ported | `verification/observations/providers/acp/acp-metadata-observation.ts` (M) |
 | `scripts/verification/board_journey_peer.py` | Deleted | D |
 | `scripts/verification/board_journey_runtime.py` | Deleted | D |
 | `scripts/verification/board_journey_target.py` | Deleted | D |
 | `scripts/verification/board_journey_values.py` | Deleted | D |
-| `scripts/verification/config_sections.py` | Ported | `verification/observations/config-sections.ts` (O); orphaned Python original removed here after #161 |
-| `scripts/verification/harness_report.py` | Ported | `verification/observations/harness-report.ts` (O) |
-| `scripts/verification/interaction_journey.py` | Ported | `verification/observations/interaction-journey.ts` (I) |
-| `scripts/verification/interaction_readback.py` | Ported | `verification/observations/interaction-readback.ts` (I) |
+| `scripts/verification/config_sections.py` | Ported | `verification/observations/configuration/config-sections.ts` (O); orphaned Python original removed here after #161 |
+| `scripts/verification/harness_report.py` | Ported | `verification/observations/harness/harness-report.ts` (O) |
+| `scripts/verification/interaction_journey.py` | Ported | `verification/observations/callbacks/interaction-journey.ts` (I) |
+| `scripts/verification/interaction_readback.py` | Ported | `verification/observations/callbacks/interaction-readback.ts` (I) |
 | `scripts/verification/mail_journey_peer.py` | Deleted | D |
-| `scripts/verification/native_correlation.py` | Ported | `verification/observations/native-correlation.ts` (O) |
-| `scripts/verification/owned_runtime.py` | Ported | `verification/observations/owned-runtime.ts` (L); orphaned Python original removed here after #161 |
-| `scripts/verification/process_inventory.py` | Ported | `verification/observations/process-inventory.ts` (L) |
-| `scripts/verification/process_ownership.py` | Ported | `verification/observations/process-ownership.ts` (L); orphaned Python original removed here after #161 |
-| `scripts/verification/provider_session_control.py` | Ported | `verification/observations/provider-session-control.ts` (I) |
-| `scripts/verification/readonly_codex_home.py` | Ported | `verification/observations/readonly-codex-home.ts` (O); orphaned Python original removed here after #161 |
-| `scripts/verification/runtime_qualification.py` | Ported | `verification/observations/runtime-qualification.ts` (L); orphaned Python original removed here after #161 |
-| `scripts/verification/tailnet_mcp.py` | Ported | `verification/observations/tailnet-mcp.ts` (T) |
-| `scripts/verification/tailnet_mcp_client.py` | Ported | `verification/observations/tailnet-transport.ts` (T) |
+| `scripts/verification/native_correlation.py` | Ported | `verification/observations/runtime/native-correlation.ts` (O) |
+| `scripts/verification/owned_runtime.py` | Ported | `verification/observations/runtime/owned-runtime.ts` (L); orphaned Python original removed here after #161 |
+| `scripts/verification/process_inventory.py` | Ported | `verification/observations/runtime/process-inventory.ts` (L) |
+| `scripts/verification/process_ownership.py` | Ported | `verification/observations/runtime/process-ownership.ts` (L); orphaned Python original removed here after #161 |
+| `scripts/verification/provider_session_control.py` | Ported | `verification/observations/callbacks/provider-session-control.ts` (I) |
+| `scripts/verification/readonly_codex_home.py` | Ported | `verification/observations/runtime/readonly-codex-home.ts` (O); orphaned Python original removed here after #161 |
+| `scripts/verification/runtime_qualification.py` | Ported | `verification/observations/runtime/runtime-qualification.ts` (L); orphaned Python original removed here after #161 |
+| `scripts/verification/tailnet_mcp.py` | Ported | `verification/observations/tailnet/tailnet-mcp.ts` (T) |
+| `scripts/verification/tailnet_mcp_client.py` | Ported | `verification/observations/tailnet/tailnet-transport.ts` (T) |
 | `scripts/verification/tailnet_mcp_host.py` | Ported | `crates/tailnet-verification-host/src/main.rs` (T) |
-| `scripts/verification/tailnet_mcp_models.py` | Ported | `verification/observations/tailnet-plans.ts` (T) |
+| `scripts/verification/tailnet_mcp_models.py` | Ported | `verification/observations/tailnet/tailnet-plans.ts` (T) |
 | `scripts/verification/tui_capture.py` | Removed by #161 | Merged in main at `6388b973` |
 | `scripts/verification/tui_capture_lifecycle.py` | Removed by #161 | Merged in main at `6388b973` |
 | `scripts/verification/tui_component_capture.py` | Removed by #161 | Merged in main at `6388b973` |
 | `scripts/verification/tui_public_sessions.py` | Removed by #161 | Merged in main at `6388b973` |
 | `scripts/verification/tui_verification.py` | Removed by #161 | Merged in main at `6388b973` |
-| `scripts/verification/typed_observations.py` | Ported | `verification/observations/evidence-models.ts` (O); orphaned Python original removed here after #161 |
+| `scripts/verification/typed_observations.py` | Ported | `verification/observations/shared/evidence-models.ts` (O); orphaned Python original removed here after #161 |
 
 ## Original-input proof
 
@@ -82,8 +82,8 @@ Golden inputs/results come from the base implementations. Fixture data retains s
 | C: CI tooling |51 original Worker bundle exit/output cases;14 original SQLx preparation scenarios compare commands, environment, refusal/commit behavior and cache bytes;8 rustc-wrapper environment vectors plus executable-process checks. Rust size checks cover physical bytes, Git inventories, quoted paths,6 source-parser fixtures and9 line-count vectors. Bootstrap tests preserve successful/stale/failed/offline/check-mode outcomes with controlled installers. Tests are under `verification/tooling/tests/`. |
 | G: guards/artifacts | Original HTTP G24/G25 outputs match exactly. Release guard rows retain original results with timestamps normalized, including pre-existing failures. Proxy DB artifact fixtures retain root, pressure, ordering, correlation and privacy checks. See `verification/tooling/structural-guards.test.ts` and its original fixture data. |
 | O: observations | Configuration sections, evidence models/JSON, reports, native read protocol and read-only Codex-home checks use frozen original observations, including unknown fields, exact integers and invalid inputs. Tests: `verification/observations/tests/{observation-core,config-sections,harness-report}.test.ts`. Raw validated records remain the serialization boundary where the original omitted unset fields. |
-| L: lifecycle |19 original scoped lifecycle outcomes plus real harmless children cover identity retention, unknown inventory, deadlines, cleanup and no signal on mismatch. Signed macOS UIDs and child reaping are checked. See `verification/observations/lifecycle.test.ts` and the original lifecycle baselines. |
-| M: metadata | Original oracle cases plus an owned Unix WebSocket check target bindings, metadata/prose separation, bounds and refusal controls. Tests: `verification/observations/acp-metadata.test.ts` and `acp-metadata-transport.test.ts`. This adds no installed-provider/TUI observation. |
+| L: lifecycle |19 original scoped lifecycle outcomes plus real harmless children cover identity retention, unknown inventory, deadlines, cleanup and no signal on mismatch. Signed macOS UIDs and child reaping are checked. See `verification/observations/runtime/lifecycle.test.ts` and the original lifecycle baselines. |
+| M: metadata | Original oracle cases plus an owned Unix WebSocket check target bindings, metadata/prose separation, bounds and refusal controls. Tests: `verification/observations/providers/acp/acp-metadata.test.ts` and `acp-metadata-transport.test.ts`. This adds no installed-provider/TUI observation. |
 | I: callbacks |26 original oracle comparisons plus real local HTTP/SQLite fixtures exercise create/control, decisions, retention, independent readback and the complete journey. Tests: `verification/observations/tests/{callback-oracles,provider-control,callback-journey}.test.ts`. |
 | T: Tailnet | Entire Host driver is Rust by the owner's relayed decision. Original profile/observation/URL fixtures and real owned process/socket tests retain no-follow, nonblocking lock, owner/mode, inode/device, byte guards and exact restoration. TS peer tests retain curl/system trust, bounds and independent Unix/SQLite readback. See `crates/tailnet-verification-host/tests/` and `verification/observations/tests/tailnet-*.test.ts`. No real Host/profile/Tailscale/two-machine run occurred. |
 | F: executable fixtures | Shared ACP settings/scripted agents retain original request/response bytes and receipts. Broader migration:173 frozen ACP/CLI scenarios,3 ordered socket transcripts,12 restricted-PATH native executable cases and6 original shell-word vectors under `verification/fixtures/tests/`. The full oversized initialize fixture retains67,108,866 original output bytes and the actual child PID. |

@@ -230,14 +230,14 @@ async fn assert_reactivated_frontier(resolved: bool) {
     })
     .await
     .expect("acknowledged historical custody was not retired");
-    assert!(
+    assert!(matches!(
         native
             .runtime()
             .local_outcome_for_test(first.id())
             .await
-            .unwrap()
-            .is_none()
-    );
+            .unwrap(),
+        Some(fleet_sync_protocol::RecipientOutcome::Prevented { .. })
+    ));
     recovery.shutdown().await;
     drop(recovery);
     drop(publisher);
@@ -262,14 +262,14 @@ async fn assert_reactivated_frontier(resolved: bool) {
         .unwrap();
     publisher.wait_project_idle_for_test(&fixture.project).await;
     assert_eq!(frontier(&fixture).await, head);
-    assert!(
+    assert!(matches!(
         native
             .runtime()
             .local_outcome_for_test(first.id())
             .await
-            .unwrap()
-            .is_none()
-    );
+            .unwrap(),
+        Some(fleet_sync_protocol::RecipientOutcome::Prevented { .. })
+    ));
     assert!(runtime.requests.lock().await.try_recv().is_err());
     publisher.shutdown().await;
     drop(publisher);

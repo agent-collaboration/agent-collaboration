@@ -1,0 +1,72 @@
+[package]
+name = "board-staging-cutover"
+autotests = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "codex-router-board-staging-cutover"
+path = "src/main.rs"
+
+[dependencies]
+durable-steps.workspace = true
+fleet-sync-delivery.workspace = true
+collaboration-contracts = { path = "../collaboration-contracts", version = "0.1.123" }
+collaboration-service = { path = "../collaboration-service", version = "0.1.123" }
+interaction-storage = { path = "../interaction-storage", version = "0.1.123" }
+collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.123" }
+collaboration-client = { path = "../collaboration-client", version = "0.1.123" }
+collaboration-central-admin-protocol = { path = "../collaboration-central-admin-protocol", version = "0.1.123" }
+codex-router-secret-store = { path = "../codex-router-secret-store", version = "0.1.123" }
+reqwest = { workspace = true, features = ["json"] }
+board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.123" }
+collaboration-central-core = { path = "../collaboration-central-core", version = "0.1.123" }
+fleet-admission = { path = "../fleet-admission", version = "0.1.123" }
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+fs2.workspace = true
+rustix.workspace = true
+tempfile = "3.27.0"
+url.workspace = true
+uuid.workspace = true
+board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.123" }
+fleet-sync-lease.workspace = true
+fleet-sync-writer.workspace = true
+message-board = { path = "../message-board", version = "0.1.123" }
+message-board-storage = { path = "../message-board-storage", version = "0.1.123" }
+runtime-primitives.workspace = true
+sqlx.workspace = true
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "84935efdab03615843611bb5723983d7655e6e26", default-features = false, features = ["macros", "runtime-tokio"] }
+tokio.workspace = true
+codex-router-host.workspace = true
+collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.121" }
+collaboration-runtime = { path = "../collaboration-runtime", version = "0.1.121" }
+fleet-sync-protocol.workspace = true
+nix.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+codex-router-core.workspace = true
+codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.123" }
+codex-native-integration.workspace = true
+axum.workspace = true
+collaboration-central-conformance = { path = "../collaboration-central-conformance", version = "0.1.123" }
+board-central-test-support = { path = "../board-central-test-support", version = "0.1.123", features = ["conformance"] }
+fleet-sync-receiver.workspace = true
+fleet-sync-tokio-runner.workspace = true
+fleet-sync-session.workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"
+
+[[test]]
+name = "e2e"
+path = "tests/e2e/main.rs"

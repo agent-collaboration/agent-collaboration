@@ -55,12 +55,12 @@ pub async fn run(base: &str) -> ConformanceResult<()> {
                 if actual.get("kind").and_then(Value::as_str) != Some("pending") {
                     return Err(format!("mapped call did not complete: {actual}").into());
                 }
-                tokio::time::sleep(Duration::from_millis(20)).await;
+                tokio::task::yield_now().await;
             }
         }).await??;
-        let expected_dispatch = vec![ObjectAddress::Connection(message_board::ServiceId::try_from(service.to_owned())?)];
+        let expected_dispatch: Vec<ObjectAddress> = Vec::new();
         if dispatches(&http, base).await? != expected_dispatch {
-            return Err("mapped PeerId did not dispatch exactly once to its unequal committed ServiceId".into());
+            return Err("mapped holder used a platform call instead of its actual Fleet socket".into());
         }
         let missing = owner_post(&http, base, "holder-call", input(
             "019f0000-0000-7000-8000-000000000933",
@@ -84,13 +84,13 @@ pub async fn run(base: &str) -> ConformanceResult<()> {
                         return Ok::<_, Box<dyn std::error::Error+Send+Sync>>(());
                     }
                 }
-                tokio::time::sleep(Duration::from_millis(20)).await;
+                tokio::task::yield_now().await;
             }
         }).await??;
         if dispatches(&http, base).await? != expected_dispatch {
             return Err("a holder without a committed mapping reached the object transport".into());
         }
-        println!("HOLDER_MAPPING_CASE real_committed_lookup mapped_dispatches=1 missing_mapping_dispatches=0 missing_reach=never_sent passed");
+        println!("HOLDER_MAPPING_CASE real_committed_lookup mapped_platform_dispatches=0 missing_mapping_platform_dispatches=0 missing_reach=never_sent passed");
         Ok::<_, Box<dyn std::error::Error+Send+Sync>>(())
     }.await;
     calls.abort_all();

@@ -32,6 +32,7 @@ fleet-admission = { path = "../fleet-admission", version = "0.1.96" }
 axum = { workspace = true, features = ["http1", "tokio", "ws"] }
 durable-steps.workspace = true
 fleet-sync-receiver.workspace = true
+fleet-sync-delivery.workspace = true
 fleet-sync-service.workspace = true
 fleet-sync-tokio-runner.workspace = true
 runtime-primitives = { workspace = true, features = ["tokio"] }

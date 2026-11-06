@@ -10,10 +10,45 @@ use sqlx_core::{
 #[derive(Debug)]
 pub(crate) struct StoredAdminImport {
     pub import_id: Option<String>,
+    pub import_id_class: Option<String>,
     pub project_id: Option<String>,
+    pub project_id_class: Option<String>,
     pub digest: Option<String>,
-    pub header: Option<String>,
-    pub phase: Option<String>,
+    pub digest_class: Option<String>,
+    pub provenance_installation: Option<String>,
+    pub provenance_installation_class: Option<String>,
+    pub provenance_machine: Option<String>,
+    pub provenance_machine_class: Option<String>,
+    pub declared_owner: Option<String>,
+    pub declared_owner_class: Option<String>,
+    pub manifest_epoch: Option<String>,
+    pub manifest_epoch_class: Option<String>,
+    pub manifest_sequence: Option<String>,
+    pub manifest_sequence_class: Option<String>,
+    pub schema_version: Option<String>,
+    pub schema_version_class: Option<String>,
+    pub schema_fingerprint: Option<String>,
+    pub schema_fingerprint_class: Option<String>,
+    pub pages: Option<String>,
+    pub pages_class: Option<String>,
+    pub manifest_table_count: Option<String>,
+    pub manifest_table_count_class: Option<String>,
+    pub summary_kind: Option<String>,
+    pub summary_kind_class: Option<String>,
+    pub summary_time_basis: Option<String>,
+    pub summary_time_basis_class: Option<String>,
+    pub summary_record_at: Option<String>,
+    pub summary_record_at_class: Option<String>,
+    pub phase_kind: Option<String>,
+    pub phase_kind_class: Option<String>,
+    pub published_epoch: Option<String>,
+    pub published_epoch_class: Option<String>,
+    pub published_sequence: Option<String>,
+    pub published_sequence_class: Option<String>,
+    pub created_at: Option<String>,
+    pub created_at_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_at_class: Option<String>,
 }
 pub(crate) fn read_admin_import<S>(
     scope: &mut S,
@@ -39,10 +74,45 @@ where
             .map(|row| {
                 Ok(StoredAdminImport {
                     import_id: row.try_get("import_id")?,
+                    import_id_class: row.try_get("import_id_class")?,
                     project_id: row.try_get("project_id")?,
+                    project_id_class: row.try_get("project_id_class")?,
                     digest: row.try_get("digest")?,
-                    header: row.try_get("header")?,
-                    phase: row.try_get("phase")?,
+                    digest_class: row.try_get("digest_class")?,
+                    provenance_installation: row.try_get("provenance_installation")?,
+                    provenance_installation_class: row.try_get("provenance_installation_class")?,
+                    provenance_machine: row.try_get("provenance_machine")?,
+                    provenance_machine_class: row.try_get("provenance_machine_class")?,
+                    declared_owner: row.try_get("declared_owner")?,
+                    declared_owner_class: row.try_get("declared_owner_class")?,
+                    manifest_epoch: row.try_get("manifest_epoch")?,
+                    manifest_epoch_class: row.try_get("manifest_epoch_class")?,
+                    manifest_sequence: row.try_get("manifest_sequence")?,
+                    manifest_sequence_class: row.try_get("manifest_sequence_class")?,
+                    schema_version: row.try_get("schema_version")?,
+                    schema_version_class: row.try_get("schema_version_class")?,
+                    schema_fingerprint: row.try_get("schema_fingerprint")?,
+                    schema_fingerprint_class: row.try_get("schema_fingerprint_class")?,
+                    pages: row.try_get("pages")?,
+                    pages_class: row.try_get("pages_class")?,
+                    manifest_table_count: row.try_get("manifest_table_count")?,
+                    manifest_table_count_class: row.try_get("manifest_table_count_class")?,
+                    summary_kind: row.try_get("summary_kind")?,
+                    summary_kind_class: row.try_get("summary_kind_class")?,
+                    summary_time_basis: row.try_get("summary_time_basis")?,
+                    summary_time_basis_class: row.try_get("summary_time_basis_class")?,
+                    summary_record_at: row.try_get("summary_record_at")?,
+                    summary_record_at_class: row.try_get("summary_record_at_class")?,
+                    phase_kind: row.try_get("phase_kind")?,
+                    phase_kind_class: row.try_get("phase_kind_class")?,
+                    published_epoch: row.try_get("published_epoch")?,
+                    published_epoch_class: row.try_get("published_epoch_class")?,
+                    published_sequence: row.try_get("published_sequence")?,
+                    published_sequence_class: row.try_get("published_sequence_class")?,
+                    created_at: row.try_get("created_at")?,
+                    created_at_class: row.try_get("created_at_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_at_class: row.try_get("updated_at_class")?,
                 })
             })
             .transpose()
@@ -53,12 +123,27 @@ pub(crate) fn insert_admin_import<S>(
     import_id: String,
     project_id: String,
     digest: String,
-    header: String,
-    phase: String,
+    provenance_installation: String,
+    provenance_machine: String,
+    declared_owner: String,
+    manifest_epoch: String,
+    manifest_sequence: String,
+    schema_version: String,
+    schema_fingerprint: String,
+    pages: String,
+    manifest_table_count: String,
+    summary_kind: String,
+    summary_time_basis: String,
+    summary_record_at: Option<String>,
+    phase_kind: String,
+    published_epoch: Option<String>,
+    published_sequence: Option<String>,
+    created_at: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
     for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
@@ -69,16 +154,127 @@ where
         .bind(import_id)
         .bind(project_id)
         .bind(digest)
-        .bind(header)
-        .bind(phase);
+        .bind(provenance_installation)
+        .bind(provenance_machine)
+        .bind(declared_owner)
+        .bind(manifest_epoch)
+        .bind(manifest_sequence)
+        .bind(schema_version)
+        .bind(schema_fingerprint)
+        .bind(pages)
+        .bind(manifest_table_count)
+        .bind(summary_kind)
+        .bind(summary_time_basis)
+        .bind(summary_record_at)
+        .bind(phase_kind)
+        .bind(published_epoch)
+        .bind(published_sequence)
+        .bind(created_at);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
 }
 pub(crate) fn update_admin_import<S>(
     scope: &mut S,
-    phase: String,
+    phase_kind: String,
+    published_epoch: Option<String>,
+    published_sequence: Option<String>,
+    now: String,
     import_id: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/admin_import_sql/update_admin_import.sql"
+        )))
+        .bind(phase_kind)
+        .bind(published_epoch)
+        .bind(published_sequence)
+        .bind(now)
+        .bind(import_id);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct StoredAdminManifest {
+    pub row_id: Option<String>,
+    pub row_id_class: Option<String>,
+    pub import_id: Option<String>,
+    pub import_id_class: Option<String>,
+    pub ordinal: Option<String>,
+    pub ordinal_class: Option<String>,
+    pub table_name: Option<String>,
+    pub table_name_class: Option<String>,
+    pub row_count: Option<String>,
+    pub row_count_class: Option<String>,
+    pub table_digest: Option<String>,
+    pub table_digest_class: Option<String>,
+    pub created_at: Option<String>,
+    pub created_at_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_at_class: Option<String>,
+}
+pub(crate) fn read_admin_manifest<S>(
+    scope: &mut S,
+    import_id: String,
+    limit: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredAdminManifest>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/admin_import_sql/read_admin_manifest.sql"
+        )))
+        .bind(import_id)
+        .bind(limit);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredAdminManifest {
+                    row_id: row.try_get("row_id")?,
+                    row_id_class: row.try_get("row_id_class")?,
+                    import_id: row.try_get("import_id")?,
+                    import_id_class: row.try_get("import_id_class")?,
+                    ordinal: row.try_get("ordinal")?,
+                    ordinal_class: row.try_get("ordinal_class")?,
+                    table_name: row.try_get("table_name")?,
+                    table_name_class: row.try_get("table_name_class")?,
+                    row_count: row.try_get("row_count")?,
+                    row_count_class: row.try_get("row_count_class")?,
+                    table_digest: row.try_get("table_digest")?,
+                    table_digest_class: row.try_get("table_digest_class")?,
+                    created_at: row.try_get("created_at")?,
+                    created_at_class: row.try_get("created_at_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_at_class: row.try_get("updated_at_class")?,
+                })
+            })
+            .collect()
+    }
+}
+pub(crate) fn insert_admin_manifest<S>(
+    scope: &mut S,
+    row_id: String,
+    import_id: String,
+    ordinal: String,
+    table_name: String,
+    row_count: String,
+    table_digest: String,
+    created_at: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -88,10 +284,15 @@ where
     async move {
         let statement = query::<S::Database>(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/admin_import_sql/update_admin_import.sql"
+            "/admin_import_sql/insert_admin_manifest.sql"
         )))
-        .bind(phase)
-        .bind(import_id);
+        .bind(row_id)
+        .bind(import_id)
+        .bind(ordinal)
+        .bind(table_name)
+        .bind(row_count)
+        .bind(table_digest)
+        .bind(created_at);
         statement.execute(scope.executor()).await?;
         Ok(())
     }

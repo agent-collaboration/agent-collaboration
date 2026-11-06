@@ -37,7 +37,7 @@ async fn lost_piece_and_renewal_answers_replay_after_the_server_process_dies()
         }
     };
     let initial = [RuntimeControlRequest {
-        address: ObjectAddress::Registry,
+        address: ObjectAddress::Fleet,
         command: RuntimeControl::SetTime {
             now: RegistryTime(saved.at.0 + chrono::TimeDelta::seconds(2)),
         },
@@ -169,11 +169,17 @@ async fn drop_committed_answer(
     body: OperationRequest<BoardConsumerProtocol>,
 ) -> ConformanceResult<()> {
     let frame = FrameId::new(Uuid::now_v7())?;
-    let address = ObjectAddress::Connection(SERVICE.to_owned().try_into()?);
+    let connection = ConformanceClient::new(base)?
+        .active_connection(
+            SERVICE,
+            fleet_sync_protocol::PeerId::try_from(PEER.to_owned())?,
+        )
+        .await?;
+    let address = ObjectAddress::Fleet;
     control(
         base,
         address.clone(),
-        RuntimeControl::DropNextAnswer { frame },
+        RuntimeControl::DropNextAnswer { connection, frame },
     )
     .await?;
     socket
@@ -182,8 +188,14 @@ async fn drop_committed_answer(
                 .into(),
         ))
         .await?;
-    let observed = control(base, address, RuntimeControl::AwaitDroppedAnswer { frame }).await?;
-    if !matches!(observed.answer,AnswerFaultObservation::Dropped {frame:actual} if actual==frame) {
+    let observed = control(
+        base,
+        address,
+        RuntimeControl::AwaitDroppedAnswer { connection, frame },
+    )
+    .await?;
+    if !matches!(observed.answer,AnswerFaultObservation::Dropped {connection:actual_connection,frame:actual} if actual_connection==connection && actual==frame)
+    {
         return Err("session resume did not lose the exact original outgoing frame answer".into());
     }
     Ok(())
@@ -270,11 +282,6 @@ fn expected_lease(saved: &SavedSession, remaining_ms: u64) -> ConformanceResult<
 }
 
 async fn pin_registry(base: &str, now: RegistryTime) -> ConformanceResult<()> {
-    control(
-        base,
-        ObjectAddress::Registry,
-        RuntimeControl::SetTime { now },
-    )
-    .await?;
+    control(base, ObjectAddress::Fleet, RuntimeControl::SetTime { now }).await?;
     Ok(())
 }

@@ -4,13 +4,13 @@ use serde_json::{Value, json};
 
 async fn stored_bindings(fixture: &Fixture) -> TestResult<Value> {
     Ok(fixture.object.transaction(|scope| Box::pin(async move {
-        let rows = query::<sqlx_turso::Turso>("SELECT peer_id, service_id, machine_label, access_client_id, credential_hash, state, expires_at, last_enrollment_operation, last_revocation_operation FROM machine_enrollments ORDER BY service_id")
+        let rows = query::<sqlx_turso::Turso>("SELECT machine_id, service_id, machine_label, access_client_id, credential_hash, state, expires_at, last_enrollment_operation_id, last_revocation_operation_id FROM machine_enrollments ORDER BY service_id")
             .fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
         let rows = rows.into_iter().map(|row| {
-            let fields = ["peer_id", "service_id", "machine_label", "access_client_id", "credential_hash", "state", "expires_at"]
+            let fields = ["machine_id", "service_id", "machine_label", "access_client_id", "credential_hash", "state", "expires_at"]
                 .into_iter().map(|field| row.try_get::<String, _>(field).map_err(StoreError::backend))
                 .collect::<Result<Vec<_>, _>>()?;
-            let operations = ["last_enrollment_operation", "last_revocation_operation"]
+            let operations = ["last_enrollment_operation_id", "last_revocation_operation_id"]
                 .into_iter().map(|field| row.try_get::<Option<String>, _>(field).map_err(StoreError::backend))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(json!({"fields":fields,"operations":operations}))
@@ -124,8 +124,8 @@ async fn an_existing_service_cannot_change_its_peer_while_active_revoked_or_read
     );
     assert_eq!(stored_bindings(&fixture).await?, active);
 
-    // The fixture cannot deliver mailbox Open; this seeds revoked state and then
-    // exercises actual readmission admission, preserving its pending operation.
+    // Seed revoked state, then use the existing activation checkpoint to keep
+    // the actual readmission operation pending while testing immutable identity.
     fixture
         .execute("UPDATE machine_enrollments SET state='revoked'")
         .await?;
@@ -138,6 +138,12 @@ async fn an_existing_service_cannot_change_its_peer_while_active_revoked_or_read
         EnrollmentDecision::Refused(EnrollmentRefusal::PeerMismatch)
     );
     assert_eq!(stored_bindings(&fixture).await?, revoked);
+    fixture
+        .revocation_control(
+            original.installation.clone(),
+            collaboration_central_core::RevocationControl::ArmBeforeActivation,
+        )
+        .await?;
     assert_eq!(
         fixture
             .runtime
@@ -155,6 +161,12 @@ async fn an_existing_service_cannot_change_its_peer_while_active_revoked_or_read
     fixture.objects.close().await?;
     drop(fixture);
     let fixture = Fixture::open(root.path()).await?;
+    fixture
+        .revocation_control(
+            original.installation.clone(),
+            collaboration_central_core::RevocationControl::ArmBeforeActivation,
+        )
+        .await?;
     assert_eq!(
         fixture.runtime.enroll_machine(&owner()?, changed).await?,
         EnrollmentDecision::Refused(EnrollmentRefusal::PeerMismatch)

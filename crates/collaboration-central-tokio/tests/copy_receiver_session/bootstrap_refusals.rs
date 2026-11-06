@@ -95,7 +95,7 @@ async fn bootstrap_full_preserves_correlated_no_effect_while_an_unrelated_copy_p
             assert_eq!(after.pointer(&pointer),Some(original),"bootstrap rollback changed {field}");
         }
         assert_eq!(request(&mut holder.socket,ReplicationRequest::Piece(schema_piece(healthy,2)?)).await?,ReplicationAnswer::Applied {through:ReplicationPosition::new(Epoch::new(1)?,CommitSequence::new(2))});
-        control(server.base_url(),ObjectAddress::Connection(service),RuntimeControl::DropNextObjectReply {destination:ObjectAddress::Copy(healthy)}).await?;
+        control(server.base_url(),ObjectAddress::Fleet,RuntimeControl::DropNextObjectReply {destination:ObjectAddress::Copy(healthy)}).await?;
         assert!(matches!(request(&mut holder.socket,ReplicationRequest::CopyStatus {database:healthy}).await?,ReplicationAnswer::OutcomeUnknown {..}));
         assert!(matches!(request(&mut holder.socket,ReplicationRequest::CopyStatus {database:healthy}).await?,ReplicationAnswer::CopyStatus(CopyStatusAnswer::Status(status)) if status.acked.sequence.value()==2));
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())

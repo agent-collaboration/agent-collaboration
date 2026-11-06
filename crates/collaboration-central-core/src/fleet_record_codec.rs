@@ -1,6 +1,5 @@
 //! Validate Fleet payloads and their physical headers at the SQL boundary.
 
-use crate::generated_fleet_record_reads::StoredFleetRecord;
 use durable_steps::StoreError;
 use fleet_admission::FleetImportDigest;
 use message_board::{
@@ -74,59 +73,11 @@ impl FleetRecordHeader {
         }
         .into()
     }
-
-    pub fn check_record(&self, record: &Record) -> Result<(), StoreError> {
-        let expected = Self::for_record(record)?;
-        if self.time != expected.time || self.origin != expected.origin {
-            return Err(corrupt(
-                "headers",
-                "record time or origin disagrees with payload",
-            ));
-        }
-        Ok(())
-    }
 }
 
 pub(crate) struct DecodedFleetRecord {
     pub record: Record,
     pub import_digest: Option<FleetImportDigest>,
-}
-
-pub(crate) fn decode(stored: StoredFleetRecord) -> Result<DecodedFleetRecord, StoreError> {
-    let record: Record = decode_json(&required(stored.payload, "payload")?, "payload")?;
-    validate_record(&record)?;
-    let reference = record.reference();
-    let envelope = record.envelope();
-    let name = business_name(&record)?;
-    if required(stored.kind, "kind")? != kind_tag(reference.kind)?
-        || required(stored.record_id, "record_id")? != reference.id.as_str()
-        || required(stored.workspace_id, "workspace_id")? != envelope.scope.workspace.as_str()
-        || stored.board_id.as_deref() != envelope.scope.board.as_ref().map(|id| id.as_str())
-        || stored.business_name.as_deref() != Some(name)
-    {
-        return Err(corrupt(
-            "index",
-            "physical identity, scope or business key disagrees with payload",
-        ));
-    }
-    FleetRecordHeader::decode(
-        stored.router_time,
-        stored.time_basis,
-        stored.origin_installation,
-        stored.origin_machine,
-    )?
-    .check_record(&record)?;
-    let import_digest = decode_digest(stored.import_digest)?;
-    if envelope.time == RecordTime::LegacyUnknown && import_digest.is_none() {
-        return Err(corrupt(
-            "import_digest",
-            "unknown time requires imported provenance",
-        ));
-    }
-    Ok(DecodedFleetRecord {
-        record,
-        import_digest,
-    })
 }
 
 pub(crate) fn validate_record(record: &Record) -> Result<(), StoreError> {
@@ -156,13 +107,35 @@ pub(crate) fn validate_record(record: &Record) -> Result<(), StoreError> {
             value.workspace == envelope.scope.workspace && envelope.scope.board.is_none()
         }
         Record::Request(value) => {
-            crate::fleet_decision_step::validate_ledger(value)?;
+            validate_ledger(value)?;
             true
         }
         _ => false,
     };
     if !coherent {
         return Err(corrupt("scope", "record violates Fleet scope"));
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_ledger(entry: &message_board::RequestLedgerEntry) -> Result<(), StoreError> {
+    let invalid = |field: &str, message: String| StoreError::Corrupt {
+        field: format!("fleet_request_decisions.{field}"),
+        message,
+    };
+    message_board::Record::Request(entry.clone())
+        .validate_bounds()
+        .map_err(|error| invalid("payload", error.to_string()))?;
+    let envelope = &entry.envelope;
+    if envelope.id.as_str() != entry.request_id.as_str()
+        || !matches!(envelope.position, RecordPlacement::Fleet(_))
+        || envelope.scope.project.is_some()
+        || entry.accepted_in.is_some()
+    {
+        return Err(invalid(
+            "envelope",
+            "request ledger violates Fleet record invariants".into(),
+        ));
     }
     Ok(())
 }
@@ -175,19 +148,6 @@ pub(crate) fn kind_tag(kind: RecordKind) -> Result<&'static str, StoreError> {
         RecordKind::Adr => Ok("adr"),
         RecordKind::Request => Ok("request"),
         _ => Err(corrupt("kind", "project-only record requested from Fleet")),
-    }
-}
-
-fn business_name(record: &Record) -> Result<&str, StoreError> {
-    match record {
-        Record::Workspace(value) => Ok(value.name.as_str()),
-        Record::Board(value) => Ok(value.name.as_str()),
-        Record::DirectoryEntry(value) => Ok(value.title.as_str()),
-        Record::Adr(value) => Ok(value.title.as_str()),
-        _ => Err(corrupt(
-            "kind",
-            "record does not belong in a metadata table",
-        )),
     }
 }
 
@@ -212,21 +172,4 @@ pub(crate) fn decode_json<T: DeserializeOwned + Serialize>(
     Ok(decoded)
 }
 
-pub(crate) fn required(value: Option<String>, field: &str) -> Result<String, StoreError> {
-    value.ok_or_else(|| corrupt(field, "required Fleet column is NULL"))
-}
-
-pub(crate) fn check_private_id(value: &str, field: &str) -> Result<(), StoreError> {
-    let id = durable_steps::Uuid::parse_str(value).map_err(|error| corrupt(field, error))?;
-    if id.get_version_num() != 7 || id.to_string() != value {
-        return Err(corrupt(field, "identity must be canonical UUIDv7"));
-    }
-    Ok(())
-}
-
-pub(crate) fn corrupt(field: &str, message: impl std::fmt::Display) -> StoreError {
-    StoreError::Corrupt {
-        field: format!("fleet.{field}"),
-        message: message.to_string(),
-    }
-}
+pub(crate) use crate::fleet_row_codec::{check_millis, check_private_id, corrupt, required};

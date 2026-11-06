@@ -10,6 +10,10 @@ use message_board::ProjectId;
 use runtime_primitives::{Clock, IdSource, SystemClock, UuidV7Ids};
 use std::{io, sync::Arc};
 
+#[cfg(test)]
+#[path = "received_grants_test.rs"]
+mod tests;
+
 impl ProjectWriters {
     /// Success means stale, already present, or durably handed to the project owner.
     pub(super) async fn receive_grant(
@@ -30,6 +34,20 @@ impl ProjectWriters {
             match registry.existing_project(project).await {
                 Ok(Some(store)) => {
                     let state = store.writer_state().await.map_err(io::Error::other)?;
+                    if matches!(state, fleet_sync_lease::WriterState::Provisional)
+                        && matches!(
+                            store
+                                .registration_outcome()
+                                .await
+                                .map_err(io::Error::other)?,
+                            fleet_sync_writer::WriterRegistrationOutcome::Pending
+                        )
+                    {
+                        // Fleet commits the grant notice with Registration. Its
+                        // answer may still be in flight to this created writer;
+                        // the registration owner must finish that same file.
+                        return Ok(());
+                    }
                     if matches!(state,
                     fleet_sync_lease::WriterState::Writing { epoch }
                     | fleet_sync_lease::WriterState::Paused { epoch, .. }

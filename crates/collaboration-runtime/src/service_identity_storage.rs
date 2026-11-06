@@ -3,7 +3,7 @@ use collaboration_protocol::UuidIdentity;
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 
 #[derive(Serialize, Deserialize)]
@@ -117,6 +117,15 @@ fn read_identity(path: &Path) -> io::Result<UuidIdentity> {
     Ok(record.service_id)
 }
 
+/// Reads an existing installation peer without creating a directory or identity file.
+pub fn read_installation_peer(directory: &Path) -> io::Result<Option<fleet_sync_protocol::PeerId>> {
+    match read_peer_identity(&directory.join("installation-peer.json")) {
+        Ok(peer) => Ok(Some(peer)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
 /// The installation's UUIDv7 peer is independent of its existing service UUID and enrollment.
 pub fn load_installation_peer(directory: &Path) -> io::Result<fleet_sync_protocol::PeerId> {
     let metadata = std::fs::symlink_metadata(directory)?;
@@ -166,13 +175,31 @@ pub fn load_installation_peer(directory: &Path) -> io::Result<fleet_sync_protoco
     }
 }
 
+#[cfg(test)]
+#[path = "service_identity_storage_test.rs"]
+mod peer_read_tests;
+
 fn read_peer_identity(path: &Path) -> io::Result<fleet_sync_protocol::PeerId> {
     let metadata = std::fs::symlink_metadata(path)?;
-    if !metadata.is_file() || metadata.permissions().mode() & 0o077 != 0 || metadata.len() > 1024 {
+    if !metadata.is_file()
+        || metadata.uid() != nix::unistd::geteuid().as_raw()
+        || metadata.permissions().mode() & 0o077 != 0
+        || metadata.len() > 1024
+    {
         return Err(io::Error::other("invalid installation peer file"));
     }
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(nix::libc::O_NOFOLLOW | nix::libc::O_NONBLOCK)
+        .open(path)?;
+    let opened = file.metadata()?;
+    if opened.dev() != metadata.dev() || opened.ino() != metadata.ino() {
+        return Err(io::Error::other(
+            "installation peer file changed while opening",
+        ));
+    }
     let mut bytes = Vec::new();
-    File::open(path)?.take(1025).read_to_end(&mut bytes)?;
+    file.take(1025).read_to_end(&mut bytes)?;
     if bytes.len() > 1024 {
         return Err(io::Error::other("installation peer file too large"));
     }

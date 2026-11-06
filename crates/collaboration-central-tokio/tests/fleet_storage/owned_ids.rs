@@ -30,6 +30,13 @@ impl WakeScheduler for TracedIds {
     }
 }
 impl PlatformIo for TracedIds {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     async fn object_call(
         &self,
         address: ObjectAddress,
@@ -51,20 +58,35 @@ async fn injected_id_source_owns_the_repository_feed_state_and_feed_entry_ids() 
     let runtime = ObjectRuntime::<FleetKind, _, _>::fleet(
         Arc::new(TokioStorageHost::new(fixture.object.clone())),
         TracedIds(next.clone()),
-        fixture.receiver,
+        fleet_sync_lease::RegistryConfig {
+            authoritative_receiver: fixture.receiver,
+            lease: fleet_sync_lease::LeasePolicy {
+                lease_duration: std::time::Duration::from_secs(60),
+                renew_interval: std::time::Duration::from_secs(20),
+            },
+            release_unsent_for: std::time::Duration::from_secs(10),
+            move_needs_renewal_within: None,
+        },
+        collaboration_central_tokio::DeliveryConfig {
+            relay_peer: "019f0000-0000-7000-8000-000000005240"
+                .to_owned()
+                .try_into()?,
+        },
+        std::time::Duration::from_secs(2),
     )?;
     let proof=async {
         runtime.on_call(import_bytes(&bundle()?)?).await.map_err(|error|format!("import did not answer: {error:?}"))?;
         let ids=fixture.object.transaction(|scope|Box::pin(async move {
-            query::<sqlx_turso::Turso>("SELECT attachment_id AS id, 0 AS ordering FROM repository_attachments UNION ALL SELECT state_id AS id, 1 AS ordering FROM fleet_feed_state UNION ALL SELECT entry_id AS id, position + 1 AS ordering FROM fleet_feed ORDER BY ordering")
+            query::<sqlx_turso::Turso>("SELECT row_id AS id,0 AS ordering FROM fleet_workspace_repository_refs UNION ALL SELECT attachment_id AS id,1 AS ordering FROM fleet_repository_attachments UNION ALL SELECT state_id AS id,2 AS ordering FROM fleet_feed_state UNION ALL SELECT entry_id AS id,position*2+1 AS ordering FROM fleet_feed UNION ALL SELECT child.row_id AS id,parent.position*2+2 AS ordering FROM fleet_feed_repository_refs AS child JOIN fleet_feed AS parent ON parent.entry_id=child.entry_id ORDER BY ordering")
                 .fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|row.try_get::<String,_>("id").map_err(StoreError::backend)).collect::<Result<Vec<_>,_>>()
         })).await?;
         assert_eq!(ids, vec![
             "019f0000-0000-7000-8000-000000000a90", "019f0000-0000-7000-8000-000000000a91",
             "019f0000-0000-7000-8000-000000000a92", "019f0000-0000-7000-8000-000000000a93",
-            "019f0000-0000-7000-8000-000000000a94",
+            "019f0000-0000-7000-8000-000000000a94", "019f0000-0000-7000-8000-000000000a95",
+            "019f0000-0000-7000-8000-000000000a96",
         ]);
-        assert_eq!(next.load(Ordering::SeqCst),0xa95);
+        assert_eq!(next.load(Ordering::SeqCst),0xa97);
         assert_eq!(fixture.counts().await?,vec![1,1,1,1,3]);
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
     }.await;

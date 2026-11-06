@@ -53,36 +53,49 @@ impl WakeScheduler for Io {
     }
 }
 impl PlatformIo for Io {
-    async fn object_call(
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
+    fn object_call(
         &self,
         destination: ObjectAddress,
         body: Vec<u8>,
-    ) -> Result<Vec<u8>, CallFailure> {
-        if destination != ObjectAddress::Fleet {
-            return Err(no_route());
-        }
-        let call: Value = serde_json::from_slice(&body).map_err(|_| CallFailure::AnswerLost)?;
-        self.calls
-            .lock()
-            .map_err(|_| CallFailure::AnswerLost)?
-            .push(
-                serde_json::from_value(
-                    call.get("identity")
-                        .cloned()
-                        .ok_or(CallFailure::AnswerLost)?,
-                )
-                .map_err(|_| CallFailure::AnswerLost)?,
-            );
-        let runtime = self
-            .fleet
-            .get()
-            .and_then(Weak::upgrade)
-            .ok_or_else(no_route)?;
-        let answer = runtime.on_call(body).await?;
-        if self.lose_answer.swap(false, Ordering::SeqCst) {
-            return Err(CallFailure::AnswerLost);
-        }
-        Ok(answer)
+    ) -> impl std::future::Future<Output = Result<Vec<u8>, CallFailure>> + Send {
+        // A fixed future type breaks the test transport/runtime type cycle.
+        let response: durable_steps::BoxFuture<'_, Result<Vec<u8>, CallFailure>> =
+            Box::pin(async move {
+                if destination != ObjectAddress::Fleet {
+                    return Err(no_route());
+                }
+                let call: Value =
+                    serde_json::from_slice(&body).map_err(|_| CallFailure::AnswerLost)?;
+                self.calls
+                    .lock()
+                    .map_err(|_| CallFailure::AnswerLost)?
+                    .push(
+                        serde_json::from_value(
+                            call.get("identity")
+                                .cloned()
+                                .ok_or(CallFailure::AnswerLost)?,
+                        )
+                        .map_err(|_| CallFailure::AnswerLost)?,
+                    );
+                let runtime = self
+                    .fleet
+                    .get()
+                    .and_then(Weak::upgrade)
+                    .ok_or_else(no_route)?;
+                let answer = runtime.on_call(body).await?;
+                if self.lose_answer.swap(false, Ordering::SeqCst) {
+                    return Err(CallFailure::AnswerLost);
+                }
+                Ok(answer)
+            });
+        response
     }
 }
 fn no_route() -> CallFailure {
@@ -123,14 +136,28 @@ impl Fixture {
         let fleet_runtime = Arc::new(ObjectRuntime::fleet(
             Arc::new(TokioStorageHost::new(fleet.clone())),
             io.clone(),
-            receiver,
+            fleet_sync_lease::RegistryConfig {
+                authoritative_receiver: receiver,
+                lease: fleet_sync_lease::LeasePolicy {
+                    lease_duration: std::time::Duration::from_secs(60),
+                    renew_interval: std::time::Duration::from_secs(20),
+                },
+                release_unsent_for: std::time::Duration::from_secs(10),
+                move_needs_renewal_within: None,
+            },
+            collaboration_central_tokio::DeliveryConfig {
+                relay_peer: "019f0000-0000-7000-8000-000000005240"
+                    .to_owned()
+                    .try_into()?,
+            },
+            std::time::Duration::from_secs(2),
         )?);
         fleet_runtime.initialize().await?;
         io.fleet
             .set(Arc::downgrade(&fleet_runtime))
             .map_err(|_| "route already set")?;
         fleet_runtime.on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"registry"},"sourceFace":"edge","authority":{"kind":"owner","value":"fixture@example.test"},
+            "source":{"kind":"fleet"},"sourceFace":"edge","authority":{"kind":"owner","value":"fixture@example.test"},
             "destination":{"kind":"fleet"},"destinationFace":"fleet","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"import"},
             "kind":"central.object","target":null,"request":{"kind":"fleet","value":{"kind":"import","value":{"bundle":{
                 "provenance":{"installation":"550e8400-e29b-41d4-a716-4466554400a8","machine":"copy fixture"},"declaredOwner":"owner","records":[
@@ -173,7 +200,7 @@ impl Fixture {
     }
     pub async fn create_as(&self, seed: bool, admin: bool) -> TestResult {
         self.runtime.on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"registry"},"sourceFace":"registry","authority":{"kind":"object"},
+            "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
             "destination":{"kind":"copy","value":self.database},"destinationFace":"copy","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"create"},
             "kind":"fleet-sync.copy-create","target":{"copy":self.receiver},"request":{
                 "database":self.database,"epoch":1,"holder":if admin {None} else {Some("019f0000-0000-7000-8000-000000000901")},
@@ -187,7 +214,7 @@ impl Fixture {
         piece: Piece<board_sync_protocol::BoardAnnotation>,
     ) -> TestResult<ReplicationAnswer> {
         let response=self.runtime.on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"connection","value":"550e8400-e29b-41d4-a716-4466554400a8"},"sourceFace":"session","authority":{"kind":"object"},
+            "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":"550e8400-e29b-41d4-a716-4466554400a8"}},
             "destination":{"kind":"copy","value":self.database},"destinationFace":"copy","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"apply"},
             "kind":"central.copy-session-write","target":{"copy":self.receiver,"database":self.database},"request":{"sender":"019f0000-0000-7000-8000-000000000901","request":{"kind":"piece","value":piece}}
         }))?).await.map_err(|error|format!("Copy apply did not answer: {error:?}"))?;
@@ -196,13 +223,13 @@ impl Fixture {
     pub async fn seed_call(&self, admin: bool, request: Value) -> TestResult<ReplicationAnswer> {
         let call = if admin {
             json!({
-                "source":{"kind":"registry"},"sourceFace":"edge","authority":{"kind":"owner","value":"fixture@example.test"},
+                "source":{"kind":"fleet"},"sourceFace":"fleet","authority":{"kind":"owner","value":"fixture@example.test"},
                 "destination":{"kind":"copy","value":self.database},"destinationFace":"copy","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"seed"},
                 "kind":"central.copy-admin-seed","target":{"copy":self.receiver,"database":self.database},"request":request
             })
         } else {
             json!({
-                "source":{"kind":"connection","value":"550e8400-e29b-41d4-a716-4466554400a8"},"sourceFace":"session","authority":{"kind":"object"},
+                "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":"550e8400-e29b-41d4-a716-4466554400a8"}},
                 "destination":{"kind":"copy","value":self.database},"destinationFace":"copy","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"seed"},
                 "kind":"central.copy-session-write","target":{"copy":self.receiver,"database":self.database},"request":{"sender":"019f0000-0000-7000-8000-000000000901","request":request}
             })
@@ -312,14 +339,19 @@ impl Fixture {
     }
     pub async fn summary(&self, directory: bool) -> TestResult<Option<Value>> {
         let object = if directory { &self.fleet } else { &self.copy };
+        let database = self.database;
         let result = object
             .transaction(move |scope| {
                 Box::pin(async move {
-                    let sql = if directory {
-                        "SELECT copy_summary AS summary FROM project_directory"
-                    } else {
-                        "SELECT record AS summary FROM _copy_summary"
-                    };
+                    if directory {
+                        return collaboration_central_core::read_fleet_copy_summary_in_scope(
+                            scope, database,
+                        )
+                        .await?
+                        .map(|summary| serde_json::to_string(&summary).map_err(StoreError::backend))
+                        .transpose();
+                    }
+                    let sql = "SELECT record AS summary FROM _copy_summary";
                     let row = query::<sqlx_turso::Turso>(sql)
                         .fetch_optional(scope.executor())
                         .await

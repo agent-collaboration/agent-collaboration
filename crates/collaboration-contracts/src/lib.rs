@@ -60,7 +60,8 @@ pub use router_delivery_types::{
     RouterConsumerProtocol, RouterDeliveryTypes, RouterLocalObservation,
 };
 #[cfg(test)]
-mod mail_fetch_budget_tests;
+#[path = "mail_push_budget_test.rs"]
+mod mail_push_budget_tests;
 
 mod router_identity;
 pub use router_identity::{RouterIdentity, RouterIdentityError};

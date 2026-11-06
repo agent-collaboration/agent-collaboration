@@ -26,6 +26,10 @@ pub(super) fn gate_result(
     error: &ProjectStorageError,
 ) -> Result<Option<RequestResult>, ProjectAdmissionError> {
     Ok(match error {
+        ProjectStorageError::Writer(OpenError::Holder {
+            error:
+                fleet_sync_lease::HolderError::Refused(fleet_sync_protocol::LeaseRefusal::NotRegistered),
+        }) => Some(RequestResult::NotWriter { current: None }),
         ProjectStorageError::SchemaNotReady(refusal) => {
             Some(RequestResult::SchemaNotReady(refusal.clone()))
         }

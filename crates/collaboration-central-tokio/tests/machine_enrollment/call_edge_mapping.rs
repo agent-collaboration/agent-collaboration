@@ -14,7 +14,7 @@ async fn registry_public_call_refuses_copy_authority_and_allows_session_peer_rea
         "source": {"kind": "copy", "value": "019f0000-0000-7000-8000-000000000806"},
         "sourceFace": "copy",
         "authority": {"kind": "object"},
-        "destination": {"kind": "registry"},
+        "destination": {"kind":"fleet"},
         "destinationFace": "registry",
         "identity": {"operation": "019f0000-0000-7000-8000-000000000806", "step": "object"},
         "kind": "central.installation-peer",
@@ -35,9 +35,10 @@ async fn registry_public_call_refuses_copy_authority_and_allows_session_peer_rea
         // This otherwise identical permitted source reaches the real Registry
         // read. Its absence is a serialized Option<PeerId>, not a refusal.
         envelope["source"] = json!({
-            "kind": "connection", "value": "550e8400-e29b-41d4-a716-446655440806"
+            "kind": "fleet"
         });
         envelope["sourceFace"] = json!("session");
+        envelope["authority"] = json!({"kind":"machine","value":{"installation":"550e8400-e29b-41d4-a716-446655440806"}});
         let reply = fixture
             .runtime
             .on_call(serde_json::to_vec(&envelope)?)

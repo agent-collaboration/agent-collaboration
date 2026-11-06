@@ -6,49 +6,6 @@
   "metadata": "fleet-lease-query-metadata.json",
   "queries": [
     {
-      "name": "read_lease_incarnation",
-      "sql": "sql/fleet/read_lease_incarnation.sql",
-      "row": "StoredLeaseIncarnation",
-      "result": "optional",
-      "parameters": []
-    },
-    {
-      "name": "insert_lease_incarnation",
-      "sql": "sql/fleet/insert_lease_incarnation.sql",
-      "row": null,
-      "result": "execute",
-      "parameters": [
-        {
-          "name": "fence_id",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "incarnation",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "store_lease_incarnation",
-      "sql": "sql/fleet/store_lease_incarnation.sql",
-      "row": null,
-      "result": "execute",
-      "parameters": [
-        {
-          "name": "incarnation",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "fence_id",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
       "name": "read_directory_lease",
       "sql": "sql/fleet/read_directory_lease.sql",
       "row": "StoredDirectoryLease",
@@ -68,7 +25,82 @@
       "result": "execute",
       "parameters": [
         {
-          "name": "lease_projection",
+          "name": "lease_epoch",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_change",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_incarnation",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_changed_at",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_lifecycle_kind",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_origin_kind",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_origin_epoch",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_origin_sequence",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_import_digest",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_retiring_attempt_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_retired_at",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_holder_machine_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_holder_service_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_expires_at",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "lease_digest",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "now",
           "kind": "text",
           "nullable": false
         },
@@ -109,7 +141,17 @@
           "nullable": false
         },
         {
-          "name": "state",
+          "name": "state_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "outcome",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "now",
           "kind": "text",
           "nullable": false
         }
@@ -165,7 +207,27 @@
           "nullable": false
         },
         {
-          "name": "result",
+          "name": "result_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "stored_epoch",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "stored_incarnation",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "stored_change",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "now",
           "kind": "text",
           "nullable": false
         }
@@ -174,7 +236,7 @@
     {
       "name": "list_project_claim_reservations",
       "sql": "sql/fleet/list_project_claim_reservations.sql",
-      "row": "StoredProjectClaimReservation",
+      "row": "StoredClaimReservation",
       "result": "many",
       "parameters": [
         {

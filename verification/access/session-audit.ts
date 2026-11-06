@@ -6,16 +6,18 @@ const frameSchema = z.object({
   kind: z.enum(["welcome", "answer", "request", "notice", "closed"]),
   value: z.unknown(),
 });
-// ServerFrame::Notice -> Notice::Consumer -> PositionedBoardNotice::kind.
-const mailNoticeSchema = z.object({
+// fleet-sync-protocol 7b69ca0: ServerFrame::Request -> ServerRequest::Crate -> ServerCall::Push.
+const crateRequestSchema = z.object({
   body: z.object({
-    kind: z.literal("consumer"),
-    value: z.object({
-      kind: z.object({
-        kind: z.literal("mailWaiting"),
-        value: z.object({ stream: z.enum(["items", "controls"]) }),
-      }),
-    }),
+    kind: z.literal("crate"),
+    value: z.object({ kind: z.string(), value: z.unknown() }),
+  }),
+});
+// Consumer-owned payloads stay opaque: the audit observes delivery identity, not body validity.
+const pushSchema = z.object({
+  item: z.object({
+    kind: z.enum(["item", "cancel"]),
+    value: z.object({ id: z.uuidv7() }),
   }),
 });
 interface FrameBuffer {
@@ -31,7 +33,8 @@ export interface SessionSnapshot {
   readonly activeWelcomes: number;
   readonly welcomes: number;
   readonly frames: Readonly<Record<string, number>>;
-  readonly mailWaiting: Readonly<Record<"items" | "controls", number>>;
+  readonly pushes: Readonly<Record<"items" | "controls", number>>;
+  readonly pushedItemIds: Readonly<Record<"items" | "controls", readonly string[]>>;
   readonly invalidConnections: number;
 }
 export class SessionAudit {
@@ -40,7 +43,10 @@ export class SessionAudit {
   private invalidConnections = 0;
   private readonly active = new Map<number, FrameBuffer | "invalid">();
   private readonly frames: Record<string, number> = {};
-  private readonly mailWaiting = { items: 0, controls: 0 };
+  private readonly pushedItemIds: Record<"items" | "controls", string[]> = {
+    items: [],
+    controls: [],
+  };
   opened(): number {
     this.connections += 1;
     this.active.set(this.connections, {
@@ -131,9 +137,12 @@ export class SessionAudit {
       state.welcomed = true;
     }
     if (message.kind === "closed") state.welcomed = false;
-    if (message.kind === "notice") {
-      const notice = mailNoticeSchema.safeParse(message.value);
-      if (notice.success) this.mailWaiting[notice.data.body.value.kind.value.stream] += 1;
+    if (message.kind === "request") {
+      const request = crateRequestSchema.safeParse(message.value);
+      if (request.success && request.data.body.value.kind === "push") {
+        const { item } = pushSchema.parse(request.data.body.value.value);
+        this.pushedItemIds[item.kind === "item" ? "items" : "controls"].push(item.value.id);
+      }
     }
   }
   snapshot(): SessionSnapshot {
@@ -145,7 +154,14 @@ export class SessionAudit {
       ).length,
       welcomes: this.welcomes,
       frames: { ...this.frames },
-      mailWaiting: { ...this.mailWaiting },
+      pushes: {
+        items: this.pushedItemIds.items.length,
+        controls: this.pushedItemIds.controls.length,
+      },
+      pushedItemIds: {
+        items: [...this.pushedItemIds.items],
+        controls: [...this.pushedItemIds.controls],
+      },
       invalidConnections: this.invalidConnections,
     };
   }

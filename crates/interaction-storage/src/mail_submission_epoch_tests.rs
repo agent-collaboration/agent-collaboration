@@ -56,15 +56,21 @@ async fn admit(
         16 * 1024 * 1024,
         20,
         16 * 1024 * 1024,
-        20,
-        16 * 1024 * 1024,
         minimum_settlement_allowance::<BoardDeliveryTypes>().map_err(StoreError::backend)?,
     )
     .map_err(StoreError::backend)?;
-    let (_, operation) = Outbox::<_, BoardDeliveryTypes>::new(scope, limits)
-        .enqueue_and_admit::<NativeSubmit>(item, PeerId::new(uuid::Uuid::now_v7()).unwrap())
-        .await
-        .map_err(fleet_sync_delivery::delivery_rollback)?;
+    let (_, operation) =
+        Outbox::<_, BoardDeliveryTypes, _>::new(scope, limits, &NoDeliveryConsumer)
+            .enqueue_and_admit::<NativeSubmit, NativeRetention>(
+                item,
+                PeerId::new(uuid::Uuid::now_v7()).unwrap(),
+                fleet_sync_protocol::Submitter::Project(
+                    fleet_sync_protocol::DatabaseId::try_from(project.as_str().to_owned()).unwrap(),
+                ),
+                NoDispatchHost.now(),
+            )
+            .await
+            .map_err(fleet_sync_delivery::delivery_rollback)?;
     if operation.is_none() {
         return Err(StoreError::backend(
             "fresh fixture submission was not admitted",
@@ -189,16 +195,15 @@ async fn an_aborted_admission_keeps_neither_custody_nor_the_epoch() {
                     16 * 1024 * 1024,
                     20,
                     16 * 1024 * 1024,
-                    20,
-                    16 * 1024 * 1024,
                     minimum_settlement_allowance::<BoardDeliveryTypes>()
                         .map_err(StoreError::backend)?,
                 )
                 .map_err(StoreError::backend)?;
-                let status = Outbox::<_, BoardDeliveryTypes>::new(scope, limits)
-                    .status(sdk_id)
-                    .await
-                    .map_err(StoreError::backend)?;
+                let status =
+                    Outbox::<_, BoardDeliveryTypes, _>::new(scope, limits, &NoDeliveryConsumer)
+                        .status(sdk_id)
+                        .await
+                        .map_err(StoreError::backend)?;
                 assert!(matches!(
                     status.state,
                     fleet_sync_delivery::OutboxStatusState::Unknown

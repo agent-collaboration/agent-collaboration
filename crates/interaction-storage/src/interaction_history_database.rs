@@ -18,12 +18,12 @@ pub(super) static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migratio
 
 pub(super) use crate::StorageError;
 
-impl StorageError {
-    pub(super) fn public_error(self, startup: bool) -> InteractionHistoryError {
+impl InteractionHistoryError {
+    pub(super) fn from_storage(error: StorageError, startup: bool) -> Self {
         if startup {
-            tracing::error!(reason = ?self, "interaction_history_startup_failed");
+            tracing::error!(reason = ?error, "interaction_history_startup_failed");
         } else {
-            tracing::error!(reason = ?self, "interaction_history_mutation_failed");
+            tracing::error!(reason = ?error, "interaction_history_mutation_failed");
         }
         InteractionHistoryError::Unavailable
     }

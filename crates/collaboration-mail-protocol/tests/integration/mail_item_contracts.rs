@@ -380,9 +380,7 @@ fn ranges_statuses_and_reports_keep_their_validated_distinct_shapes() {
     let target = item().id().clone();
     for status in [
         MailStatus::Queued {},
-        MailStatus::Sent {
-            seq: MailSeq::new(1),
-        },
+        MailStatus::Sent {},
         MailStatus::AtMachine {},
         MailStatus::Held {},
         MailStatus::Delivered {
@@ -390,6 +388,7 @@ fn ranges_statuses_and_reports_keep_their_validated_distinct_shapes() {
         },
         MailStatus::Uncertain {},
         MailStatus::Expired {},
+        MailStatus::ExpiredAtUpgrade {},
         MailStatus::Cancelled {},
         MailStatus::Refused {
             reason: MailRefusal::CancelSenderMismatch {

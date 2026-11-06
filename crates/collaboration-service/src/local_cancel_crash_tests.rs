@@ -109,19 +109,31 @@ async fn crash_between_attribution_and_sdk_admission_leaves_neither_after_reopen
         CancelBody { target },
     )
     .unwrap();
+    let binding = crate::MachineSenderBinding::new(
+        "00000000-0000-4000-8000-000000000001"
+            .to_owned()
+            .try_into()
+            .unwrap(),
+        state.owner,
+    );
     let admitted = store
         .transaction(move |scope| {
             Box::pin(async move {
-                Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
-                    .enqueue_local_cancel(
-                        replacement,
-                        &*consumer,
-                        runtime_primitives::SyncTime::from_unix_millis(
-                            recorded_at().timestamp_millis(),
-                        ),
-                    )
-                    .await
-                    .map_err(delivery_rollback)
+                Inbox::<_, RouterDeliveryTypes, _>::new(
+                    scope,
+                    config.owner,
+                    config.limits,
+                    &binding,
+                )
+                .enqueue_local_cancel(
+                    replacement,
+                    &*consumer,
+                    runtime_primitives::SyncTime::from_unix_millis(
+                        recorded_at().timestamp_millis(),
+                    ),
+                )
+                .await
+                .map_err(delivery_rollback)
             })
         })
         .await

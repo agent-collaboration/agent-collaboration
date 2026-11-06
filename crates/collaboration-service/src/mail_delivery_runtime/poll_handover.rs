@@ -53,31 +53,35 @@ impl MailDeliveryRuntime {
         let config = self.config;
         let now = self.host.now();
         self.store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    if interaction_storage::read_pending_poll_in_scope(scope, item)
-                        .await
-                        .map_err(StoreError::backend)?
-                        .is_some()
-                    {
-                        // A newly registered waiter may race the first SDK attempt. None
-                        // means no new operation, not an uncertain external handover.
-                        let released = Inbox::<_, RouterDeliveryTypes>::new(
-                            scope,
-                            config.owner,
-                            config.limits,
-                        )
-                        .release_held::<LocalMailTask>(item, now)
-                        .await
-                        .map_err(StoreError::backend)?;
-                        tracing::trace!(
-                            ?item,
-                            rescheduled = released.is_some(),
-                            "Poll waiter requested SDK readiness"
-                        );
-                    }
-                    Ok(())
-                })
+            .transaction({
+                let binding = self.binding.clone();
+                move |scope| {
+                    Box::pin(async move {
+                        if interaction_storage::read_pending_poll_in_scope(scope, item)
+                            .await
+                            .map_err(StoreError::backend)?
+                            .is_some()
+                        {
+                            // A newly registered waiter may race the first SDK attempt. None
+                            // means no new operation, not an uncertain external handover.
+                            let released = Inbox::<_, RouterDeliveryTypes, _>::new(
+                                scope,
+                                config.owner,
+                                config.limits,
+                                binding.as_ref(),
+                            )
+                            .release_held::<LocalMailTask>(item, now)
+                            .await
+                            .map_err(StoreError::backend)?;
+                            tracing::trace!(
+                                ?item,
+                                rescheduled = released.is_some(),
+                                "Poll waiter requested SDK readiness"
+                            );
+                        }
+                        Ok(())
+                    })
+                }
             })
             .await?;
         self.host.wake_at(now).await.map_err(StoreError::backend)

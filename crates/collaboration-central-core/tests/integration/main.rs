@@ -15,7 +15,6 @@ mod identity_boundary_rules;
 mod issuer_decision_contracts;
 mod issuer_policy;
 mod machine_claim_boundaries;
-mod mailbox_limits;
 mod object_addresses;
 mod organization_command_contracts;
 mod presence_lookup_contracts;

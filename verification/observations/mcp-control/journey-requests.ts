@@ -7,7 +7,7 @@
 //   untagged, a SessionRef or `{humanId}` (collaboration-protocol provider_identity.rs:8-16).
 // Field names follow collaboration-client conversation_client.rs and collaboration-protocol
 // provider_conversation_contract.rs; the tool wrappers flatten them beside `timeoutSeconds`.
-import { operationId } from "../provider-journey-plan.ts";
+import { operationId } from "../callbacks/provider-journey-plan.ts";
 import type { SessionRef } from "./observation-models.ts";
 import type { ControlPlan } from "./control-plan.ts";
 

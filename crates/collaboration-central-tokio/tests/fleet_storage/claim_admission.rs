@@ -1,6 +1,6 @@
 //! Native gate calls meet durable tombstones without the library's task replay.
 use super::{
-    claim_settlement::{acquire_incarnation, encoded_projection, registry_call},
+    claim_settlement::registry_call,
     support::{Fixture, TestResult, bundle},
 };
 use collaboration_central_core::{ClaimReservationOutcome, ClaimReservationState};
@@ -8,8 +8,7 @@ use durable_steps::{AtomicStore, CallTarget, StoreError, storage::TransactionSco
 use fleet_sync_protocol::{
     DatabaseId, GateAnswer, HolderChangeRequest, PeerId, SettleOutcome, TransferId,
 };
-use serde_json::{Value, json};
-use sqlx_core::{query::query, row::Row};
+use sqlx_core::query::query;
 
 const PROJECT: &str = "019f0000-0000-7000-8000-000000000a83";
 const ATTEMPT: &str = "019f0000-0000-7000-8000-000000000b01";
@@ -63,19 +62,18 @@ async fn state(fixture: &Fixture) -> TestResult<ClaimReservationState> {
         .transaction(|scope| {
             Box::pin(async move {
                 let row = query::<sqlx_turso::Turso>(
-                    "SELECT state FROM claim_reservations WHERE attempt_id=? AND project_id=?",
+                    "SELECT state_kind,outcome FROM lease_claim_reservations WHERE attempt_id=? AND project_id=?",
                 )
                 .bind(ATTEMPT)
                 .bind(PROJECT)
                 .fetch_one(scope.executor())
                 .await
                 .map_err(StoreError::backend)?;
-                row.try_get::<String, _>("state")
-                    .map_err(StoreError::backend)
+                crate::typed_claim_observer::reservation_state(&row)?.ok_or_else(||StoreError::backend("reservation absent"))
             })
         })
         .await?;
-    Ok(serde_json::from_str(&payload)?)
+    Ok(serde_json::from_value(payload)?)
 }
 
 #[expect(
@@ -128,76 +126,6 @@ async fn cancel_before_reserve_stays_refused_after_reopen() -> TestResult {
             reserve(&reopened, durable_steps::Uuid::now_v7()).await?,
             ClaimReservationOutcome::Refused,
         )?;
-        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
-    }
-    .await;
-    reopened.objects.close().await?;
-    proof
-}
-
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions must fail this test while fixture errors propagate through Result."
-)]
-#[tokio::test]
-async fn granted_attempt_refuses_the_original_reserve_call_even_after_reopen() -> TestResult {
-    let root = tempfile::tempdir()?;
-    let fixture = Fixture::open(root.path()).await?;
-    let reserve_call = durable_steps::Uuid::now_v7();
-    let proof = async {
-        fixture.import(&bundle()?).await?;
-        assert_eq!(reserve(&fixture, reserve_call).await?, GateAnswer::Reserved);
-        assert_eq!(reserve(&fixture, reserve_call).await?, GateAnswer::Reserved);
-        let incarnation = acquire_incarnation(&fixture).await?;
-        let answer = fixture
-            .runtime
-            .on_call(registry_call(
-                "central.claim-granted",
-                json!({"attempt":ATTEMPT,"projection":encoded_projection(incarnation)?}),
-                durable_steps::Uuid::now_v7(),
-            )?)
-            .await
-            .map_err(|error| format!("grant did not answer: {error:?}"))?;
-        assert_eq!(
-            serde_json::from_slice::<Value>(&answer)?,
-            json!({"kind":"applied"})
-        );
-        assert_settled(
-            reserve(&fixture, reserve_call).await?,
-            ClaimReservationOutcome::Granted,
-        )?;
-        assert_eq!(
-            state(&fixture).await?,
-            ClaimReservationState::Settled {
-                outcome: ClaimReservationOutcome::Granted
-            }
-        );
-        assert!(
-            cancel(&fixture).await.is_err(),
-            "a conflicting outcome must retain the grant"
-        );
-        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
-    }
-    .await;
-    fixture.objects.close().await?;
-    proof?;
-    drop(fixture);
-    let reopened = Fixture::open(root.path()).await?;
-    let proof = async {
-        assert_settled(
-            reserve(&reopened, reserve_call).await?,
-            ClaimReservationOutcome::Granted,
-        )?;
-        assert_settled(
-            reserve(&reopened, durable_steps::Uuid::now_v7()).await?,
-            ClaimReservationOutcome::Granted,
-        )?;
-        assert_eq!(
-            state(&reopened).await?,
-            ClaimReservationState::Settled {
-                outcome: ClaimReservationOutcome::Granted
-            }
-        );
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }
     .await;

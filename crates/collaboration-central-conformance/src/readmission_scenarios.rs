@@ -1,4 +1,4 @@
-//! Real mailbox Open and activation interleavings through normal admin and sessions.
+//! Real enrollment reservation and activation interleavings through normal admin and sessions.
 
 use crate::revocation_race_scenarios::{live, receive};
 use crate::{ConformanceClient, ConformanceResult, enroll_admitted_peer};
@@ -16,7 +16,9 @@ const SERVICE: &str = "550e8400-e29b-41d4-a716-4466554400e7";
 const OLD_CREDENTIAL: &str = "activation-before-finish-old";
 const NEW_CREDENTIAL: &str = "activation-before-finish-new";
 
-pub async fn run_readmission_open_conformance(client: &ConformanceClient) -> ConformanceResult<()> {
+pub async fn run_readmission_reservation_conformance(
+    client: &ConformanceClient,
+) -> ConformanceResult<()> {
     let mut active = enroll_admitted_peer(
         client,
         SERVICE,
@@ -27,8 +29,6 @@ pub async fn run_readmission_open_conformance(client: &ConformanceClient) -> Con
     .await?;
     let stable_peer = active.peer;
     let mut requests = JoinSet::new();
-    let mut old_opens: Vec<durable_steps::CallId> = Vec::new();
-    let mut old_closes: Vec<durable_steps::CallId> = Vec::new();
     let mut old_ends: Vec<durable_steps::CallId> = Vec::new();
     let proof = async {
         for (credential, session) in [
@@ -36,92 +36,69 @@ pub async fn run_readmission_open_conformance(client: &ConformanceClient) -> Con
             ("readmission-second-cycle", "019f0000-0000-7000-8000-000000000973"),
         ] {
             revoke(client).await?;
-            let closed = observed(client, |value| completed(value.operation.as_ref())).await?;
+            let ended = observed(client, |value| completed(value.operation.as_ref())).await?;
             if receive(&mut active.socket).await? != json!({"kind":"closed","value":{"reason":{"kind":"credentialRejected","value":"revoked"}}}) {
                 return Err("a completed revoke did not close its old session".into());
             }
-            let revoke = closed.enrollment.as_ref().and_then(|row| row.last_revocation_operation)
+            let revoke = ended.enrollment.as_ref().and_then(|row|row.last_revocation_operation)
                 .ok_or("completed revoke has no owning operation")?;
-            old_closes.push(closed.close_calls.iter().find(|call| call.operation == revoke)
-                .cloned().ok_or("completed revoke has no physical Close call")?);
-            old_ends.push(closed.calls.iter().find(|call| call.operation == revoke)
-                .cloned().ok_or("completed revoke has no EndSessions call")?);
-            for call in &old_opens {
-                control(client, RevocationControl::Replay { call: call.clone() }).await?;
-            }
-            control(client, RevocationControl::ArmOpen).await?;
+            old_ends.push(ended.calls.iter().find(|call|call.operation==revoke).cloned()
+                .ok_or("completed revoke has no actual EndSessions call")?);
+            control(client, RevocationControl::ArmBeforeActivation).await?;
             let proposed = json!({"kind":"enrollMachine","value":{
                 "installation":SERVICE,"peer":stable_peer,"label":credential,
                 "access_client_id":crate::access_client_id(credential)?,
-                "credential_hash":format!("{:x}", Sha256::digest(credential.as_bytes())),
+                "credential_hash":format!("{:x}",Sha256::digest(credential.as_bytes())),
                 "expires_at":"2033-05-18T03:33:20Z"
             }});
-            let caller = client.clone();
-            let request = proposed.clone();
-            requests.spawn(async move { crate::enrollment_scenarios::enroll(&caller, &request).await });
-            let held = observed(client, |value| value.open_pause.reached).await?;
-            let reserved = held.enrollment.clone().ok_or("held Open lost the reserved enrollment")?;
-            if !reserved.revoked || reserved.peer.as_uuid() != stable_peer {
-                return Err("delayed Open activated the row before the mailbox answered".into());
+            let caller=client.clone();
+            let request=proposed.clone();
+            requests.spawn(async move {crate::enrollment_scenarios::enroll(&caller,&request).await});
+            let held=observed(client,|value|value.before_activation_pause.reached).await?;
+            let reserved=held.enrollment.clone().ok_or("pending activation lost its reserved enrollment")?;
+            let enrollment=reserved.last_enrollment_operation.ok_or("reserved row lacks enrollment operation")?;
+            if !reserved.revoked || reserved.peer.as_uuid()!=stable_peer || held.activation_step.is_some()
+                || !held.readmission_operation.as_ref().is_some_and(|operation|operation.id==enrollment && matches!(operation.state,OperationState::Running {..})) {
+                return Err(format!("reservation activated before its local step: {held:?}").into());
             }
-            let enrollment = reserved.last_enrollment_operation.ok_or("held Open lacks enrollment operation")?;
-            old_opens.push(held.open_calls.iter().find(|call| call.operation == enrollment)
-                .cloned().ok_or("held Open has no actual durable call")?);
-            let response = client.with_machine_access(client.client.get(format!("{}/v1/session",client.base_url))
-                .bearer_auth(credential), credential)?.send().await?;
-            if response.status() != reqwest::StatusCode::UNAUTHORIZED || response.json::<Value>().await? != json!("revoked") {
-                return Err("reserved credential authenticated before Open completed".into());
+            let response=client.with_machine_access(client.client.get(format!("{}/v1/session",client.base_url)).bearer_auth(credential),credential)?.send().await?;
+            if response.status()!=reqwest::StatusCode::UNAUTHORIZED || response.json::<Value>().await?!=json!("revoked") {
+                return Err("reserved credential authenticated before activation committed".into());
             }
-            for request in [proposed.clone(), {
-                let mut overlap = proposed;
-                *overlap.pointer_mut("/value/label").ok_or("overlap enrollment label missing")? = json!("must not overwrite reserved identities");
+            for request in [proposed.clone(),{
+                let mut overlap=proposed;
+                *overlap.pointer_mut("/value/label").ok_or("overlap label missing")?=json!("must not overwrite reserved identities");
                 overlap
             }] {
-                if crate::enrollment_scenarios::enroll(client, &request).await? != json!({"kind":"enrollmentInProgress"}) {
-                    return Err("overlapping enrollment was admitted while Open was held".into());
+                if crate::enrollment_scenarios::enroll(client,&request).await?!=json!({"kind":"enrollmentInProgress"}) {
+                    return Err("overlapping enrollment was admitted during its reservation".into());
                 }
             }
-            if revoke_answer(client).await? != json!({"kind":"enrollmentInProgress"})
-                || control(client, RevocationControl::Observe).await?.enrollment.as_ref() != Some(&reserved) {
-                return Err("pending revoke or overlap changed the reserved row".into());
+            if revoke_answer(client).await?!=json!({"kind":"enrollmentInProgress"})
+                || control(client,RevocationControl::Observe).await?.enrollment.as_ref()!=Some(&reserved) {
+                return Err("overlapping enrollment or revoke changed the reserved row".into());
             }
-            control(client, RevocationControl::ArmBeforeActivation).await?;
-            control(client, RevocationControl::ReleaseOpen).await?;
-            let opened = observed(client, |value| value.before_activation_pause.reached).await?;
-            let saved_open = opened.open_step.as_ref().ok_or("Open's saved answer missing before activation")?;
-            if saved_open.name.as_str() != "open_mailbox"
-                || !matches!(&saved_open.state, StepState::CallDone { .. })
-                || opened.activation_step.is_some()
-                || opened.enrollment.as_ref() != Some(&reserved) {
-                return Err(format!("after-Open checkpoint changed credentials or activated early: {opened:?}").into());
-            }
-            let response = client.with_machine_access(client.client.get(format!("{}/v1/session",client.base_url))
-                .bearer_auth(credential), credential)?.send().await?;
-            if response.status() != reqwest::StatusCode::UNAUTHORIZED || response.json::<Value>().await? != json!("revoked") {
-                return Err("reserved credential authenticated after Open but before activation".into());
-            }
-            println!("READMISSION_CASE saved_open_before_activation_keeps_reserved_credential_inactive passed");
-            control(client, RevocationControl::ReleaseBeforeActivation).await?;
-            observed(client, |value| value.enrollment.as_ref().is_some_and(|row| !row.revoked)
-                && value.readmission_operation.as_ref().is_some_and(|record| record.id == enrollment)
+            println!("READMISSION_CASE reserved_before_activation_keeps_new_credential_inactive passed");
+            control(client,RevocationControl::ReleaseBeforeActivation).await?;
+            observed(client,|value|value.enrollment.as_ref().is_some_and(|row|!row.revoked)
+                && value.readmission_operation.as_ref().is_some_and(|record|record.id==enrollment)
                 && completed(value.readmission_operation.as_ref())).await?;
-            let next = enroll_admitted_peer(client, SERVICE,"019f0000-0000-7000-8000-000000001007", credential, session).await?;
-            if next.peer != stable_peer { return Err("a later readmission changed PeerId".into()); }
-            let previous = std::mem::replace(&mut active, next);
-            let _ = previous.socket.close(reqwest_websocket::CloseCode::Normal,None).await;
-            for call in old_closes.iter().chain(&old_ends) {
-                control(client, RevocationControl::Replay { call: call.clone() }).await?;
+            let next=enroll_admitted_peer(client,SERVICE,"019f0000-0000-7000-8000-000000001007",credential,session).await?;
+            if next.peer!=stable_peer {return Err("readmission changed the machine's PeerId".into());}
+            let previous=std::mem::replace(&mut active,next);
+            let _=previous.socket.close(reqwest_websocket::CloseCode::Normal,None).await;
+            for call in &old_ends {
+                control(client,RevocationControl::Replay {call:call.clone()}).await?;
             }
-            live(&mut active.socket, session).await?;
-            let answer = requests.join_next().await.ok_or("readmission caller disappeared")???;
-            if answer != json!({"kind":"enrollmentInProgress"}) && answer.get("kind").and_then(Value::as_str) != Some("machineEnrolled") {
-                return Err(format!("unexpected readmission answer {answer}").into());
+            live(&mut active.socket,session).await?;
+            let answer=requests.join_next().await.ok_or("readmission caller disappeared")???;
+            if answer!=json!({"kind":"enrollmentInProgress"}) && answer.get("kind").and_then(Value::as_str)!=Some("machineEnrolled") {
+                return Err(format!("unexpected original readmission answer: {answer}").into());
             }
         }
-        println!("READMISSION_CASE two_cycles_hold_open_reserve_credentials_and_replay_old_calls passed");
+        println!("READMISSION_CASE two_cycles_reserve_credentials_and_replay_old_end_sessions passed");
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
     }.await;
-    let _ = control(client, RevocationControl::ReleaseOpen).await;
     let _ = control(client, RevocationControl::ReleaseBeforeActivation).await;
     requests.abort_all();
     while requests.join_next().await.is_some() {}

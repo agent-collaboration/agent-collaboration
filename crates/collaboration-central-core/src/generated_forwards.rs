@@ -9,36 +9,66 @@ use sqlx_core::{
 
 #[derive(Debug)]
 pub(crate) struct StoredForwardRow {
-    pub forward_frame: Option<String>,
-    pub record: Option<String>,
+    pub id: Option<String>,
+    pub forward_frame_id: Option<String>,
+    pub side: Option<String>,
+    pub request_frame_id: Option<String>,
+    pub origin_machine_id: Option<String>,
+    pub origin_session_id: Option<String>,
+    pub connection_id: Option<String>,
+    pub expected_holder_machine_id: Option<String>,
+    pub project_id: Option<String>,
+    pub phase: Option<String>,
+    pub deadline_at: Option<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+    pub origin_service_id: Option<String>,
+    pub holder_service_id: Option<String>,
 }
-pub(crate) fn read_pending_forwards<S>(
+pub(crate) fn read_forward_rows<S>(
     scope: &mut S,
+    side: String,
 ) -> impl std::future::Future<Output = Result<Vec<StoredForwardRow>, sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
     for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
     for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
         let statement = query::<S::Database>(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/sql/forwards/read_pending_forwards.sql"
-        )));
+            "/sql/forwards/read_forward_rows.sql"
+        )))
+        .bind(side);
         let rows = statement.fetch_all(scope.executor()).await?;
         rows.iter()
             .map(|row| {
                 Ok(StoredForwardRow {
-                    forward_frame: row.try_get("forward_frame")?,
-                    record: row.try_get("record")?,
+                    id: row.try_get("id")?,
+                    forward_frame_id: row.try_get("forward_frame_id")?,
+                    side: row.try_get("side")?,
+                    request_frame_id: row.try_get("request_frame_id")?,
+                    origin_machine_id: row.try_get("origin_machine_id")?,
+                    origin_session_id: row.try_get("origin_session_id")?,
+                    connection_id: row.try_get("connection_id")?,
+                    expected_holder_machine_id: row.try_get("expected_holder_machine_id")?,
+                    project_id: row.try_get("project_id")?,
+                    phase: row.try_get("phase")?,
+                    deadline_at: row.try_get("deadline_at")?,
+                    created_at: row.try_get("created_at")?,
+                    updated_at: row.try_get("updated_at")?,
+                    origin_service_id: row.try_get("origin_service_id")?,
+                    holder_service_id: row.try_get("holder_service_id")?,
                 })
             })
             .collect()
     }
 }
-pub(crate) fn read_pending_forward<S>(
+pub(crate) fn read_forward_row<S>(
     scope: &mut S,
+    side: String,
     forward_frame: String,
 ) -> impl std::future::Future<Output = Result<Option<StoredForwardRow>, sqlx_core::Error>> + Send
 where
@@ -51,43 +81,81 @@ where
     async move {
         let statement = query::<S::Database>(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/sql/forwards/read_pending_forward.sql"
+            "/sql/forwards/read_forward_row.sql"
         )))
+        .bind(side)
         .bind(forward_frame);
         let row = statement.fetch_optional(scope.executor()).await?;
         row.as_ref()
             .map(|row| {
                 Ok(StoredForwardRow {
-                    forward_frame: row.try_get("forward_frame")?,
-                    record: row.try_get("record")?,
+                    id: row.try_get("id")?,
+                    forward_frame_id: row.try_get("forward_frame_id")?,
+                    side: row.try_get("side")?,
+                    request_frame_id: row.try_get("request_frame_id")?,
+                    origin_machine_id: row.try_get("origin_machine_id")?,
+                    origin_session_id: row.try_get("origin_session_id")?,
+                    connection_id: row.try_get("connection_id")?,
+                    expected_holder_machine_id: row.try_get("expected_holder_machine_id")?,
+                    project_id: row.try_get("project_id")?,
+                    phase: row.try_get("phase")?,
+                    deadline_at: row.try_get("deadline_at")?,
+                    created_at: row.try_get("created_at")?,
+                    updated_at: row.try_get("updated_at")?,
+                    origin_service_id: row.try_get("origin_service_id")?,
+                    holder_service_id: row.try_get("holder_service_id")?,
                 })
             })
             .transpose()
     }
 }
-pub(crate) fn store_pending_forward<S>(
+pub(crate) fn store_forward_row<S>(
     scope: &mut S,
+    id: String,
     forward_frame: String,
-    record: String,
+    side: String,
+    request_frame: String,
+    origin_machine: String,
+    origin_session: String,
+    connection: String,
+    expected_holder: Option<String>,
+    project: String,
+    phase: String,
+    deadline: String,
+    created_at: String,
+    updated_at: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
     for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
         let statement = query::<S::Database>(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/sql/forwards/store_pending_forward.sql"
+            "/sql/forwards/store_forward_row.sql"
         )))
+        .bind(id)
         .bind(forward_frame)
-        .bind(record);
+        .bind(side)
+        .bind(request_frame)
+        .bind(origin_machine)
+        .bind(origin_session)
+        .bind(connection)
+        .bind(expected_holder)
+        .bind(project)
+        .bind(phase)
+        .bind(deadline)
+        .bind(created_at)
+        .bind(updated_at);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
 }
-pub(crate) fn delete_pending_forward<S>(
+pub(crate) fn delete_forward_row<S>(
     scope: &mut S,
+    side: String,
     forward_frame: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
@@ -98,101 +166,9 @@ where
     async move {
         let statement = query::<S::Database>(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/sql/forwards/delete_pending_forward.sql"
+            "/sql/forwards/delete_forward_row.sql"
         )))
-        .bind(forward_frame);
-        statement.execute(scope.executor()).await?;
-        Ok(())
-    }
-}
-pub(crate) fn read_delivered_forwards<S>(
-    scope: &mut S,
-) -> impl std::future::Future<Output = Result<Vec<StoredForwardRow>, sqlx_core::Error>> + Send
-where
-    S: TransactionScope,
-    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
-    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
-{
-    async move {
-        let statement = query::<S::Database>(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/sql/forwards/read_delivered_forwards.sql"
-        )));
-        let rows = statement.fetch_all(scope.executor()).await?;
-        rows.iter()
-            .map(|row| {
-                Ok(StoredForwardRow {
-                    forward_frame: row.try_get("forward_frame")?,
-                    record: row.try_get("record")?,
-                })
-            })
-            .collect()
-    }
-}
-pub(crate) fn read_delivered_forward<S>(
-    scope: &mut S,
-    forward_frame: String,
-) -> impl std::future::Future<Output = Result<Option<StoredForwardRow>, sqlx_core::Error>> + Send
-where
-    S: TransactionScope,
-    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
-    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
-    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
-{
-    async move {
-        let statement = query::<S::Database>(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/sql/forwards/read_delivered_forward.sql"
-        )))
-        .bind(forward_frame);
-        let row = statement.fetch_optional(scope.executor()).await?;
-        row.as_ref()
-            .map(|row| {
-                Ok(StoredForwardRow {
-                    forward_frame: row.try_get("forward_frame")?,
-                    record: row.try_get("record")?,
-                })
-            })
-            .transpose()
-    }
-}
-pub(crate) fn store_delivered_forward<S>(
-    scope: &mut S,
-    forward_frame: String,
-    record: String,
-) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
-where
-    S: TransactionScope,
-    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
-{
-    async move {
-        let statement = query::<S::Database>(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/sql/forwards/store_delivered_forward.sql"
-        )))
-        .bind(forward_frame)
-        .bind(record);
-        statement.execute(scope.executor()).await?;
-        Ok(())
-    }
-}
-pub(crate) fn delete_delivered_forward<S>(
-    scope: &mut S,
-    forward_frame: String,
-) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
-where
-    S: TransactionScope,
-    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
-{
-    async move {
-        let statement = query::<S::Database>(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/sql/forwards/delete_delivered_forward.sql"
-        )))
+        .bind(side)
         .bind(forward_frame);
         statement.execute(scope.executor()).await?;
         Ok(())

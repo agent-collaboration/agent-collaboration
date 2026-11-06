@@ -47,7 +47,9 @@ impl BoardOperations {
         let result = if known_in_fleet || authority.is_some() {
             let current = authority.and_then(|(writer, observation)| match writer {
                 CurrentWriter::Held { epoch } => Some(epoch),
-                CurrentWriter::Unknown {} | CurrentWriter::Unheld {} => {
+                CurrentWriter::Unknown {}
+                | CurrentWriter::Unheld {}
+                | CurrentWriter::NotInCentral {} => {
                     observation.map(|observation| observation.lease_version.epoch())
                 }
             });

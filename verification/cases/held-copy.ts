@@ -31,7 +31,6 @@ export async function heldCopy(context: PreparedRun, receipt: Receipt): Promise<
   };
   const hold = new CopyHold({
     owner: context.central.owner,
-    service: (await source.installation.identity()).serviceId,
     project: notification.project,
     receipt,
   });

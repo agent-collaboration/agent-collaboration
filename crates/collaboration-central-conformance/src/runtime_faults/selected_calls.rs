@@ -16,37 +16,48 @@ struct InvocationKind {
 }
 
 #[derive(Deserialize)]
-struct MailboxInvocation {
+struct FleetInvocation {
     kind: SelectedInvocationKind,
-    request: MailboxSubmitIdentity,
+    request: FleetSubmitIdentity,
 }
 
 #[derive(Deserialize)]
-struct MailboxSubmitIdentity {
-    origin: PeerId,
-    item: MailboxItem,
+struct FleetSubmitIdentity {
+    session: SubmittingSession,
+    item: FleetItem,
 }
 
 #[derive(Deserialize)]
-struct MailboxItem {
-    value: MailboxItemIdentity,
+struct SubmittingSession {
+    peer: PeerId,
 }
 
 #[derive(Deserialize)]
-struct MailboxItemIdentity {
+struct FleetItem {
+    value: FleetItemIdentity,
+}
+
+#[derive(Deserialize)]
+struct FleetItemIdentity {
     id: ItemId,
 }
 
 #[derive(Deserialize)]
 enum SelectedInvocationKind {
-    #[serde(rename = "central.mailbox-submit")]
-    MailboxSubmit,
+    #[serde(rename = "central.mail-submit")]
+    FleetMailSubmit,
     #[serde(rename = "central.installation-peer")]
     InstallationPeer,
     #[serde(rename = "central.forward-route")]
     ForwardRoute,
+    #[serde(rename = "central.machine-notice")]
+    FleetMachineNotice,
+    #[serde(rename = "fleet-sync.claim-settlement")]
+    FleetClaimSettlement,
     #[serde(rename = "central.copy-session-write")]
     CopyWrite,
+    #[serde(rename = "fleet-sync.copy-fence")]
+    CopyFence,
     #[serde(other)]
     Other,
 }
@@ -54,12 +65,12 @@ enum SelectedInvocationKind {
 impl DispatchSelection {
     pub(super) fn matches(&self, request: &[u8]) -> bool {
         match self {
-            Self::Any => true,
+            Self::Any | Self::Call(DispatchCallSelector::Any) => true,
             Self::ExactRequest(expected) => expected == request,
-            Self::Call(DispatchCallSelector::MailboxSubmitFor { origin, item }) => {
-                serde_json::from_slice::<MailboxInvocation>(request).is_ok_and(|invocation| {
-                    matches!(invocation.kind, SelectedInvocationKind::MailboxSubmit)
-                        && invocation.request.origin == *origin
+            Self::Call(DispatchCallSelector::FleetMailSubmitFor { peer, item }) => {
+                serde_json::from_slice::<FleetInvocation>(request).is_ok_and(|invocation| {
+                    matches!(invocation.kind, SelectedInvocationKind::FleetMailSubmit)
+                        && invocation.request.session.peer == *peer
                         && invocation.request.item.value.id == *item
                 })
             }
@@ -68,8 +79,8 @@ impl DispatchSelection {
                     matches!(
                         (call, invocation.kind),
                         (
-                            DispatchCallSelector::MailboxSubmit,
-                            SelectedInvocationKind::MailboxSubmit
+                            DispatchCallSelector::FleetMailSubmit,
+                            SelectedInvocationKind::FleetMailSubmit
                         ) | (
                             DispatchCallSelector::InstallationPeer,
                             SelectedInvocationKind::InstallationPeer
@@ -77,8 +88,17 @@ impl DispatchSelection {
                             DispatchCallSelector::ForwardRoute,
                             SelectedInvocationKind::ForwardRoute
                         ) | (
+                            DispatchCallSelector::FleetMachineNotice,
+                            SelectedInvocationKind::FleetMachineNotice
+                        ) | (
+                            DispatchCallSelector::FleetClaimSettlement,
+                            SelectedInvocationKind::FleetClaimSettlement
+                        ) | (
                             DispatchCallSelector::CopyWrite,
                             SelectedInvocationKind::CopyWrite
+                        ) | (
+                            DispatchCallSelector::CopyFence,
+                            SelectedInvocationKind::CopyFence
                         )
                     )
                 })

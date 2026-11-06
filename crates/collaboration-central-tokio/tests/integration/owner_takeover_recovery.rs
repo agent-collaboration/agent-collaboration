@@ -9,6 +9,7 @@ mod grant_readback;
 use crate::owner_registry_scenarios;
 
 use board_sync_protocol::{BoardAnnotation, BoardConsumerProtocol};
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, DispatchFaultObservation, JwksFixtureServer,
     ObjectReplyFaultObservation, RuntimeControl, RuntimeControlRequest, RuntimeFaultObservation,
@@ -102,7 +103,7 @@ async fn control(
         .post(format!("{base}/admin/v1/conformance/runtime"))
         .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
         .json(&RuntimeControlRequest {
-            address: ObjectAddress::Registry,
+            address: ObjectAddress::Fleet,
             command,
         })
         .send()
@@ -112,11 +113,17 @@ async fn control(
         .await?)
 }
 async fn held_fence(base: &str, database: DatabaseId) -> ConformanceResult<Value> {
-    let observation = control(base, RuntimeControl::AwaitHeldDispatch).await?;
+    let observation = control(
+        base,
+        RuntimeControl::AwaitHeldDispatch {
+            key: DispatchKey::any(ObjectAddress::Copy(database)),
+        },
+    )
+    .await?;
     let DispatchFaultObservation::Held {
         destination,
         request,
-    } = observation.dispatch
+    } = observation.dispatch(&DispatchKey::any(ObjectAddress::Copy(database)))
     else {
         return Err("Takeover never reached its held Copy Fence".into());
     };
@@ -148,7 +155,7 @@ fn validate_fence(
             .cloned()
             .ok_or("held Fence omitted target")?,
     )?;
-    if envelope.get("source") != Some(&json!(ObjectAddress::Registry))
+    if envelope.get("source") != Some(&json!(ObjectAddress::Fleet))
         || envelope.get("destination") != Some(&json!(ObjectAddress::Copy(database)))
         || envelope.get("kind") != Some(&json!(<fleet_sync_lease::CopyFence as CallTarget>::KIND))
         || target.copy != configuration::registry_config()?.authoritative_receiver
@@ -256,8 +263,9 @@ async fn arrange_and_interrupt(base: &str) -> ConformanceResult<InterruptedTrans
         .timeout(Duration::from_secs(10))
         .build()?;
     let mut callers = tokio::task::JoinSet::new();
+    let database = DatabaseId::new(Uuid::now_v7())?;
     let proof = async {
-        let database = DatabaseId::new(Uuid::now_v7())?;
+
         let workspace = WorkspaceId::generate(); let board = BoardId::generate();
         for operation in [
             FleetOperation::WorkspaceCreate {name: ResourceName::try_from("interrupted Takeover workspace".to_owned())?, description: Description::try_from("lost committed Fence reply".to_owned())?},
@@ -280,13 +288,13 @@ async fn arrange_and_interrupt(base: &str) -> ConformanceResult<InterruptedTrans
         assert_copy(&mut old.socket, database, 1, false).await?;
         println!("TAKEOVER_RECOVERY_STAGE stale_preview_preserves_fence1_and_literal_row passed");
         let confirmation = json!({"transferId":Uuid::now_v7(),"toInstallation":TARGET_SERVICE,"reason":"recover committed but lost Copy Fence reply","preview":preview(&http,&route,2).await?});
-        control(base, RuntimeControl::HoldNextDispatch {destination: ObjectAddress::Copy(database)}).await?;
+        control(base, RuntimeControl::HoldNextDispatch { key: DispatchKey::any(ObjectAddress::Copy(database)) }).await?;
         let send_http = http.clone(); let send_route = route.clone(); let send_confirmation = confirmation.clone();
         callers.spawn(async move { owner_registry_scenarios::post(&send_http,&send_route,&send_confirmation).await });
         let fence_envelope = held_fence(base, database).await?;
         validate_fence(&fence_envelope, database, &confirmation)?;
         control(base, RuntimeControl::DropNextObjectReply {destination: ObjectAddress::Copy(database)}).await?;
-        control(base, RuntimeControl::ResumeDispatch).await?;
+        control(base, RuntimeControl::ResumeDispatch { key: DispatchKey::any(ObjectAddress::Copy(database)) }).await?;
         let dropped = control(base, RuntimeControl::AwaitDroppedObjectReply).await?;
         if !matches!(dropped.object_reply,ObjectReplyFaultObservation::Dropped {destination,request} if destination==ObjectAddress::Copy(database) && serde_json::from_slice::<Value>(&request)?==fence_envelope) { return Err("Takeover did not lose this exact successful Copy Fence reply".into()); }
         let initial = tokio::time::timeout(Duration::from_secs(8), callers.join_next()).await?.ok_or("interrupted Takeover HTTP caller disappeared")???;
@@ -295,7 +303,13 @@ async fn arrange_and_interrupt(base: &str) -> ConformanceResult<InterruptedTrans
         println!("TAKEOVER_RECOVERY_STAGE exact_Fence_reply_lost_after_committed_fence3_before_reopen passed");
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(InterruptedTransfer {database, confirmation, fence_envelope, old_session, target_session})
     }.await;
-    let _ = control(base, RuntimeControl::ResumeDispatch).await;
+    let _ = control(
+        base,
+        RuntimeControl::ResumeDispatch {
+            key: DispatchKey::any(ObjectAddress::Copy(database)),
+        },
+    )
+    .await;
     callers.abort_all();
     while callers.join_next().await.is_some() {}
     let old_closed = old
@@ -337,6 +351,9 @@ async fn reconnect(
             .into(),
         ))
         .await?;
+    ConformanceClient::new(base)?
+        .wake_due_after_hello(session_id)
+        .await?;
     let message = tokio::time::timeout(Duration::from_secs(5), socket.next())
         .await?
         .ok_or("reopened holder ended before Welcome")??;
@@ -371,7 +388,7 @@ async fn recover_same_transfer(
         let replayed = held_fence(base, interrupted.database).await?;
         if replayed != interrupted.fence_envelope { return Err("reopened Takeover changed its exact original Fence CallId/request/target".into()); }
         println!("TAKEOVER_RECOVERY_STAGE owning_reopen_retries_exact_original_Fence_envelope passed");
-        control(base, RuntimeControl::ResumeDispatch).await?;
+        control(base, RuntimeControl::ResumeDispatch { key: DispatchKey::any(ObjectAddress::Copy(interrupted.database)) }).await?;
         let initial = tokio::time::timeout(Duration::from_secs(8),callers.join_next()).await?.ok_or("reopened Takeover caller disappeared")???;
         let granted = owner_registry_scenarios::complete(&http,&route,&interrupted.confirmation,initial).await?;
         let expected = json!({"kind":"granted","value":{"newEpoch":3,"start":{"epoch":1,"sequence":2}}});
@@ -396,7 +413,13 @@ async fn recover_same_transfer(
         let target_closed=target.close(reqwest_websocket::CloseCode::Normal,None).await;
         readback?;old_closed?;target_closed?;Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
     }.await;
-    let _ = control(base, RuntimeControl::ResumeDispatch).await;
+    let _ = control(
+        base,
+        RuntimeControl::ResumeDispatch {
+            key: DispatchKey::any(ObjectAddress::Copy(interrupted.database)),
+        },
+    )
+    .await;
     callers.abort_all();
     while callers.join_next().await.is_some() {}
     proof
@@ -431,15 +454,15 @@ async fn takeover_replays_committed_lost_fence_after_owning_reopen_without_secon
             settings(root.path(), &keys)?,
             vec![
                 RuntimeControlRequest {
-                    address: ObjectAddress::Registry,
+                    address: ObjectAddress::Fleet,
                     command: RuntimeControl::SetTime {
                         now: RegistryTime("2030-03-17T17:46:41Z".parse()?),
                     },
                 },
                 RuntimeControlRequest {
-                    address: ObjectAddress::Registry,
+                    address: ObjectAddress::Fleet,
                     command: RuntimeControl::HoldNextDispatch {
-                        destination: ObjectAddress::Copy(interrupted.database),
+                        key: DispatchKey::any(ObjectAddress::Copy(interrupted.database)),
                     },
                 },
             ],

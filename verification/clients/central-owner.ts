@@ -1,5 +1,9 @@
 import { z } from "zod";
 import { decode, encode } from "../exact-json.ts";
+import {
+  parseFleetSchemaReadback,
+  type FleetSchemaReadback,
+} from "../observations/central/d1-fleet-schema.ts";
 
 export class CentralOwner {
   readonly origin: URL;
@@ -45,6 +49,19 @@ export class CentralOwner {
   }
   async control(address: unknown, command: unknown): Promise<unknown> {
     return this.call("/admin/v1/conformance/runtime", { address, command });
+  }
+  async projectFault(project: string, enabled: boolean): Promise<unknown> {
+    const raw = await this.control(
+      { kind: "copy", value: z.uuidv7().parse(project) },
+      { kind: enabled ? "projectUnavailable" : "clearProjectFault" },
+    );
+    z.object({ storage: z.object({ kind: z.literal(enabled ? "unavailable" : "idle") }) }).parse(
+      raw,
+    );
+    return raw;
+  }
+  async fleetSchema(): Promise<FleetSchemaReadback> {
+    return parseFleetSchemaReadback(await this.call("/admin/v1/conformance/fleet-schema"));
   }
 }
 export function environmentValue(name: string): string {

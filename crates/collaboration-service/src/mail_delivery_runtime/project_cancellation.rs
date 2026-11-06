@@ -1,7 +1,7 @@
 //! Frozen project controls share the original's atomic SDK custody and epoch boundary.
 use super::{
     AtomicStore, CarrierAcceptance, Clock, DeliveryItemRef, MailDeliveryRuntime, MailSender,
-    RouterDeliveryTypes, StoreError, SubmitMailTask, WakeScheduler,
+    RemoveMailRecord, RouterDeliveryTypes, StoreError, SubmitMailTask, WakeScheduler,
 };
 use fleet_sync_delivery::{
     DeliveryTransactionFailure, Outbox, OutboxAdmission, classify_delivery_store_error,
@@ -65,6 +65,13 @@ impl MailDeliveryRuntime {
             .map_err(|error| {
                 DeliveryTransactionFailure::OutcomeUnknown(StoreError::backend(error))
             })?;
+        let submitter = fleet_sync_protocol::Submitter::Project(
+            fleet_sync_protocol::DatabaseId::try_from(project.as_str().to_owned()).map_err(
+                |_| DeliveryTransactionFailure::Corrupt {
+                    field: "project cancel submitter".into(),
+                },
+            )?,
+        );
         let config = self.config;
         let consumer = self.consumer.clone();
         let now = self.clock.now();
@@ -72,25 +79,35 @@ impl MailDeliveryRuntime {
         let probe = self.project_admission_probe.clone();
         let (admission, has_effects) = self
             .store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    let (admission, operation) =
-                        Outbox::<_, RouterDeliveryTypes>::new(scope, config.limits)
-                            .enqueue_cancel_and_admit::<SubmitMailTask, _>(
-                                cancel, relay, &*consumer,
-                            )
-                            .await
-                            .map_err(delivery_rollback)?;
-                    #[cfg(test)]
-                    if let Some(socket) = probe {
-                        super::project_admission::pause_project_admission(&socket).await?;
-                    }
-                    super::project_admission::record_project_custody_epoch(
-                        scope, &admission, &id, &project, epoch, now,
-                    )
-                    .await?;
-                    Ok((admission, operation.is_some()))
-                })
+            .transaction({
+                let binding = self.binding.clone();
+                move |scope| {
+                    Box::pin(async move {
+                        let (admission, operation) = Outbox::<_, RouterDeliveryTypes, _>::new(
+                            scope,
+                            config.limits,
+                            binding.as_ref(),
+                        )
+                        .enqueue_cancel_and_admit::<SubmitMailTask, RemoveMailRecord, _>(
+                            cancel,
+                            relay,
+                            submitter,
+                            runtime_primitives::SyncTime::from_unix_millis(now.timestamp_millis()),
+                            &*consumer,
+                        )
+                        .await
+                        .map_err(delivery_rollback)?;
+                        #[cfg(test)]
+                        if let Some(socket) = probe {
+                            super::project_admission::pause_project_admission(&socket).await?;
+                        }
+                        super::project_admission::record_project_custody_epoch(
+                            scope, &admission, &id, &project, epoch, now,
+                        )
+                        .await?;
+                        Ok((admission, operation.is_some()))
+                    })
+                }
             })
             .await
             .map_err(classify_delivery_store_error)?;

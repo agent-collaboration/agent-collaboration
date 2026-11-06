@@ -52,7 +52,7 @@ impl AtomicStore for FaultStore {
                 Box::pin(async move {
                     let output = run(scope).await?;
                     let row = query::<sqlx_turso::Turso>(
-                        "SELECT count(*) AS count FROM project_directory",
+                        "SELECT count(*) AS count FROM fleet_project_directory",
                     )
                     .fetch_one(scope.executor())
                     .await
@@ -147,7 +147,21 @@ async fn failure_after_all_import_writes_rolls_back_every_canonical_table() -> T
             }),
         }),
         Io::default(),
-        fixture.receiver,
+        fleet_sync_lease::RegistryConfig {
+            authoritative_receiver: fixture.receiver,
+            lease: fleet_sync_lease::LeasePolicy {
+                lease_duration: std::time::Duration::from_secs(60),
+                renew_interval: std::time::Duration::from_secs(20),
+            },
+            release_unsent_for: std::time::Duration::from_secs(10),
+            move_needs_renewal_within: None,
+        },
+        collaboration_central_tokio::DeliveryConfig {
+            relay_peer: "019f0000-0000-7000-8000-000000005240"
+                .to_owned()
+                .try_into()?,
+        },
+        std::time::Duration::from_secs(2),
     )?;
     let proof = async {
         let offered = bundle()?;
@@ -206,9 +220,13 @@ async fn creation_directory_ledger_and_binding_roll_back_together_then_retry_onc
         let runtime=ObjectRuntime::<FleetKind,_,_>::fleet(Arc::new(FaultHost {
             native:Arc::new(TokioStorageHost::new(fixture.object.clone())),
             store:Arc::new(FaultStore {object:fixture.object.clone(),armed:Arc::new(AtomicBool::new(true)),injected:injected.clone()}),
-        }),Io::default(),fixture.receiver)?;
+        }),
+Io::default(),
+fleet_sync_lease::RegistryConfig { authoritative_receiver: fixture.receiver, lease: fleet_sync_lease::LeasePolicy { lease_duration: std::time::Duration::from_secs(60), renew_interval: std::time::Duration::from_secs(20) }, release_unsent_for: std::time::Duration::from_secs(10), move_needs_renewal_within: None },
+collaboration_central_tokio::DeliveryConfig { relay_peer: "019f0000-0000-7000-8000-000000005240".to_owned().try_into()? },
+std::time::Duration::from_secs(2))?;
         let call=serde_json::to_vec(&json!({
-            "source":{"kind":"connection","value":"550e8400-e29b-41d4-a716-4466554400a9"},"sourceFace":"session","authority":{"kind":"object"},
+            "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":"550e8400-e29b-41d4-a716-4466554400a9"}},
             "destination":{"kind":"fleet"},"destinationFace":"fleet",
             "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"atomic_creation"},
             "kind":"central.fleet-metadata","target":null,"request":{"request":creation,"origin":{"installation":"550e8400-e29b-41d4-a716-4466554400a9","machine":"live router"}}
@@ -220,7 +238,7 @@ async fn creation_directory_ledger_and_binding_roll_back_together_then_retry_onc
         let request_id=creation.request_id.as_str().to_owned();
         let saved_request=request_id.clone();
         let counts=fixture.object.transaction(move |scope|Box::pin(async move {
-            let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM creation_decisions) AS bindings,(SELECT count(*) FROM fleet_request_decisions WHERE request_id=?1) AS decisions")
+            let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM fleet_creation_decisions) AS bindings,(SELECT count(*) FROM fleet_request_decisions WHERE request_id=?1) AS decisions")
                 .bind(saved_request).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
             Ok((row.try_get::<i64,_>("bindings").map_err(StoreError::backend)?,row.try_get::<i64,_>("decisions").map_err(StoreError::backend)?))
         })).await?;
@@ -228,7 +246,7 @@ async fn creation_directory_ledger_and_binding_roll_back_together_then_retry_onc
         let bytes=runtime.on_call(call).await.map_err(|error|format!("same creation retry failed: {error:?}"))?;
         assert!(matches!(serde_json::from_slice::<FleetRequestResult>(&bytes)?,FleetRequestResult::Decided(RequestDecision::Accepted {..})));
         let counts=fixture.object.transaction(move |scope|Box::pin(async move {
-            let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM creation_decisions) AS bindings,(SELECT count(*) FROM fleet_request_decisions WHERE request_id=?1) AS decisions")
+            let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM fleet_creation_decisions) AS bindings,(SELECT count(*) FROM fleet_request_decisions WHERE request_id=?1) AS decisions")
                 .bind(request_id).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
             Ok((row.try_get::<i64,_>("bindings").map_err(StoreError::backend)?,row.try_get::<i64,_>("decisions").map_err(StoreError::backend)?))
         })).await?;

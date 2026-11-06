@@ -28,6 +28,7 @@ fleet-sync-receiver.workspace = true
 fleet-sync-delivery.workspace = true
 fleet-sync-session.workspace = true
 futures-channel = "0.3.34"
+futures-util.workspace = true
 sqlx-core.workspace = true
 fleet-admission = { version = "0.1.93", path = "../fleet-admission" }
 message-board = { version = "0.1.93", path = "../message-board" }
@@ -46,7 +47,13 @@ uuid = { version = "=1.26.0", features = ["v7", "js"] }
 fleet-sync-query-gen.workspace = true
 
 [dev-dependencies]
+tracing.workspace = true
+tracing-subscriber.workspace = true
 jsonschema.workspace = true
+fleet-sync-tokio-runner.workspace = true
+tokio.workspace = true
+tempfile = "3.27.0"
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "84935efdab03615843611bb5723983d7655e6e26", default-features = false }
 
 [[test]]
 name = "integration"

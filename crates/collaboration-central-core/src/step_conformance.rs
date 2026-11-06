@@ -19,6 +19,7 @@ pub struct StepConformance<Host: ObjectHost> {
     driver: StepDriver<Host>,
     bootstrap: crate::ObjectBootstrap<Host>,
     ids: Arc<dyn runtime_primitives::IdSource>,
+    now: runtime_primitives::SyncTime,
 }
 
 impl<Host: ObjectHost> StepConformance<Host>
@@ -26,6 +27,16 @@ where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'blob, Host::Database>
+        + sqlx_core::decode::Decode<'blob, Host::Database>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Host::Database> + sqlx_core::decode::Decode<'blob, Host::Database>,
+    for<'scalar> Option<i64>:
+        sqlx_core::types::Type<Host::Database> + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -65,8 +76,12 @@ where
     ) -> Self {
         Self {
             driver: StepDriver::new(host.clone()),
-            bootstrap: crate::ObjectBootstrap::new(host, now),
+            bootstrap: crate::ObjectBootstrap::new(
+                host,
+                Arc::new(crate::object_bootstrap::FixedBootstrapClock(now)),
+            ),
             ids,
+            now,
         }
     }
 
@@ -85,7 +100,7 @@ where
         let receipt_ids = (0..effects.len()).map(|_| self.ids.new_id()).collect();
         Ok(crate::effect_driver::conformance_effects(
             self.driver
-                .record_fleet_decision(entry, effects, receipt_ids)
+                .record_fleet_decision(entry, effects, receipt_ids, self.now, self.ids.clone())
                 .await?,
         ))
     }
@@ -131,7 +146,14 @@ where
         let receipt_ids = (0..effects.len()).map(|_| self.ids.new_id()).collect();
         Ok(crate::effect_driver::conformance_effects(
             self.driver
-                .conformance_record_fleet_decision(entry, effects, receipt_ids, fault)
+                .conformance_record_fleet_decision(
+                    entry,
+                    effects,
+                    receipt_ids,
+                    fault,
+                    self.now,
+                    self.ids.clone(),
+                )
                 .await?,
         ))
     }
@@ -152,6 +174,8 @@ where
                     entry,
                     effects,
                     receipt_ids,
+                    now: self.now,
+                    row_ids: crate::fleet_row_ids::FleetRowIds::new(self.ids.clone()),
                     fault: FleetDecisionFault::None,
                 },
                 after_write,

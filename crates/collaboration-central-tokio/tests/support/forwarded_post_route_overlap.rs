@@ -2,12 +2,12 @@
 #![deny(clippy::too_many_lines)]
 use super::{
     forwarded_post_lifecycle_oracles::{answer, holder_frame, outcome, post},
-    forwarded_post_scenarios::SENDER_SERVICE,
     forwarded_post_state_oracles::{
         live_records, no_retained_state, pending_record, records, sender_session,
     },
 };
 use board_sync_protocol::ForwardOutcome;
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     ConformanceResult, DispatchCallSelector, DispatchFaultObservation, RuntimeControl,
     RuntimeFaultObservation,
@@ -39,9 +39,8 @@ where
         now: RegistryTime(started.into()),
     })
     .await?;
-    control(RuntimeControl::HoldNextSelectedDispatch {
-        destination: ObjectAddress::Registry,
-        call: DispatchCallSelector::ForwardRoute,
+    control(RuntimeControl::HoldNextDispatch {
+        key: DispatchKey::new(ObjectAddress::Fleet, DispatchCallSelector::ForwardRoute),
     })
     .await?;
     let proof = overlap_sequence(
@@ -54,8 +53,23 @@ where
     )
     .await;
     let released = match control(RuntimeControl::Observe).await {
-        Ok(state) if matches!(state.dispatch, DispatchFaultObservation::Held { .. }) => {
-            control(RuntimeControl::ResumeDispatch).await.map(|_| ())
+        Ok(state)
+            if matches!(
+                state.dispatch(&DispatchKey::new(
+                    collaboration_central_core::ObjectAddress::Fleet,
+                    collaboration_central_conformance::DispatchCallSelector::ForwardRoute
+                )),
+                DispatchFaultObservation::Held { .. }
+            ) =>
+        {
+            control(RuntimeControl::ResumeDispatch {
+                key: DispatchKey::new(
+                    collaboration_central_core::ObjectAddress::Fleet,
+                    collaboration_central_conformance::DispatchCallSelector::ForwardRoute,
+                ),
+            })
+            .await
+            .map(|_| ())
         }
         Ok(_) => Ok(()),
         Err(error) => Err(error),
@@ -84,7 +98,16 @@ where
     ObserveFuture: Future<Output = ConformanceResult<Value>>,
 {
     let original = post(sender, database).await?;
-    require_route_hold(control(RuntimeControl::AwaitHeldDispatch).await?, database)?;
+    require_route_hold(
+        control(RuntimeControl::AwaitHeldDispatch {
+            key: DispatchKey::new(
+                collaboration_central_core::ObjectAddress::Fleet,
+                collaboration_central_conformance::DispatchCallSelector::ForwardRoute,
+            ),
+        })
+        .await?,
+        database,
+    )?;
     let pending = pending_record(
         &observe(false).await?,
         database,
@@ -93,7 +116,7 @@ where
     )?;
     let old_frame: FrameId = serde_json::from_value(
         pending
-            .get("forwardFrame")
+            .get("forwardFrameId")
             .ok_or("forward identity absent")?
             .clone(),
     )?;
@@ -109,7 +132,13 @@ where
     if fresh_delivered == old_frame {
         return Err("fresh request reused the expired route frame".into());
     }
-    control(RuntimeControl::ResumeDispatch).await?;
+    control(RuntimeControl::ResumeDispatch {
+        key: DispatchKey::new(
+            collaboration_central_core::ObjectAddress::Fleet,
+            collaboration_central_conformance::DispatchCallSelector::ForwardRoute,
+        ),
+    })
+    .await?;
     await_completed(observe, old_frame).await?;
     live_records(
         &observe(false).await?,
@@ -134,19 +163,19 @@ fn require_route_hold(
     let DispatchFaultObservation::Held {
         destination,
         request,
-    } = held.dispatch
+    } = held.dispatch(&DispatchKey::new(
+        collaboration_central_core::ObjectAddress::Fleet,
+        collaboration_central_conformance::DispatchCallSelector::ForwardRoute,
+    ))
     else {
         return Err("the original forwarding route never reached its real hold".into());
     };
     let envelope: Value = serde_json::from_slice(&request)?;
     for (field, expected) in [
         ("kind", json!("central.forward-route")),
-        (
-            "source",
-            json!({"kind":"connection","value":SENDER_SERVICE}),
-        ),
+        ("source", json!({"kind":"fleet"})),
         ("sourceFace", json!("session")),
-        ("destination", json!({"kind":"registry"})),
+        ("destination", json!({"kind":"fleet"})),
         ("destinationFace", json!("registry")),
         (
             "request",
@@ -167,7 +196,7 @@ fn require_route_hold(
         "FORWARD_ROUTE_HOLD call={}",
         serde_json::to_string(&identity)?
     );
-    if destination != ObjectAddress::Registry {
+    if destination != ObjectAddress::Fleet {
         return Err("held forwarding call lost destination or CallId".into());
     }
     Ok(())

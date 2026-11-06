@@ -1,4 +1,5 @@
 //! A test-only task exercises the real Registry host and durable call journal.
+use crate::FleetKind;
 
 use crate::{
     AccessCaller, CallerContext, CallerKind, CentralApplication, CentralPlatform, EdgeKind,
@@ -189,11 +190,14 @@ pub(crate) fn probe_response<Answer: Serialize>(result: Result<Answer, CallFailu
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -205,7 +209,7 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Edge
-            || invocation.source != ObjectAddress::Registry
+            || invocation.source != ObjectAddress::Fleet
             || !matches!(invocation.authority, CallAuthority::Owner(_))
         {
             return Err(refused());
@@ -213,7 +217,7 @@ where
         let _: HolderProbe = serde_json::from_value(invocation.target).map_err(|_| refused())?;
         let input: HolderProbeInput =
             serde_json::from_value(invocation.request).map_err(|_| refused())?;
-        let ObjectWork::Registry {
+        let ObjectWork::Fleet {
             host,
             engine,
             shared_host,
@@ -241,7 +245,7 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Edge
-            || invocation.source != ObjectAddress::Registry
+            || invocation.source != ObjectAddress::Fleet
             || !matches!(invocation.authority, CallAuthority::Owner(_))
         {
             return Err(refused());
@@ -249,7 +253,7 @@ where
         let _: ObserveRegistryDispatches =
             serde_json::from_value(invocation.target).map_err(|_| refused())?;
         let _: () = serde_json::from_value(invocation.request).map_err(|_| refused())?;
-        let ObjectWork::Registry { shared_host, .. } = &self.work else {
+        let ObjectWork::Fleet { shared_host, .. } = &self.work else {
             return Err(refused());
         };
         let destinations = shared_host
@@ -263,7 +267,7 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Edge
-            || invocation.source != ObjectAddress::Registry
+            || invocation.source != ObjectAddress::Fleet
             || !matches!(invocation.authority, CallAuthority::Owner(_))
         {
             return Err(refused());
@@ -278,7 +282,7 @@ where
         &self,
         operation: OperationId,
     ) -> Result<Vec<u8>, CallFailure> {
-        let ObjectWork::Registry { host, engine, .. } = &self.work else {
+        let ObjectWork::Fleet { host, engine, .. } = &self.work else {
             return Err(refused());
         };
         let answer = match engine

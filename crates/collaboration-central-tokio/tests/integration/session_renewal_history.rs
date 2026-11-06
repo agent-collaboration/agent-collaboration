@@ -19,7 +19,7 @@ use durable_steps::Uuid;
 use fleet_admission::FleetOperation;
 use fleet_sync_protocol::*;
 use futures_util::{SinkExt, StreamExt};
-use message_board::{BoardId, Description, ResourceName, ServiceId, WorkspaceId};
+use message_board::{BoardId, Description, ResourceName, WorkspaceId};
 use reqwest_websocket::{Message, RequestBuilderExt, WebSocket};
 use serde_json::json;
 use std::time::Duration;
@@ -89,7 +89,7 @@ async fn pin_registry(base: &str, elapsed_ms: i64) -> ConformanceResult<()> {
         .ok_or("renewal fixture time is outside range")?;
     runtime_control(
         base,
-        ObjectAddress::Registry,
+        ObjectAddress::Fleet,
         RuntimeControl::SetTime {
             now: RegistryTime(now),
         },
@@ -124,6 +124,9 @@ async fn reconnect_writer(
             })?
             .into(),
         ))
+        .await?;
+    ConformanceClient::new(base)?
+        .wake_due_after_hello(session)
         .await?;
     let message = tokio::time::timeout(Duration::from_secs(5), replacement.next())
         .await?
@@ -210,11 +213,14 @@ async fn lost_replay_fresh_extension_and_supersession(
         epoch: Epoch::new(1)?,
     };
     let frame = FrameId::new(Uuid::now_v7())?;
-    let session = ObjectAddress::Connection(ServiceId::try_from(SERVICE.to_owned())?);
+    let connection = ConformanceClient::new(base)?
+        .active_connection(SERVICE, PeerId::try_from(PEER.to_owned())?)
+        .await?;
+    let session = ObjectAddress::Fleet;
     runtime_control(
         base,
         session.clone(),
-        RuntimeControl::DropNextAnswer { frame },
+        RuntimeControl::DropNextAnswer { connection, frame },
     )
     .await?;
     socket
@@ -226,7 +232,7 @@ async fn lost_replay_fresh_extension_and_supersession(
             .into(),
         ))
         .await?;
-    if !matches!(runtime_control(base,session,RuntimeControl::AwaitDroppedAnswer {frame}).await?.answer,AnswerFaultObservation::Dropped {frame:actual} if actual==frame)
+    if !matches!(runtime_control(base,session,RuntimeControl::AwaitDroppedAnswer {connection,frame}).await?.answer,AnswerFaultObservation::Dropped {connection:actual_connection,frame:actual} if actual_connection==connection && actual==frame)
     {
         return Err("renewal R1 did not lose its exact committed outgoing answer".into());
     }

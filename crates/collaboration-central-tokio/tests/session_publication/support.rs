@@ -1,6 +1,6 @@
 use collaboration_central_core::{
     CoreHost, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, RegistrationEdits,
-    RegistrationSnapshot, SessionKind, SocketFailure,
+    RegistrationSnapshot, SocketFailure,
 };
 use collaboration_central_tokio::{SocketCommand, TokioStorageHost};
 use durable_steps::{
@@ -25,12 +25,13 @@ use std::{
 use tokio::sync::{Semaphore, mpsc};
 
 pub type TestError = Box<dyn std::error::Error + Send + Sync>;
-pub type Runtime = ObjectRuntime<SessionKind, TestHost, Transport>;
+pub type Runtime = ObjectRuntime<collaboration_central_core::FleetKind, TestHost, Transport>;
 type NativeObject = TokioObject<CoreHost<Transport>>;
 
 #[derive(Clone, Default)]
 pub struct Transport {
     pub calls: Arc<Mutex<Vec<serde_json::Value>>>,
+    pub local_calls: Arc<Mutex<Vec<serde_json::Value>>>,
     pub wakes: Arc<Mutex<Vec<SyncTime>>>,
     pub gather: Arc<PublicationProbe>,
     pub schema: Arc<PublicationProbe>,
@@ -60,6 +61,33 @@ impl WakeScheduler for Transport {
     }
 }
 impl PlatformIo for Transport {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
+    async fn before_local_call(&self, bytes: &[u8]) -> Result<(), CallFailure> {
+        let call: serde_json::Value =
+            serde_json::from_slice(bytes).map_err(|_| CallFailure::AnswerLost)?;
+        let schema_publication = call.get("kind").and_then(serde_json::Value::as_str)
+            == Some("fleet-sync.report-schema-support");
+        self.local_calls
+            .lock()
+            .map_err(|_| CallFailure::AnswerLost)?
+            .push(call);
+        if schema_publication && self.schema.hold.load(Ordering::SeqCst) {
+            self.schema.entered.add_permits(1);
+            self.schema
+                .release
+                .acquire()
+                .await
+                .map_err(|_| CallFailure::AnswerLost)?
+                .forget();
+        }
+        Ok(())
+    }
     async fn object_call(
         &self,
         _to: ObjectAddress,
@@ -72,18 +100,7 @@ impl PlatformIo for Transport {
             .map_err(|_| CallFailure::AnswerLost)?
             .push(call.clone());
         match call.get("kind").and_then(serde_json::Value::as_str) {
-            Some("fleet-sync.report-schema-support") => {
-                if self.schema.hold.load(Ordering::SeqCst) {
-                    self.schema.entered.add_permits(1);
-                    self.schema
-                        .release
-                        .acquire()
-                        .await
-                        .map_err(|_| CallFailure::AnswerLost)?
-                        .forget();
-                }
-                Ok(b"null".to_vec())
-            }
+            Some("fleet-sync.report-schema-support") => Ok(b"null".to_vec()),
             Some("central.welcome-leases") => {
                 if self.gather.hold.load(Ordering::SeqCst) {
                     self.gather.entered.add_permits(1);
@@ -177,6 +194,7 @@ pub struct TestHost {
     pub native: Arc<TokioStorageHost<CoreHost<Transport>>>,
     pub store: Arc<TestStore>,
     pub probe: Arc<PublicationProbe>,
+    welcome: Arc<PublicationProbe>,
 }
 impl ObjectHost for TestHost {
     type Database = sqlx_turso::Turso;
@@ -198,6 +216,25 @@ impl ObjectHost for TestHost {
         self.native.quarantine_connections(connections).await;
     }
     async fn send_frame(&self, to: ConnectionId, frame: Bytes) -> Result<(), SocketFailure> {
+        let is_welcome = serde_json::from_slice::<serde_json::Value>(&frame)
+            .ok()
+            .and_then(|value| {
+                value
+                    .get("kind")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned)
+            })
+            .as_deref()
+            == Some("welcome");
+        if is_welcome && self.welcome.hold.load(Ordering::SeqCst) {
+            self.welcome.entered.add_permits(1);
+            self.welcome
+                .release
+                .acquire()
+                .await
+                .map_err(|_| SocketFailure::Closed)?
+                .forget();
+        }
         self.native.send_frame(to, frame).await
     }
     async fn close_connection(
@@ -266,6 +303,7 @@ pub struct Fixture {
     pub host: Arc<TestHost>,
     pub runtime: Arc<Runtime>,
     pub io: Transport,
+    installation: message_board::ServiceId,
 }
 impl Fixture {
     pub async fn open(path: &std::path::Path) -> Result<Self, TestError> {
@@ -296,7 +334,7 @@ impl Fixture {
         let objects = ObjectStore::open(path).await?;
         let shared = Arc::new(CoreHost::conformance_registry(io.clone(), receiver));
         let object = objects
-            .object(ObjectKey::new("session")?, Default::default(), shared)
+            .object(ObjectKey::new("fleet")?, Default::default(), shared)
             .await?;
         let native = Arc::new(TokioStorageHost::new(object.clone()));
         let host = Arc::new(TestHost {
@@ -308,13 +346,26 @@ impl Fixture {
                 after_rollback: Arc::default(),
             }),
             probe: Arc::default(),
+            welcome: io.gather.clone(),
         });
         // This route address is a test fixture only; no provenance is derived from PeerId.
-        let runtime = Arc::new(Runtime::session(
+        let runtime = Arc::new(Runtime::fleet(
             host.clone(),
             io.clone(),
-            receiver,
-            installation,
+            fleet_sync_lease::RegistryConfig {
+                authoritative_receiver: receiver,
+                lease: fleet_sync_lease::LeasePolicy {
+                    lease_duration: std::time::Duration::from_secs(60),
+                    renew_interval: std::time::Duration::from_secs(20),
+                },
+                release_unsent_for: std::time::Duration::from_secs(10),
+                move_needs_renewal_within: None,
+            },
+            collaboration_central_tokio::DeliveryConfig {
+                relay_peer: "019f0000-0000-7000-8000-000000005240"
+                    .to_owned()
+                    .try_into()?,
+            },
             std::time::Duration::from_secs(2),
         )?);
         if initialize {
@@ -325,6 +376,7 @@ impl Fixture {
             host,
             runtime,
             io,
+            installation,
         })
     }
     pub async fn socket(
@@ -333,10 +385,22 @@ impl Fixture {
         self.socket_for(PeerId::new(durable_steps::Uuid::now_v7())?)
             .await
     }
+    pub async fn enroll(&self, peer: PeerId) -> Result<(), TestError> {
+        let installation = self.installation.clone();
+        self.host.store.object.transaction(move |scope| Box::pin(async move {
+            // This session component fixture supplies the enrollment that normal HTTP admission owns.
+            query::<sqlx_turso::Turso>("INSERT INTO machine_enrollments(machine_id,service_id,machine_label,access_client_id,credential_hash,state,expires_at,created_at,updated_at) VALUES(?,?,'native fixture',?,?,'enrolled','2033-05-18T03:33:20+00:00','2026-10-18T00:00:00+00:00','2026-10-18T00:00:00+00:00') ON CONFLICT(machine_id) DO NOTHING")
+                .bind(peer.to_string()).bind(installation.as_str()).bind(format!("fixture-client-{peer}")).bind(format!("fixture-credential-{peer}"))
+                .execute(scope.executor()).await.map_err(StoreError::backend)?;
+            Ok(())
+        })).await?;
+        Ok(())
+    }
     pub async fn socket_for(
         &self,
         peer: PeerId,
     ) -> Result<(ConnectionBinding, SessionId, mpsc::Receiver<SocketCommand>), TestError> {
+        self.enroll(peer).await?;
         let connection = ConnectionId::new(durable_steps::Uuid::now_v7())?;
         let session = SessionId::new(durable_steps::Uuid::now_v7())?;
         let binding = ConnectionBinding::new(
@@ -347,9 +411,7 @@ impl Fixture {
             },
         );
         let origin = collaboration_central_core::AdmissionOrigin {
-            installation: message_board::ServiceId::try_from(
-                "550e8400-e29b-41d4-a716-446655440000".to_owned(),
-            )?,
+            installation: self.installation.clone(),
             machine: message_board::MachineLabel::try_from("native fixture".to_owned())?,
         };
         let socket = self.host.native.attach_socket(binding, origin).await;

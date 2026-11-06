@@ -219,6 +219,7 @@ dependencies = [
  "durable-steps",
  "fleet-admission",
  "fleet-sync-delivery",
+ "fleet-sync-lease",
  "fleet-sync-protocol",
  "fleet-sync-session",
  "fleet-sync-tokio-runner",
@@ -932,6 +933,7 @@ dependencies = [
  "board-sync-protocol",
  "durable-steps",
  "fleet-admission",
+ "fleet-sync-delivery",
  "fleet-sync-lease",
  "fleet-sync-protocol",
  "fleet-sync-receiver",
@@ -1000,6 +1002,58 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "board-staging-cutover"
+version = "0.1.127"
+dependencies = [
+ "axum",
+ "board-central-test-support",
+ "board-fleet-sync",
+ "board-sync-protocol",
+ "chrono",
+ "codex-native-integration",
+ "codex-router-core",
+ "codex-router-host",
+ "codex-router-secret-store",
+ "codex-router-test-support",
+ "collaboration-central-admin-protocol",
+ "collaboration-central-conformance",
+ "collaboration-central-core",
+ "collaboration-client",
+ "collaboration-contracts",
+ "collaboration-mail-protocol",
+ "collaboration-protocol",
+ "collaboration-runtime",
+ "collaboration-service",
+ "durable-steps",
+ "fleet-admission",
+ "fleet-sync-delivery",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-receiver",
+ "fleet-sync-session",
+ "fleet-sync-tokio-runner",
+ "fleet-sync-writer",
+ "fs2",
+ "interaction-storage",
+ "message-board",
+ "message-board-storage",
+ "nix",
+ "reqwest 0.12.28",
+ "runtime-primitives",
+ "rustix 1.1.4",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "sqlx-turso",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "url",
  "uuid",
 ]
 
@@ -1640,7 +1694,17 @@ name = "codex-router-tailnet-verification-host"
 version = "0.1.127"
 dependencies = [
  "axum",
+ "board-fleet-sync",
  "chrono",
+ "codex-native-integration",
+ "codex-router-host",
+ "collaboration-central-conformance",
+ "collaboration-central-core",
+ "collaboration-central-tokio",
+ "collaboration-runtime",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-session",
  "fs2",
  "nix",
  "reqwest 0.12.28",
@@ -1652,6 +1716,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -1744,6 +1809,7 @@ dependencies = [
  "durable-steps",
  "fleet-admission",
  "fleet-sync-protocol",
+ "fleet-sync-session",
  "futures-util",
  "message-board",
  "reqwest 0.12.28",
@@ -1776,7 +1842,9 @@ dependencies = [
  "fleet-sync-query-gen",
  "fleet-sync-receiver",
  "fleet-sync-session",
+ "fleet-sync-tokio-runner",
  "futures-channel",
+ "futures-util",
  "http",
  "jsonschema",
  "message-board",
@@ -1786,7 +1854,12 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sqlx-core",
+ "sqlx-turso",
+ "tempfile",
  "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
  "url",
  "uuid",
 ]
@@ -1833,6 +1906,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "turso_parser",
 ]
 
 [[package]]
@@ -2004,6 +2078,7 @@ dependencies = [
  "lifecycle-observation",
  "message-board",
  "message-board-storage",
+ "nix",
  "runtime-primitives",
  "serde",
  "serde_json",
@@ -2605,7 +2680,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable-steps"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f230f81430fdf1140fbb634cf64decd8e"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
 dependencies = [
  "futures-util",
  "runtime-primitives",
@@ -2820,7 +2895,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-delivery"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f230f81430fdf1140fbb634cf64decd8e"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
 dependencies = [
  "durable-steps",
  "fleet-sync-protocol",
@@ -2837,7 +2912,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-lease"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f230f81430fdf1140fbb634cf64decd8e"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
 dependencies = [
  "durable-steps",
  "fleet-sync-protocol",
@@ -2854,7 +2929,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-protocol"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f230f81430fdf1140fbb634cf64decd8e"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
 dependencies = [
  "runtime-primitives",
  "serde",
@@ -2868,7 +2943,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-query-gen"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f230f81430fdf1140fbb634cf64decd8e"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
 dependencies = [
  "serde",
  "serde_json",
@@ -2879,7 +2954,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-receiver"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f230f81430fdf1140fbb634cf64decd8e"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
 dependencies = [
  "durable-steps",
  "fleet-sync-protocol",
@@ -2896,7 +2971,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-service"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f230f81430fdf1140fbb634cf64decd8e"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
 dependencies = [
  "axum",
  "durable-steps",
@@ -2921,7 +2996,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-session"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f230f81430fdf1140fbb634cf64decd8e"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
 dependencies = [
  "bytes",
  "durable-steps",
@@ -2939,7 +3014,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-tokio-runner"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f230f81430fdf1140fbb634cf64decd8e"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
 dependencies = [
  "durable-steps",
  "fleet-sync-protocol",
@@ -2963,7 +3038,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-transport-websocket"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f230f81430fdf1140fbb634cf64decd8e"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
 dependencies = [
  "axum",
  "fleet-sync-protocol",
@@ -2977,7 +3052,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-writer"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f230f81430fdf1140fbb634cf64decd8e"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
 dependencies = [
  "durable-steps",
  "either",
@@ -5349,7 +5424,7 @@ dependencies = [
 [[package]]
 name = "runtime-primitives"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f230f81430fdf1140fbb634cf64decd8e"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
 dependencies = [
  "chrono",
  "futures-util",
@@ -6048,7 +6123,7 @@ dependencies = [
 [[package]]
 name = "sqlx-durable-object"
 version = "0.3.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f230f81430fdf1140fbb634cf64decd8e"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
 dependencies = [
  "futures-core",
  "futures-util",
@@ -6063,7 +6138,7 @@ dependencies = [
 [[package]]
 name = "sqlx-durable-object-core"
 version = "0.2.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f230f81430fdf1140fbb634cf64decd8e"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
 dependencies = [
  "js-sys",
  "sqlx-core",
@@ -6195,7 +6270,7 @@ dependencies = [
 [[package]]
 name = "sqlx-turso"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f230f81430fdf1140fbb634cf64decd8e"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
 dependencies = [
  "sqlx",
  "sqlx-turso-core",
@@ -6205,7 +6280,7 @@ dependencies = [
 [[package]]
 name = "sqlx-turso-core"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f230f81430fdf1140fbb634cf64decd8e"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
 dependencies = [
  "chrono",
  "either",
@@ -6226,7 +6301,7 @@ dependencies = [
 [[package]]
 name = "sqlx-turso-macros"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.4.0#b9da4b5f230f81430fdf1140fbb634cf64decd8e"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",

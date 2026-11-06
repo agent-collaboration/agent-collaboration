@@ -187,9 +187,24 @@ fn composed_body_error_cleans_child_before_exact_profile_restore()
 )]
 fn native_launcher_creates_the_same_session_and_group_as_its_host_pid()
 -> Result<(), Box<dyn std::error::Error>> {
+    let launcher = env!("CARGO_BIN_EXE_codex-router-tailnet-verification-host");
+    if cfg!(target_os = "macos") {
+        // Cargo may restore linker-signed output between list and run. This
+        // direct child bypasses the Cargo runner, so sign before readiness starts.
+        let runner = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../scripts/cargo_debug_signing_runner.sh");
+        codex_router_tailnet_verification_host::bounded_command::command(&[
+            runner
+                .to_str()
+                .ok_or("signing runner path is not UTF-8")?
+                .to_owned(),
+            "--sign-only".to_owned(),
+            launcher.to_owned(),
+        ])?;
+    }
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../verification/fixtures/harmless-owned-child.ts");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_codex-router-tailnet-verification-host"))
+    let mut child = Command::new(launcher)
         .arg("__launch-host")
         .arg("node")
         .arg(fixture)

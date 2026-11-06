@@ -10,9 +10,13 @@ use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost};
 async fn committed_handoff_recovers_the_same_item_after_reopen_before_outbox_admission() {
     let mut fixture = Box::pin(OwnerFixture::new()).await;
     let intent = create_addressed_intent(&fixture).await;
-    let item =
-        fleet_sync_protocol::ItemId::try_from("019f0000-0000-7000-8000-000000041081".to_owned())
-            .unwrap();
+    let now = fixture.clock.now();
+    let timestamp = uuid::Timestamp::from_unix(
+        uuid::NoContext,
+        u64::try_from(now.timestamp()).unwrap(),
+        now.timestamp_subsec_nanos(),
+    );
+    let item = fleet_sync_protocol::ItemId::new(uuid::Uuid::new_v7(timestamp)).unwrap();
     let session = target_session(&fixture.reader).unwrap();
     fixture
         .admission
@@ -119,12 +123,21 @@ async fn assert_recovered_custody(
             runtime_primitives::SystemClock,
         )),
     );
+    let binding = native.runtime().binding.clone();
     let rows = observer
-        .transaction(|scope| {
+        .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::test_support::snapshot(scope)
-                    .await
-                    .map_err(StoreError::backend)
+                fleet_sync_delivery::test_support::snapshot::<
+                    _,
+                    collaboration_contracts::RouterDeliveryTypes,
+                    _,
+                >(
+                    scope,
+                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    binding.as_ref(),
+                )
+                .await
+                .map_err(StoreError::backend)
             })
         })
         .await

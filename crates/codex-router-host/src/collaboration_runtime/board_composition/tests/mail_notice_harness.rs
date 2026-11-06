@@ -1,8 +1,12 @@
 //! Start and drain the real Host event loop around one actual library pump.
 use super::*;
 use std::path::PathBuf;
+#[path = "cold_sender_binding_test.rs"]
+mod cold_sender_binding;
 #[path = "installation_directory_refresh.rs"]
 mod installation_directory_refresh;
+#[path = "mail_settlement_test.rs"]
+mod mail_settlement;
 #[path = "notification_directory.rs"]
 mod notification_directory;
 #[path = "notification_frontier.rs"]
@@ -63,7 +67,7 @@ impl MailHarness {
     ) -> Result<Self, TestError> {
         Self::open_configured(base, None, false, true, peer, None).await
     }
-    async fn open_configured(
+    pub(super) async fn open_configured(
         base: &Path,
         directory: Option<tempfile::TempDir>,
         initial_notice: bool,
@@ -217,6 +221,85 @@ impl MailHarness {
         )
         .await?
         .ok_or_else(|| io::Error::other("actual session event stream closed").into())
+    }
+    // Recipient outcome is an explicit external setup input. The real relay
+    // validates its authenticated peer and owns status publication/history.
+    pub(super) async fn report_held(
+        &self,
+        item: fleet_sync_protocol::ItemId,
+    ) -> Result<(), TestError> {
+        self.report_outcome(item, fleet_sync_protocol::RecipientOutcome::Held)
+            .await
+    }
+    pub(super) async fn report_outcome(
+        &self,
+        item: fleet_sync_protocol::ItemId,
+        outcome: fleet_sync_protocol::RecipientOutcome<
+            collaboration_mail_protocol::CarrierAcceptance,
+        >,
+    ) -> Result<(), TestError> {
+        use fleet_sync_protocol::{
+            DeliveryAnswer, DeliveryRequest, RecipientReport, ReportResult, ReportSeq,
+        };
+        let report_seq = ReportSeq::new(1);
+        let call = runtime_primitives::CallId {
+            operation: runtime_primitives::OperationId::new(durable_steps::Uuid::now_v7())?,
+            step: runtime_primitives::StepName::new("fixture-recipient-held")?,
+        };
+        match self
+            .requests
+            .request(OperationRequest::Delivery(DeliveryRequest::Report {
+                call,
+                report: RecipientReport {
+                    item,
+                    report_seq,
+                    outcome,
+                },
+            }))
+            .await?
+        {
+            OperationAnswer::Delivery(DeliveryAnswer::Report(ReportResult::Ack {
+                report_seq: actual,
+            })) if actual == report_seq => Ok(()),
+            _ => Err(io::Error::other("real relay refused the recipient Held setup report").into()),
+        }
+    }
+
+    // L5 also sends actual Push requests. Route them through the owning Host
+    // handler before selecting the publication whose native commit is tested.
+    pub(super) async fn next_publication(
+        &mut self,
+    ) -> Result<ClientEvent<BoardConsumerProtocol>, TestError> {
+        use fleet_sync_protocol::{ServerCall, ServerRequest};
+        loop {
+            match self.next_manual_event().await? {
+                event @ ClientEvent::Request {
+                    body: ServerRequest::Crate(ServerCall::PublishStatus { .. }),
+                    ..
+                } => return Ok(event),
+                ClientEvent::Request {
+                    frame,
+                    body: body @ ServerRequest::Crate(ServerCall::Push { .. }),
+                } => {
+                    answer_server_call(
+                        self.projects.clone(),
+                        Weak::new(),
+                        Arc::downgrade(&self.mail.mail),
+                        Weak::new(),
+                        self.requests.clone(),
+                        frame,
+                        body,
+                    )
+                    .await?;
+                }
+                _ => {
+                    return Err(io::Error::other(
+                        "unexpected event while awaiting actual publication",
+                    )
+                    .into());
+                }
+            }
+        }
     }
     async fn resume_events(
         &mut self,
@@ -373,28 +456,6 @@ impl MailHarness {
             .await?
             .ok_or("resume missing")?
             .notice_cursor)
-    }
-    pub async fn wait_state(
-        &self,
-        ready: impl Fn(&serde_json::Value) -> bool,
-        failure: &'static str,
-    ) -> Result<serde_json::Value, TestError> {
-        let started = std::time::Instant::now();
-        tokio::time::timeout(BOUND, async {
-            loop {
-                if let Some(state) = self.mail.state().await?
-                    && ready(&state)
-                {
-                    return Ok(state);
-                }
-                if started.elapsed() >= BOUND {
-                    return Err(io::Error::other(failure).into());
-                }
-                tokio::task::yield_now().await;
-            }
-        })
-        .await
-        .map_err(|_| io::Error::other(failure))?
     }
     pub async fn wait_ack(&self, position: NoticePosition) -> Result<(), TestError> {
         tokio::time::timeout(BOUND, async {

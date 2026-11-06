@@ -1,10 +1,6 @@
 //! Canonical Fleet records share the caller's already-open SQL transaction.
 
-use crate::{
-    fleet_record_codec::{self as codec, DecodedFleetRecord, FleetRecordHeader, corrupt},
-    generated_fleet_record_reads as reads, generated_fleet_record_writes as writes,
-    generated_statements,
-};
+use crate::fleet_record_codec::{DecodedFleetRecord, FleetRecordHeader, corrupt};
 use durable_steps::{StoreError, storage::TransactionScope};
 use fleet_admission::FleetImportDigest;
 use message_board::{Record, RecordKind, RecordRef, RecordTime};
@@ -36,26 +32,25 @@ where
     for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    let result = if reference.kind == RecordKind::Request {
-        generated_statements::read_fleet_decision(scope, reference.id.as_str().into())
-            .await
-            .map_err(StoreError::backend)?
-            .map(crate::fleet_decision_step::decode)
-            .transpose()?
+    let result = if reference.kind == RecordKind::Workspace {
+        crate::fleet_workspace_store::read(scope, reference.id.as_str()).await?
+    } else if reference.kind == RecordKind::Board {
+        crate::fleet_board_store::read(scope, reference.id.as_str()).await?
+    } else if reference.kind == RecordKind::Adr {
+        crate::fleet_adr_store::read(scope, reference.id.as_str()).await?
+    } else if reference.kind == RecordKind::Request {
+        let request = message_board::RequestId::try_from(reference.id.as_str().to_owned())
+            .map_err(StoreError::backend)?;
+        crate::fleet_decision_step::read_ledger(scope, &request)
+            .await?
             .map(|entry| DecodedFleetRecord {
                 record: Record::Request(entry),
                 import_digest: None,
             })
+    } else if reference.kind == RecordKind::Project {
+        crate::fleet_directory_store::read(scope, reference.id.as_str()).await?
     } else {
-        reads::read_canonical_fleet_record(
-            scope,
-            codec::kind_tag(reference.kind)?.into(),
-            reference.id.as_str().into(),
-        )
-        .await
-        .map_err(StoreError::backend)?
-        .map(codec::decode)
-        .transpose()?
+        return Err(corrupt("kind", "project-only record requested from Fleet"));
     };
     if result
         .as_ref()
@@ -70,6 +65,7 @@ pub(crate) async fn put<Scope: TransactionScope>(
     scope: &mut Scope,
     record: &Record,
     source: RecordWriteSource<'_>,
+    now: chrono::DateTime<chrono::Utc>,
     row_ids: &mut crate::fleet_row_ids::FleetRowIds,
 ) -> Result<(), StoreError>
 where
@@ -98,28 +94,19 @@ where
             _ => {}
         }
     }
-    let payload = serde_json::to_string(record).map_err(StoreError::backend)?;
-    let time = header.router_time();
-    let basis = header.time_basis();
-    let installation = header.origin.installation.as_str().to_owned();
-    let machine = header.origin.machine.as_str().to_owned();
-    let digest = source.digest();
-    match record {
-        Record::Workspace(_) => {
-            writes::put_workspace(scope, payload, time, basis, installation, machine, digest).await
-        }
-        Record::Board(_) => {
-            writes::put_board(scope, payload, time, basis, installation, machine, digest).await
-        }
-        Record::DirectoryEntry(_) => {
-            writes::put_project(scope, payload, time, basis, installation, machine, digest).await
-        }
-        Record::Adr(_) => {
-            writes::put_adr(scope, payload, time, basis, installation, machine, digest).await
-        }
-        _ => return Err(corrupt("kind", "ledger writes use the decision owner")),
+    if let Record::Workspace(workspace) = record {
+        crate::fleet_workspace_store::put(scope, workspace, &header, source.digest(), now, row_ids)
+            .await?;
+    } else if let Record::Board(board) = record {
+        crate::fleet_board_store::put(scope, board, &header, source.digest(), now).await?;
+    } else if let Record::Adr(adr) = record {
+        crate::fleet_adr_store::put(scope, adr, &header, source.digest(), now, row_ids).await?;
+    } else {
+        let Record::DirectoryEntry(project) = record else {
+            return Err(corrupt("kind", "ledger writes use the decision owner"));
+        };
+        crate::fleet_directory_store::put(scope, project, &header, source.digest(), now).await?;
     }
-    .map_err(StoreError::backend)?;
     if let (RecordWriteSource::Imported(digest), Record::Workspace(value)) = (source, record) {
         for repository in &value.repositories {
             crate::fleet_repository_store::attach(
@@ -129,6 +116,7 @@ where
                 &header,
                 Some(digest),
                 row_ids.next()?,
+                now,
             )
             .await?;
         }

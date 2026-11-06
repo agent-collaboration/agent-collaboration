@@ -1,6 +1,7 @@
 //! The library commits retirement; existing alarm publication owns Directory.
+use crate::FleetKind;
 use crate::{
-    ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
+    ObjectHost, ObjectRuntime, PlatformIo,
     object_runtime::ObjectWork,
     owner_registry_calls::{
         OwnerBlockedSubject, OwnerRetirement, OwnerRetirementAnswer, OwnerRetirementPhase,
@@ -12,7 +13,7 @@ use durable_steps::{
     StoreError,
     storage::{JournalStorage, StepState, TransactionScope},
 };
-use fleet_sync_lease::{DatabaseLifecycle, RetirementTask};
+use fleet_sync_lease::DatabaseLifecycle;
 use fleet_sync_protocol::{
     CopyUnavailableReason, DatabaseId, Retirement, RetirementAnswer, SyncTime, TransferId,
 };
@@ -22,11 +23,14 @@ use sqlx_core::{
 };
 use std::convert::Infallible;
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
     for<'value> String:
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'value> Option<String>:
@@ -38,7 +42,7 @@ where
         database: DatabaseId,
         request: OwnerRetirement,
     ) -> Result<OwnerRetirementAnswer, CallFailure> {
-        let ObjectWork::Registry { engine, host, .. } = &self.work else {
+        let ObjectWork::Fleet { engine, host, .. } = &self.work else {
             return Err(CallFailure::AnswerLost);
         };
         let attempt = request.request_id;
@@ -47,7 +51,7 @@ where
         // Always bind the request before consulting current lifecycle. A final
         // tombstone cannot make changed content under the same ID acceptable.
         let operation = match engine
-            .start::<RetirementTask<Host::Store, Host::Database>>(
+            .start_retirement(
                 &key,
                 Retirement {
                     attempt,
@@ -131,13 +135,9 @@ where
         request_id: fleet_sync_protocol::RequestId,
         at: SyncTime,
     ) -> Result<OwnerRetirementAnswer, CallFailure> {
-        let ObjectWork::Registry { shared_host, .. } = &self.work else {
+        let ObjectWork::Fleet { shared_host, .. } = &self.work else {
             return Err(CallFailure::AnswerLost);
         };
-        shared_host
-            .request_lease_publication_repair()
-            .await
-            .map_err(|_| CallFailure::AnswerLost)?;
         if shared_host
             .retirement_directory_acknowledged(database, at)
             .await

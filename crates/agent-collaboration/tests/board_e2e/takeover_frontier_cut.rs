@@ -4,7 +4,7 @@ use super::super::{
     fixture::{BoardFixture, at},
     takeover_controls::{self as controls, BOUND, EndPrefix},
 };
-use board_central_test_support::{DispatchCallSelector, RuntimeControl};
+use board_central_test_support::RuntimeControl;
 use board_sync_protocol::BoardAnnotation;
 use codex_router_test_support::FixtureResult;
 use fleet_sync_protocol::{ReplicationPosition, ReplicationRequest};
@@ -81,11 +81,11 @@ pub async fn establish(
                         // Start another actual copy pass, without a cadence assumption.
                         break;
                     }
-                    held = controls::held(fixture, controls::connection(fixture)?) => {
+                    held = controls::held(fixture, board_central_test_support::ObjectAddress::Fleet, controls::copy_write_key(fixture)?) => {
                         let held = held?;
                         if let Some(frontier) = frontier_capture(&held, cut)? {
                             if matches!(cut, FrontierCut::Settled) {
-                                controls::resume(fixture, controls::connection(fixture)?).await?;
+                                controls::resume(fixture, board_central_test_support::ObjectAddress::Fleet, controls::copy_write_key(fixture)?).await?;
                                 copying.await?;
                                 controls::confirm_copy_ack(fixture, frontier.position).await?;
                             }
@@ -94,9 +94,7 @@ pub async fn establish(
                             // this Host before issuing another stdin request.
                             return Ok(frontier);
                         }
-                        central(fixture)?.runtime_control(controls::connection(fixture)?, RuntimeControl::ResumeDispatchAndHoldNextSelected {
-                            destination: controls::copy(fixture)?, call: DispatchCallSelector::CopyWrite,
-                        }).await?;
+                        central(fixture)?.runtime_control(board_central_test_support::ObjectAddress::Fleet, RuntimeControl::ResumeDispatchAndHoldNext { key: controls::copy_write_key(fixture)?, next: controls::copy_write_key(fixture)? }).await?;
                     }
                 }
             }

@@ -48,6 +48,11 @@ pub async fn enroll_admitted_peer_with_label(
         .socket
         .send(Message::Text(admitted.hello.to_string()))
         .await?;
+    client
+        .wake_due_after_hello(fleet_sync_protocol::SessionId::new(uuid::Uuid::parse_str(
+            session,
+        )?)?)
+        .await?;
     if receive(&mut admitted.socket).await? != admitted.welcome {
         return Err("holder fixture did not complete normal admission".into());
     }

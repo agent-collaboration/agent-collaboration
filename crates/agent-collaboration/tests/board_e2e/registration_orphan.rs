@@ -4,25 +4,10 @@ use super::{
     fixture::{BoardFixture, at, fields, header, identity},
     owned_host::StoppedHost,
 };
-use board_central_test_support::{DispatchFaultObservation, ObjectAddress, RuntimeControl};
 use codex_router_test_support::{FixtureResult, scenario_finalization::run_scenario};
 use message_board::{ProjectId, RecordKind};
 use serde_json::{Value, json};
 use std::{path::PathBuf, sync::Arc, time::Duration};
-
-fn connection(fixture: &BoardFixture) -> FixtureResult<ObjectAddress> {
-    Ok(ObjectAddress::Connection(
-        String::from(
-            fixture
-                .installation
-                .as_ref()
-                .ok_or("installation absent")?
-                .service_id
-                .clone(),
-        )
-        .try_into()?,
-    ))
-}
 
 fn central(fixture: &BoardFixture) -> FixtureResult<&board_central_test_support::TestCentral> {
     fixture
@@ -67,33 +52,27 @@ pub async fn arrange(fixture: &mut BoardFixture) -> FixtureResult<Value> {
         json!({"projectId":project,
         "boardId":fixture.board,"title":format!("controlled registration refusal {project}")}),
     )?;
-    let source = connection(fixture)?;
+    let database = project.clone().try_into()?;
+    let hold = central(fixture)?.hold_registration_answer(database)?;
     run_scenario(
-        (&mut *fixture, source),
-        async |state: &mut (&mut BoardFixture, ObjectAddress)| {
-            let (fixture, source) = state;
-            let armed = central(fixture)?
-                .runtime_control(
-                    source.clone(),
-                    RuntimeControl::HoldNextDispatch {
-                        destination: ObjectAddress::Registry,
-                    },
-                )
-                .await?;
-            assert!(matches!(
-                armed.dispatch,
-                DispatchFaultObservation::Armed { .. }
-            ));
-            // Do not retry: the accepted directory and actual Register must remain pending.
+        (&mut *fixture, hold),
+        async |state: &mut (
+            &mut BoardFixture,
+            board_central_test_support::RegistrationAnswerObservation,
+        )| {
+            let (fixture, hold) = state;
+            // Hold this machine's actual Registered answer, not an unrelated
+            // Fleet invocation. The owning writer remains pending until intake.
             let reply = fixture
                 .host()?
                 .mcp("project_create", request.clone())
                 .await?;
+            tokio::time::timeout(Duration::from_secs(30), hold.wait_held()).await??;
             assert_eq!(
                 reply.pointer("/result/kind"),
-                Some(&json!("projectCreationPending"))
+                Some(&json!("projectCreationPending")),
+                "{reply}"
             );
-            hold_register(fixture, source.clone(), &project).await?;
             let stopped = fixture
                 .host
                 .take()
@@ -102,17 +81,10 @@ pub async fn arrange(fixture: &mut BoardFixture) -> FixtureResult<Value> {
                 .await?;
             reject_native(fixture, &stopped, &project).await
         },
-        async |(fixture, source): (&mut BoardFixture, ObjectAddress)| {
-            let observed = central(fixture)?
-                .runtime_control(source.clone(), RuntimeControl::Observe)
-                .await?;
-            if matches!(observed.dispatch, DispatchFaultObservation::Held { .. }) {
-                central(fixture)?
-                    .runtime_control(source, RuntimeControl::ResumeDispatch)
-                    .await?;
-            }
-            Ok(())
-        },
+        async |(_fixture, hold): (
+            &mut BoardFixture,
+            board_central_test_support::RegistrationAnswerObservation,
+        )| { hold.release() },
         || Ok(()),
     )
     .await?;
@@ -134,44 +106,6 @@ pub async fn arrange(fixture: &mut BoardFixture) -> FixtureResult<Value> {
         Some(&json!("registration"))
     );
     Ok(request)
-}
-
-async fn hold_register(
-    fixture: &BoardFixture,
-    source: ObjectAddress,
-    project: &str,
-) -> FixtureResult {
-    tokio::time::timeout(Duration::from_secs(30), async {
-        loop {
-            let observed = central(fixture)?
-                .runtime_control(source.clone(), RuntimeControl::AwaitHeldDispatch)
-                .await?;
-            let DispatchFaultObservation::Held {
-                destination,
-                request,
-            } = observed.dispatch
-            else {
-                return Err("Register did not reach actual dispatch hold".into());
-            };
-            assert_eq!(destination, ObjectAddress::Registry);
-            let request: Value = serde_json::from_slice(&request)?;
-            if request.get("kind") == Some(&json!("central.session-lease"))
-                && request.pointer("/request/request/kind") == Some(&json!("register"))
-                && request.pointer("/request/request/value/database") == Some(&json!(project))
-            {
-                return Ok(());
-            }
-            central(fixture)?
-                .runtime_control(
-                    source.clone(),
-                    RuntimeControl::ResumeDispatchAndHoldNext {
-                        destination: ObjectAddress::Registry,
-                    },
-                )
-                .await?;
-        }
-    })
-    .await?
 }
 
 async fn reject_native(

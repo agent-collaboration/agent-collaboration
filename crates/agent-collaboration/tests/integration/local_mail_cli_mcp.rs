@@ -134,8 +134,13 @@ async fn supplied_identity_replays_across_cli_and_mcp_and_conflicts_without_anot
     ensure_eq!(surfaces.carrier.injections.load(Ordering::SeqCst), 1);
     let reference = surfaces.delivery_reference(&id).await?;
     ensure!(
-        native_sql::local_is_compacted(surfaces.interactions.clone(), surfaces.peer, reference)
-            .await?
+        native_sql::local_is_compacted(
+            surfaces.interactions.clone(),
+            surfaces.peer,
+            reference,
+            surfaces.sender_binding()?
+        )
+        .await?
     );
     let recorded = surfaces
         .interactions
@@ -217,8 +222,13 @@ async fn every_m2c_mail_preparation_path_writes_terminal_age_retention() -> Test
         let item = id.to_owned().try_into()?;
         let reference = surfaces.delivery_reference(&item).await?;
         ensure!(
-            native_sql::local_is_compacted(surfaces.interactions.clone(), surfaces.peer, reference)
-                .await?
+            native_sql::local_is_compacted(
+                surfaces.interactions.clone(),
+                surfaces.peer,
+                reference,
+                surfaces.sender_binding()?
+            )
+            .await?
         );
     }
     ensure_eq!(surfaces.carrier.injections.load(Ordering::SeqCst), 3);

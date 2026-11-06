@@ -1,5 +1,7 @@
 {
-  "migrations": ["admin_import_migrations"],
+  "migrations": [
+    "admin_import_migrations"
+  ],
   "output": "src/generated_admin_imports.rs",
   "metadata": "admin-import-query-metadata.json",
   "queries": [
@@ -9,8 +11,16 @@
       "row": "StoredAdminImport",
       "result": "optional",
       "parameters": [
-        {"name": "project_id", "kind": "text", "nullable": false},
-        {"name": "digest", "kind": "text", "nullable": false}
+        {
+          "name": "project_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "digest",
+          "kind": "text",
+          "nullable": false
+        }
       ]
     },
     {
@@ -19,11 +29,101 @@
       "row": null,
       "result": "execute",
       "parameters": [
-        {"name": "import_id", "kind": "text", "nullable": false},
-        {"name": "project_id", "kind": "text", "nullable": false},
-        {"name": "digest", "kind": "text", "nullable": false},
-        {"name": "header", "kind": "text", "nullable": false},
-        {"name": "phase", "kind": "text", "nullable": false}
+        {
+          "name": "import_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "project_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "digest",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "provenance_installation",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "provenance_machine",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "declared_owner",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "manifest_epoch",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "manifest_sequence",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "schema_version",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "schema_fingerprint",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "pages",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "manifest_table_count",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "summary_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "summary_time_basis",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "summary_record_at",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "phase_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "published_epoch",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "published_sequence",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "kind": "text",
+          "nullable": false
+        }
       ]
     },
     {
@@ -32,8 +132,92 @@
       "row": null,
       "result": "execute",
       "parameters": [
-        {"name": "phase", "kind": "text", "nullable": false},
-        {"name": "import_id", "kind": "text", "nullable": false}
+        {
+          "name": "phase_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "published_epoch",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "published_sequence",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "import_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_admin_manifest",
+      "sql": "admin_import_sql/read_admin_manifest.sql",
+      "row": "StoredAdminManifest",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "import_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_admin_manifest",
+      "sql": "admin_import_sql/insert_admin_manifest.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "row_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "import_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "ordinal",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "table_name",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "row_count",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "table_digest",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "kind": "text",
+          "nullable": false
+        }
       ]
     }
   ]

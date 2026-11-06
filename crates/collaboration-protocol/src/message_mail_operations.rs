@@ -90,9 +90,7 @@ impl From<PushRecordShowParams> for MessageShowRequest {
 )]
 pub enum RemoteDeliveryStatus {
     Queued,
-    Sent {
-        seq: u64,
-    },
+    Sent,
     AtMachine,
     Held,
     Delivered {
@@ -100,6 +98,7 @@ pub enum RemoteDeliveryStatus {
     },
     Uncertain,
     Expired,
+    ExpiredAtUpgrade,
     Cancelled,
     Refused {
         reason: RemoteDeliveryRefusal,
@@ -130,8 +129,13 @@ pub enum RemoteDeliveryRefusal {
         cancel: MailItemId,
         digest: MailDigest,
     },
+    NotThisMachine,
+    NotRecipient,
+    NotSubmitter,
+    TooOld,
     RecipientUnknown,
     RecipientRevoked,
+    SenderNotEnrolled,
     DroppedByPolicy,
     CancelSenderMismatch,
 }

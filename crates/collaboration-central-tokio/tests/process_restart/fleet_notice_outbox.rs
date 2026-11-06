@@ -1,5 +1,7 @@
 //! Both original notice-loss paths recover through a fresh native OS process.
 use super::*;
+#[path = "fleet_notice_outbox/notice_retry.rs"]
+mod notice_retry;
 use collaboration_central_conformance::ObjectReplyFaultObservation;
 use collaboration_central_core::{ConformanceBoardState, RegistryTime};
 use fleet_admission::{DirectoryEntry, DirectoryLease, DirectorySide, LeaseMetadata};
@@ -104,7 +106,7 @@ async fn prepare_notice_loss(
     let at = RegistryTime(chrono::Utc::now() - chrono::TimeDelta::seconds(1));
     control(
         base,
-        ObjectAddress::Registry,
+        ObjectAddress::Fleet,
         RuntimeControl::SetTime { now: at },
     )
     .await?;
@@ -158,16 +160,15 @@ async fn prepare_notice_loss(
         let (initial_feed, head) = read_complete_fleet_feed(&mut holder.socket).await?;
         assert_eq!(head, 3);
         assert_eq!(initial_feed.len(), 3);
-        let destination = ObjectAddress::Connection(SERVICE.to_owned().try_into()?);
+        let destination = ObjectAddress::Fleet;
         // Each released call arms the next hold atomically. A first receiver
         // call may only admit its async append; keep advancing until a real
         // successful reply is lost, then retain the next hold until SIGKILL.
-        control(base, ObjectAddress::Fleet, RuntimeControl::HoldNextDispatch {
-            destination: destination.clone(),
-        }).await?;
+        control(base, ObjectAddress::Fleet, RuntimeControl::HoldNextDispatch { key: notice_key() }).await?;
         if matches!(loss,NoticeLoss::Acknowledgement) {
-            control(base,ObjectAddress::Fleet,RuntimeControl::DropNextObjectReply {
+            control(base,ObjectAddress::Fleet,RuntimeControl::DropNextSelectedObjectReply {
                 destination: destination.clone(),
+                call: collaboration_central_conformance::DispatchCallSelector::FleetMachineNotice,
             }).await?;
         }
         let request = FleetRequest {
@@ -185,24 +186,27 @@ async fn prepare_notice_loss(
         let observed = tokio::time::timeout(Duration::from_secs(8), async {
             let recorded: ConformanceResult<Vec<u8>> = match loss {
                 NoticeLoss::Dispatch => {
-                    let observed = control(base, ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch).await?;
-                    match observed.dispatch {
+                    let observed = control(base, ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch { key: notice_key() }).await?;
+                    match observed.dispatch(&notice_key()) {
                         DispatchFaultObservation::Held { destination: actual, request } if actual == destination => Ok(request),
                         other => Err(format!("actual notice dispatch did not reach its barrier: {other:?}").into()),
                     }
                 }
                 NoticeLoss::Acknowledgement => {
                     loop {
-                        let observed=control(base,ObjectAddress::Fleet,RuntimeControl::AwaitHeldDispatch).await?;
-                        if !matches!(observed.dispatch,DispatchFaultObservation::Held {destination:ref actual,..} if *actual==destination) {
+                        let observed=control(base,ObjectAddress::Fleet,RuntimeControl::AwaitHeldDispatch { key: notice_key() }).await?;
+                        let DispatchFaultObservation::Held {destination:actual,request:held} = observed.dispatch(&notice_key()) else {
                             return Err("notice ACK-loss handoff lost its real next-dispatch hold".into());
+                        };
+                        if actual != destination {
+                            return Err("notice ACK-loss handoff held another destination".into());
                         }
                         if let ObjectReplyFaultObservation::Dropped {destination:actual,request}=observed.object_reply {
                             if actual!=destination {return Err("notice ACK loss recorded another destination".into());}
                             eprintln!("FLEET_NOTICE_RESTART_STAGE successful_reply_lost_next_dispatch_held");
                             break Ok(request);
                         }
-                        control(base,ObjectAddress::Fleet,RuntimeControl::ResumeDispatchAndHoldNext {destination:destination.clone()}).await?;
+                        notice_retry::resume_at_committed_retry(base,root,&held).await?;
                     }
                 }
             };
@@ -389,7 +393,7 @@ async fn assert_original_receiver_receipt(
         .ok_or("saved call step is not text")?;
     let key = format!("central-machine-notice:{operation}:{step}");
     let mut connection = sqlx_turso::TursoConnectOptions::new()
-        .filename(root.join(format!("connection-{SERVICE}.db")))
+        .filename(root.join("fleet.db"))
         .read_only(true)
         .connect()
         .await?;
@@ -518,10 +522,7 @@ async fn observe_failed_preparation(base: &str, root: &std::path::Path) -> Confo
         query::query,
         row::Row,
     };
-    for (address, file) in [
-        (ObjectAddress::Registry, "registry.db"),
-        (ObjectAddress::Fleet, "fleet.db"),
-    ] {
+    for (address, file) in [(ObjectAddress::Fleet, "fleet.db")] {
         let observed = control(base, address, RuntimeControl::Observe).await?;
         eprintln!(
             "FLEET_NOTICE_RESTART_DIAGNOSTIC file={file} clock={:?} wall_ms={}",

@@ -1,7 +1,8 @@
 //! Local control attribution, SDK custody and every attempt commit together.
 use super::{
     AtomicStore, Clock, DeliveryItemRef, Inbox, ItemId, LocalMailTask, MailDeliveryRuntime,
-    MailHost, ReportMailTask, RouterDeliveryTypes, StoreError, SyncTime, TursoScope,
+    MailHost, RemoveMailRecord, ReportMailTask, RouterDeliveryTypes, StoreError, SyncTime,
+    TursoScope,
 };
 use collaboration_mail_protocol::{CancelCause, MailItemId};
 use durable_steps::JournalScope;
@@ -55,65 +56,77 @@ impl MailDeliveryRuntime {
         #[cfg(test)]
         let admission_probe = self.cancel_admission_probe.clone();
         self.store
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    // No outbox precedes this entry: its own attribution must exist before the hook.
-                    let preparation =
-                        prepare_local_cancel_in_scope(scope, &proposed, &target, &attribution, now)
-                            .await
+            .transaction({
+                let binding = self.binding.clone();
+                move |scope| {
+                    Box::pin(async move {
+                        // No outbox precedes this entry: its own attribution must exist before the hook.
+                        let preparation = prepare_local_cancel_in_scope(
+                            scope,
+                            &proposed,
+                            &target,
+                            &attribution,
+                            now,
+                        )
+                        .await
+                        .map_err(StoreError::backend)?;
+                        #[cfg(test)]
+                        if let Some(probe) = admission_probe {
+                            if read_local_cancel_in_scope(scope, &proposed)
+                                .await
+                                .map_err(StoreError::backend)?
+                                .is_none()
+                            {
+                                return Err(StoreError::backend(
+                                    "cancel crash probe reached before attribution",
+                                ));
+                            }
+                            pause_cancel_admission(&probe).await?;
+                        }
+                        let admitted = Inbox::<_, RouterDeliveryTypes, _>::new(
+                            scope,
+                            config.owner,
+                            config.limits,
+                            binding.as_ref(),
+                        )
+                        .enqueue_local_cancel_and_admit::<RemoveMailRecord, _>(
+                            cancel,
+                            &*consumer,
+                            SyncTime::from_unix_millis(now.timestamp_millis()),
+                        )
+                        .await
+                        .map_err(delivery_rollback)?;
+                        let canonical: MailItemId = admitted
+                            .reference
+                            .item
+                            .as_uuid()
+                            .to_string()
+                            .try_into()
                             .map_err(StoreError::backend)?;
-                    #[cfg(test)]
-                    if let Some(probe) = admission_probe {
-                        if read_local_cancel_in_scope(scope, &proposed)
+                        if canonical != proposed {
+                            delete_tentative_local_cancel_in_scope(scope, &proposed, preparation)
+                                .await
+                                .map_err(StoreError::backend)?;
+                        }
+                        admit_cancel_effects(scope, &admitted.effects).await?;
+                        let has_effects = !admitted.effects.attempts.is_empty()
+                            || !admitted.effects.reports.is_empty();
+                        let reference = if read_local_cancel_in_scope(scope, &canonical)
                             .await
                             .map_err(StoreError::backend)?
-                            .is_none()
+                            .is_some()
                         {
-                            return Err(StoreError::backend(
-                                "cancel crash probe reached before attribution",
-                            ));
-                        }
-                        pause_cancel_admission(&probe).await?;
-                    }
-                    let admitted =
-                        Inbox::<_, RouterDeliveryTypes>::new(scope, config.owner, config.limits)
-                            .enqueue_local_cancel(
-                                cancel,
-                                &*consumer,
-                                SyncTime::from_unix_millis(now.timestamp_millis()),
-                            )
-                            .await
-                            .map_err(delivery_rollback)?;
-                    let canonical: MailItemId = admitted
-                        .reference
-                        .item
-                        .as_uuid()
-                        .to_string()
-                        .try_into()
-                        .map_err(StoreError::backend)?;
-                    if canonical != proposed {
-                        delete_tentative_local_cancel_in_scope(scope, &proposed, preparation)
-                            .await
-                            .map_err(StoreError::backend)?;
-                    }
-                    admit_cancel_effects(scope, &admitted.effects).await?;
-                    let has_effects = !admitted.effects.attempts.is_empty()
-                        || !admitted.effects.reports.is_empty();
-                    let reference = if read_local_cancel_in_scope(scope, &canonical)
-                        .await
-                        .map_err(StoreError::backend)?
-                        .is_some()
-                    {
-                        LocalCancelReference::Local {
-                            reference: admitted.reference,
-                        }
-                    } else {
-                        LocalCancelReference::ExistingElsewhere {
-                            reference: admitted.reference,
-                        }
-                    };
-                    Ok((reference, has_effects))
-                })
+                            LocalCancelReference::Local {
+                                reference: admitted.reference,
+                            }
+                        } else {
+                            LocalCancelReference::ExistingElsewhere {
+                                reference: admitted.reference,
+                            }
+                        };
+                        Ok((reference, has_effects))
+                    })
+                }
             })
             .await
     }

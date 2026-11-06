@@ -11,18 +11,46 @@ impl ShellActor {
         host: &StoreHost,
         runtime: &RuntimeFace,
     ) -> Result<Option<Response>> {
+        if request.path() == "/test/fleet-mail-custody" {
+            let RuntimeFace::Fleet(runtime) = runtime else {
+                return Err(error("custody observation requires Fleet"));
+            };
+            let input: collaboration_central_core::FleetMailCustodyRequest = request.json().await?;
+            return Response::from_json(
+                &runtime
+                    .conformance_mail_custody(input.item)
+                    .await
+                    .map_err(error)?,
+            )
+            .map(Some);
+        }
+        if request.path() == "/test/fleet-schema" {
+            let RuntimeFace::Fleet(runtime) = runtime else {
+                return Err(error("schema observation requires the Fleet owner"));
+            };
+            return Response::from_json(&runtime.conformance_schema().await.map_err(error)?)
+                .map(Some);
+        }
         if request.path() == crate::composed_control::OBJECT_PATH {
             let command: collaboration_central_conformance::RuntimeControl = request.json().await?;
             if matches!(
                 command,
-                collaboration_central_conformance::RuntimeControl::SmallMailboxCapacity
+                collaboration_central_conformance::RuntimeControl::ProjectUnavailable
+                    | collaboration_central_conformance::RuntimeControl::ClearProjectFault
             ) {
-                let RuntimeFace::Mailbox(mailbox) = runtime else {
-                    return Err(error("small capacity requires a mailbox"));
-                };
-                mailbox
-                    .conformance_small_mailbox_capacity()
-                    .map_err(error)?;
+                if !matches!(runtime, RuntimeFace::Copy(_)) {
+                    return Err(error("project fault requires a project object"));
+                }
+                self.state
+                    .storage()
+                    .put(
+                        crate::composed_control::PROJECT_FAULT_KEY,
+                        matches!(
+                            command,
+                            collaboration_central_conformance::RuntimeControl::ProjectUnavailable
+                        ),
+                    )
+                    .await?;
             }
             if let collaboration_central_conformance::RuntimeControl::SetTime { now } = &command {
                 self.state
@@ -41,14 +69,14 @@ impl ShellActor {
                 .map(Some);
         }
         if request.path() == "/test/forward-state" {
-            let RuntimeFace::Session(runtime) = runtime else {
+            let RuntimeFace::Fleet(runtime) = runtime else {
                 return Err(error("not a connection runtime"));
             };
             return Response::from_json(&runtime.conformance_forward_state().await.map_err(error)?)
                 .map(Some);
         }
         if request.path() == "/test/holder-frames" {
-            let RuntimeFace::Session(runtime) = runtime else {
+            let RuntimeFace::Fleet(runtime) = runtime else {
                 return Err(error("not a connection runtime"));
             };
             return Response::from_json(&runtime.conformance_holder_frames().map_err(error)?)
@@ -62,14 +90,24 @@ impl ShellActor {
             return Response::from_json(&origins).map(Some);
         }
         if request.path() == "/test/session-connections" {
-            if !matches!(runtime, RuntimeFace::Session(_)) {
+            if !matches!(runtime, RuntimeFace::Fleet(_)) {
                 return Err(error("session observation requires a Connection object"));
             }
-            return Response::from_json(&host.conformance_session_connections().map_err(error)?)
-                .map(Some);
+            let installation: Option<message_board::ServiceId> = request.json().await?;
+            let connections = host
+                .conformance_session_connections()
+                .map_err(error)?
+                .into_iter()
+                .filter(|connection| {
+                    installation
+                        .as_ref()
+                        .is_none_or(|installation| connection.belongs_to(installation))
+                })
+                .collect::<Vec<_>>();
+            return Response::from_json(&connections).map(Some);
         }
         if request.path() == "/test/session-faults" {
-            if !matches!(runtime, RuntimeFace::Session(_)) {
+            if !matches!(runtime, RuntimeFace::Fleet(_)) {
                 return Err(error("session faults require a Connection object"));
             }
             let command: collaboration_central_conformance::SessionFaultControl =
@@ -100,7 +138,7 @@ impl ShellActor {
                 .map(Some);
         }
         if request.path() == "/test/session-attachment-codec" {
-            if !matches!(runtime, RuntimeFace::Session(_)) {
+            if !matches!(runtime, RuntimeFace::Fleet(_)) {
                 return Err(error("codec observation requires a Connection object"));
             }
             return Response::from_json(
@@ -111,7 +149,7 @@ impl ShellActor {
             .map(Some);
         }
         if request.path() == "/test/session-alarm" {
-            if !matches!(runtime, RuntimeFace::Session(_)) {
+            if !matches!(runtime, RuntimeFace::Fleet(_)) {
                 return Err(error("alarm observation requires a Connection object"));
             }
             return Response::from_json(
@@ -122,7 +160,7 @@ impl ShellActor {
             .map(Some);
         }
         if request.path() == "/test/schema-report" {
-            let RuntimeFace::Registry(runtime) = runtime else {
+            let RuntimeFace::Fleet(runtime) = runtime else {
                 return Err(error("not a registry runtime"));
             };
             let report = runtime
@@ -132,7 +170,7 @@ impl ShellActor {
             return Response::from_json(&report).map(Some);
         }
         if request.path() == crate::conformance_bootstrap::IMPORTED_UNHELD_PATH {
-            let RuntimeFace::Registry(runtime) = runtime else {
+            let RuntimeFace::Fleet(runtime) = runtime else {
                 return Err(error("import fixture requires Registry"));
             };
             let (database, owner, board_state): (
@@ -164,7 +202,7 @@ impl ShellActor {
             return Response::from_json(&observation).map(Some);
         }
         if request.path() == "/test/holder-session-identity" {
-            let RuntimeFace::Session(runtime) = runtime else {
+            let RuntimeFace::Fleet(runtime) = runtime else {
                 return Err(error("holder identity requires a Connection object"));
             };
             let connection: fleet_sync_protocol::ConnectionId = request.json().await?;
@@ -175,7 +213,7 @@ impl ShellActor {
             return Response::from_json(&()).map(Some);
         }
         if request.path() == "/test/holder-observation" {
-            let RuntimeFace::Session(runtime) = runtime else {
+            let RuntimeFace::Fleet(runtime) = runtime else {
                 return Err(error("holder observation requires a Connection object"));
             };
             return Response::from_json(&runtime.conformance_holder_observation().map_err(error)?)

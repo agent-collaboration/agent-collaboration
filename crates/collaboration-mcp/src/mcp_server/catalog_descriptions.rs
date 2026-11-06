@@ -341,7 +341,7 @@ pub(super) fn operation_description(name: &str) -> &'static str {
             "Reads a bounded project feed page after an epoch-qualified cursor, with covered-through position. Identified reads mark that coverage and report a separate readMark outcome. A superseded epoch returns its resume cursor."
         }
         "view_work" => {
-            "Derives project lanes, dependency order, task progress, ready and blocked work, repeated rejections and epoch freshness. This summary advances no read marks and returns no readMark field."
+            "Derives project lanes, dependency order, task progress, ready and blocked work, repeated rejections and epoch freshness. A notInCentral writer means not in central yet (run the cutover import); its local history remains readable. This summary advances no read marks and returns no readMark field."
         }
         "view_card" => {
             "Derives an actor's continuation card for a project, workstream or task: governing plan, role, pending duties, latest trail and counts. Assignment, notify intent state, blocker and Host running state stay separate. This summary advances no read marks and returns no readMark field."

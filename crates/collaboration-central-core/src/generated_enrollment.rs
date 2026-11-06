@@ -19,6 +19,8 @@ pub(crate) struct StoredEnrollment {
     pub last_seen: Option<String>,
     pub last_revocation_operation: Option<String>,
     pub last_enrollment_operation: Option<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
 }
 pub(crate) fn read_enrollments<S>(
     scope: &mut S,
@@ -57,6 +59,8 @@ where
                     last_seen: row.try_get("last_seen")?,
                     last_revocation_operation: row.try_get("last_revocation_operation")?,
                     last_enrollment_operation: row.try_get("last_enrollment_operation")?,
+                    created_at: row.try_get("created_at")?,
+                    updated_at: row.try_get("updated_at")?,
                 })
             })
             .collect()
@@ -70,6 +74,8 @@ pub(crate) fn insert_enrollment<S>(
     access_client_id: String,
     credential_hash: String,
     expires_at: String,
+    created_at: String,
+    updated_at: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
@@ -86,7 +92,9 @@ where
         .bind(machine_label)
         .bind(access_client_id)
         .bind(credential_hash)
-        .bind(expires_at);
+        .bind(expires_at)
+        .bind(created_at)
+        .bind(updated_at);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -97,6 +105,7 @@ pub(crate) fn update_enrollment<S>(
     access_client_id: String,
     credential_hash: String,
     expires_at: String,
+    updated_at: String,
     peer_id: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
@@ -113,6 +122,7 @@ where
         .bind(access_client_id)
         .bind(credential_hash)
         .bind(expires_at)
+        .bind(updated_at)
         .bind(peer_id);
         statement.execute(scope.executor()).await?;
         Ok(())
@@ -121,6 +131,7 @@ where
 pub(crate) fn revoke_enrollment<S>(
     scope: &mut S,
     operation: String,
+    updated_at: String,
     peer: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
@@ -134,6 +145,7 @@ where
             "/sql/revoke_enrollment.sql"
         )))
         .bind(operation)
+        .bind(updated_at)
         .bind(peer);
         statement.execute(scope.executor()).await?;
         Ok(())
@@ -146,6 +158,7 @@ pub(crate) fn admit_readmission<S>(
     credential_hash: String,
     expires_at: String,
     operation: String,
+    updated_at: String,
     peer_id: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
@@ -163,6 +176,7 @@ where
         .bind(credential_hash)
         .bind(expires_at)
         .bind(operation)
+        .bind(updated_at)
         .bind(peer_id);
         statement.execute(scope.executor()).await?;
         Ok(())
@@ -170,6 +184,7 @@ where
 }
 pub(crate) fn activate_enrollment<S>(
     scope: &mut S,
+    updated_at: String,
     peer_id: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
@@ -182,6 +197,7 @@ where
             env!("CARGO_MANIFEST_DIR"),
             "/sql/activate_enrollment.sql"
         )))
+        .bind(updated_at)
         .bind(peer_id);
         statement.execute(scope.executor()).await?;
         Ok(())

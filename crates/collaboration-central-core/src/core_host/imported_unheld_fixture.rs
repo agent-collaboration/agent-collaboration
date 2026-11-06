@@ -1,7 +1,8 @@
 //! Conformance setup only: public import and seed on the actual composed objects.
 use super::{CoreHost, DatabaseId, IdSource, PlatformIo};
+use crate::FleetKind;
 use crate::{
-    CallerContext, CopyKind, EdgeKind, ObjectHost, ObjectRuntime, OwnerIdentity, RegistryKind,
+    CallerContext, EdgeKind, ObjectHost, ObjectRuntime, OwnerIdentity,
     copy_write_calls::{AdminCopySeedRequest, CopyAdminSeed},
     object_runtime::ObjectWork,
 };
@@ -25,7 +26,7 @@ pub enum ConformanceBoardState {
     Open,
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<RegistryKind, Host, Io>
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -43,7 +44,7 @@ where
         owner: OwnerIdentity,
         board_state: ConformanceBoardState,
     ) -> Result<ReplicationPosition, StoreError> {
-        let ObjectWork::Registry {
+        let ObjectWork::Fleet {
             engine,
             shared_host,
             config,
@@ -57,7 +58,7 @@ where
         fixture_fleet(shared_host, &owner, database, board_state).await?;
         let attempt = RequestId::new(shared_host.new_id()).map_err(StoreError::backend)?;
         let operation = engine
-            .start::<fleet_sync_lease::ImportTask<Host::Store, Host::Database>>(
+            .start_import(
                 &fleet_sync_lease::lifecycle_request_key(attempt).map_err(StoreError::backend)?,
                 Import {
                     attempt,
@@ -180,10 +181,10 @@ pub(super) async fn fixture_seed<Io: PlatformIo>(
     request: AdminCopySeedRequest,
 ) -> Result<ReplicationAnswer, StoreError> {
     let caller = CallerContext::<EdgeKind>::for_owner(owner.clone());
-    let call = crate::object_call_envelope::encode_shared_call::<EdgeKind, CopyKind, _>(
+    let call = crate::object_call_envelope::encode_shared_call::<EdgeKind, FleetKind, _>(
         &caller,
-        target.database,
-        CopyAdminSeed {
+        (),
+        crate::copy_write_calls::FleetProjectSeed {
             copy: target.copy,
             database: target.database,
         },
@@ -194,10 +195,8 @@ pub(super) async fn fixture_seed<Io: PlatformIo>(
             })?,
     )
     .map_err(|failure| StoreError::backend(format!("fixture seed encoding: {failure:?}")))?;
-    let (address, bytes) = call.into_parts();
     let answer = host
-        .io
-        .object_call(address, bytes)
+        .transmit(call)
         .await
         .map_err(|failure| StoreError::backend(format!("fixture seed transport: {failure:?}")))?;
     serde_json::from_slice(&answer).map_err(StoreError::backend)
@@ -274,10 +273,8 @@ pub(super) async fn fixture_fleet<Io: PlatformIo>(
         },
     )
     .map_err(|failure| StoreError::backend(format!("fixture Fleet encoding: {failure:?}")))?;
-    let (address, bytes) = call.into_parts();
     let answer = host
-        .io
-        .object_call(address, bytes)
+        .transmit(call)
         .await
         .map_err(|failure| StoreError::backend(format!("fixture Fleet transport: {failure:?}")))?;
     let crate::FleetResult::Imported(FleetImportResult::Imported { .. }) =

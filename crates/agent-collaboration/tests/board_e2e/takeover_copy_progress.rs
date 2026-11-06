@@ -27,13 +27,17 @@ pub async fn held_submit(fixture: &mut BoardFixture) -> FixtureResult<Value> {
         loop {
             copy_project(fixture).await?;
             let observed = central(fixture)?
-                .runtime_control(ObjectAddress::Registry, RuntimeControl::Observe)
+                .runtime_control(ObjectAddress::Fleet, RuntimeControl::Observe)
                 .await?;
-            if matches!(observed.dispatch, DispatchFaultObservation::Held { .. }) {
+            if matches!(
+                observed.dispatch(&controls::submit_key()),
+                DispatchFaultObservation::Held { .. }
+            ) {
                 return controls::held_call(
                     fixture,
-                    ObjectAddress::Registry,
-                    "central.mailbox-submit",
+                    ObjectAddress::Fleet,
+                    controls::submit_key(),
+                    "central.mail-submit",
                 )
                 .await;
             }

@@ -47,6 +47,10 @@ fn current_writer_keeps_a_grant_unheld_import_and_unknown_distinct() -> TestResu
         ),
         (CurrentWriter::Unheld {}, json!({"kind":"unheld"})),
         (CurrentWriter::Unknown {}, json!({"kind":"unknown"})),
+        (
+            CurrentWriter::NotInCentral {},
+            json!({"kind":"notInCentral"}),
+        ),
     ] {
         let encoded = serde_json::to_value(writer)?;
         assert_eq!(encoded, expected);
@@ -61,6 +65,7 @@ fn current_writer_keeps_a_grant_unheld_import_and_unknown_distinct() -> TestResu
         json!({"kind":"provisional","epoch":1}),
         json!({"kind":"unheld","epoch":2}),
         json!({"kind":"unknown","epoch":3}),
+        json!({"kind":"notInCentral","epoch":3}),
         json!({"kind":"future"}),
     ] {
         assert!(serde_json::from_value::<CurrentWriter>(invalid).is_err());

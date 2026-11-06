@@ -12,7 +12,7 @@ use futures_util::{SinkExt, StreamExt};
 use reqwest_websocket::{Message as UpstreamMessage, RequestBuilderExt};
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, AtomicUsize, Ordering},
+    atomic::{AtomicUsize, Ordering},
 };
 use tokio::task::JoinSet;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
@@ -21,8 +21,6 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 struct EdgeState {
     upstream: String,
     accepted_sessions: Arc<AtomicUsize>,
-    duplicate_mail: Arc<AtomicBool>,
-    duplicated_mail: Arc<AtomicUsize>,
     authorization: String,
     assertion: String,
     stop: CancellationToken,
@@ -32,14 +30,13 @@ struct EdgeState {
     #[cfg(feature = "conformance")]
     piece_integrity: crate::piece_integrity_refusal::PieceIntegrityRefusal,
     lease_notices: crate::lease_notice_gate::LeaseNoticeGate,
+    registration_answers: crate::registration_answer_gate::RegistrationAnswerGate,
     #[cfg(feature = "conformance")]
     payload_inputs: crate::payload_input_observer::PayloadInputObserver,
 }
 pub(crate) struct SignedAccessEdge {
     pub endpoint: String,
     accepted_sessions: Arc<AtomicUsize>,
-    duplicate_mail: Arc<AtomicBool>,
-    duplicated_mail: Arc<AtomicUsize>,
     stop: CancellationToken,
     listener: JoinSet<Result<(), std::io::Error>>,
     connections: TaskTracker,
@@ -48,6 +45,7 @@ pub(crate) struct SignedAccessEdge {
     #[cfg(feature = "conformance")]
     piece_integrity: crate::piece_integrity_refusal::PieceIntegrityRefusal,
     lease_notices: crate::lease_notice_gate::LeaseNoticeGate,
+    registration_answers: crate::registration_answer_gate::RegistrationAnswerGate,
     #[cfg(feature = "conformance")]
     payload_inputs: crate::payload_input_observer::PayloadInputObserver,
 }
@@ -55,12 +53,12 @@ impl SignedAccessEdge {
     pub async fn start(upstream: &str, credential: &str) -> FixtureResult<Self> {
         let stop = CancellationToken::new();
         let accepted_sessions = Arc::new(AtomicUsize::new(0));
-        let duplicate_mail = Arc::new(AtomicBool::new(false));
-        let duplicated_mail = Arc::new(AtomicUsize::new(0));
         let connections = TaskTracker::new();
         let claim_grants = crate::claim_grant_drop::ClaimGrantDrop::default();
         let mail_wire = crate::mail_wire_observer::MailWireObserver::default();
         let lease_notices = crate::lease_notice_gate::LeaseNoticeGate::default();
+        let registration_answers =
+            crate::registration_answer_gate::RegistrationAnswerGate::default();
         #[cfg(feature = "conformance")]
         let piece_integrity = crate::piece_integrity_refusal::PieceIntegrityRefusal::default();
         #[cfg(feature = "conformance")]
@@ -68,8 +66,6 @@ impl SignedAccessEdge {
         let state = EdgeState {
             upstream: format!("{upstream}/v1/session"),
             accepted_sessions: accepted_sessions.clone(),
-            duplicate_mail: duplicate_mail.clone(),
-            duplicated_mail: duplicated_mail.clone(),
             authorization: format!("Bearer {credential}"),
             assertion: collaboration_central_conformance::machine_assertion(credential)?,
             stop: stop.clone(),
@@ -79,6 +75,7 @@ impl SignedAccessEdge {
             #[cfg(feature = "conformance")]
             piece_integrity: piece_integrity.clone(),
             lease_notices: lease_notices.clone(),
+            registration_answers: registration_answers.clone(),
             #[cfg(feature = "conformance")]
             payload_inputs: payload_inputs.clone(),
         };
@@ -97,8 +94,6 @@ impl SignedAccessEdge {
         Ok(Self {
             endpoint,
             accepted_sessions,
-            duplicate_mail,
-            duplicated_mail,
             stop,
             listener,
             connections,
@@ -107,6 +102,7 @@ impl SignedAccessEdge {
             #[cfg(feature = "conformance")]
             piece_integrity,
             lease_notices,
+            registration_answers,
             #[cfg(feature = "conformance")]
             payload_inputs,
         })
@@ -139,6 +135,12 @@ impl SignedAccessEdge {
     ) -> FixtureResult<crate::LeaseNoticeObservation> {
         self.lease_notices.begin(project, epoch)
     }
+    pub(crate) fn hold_registration_answer(
+        &self,
+        database: fleet_sync_protocol::DatabaseId,
+    ) -> FixtureResult<crate::RegistrationAnswerObservation> {
+        self.registration_answers.begin(database)
+    }
     pub(crate) fn hold_superseded_notice(
         &self,
         project: message_board::ProjectId,
@@ -151,12 +153,6 @@ impl SignedAccessEdge {
         &self,
     ) -> FixtureResult<crate::PayloadInputObservation> {
         self.payload_inputs.begin()
-    }
-    pub(crate) fn duplicate_next_mail_notice(&self) {
-        self.duplicate_mail.store(true, Ordering::SeqCst);
-    }
-    pub(crate) fn duplicated_mail_notices(&self) -> usize {
-        self.duplicated_mail.load(Ordering::SeqCst)
     }
     pub(crate) fn session_connections(&self) -> usize {
         self.accepted_sessions.load(Ordering::SeqCst)
@@ -210,6 +206,8 @@ async fn upgrade(
 }
 async fn bridge(mut downstream: WebSocket, state: EdgeState) -> FixtureResult {
     let mut notice_changes = state.lease_notices.subscribe();
+    let mut registration_changes = state.registration_answers.subscribe();
+    let mut held_answers = std::collections::VecDeque::new();
     let mut held_notices: Option<(u64, std::collections::VecDeque<Message>)> = None;
     let mut upstream = reqwest::Client::builder()
         .http1_only()
@@ -228,6 +226,14 @@ async fn bridge(mut downstream: WebSocket, state: EdgeState) -> FixtureResult {
     loop {
         tokio::select! {
             _ = state.stop.cancelled() => break,
+            changed = registration_changes.changed() => {
+                changed?;
+                if !state.registration_answers.is_held()? {
+                    while let Some(answer) = held_answers.pop_front() {
+                        downstream.send(answer).await?;
+                    }
+                }
+            },
             changed = notice_changes.changed() => {
                 changed?;
                 flush_released_notices(&mut downstream, &state.lease_notices, &mut held_notices).await?;
@@ -258,6 +264,11 @@ async fn bridge(mut downstream: WebSocket, state: EdgeState) -> FixtureResult {
             },
             frame = upstream.next() => match frame {
                 Some(Ok(UpstreamMessage::Binary(bytes))) => {
+                    if state.registration_answers.defer(&bytes)? {
+                        if held_answers.len() >= 64 { return Err("registration answer hold exceeded its bound".into()); }
+                        held_answers.push_back(Message::Binary(bytes));
+                        continue;
+                    }
                     if state.mail_wire.server_frame(&bytes)? { continue; }
                     if state.claim_grants.drop_answer(&bytes)? { break; }
                     flush_released_notices(&mut downstream, &state.lease_notices, &mut held_notices).await?;
@@ -267,10 +278,14 @@ async fn bridge(mut downstream: WebSocket, state: EdgeState) -> FixtureResult {
                     }
                     #[cfg(feature = "conformance")]
                     state.payload_inputs.observe(&bytes)?;
-                    if duplicate_mail_notice(&state,&bytes)? { downstream.send(Message::Binary(bytes.clone())).await?; }
                     downstream.send(Message::Binary(bytes)).await?;
                 },
                 Some(Ok(UpstreamMessage::Text(text))) => {
+                    if state.registration_answers.defer(text.as_bytes())? {
+                        if held_answers.len() >= 64 { return Err("registration answer hold exceeded its bound".into()); }
+                        held_answers.push_back(Message::Text(text.into()));
+                        continue;
+                    }
                     if state.mail_wire.server_frame(text.as_bytes())? { continue; }
                     if state.claim_grants.drop_answer(text.as_bytes())? { break; }
                     flush_released_notices(&mut downstream, &state.lease_notices, &mut held_notices).await?;
@@ -280,7 +295,6 @@ async fn bridge(mut downstream: WebSocket, state: EdgeState) -> FixtureResult {
                     }
                     #[cfg(feature = "conformance")]
                     state.payload_inputs.observe(text.as_bytes())?;
-                    if duplicate_mail_notice(&state,text.as_bytes())? { downstream.send(Message::Text(text.clone().into())).await?; }
                     downstream.send(Message::Text(text.into())).await?;
                 },
                 Some(Ok(UpstreamMessage::Ping(_) | UpstreamMessage::Pong(_))) => {},
@@ -325,29 +339,4 @@ async fn flush_released_notices(
         }
     }
     Ok(())
-}
-
-fn duplicate_mail_notice(state: &EdgeState, bytes: &[u8]) -> FixtureResult<bool> {
-    if !state.duplicate_mail.load(Ordering::SeqCst) {
-        return Ok(false);
-    }
-    let frame: fleet_sync_protocol::ServerFrame<board_sync_protocol::BoardConsumerProtocol> =
-        serde_json::from_slice(bytes)?;
-    if matches!(
-        frame,
-        fleet_sync_protocol::ServerFrame::Notice {
-            body: fleet_sync_protocol::Notice::Consumer(
-                board_sync_protocol::PositionedBoardNotice {
-                    kind: board_sync_protocol::BoardNotice::MailWaiting { .. },
-                    ..
-                }
-            ),
-            ..
-        }
-    ) && state.duplicate_mail.swap(false, Ordering::SeqCst)
-    {
-        state.duplicated_mail.fetch_add(1, Ordering::SeqCst);
-        return Ok(true);
-    }
-    Ok(false)
 }

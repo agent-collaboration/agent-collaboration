@@ -1,5 +1,6 @@
 //! Refusals must cross the normal owner route from real Registry/Copy state.
 use super::*;
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{DispatchFaultObservation, RuntimeControl};
 
 #[tokio::test]
@@ -53,11 +54,11 @@ async fn owner_takeover_preserves_transfer_in_progress_while_the_first_real_fenc
     let proof=async {
         let preview=fixture.preview().await?;
         let first=durable_steps::Uuid::now_v7();
-        fixture.control(RuntimeControl::HoldNextDispatch { destination: collaboration_central_core::ObjectAddress::Copy(fixture.database) }).await?;
+        fixture.control(RuntimeControl::HoldNextDispatch { key: DispatchKey::any((collaboration_central_core::ObjectAddress::Copy(fixture.database)).clone()) }).await?;
         let http=fixture.http.clone(); let route=fixture.route("takeover"); let first_request=confirm(first,preview.clone()); let request=first_request.clone();
         pending.spawn(async move { fixture::post(&http,&route,&request).await });
-        let observed=fixture.control(RuntimeControl::AwaitHeldDispatch).await?;
-        let DispatchFaultObservation::Held {destination,request}=observed.dispatch else { return Err("first transfer did not reach its real Copy fence hold".into()); };
+        let observed=fixture.control(RuntimeControl::AwaitHeldDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Copy(fixture.database)) }).await?;
+        let DispatchFaultObservation::Held {destination,request}=observed.dispatch(&DispatchKey::any(collaboration_central_core::ObjectAddress::Copy(fixture.database))) else { return Err("first transfer did not reach its real Copy fence hold".into()); };
         if destination != collaboration_central_core::ObjectAddress::Copy(fixture.database) { return Err("transfer held another Copy".into()); }
         let held:Value=serde_json::from_slice(&request)?;
         if held.get("kind") != Some(&json!("fleet-sync.copy-fence")) { return Err(format!("transfer hold caught another operation: {held}").into()); }
@@ -65,13 +66,19 @@ async fn owner_takeover_preserves_transfer_in_progress_while_the_first_real_fenc
         if reply != json!({"kind":"refused","value":{"kind":"transferInProgress","value":{"transfer":first}}}) {
             return Err(format!("second owner transfer lost the first active attempt: {reply}").into());
         }
-        fixture.control(RuntimeControl::ResumeDispatch).await?;
+        fixture.control(RuntimeControl::ResumeDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Copy(fixture.database)) }).await?;
         let answer=tokio::time::timeout(Duration::from_secs(8),pending.join_next()).await?.ok_or("first transfer vanished")???;
         fixture::granted(&fixture.complete("takeover",&first_request,answer).await?,"granted",2,fixture::position(1,0)?)?;
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
     }.await;
     // Always release our exact owned hold before shutting down or reporting a failed assertion.
-    let _ = fixture.control(RuntimeControl::ResumeDispatch).await;
+    let _ = fixture
+        .control(RuntimeControl::ResumeDispatch {
+            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Copy(
+                fixture.database,
+            )),
+        })
+        .await;
     pending.abort_all();
     while pending.join_next().await.is_some() {}
     let database = fixture.database;

@@ -12,8 +12,8 @@ fn answer(value: Value) -> Value {
 #[test]
 fn mail_submit_answers_round_trip_library_results_and_distinct_retryable_outcomes() {
     for result in [
-        json!({"kind":"submitted","value":{"kind":"accepted","value":{"seq":11,"status":{"kind":"sent","value":{"seq":11}},"version":1,"cancel":null}}}),
-        json!({"kind":"submitted","value":{"kind":"accepted","value":{"seq":11,"status":{"kind":"expired"},"version":2,"cancel":null}}}),
+        json!({"kind":"submitted","value":{"kind":"accepted","value":{"status":{"kind":"sent"},"version":1,"cancel":null}}}),
+        json!({"kind":"submitted","value":{"kind":"accepted","value":{"status":{"kind":"expired"},"version":2,"cancel":null}}}),
         json!({"kind":"submitted","value":{"kind":"replayed","value":{"status":{"kind":"delivered","value":{"acceptance":"peerMessageWritten"}},"version":u64::MAX,"cancel":{"kind":"tooLate","value":{"at":"delivered"}}}}}),
         json!({"kind":"submitted","value":{"kind":"refused","value":{"reason":{"kind":"itemConflict","value":{"existing":"a".repeat(64)}}}}}),
         json!({"kind":"mailboxUnavailable","value":{"reason":{"kind":"processingFailed","value":{"kind":"custodyCorrupt"}}}}),
@@ -44,7 +44,7 @@ fn mail_submit_answers_reject_unknown_variants_and_fields() {
         json!({"kind":"notWriter","value":{"current":7}}),
         json!({"kind":"mailboxUnavailable","value":{"reason":{"kind":"mailboxFull"},"extra":true}}),
         json!({"kind":"submitted","value":{"kind":"refused","value":{"reason":{"kind":"invented"}}}}),
-        json!({"kind":"submitted","value":{"kind":"accepted","value":{"seq":11,"status":{"kind":"queued"},"version":1,"cancel":null,"extra":true}}}),
+        json!({"kind":"submitted","value":{"kind":"accepted","value":{"status":{"kind":"queued"},"version":1,"cancel":null,"extra":true}}}),
     ] {
         assert!(
             serde_json::from_value::<wire::ServerFrame<BoardConsumerProtocol>>(answer(

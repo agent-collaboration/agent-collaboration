@@ -1,6 +1,7 @@
 //! Fleet projection catch-up reads its checkpoint, independent of unrelated cached bodies.
 use crate::board_fixture;
 use crate::board_read_setup;
+use crate::fleet_maintenance_probe;
 use crate::read_cost_counter;
 use board_central_test_support::RouterPayloadInputBodies;
 use board_fixture::{BoardFixture, TestError, accepted};
@@ -44,8 +45,9 @@ async fn update_cost(
         shown.pointer("/result/workspace/name"),
         Some(&json!("updated workspace"))
     );
+    let maintenance = fleet_maintenance_probe::probe_fixed_maintenance(&fixture).await?;
     fixture.stop().await?;
-    Ok((cost, payload_inputs, alarms))
+    Ok((cost, payload_inputs, maintenance))
 }
 
 async fn corruption_isolation() -> Result<(), TestError> {
@@ -104,12 +106,18 @@ async fn fleet_write_reads_only_its_operands_and_survives_an_unrelated_corrupt_c
         (large.0, large.1),
         "fleet write decoded unrelated cached directory bodies"
     );
+    // C6 adds nine fixed statements to the former budget of 38:
+    // workspace repository children (2), feed repository children (2), feed ADR
+    // files (2), feed ledger heads (2), and workspace child-tail pruning (1).
+    // Enrollment admission adds one current-caller lookup in the Fleet frame
+    // transaction. Each feed read batches the range; neither cost scales with
+    // unrelated records.
     assert_eq!(
-        small.0.statements, 40,
+        small.0.statements, 48,
         "exact foreground board/cache SQL budget"
     );
     assert_eq!(
-        large.0.statements, 40,
+        large.0.statements, 48,
         "exact foreground board/cache SQL budget"
     );
     assert!(
@@ -117,9 +125,9 @@ async fn fleet_write_reads_only_its_operands_and_survives_an_unrelated_corrupt_c
         "real alarm work must be observed"
     );
     assert_eq!(
-        small.2.distinct_costs(),
-        large.2.distinct_costs(),
-        "complete alarm-run SQL cost grew with unrelated records"
+        read_cost_counter::alarm_read_costs::fixed_fleet_maintenance_profiles(&small.2),
+        read_cost_counter::alarm_read_costs::fixed_fleet_maintenance_profiles(&large.2),
+        "fixed per-owner maintenance SQL grew with unrelated records"
     );
     assert_eq!(
         large.0.core_canonical_input_bodies, 2,

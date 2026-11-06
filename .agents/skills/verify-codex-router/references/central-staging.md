@@ -1,5 +1,7 @@
 # Central staging: G4 / OB7
 
+For central-storage-reset D1, use [D1 central mail](d1-central-mail.md). O5 reset and O6 Cloudflare capacity are staging-only declarations awaiting the Lead's live target/deploy grant. The D1 preparation entry cannot execute them.
+
 ## Current entry
 
 The wrapper retired in 0.1.102. Current cross-machine/staging orchestration is `node verification/run.ts "$PRIVATE_DECLARATION"`, using `verification/declaration.ts`, `verification/case-registry.ts` and `verification/targets/staging-central.ts`. The declaration binds the HTTPS staging target, qualified artifacts, both machines, selected governing rows and a deadline. Staging attachment owns no deployed process; guarded deployment remains a separately declared, authorized external operation. The runner records unmapped rows as open and cannot return confirmation credit for them. Do not infer that every historical group below has a mapped replacement.

@@ -1,6 +1,14 @@
 //! One namespace per original central runtime test root.
 
 #[cfg(feature = "conformance")]
+#[path = "../support/fleet_ledger_rows.rs"]
+#[expect(
+    dead_code,
+    reason = "This aggregate only needs the connection snapshot; integration also uses the borrowed scope."
+)]
+mod fleet_ledger_rows;
+
+#[cfg(feature = "conformance")]
 #[path = "../native_http/support.rs"]
 mod configuration;
 #[cfg(feature = "conformance")]
@@ -73,3 +81,11 @@ mod fleet_client_cache;
 mod forwarded_posts;
 mod forwarding_real_timer;
 mod mailbox_rules;
+
+#[cfg(feature = "conformance")]
+#[path = "../support/mail_push_inbox.rs"]
+mod mail_push_inbox;
+
+#[cfg(feature = "conformance")]
+#[path = "../support/mail_push_transport.rs"]
+mod mail_push_transport;

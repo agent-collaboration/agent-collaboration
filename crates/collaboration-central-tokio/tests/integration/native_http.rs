@@ -254,12 +254,8 @@ async fn admitted_v4_service_completes_the_real_schema_publication_before_welcom
     stopped?;
     fixture?;
     result?;
-    if !directory
-        .path()
-        .join("connection-550e8400-e29b-41d4-a716-446655440001.db")
-        .is_file()
-    {
-        return Err("upgrade did not route to the authenticated ServiceId object".into());
+    if !directory.path().join("fleet.db").is_file() {
+        return Err("upgrade did not route to the shared Fleet object".into());
     }
     Ok(())
 }

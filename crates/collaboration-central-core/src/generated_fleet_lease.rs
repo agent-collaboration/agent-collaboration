@@ -8,82 +8,39 @@ use sqlx_core::{
 };
 
 #[derive(Debug)]
-pub(crate) struct StoredLeaseIncarnation {
-    pub fence_id: Option<String>,
-    pub incarnation: Option<String>,
-}
-pub(crate) fn read_lease_incarnation<S>(
-    scope: &mut S,
-) -> impl std::future::Future<Output = Result<Option<StoredLeaseIncarnation>, sqlx_core::Error>> + Send
-where
-    S: TransactionScope,
-    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
-    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
-{
-    async move {
-        let statement = query::<S::Database>(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/sql/fleet/read_lease_incarnation.sql"
-        )));
-        let row = statement.fetch_optional(scope.executor()).await?;
-        row.as_ref()
-            .map(|row| {
-                Ok(StoredLeaseIncarnation {
-                    fence_id: row.try_get("fence_id")?,
-                    incarnation: row.try_get("incarnation")?,
-                })
-            })
-            .transpose()
-    }
-}
-pub(crate) fn insert_lease_incarnation<S>(
-    scope: &mut S,
-    fence_id: String,
-    incarnation: String,
-) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
-where
-    S: TransactionScope,
-    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
-{
-    async move {
-        let statement = query::<S::Database>(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/sql/fleet/insert_lease_incarnation.sql"
-        )))
-        .bind(fence_id)
-        .bind(incarnation);
-        statement.execute(scope.executor()).await?;
-        Ok(())
-    }
-}
-pub(crate) fn store_lease_incarnation<S>(
-    scope: &mut S,
-    incarnation: String,
-    fence_id: String,
-) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
-where
-    S: TransactionScope,
-    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
-{
-    async move {
-        let statement = query::<S::Database>(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/sql/fleet/store_lease_incarnation.sql"
-        )))
-        .bind(incarnation)
-        .bind(fence_id);
-        statement.execute(scope.executor()).await?;
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
 pub(crate) struct StoredDirectoryLease {
     pub project_id: Option<String>,
-    pub lease_projection: Option<String>,
+    pub project_id_class: Option<String>,
+    pub lease_epoch: Option<String>,
+    pub lease_epoch_class: Option<String>,
+    pub lease_change: Option<String>,
+    pub lease_change_class: Option<String>,
+    pub lease_incarnation: Option<String>,
+    pub lease_incarnation_class: Option<String>,
+    pub lease_changed_at: Option<String>,
+    pub lease_changed_at_class: Option<String>,
+    pub lease_lifecycle_kind: Option<String>,
+    pub lease_lifecycle_kind_class: Option<String>,
+    pub lease_origin_kind: Option<String>,
+    pub lease_origin_kind_class: Option<String>,
+    pub lease_origin_epoch: Option<String>,
+    pub lease_origin_epoch_class: Option<String>,
+    pub lease_origin_sequence: Option<String>,
+    pub lease_origin_sequence_class: Option<String>,
+    pub lease_import_digest: Option<String>,
+    pub lease_import_digest_class: Option<String>,
+    pub lease_retiring_attempt_id: Option<String>,
+    pub lease_retiring_attempt_id_class: Option<String>,
+    pub lease_retired_at: Option<String>,
+    pub lease_retired_at_class: Option<String>,
+    pub lease_holder_machine_id: Option<String>,
+    pub lease_holder_machine_id_class: Option<String>,
+    pub lease_holder_service_id: Option<String>,
+    pub lease_holder_service_id_class: Option<String>,
+    pub lease_expires_at: Option<String>,
+    pub lease_expires_at_class: Option<String>,
+    pub lease_digest: Option<String>,
+    pub lease_digest_class: Option<String>,
 }
 pub(crate) fn read_directory_lease<S>(
     scope: &mut S,
@@ -107,7 +64,38 @@ where
             .map(|row| {
                 Ok(StoredDirectoryLease {
                     project_id: row.try_get("project_id")?,
-                    lease_projection: row.try_get("lease_projection")?,
+                    project_id_class: row.try_get("project_id_class")?,
+                    lease_epoch: row.try_get("lease_epoch")?,
+                    lease_epoch_class: row.try_get("lease_epoch_class")?,
+                    lease_change: row.try_get("lease_change")?,
+                    lease_change_class: row.try_get("lease_change_class")?,
+                    lease_incarnation: row.try_get("lease_incarnation")?,
+                    lease_incarnation_class: row.try_get("lease_incarnation_class")?,
+                    lease_changed_at: row.try_get("lease_changed_at")?,
+                    lease_changed_at_class: row.try_get("lease_changed_at_class")?,
+                    lease_lifecycle_kind: row.try_get("lease_lifecycle_kind")?,
+                    lease_lifecycle_kind_class: row.try_get("lease_lifecycle_kind_class")?,
+                    lease_origin_kind: row.try_get("lease_origin_kind")?,
+                    lease_origin_kind_class: row.try_get("lease_origin_kind_class")?,
+                    lease_origin_epoch: row.try_get("lease_origin_epoch")?,
+                    lease_origin_epoch_class: row.try_get("lease_origin_epoch_class")?,
+                    lease_origin_sequence: row.try_get("lease_origin_sequence")?,
+                    lease_origin_sequence_class: row.try_get("lease_origin_sequence_class")?,
+                    lease_import_digest: row.try_get("lease_import_digest")?,
+                    lease_import_digest_class: row.try_get("lease_import_digest_class")?,
+                    lease_retiring_attempt_id: row.try_get("lease_retiring_attempt_id")?,
+                    lease_retiring_attempt_id_class: row
+                        .try_get("lease_retiring_attempt_id_class")?,
+                    lease_retired_at: row.try_get("lease_retired_at")?,
+                    lease_retired_at_class: row.try_get("lease_retired_at_class")?,
+                    lease_holder_machine_id: row.try_get("lease_holder_machine_id")?,
+                    lease_holder_machine_id_class: row.try_get("lease_holder_machine_id_class")?,
+                    lease_holder_service_id: row.try_get("lease_holder_service_id")?,
+                    lease_holder_service_id_class: row.try_get("lease_holder_service_id_class")?,
+                    lease_expires_at: row.try_get("lease_expires_at")?,
+                    lease_expires_at_class: row.try_get("lease_expires_at_class")?,
+                    lease_digest: row.try_get("lease_digest")?,
+                    lease_digest_class: row.try_get("lease_digest_class")?,
                 })
             })
             .transpose()
@@ -115,12 +103,28 @@ where
 }
 pub(crate) fn store_directory_lease<S>(
     scope: &mut S,
-    lease_projection: String,
+    lease_epoch: Option<String>,
+    lease_change: Option<String>,
+    lease_incarnation: Option<String>,
+    lease_changed_at: Option<String>,
+    lease_lifecycle_kind: Option<String>,
+    lease_origin_kind: Option<String>,
+    lease_origin_epoch: Option<String>,
+    lease_origin_sequence: Option<String>,
+    lease_import_digest: Option<String>,
+    lease_retiring_attempt_id: Option<String>,
+    lease_retired_at: Option<String>,
+    lease_holder_machine_id: Option<String>,
+    lease_holder_service_id: Option<String>,
+    lease_expires_at: Option<String>,
+    lease_digest: Option<String>,
+    now: String,
     project_id: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
     for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
@@ -128,7 +132,22 @@ where
             env!("CARGO_MANIFEST_DIR"),
             "/sql/fleet/store_directory_lease.sql"
         )))
-        .bind(lease_projection)
+        .bind(lease_epoch)
+        .bind(lease_change)
+        .bind(lease_incarnation)
+        .bind(lease_changed_at)
+        .bind(lease_lifecycle_kind)
+        .bind(lease_origin_kind)
+        .bind(lease_origin_epoch)
+        .bind(lease_origin_sequence)
+        .bind(lease_import_digest)
+        .bind(lease_retiring_attempt_id)
+        .bind(lease_retired_at)
+        .bind(lease_holder_machine_id)
+        .bind(lease_holder_service_id)
+        .bind(lease_expires_at)
+        .bind(lease_digest)
+        .bind(now)
         .bind(project_id);
         statement.execute(scope.executor()).await?;
         Ok(())
@@ -137,8 +156,14 @@ where
 
 #[derive(Debug)]
 pub(crate) struct StoredClaimReservation {
+    pub attempt_id: Option<String>,
     pub project_id: Option<String>,
-    pub state: Option<String>,
+    pub state_kind: Option<String>,
+    pub outcome: Option<String>,
+    pub created_at: Option<String>,
+    pub created_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_class: Option<String>,
 }
 pub(crate) fn read_claim_reservation<S>(
     scope: &mut S,
@@ -161,8 +186,14 @@ where
         row.as_ref()
             .map(|row| {
                 Ok(StoredClaimReservation {
+                    attempt_id: row.try_get("attempt_id")?,
                     project_id: row.try_get("project_id")?,
-                    state: row.try_get("state")?,
+                    state_kind: row.try_get("state_kind")?,
+                    outcome: row.try_get("outcome")?,
+                    created_at: row.try_get("created_at")?,
+                    created_class: row.try_get("created_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_class: row.try_get("updated_class")?,
                 })
             })
             .transpose()
@@ -172,11 +203,14 @@ pub(crate) fn store_claim_reservation<S>(
     scope: &mut S,
     attempt_id: String,
     project_id: String,
-    state: String,
+    state_kind: String,
+    outcome: Option<String>,
+    now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
     for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
@@ -186,7 +220,9 @@ where
         )))
         .bind(attempt_id)
         .bind(project_id)
-        .bind(state);
+        .bind(state_kind)
+        .bind(outcome)
+        .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
@@ -195,9 +231,18 @@ where
 #[derive(Debug)]
 pub(crate) struct StoredClaimSettlementReceipt {
     pub receipt_id: Option<String>,
+    pub operation_id: Option<String>,
+    pub step_name: Option<String>,
     pub attempt_id: Option<String>,
     pub project_id: Option<String>,
-    pub result: Option<String>,
+    pub result_kind: Option<String>,
+    pub stored_epoch: Option<String>,
+    pub stored_incarnation: Option<String>,
+    pub stored_change: Option<String>,
+    pub created_at: Option<String>,
+    pub created_class: Option<String>,
+    pub updated_at: Option<String>,
+    pub updated_class: Option<String>,
 }
 pub(crate) fn read_claim_settlement_receipt<S>(
     scope: &mut S,
@@ -224,9 +269,18 @@ where
             .map(|row| {
                 Ok(StoredClaimSettlementReceipt {
                     receipt_id: row.try_get("receipt_id")?,
+                    operation_id: row.try_get("operation_id")?,
+                    step_name: row.try_get("step_name")?,
                     attempt_id: row.try_get("attempt_id")?,
                     project_id: row.try_get("project_id")?,
-                    result: row.try_get("result")?,
+                    result_kind: row.try_get("result_kind")?,
+                    stored_epoch: row.try_get("stored_epoch")?,
+                    stored_incarnation: row.try_get("stored_incarnation")?,
+                    stored_change: row.try_get("stored_change")?,
+                    created_at: row.try_get("created_at")?,
+                    created_class: row.try_get("created_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_class: row.try_get("updated_class")?,
                 })
             })
             .transpose()
@@ -239,11 +293,16 @@ pub(crate) fn insert_claim_settlement_receipt<S>(
     step_name: String,
     attempt_id: String,
     project_id: String,
-    result: String,
+    result_kind: String,
+    stored_epoch: Option<String>,
+    stored_incarnation: Option<String>,
+    stored_change: Option<String>,
+    now: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
     for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
@@ -256,22 +315,19 @@ where
         .bind(step_name)
         .bind(attempt_id)
         .bind(project_id)
-        .bind(result);
+        .bind(result_kind)
+        .bind(stored_epoch)
+        .bind(stored_incarnation)
+        .bind(stored_change)
+        .bind(now);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
 }
-
-#[derive(Debug)]
-pub(crate) struct StoredProjectClaimReservation {
-    pub attempt_id: Option<String>,
-    pub project_id: Option<String>,
-    pub state: Option<String>,
-}
 pub(crate) fn list_project_claim_reservations<S>(
     scope: &mut S,
     project_id: String,
-) -> impl std::future::Future<Output = Result<Vec<StoredProjectClaimReservation>, sqlx_core::Error>> + Send
+) -> impl std::future::Future<Output = Result<Vec<StoredClaimReservation>, sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
@@ -288,10 +344,15 @@ where
         let rows = statement.fetch_all(scope.executor()).await?;
         rows.iter()
             .map(|row| {
-                Ok(StoredProjectClaimReservation {
+                Ok(StoredClaimReservation {
                     attempt_id: row.try_get("attempt_id")?,
                     project_id: row.try_get("project_id")?,
-                    state: row.try_get("state")?,
+                    state_kind: row.try_get("state_kind")?,
+                    outcome: row.try_get("outcome")?,
+                    created_at: row.try_get("created_at")?,
+                    created_class: row.try_get("created_class")?,
+                    updated_at: row.try_get("updated_at")?,
+                    updated_class: row.try_get("updated_class")?,
                 })
             })
             .collect()

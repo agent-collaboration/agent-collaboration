@@ -37,6 +37,13 @@ impl WakeScheduler for ClockIo {
     }
 }
 impl PlatformIo for ClockIo {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
     async fn object_call(&self, _: ObjectAddress, _: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
         Err(CallFailure::NotSent {
             reason: NotSentReason::Unreachable { last_seen: None },
@@ -63,7 +70,21 @@ impl Fixture {
         let runtime = ObjectRuntime::fleet(
             Arc::new(TokioStorageHost::new(object)),
             io.clone(),
-            receiver,
+            fleet_sync_lease::RegistryConfig {
+                authoritative_receiver: receiver,
+                lease: fleet_sync_lease::LeasePolicy {
+                    lease_duration: std::time::Duration::from_secs(60),
+                    renew_interval: std::time::Duration::from_secs(20),
+                },
+                release_unsent_for: std::time::Duration::from_secs(10),
+                move_needs_renewal_within: None,
+            },
+            collaboration_central_tokio::DeliveryConfig {
+                relay_peer: "019f0000-0000-7000-8000-000000005240"
+                    .to_owned()
+                    .try_into()?,
+            },
+            std::time::Duration::from_secs(2),
         )?;
         runtime.initialize().await?;
         Ok(Self {
@@ -74,7 +95,7 @@ impl Fixture {
     }
     async fn call(&self, kind: &str, request: serde_json::Value) -> TestResult<Vec<u8>> {
         self.runtime.on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"connection","value":SERVICE},"sourceFace":"session","authority":{"kind":"object"},
+            "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":SERVICE}},
             "destination":{"kind":"fleet"},"destinationFace":"fleet",
             "identity":{"operation":Uuid::now_v7(),"step":"clock_read"},
             "kind":kind,"target":null,"request":request

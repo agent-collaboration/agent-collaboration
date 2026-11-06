@@ -3,13 +3,27 @@ mod health_read;
 #[cfg(feature = "conformance")]
 pub use health_read::HealthFileSample;
 
+#[cfg(feature = "conformance")]
+#[derive(Clone, Debug)]
+pub struct SocketOwnerSnapshot {
+    pub address: collaboration_central_core::ObjectAddress,
+    pub admissions: Vec<collaboration_central_core::AdmissionOrigin>,
+}
+
+#[cfg(feature = "conformance")]
+#[derive(serde::Serialize)]
+pub(crate) struct SessionConnectionSnapshot {
+    connection: fleet_sync_protocol::ConnectionId,
+    peer: fleet_sync_protocol::PeerId,
+    registration: fleet_sync_session::ConnectionRegistration,
+}
+
 use crate::object_keys::{address_from_key, address_key};
 
 use crate::{SocketCommand, TokioStorageHost};
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
 use collaboration_central_core::{
-    AdmissionOrigin, CopyKind, CoreHost, FleetKind, MailboxKind, ObjectAddress, ObjectRuntime,
-    PlatformIo, RegistryKind, SessionKind,
+    AdmissionOrigin, CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectRuntime, PlatformIo,
 };
 use durable_steps::{BoxFuture, CallFailure, NotSentReason, StoreError};
 use fleet_sync_lease::RegistryConfig;
@@ -25,11 +39,8 @@ use tokio::sync::{Mutex, OnceCell};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 type NativeHost = TokioStorageHost<CoreHost<TokioObjectIo>>;
-type RegistryRuntime = ObjectRuntime<RegistryKind, NativeHost, TokioObjectIo>;
-type SessionRuntime = ObjectRuntime<SessionKind, NativeHost, TokioObjectIo>;
 type CopyRuntime = ObjectRuntime<CopyKind, NativeHost, TokioObjectIo>;
 type FleetRuntime = ObjectRuntime<FleetKind, NativeHost, TokioObjectIo>;
-type MailboxRuntime = ObjectRuntime<MailboxKind, NativeHost, TokioObjectIo>;
 
 #[derive(Clone)]
 struct SharedClock(Arc<dyn Clock>);
@@ -67,6 +78,26 @@ impl WakeScheduler for TokioObjectIo {
     }
 }
 impl PlatformIo for TokioObjectIo {
+    fn reply_deadline(
+        &self,
+        remaining: std::time::Duration,
+    ) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+
+    #[cfg(feature = "conformance")]
+    async fn before_local_call(&self, request: &[u8]) -> Result<(), CallFailure> {
+        self.faults
+            .before_dispatch(&ObjectAddress::Fleet, request)
+            .await
+            .map_err(|_| CallFailure::AnswerLost)
+    }
+    #[cfg(feature = "conformance")]
+    fn drop_local_reply(&self, request: &[u8]) -> Result<bool, CallFailure> {
+        self.faults
+            .drop_successful_object_reply(&ObjectAddress::Fleet, request)
+            .map_err(|_| CallFailure::AnswerLost)
+    }
     async fn object_call(
         &self,
         address: ObjectAddress,
@@ -97,35 +128,26 @@ impl PlatformIo for TokioObjectIo {
 
 enum RuntimeFace {
     Fleet(FleetRuntime),
-    Registry(RegistryRuntime),
-    Session(SessionRuntime),
     Copy(CopyRuntime),
-    Mailbox(MailboxRuntime),
 }
 impl RuntimeFace {
     async fn initialize(&self) -> Result<(), StoreError> {
         match self {
             Self::Fleet(runtime) => runtime.initialize().await.map(|_| ()),
-            Self::Registry(runtime) => runtime.initialize().await.map(|_| ()),
-            Self::Session(runtime) => runtime.initialize().await.map(|_| ()),
             // Copy's core call/alarm prelude runs after Health classification.
             Self::Copy(_) => Ok(()),
-            Self::Mailbox(runtime) => runtime.initialize().await.map(|_| ()),
         }
     }
     // Keep a scheduled drive's SQL and dispatched effects in one observable
     // scope, distinct from inbound requests and later redelivery attempts.
     #[tracing::instrument(level = "trace", name = "central_alarm", skip_all, fields(object_kind = match self {
-        Self::Fleet(_) => "fleet", Self::Registry(_) => "registry", Self::Session(_) => "session",
-        Self::Copy(_) => "copy", Self::Mailbox(_) => "mailbox",
+        Self::Fleet(_) => "fleet",
+        Self::Copy(_) => "copy",
     }))]
     async fn on_alarm(&self) -> Result<(), StoreError> {
         match self {
             Self::Fleet(runtime) => runtime.on_alarm().await.map(|_| ()),
-            Self::Registry(runtime) => runtime.on_alarm().await.map(|_| ()),
-            Self::Session(runtime) => runtime.on_alarm().await.map(|_| ()),
             Self::Copy(runtime) => runtime.on_alarm().await,
-            Self::Mailbox(runtime) => runtime.on_alarm().await.map(|_| ()),
         }
     }
 }
@@ -136,7 +158,7 @@ struct ObjectSlot {
     runtime: OnceCell<Arc<RuntimeFace>>,
     alarm_task: OnceLock<()>,
     #[cfg(test)]
-    alarm_owner_ready: tokio::sync::watch::Sender<bool>,
+    alarm_owner_generation: tokio::sync::watch::Sender<u64>,
 }
 
 pub(crate) struct NativeObjects {
@@ -166,20 +188,6 @@ impl NativeObjects {
             collaboration_central_conformance::RuntimeControl::SetTime { .. }
         );
         let slot = self.slot(request.address).await?;
-        if matches!(
-            request.command,
-            collaboration_central_conformance::RuntimeControl::SmallMailboxCapacity
-        ) {
-            let Some(runtime) = slot.runtime.get() else {
-                return Err(StoreError::backend("mailbox runtime not initialized"));
-            };
-            let RuntimeFace::Mailbox(mailbox) = runtime.as_ref() else {
-                return Err(StoreError::backend("small capacity requires a mailbox"));
-            };
-            mailbox
-                .conformance_small_mailbox_capacity()
-                .map_err(StoreError::backend)?;
-        }
         let observed = slot
             .io
             .faults
@@ -310,7 +318,7 @@ impl NativeObjects {
                         runtime: OnceCell::new(),
                         alarm_task: OnceLock::new(),
                         #[cfg(test)]
-                        alarm_owner_ready: tokio::sync::watch::channel(false).0,
+                        alarm_owner_generation: tokio::sync::watch::channel(0_u64).0,
                     })
                 })
                 .clone()
@@ -345,21 +353,6 @@ impl NativeObjects {
             .runtime
             .get_or_try_init(|| async {
                 let runtime = match &address {
-                    ObjectAddress::Registry => RuntimeFace::Registry(ObjectRuntime::registry(
-                        host,
-                        slot.io.clone(),
-                        self.config,
-                        self.delivery,
-                    )?),
-                    ObjectAddress::Connection(installation) => {
-                        RuntimeFace::Session(ObjectRuntime::session(
-                            host,
-                            slot.io.clone(),
-                            self.config.authoritative_receiver,
-                            installation.clone(),
-                            self.holder_answer_timeout,
-                        )?)
-                    }
                     ObjectAddress::Copy(project) => RuntimeFace::Copy(ObjectRuntime::copy(
                         host,
                         slot.io.clone(),
@@ -367,33 +360,12 @@ impl NativeObjects {
                         *project,
                         self.copy_ack_wait,
                     )),
-                    ObjectAddress::Mailbox(installation) => {
-                        let limits = collaboration_central_core::central_mailbox_limits()
-                            .map_err(StoreError::backend)?;
-                        let mailbox = ObjectRuntime::mailbox(
-                            host,
-                            slot.io.clone(),
-                            self.config.authoritative_receiver,
-                            installation.clone(),
-                            limits,
-                        )?;
-                        #[cfg(feature = "conformance")]
-                        if slot
-                            .io
-                            .faults
-                            .small_mailbox_capacity()
-                            .map_err(StoreError::backend)?
-                        {
-                            mailbox
-                                .conformance_small_mailbox_capacity()
-                                .map_err(StoreError::backend)?;
-                        }
-                        RuntimeFace::Mailbox(mailbox)
-                    }
                     ObjectAddress::Fleet => RuntimeFace::Fleet(ObjectRuntime::fleet(
                         host,
                         slot.io.clone(),
-                        self.config.authoritative_receiver,
+                        self.config,
+                        self.delivery,
+                        self.holder_answer_timeout,
                     )?),
                 };
                 runtime.initialize().await?;
@@ -406,7 +378,7 @@ impl NativeObjects {
             let clock = self.clock.clone();
             let stop = self.stop.clone();
             #[cfg(test)]
-            let ready = slot.alarm_owner_ready.clone();
+            let ready = slot.alarm_owner_generation.clone();
             self.tasks.spawn(alarm_owner::run(
                 runtime,
                 wake,
@@ -429,9 +401,17 @@ impl NativeObjects {
             #[cfg(feature = "conformance")]
             let health_address = address.clone();
             let slot = objects.slot(address).await.map_err(|_| no_route())?;
+            #[cfg(feature = "conformance")]
+            if slot
+                .io
+                .faults
+                .project_unavailable()
+                .map_err(|_| CallFailure::AnswerLost)?
+            {
+                return Err(no_route());
+            }
             match slot.runtime.get().map(Arc::as_ref) {
                 Some(RuntimeFace::Fleet(runtime)) => runtime.on_call(body).await,
-                Some(RuntimeFace::Registry(runtime)) => runtime.on_call(body).await,
                 Some(RuntimeFace::Copy(runtime)) => match runtime.copy_call_class(&body)? {
                     collaboration_central_core::CopyCallClass::Health => {
                         objects
@@ -448,14 +428,6 @@ impl NativeObjects {
                         runtime.on_call(body).await
                     }
                 },
-                Some(RuntimeFace::Mailbox(runtime)) => runtime.on_call(body).await,
-                Some(RuntimeFace::Session(runtime)) => {
-                    runtime
-                        .delivery()
-                        .map_err(|_| no_route())?
-                        .on_call(body)
-                        .await
-                }
                 _ => Err(no_route()),
             }
         })
@@ -470,10 +442,7 @@ impl NativeObjects {
         if self.stop.is_cancelled() {
             return;
         }
-        let Ok(slot) = self
-            .slot(ObjectAddress::Connection(origin.installation.clone()))
-            .await
-        else {
+        let Ok(slot) = self.slot(ObjectAddress::Fleet).await else {
             return;
         };
         let Some(host) = slot.host.get() else {
@@ -482,7 +451,7 @@ impl NativeObjects {
         let Some(runtime_handle) = slot.runtime.get().cloned() else {
             return;
         };
-        let RuntimeFace::Session(runtime) = runtime_handle.as_ref() else {
+        let RuntimeFace::Fleet(runtime) = runtime_handle.as_ref() else {
             return;
         };
         let mut outgoing = host.attach_socket(binding, origin).await;
@@ -508,11 +477,11 @@ impl NativeObjects {
                     message = socket.recv() => match message {
                         Some(Ok(Message::Binary(bytes))) => {
                             let runtime = runtime_handle.clone();
-                            requests.spawn(async move { match runtime.as_ref() { RuntimeFace::Session(runtime) => runtime.on_frame(binding, bytes.to_vec()).await, _ => Err(StoreError::Aborted { reason: "session runtime missing".into() }) } });
+                            requests.spawn(async move { match runtime.as_ref() { RuntimeFace::Fleet(runtime) => runtime.on_frame(binding, bytes.to_vec()).await, RuntimeFace::Copy(_) => Err(StoreError::Aborted { reason: "session runtime missing".into() }) } });
                         },
                         Some(Ok(Message::Text(text))) => {
                             let runtime = runtime_handle.clone();
-                            requests.spawn(async move { match runtime.as_ref() { RuntimeFace::Session(runtime) => runtime.on_frame(binding, text.as_bytes().to_vec()).await, _ => Err(StoreError::Aborted { reason: "session runtime missing".into() }) } });
+                            requests.spawn(async move { match runtime.as_ref() { RuntimeFace::Fleet(runtime) => runtime.on_frame(binding, text.as_bytes().to_vec()).await, RuntimeFace::Copy(_) => Err(StoreError::Aborted { reason: "session runtime missing".into() }) } });
                         },
                         Some(Ok(Message::Ping(_) | Message::Pong(_))) => {},
                         Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
@@ -536,20 +505,15 @@ impl NativeObjects {
     #[cfg(feature = "conformance")]
     pub(crate) async fn forward_state(
         &self,
-        service: &message_board::ServiceId,
+        _service: &message_board::ServiceId,
     ) -> Result<collaboration_central_core::ForwardStateObservation, StoreError> {
-        let slot = self
-            .slots
-            .lock()
-            .await
-            .get(&format!("connection-{}", service.as_str()))
-            .cloned();
+        let slot = self.slots.lock().await.get("fleet").cloned();
         match slot
             .as_ref()
             .and_then(|slot| slot.runtime.get())
             .map(Arc::as_ref)
         {
-            Some(RuntimeFace::Session(runtime)) => runtime.conformance_forward_state().await,
+            Some(RuntimeFace::Fleet(runtime)) => runtime.conformance_forward_state().await,
             _ => Err(StoreError::Aborted {
                 reason: "connection runtime missing".into(),
             }),
@@ -559,24 +523,89 @@ impl NativeObjects {
     #[cfg(feature = "conformance")]
     pub(crate) async fn holder_frames(
         &self,
-        service: &message_board::ServiceId,
+        _service: &message_board::ServiceId,
     ) -> Result<Vec<fleet_sync_protocol::FrameId>, StoreError> {
-        let slot = self
-            .slots
-            .lock()
-            .await
-            .get(&format!("connection-{}", service.as_str()))
-            .cloned();
+        let slot = self.slots.lock().await.get("fleet").cloned();
         match slot
             .as_ref()
             .and_then(|slot| slot.runtime.get())
             .map(Arc::as_ref)
         {
-            Some(RuntimeFace::Session(runtime)) => runtime.conformance_holder_frames(),
+            Some(RuntimeFace::Fleet(runtime)) => runtime.conformance_holder_frames(),
             _ => Err(StoreError::Aborted {
                 reason: "connection runtime missing".into(),
             }),
         }
+    }
+
+    #[cfg(feature = "conformance")]
+    pub(crate) async fn mail_custody(
+        &self,
+        item: fleet_sync_protocol::ItemId,
+    ) -> Result<collaboration_central_core::FleetMailCustodyObservation, StoreError> {
+        // Observation never creates or migrates an owning store.
+        let slot = self.slots.lock().await.get("fleet").cloned();
+        match slot
+            .as_ref()
+            .and_then(|slot| slot.runtime.get())
+            .map(Arc::as_ref)
+        {
+            Some(RuntimeFace::Fleet(runtime)) => runtime.conformance_mail_custody(item).await,
+            _ => Err(StoreError::Aborted {
+                reason: "Fleet owner missing".into(),
+            }),
+        }
+    }
+
+    #[cfg(feature = "conformance")]
+    pub(crate) async fn session_connections(
+        &self,
+        service: Option<&message_board::ServiceId>,
+    ) -> Result<Vec<SessionConnectionSnapshot>, collaboration_central_core::SocketFailure> {
+        use collaboration_central_core::ObjectHost;
+        let slot = self.slots.lock().await.get("fleet").cloned();
+        let host = slot
+            .as_ref()
+            .and_then(|slot| slot.host.get())
+            .ok_or(collaboration_central_core::SocketFailure::NotConnected)?;
+        let mut connections = Vec::new();
+        for (connection, registration) in host.registrations().await? {
+            let origin = host.admission_origin(connection).await?;
+            if service.is_none_or(|service| &origin.installation == service) {
+                let binding = host.admission_binding(connection).await?;
+                connections.push(SessionConnectionSnapshot {
+                    connection,
+                    peer: binding.peer,
+                    registration,
+                });
+            }
+        }
+        Ok(connections)
+    }
+
+    #[cfg(feature = "conformance")]
+    pub(crate) async fn socket_inventory(
+        &self,
+    ) -> Result<Vec<SocketOwnerSnapshot>, collaboration_central_core::SocketFailure> {
+        use collaboration_central_core::ObjectHost;
+        let slots = self.slots.lock().await.clone();
+        let mut inventory = Vec::new();
+        for (key, slot) in slots {
+            let Some(host) = slot.host.get() else {
+                continue;
+            };
+            let address = address_from_key(&key)
+                .map_err(|_| collaboration_central_core::SocketFailure::NotConnected)?;
+            let mut admissions = Vec::new();
+            for connection in host.registrations().await?.keys() {
+                admissions.push(host.admission_origin(*connection).await?);
+            }
+            inventory.push(SocketOwnerSnapshot {
+                address,
+                admissions,
+            });
+        }
+        Ok(inventory)
     }
 
     #[cfg(feature = "conformance")]
@@ -585,19 +614,17 @@ impl NativeObjects {
         service: &message_board::ServiceId,
     ) -> Result<Vec<AdmissionOrigin>, collaboration_central_core::SocketFailure> {
         use collaboration_central_core::ObjectHost;
-        let slot = self
-            .slots
-            .lock()
-            .await
-            .get(&format!("connection-{}", service.as_str()))
-            .cloned();
+        let slot = self.slots.lock().await.get("fleet").cloned();
         let host = slot
             .as_ref()
             .and_then(|slot| slot.host.get())
             .ok_or(collaboration_central_core::SocketFailure::NotConnected)?;
         let mut origins = Vec::new();
         for connection in host.registrations().await?.keys() {
-            origins.push(host.admission_origin(*connection).await?);
+            let origin = host.admission_origin(*connection).await?;
+            if &origin.installation == service {
+                origins.push(origin);
+            }
         }
         Ok(origins)
     }
@@ -607,9 +634,9 @@ impl NativeObjects {
         self: &Arc<Self>,
         peer: fleet_sync_protocol::PeerId,
     ) -> Result<Option<fleet_sync_protocol::ReportSchemaSupport>, StoreError> {
-        let slot = self.slot(ObjectAddress::Registry).await?;
+        let slot = self.slot(ObjectAddress::Fleet).await?;
         match slot.runtime.get().map(Arc::as_ref) {
-            Some(RuntimeFace::Registry(runtime)) => runtime.conformance_schema_report(peer).await,
+            Some(RuntimeFace::Fleet(runtime)) => runtime.conformance_schema_report(peer).await,
             _ => Err(StoreError::Aborted {
                 reason: "registry runtime missing".into(),
             }),

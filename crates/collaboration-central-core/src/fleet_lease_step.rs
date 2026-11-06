@@ -1,65 +1,23 @@
-//! Projection order and the separately receipted claim settle in one local transaction.
+//! Claim settlement receipts observe the lease hook's committed directory projection.
 use crate::{
-    ClaimReservationOutcome, ClaimReservationState, RegistryIncarnation,
-    fleet_lease_projection_step::{apply_projection, checked_row_id, read_incarnation_fence},
-    fleet_record_codec::{corrupt, decode_json, required},
+    ClaimReservationOutcome, ClaimReservationState,
+    fleet_record_codec::corrupt,
     generated_fleet_lease as queries,
     lease_projection::{ClaimGrantedUpdate, LeaseProjectionResult},
     step_driver::{StepCallback, StepResult},
 };
-use durable_steps::{AtomicStore, BoxFuture, CallId, StoreError, Uuid, storage::TransactionScope};
+use durable_steps::{AtomicStore, BoxFuture, CallId, StoreError, storage::TransactionScope};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
 };
 use std::convert::Infallible;
 
-pub(crate) struct AdvanceLeaseIncarnationStep {
-    pub at_least: u64,
-    pub row_id: Uuid,
-}
 pub(crate) struct StoreClaimGrant {
     pub update: ClaimGrantedUpdate,
     pub call: CallId,
     pub now: chrono::DateTime<chrono::Utc>,
     pub row_ids: crate::fleet_row_ids::FleetRowIds,
-}
-
-impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver>
-    for AdvanceLeaseIncarnationStep
-where
-    for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
-    Driver::Arguments: IntoArguments<Driver>,
-    for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
-    for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
-    for<'row> &'row str: ColumnIndex<Driver::Row>,
-{
-    type Output = RegistryIncarnation;
-    type Effect = Infallible;
-    fn run<'scope, 'transaction>(
-        self,
-        scope: &'scope mut Store::Scope<'transaction>,
-    ) -> BoxFuture<'scope, StepResult<Self::Output, Infallible>> {
-        Box::pin(async move {
-            let previous = read_incarnation_fence(scope).await?;
-            let next = previous
-                .as_ref()
-                .map_or(0, |(_, value)| value.value())
-                .max(self.at_least)
-                .checked_add(1)
-                .ok_or_else(|| corrupt("incarnation.value", "counter exhausted"))?;
-            let incarnation = RegistryIncarnation::new(next)
-                .map_err(|error| corrupt("incarnation.value", error))?;
-            if let Some((row_id, _)) = previous {
-                queries::store_lease_incarnation(scope, next.to_string(), row_id).await
-            } else {
-                queries::insert_lease_incarnation(scope, self.row_id.to_string(), next.to_string())
-                    .await
-            }
-            .map_err(StoreError::backend)?;
-            Ok((incarnation, Vec::new()))
-        })
-    }
 }
 
 impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for StoreClaimGrant
@@ -83,31 +41,18 @@ where
                 projection,
             } = self.update;
             let project = projection.database().as_uuid().to_string();
-            let attempt = attempt.as_uuid().to_string();
+            let attempt_id = attempt;
             // The CallId identifies the original settlement across projection refreshes.
-            if let Some(receipt) = queries::read_claim_settlement_receipt(
-                scope,
-                self.call.operation.as_uuid().to_string(),
-                self.call.step.as_str().into(),
-            )
-            .await
-            .map_err(StoreError::backend)?
+            if let Some(receipt) = crate::fleet_claim_store::read_receipt(scope, &self.call).await?
             {
-                checked_row_id(receipt.receipt_id, "claim.receipt_id")?;
-                if required(receipt.attempt_id, "claim.attempt_id")? != attempt.as_str()
-                    || required(receipt.project_id, "claim.project_id")? != project.as_str()
-                {
+                if receipt.attempt != attempt_id || receipt.database != projection.database() {
                     return Err(corrupt(
                         "claim.receipt",
                         "CallId belongs to another settlement",
                     ));
                 }
-                let result: LeaseProjectionResult =
-                    decode_json(&required(receipt.result, "claim.result")?, "claim.result")?;
-                if matches!(
-                    result,
-                    LeaseProjectionResult::Fenced { .. } | LeaseProjectionResult::Conflict { .. }
-                ) {
+                let result = receipt.result;
+                if matches!(result, LeaseProjectionResult::Conflict { .. }) {
                     return Err(corrupt(
                         "claim.result",
                         "retryable publication was receipted",
@@ -115,55 +60,70 @@ where
                 }
                 return Ok((result, Vec::new()));
             }
-            let result = apply_projection(scope, &projection).await?;
-            if matches!(
-                result,
-                LeaseProjectionResult::Fenced { .. } | LeaseProjectionResult::Conflict { .. }
-            ) {
-                return Ok((result, Vec::new()));
-            }
-            if let Some(previous) = queries::read_claim_reservation(scope, attempt.as_str().into())
+            let row = queries::read_directory_lease(scope, project.clone())
                 .await
                 .map_err(StoreError::backend)?
-            {
-                if required(previous.project_id, "claim.project_id")? != project.as_str() {
-                    return Err(corrupt(
-                        "claim.project_id",
-                        "attempt belongs to another project",
-                    ));
-                }
-                let state: ClaimReservationState =
-                    decode_json(&required(previous.state, "claim.state")?, "claim.state")?;
-                if state
-                    == (ClaimReservationState::Settled {
-                        outcome: ClaimReservationOutcome::Refused,
-                    })
-                {
-                    return Err(corrupt("claim.state", "cannot grant a refused settlement"));
-                }
+                .ok_or_else(|| corrupt("claim.project", "directory entry is missing"))?;
+            let committed = crate::fleet_lease_columns::decode(row)?
+                .ok_or_else(|| corrupt("claim.lease_projection", "missing committed projection"))?;
+            if committed.database() != projection.database() {
+                return Err(corrupt(
+                    "claim.project",
+                    "projection belongs to another project",
+                ));
             }
-            queries::store_claim_reservation(
-                scope,
-                attempt.as_str().into(),
-                project.as_str().into(),
-                serde_json::to_string(&ClaimReservationState::Settled {
-                    outcome: ClaimReservationOutcome::Granted,
+            // Only the lease hook writes this view. Settlement can observe an equal or newer revision.
+            let result = if projection.version() < committed.version() {
+                LeaseProjectionResult::Older {
+                    stored: committed.version(),
+                }
+            } else if projection.version() == committed.version()
+                && projection.digest() == committed.digest()
+            {
+                LeaseProjectionResult::Duplicate
+            } else {
+                LeaseProjectionResult::Conflict {
+                    stored: committed.version(),
+                }
+            };
+            if matches!(result, LeaseProjectionResult::Conflict { .. }) {
+                return Ok((result, Vec::new()));
+            }
+            if matches!(
+                crate::fleet_claim_store::read_reservation(
+                    scope,
+                    projection.database(),
+                    attempt_id
+                )
+                .await?,
+                Some(ClaimReservationState::Settled {
+                    outcome: ClaimReservationOutcome::Refused
                 })
-                .map_err(StoreError::backend)?,
-            )
-            .await
-            .map_err(StoreError::backend)?;
-            queries::insert_claim_settlement_receipt(
+            ) {
+                return Err(corrupt("claim.state", "cannot grant a refused settlement"));
+            }
+            crate::fleet_claim_store::write_reservation(
                 scope,
-                self.row_ids.next()?.to_string(),
-                self.call.operation.as_uuid().to_string(),
-                self.call.step.as_str().into(),
-                attempt.as_str().into(),
-                project.as_str().into(),
-                serde_json::to_string(&result).map_err(StoreError::backend)?,
+                projection.database(),
+                attempt_id,
+                ClaimReservationState::Settled {
+                    outcome: ClaimReservationOutcome::Granted,
+                },
+                self.now,
             )
-            .await
-            .map_err(StoreError::backend)?;
+            .await?;
+            crate::fleet_claim_store::insert_receipt(
+                scope,
+                crate::fleet_claim_store::ClaimReceiptInput {
+                    id: self.row_ids.next()?,
+                    call: self.call,
+                    attempt: attempt_id,
+                    database: projection.database(),
+                    result: result.clone(),
+                    now: self.now,
+                },
+            )
+            .await?;
             let project = message_board::ProjectId::try_from(project)
                 .map_err(|error| corrupt("claim.project_id", error))?;
             crate::fleet_archive_completion::complete_project(
@@ -173,7 +133,7 @@ where
                 &mut self.row_ids,
             )
             .await?;
-            crate::fleet_notice_admission::admit_mutation_notices::<Store, Driver>(
+            crate::fleet_notice_admission::admit_mutation_notices::<Store, Driver, _>(
                 scope,
                 previous_feed,
                 runtime_primitives::SyncTime::from_unix_millis(self.now.timestamp_millis()),

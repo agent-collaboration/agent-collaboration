@@ -1,7 +1,8 @@
 use durable_steps::CallId;
 use fleet_sync_lease::{GateFailure, HolderChangeGate, LifecycleGate};
 use fleet_sync_protocol::{
-    AuthRefusal, DatabaseId, GateAnswer, HolderChangeRequest, NoConsumer, PeerId, SettleOutcome,
+    AuthRefusal, DatabaseId, GateAnswer, HolderChangeRequest, NoConsumer, NoDelivery, PeerId,
+    SettleOutcome, Submitter,
 };
 use fleet_sync_receiver::{
     AppliedPiece, FollowUpDone, FollowUpFailure, FollowUpHandler, HookError, ReceiverRules,
@@ -33,6 +34,16 @@ impl ConsumerHandler<NoConsumer> for SessionConsumer {
 
 impl ServiceConsumer<NoConsumer> for SessionConsumer {
     type HookItem = ();
+}
+
+impl fleet_sync_delivery::SenderBinding<ServiceScope<'_>, NoDelivery> for SessionConsumer {
+    async fn resolve_submitter<'a>(
+        &'a self,
+        _: &'a mut ServiceScope<'_>,
+        sender: &'a Submitter,
+    ) -> Result<Submitter, fleet_sync_delivery::SenderBindingFailure> {
+        Ok(*sender)
+    }
 }
 
 impl ReceiverRules<ServiceScope<'_>> for SessionConsumer {

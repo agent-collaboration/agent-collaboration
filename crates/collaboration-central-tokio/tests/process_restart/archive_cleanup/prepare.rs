@@ -1,5 +1,6 @@
 //! Force a real schema refusal only after Active has blocked the accepted archive.
 use super::*;
+use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::enroll_open_peer_with_label;
 use fleet_sync_protocol::{CopyStatusAnswer, ReplicationAnswer, ReplicationRequest, SettleOutcome};
 use futures_util::SinkExt;
@@ -13,9 +14,12 @@ pub(super) async fn prepare_cleanup(
         chrono::DateTime::from_timestamp_millis(chrono::Utc::now().timestamp_millis())
             .ok_or("cleanup fixture time is outside range")?,
     );
-    for address in [ObjectAddress::Registry, ObjectAddress::Fleet] {
-        control(base, address, RuntimeControl::SetTime { now: at }).await?;
-    }
+    control(
+        base,
+        ObjectAddress::Fleet,
+        RuntimeControl::SetTime { now: at },
+    )
+    .await?;
     let client = ConformanceClient::new(base)?;
     let mut claimant = enroll_open_peer_with_label(
         &client,
@@ -33,6 +37,9 @@ pub(super) async fn prepare_cleanup(
             json!({"kind":"hello","value":{"sessionId":session,"schemaSupport":{"maxVersion":0}}})
                 .to_string(),
         ))
+        .await?;
+    ConformanceClient::new(base)?
+        .wake_due_after_hello(fleet_sync_protocol::SessionId::new(session)?)
         .await?;
     let welcome = tokio::time::timeout(Duration::from_secs(5), claimant.socket.next())
         .await?
@@ -79,9 +86,9 @@ pub(super) async fn prepare_cleanup(
     let copy = ObjectAddress::Copy(database);
     control(
         base,
-        ObjectAddress::Registry,
+        ObjectAddress::Fleet,
         RuntimeControl::HoldNextDispatch {
-            destination: copy.clone(),
+            key: DispatchKey::any(copy.clone()),
         },
     )
     .await?;
@@ -104,16 +111,16 @@ pub(super) async fn prepare_cleanup(
             format!("Claim did not hold its actual Copy status path: {status_call}").into(),
         );
     }
-    if lease_publication::reservation(base, database, attempt).await?
-        != Some(ClaimReservationState::Active)
+    if read_claim_reservation(base, database, attempt).await? != Some(ClaimReservationState::Active)
     {
         return Err("normal Claim did not create its real Active reservation".into());
     }
     control(
         base,
-        ObjectAddress::Registry,
+        ObjectAddress::Fleet,
         RuntimeControl::ResumeDispatchAndHoldNext {
-            destination: copy.clone(),
+            key: DispatchKey::any(copy.clone()),
+            next: DispatchKey::any(copy.clone()),
         },
     )
     .await?;
@@ -152,9 +159,10 @@ pub(super) async fn prepare_cleanup(
         CleanupLoss::Dispatch => {
             control(
                 base,
-                ObjectAddress::Registry,
+                ObjectAddress::Fleet,
                 RuntimeControl::ResumeDispatchAndHoldNext {
-                    destination: ObjectAddress::Fleet,
+                    key: DispatchKey::any(ObjectAddress::Copy(database)),
+                    next: settlement_key(),
                 },
             )
             .await?;
@@ -162,16 +170,19 @@ pub(super) async fn prepare_cleanup(
         CleanupLoss::Acknowledgement => {
             control(
                 base,
-                ObjectAddress::Registry,
-                RuntimeControl::DropNextObjectReply {
+                ObjectAddress::Fleet,
+                RuntimeControl::DropNextSelectedObjectReply {
                     destination: ObjectAddress::Fleet,
+                    call: collaboration_central_conformance::DispatchCallSelector::FleetClaimSettlement,
                 },
             )
             .await?;
             control(
                 base,
-                ObjectAddress::Registry,
-                RuntimeControl::ResumeDispatch,
+                ObjectAddress::Fleet,
+                RuntimeControl::ResumeDispatch {
+                    key: DispatchKey::any(ObjectAddress::Copy(database)),
+                },
             )
             .await?;
         }
@@ -181,7 +192,7 @@ pub(super) async fn prepare_cleanup(
         CleanupLoss::Acknowledgement => {
             let observed = control(
                 base,
-                ObjectAddress::Registry,
+                ObjectAddress::Fleet,
                 RuntimeControl::AwaitDroppedObjectReply,
             )
             .await?;
@@ -234,7 +245,7 @@ pub(super) async fn prepare_cleanup(
     let settled_before = match loss {
         CleanupLoss::Dispatch => {
             if read_fleet(&mut reader.socket).await? != before
-                || lease_publication::reservation(base, database, attempt).await?
+                || read_claim_reservation(base, database, attempt).await?
                     != Some(ClaimReservationState::Active)
             {
                 return Err("pre-dispatch loss already applied the refused settlement".into());
@@ -243,7 +254,8 @@ pub(super) async fn prepare_cleanup(
         }
         CleanupLoss::Acknowledgement => {
             let expected = finalized(&before, at)?;
-            if read_fleet(&mut reader.socket).await? != expected {
+            let actual = read_fleet(&mut reader.socket).await?;
+            if actual != expected {
                 return Err(
                     "lost real settlement ACK did not follow exact committed archive finalization"
                         .into(),
@@ -255,7 +267,6 @@ pub(super) async fn prepare_cleanup(
     Ok(PreparedCleanup {
         input: CleanupInput {
             database,
-            at,
             original,
             call,
             operation,
@@ -270,12 +281,17 @@ pub(super) async fn prepare_cleanup(
 }
 
 async fn await_call(base: &str, destination: &ObjectAddress) -> ConformanceResult<Value> {
+    let key = if *destination == ObjectAddress::Fleet {
+        settlement_key()
+    } else {
+        DispatchKey::any(destination.clone())
+    };
     let observed = tokio::time::timeout(
         Duration::from_secs(8),
         control(
             base,
-            ObjectAddress::Registry,
-            RuntimeControl::AwaitHeldDispatch,
+            ObjectAddress::Fleet,
+            RuntimeControl::AwaitHeldDispatch { key: key.clone() },
         ),
     )
     .await
@@ -283,7 +299,7 @@ async fn await_call(base: &str, destination: &ObjectAddress) -> ConformanceResul
     let DispatchFaultObservation::Held {
         destination: actual,
         request,
-    } = observed.dispatch
+    } = observed.dispatch(&key)
     else {
         return Err("actual cleanup dispatch did not reach its barrier".into());
     };

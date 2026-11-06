@@ -1,26 +1,26 @@
 {
   "producer": "owned sqlx-turso / Turso 0.8.1 describe",
   "sources": {
-    "core_migrations/0000_migration_history.sql": "d30bfbde01af17b339ef44b0c4034fd22250680b09b07011287a80f2b10be539",
-    "core_migrations/0001_fleet_decisions.sql": "32dbcb0f9130a307c10c0f4be5d0d229a400915ff0a77fc8d1361cf51282e770",
-    "core_migrations/0002_fleet_decision_receipts.sql": "4e56a7411eaba1fbd0c20601f38c215c0f73f1fa52a352cdecb400c620216cfb",
-    "core_migrations/0003_fleet_records.sql": "1a041693581c32700f46f6ef51bb7bbe82722977a2f743ec03162be1d906ce64",
-    "core_migrations/0004_directory_copy_summary.sql": "0fd0ccb64479650ee17ea2c46c88b12617631bba3c5b18c9533671cd239ee148",
-    "core_migrations/0005_claim_lease_projection.sql": "51fae3473797218a515088b5ea7c763fa01eec5e0d4735aa772ff1b4fe3bec29",
-    "core_migrations/0006_archive_reports.sql": "0a808b5c57a9fb3250fd46ff0208638ef7bc8440b48a79defedeb08d6156cffb",
-    "core_migrations/0007_creation_decisions.sql": "51f95c896d06ae224ab1cb97d111e6e93ea3fad126d5e293606c93ddade3c5ba",
-    "core_migrations/0008_feed_readers.sql": "8d47a7e1753c5c6a72c596d8ec9fa266e27fe19f8f207ab3094e15699a58a185",
-    "core_migrations/0009_migration_failures.sql": "cb66a15734e44a6dd6d022dc79601ae018824125c51104f95b8859cbdaf70674",
-    "fleet-record-write-queries.json": "62b4bf679cf0f440ceb0464e1b188b4abe5d0fb872330ddd69cc0d756b5e75f3",
+    "core_migrations/0000_migration_history.sql": "badc108861ed9aff10b5da4383ecb7a62387c677f8ae28ab67a77d0d878bd68b",
+    "core_migrations/0001_fleet_decisions.sql": "88b68c4557b378f3b6757c93243543de05dfc375d4d3c23d7cf5b6a1598343a5",
+    "core_migrations/0002_fleet_decision_receipts.sql": "07da9a4fce8c160b30fec2133c1130171f901c1ecc9dfb2a15d35f32a0511fb3",
+    "core_migrations/0003_fleet_records.sql": "708ac76292741e43deb96bec00cd32dcca4834ffc171289e330bc3e9e68a726c",
+    "core_migrations/0004_directory_copy_summary.sql": "dd552b225e5977df2fedd66f93714c4124ee52d6cc79767a982dcae444cc9bef",
+    "core_migrations/0005_claim_lease_projection.sql": "7151d61cd28ae249562322f29854362e027fb68fc8d5ecd92e81c014f2f1cd11",
+    "core_migrations/0006_archive_reports.sql": "e20d48929afb4e5b71cdb383115800178cb1866aec72b2664e46c7a8f9da050e",
+    "core_migrations/0007_creation_decisions.sql": "0292e6a4f8406b77586d00b876626ad4987e9392381356126503e0c7e5dc1242",
+    "core_migrations/0008_feed_readers.sql": "dda67da87b76d2cc87645e4ae7c2119a704ee88603f3bab40c9357019b9d3a47",
+    "core_migrations/0009_migration_failures.sql": "73536abea3f72253fb6d7c5118e2059eae0cbb58e5c8ce79a48ec098e781e227",
+    "fleet-record-write-queries.json": "eb9e9c93b769dda8a4d4e641195cf805aaa874e2d64a789055fc2cc20a480d5d",
     "generator:fleet-sync-query-gen/Cargo.toml": "01210c567dcbccb4ff127626a0ff7625641edd4c5f0787ea41777757b1eaa3e6",
     "generator:fleet-sync-query-gen/src/expression_classes.rs": "14dc40abaec059e437d3e44bc187b9560812b0ed21ee2ad9d558364032fb097e",
     "generator:fleet-sync-query-gen/src/lib.rs": "df50be1a279adf266fdd12d184637b0113740390c0cef7273d1995dea0475152",
     "generator:fleet-sync-query-gen/src/main.rs": "528bf0583d11bde8fc4b7c0d5a2ea21bde8380e452c0c123a22929dfa5635cfd",
-    "generator:fleet-sync-query-gen/src/native_generation.rs": "c50abad4f34d2e0f9fef19d5623c6ce1be2e4064ec17ef2f4fa73cdf83f5733f",
+    "generator:fleet-sync-query-gen/src/native_generation.rs": "621160213c6b6cd17f5ee448c240088269476aa2feea99ef4d75627b0412b2d5",
     "generator:fleet-sync-query-gen/src/query_render.rs": "2584f37650c8355b5537362ff5f66c8cf6a3955eb7a903faa5c5887ec26c880a",
     "generator:fleet-sync-query-gen/src/source_freshness.rs": "8fc73a2d5dcfb3d81f7a10b92507ff0ad2a969c0a5b48c9528b3b5016f58ddb3",
     "generator:fleet-sync-query-gen/src/source_inputs.rs": "8cabacd9d34273e5cf16201c1680b89d755c98b5060ea0004ee1e5dcea4ec622",
-    "generator:fleet-sync-query-gen/src/source_manifest.rs": "770e53cb230b27d44731507738e08f7217dba8fc230617d97bda765c78be8ad8",
+    "generator:fleet-sync-query-gen/src/source_manifest.rs": "311dfe2915aad7ddbf8d1c453f0ad4924603ace53e703b2369221dd46d82165a",
     "generator:sqlx-durable-object-core/Cargo.toml": "5af0f7433ff001c4f2347d0575306bb35da43f53b3b75ae4c0fb2c3a0b5e308f",
     "generator:sqlx-durable-object-core/src/arguments.rs": "d278847139d6d4824d9b59f4c50302b8aad641a549ddbfefa1eba55b499d876f",
     "generator:sqlx-durable-object-core/src/error.rs": "1c1484a9714c5bf4bca07d8faf45413841d86f0bcd1c65dda44bafc362ee8bac",
@@ -64,38 +64,20 @@
     "generator:sqlx-turso/src/lib.rs": "32ec3ac4ca4d0d703a452496262928a3a00ddfdf71eac8cbbe4ce1a3da69d9b5",
     "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
-    "sql/fleet/put_adr.sql": "4780b33c27ac56ecfb1a65bfe57f6f854ab82541b3c1a11ccdf4ed7b4271dfcc",
-    "sql/fleet/put_board.sql": "a72aba54d14f5dfc5a5d7ab68ae6ef3b9791397f60b11ff6f9dd07ea40380d93",
-    "sql/fleet/put_project.sql": "b287d948b3eb2996354b7ff55915cf040f70ebb7dbd000004305daf98738e7eb",
-    "sql/fleet/put_workspace.sql": "b8ed745cfd16060ab293c579857aed9df015d1336951e7fa74e8307c2c7d0a6a",
-    "sql/fleet/store_directory_summary.sql": "38b8ea19634767538af03ec262f27ac7db424a1a0429113dea8dd08427c91389",
-    "src/generated_fleet_record_writes.rs": "6424fdf1b8437473eb49fbb3fa8cfc319613f9485a4df031593f23fecdc7ade4"
+    "sql/fleet/put_project.sql": "c32853fa8b7b942598505f6f9273f96b7c6dd499e5bc7608e0390388bc3caabf",
+    "sql/fleet/store_directory_summary.sql": "39f08a2648a2ae1396feade5121a2592c438c99b3bb9df152885bd1132f8e012",
+    "src/generated_fleet_record_writes.rs": "608fcf60de4f18a2dd90e608822dc60408a7e19d1cddbc37a5ee38059dbb54ad"
   },
-  "queries_digest": "b5a3a301700dd1c13e78a81a0ab49aee213552436994bb9ae61139eb5777508b",
+  "queries_digest": "1ec6d8610f3ef7226f9e19a7069d20b9f602df825c709692986d281e4635c4b6",
   "queries": [
     {
-      "name": "put_workspace",
-      "bind_slots": 6,
-      "columns": []
-    },
-    {
-      "name": "put_board",
-      "bind_slots": 6,
-      "columns": []
-    },
-    {
       "name": "put_project",
-      "bind_slots": 6,
-      "columns": []
-    },
-    {
-      "name": "put_adr",
-      "bind_slots": 6,
+      "bind_slots": 18,
       "columns": []
     },
     {
       "name": "store_directory_summary",
-      "bind_slots": 2,
+      "bind_slots": 7,
       "columns": []
     }
   ]
