@@ -31,7 +31,7 @@ mod frame_grid_test;
 pub mod help_scene;
 
 mod frame_inspection;
-#[cfg(all(feature = "test-support", debug_assertions))]
+#[cfg(feature = "test-support")]
 pub mod frame_output;
 
 pub mod control_kind_contract;
