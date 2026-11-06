@@ -54,15 +54,21 @@ function notification(sequence: bigint): unknown {
   };
 }
 
-test("a JSON answer is matched to its request and keeps exact integers", async () => {
+test("a UUIDv7 request matches its JSON answer and keeps exact integers", async () => {
+  let requestId: unknown;
   await withServer(
     (id, response) => {
+      requestId = id;
       response.setHeader("content-type", "application/json");
       response.end(encode(toolAnswer(id, { epoch: 18446744073709551615n })));
     },
     async (client) => {
       const outcome = await client.callTool("events_observe", {}, { timeoutMs: 2_000 });
       assert.equal(outcome.kind, "answered");
+      assert.match(
+        z.string().parse(requestId),
+        /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
       assert.deepEqual(outcome.kind === "answered" ? outcome.value : null, {
         epoch: 18446744073709551615n,
       });
@@ -216,4 +222,21 @@ test("a structured tool error is a refusal and a repeated or missing answer is u
 test("production Router ports and non-loopback endpoints are refused before any request", () => {
   assert.throws(() => new StreamingMcpClient("http://127.0.0.1:19741/mcp"), /isolated loopback/);
   assert.throws(() => new StreamingMcpClient("http://localhost:5000/mcp"), /isolated loopback/);
+});
+
+test("an answer naming another request cannot match the generated UUIDv7", async () => {
+  await withServer(
+    (_id, response) => {
+      response.setHeader("content-type", "application/json");
+      response.end(encode(toolAnswer("019f0000-0000-7000-8000-000000000001", {})));
+    },
+    async (client) => {
+      const outcome = await client.callTool("events_observe", {}, { timeoutMs: 2_000 });
+      assert.deepEqual(outcome, {
+        kind: "unconfirmed",
+        reason: "invalidResponse",
+        notifications: [],
+      });
+    },
+  );
 });

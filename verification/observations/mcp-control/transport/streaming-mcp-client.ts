@@ -5,7 +5,7 @@
 // an abort closes the request, which the server treats as the caller disconnecting
 // (tool_call_registry.rs:42-63). The older verification/clients/router-mcp.ts buffers the
 // whole body and keeps only the answer, so it cannot observe either.
-import { randomUUID } from "node:crypto";
+import { newOperationId } from "./journey-requests.ts";
 import { z } from "zod";
 import { decode, encode } from "../../../exact-json.ts";
 
@@ -122,7 +122,7 @@ export class StreamingMcpClient {
     params: unknown,
     options: { readonly timeoutMs: number; readonly abort?: AbortSignal },
   ): Promise<McpCallOutcome> {
-    const id = randomUUID();
+    const id = newOperationId();
     const started = performance.now();
     const notifications: ReceivedNotification[] = [];
     const signals = [AbortSignal.timeout(options.timeoutMs)];
