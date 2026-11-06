@@ -1,5 +1,29 @@
 # B2 organization addressing
 
+## Delivery hold (2026-11-06)
+
+Copy routing at `0337d264907f6a987612f3eb314086d346199afa` is **unaccepted and
+unshipped**. The full Tokio run exposed 48 existing D1 Copy failures: valid
+local Health/Repair/Migrate and typed uninitialized operations are gated by an
+empty reference map; imported seed arrangers and native/process reopens lose
+that map while the Copy data and follow-up journal remain. An ephemeral routing
+stand-in cannot be a mandatory admission policy for those existing paths.
+
+The Lead chose **B1 first** (the owner decision about central's proposed tables,
+including the private Copy reference). No legacy-only namespace assignment,
+fallback organization, revert, reset, or history rewrite is authorized. Copy
+routing code stays frozen until that decision; the scoped Fleet resolver/naming
+work remains available for its independent proof.
+
+The 49th Tokio failure was the separate Fleet SQL observer in a combined test
+process. Its unchanged exact case passed under nextest (one selected, one
+passed, exit 0). Preserve the SQL oracle and run integration tests under nextest
+with one process per test. This does not close the 48 Copy regressions.
+
+The architecture check reports a further central-core baseline shrink with no
+new edges. On resumption, perform a shrink-only `ARCHITECTURE_BLESS=1` refresh,
+inspect the before/after JSON, and rerun the ordinary gate. Do not bless growth.
+
 The physical Fleet address now includes its validated organization. Registry,
 Fleet, Session and Delivery callers carry that organization; logical Copy
 callers carry it only in memory. A physical Copy address remains its database
@@ -29,8 +53,10 @@ reference refuses calls rather than inferring its organization from replicated
 data or a caller. The SQL-gated native and CF adapters must restore that
 reference before ordinary Copy restart journeys can pass.
 
-This stand-in permits scoped development now. It does not prove persisted Copy
-routing, recovery, organization provisioning or real token authorization.
+The wired stand-in is not an acceptable delivery point: the failures above
+violate existing D1 behavior. Its focused tests prove only the tested component
+properties, not persisted Copy routing, recovery, organization provisioning or
+real token authorization.
 
 ## Deployment order
 
