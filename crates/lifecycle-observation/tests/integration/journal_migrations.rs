@@ -386,8 +386,8 @@ async fn concurrent_open_registers_one_baseline_and_preserves_one_identity() {
         ObservationJournal::open(&path, identity().unwrap()),
         ObservationJournal::open(&path, other)
     );
-    let first = first.unwrap_or_else(|error| panic!("journal migration proof: {error}"));
-    let second = second.unwrap_or_else(|error| panic!("journal migration proof: {error}"));
+    let first = first.unwrap_or_else(|error| panic!("journal migration proof: {error:?}"));
+    let second = second.unwrap_or_else(|error| panic!("journal migration proof: {error:?}"));
     assert_eq!(first.journal_id(), second.journal_id());
     first.close().await;
     second.close().await;
