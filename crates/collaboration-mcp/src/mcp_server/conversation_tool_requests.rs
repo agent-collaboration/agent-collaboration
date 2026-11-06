@@ -14,7 +14,7 @@ use serde::Deserialize;
         "then": {"required": ["model", "effort"]}
     },
     {
-        "if": {"properties": {"endpoint": {"properties": {"endpointId": {"enum": ["claude-local", "cursor-local"]}}}}},
+        "if": {"allOf": [{"not": {"required": ["machine"], "properties": {"machine": {"type": "string"}}}}, {"properties": {"endpoint": {"properties": {"endpointId": {"enum": ["claude-local", "cursor-local"]}}}}}]},
         "then": {"not": {"anyOf": [{"required": ["model"]}, {"required": ["effort"]}]}}
     },
     {
@@ -23,10 +23,28 @@ use serde::Deserialize;
     }
 ]))]
 pub(super) struct ConversationCreateToolRequest {
+    /// Target Fleet peer; the endpoint's service remains this requester Router.
+    #[serde(default)]
+    pub(super) machine: Option<message_board::RecordId>,
+    #[serde(default)]
+    pub(super) first_input: Option<collaboration_client::FirstInput>,
     #[serde(flatten)]
     pub(super) create: ConversationCreateInput,
     #[serde(default)]
     pub(super) timeout_seconds: Option<PositiveSeconds>,
+}
+
+#[derive(serde::Serialize, schemars::JsonSchema)]
+#[serde(untagged)]
+pub(super) enum ConversationCreateToolOutcome {
+    Local(collaboration_protocol::ConversationCreateOutcome),
+    Remote(collaboration_client::RemoteCreateAdmission),
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct ConversationRemoteStatusToolRequest {
+    pub(super) request_id: message_board::RequestId,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]

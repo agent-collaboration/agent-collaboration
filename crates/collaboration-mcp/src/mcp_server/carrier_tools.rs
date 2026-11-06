@@ -7,22 +7,52 @@
 use super::{
     BoundedObservationRequest, BoundedObservationResult, CallToolResult, CollaborationMcpServer,
     ConversationCancelInput, ConversationClient, ConversationClientError,
-    ConversationCreateOutcome, ConversationCreatePromptOutcome,
-    ConversationCreatePromptToolRequest, ConversationCreateToolRequest,
-    ConversationLoadToolRequest, ConversationOperationResult, ConversationOperationSubmission,
-    ConversationPromptToolRequest, Duration, McpToolOutput, OperationEffect, Parameters,
+    ConversationCreatePromptOutcome, ConversationCreatePromptToolRequest,
+    ConversationCreateToolOutcome, ConversationCreateToolRequest, ConversationLoadToolRequest,
+    ConversationOperationResult, ConversationOperationSubmission, ConversationPromptToolRequest,
+    ConversationRemoteStatusToolRequest, Duration, McpToolOutput, OperationEffect, Parameters,
     conversation_call_cancelled, conversation_create_tool_result, conversation_tool_result,
     failure, operation_error_result, structured_result, tool, tool_router,
 };
 
 #[tool_router(router = carrier_tool_router, vis = "pub(super)")]
 impl CollaborationMcpServer {
-    #[tool(name = "conversation_create", description = "Creates one conversation through its advertised client. Requires a caller UUIDv7 operationId and exact endpoint, working directory, access, and creator; approver defaults to creator. model and effort are required for Codex endpoints; provider endpoints accept advertised mode, model and effort values. fork and rootMessageId are Codex-only and rejected for provider endpoints. Returns created with target or pending with the inspectable operation ID.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<ConversationCreateOutcome>>())]
+    #[tool(name = "conversation_create", description = "Creates a conversation locally, or requests creation on machine (a Fleet peer UUIDv7). For machine requests operationId is the stable request id, endpoint.serviceId and createdBy must name this Router, and firstInput is optional. Target-local approver, generation, fork and rootMessageId are refused; the target owns approval. Remote results are accepted, replayed or refused, with no local operation record. Local creates preserve the advertised-client behavior and approver default. For local routes, model and effort are required for Codex endpoints; fork and rootMessageId are rejected for provider endpoints.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<ConversationCreateToolOutcome>>())]
     pub(super) async fn conversation_create(
         &self,
         Parameters(mut request): Parameters<ConversationCreateToolRequest>,
         context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
     ) -> CallToolResult {
+        if let Some(machine) = request.machine.take() {
+            let operation_id = request.create.operation_id.clone();
+            let frozen = match ConversationClient::remote_create_request(
+                &request.create,
+                &machine,
+                request.first_input.take(),
+                self.application.service_id(),
+            ) {
+                Ok(request) => request,
+                Err(error) => return failure(error, OperationEffect::None),
+            };
+            if context.ct.is_cancelled() {
+                return conversation_call_cancelled(OperationEffect::None, Some(&operation_id));
+            }
+            let timeout =
+                Duration::from_secs(u64::from(request.timeout_seconds.map_or(300, u32::from)));
+            let result = tokio::select! {
+                _ = context.ct.cancelled() => return conversation_call_cancelled(OperationEffect::Unknown, Some(&operation_id)),
+                result = tokio::time::timeout(timeout, self.application.conversations().remote_create(frozen)) => result,
+            };
+            return match result {
+                Ok(result) => {
+                    super::domain_result(result.map(ConversationCreateToolOutcome::Remote), true)
+                }
+                Err(_) => failure(super::ClientError::Timeout, OperationEffect::Unknown),
+            };
+        }
+        if request.first_input.is_some() {
+            return super::validation_failure("firstInput requires machine");
+        }
         request.create.default_approver();
         let operation_id = request.create.operation_id.clone();
         let endpoint = request.create.endpoint.clone();
@@ -58,7 +88,24 @@ impl CollaborationMcpServer {
             }
             Err(error) => Err(error),
         };
-        conversation_create_tool_result(result, operation_id)
+        match result {
+            Ok(outcome) => super::success_result(&ConversationCreateToolOutcome::Local(outcome)),
+            Err(error) => conversation_create_tool_result(Err(error), operation_id),
+        }
+    }
+
+    #[tool(name = "conversation_remote_status", description = "Reads this machine's remote-create request at the Fleet by requestId. Returns admitted, atTarget, completed or expired; no local operation record is created.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<collaboration_client::RemoteCreateStatus>>())]
+    pub(super) async fn conversation_remote_status(
+        &self,
+        Parameters(request): Parameters<ConversationRemoteStatusToolRequest>,
+    ) -> CallToolResult {
+        super::domain_result(
+            self.application
+                .conversations()
+                .remote_status(request.request_id)
+                .await,
+            false,
+        )
     }
 
     #[tool(name = "conversation_load", description = "Loads one conversation through its advertised client using an exact target, working directory, access and requester. External providers require a caller UUIDv7 operation ID; Codex load must omit it because it is not inspectable. Returns a completed settlement or an inspectable provider operation when pending; uncertain work is never replayed.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<ConversationOperationResult>>())]

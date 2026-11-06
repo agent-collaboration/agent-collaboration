@@ -320,8 +320,9 @@ fn send_producer_copies_the_exact_label_through_shared_wire_and_recipient_projec
 }
 
 #[test]
-fn remote_create_bodies_refuse_native_projection_until_their_owners_are_wired() {
+fn machine_commands_refuse_projection_and_fleet_results_have_fleet_display_origin() {
     let id = "019f0000-0000-7000-8000-000000000001";
+    let request_id = "019f0000-0000-7000-8000-000000000002";
     let session =
         json!({"endpoint":{"serviceId":id,"endpointId":"codex-local"},"sessionId":"requester"});
     for (body, address) in [
@@ -332,7 +333,7 @@ fn remote_create_bodies_refuse_native_projection_until_their_owners_are_wired() 
             json!({"machine":id}),
         ),
         (
-            json!({"kind":"remoteCreateResult","requestId":id,"outcome":{"kind":"expired"}}),
+            json!({"kind":"remoteCreateResult","requestId":request_id,"outcome":{"kind":"expired"}}),
             session,
         ),
     ] {
@@ -347,6 +348,28 @@ fn remote_create_bodies_refuse_native_projection_until_their_owners_are_wired() 
             serde_json::from_value(body).unwrap(),
         )
         .unwrap();
-        assert!(received_mail_push(&item, Utc::now()).is_err());
+        if matches!(
+            item.body(),
+            board_sync_protocol::BoardDeliveryBody::CreateSession(_)
+        ) {
+            assert!(received_mail_push(&item, Utc::now()).is_err());
+        } else {
+            let push = received_mail_push(&item, Utc::now()).unwrap().unwrap();
+            assert_eq!(push.origin, PushOrigin::Fleet);
+            assert_eq!(String::from(push.push_id.clone()), id);
+            assert_ne!(id, request_id);
+            let projected: serde_json::Value =
+                serde_json::from_str(push.body.as_deref().unwrap()).unwrap();
+            assert_eq!(projected["requestId"], request_id);
+            let line = render_push_line(&PushLineInput {
+                link: RouterLink::new(id.to_owned().try_into().unwrap(), push.push_id.clone()),
+                machine_label: "A".to_owned().try_into().unwrap(),
+                origin: push.origin,
+                header_facts: push.header_facts,
+                body: push.body,
+            })
+            .unwrap();
+            assert!(line.contains("Fleet @A"), "{line}");
+        }
     }
 }

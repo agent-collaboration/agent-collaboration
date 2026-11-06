@@ -36,7 +36,7 @@ fn conversation_key(context: &MailReadContext) -> Result<Option<String>, Storage
                 .map_err(|_| StorageError::InvalidRecord)
         }
         MailReadContext::Direct {
-            origin: PushOrigin::OwnerUnverified,
+            origin: PushOrigin::OwnerUnverified | PushOrigin::Fleet,
             ..
         }
         | MailReadContext::Project { .. } => Ok(None),

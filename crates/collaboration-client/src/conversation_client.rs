@@ -8,6 +8,10 @@ use crate::{
     AcpConversation, ClientError, CollaborationAccess, CollaborationClient,
     ConversationCreatePromptOutcome, PublicPromptContent,
 };
+use collaboration_mail_protocol::{
+    AccessMode, CreateSessionCommand, FirstInput, RemoteCreateAdmission, RemoteCreateRequest,
+    RemoteCreateStatus,
+};
 use collaboration_protocol::ProviderIdentity;
 use collaboration_protocol::{
     ChannelDescription, CodexGeneration, ConversationCreateOutcome, ConversationOperationFailure,
@@ -18,6 +22,7 @@ use collaboration_protocol::{
     ProviderRequestedSettings, ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef,
     UuidIdentity,
 };
+use message_board::{RecordId, RequestId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, time::Duration};
@@ -666,6 +671,161 @@ fn advertised_conversation_transport(
     selected.ok_or(ClientError::UnsupportedCapability("conversation transport"))
 }
 
+impl ConversationClient {
+    pub fn remote_create_request(
+        input: &ConversationCreateInput,
+        machine: &RecordId,
+        first_input: Option<FirstInput>,
+        service: &UuidIdentity,
+    ) -> Result<RemoteCreateRequest, ClientError> {
+        if String::from(input.endpoint.endpoint_id.clone()) == "codex-local"
+            && (input.model.is_none() || input.effort.is_none())
+        {
+            return Err(ClientError::InvalidRequest(
+                "Codex remote create requires model and effort",
+            ));
+        }
+        if input.endpoint.service_id != *service
+            || input.approver.is_some()
+            || input.generation.is_some()
+            || input.fork.is_some()
+            || input.root_message_id.is_some()
+        {
+            return Err(ClientError::InvalidRequest(
+                "remote create requires this Router's endpoint selector and cannot set a target-local approver, generation, fork or scratch root",
+            ));
+        }
+        let requester = input
+            .created_by
+            .session()
+            .map_err(|_| ClientError::InvalidRequest("invalid remote-create requester"))?
+            .ok_or(ClientError::InvalidRequest(
+                "remote-create requester must be a local Session",
+            ))?;
+        if requester.endpoint.service_id != *service {
+            return Err(ClientError::InvalidRequest(
+                "remote-create requester must belong to this Router",
+            ));
+        }
+        let invalid =
+            || ClientError::InvalidRequest("invalid remote-create endpoint, directory or settings");
+        let working_directory = input
+            .working_directory
+            .to_str()
+            .ok_or_else(invalid)?
+            .to_owned()
+            .try_into()
+            .map_err(|_| invalid())?;
+        Ok(RemoteCreateRequest {
+            request_id: String::from(input.operation_id.clone())
+                .try_into()
+                .map_err(|_| invalid())?,
+            requester: requester.try_into().map_err(|_| invalid())?,
+            target_machine: machine
+                .as_str()
+                .to_owned()
+                .try_into()
+                .map_err(|_| invalid())?,
+            command: CreateSessionCommand {
+                endpoint: String::from(input.endpoint.endpoint_id.clone())
+                    .try_into()
+                    .map_err(|_| invalid())?,
+                working_directory,
+                access: match input.access {
+                    RouterAccess::WriteRestricted => AccessMode::WriteRestricted,
+                    RouterAccess::WorkspaceWrite => AccessMode::WorkspaceWrite,
+                },
+                model: input
+                    .model
+                    .clone()
+                    .map(TryInto::try_into)
+                    .transpose()
+                    .map_err(|_| invalid())?,
+                effort: input
+                    .effort
+                    .clone()
+                    .map(TryInto::try_into)
+                    .transpose()
+                    .map_err(|_| invalid())?,
+                mode: input
+                    .mode
+                    .clone()
+                    .map(TryInto::try_into)
+                    .transpose()
+                    .map_err(|_| invalid())?,
+                first_input,
+            },
+        })
+    }
+
+    pub async fn create_remote(
+        client: &CollaborationClient,
+        input: ConversationCreateInput,
+        machine: RecordId,
+        first_input: Option<FirstInput>,
+        timeout: Duration,
+    ) -> Result<RemoteCreateAdmission, ClientError> {
+        if timeout.is_zero() {
+            return Err(ClientError::InvalidRequest(
+                "remote create requires a positive timeout",
+            ));
+        }
+        let frozen = Self::remote_create_request(
+            &input,
+            &machine,
+            first_input.clone(),
+            &client.identity().service_id,
+        )?;
+        let mut args = serde_json::to_value(&input)
+            .map_err(|_| ClientError::InvalidRequest("invalid remote-create request"))?;
+        let fields = args
+            .as_object_mut()
+            .ok_or(ClientError::InvalidRequest("invalid remote-create request"))?;
+        fields.insert("machine".into(), serde_json::json!(machine));
+        if let Some(first_input) = first_input {
+            fields.insert("firstInput".into(), serde_json::json!(first_input));
+        }
+        fields.insert(
+            "timeoutSeconds".into(),
+            serde_json::json!(
+                u32::try_from(timeout.as_secs()).map_err(|_| ClientError::InvalidRequest(
+                    "remote-create timeout is too large"
+                ))?
+            ),
+        );
+        let answer = client
+            .connection
+            .call_with_timeout("conversation_create", args, timeout)
+            .await?;
+        let answer: RemoteCreateAdmission = serde_json::from_value(answer)
+            .map_err(|_| ClientError::Protocol("invalid remote-create admission"))?;
+        if matches!(&answer, RemoteCreateAdmission::Accepted { request_id } | RemoteCreateAdmission::Replayed { request_id, .. } if request_id != &frozen.request_id)
+        {
+            return Err(ClientError::Protocol(
+                "remote-create answer has a different request id",
+            ));
+        }
+        Ok(answer)
+    }
+
+    pub async fn remote_status(
+        client: &CollaborationClient,
+        request: RequestId,
+        timeout: Duration,
+    ) -> Result<RemoteCreateStatus, ClientError> {
+        let answer = client
+            .connection
+            .call_with_timeout(
+                "conversation_remote_status",
+                serde_json::json!({"requestId":request}),
+                timeout,
+            )
+            .await?;
+        serde_json::from_value(answer)
+            .map_err(|_| ClientError::Protocol("invalid remote-create status"))
+    }
+}
+
 #[cfg(test)]
-#[path = "conversation_client_tests.rs"]
+#[path = "conversation_client_test.rs"]
 mod tests;

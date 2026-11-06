@@ -196,10 +196,15 @@ pub enum PushKind {
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PushOrigin {
+    Fleet,
     Session(SessionRef),
     OwnerUnverified,
     Router(PushKind),
 }
+
+#[cfg(test)]
+#[path = "push_line_fleet_test.rs"]
+mod fleet_tests;
 
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(

@@ -84,6 +84,9 @@ impl DisplayLimits {
             (PushHeaderFacts::DirectMessage { .. }, PushOrigin::OwnerUnverified) => {
                 format!("🧑 Owner (unverified) @{machine_label} → you")
             }
+            (PushHeaderFacts::DirectMessage { .. }, PushOrigin::Fleet) => {
+                format!("✉️ Fleet @{machine_label} → you")
+            }
             (PushHeaderFacts::Wake, PushOrigin::Router(PushKind::Wake)) => {
                 format!("⏰ Router wake @{machine_label}")
             }
@@ -261,6 +264,7 @@ fn validate_input(input: &PushLineInput) -> Result<(), PushLineError> {
     let kind = input.header_facts.kind();
     match (&input.origin, kind) {
         (PushOrigin::Session(_), PushKind::DirectMessage)
+        | (PushOrigin::Fleet, PushKind::DirectMessage)
         | (PushOrigin::OwnerUnverified, PushKind::DirectMessage) => {}
         (PushOrigin::Router(origin_kind), candidate_kind)
             if *origin_kind == candidate_kind

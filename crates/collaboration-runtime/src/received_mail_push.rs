@@ -62,10 +62,25 @@ fn received_mail_push_for(
         .try_into()
         .map_err(|_| invalid_projection())?;
     let draft = match item.body() {
-        board_sync_protocol::BoardDeliveryBody::CreateSession(_)
-        | board_sync_protocol::BoardDeliveryBody::RemoteCreateResult(_) => {
+        board_sync_protocol::BoardDeliveryBody::CreateSession(_) => {
             return Err(invalid_projection());
         }
+        board_sync_protocol::BoardDeliveryBody::RemoteCreateResult(body) => PushRecordDraft {
+            push_id,
+            kind: PushKind::DirectMessage,
+            origin: PushOrigin::Fleet,
+            origin_router_ref: None,
+            target,
+            mode: Some(collaboration_protocol::MessageDelivery::Auto),
+            guard: None,
+            reply_to_push_id: None,
+            header_facts: PushHeaderFacts::DirectMessage {
+                sender_display_name: None,
+            },
+            body: Some(serde_json::to_string(body).map_err(|_| invalid_projection())?),
+            activity: None,
+            created_at: received_at,
+        },
         board_sync_protocol::BoardDeliveryBody::Wake(_) => return Ok(None),
         board_sync_protocol::BoardDeliveryBody::Message(body) => {
             let origin = match item.sender() {

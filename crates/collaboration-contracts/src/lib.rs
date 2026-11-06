@@ -63,5 +63,9 @@ pub use router_delivery_types::{
 #[path = "mail_push_budget_test.rs"]
 mod mail_push_budget_tests;
 
+mod remote_create_fleet;
 mod router_identity;
+pub use remote_create_fleet::{RemoteCreateFleet, RemoteCreateFleetError, RemoteCreateFleetFuture};
+#[cfg(any(test, feature = "test-support"))]
+pub mod remote_create_test_support;
 pub use router_identity::{RouterIdentity, RouterIdentityError};

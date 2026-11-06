@@ -30,6 +30,7 @@ pub struct ConversationOperations {
     pub(super) codex_conversation_recorder:
         Option<std::sync::Arc<collaboration_runtime::CodexConversationOperationRecorder>>,
     pub(super) directory: collaboration_runtime::EndpointDirectory,
+    pub(super) remote_fleet: Option<std::sync::Arc<dyn collaboration_contracts::RemoteCreateFleet>>,
 }
 
 /// Submits one admitted operation to the backend with the binding's current generation.
@@ -85,6 +86,7 @@ impl ConversationOperations {
             provider_operations,
             codex_conversation_recorder,
             directory,
+            remote_fleet: None,
         }
     }
 

@@ -30,7 +30,7 @@ pub fn outgoing_mail_message(
         PushOrigin::OwnerUnverified => MailSender::HumanUser {
             installation: submitting_installation.clone(),
         },
-        PushOrigin::Router(_) => return Err(invalid()),
+        PushOrigin::Router(_) | PushOrigin::Fleet => return Err(invalid()),
     };
     let PushHeaderFacts::DirectMessage {
         sender_display_name,

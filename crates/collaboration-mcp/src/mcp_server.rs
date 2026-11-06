@@ -69,8 +69,9 @@ use catalog_tools::{
 };
 use conversation_operation_tools::register_conversation_operation_tools;
 use conversation_tool_requests::{
-    ConversationCreatePromptToolRequest, ConversationCreateToolRequest,
-    ConversationLoadToolRequest, ConversationPromptToolRequest,
+    ConversationCreatePromptToolRequest, ConversationCreateToolOutcome,
+    ConversationCreateToolRequest, ConversationLoadToolRequest, ConversationPromptToolRequest,
+    ConversationRemoteStatusToolRequest,
 };
 #[cfg(test)]
 use conversation_tool_results::common_prompt_tool_result;

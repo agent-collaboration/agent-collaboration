@@ -18,6 +18,8 @@ use tokio_util::sync::CancellationToken;
 
 #[path = "fleet_client/cache_refresh.rs"]
 mod cache_refresh;
+#[path = "remote_create_fleet_client.rs"]
+mod remote_create_calls;
 mod synchronization;
 use synchronization::SynchronizationRequests;
 

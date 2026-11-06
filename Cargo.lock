@@ -1921,6 +1921,7 @@ dependencies = [
  "codex-native-integration",
  "collaboration-central-admin-protocol",
  "collaboration-contracts",
+ "collaboration-mail-protocol",
  "collaboration-mcp",
  "collaboration-protocol",
  "collaboration-runtime",

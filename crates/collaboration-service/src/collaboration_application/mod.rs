@@ -23,6 +23,7 @@ mod interaction_operations;
 mod journal_operations;
 mod message_operations;
 mod provider_observation_operations;
+mod remote_create_operations;
 mod schedule_operations;
 mod session_context_reader;
 mod session_native_control;
