@@ -38,6 +38,9 @@ export type ReplayShape =
 
 export interface StandInOptions {
   readonly currentModel?: string;
+  readonly configOptions?: readonly Json[];
+  readonly configOptionsAfterResume?: readonly Json[];
+  readonly configOptionsAfterLoad?: readonly Json[];
   readonly modelAfterResume?: string;
   readonly modelAfterLoad?: string;
   readonly createNotApplied?: boolean;
@@ -182,13 +185,15 @@ class ScriptedHost {
   private readonly kinds = new Map<string, string>();
   private created = 0;
   private currentModel: string;
+  private configOptions: readonly Json[];
   private readonly options: StandInOptions;
   readonly store: string;
   readonly receipt: string;
 
   constructor(options: StandInOptions, store: string, receipt: string) {
     this.options = options;
-    this.currentModel = options.currentModel ?? "claude-haiku-5-5";
+    this.currentModel = options.currentModel ?? "haiku";
+    this.configOptions = options.configOptions ?? [];
     this.store = store;
     this.receipt = receipt;
     const database = new DatabaseSync(store);
@@ -242,6 +247,7 @@ class ScriptedHost {
                   currentValue: { kind: "select", value: this.currentModel },
                   choices: [],
                 },
+                ...this.configOptions,
               ],
             },
             capabilities: {},
@@ -281,7 +287,7 @@ class ScriptedHost {
         target: this.target(id),
         ...(this.options.createdWithoutSettings ? { applied: [], failed: [] } : {}),
         ...(this.options.createNotApplied
-          ? { notApplied: [{ setting: "model", value: "claude-haiku-5-5" }] }
+          ? { notApplied: [{ setting: "model", value: "haiku" }] }
           : {}),
       },
     };
@@ -365,6 +371,7 @@ class ScriptedHost {
     }
     if (tool === "resume") {
       this.currentModel = this.options.modelAfterResume ?? this.currentModel;
+      this.configOptions = this.options.configOptionsAfterResume ?? this.configOptions;
       this.openEpoch(session, replayed(session.history, this.options.resumeReplay ?? "none"), {
         unknown: "replayed",
       });
@@ -386,6 +393,7 @@ class ScriptedHost {
     this.recordOperation(operationId, "conversationLoad", session.id);
     this.receiptRow("session/load", session.id);
     this.currentModel = this.options.modelAfterLoad ?? this.currentModel;
+    this.configOptions = this.options.configOptionsAfterLoad ?? this.configOptions;
     const shape = this.options.loadReplay ?? "faithful";
     this.openEpoch(
       session,

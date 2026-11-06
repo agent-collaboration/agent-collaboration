@@ -13,6 +13,7 @@ import { isAbsolute, join } from 'node:path';
 
 import { z } from 'zod';
 
+import { declaredProviderSelectionSchema } from '../../../../verification/observations/mcp-control/observations/declared-model.ts';
 import { normalBuildManifestSchema } from '../../../../verification/observations/providers/acp/acp-metadata-models.ts';
 import {
 	MAX_ROUTE_PREFIX_BYTES,
@@ -181,7 +182,7 @@ export const codexAcpRunPlanSchema = z
 			z.strictObject({
 				kind: z.literal('prompt'),
 				provider: providerSchema,
-				expected_model: z.string().trim().min(1),
+				selection: declaredProviderSelectionSchema,
 				prompt: codexOrdinaryPromptSchema,
 				completion: z.string().min(8),
 				reply_deadline_ms: z.number().int().positive().max(600_000),
@@ -204,13 +205,6 @@ export const codexAcpRunPlanSchema = z
 				plan.journey.provider === 'claude' &&
 				plan.target.endpoint_id === 'claude-local'),
 		'a Claude route proof is admitted only for a Claude prompt or selected-skill plan',
-	)
-	.refine(
-		(plan) =>
-			plan.journey.kind !== 'prompt' ||
-			plan.journey.expected_model ===
-				(plan.journey.provider === 'claude' ? 'claude-haiku-5-5' : 'grok-4.7-low'),
-		'an ordinary prompt must declare its required provider model',
 	)
 	.readonly();
 export type CodexAcpRunPlan = z.infer<typeof codexAcpRunPlanSchema>;

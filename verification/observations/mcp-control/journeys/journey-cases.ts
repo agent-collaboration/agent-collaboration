@@ -232,7 +232,7 @@ async function requireDeclaredModel(
       "model inspect",
     ),
     target,
-    inputs.plan.peer.model,
+    inputs.plan.peer.selection,
   );
 }
 

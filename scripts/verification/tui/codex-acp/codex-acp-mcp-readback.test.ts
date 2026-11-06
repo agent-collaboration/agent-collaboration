@@ -17,7 +17,11 @@ import { codexAcpMain, driveCodexJourney } from './codex-acp-run.ts';
 import { EPOCH, RAW_SESSION, SERVICE, targetFixture } from './codex-acp-test-fixtures.ts';
 
 const declaration = {
-	expected_model: 'grok-4.7-low',
+	selection: {
+		model: 'grok-4.7',
+		selectOnCreate: false,
+		requiredOptions: { reasoning_effort: 'low', fast: 'false' },
+	},
 	prompt: 'Reply with only the product of 4321 and 5678, digits only',
 	completion: '24534638',
 	reply_deadline_ms: 120_000,
@@ -31,6 +35,8 @@ const turnId = '019a0000-0000-7000-8000-000000000002';
 
 interface CaseOptions {
 	readonly models?: readonly unknown[];
+	readonly configOptions?: readonly unknown[];
+	readonly configOptionsAtSecond?: readonly unknown[];
 	readonly foreignInspect?: boolean;
 	readonly foreignObservation?: boolean;
 	readonly reply?: string;
@@ -86,14 +92,21 @@ async function controlledRun(options: CaseOptions = {}): Promise<{
 					await options.secondInspectGate;
 				}
 				const selected = options.models?.[inspected] ?? [
-					{ category: 'model', currentValue: { kind: 'select', value: 'grok-4.7-low' } },
+					{ ...requiredOption('model', 'grok-4.7'), category: 'model' },
 				];
+				const requiredOptions = (inspected === 1 ? options.configOptionsAtSecond : undefined) ??
+					options.configOptions ?? [
+						requiredOption('reasoning_effort', 'low'),
+						requiredOption('fast', 'false'),
+					];
 				inspected += 1;
 				value = {
 					target: options.foreignInspect
 						? { ...targetSession, sessionId: 'foreign' }
 						: targetSession,
-					settingsCatalog: { configOptions: selected },
+					settingsCatalog: {
+						configOptions: [...z.array(z.unknown()).parse(selected), ...requiredOptions],
+					},
 				};
 			} else {
 				expect(call.name).toBe('events_observe');
@@ -227,16 +240,26 @@ async function controlledRun(options: CaseOptions = {}): Promise<{
 	};
 }
 
-const wrongModel = [{ category: 'model', currentValue: { kind: 'select', value: 'other-model' } }];
-const correctModel = [
-	{ category: 'model', currentValue: { kind: 'select', value: 'grok-4.7-low' } },
-];
+const wrongModel = [{ ...requiredOption('model', 'other-model'), category: 'model' }];
+const correctModel = [{ ...requiredOption('model', 'grok-4.7'), category: 'model' }];
 for (const [label, models, inputs] of [
 	['initial mismatch', [wrongModel], []],
 	['pre-Enter mismatch', [correctModel, wrongModel], [declaration.prompt]],
 	['missing model', [[]], []],
 	['ambiguous model', [[...correctModel, ...correctModel]], []],
-	['boolean model', [[{ category: 'model', currentValue: { kind: 'boolean', value: true } }]], []],
+	[
+		'boolean model',
+		[
+			[
+				{
+					...requiredOption('model', 'unused'),
+					category: 'model',
+					currentValue: { kind: 'boolean', value: true },
+				},
+			],
+		],
+		[],
+	],
 ] as const) {
 	test(`no submitted input on ${label}`, async () => {
 		const fixture = await controlledRun({ models });
@@ -249,6 +272,49 @@ for (const [label, models, inputs] of [
 			await fixture.cleanup();
 		}
 	});
+}
+
+function requiredOption(optionId: string, value: string): Readonly<Record<string, unknown>> {
+	const option: Record<string, unknown> = { currentValue: { kind: 'select', value } };
+	option['id'] = optionId;
+	return option;
+}
+for (const [label, configOptions, reason] of [
+	[
+		'wrong effort',
+		[requiredOption('reasoning_effort', 'high'), requiredOption('fast', 'false')],
+		'required option reasoning_effort',
+	],
+	[
+		'fast true',
+		[requiredOption('reasoning_effort', 'low'), requiredOption('fast', 'true')],
+		'required option fast',
+	],
+	['missing option', [requiredOption('reasoning_effort', 'low')], 'required option fast'],
+	[
+		'duplicated option',
+		[
+			requiredOption('reasoning_effort', 'low'),
+			requiredOption('fast', 'false'),
+			requiredOption('fast', 'false'),
+		],
+		'required option fast',
+	],
+] as const) {
+	for (const phase of ['initial', 'pre-Enter'] as const) {
+		test(`CLI refuses ${label} at ${phase} with no submission`, async () => {
+			const fixture = await controlledRun(
+				phase === 'initial' ? { configOptions } : { configOptionsAtSecond: configOptions },
+			);
+			try {
+				await expect(fixture.drive()).rejects.toThrow(reason);
+				expect(fixture.sent).toEqual(phase === 'initial' ? [] : [declaration.prompt]);
+				expect(fixture.hasResult()).toBe(false);
+			} finally {
+				await fixture.cleanup();
+			}
+		});
+	}
 }
 
 test('the first model read is awaited before any input', async () => {
@@ -351,9 +417,9 @@ test('missing or wrong provider model in a run plan fails before any output or t
 		target: (await targetFixture()).target,
 		journey: { kind: 'prompt', provider: 'cursor', ...declaration },
 	};
-	const { expected_model: _model, ...missing } = plan.journey;
+	const { selection: _selection, ...missing } = plan.journey;
 	await Promise.all(
-		[missing, { ...plan.journey, expected_model: 'other-model' }].map(
+		[missing, { ...plan.journey, selection: { model: 'grok-4.7' } }].map(
 			async (journey, index): Promise<void> => {
 				const path = join(root, `plan-${index}.json`);
 				writeFileSync(path, JSON.stringify({ ...plan, journey }));

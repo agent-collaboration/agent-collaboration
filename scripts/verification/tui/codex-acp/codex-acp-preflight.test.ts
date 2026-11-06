@@ -173,7 +173,7 @@ else process.exitCode = 1;`,
 		journey: {
 			kind: 'prompt',
 			provider: 'claude',
-			expected_model: 'claude-haiku-5-5',
+			selection: { model: 'haiku', selectOnCreate: true, requiredOptions: {} },
 			prompt: PROMPT,
 			completion: COMPLETION,
 			reply_deadline_ms: 120_000,

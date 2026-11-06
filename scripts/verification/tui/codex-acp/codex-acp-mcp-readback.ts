@@ -14,7 +14,10 @@ import {
 	record,
 } from '../../../../verification/observations/mcp-control/journeys/journey-steps.ts';
 import type { JourneyContext } from '../../../../verification/observations/mcp-control/journeys/journey-steps.ts';
-import { requireSelectedModel } from '../../../../verification/observations/mcp-control/observations/declared-model.ts';
+import {
+	declaredProviderSelectionSchema,
+	requireSelectedModel,
+} from '../../../../verification/observations/mcp-control/observations/declared-model.ts';
 import { foldObservationReads } from '../../../../verification/observations/mcp-control/observations/observation-ledger.ts';
 import type { ObservationRead } from '../../../../verification/observations/mcp-control/observations/observation-ledger.ts';
 import type { SessionRef } from '../../../../verification/observations/mcp-control/observations/observation-models.ts';
@@ -35,7 +38,7 @@ const serviceSchema = z.looseObject({
 
 export type CliPromptDeclaration = Pick<
 	Extract<CodexAcpRunPlan['journey'], { readonly kind: 'prompt' }>,
-	'expected_model' | 'prompt' | 'completion' | 'reply_deadline_ms'
+	'selection' | 'prompt' | 'completion' | 'reply_deadline_ms'
 >;
 
 export interface PromptReadbackHooks {
@@ -64,6 +67,7 @@ export function cliPromptReadback(inputs: {
 	readonly evidence: string;
 }): PromptReadbackHooks {
 	const { target, declaration, evidence } = inputs;
+	const selection = declaredProviderSelectionSchema.parse(declaration.selection);
 	const endpoint = cliMcpEndpoint(target);
 	const context: JourneyContext = {
 		client: new StreamingMcpClient(endpoint),
@@ -89,7 +93,7 @@ export function cliPromptReadback(inputs: {
 			{ timeoutMs: 15_000 },
 		);
 		binding();
-		requireSelectedModel(answered(outcome, step), session, declaration.expected_model);
+		requireSelectedModel(answered(outcome, step), session, selection);
 	};
 	async function retainReply(attempt: number): Promise<void> {
 		if (attempt >= 10) throw new Error('CLI MCP turn remained unsettled at its read bound');
@@ -146,8 +150,6 @@ export function cliPromptReadback(inputs: {
 	}
 	return {
 		beforeInput: async (): Promise<void> => {
-			if (declaration.expected_model.trim() === '')
-				throw new Error('a declared provider model is required');
 			binding();
 			const initialized = await context.client.initialize(15_000);
 			record(context, { step: 'cli-mcp-initialize', outcome: initialized });

@@ -8,6 +8,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "n
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, sep } from "node:path";
 import { z } from "zod";
+import { declaredProviderSelectionSchema } from "../observations/declared-model.ts";
 import { decode } from "../../../exact-json.ts";
 import {
   preparedContextBinding,
@@ -97,7 +98,7 @@ export const controlPlanSchema = z.strictObject({
       receipt: absolutePath,
       releaseSentinel: absolutePath,
     }),
-    z.strictObject({ kind: z.literal("provider"), model: z.string().trim().min(1) }),
+    z.strictObject({ kind: z.literal("provider"), selection: declaredProviderSelectionSchema }),
   ]),
   cases: z.array(controlCaseSchema).min(1),
   // The harmless prompt each case submits. The controlled peer answers any text but "hold",
