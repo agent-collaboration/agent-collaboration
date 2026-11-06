@@ -1,5 +1,5 @@
 //! Decode the stamp profile without granting identity to unverified claims.
-use super::fleet_statement::FleetOrganizationStatementRefusal;
+use super::fleet_statement_refusal::FleetOrganizationStatementRefusal;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use fleet_identity_protocol::OrganizationId;
 use serde::{Deserialize, Deserializer};

@@ -27,3 +27,13 @@ The concrete Fleet transaction capability and both hosts’ mount remain unimple
 ## Retired central people commands
 
 CreateOrganization, SetOrganizationOwner, AllowSignIn and RemoveSignIn are removed from central’s Rust surface and published schema artifacts. Better Auth owns those changes. The original positive request bodies remain verbatim in tests/fixtures/retired_people_commands.json as negative provisioning inputs; a nonempty aggregate case checks both the real Rust decoder and its generated schema refuse every one. This is the requested contract retirement, not a failing-test exemption. Generic Admitted and CommandStatus contracts remain untouched for B5’s later decision.
+
+## Signed identity core boundary
+
+The FleetOrganizationStatementVerifier parses the closed compact-JWS stamp profile, verifies real Ed25519 signed bytes through the injected issuer-key capability, and checks injected issuer, audience and host-owned expected organization. It samples its injected clock after key/signature work and rejects future issuance and expiry at exp; callers can recheck require_valid_at at the applying boundary. It retains the validated signed replaces digest without changing storage. The one-year lifetime and daily renewal at 30 days remaining belong to sign-in's issuance/renewal policy, not a hardcoded verifier default.
+
+The pure replacement decision takes the currently read verified statement and incoming verified statement. No predecessor on a new store initializes; same-organization setup replay is a no-op; a matching signed predecessor replaces; a stale/missing predecessor refuses; organization is immutable. It owns no transaction, record counter or recovery bypass. Real concurrent CAS, record atomicity and invalid-stamp recovery remain storage/owner-gated proof.
+
+require_project_ownership takes the verified token's organization and the addressed Fleet's injected scope, refuses organization mismatch before a directory read, and calls D1's existing typed directory read to refuse unavailable/foreign projects. It writes nothing and dispatches no project call. Its unit cases use real in-memory Turso query/codec reads; relational creation is outside those fixtures. No admin route is wired to it yet, so these component tests are not proof that every live route applies it.
+
+This core batch changes neither the published provisioning request above nor either host's startup, link mount, schema or migration. The proposed organizationStatement envelope and signed replaces policy still need their shared wire publication and real two-host interaction. Recovery, checksum and SQL approvals remain separate gates.

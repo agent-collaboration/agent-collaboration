@@ -1,8 +1,9 @@
 //! Fleet identity verification owns no storage, policy lifetime or host routing.
+use super::fleet_statement_refusal::FleetOrganizationStatementRefusal;
 use super::fleet_statement_wire::{OrganizationStatementDigest, ParsedFleetStatement};
 use crate::{
-    Ed25519Verification, IssuerKeyCache, IssuerKeySource, IssuerSignatureRefusal,
-    IssuerSignatureVerifier,
+    Ed25519Verification, IssuerKeyCache, IssuerKeySource, IssuerSignatureVerifier,
+    SignatureValidity,
 };
 use fleet_identity_protocol::{OrganizationId, UnixSeconds};
 use runtime_primitives::{Clock, SyncTime};
@@ -64,34 +65,54 @@ impl<Crypto: Ed25519Verification, Keys: IssuerKeySource>
         statement: &str,
     ) -> Result<VerifiedFleetOrganizationStatement, FleetOrganizationStatementRefusal> {
         let parsed = ParsedFleetStatement::parse(statement)?;
-        // RED checkpoint only: structural decoding and real crypto execute, but
-        // semantic admission is deliberately incomplete for the first failing run.
-        let _validity = self
+        if parsed.header.typ != "fleet-organization-stamp+jwt" {
+            return Err(FleetOrganizationStatementRefusal::WrongTokenType);
+        }
+        if parsed.header.alg != "EdDSA" {
+            return Err(FleetOrganizationStatementRefusal::UnsupportedAlgorithm);
+        }
+        if parsed.header.kid.is_empty() || parsed.signature.len() != 64 {
+            return Err(FleetOrganizationStatementRefusal::Malformed);
+        }
+        let validity = self
             .signatures
             .verify(&parsed.header.kid, &parsed.signed, &parsed.signature)
             .await
             .map_err(FleetOrganizationStatementRefusal::VerificationUnavailable)?;
-        let _ = (
-            &self.trust.issuer,
-            &self.trust.audience,
-            &self.trust.organization,
-            self.clock.now(),
-            &parsed.header.typ,
-            &parsed.header.alg,
-            &parsed.claims.purpose,
-            parsed.claims.version,
-            &parsed.claims.iss,
-            &parsed.claims.aud,
-            &parsed.claims.sub,
-        );
-        Ok(VerifiedFleetOrganizationStatement {
+        if validity != SignatureValidity::Valid {
+            return Err(FleetOrganizationStatementRefusal::BadSignature);
+        }
+        if parsed.claims.purpose != "fleet-organization-stamp" {
+            return Err(FleetOrganizationStatementRefusal::WrongPurpose);
+        }
+        if parsed.claims.version != 1 {
+            return Err(FleetOrganizationStatementRefusal::UnsupportedVersion);
+        }
+        if parsed.claims.iss != self.trust.issuer {
+            return Err(FleetOrganizationStatementRefusal::WrongIssuer);
+        }
+        if parsed.claims.aud != self.trust.audience {
+            return Err(FleetOrganizationStatementRefusal::WrongAudience);
+        }
+        if parsed.claims.sub != parsed.claims.organization_id
+            || parsed.claims.organization_id != self.trust.organization
+        {
+            return Err(FleetOrganizationStatementRefusal::OrganizationMismatch);
+        }
+        if parsed.claims.exp.0 <= parsed.claims.iat.0 {
+            return Err(FleetOrganizationStatementRefusal::Malformed);
+        }
+        let verified = VerifiedFleetOrganizationStatement {
             organization: parsed.claims.organization_id,
             key_id: parsed.header.kid,
             issued_at: UnixSeconds(parsed.claims.iat.0),
             expires_at: UnixSeconds(parsed.claims.exp.0),
             replaces: parsed.claims.replaces,
             digest: OrganizationStatementDigest::of_compact_jws(statement),
-        })
+        };
+        // Sample after key fetch/crypto, so verification cannot outlive its exp.
+        verified.require_valid_at(self.clock.now())?;
+        Ok(verified)
     }
 }
 
@@ -133,41 +154,15 @@ impl VerifiedFleetOrganizationStatement {
     }
 
     pub fn require_valid_at(&self, now: SyncTime) -> Result<(), FleetOrganizationStatementRefusal> {
-        if now.unix_millis().div_euclid(1000) >= self.expires_at.0 {
+        let now_seconds = now.unix_millis().div_euclid(1000);
+        if now_seconds < self.issued_at.0 {
+            return Err(FleetOrganizationStatementRefusal::NotYetValid);
+        }
+        if now_seconds >= self.expires_at.0 {
             return Err(FleetOrganizationStatementRefusal::Expired);
         }
         Ok(())
     }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum FleetOrganizationStatementRefusal {
-    #[error("Fleet organization statement is malformed")]
-    Malformed,
-    #[error("Fleet organization statement has the wrong token type")]
-    WrongTokenType,
-    #[error("Fleet organization statement algorithm is unsupported")]
-    UnsupportedAlgorithm,
-    #[error("Fleet organization statement signature is invalid")]
-    BadSignature,
-    #[error("Fleet organization statement has the wrong purpose")]
-    WrongPurpose,
-    #[error("Fleet organization statement version is unsupported")]
-    UnsupportedVersion,
-    #[error("Fleet organization statement has the wrong issuer")]
-    WrongIssuer,
-    #[error("Fleet organization statement has the wrong audience")]
-    WrongAudience,
-    #[error("Fleet organization statement names a different organization")]
-    OrganizationMismatch,
-    #[error("Fleet organization statement has expired")]
-    Expired,
-    #[error("Fleet organization statement is not yet valid")]
-    NotYetValid,
-    #[error("Fleet organization statement trust configuration is invalid")]
-    InvalidConfiguration,
-    #[error("Fleet organization statement verification is unavailable: {0}")]
-    VerificationUnavailable(IssuerSignatureRefusal),
 }
 
 #[cfg(test)]

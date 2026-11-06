@@ -8,6 +8,8 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 
+/// The caller supplies a verified token organization and the addressed Fleet's
+/// scope, and rechecks the stamp's time at its applying boundary.
 pub async fn require_project_ownership<S: TransactionScope>(
     scope: &mut S,
     token_organization: &OrganizationId,
@@ -20,12 +22,16 @@ where
     for<'v> Option<String>: Type<S::Database> + Decode<'v, S::Database>,
     for<'r> &'r str: ColumnIndex<<S::Database as Database>::Row>,
 {
-    // RED checkpoint: prove the tests catch ignoring ownership before completing the guard.
-    let _ = (token_organization, stamp);
-    let _present = crate::fleet_directory_store::read(scope, project.as_str())
+    if token_organization != stamp.organization_id() {
+        return Err(ProjectOwnershipRefusal::OrganizationMismatch);
+    }
+    let present = crate::fleet_directory_store::read(scope, project.as_str())
         .await
         .map_err(|_| ProjectOwnershipRefusal::DirectoryUnavailable)?;
-    Ok(())
+    match present {
+        Some(_) => Ok(()),
+        None => Err(ProjectOwnershipRefusal::ProjectUnavailable),
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]

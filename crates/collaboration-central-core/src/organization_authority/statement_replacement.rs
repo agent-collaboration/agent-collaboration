@@ -20,9 +20,22 @@ pub fn decide_organization_statement_replacement(
     stored: Option<&VerifiedFleetOrganizationStatement>,
     incoming: &VerifiedFleetOrganizationStatement,
 ) -> Result<OrganizationStatementReplacement, OrganizationStatementReplacementRefusal> {
-    // RED checkpoint only: tests must catch unconditional replacement.
-    let _ = (stored, incoming);
-    Ok(OrganizationStatementReplacement::Replace)
+    let Some(stored) = stored else {
+        return match incoming.replaces() {
+            None => Ok(OrganizationStatementReplacement::Initialize),
+            Some(_) => Err(OrganizationStatementReplacementRefusal::StaleOrganizationStatement),
+        };
+    };
+    if stored.organization_id() != incoming.organization_id() {
+        return Err(OrganizationStatementReplacementRefusal::OrganizationMismatch);
+    }
+    match incoming.replaces() {
+        None => Ok(OrganizationStatementReplacement::AlreadyProvisioned),
+        Some(predecessor) if predecessor == stored.digest() => {
+            Ok(OrganizationStatementReplacement::Replace)
+        }
+        Some(_) => Err(OrganizationStatementReplacementRefusal::StaleOrganizationStatement),
+    }
 }
 
 #[cfg(test)]
