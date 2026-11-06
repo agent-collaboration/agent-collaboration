@@ -1,6 +1,6 @@
 use crate::support;
-use crate::upload_support::actual_cli;
 use actual_cli::{ImporterCliInvocation, run_importer_cli};
+use legacy_upgrade_test_support::actual_cli;
 use owned_process_test_support::owned_cli_process::run_cli_output;
 use std::{
     path::{Path, PathBuf},

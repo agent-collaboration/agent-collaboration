@@ -47,6 +47,7 @@ tokio = { workspace = true, features = ["io-std", "fs"] }
 unicode-width.workspace = true
 
 [dev-dependencies]
+legacy-upgrade-test-support = { path = "../legacy-upgrade-test-support", version = "0.1.126" }
 collaboration-application-test-support = { path = "../collaboration-application-test-support", version = "0.1.126" }
 owned-process-test-support = { path = "../owned-process-test-support", version = "0.1.126" }
 agent-session-inventory = { version = "0.1.105", path = "../agent-session-inventory", features = ["test-support"] }

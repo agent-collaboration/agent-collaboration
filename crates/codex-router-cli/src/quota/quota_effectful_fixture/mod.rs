@@ -4,18 +4,14 @@ mod control_server;
 mod effect_ports;
 mod event_fence;
 mod grouping_reopen;
-#[path = "../../../../codex-router-quota-reset-test-harness/tests/e2e/quota_reset/quota_reset_pty_test/loopback_provider_test.rs"]
-mod loopback_provider;
+use codex_router_quota_reset_test_harness::loopback_provider;
 mod owned_state;
 mod receipts;
 use agent_collaboration_tui::test_support::recording_backend;
 mod refresh_fixture;
-mod validation;
-mod isolated_fixture_test {
-    pub(super) type TestResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
-}
 #[path = "contract_test.rs"]
 mod tests;
+mod validation;
 
 use agent_router_quota_tui::{
     QuotaOutcome, QuotaStatusViewOptions,

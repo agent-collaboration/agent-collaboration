@@ -15,11 +15,10 @@ use crate::central_pair;
 #[path = "../board_e2e/central_replication.rs"]
 mod central_replication;
 use crate::fixture;
-#[path = "../../../board-legacy-upgrade/tests/upload_support/actual_cli.rs"]
-mod legacy_publisher;
 use crate::owned_host;
 use crate::records_reopen;
 use codex_router_test_support::FixtureResult;
+use legacy_upgrade_test_support::actual_cli as legacy_publisher;
 
 #[tokio::test]
 async fn bc01_replicated_prefix_mapping_replay_and_owning_reopen() -> FixtureResult {

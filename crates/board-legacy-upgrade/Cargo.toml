@@ -53,6 +53,7 @@ uuid.workspace = true
 tempfile = "3.27.0"
 
 [dev-dependencies]
+legacy-upgrade-test-support = { path = "../legacy-upgrade-test-support", version = "0.1.126" }
 owned-process-test-support = { path = "../owned-process-test-support", version = "0.1.126" }
 futures-util.workspace = true
 reqwest-websocket = "=0.5.1"

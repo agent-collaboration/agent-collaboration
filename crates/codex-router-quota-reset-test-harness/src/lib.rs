@@ -13,3 +13,8 @@ pub fn run_sessions_picker_test_harness() -> i32 {
     }
     0
 }
+
+/// Held local provider used by hermetic quota scenarios.
+pub mod loopback_provider;
+
+pub type TestResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
