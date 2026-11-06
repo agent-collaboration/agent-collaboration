@@ -216,3 +216,28 @@ test("each segment's submitted text is distinct, so a reordered replay fails eve
     assert.deepEqual(result.verdict, { kind: "failed", reason }, loadReplay);
   }
 });
+
+for (const [label, options, reason] of [
+  [
+    "prompt-kind close readback",
+    { closeReadbackOperation: "conversationPrompt" },
+    "the readback operation is conversationPrompt, not conversationClose",
+  ],
+  [
+    "non-Closed close settlement",
+    { closeSettlementKind: "resumed" },
+    "the operation settled resumed, not closed",
+  ],
+  [
+    "unavailable close settlement",
+    { unretainedSettlement: "closed" },
+    "the closed settlement is outputUnavailable",
+  ],
+] as const) {
+  test(`loadResume rejects ${label}`, async () => {
+    const { result } = await loadResume(options);
+    assert.equal(result.verdict.kind, "failed");
+    if (result.verdict.kind !== "failed") throw new Error("expected failed close");
+    assert.equal(result.verdict.reason.endsWith(reason), true, result.verdict.reason);
+  });
+}

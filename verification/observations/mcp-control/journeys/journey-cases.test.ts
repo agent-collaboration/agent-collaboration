@@ -132,12 +132,27 @@ function answer(standIn: StandIn, name: string, args: Readonly<Record<string, un
     case "conversation_operation_show":
       return {
         operationId: args["operationId"],
-        operation: "conversationPrompt",
+        operation:
+          args["operationId"] === standIn.promptOperation
+            ? "conversationPrompt"
+            : "conversationClose",
         target: TARGET,
         stage: "terminal",
         effect: "applied",
         reconciliation: "confirmed",
         terminalStopReason: "end_turn",
+      };
+    case "conversation_operation_wait":
+      return {
+        operation: {
+          operationId: args["operationId"],
+          operation: "conversationClose",
+          target: TARGET,
+          stage: "terminal",
+          effect: "applied",
+          reconciliation: "confirmed",
+        },
+        output: { kind: "available", settlement: { kind: "closed", target: TARGET } },
       };
     default:
       // conversation_close answers ConversationOperationSubmission; the driver follows it.

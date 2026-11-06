@@ -206,6 +206,7 @@ export async function requireSettled(
   answer: unknown,
   operationId: string,
   target: SessionRef,
+  expectedOperation: string,
 ): Promise<void> {
   const problem = immediateAnswerProblem(answer, operationId, target);
   if (problem !== null) throw new Error(`${step}: ${problem}`);
@@ -213,12 +214,13 @@ export async function requireSettled(
     await operationShow(context, `${step}-show`, operationId),
     operationId,
     target,
+    expectedOperation,
   );
   if (state.kind === "open") {
     const waited = z
       .looseObject({ operation: z.unknown() })
       .parse(await operationWait(context, `${step}-wait`, operationId, 60));
-    state = settlementState(waited.operation, operationId, target);
+    state = settlementState(waited.operation, operationId, target, expectedOperation);
   }
   if (state.kind === "open")
     throw new Error(`${step}: still ${state.stage} at its wait bound; not replayed`);

@@ -135,4 +135,4 @@ Sensitivity is permanent in the colocated tests:
 
 ## Cleanup
 
-Each case closes its Session through `conversation_close`, with the declared creator as requester. That Session's close is performable, so the existing close rule ([ACP metadata](acp-metadata.md)) is satisfied. The allocation's owner stops the Host by its recorded identity. Unknown outcomes keep their operation IDs and are never retried.
+Full-profile cases close their Session through `conversation_close`, with the declared creator as requester. The readback must name `conversationClose`, and operation wait must retain a `closed` settlement on that exact operation and target. An acknowledgement or unavailable output cannot qualify close, and a Closed settlement does not prove process cessation. Unsupported-method profiles retain their typed refusal instead. The existing close rule ([ACP metadata](acp-metadata.md)) still applies. The allocation's owner stops the Host by its recorded identity. Unknown outcomes keep their operation IDs and are never retried.

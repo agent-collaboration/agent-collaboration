@@ -256,6 +256,7 @@ export async function reattach(
     answered(outcome, tool),
     operationId,
     target,
+    tool === "conversation_load" ? "conversationLoad" : "conversationResume",
   );
   const settled = reattachSettlement(
     await operationWait(inputs.context, `reattach-${tool}-settlement`, operationId, 5),

@@ -15,17 +15,31 @@ const snapshot = (fields: Readonly<Record<string, unknown>>): unknown => ({
 });
 
 test("only a terminal, applied, confirmed record on the exact target is settled", () => {
-  assert.deepEqual(settlementState(snapshot({}), "op-1", TARGET), { kind: "settled" });
-  assert.deepEqual(settlementState(snapshot({ stage: "dispatched" }), "op-1", TARGET), {
-    kind: "open",
-    stage: "dispatched",
+  assert.deepEqual(settlementState(snapshot({}), "op-1", TARGET, "conversationClose"), {
+    kind: "settled",
   });
-  assert.deepEqual(settlementState(snapshot({ effect: "notApplied" }), "op-1", TARGET), {
-    kind: "refused",
-    reason: "the operation ended notApplied/confirmed",
-  });
-  assert.equal(settlementState(snapshot({ target: OTHER }), "op-1", TARGET).kind, "refused");
-  assert.equal(settlementState(snapshot({ operationId: "op-2" }), "op-1", TARGET).kind, "refused");
+  assert.deepEqual(
+    settlementState(snapshot({ stage: "dispatched" }), "op-1", TARGET, "conversationClose"),
+    {
+      kind: "open",
+      stage: "dispatched",
+    },
+  );
+  assert.deepEqual(
+    settlementState(snapshot({ effect: "notApplied" }), "op-1", TARGET, "conversationClose"),
+    {
+      kind: "refused",
+      reason: "the operation ended notApplied/confirmed",
+    },
+  );
+  assert.equal(
+    settlementState(snapshot({ target: OTHER }), "op-1", TARGET, "conversationClose").kind,
+    "refused",
+  );
+  assert.equal(
+    settlementState(snapshot({ operationId: "op-2" }), "op-1", TARGET, "conversationClose").kind,
+    "refused",
+  );
 });
 
 test("an admission for another operation or Session is refused before any follow-up", () => {
@@ -53,5 +67,20 @@ test("an admission for another operation or Session is refused before any follow
   assert.equal(
     immediateAnswerProblem({ unexpected: true }, "op-1", TARGET),
     "the answer is neither a submission nor an operation result",
+  );
+});
+
+test("a prompt readback cannot settle a close", () => {
+  assert.deepEqual(
+    settlementState(
+      snapshot({ operation: "conversationPrompt" }),
+      "op-1",
+      TARGET,
+      "conversationClose",
+    ),
+    {
+      kind: "refused",
+      reason: "the readback operation is conversationPrompt, not conversationClose",
+    },
   );
 });

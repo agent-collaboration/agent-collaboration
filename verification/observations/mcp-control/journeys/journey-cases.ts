@@ -3,6 +3,7 @@
 // come from the owning store; replies, cursors and terminal facts from the actual MCP results.
 // A case that cannot reach its deciding observation reports why; nothing here invents success.
 import { z } from "zod";
+import { reattachSettlement } from "../observations/operation-settlement.ts";
 import { sessionRefSchema, type SessionRef } from "../observations/observation-models.ts";
 import type { ObservationRead } from "../observations/observation-ledger.ts";
 import { foldObservationReads } from "../observations/observation-ledger.ts";
@@ -141,7 +142,15 @@ export async function closeSession(
     answered(outcome, `${step} close`),
     operationId,
     target,
+    "conversationClose",
   );
+  const closed = reattachSettlement(
+    await operationWait(inputs.context, `${step}-settlement`, operationId, 5),
+    operationId,
+    target,
+    "closed",
+  );
+  if (closed.kind !== "settled") throw new Error(`${step}: ${closed.reason}`);
 }
 
 export function baseline(
@@ -380,6 +389,7 @@ export async function explicitCancelCase(inputs: CaseInputs): Promise<CaseResult
     answered(cancelled, "explicit cancel"),
     cancelId,
     target,
+    "conversationCancel",
   );
   const value = answered(await prompt, "held prompt");
   await observeUntilTurnsEnd(inputs.context, "cancel-observe", target, reads, 1);

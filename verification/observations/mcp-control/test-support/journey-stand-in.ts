@@ -45,6 +45,8 @@ export interface StandInOptions {
   readonly resumeHistory?: string;
   /** Overrides only the resume settlement kind. */
   readonly resumeSettlementKind?: string;
+  readonly closeSettlementKind?: string;
+  readonly closeReadbackOperation?: string;
   /** Overrides only the load settlement kind, leaving resume valid. */
   readonly loadSettlementKind?: string;
   /** Every prompt gets the same reply, as a real provider may give; only the inputs differ. */
@@ -72,7 +74,7 @@ export interface StandInOptions {
   /** The binding the load operation's snapshot names, when it differs from the live one. */
   readonly loadBinding?: { readonly epoch?: string; readonly bindingId?: string };
   /** Which reattach loses its retained settlement, as after Host restart or eviction. */
-  readonly unretainedSettlement?: "resumed" | "loaded";
+  readonly unretainedSettlement?: "resumed" | "loaded" | "closed";
   /** The prompt after a load: a live turn, no new turn (a stale terminal) or one with an injected input. */
   readonly afterLoadPrompt?: "live" | "stale" | "injected";
   /** Sessions that already exist, as after a settled first Host lifetime. */
@@ -325,6 +327,12 @@ class ScriptedHost {
       session.id,
     );
     this.receiptRow(`session/${tool}`, session.id);
+    if (tool === "close") {
+      this.settlements.set(operationId, {
+        kind: this.options.closeSettlementKind ?? "closed",
+        target: this.target(session.id),
+      });
+    }
     if (tool === "resume") {
       this.openEpoch(session, replayed(session.history, this.options.resumeReplay ?? "none"), {
         unknown: "replayed",
@@ -429,7 +437,8 @@ class ScriptedHost {
     const load = kind === "conversationLoad" ? (this.options.loadBinding ?? {}) : {};
     return {
       operationId,
-      operation: kind,
+      operation:
+        kind === "conversationClose" ? (this.options.closeReadbackOperation ?? kind) : kind,
       binding: {
         kind: "externalProvider",
         binding: {

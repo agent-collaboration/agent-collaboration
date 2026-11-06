@@ -8,6 +8,7 @@ import { sameSession, sessionRefSchema, type SessionRef } from "./observation-mo
 
 const snapshotSchema = z.looseObject({
   operationId: z.string(),
+  operation: z.string(),
   target: sessionRefSchema.optional(),
   stage: z.string(),
   effect: z.string(),
@@ -53,6 +54,7 @@ export function settlementState(
   snapshot: unknown,
   operationId: string,
   target: SessionRef,
+  expectedOperation: string,
 ): SettlementState {
   const parsed = snapshotSchema.safeParse(snapshot);
   if (!parsed.success)
@@ -60,6 +62,11 @@ export function settlementState(
   const operation = parsed.data;
   if (operation.operationId !== operationId)
     return { kind: "refused", reason: "the readback names another operation" };
+  if (operation.operation !== expectedOperation)
+    return {
+      kind: "refused",
+      reason: `the readback operation is ${operation.operation}, not ${expectedOperation}`,
+    };
   if (operation.target === undefined || !sameSession(operation.target, target))
     return { kind: "refused", reason: "the readback names another Session" };
   if (operation.stage !== "terminal") return { kind: "open", stage: operation.stage };
@@ -106,12 +113,21 @@ export function reattachSettlement(
   wait: unknown,
   operationId: string,
   target: SessionRef,
-  expected: "loaded" | "resumed",
+  expected: "loaded" | "resumed" | "closed",
 ): ReattachSettlement {
   const parsed = reattachWaitSchema.safeParse(wait);
   if (!parsed.success)
     return { kind: "refused", reason: "the wait result is not an operation wait" };
   const { operation, output } = parsed.data;
+  const expectedOperation = {
+    loaded: "conversationLoad",
+    resumed: "conversationResume",
+    closed: "conversationClose",
+  }[expected];
+  const state = settlementState(operation, operationId, target, expectedOperation);
+  if (state.kind === "refused") return state;
+  if (state.kind === "open")
+    return { kind: "unknown", reason: `the ${expected} operation is ${state.stage}` };
   if (operation.operationId !== operationId)
     return { kind: "refused", reason: "the wait names another operation" };
   if (output.kind !== "available")
