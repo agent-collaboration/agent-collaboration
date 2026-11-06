@@ -12,6 +12,22 @@ Host, cold-verifies e2 tables, writes and replays the public canary, and then
 rejects post-canary content equality. These are local proofs; a separately
 commissioned Verifier owns hosted staging rehearsal.
 
+Two ignored `production_workerd` cases run the same compiled production publisher
+against the CI conformance-faults Worker build: fresh Fleet state, and an existing
+recorded Fleet reader to exercise notice/alarm debt. Supply absolute pinned
+`D1_WORKERD_NODE` and `D1_MINIFLARE_ENTRYPOINT` paths and select them with
+`--run-ignored only -E 'test(production_publication_)'`. They use fresh local
+Durable Object storage and a fixture JWT issuer; hosted TLS and Access remain
+outside that proof. The local `publication_wire` case captures Fleet and Status
+HTTP method/version/headers/framing without printing auth values.
+
+The debug-only `publication_status` Cargo example accepts an explicit Central
+origin and sealed bundle directory. It uses the actual owner's cached Access
+transport and the publisher's existing Status method, checks the seal/origin,
+and emits only bounded import metadata or sanitized diagnostics. It never starts
+or advances publication, acquires a Host lock, or archives a source. Release
+builds contain only a refusal stub for this example.
+
 Unit tests are colocated with the Rust implementation in `src/*_test.rs`.
 They cover transport reframing, unchanged row bytes, source cursor separation,
 the existing Host singleton lock, private roots and retained source identities.

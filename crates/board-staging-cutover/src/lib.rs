@@ -31,7 +31,7 @@ pub use prepared_project_bundle::{
     PreparedProjectBundle, ProjectBundleManifest, ProjectPreparation,
 };
 pub use staging_publication::{
-    PublicationError, PublicationStage, PublishedProject, StagingPublisher,
+    PublicationDiagnostic, PublicationError, PublicationStage, PublishedProject, StagingPublisher,
 };
 
 pub use offline_host::{HostInspection, OfflineHost, OfflineHostError};

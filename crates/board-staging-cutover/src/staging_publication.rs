@@ -65,7 +65,7 @@ pub enum PublicationError {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct PublicationDiagnostic {
+pub struct PublicationDiagnostic {
     stage: PublicationStage,
     failure: PublicationRequestFailure,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -102,7 +102,7 @@ struct PublicationIoFailure {
 }
 
 impl PublicationError {
-    pub(crate) fn diagnostic(&self) -> Option<PublicationDiagnostic> {
+    pub fn diagnostic(&self) -> Option<PublicationDiagnostic> {
         match self {
             Self::OutcomeUnknown { stage, source } => Some(PublicationDiagnostic {
                 stage: *stage,
@@ -202,6 +202,19 @@ pub struct StagingPublisher {
 }
 
 impl StagingPublisher {
+    /// Debug-only read of an existing sealed import; never starts or advances publication.
+    #[cfg(debug_assertions)]
+    pub async fn inspect_import_status(
+        &self,
+        bundle: &PreparedProjectBundle,
+    ) -> Result<Option<AdminImportRecord>, PublicationError> {
+        if bundle.manifest().target_origin != self.endpoint.origin().ascii_serialization() {
+            return Err(PublicationError::TargetMismatch);
+        }
+        require_unchanged_bundle(bundle)?;
+        self.status(bundle).await
+    }
+
     pub fn from_owner_file(endpoint: Url, path: &Path) -> Result<Self, PublicationError> {
         validate_endpoint(&endpoint)?;
         let headers = headers_from_private_file(&endpoint, path, &SystemClock)?;
