@@ -4,7 +4,7 @@ use super::{
 };
 use crate::organization_authority::{
     VerifiedFleetOrganizationStatement,
-    fleet_statement::tests::{claims, verified_claims, verified_fixture},
+    fleet_statement_test_support::{claims, verified_claims, verified_fixture},
 };
 use serde_json::json;
 

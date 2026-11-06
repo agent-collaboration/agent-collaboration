@@ -1,5 +1,7 @@
 //! Rules owned by an organization's Fleet object.
 mod fleet_statement;
+#[cfg(test)]
+mod fleet_statement_test_support;
 mod fleet_statement_wire;
 mod identity;
 mod project_ownership;

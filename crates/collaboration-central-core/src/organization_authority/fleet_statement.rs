@@ -172,4 +172,4 @@ pub enum FleetOrganizationStatementRefusal {
 
 #[cfg(test)]
 #[path = "fleet_statement_test.rs"]
-pub(super) mod tests;
+mod tests;

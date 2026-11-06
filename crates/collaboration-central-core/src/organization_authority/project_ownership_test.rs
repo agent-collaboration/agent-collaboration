@@ -1,5 +1,5 @@
 use super::{ProjectOwnershipRefusal, require_project_ownership};
-use crate::organization_authority::fleet_statement::tests::{
+use crate::organization_authority::fleet_statement_test_support::{
     FOREIGN_ORGANIZATION, ORGANIZATION, organization, verified_fixture,
 };
 use durable_steps::storage::TransactionScope;
