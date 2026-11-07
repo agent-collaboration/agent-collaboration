@@ -25,12 +25,14 @@ pub(super) struct CollaborationLifecycle {
     schema_digest: Option<[u8; 32]>,
 }
 impl CollaborationLifecycle {
-    pub(super) async fn observe_fleet(&self) -> crate::FleetHostObservation {
+    pub(super) fn observe_fleet(&self) -> crate::collaboration_runtime::FleetObservationFuture {
         match &self.runtime {
-            Some(runtime) => runtime.observe_fleet().await,
-            None => crate::FleetHostObservation::Unavailable {
-                message: "collaboration runtime is unavailable".to_owned(),
-            },
+            Some(runtime) => runtime.observe_fleet(),
+            None => Box::pin(async {
+                crate::FleetHostObservation::Unavailable {
+                    message: "collaboration runtime is unavailable".to_owned(),
+                }
+            }),
         }
     }
     pub(super) async fn start(
@@ -85,7 +87,7 @@ impl CollaborationLifecycle {
             published_child: None,
             schema_digest: None,
         };
-        if let Err(error) = owner.synchronize(instance, Some(child)).await {
+        if let Err(error) = owner.synchronize(instance, Some(child), || {}).await {
             let cleanup = owner.shutdown().await;
             return Err(match cleanup {
                 Ok(()) => error,
@@ -99,6 +101,7 @@ impl CollaborationLifecycle {
         &mut self,
         instance: &HostInstance,
         child: Option<&AppServerChild>,
+        before_runtime_retirement: impl FnOnce(),
     ) -> io::Result<()> {
         let Some(child) = child else {
             if self.published_child.take().is_some()
@@ -124,6 +127,7 @@ impl CollaborationLifecycle {
         if self.runtime.is_some() && digest != self.schema_digest {
             // The manifest's native schema digest and the tool schemas bound to it are fixed for
             // a runtime; a changed native schema starts a new one.
+            before_runtime_retirement();
             self.shutdown().await?;
         }
         if self.runtime.is_none() {

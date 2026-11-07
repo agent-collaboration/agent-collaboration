@@ -158,9 +158,15 @@ pub struct CollaborationRuntime {
     collaboration_api: ServedCollaborationApi,
     tailscale_exposure: Option<crate::tailscale_exposure::TailscaleExposure>,
 }
+pub(crate) use fleet_observation::FleetObservationFuture;
+
 impl CollaborationRuntime {
-    pub(crate) async fn observe_fleet(&self) -> crate::FleetHostObservation {
-        fleet_observation::observe_fleet_sources(&self.fleet_link, &self.interactions).await
+    pub(crate) fn observe_fleet(&self) -> FleetObservationFuture {
+        let link = self.fleet_link.clone();
+        let interactions = self.interactions.clone();
+        Box::pin(
+            async move { fleet_observation::observe_fleet_sources(&link, &interactions).await },
+        )
     }
     pub(crate) const fn mcp_listen_address(&self) -> std::net::SocketAddr {
         self.collaboration_api.local_address()

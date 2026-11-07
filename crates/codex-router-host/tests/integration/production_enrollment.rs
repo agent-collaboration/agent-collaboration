@@ -122,7 +122,7 @@ async fn failed_session_preparation_keeps_its_typed_failure_on_both_status_surfa
     fixture.run(async |fixture| {
         fixture.host.await_ready().await?;
         let client = CollaborationClient::connect(&fixture.directory, "failed-link-test", "1").await?;
-        let record = client.installation_show().await?.central.ok_or("failed configured link was hidden")?;
+        let record = client.installation_show().await?.central.into_record().ok_or("failed configured link was hidden")?;
         require(matches!(record.state, board_sync_protocol::FleetLinkState::Disconnected { .. }), "failed preparation did not disconnect")?;
         require(matches!(record.last_failure.as_ref().map(|failure| &failure.reason), Some(board_sync_protocol::FleetLinkFailureReason::CorruptStore { field }) if field == "machineSessionState"), "typed store failure missing")?;
         require(fixture.central.session_connections() == 0, "failed preparation opened a session")?;
@@ -520,6 +520,7 @@ async fn require_shared_link_status(
         .installation_show()
         .await?
         .central
+        .into_record()
         .ok_or("MCP link missing")?;
     let status =
         operator_client::send_operator_request(&host.operator, OperatorRequest::Status, BOUND)
@@ -542,6 +543,7 @@ async fn require_shared_link_status(
         .installation_show()
         .await?
         .central
+        .into_record()
         .ok_or("MCP link missing after status")?;
     require(
         link.peer == peer

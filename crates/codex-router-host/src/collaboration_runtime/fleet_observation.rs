@@ -4,6 +4,10 @@ use collaboration_protocol::StuckMailSummary;
 use interaction_storage::InteractionStore;
 use std::{sync::Weak, time::Duration};
 
+pub(crate) type FleetObservationFuture = std::pin::Pin<
+    Box<dyn std::future::Future<Output = crate::FleetHostObservation> + Send + 'static>,
+>;
+
 const OBSERVATION_READ_BOUND: Duration = Duration::from_secs(5);
 
 pub(super) async fn observe_fleet_sources(

@@ -71,11 +71,15 @@ impl SessionOperations {
                 .to_string()
                 .try_into()
                 .map_err(|_| InstallationIdentityUnavailable::Identity)?,
-            central: self.link.read().await.map_err(|error| {
-                InstallationIdentityUnavailable::CentralLink {
+            central: match self.link.read().await {
+                Ok(Some(record)) => collaboration_protocol::CentralLinkObservation::Available {
+                    record: Box::new(record),
+                },
+                Ok(None) => collaboration_protocol::CentralLinkObservation::NotConfigured,
+                Err(error) => collaboration_protocol::CentralLinkObservation::Unavailable {
                     message: error.to_string(),
-                }
-            })?,
+                },
+            },
         })
     }
     pub async fn codex_session_list(
@@ -122,8 +126,6 @@ pub struct EndpointDirectoryUnavailable;
 pub enum InstallationIdentityUnavailable {
     #[error("Installation identity unavailable")]
     Identity,
-    #[error("Central link unavailable: {message}")]
-    CentralLink { message: String },
 }
 
 impl CollaborationRejection for InstallationIdentityUnavailable {

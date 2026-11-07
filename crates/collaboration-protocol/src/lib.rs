@@ -172,7 +172,7 @@ pub use endpoint_inventory::EndpointInventory;
 mod identity_schemas;
 mod installation_peer_identity;
 pub use installation_peer_identity::{
-    InstallationIdentity, InstallationPeerId, InstallationPeerIdentityError,
+    CentralLinkObservation, InstallationIdentity, InstallationPeerId, InstallationPeerIdentityError,
 };
 mod protocol_type_schemas;
 pub use protocol_type_schemas::protocol_type_schemas;

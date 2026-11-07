@@ -107,6 +107,7 @@ async fn await_state(
                 .installation_show()
                 .await?
                 .central
+                .into_record()
                 .ok_or("link observation missing")?;
             if expected(&record.state) {
                 return Ok(record);

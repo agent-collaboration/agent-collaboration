@@ -38,6 +38,7 @@ impl Clock for PausedClock {
 
 enum HelloReply {
     Welcome,
+    WelcomeThenReplaced,
     Ended,
     Silent,
 }
@@ -86,6 +87,18 @@ impl TransportConnection for ScriptedConnection {
             ClientFrame::Hello { session_id, .. } => {
                 self.hellos.send(session_id).unwrap();
                 match self.reply {
+                    HelloReply::WelcomeThenReplaced => {
+                        let welcome: ServerFrame<BoardConsumerProtocol> = ServerFrame::Welcome {
+                            session_id,
+                            databases: Vec::new(),
+                        };
+                        self.send
+                            .send(serde_json::to_vec(&welcome).unwrap().into())
+                            .unwrap();
+                        ServerFrame::Closed {
+                            reason: fleet_sync_protocol::CloseReason::ConnectionReplaced,
+                        }
+                    }
                     HelloReply::Welcome => ServerFrame::Welcome {
                         session_id,
                         databases: Vec::new(),
@@ -198,6 +211,61 @@ async fn await_welcome(events: &mut mpsc::Receiver<ClientEvent<BoardConsumerProt
     })
     .await
     .unwrap();
+}
+
+#[tokio::test(start_paused = true)]
+async fn host_policy_stops_after_same_session_connection_replacement_without_reconnect() {
+    // Arrange: the exact production factory, with a spare socket that must stay unused.
+    let RecoveryFixture {
+        requests,
+        mut events,
+        pump,
+        mut attempts,
+        mut hellos,
+        store,
+        original,
+    } = prepare_recovery(vec![
+        ConnectStep::Accepted(HelloReply::WelcomeThenReplaced),
+        ConnectStep::Accepted(HelloReply::Welcome),
+    ])
+    .await;
+    let state = pump.link_state();
+    let (_stop, stopped) = watch::channel(false);
+    let task = tokio::spawn(pump.run_with_clock(stopped, PausedClock(Instant::now())));
+
+    // Act: the scripted central welcomes then explicitly replaces this physical connection.
+    await_welcome(&mut events).await;
+    let completed = timeout(Duration::from_secs(1), task).await;
+
+    // Assert: Router policy opts into the library terminal path and keeps the same identity.
+    assert!(
+        completed.is_ok(),
+        "Host policy kept retrying a replaced connection"
+    );
+    assert!(matches!(
+        completed.unwrap().unwrap(),
+        Err(ClientError::ConnectionReplaced)
+    ));
+    assert!(requests.is_closed());
+    assert!(matches!(
+        state.borrow().status,
+        fleet_sync_tokio_runner::SessionLinkStatus::Refused {
+            reason: fleet_sync_tokio_runner::SessionDropReason::Disconnected {
+                reason: Some(fleet_sync_protocol::CloseReason::ConnectionReplaced)
+            }
+        }
+    ));
+    assert_eq!(hellos.recv().await.unwrap(), original);
+    assert_eq!(store.load().await.unwrap().unwrap().session_id, original);
+    attempts.recv().await.unwrap();
+    advance(Duration::from_secs(300)).await;
+    assert!(
+        matches!(
+            attempts.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty | mpsc::error::TryRecvError::Disconnected)
+        ),
+        "replaced Host made another connection attempt"
+    );
 }
 
 #[tokio::test(start_paused = true)]

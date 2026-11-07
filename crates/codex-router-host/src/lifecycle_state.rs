@@ -193,13 +193,14 @@ pub struct LifecycleOutcome {
 }
 
 /// Orthogonal live status returned through the operator boundary.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
     rename_all_fields = "camelCase"
 )]
 pub enum FleetHostObservation {
+    #[default]
     NotObserved,
     Available {
         central: Option<board_sync_protocol::FleetLinkRecord>,
@@ -212,6 +213,7 @@ pub enum FleetHostObservation {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct HostSnapshot {
+    #[serde(default)]
     fleet: Box<FleetHostObservation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     port_selection: Option<crate::HostPortSelection>,

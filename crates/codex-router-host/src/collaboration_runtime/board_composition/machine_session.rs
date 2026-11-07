@@ -282,6 +282,27 @@ impl PreparedMachineSession {
 }
 
 impl RunningMachineSession {
+    #[cfg(test)]
+    pub(in crate::collaboration_runtime) async fn wait_for_stop_for_test(&self) -> io::Result<()> {
+        await_machine_stop(self.stop.subscribe()).await
+    }
+
+    pub(in crate::collaboration_runtime) fn is_expected_refusal_error(error: &io::Error) -> bool {
+        expected_terminal_io(error)
+    }
+
+    #[cfg(test)]
+    pub(in crate::collaboration_runtime) fn failed_for_test(error: io::Error) -> Self {
+        let (stop, _stopped) = watch::channel(false);
+        let mut task = JoinSet::new();
+        task.spawn(async move { Err(error) });
+        Self {
+            stop,
+            task,
+            projects: Weak::new(),
+        }
+    }
+
     pub(in crate::collaboration_runtime) fn is_observed_refusal(
         error: &io::Error,
         record: &board_sync_protocol::FleetLinkRecord,
@@ -306,6 +327,7 @@ impl RunningMachineSession {
                 },
             )
             | (ClientError::ReplacedByNewerSession, FleetLinkRefusal::IdentityInUseElsewhere)
+            | (ClientError::ConnectionReplaced, FleetLinkRefusal::IdentityInUseElsewhere)
             | (
                 ClientError::Connect(ConnectFailure::InvalidEndpoint),
                 FleetLinkRefusal::SessionFailure {
@@ -368,6 +390,7 @@ fn expected_terminal(error: &fleet_sync_session::ClientError) -> bool {
         ClientError::Revoked
             | ClientError::CredentialRejected { .. }
             | ClientError::ReplacedByNewerSession
+            | ClientError::ConnectionReplaced
             | ClientError::Connect(
                 ConnectFailure::InvalidEndpoint | ConnectFailure::InvalidCredential
             )
@@ -422,6 +445,7 @@ fn create_machine_session_pump<
         requests,
         events,
         pump.with_recovery_policy(SessionRecoveryPolicy {
+            connection_replaced: fleet_sync_tokio_runner::ConnectionReplacedRecovery::Terminal,
             welcome_timeout: Some(Duration::from_secs(30)),
             ..SessionRecoveryPolicy::default()
         }),

@@ -389,6 +389,7 @@ impl HostRuntime {
         loop {
             if let Some(owner) = &mut collaboration {
                 let result = if active_host_replacement.is_some() {
+                    drop(active_status.take());
                     owner.shutdown().await
                 } else {
                     owner
@@ -399,11 +400,13 @@ impl HostRuntime {
                             } else {
                                 None
                             },
+                            || drop(active_status.take()),
                         )
                         .await
                 };
                 if let Err(error) = result {
                     tracing::error!("collaboration lifecycle synchronization failed");
+                    drop(active_status.take());
                     let cleanup = owner.shutdown().await;
                     if config.remote_access().is_some() {
                         let error = match cleanup {
@@ -436,6 +439,7 @@ impl HostRuntime {
             tokio::select! {
                 never = &mut login_reload, if matches!(state.phase, HostPhase::Steady) && app_server.is_some() => match never {},
                 failure = collaboration_lifecycle::wait_failure(&mut collaboration), if collaboration.is_some() => {
+                    drop(active_status.take());
                     match failure {
                         crate::CollaborationFailure::LocalListener(error) => {
                             tracing::error!("collaboration listener failed");
@@ -484,6 +488,10 @@ impl HostRuntime {
                         || retained_updater.is_some()
                         || active_status.is_some();
                     request_admission::handle_operator_work(work, request_admission::OperatorRuntimeContext {
+                        fleet_observation: match &collaboration {
+                            Some(owner) => owner.observe_fleet(),
+                            None => Box::pin(async { crate::FleetHostObservation::Unavailable { message: "collaboration runtime is not configured".to_owned() } }),
+                        },
                         state: &mut state,
                         app_server: &mut app_server,
                         router_child: &mut router_child,
@@ -651,11 +659,6 @@ impl HostRuntime {
                     let mcp_listen_address = collaboration.as_ref()
                         .and_then(|owner| owner.mcp_listen_address());
                     let (snapshot, status_identity) = status_observation.snapshot(&state, mcp_listen_address);
-                    let fleet = match &collaboration {
-                        Some(owner) => owner.observe_fleet().await,
-                        None => crate::FleetHostObservation::Unavailable { message: "collaboration runtime is not configured".to_owned() },
-                    };
-                    let snapshot = snapshot.with_fleet(fleet);
                     if pending_identity.is_none() {
                         pending_identity = status_identity;
                     }
@@ -765,6 +768,7 @@ impl HostRuntime {
                     });
                 }
                 _ = interrupt.recv() => {
+                    drop(active_status.take());
                     let collaboration_shutdown = match &mut collaboration {
                         Some(owner) => owner.shutdown().await,
                         None => Ok(()),
@@ -787,6 +791,7 @@ impl HostRuntime {
                     return Ok(HostExit::Signal);
                 }
                 _ = terminate.recv() => {
+                    drop(active_status.take());
                     let collaboration_shutdown = match &mut collaboration {
                         Some(owner) => owner.shutdown().await,
                         None => Ok(()),
@@ -809,6 +814,7 @@ impl HostRuntime {
                     return Ok(HostExit::Signal);
                 }
                 _ = hangup.recv() => {
+                    drop(active_status.take());
                     let collaboration_shutdown = match &mut collaboration {
                         Some(owner) => owner.shutdown().await,
                         None => Ok(()),

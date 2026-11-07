@@ -38,8 +38,44 @@ async fn installation_show_transmits_the_observed_central_record_over_mcp() {
     let identity = result.structured_content.expect("installation identity");
     assert_eq!(identity["peerId"], peer.to_string());
     assert_eq!(
-        identity["central"],
+        identity["central"]["record"],
         serde_json::to_value(record).expect("link record")
+    );
+}
+
+#[tokio::test]
+async fn installation_show_preserves_the_peer_when_its_central_observation_is_unavailable() {
+    use crate::api_test_harness::{ServedApi, api_config, test_identity};
+    // Arrange: identity is valid; the independently owned cache reader failed.
+    let peer = fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).expect("peer");
+    let application = test_identity()
+        .with_installation_peer(peer)
+        .expect("identity")
+        .with_fleet_link(board_fleet_sync::FleetLinkObservation::Unavailable {
+            message: "controlled FleetCache read failure".to_owned(),
+        })
+        .build();
+    let directory = tempfile::tempdir().expect("service directory");
+    let listener = ServedApi::tcp(&api_config(application, directory.path())).await;
+
+    // Act: real RMCP transport, application, identity and diagnostic read paths.
+    let result = listener
+        .call_tool("installation_show", serde_json::json!({}))
+        .await;
+    listener.stop().await;
+
+    // Assert: re-enrollment can still obtain peer identity and the diagnostic is explicit.
+    assert_ne!(
+        result.is_error,
+        Some(true),
+        "link read failure hid installation identity"
+    );
+    let identity = result.structured_content.expect("installation identity");
+    assert_eq!(identity["peerId"], peer.to_string());
+    assert_eq!(identity["central"]["kind"], "unavailable");
+    assert_eq!(
+        identity["central"]["message"],
+        "session store unavailable: controlled FleetCache read failure"
     );
 }
 

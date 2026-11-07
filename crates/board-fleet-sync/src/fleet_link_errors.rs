@@ -62,6 +62,9 @@ pub(super) fn client_failure(error: &ClientError) -> FleetLinkFailureReason {
             FleetLinkFailureReason::CredentialRejected { reason: *reason }
         }
         ClientError::ReplacedByNewerSession => FleetLinkFailureReason::ReplacedByNewerSession,
+        ClientError::ConnectionReplaced => FleetLinkFailureReason::SessionClosed {
+            reason: fleet_sync_protocol::CloseReason::ConnectionReplaced,
+        },
         ClientError::StaleNoticeAcknowledgement { expected, received } => {
             FleetLinkFailureReason::StaleNoticeAcknowledgement {
                 expected: *expected,

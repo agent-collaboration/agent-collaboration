@@ -26,6 +26,12 @@ fn native_client_failure_codes_and_payloads_are_retained_exhaustively() {
             Failure::ReplacedByNewerSession,
         ),
         (
+            ClientError::ConnectionReplaced,
+            Failure::SessionClosed {
+                reason: fleet_sync_protocol::CloseReason::ConnectionReplaced,
+            },
+        ),
+        (
             ClientError::StaleNoticeAcknowledgement { expected, received },
             Failure::StaleNoticeAcknowledgement { expected, received },
         ),
