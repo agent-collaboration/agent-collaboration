@@ -19,6 +19,8 @@ use std::{
     time::Duration,
 };
 
+#[path = "production_enrollment_duplicate_test.rs"]
+mod duplicate_identity;
 #[path = "../support/production_enrollment_fixture.rs"]
 mod enrollment_fixture;
 use crate::operator_client;

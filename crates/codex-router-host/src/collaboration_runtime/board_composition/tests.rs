@@ -40,6 +40,8 @@ mod claim_refusals;
 mod claim_restart;
 #[path = "tests/directory_inputs.rs"]
 mod directory_inputs;
+#[path = "tests/duplicate_machine_identity.rs"]
+mod duplicate_machine_identity;
 #[cfg(feature = "runtime-test-support")]
 #[path = "tests/forwarded_notification_fixture.rs"]
 mod forwarded_notification_fixture;
