@@ -56,18 +56,18 @@ collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime"
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance" }
 durable-steps.workspace = true
-fleet-sync-delivery = { workspace = true, features = ["test-support"] }
+fleet-mail-delivery = { workspace = true, features = ["test-support"] }
 interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
 sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090" }
-fleet-sync-writer.workspace = true
-fleet-sync-lease.workspace = true
+fleet-project-writer.workspace = true
+fleet-project-lease.workspace = true
 fleet-admission = { path = "../fleet-admission", version = "0.1.96" }
 board-central-test-support = { version = "0.1.96", path = "../board-central-test-support" }
-fleet-sync-session.workspace = true
-fleet-sync-tokio-runner.workspace = true
+fleet-session.workspace = true
+fleet-session-client.workspace = true
 board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.96" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
-fleet-sync-protocol.workspace = true
+fleet-protocol.workspace = true
 runtime-primitives.workspace = true
 axum = { workspace = true, features = ["http1", "tokio", "json"] }
 tokio = { workspace = true, features = ["test-util"] }

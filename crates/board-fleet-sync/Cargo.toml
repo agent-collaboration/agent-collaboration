@@ -12,11 +12,11 @@ workspace = true
 [dependencies]
 chrono.workspace = true
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
-fleet-sync-protocol.workspace = true
-fleet-sync-lease.workspace = true
-fleet-sync-session.workspace = true
-fleet-sync-tokio-runner.workspace = true
-fleet-sync-writer.workspace = true
+fleet-protocol.workspace = true
+fleet-project-lease.workspace = true
+fleet-session.workspace = true
+fleet-session-client.workspace = true
+fleet-project-writer.workspace = true
 futures-util.workspace = true
 message-board-storage = { path = "../message-board-storage", version = "0.1.96" }
 message-board = { path = "../message-board", version = "0.1.96" }
@@ -35,9 +35,9 @@ tokio = { workspace = true, features = ["test-util"] }
 fleet-admission = { path = "../fleet-admission", version = "0.1.96" }
 axum = { workspace = true, features = ["http1", "tokio", "ws"] }
 durable-steps.workspace = true
-fleet-sync-receiver.workspace = true
-fleet-sync-delivery.workspace = true
-fleet-sync-service.workspace = true
+fleet-project-copy.workspace = true
+fleet-mail-delivery.workspace = true
+fleet-native-services.workspace = true
 runtime-primitives = { workspace = true, features = ["tokio"] }
 sqlx.workspace = true
 tempfile = "3.27.0"

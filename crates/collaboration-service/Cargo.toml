@@ -16,13 +16,15 @@ workspace = true
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
-fleet-sync-tokio-runner.workspace = true
+fleet-native-writer.workspace = true
+fleet-session-client.workspace = true
+fleet-tokio-objects.workspace = true
 board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.96" }
 durable-steps.workspace = true
-fleet-sync-delivery.workspace = true
-fleet-sync-lease.workspace = true
-fleet-sync-protocol.workspace = true
-fleet-sync-writer.workspace = true
+fleet-mail-delivery.workspace = true
+fleet-project-lease.workspace = true
+fleet-protocol.workspace = true
+fleet-project-writer.workspace = true
 runtime-primitives = { workspace = true, features = ["tokio"] }
 collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.93" }
 message-board = { path = "../message-board", version = "0.1.20" }
@@ -60,10 +62,10 @@ collaboration-application-test-support = { path = "../collaboration-application-
 node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime", features = ["test-support"] }
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts", features = ["test-support"] }
-fleet-sync-delivery = { workspace = true, features = ["test-support"] }
-fleet-sync-session.workspace = true
+fleet-mail-delivery = { workspace = true, features = ["test-support"] }
+fleet-session.workspace = true
 board-central-test-support = { version = "0.1.96", path = "../board-central-test-support", features = ["conformance"] }
-fleet-sync-receiver.workspace = true
+fleet-project-copy.workspace = true
 tracing-subscriber.workspace = true
 turso_parser = { workspace = true, features = ["serde"] }
 proptest.workspace = true

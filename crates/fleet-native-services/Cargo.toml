@@ -1,31 +1,32 @@
 [package]
-name = "fleet-sync-service"
+autotests = false
+name = "fleet-native-services"
 description = "Native replication copies, lease registry and authenticated sessions"
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
-[lints]
-workspace = true
-
 [features]
-test-fault = ["fleet-sync-tokio-runner/test-fault"]
-test-support = ["durable-steps/test-support", "fleet-sync-tokio-runner/test-support", "fleet-sync-delivery/test-support"]
+test-fault = ["fleet-tokio-objects/test-fault"]
+test-support = ["durable-steps/test-support", "fleet-native-writer/test-support", "fleet-native-session/test-support", "fleet-mail-delivery/test-support"]
 
 [dependencies]
-fleet-sync-delivery = {path="../fleet-sync-delivery"}
+fleet-mail-delivery = { workspace = true }
 axum = {version="0.8.9",features=["ws"]}
-durable-steps = {path="../durable-steps",features=["turso"]}
-fleet-sync-protocol = {path="../fleet-sync-protocol"}
-fleet-sync-receiver = {path="../fleet-sync-receiver"}
-fleet-sync-lease = {path="../fleet-sync-lease"}
-fleet-sync-session = {path="../fleet-sync-session"}
-fleet-sync-tokio-runner = {path="../fleet-sync-tokio-runner"}
-fleet-sync-transport-websocket = {path="../fleet-sync-transport-websocket"}
-runtime-primitives = {path="../runtime-primitives",features=["tokio"]}
+durable-steps = { workspace = true, features=["turso"] }
+fleet-protocol = { workspace = true }
+fleet-project-copy = { workspace = true }
+fleet-project-lease = { workspace = true }
+fleet-session = { workspace = true }
+fleet-native-session.workspace = true
+fleet-native-writer.workspace = true
+fleet-session-client.workspace = true
+fleet-tokio-objects.workspace = true
+fleet-websocket-transport = { workspace = true }
+runtime-primitives = { workspace = true, features=["tokio"] }
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
 sqlx = {workspace=true,features=["migrate","macros"]}
 sqlx-core = {workspace=true,features=["migrate"]}
 sqlx-turso.workspace = true
@@ -35,3 +36,28 @@ tracing.workspace = true
 
 [dev-dependencies]
 tempfile = "3.27.0"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+await_holding_invalid_type = "deny"
+await_holding_lock = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+manual_ok_or = "deny"
+manual_unwrap_or = "deny"
+needless_collect = "deny"
+panic = "deny"
+panic_in_result_fn = "deny"
+redundant_clone = "deny"
+string_slice = "deny"
+todo = "deny"
+uninlined_format_args = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+unwrap_used = "deny"
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

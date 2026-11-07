@@ -23,11 +23,12 @@ collaboration-runtime = { path = "../collaboration-runtime", version = "0.1.126"
 collaboration-service = { path = "../collaboration-service", version = "0.1.126", features = ["test-support"] }
 durable-steps.workspace = true
 fleet-admission = { path = "../fleet-admission", version = "0.1.126" }
-fleet-sync-lease.workspace = true
-fleet-sync-protocol.workspace = true
-fleet-sync-receiver.workspace = true
-fleet-sync-tokio-runner.workspace = true
-fleet-sync-writer.workspace = true
+fleet-project-lease.workspace = true
+fleet-protocol.workspace = true
+fleet-project-copy.workspace = true
+fleet-native-writer.workspace = true
+fleet-tokio-objects.workspace = true
+fleet-project-writer.workspace = true
 futures-util.workspace = true
 interaction-storage = { path = "../interaction-storage", version = "0.1.126" }
 message-board = { path = "../message-board", version = "0.1.126" }

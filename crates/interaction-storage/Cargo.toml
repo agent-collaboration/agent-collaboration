@@ -17,8 +17,8 @@ chrono.workspace = true
 collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.96" }
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.96" }
 durable-steps = { workspace = true, features = ["turso"] }
-fleet-sync-delivery.workspace = true
-fleet-sync-protocol.workspace = true
+fleet-mail-delivery.workspace = true
+fleet-protocol.workspace = true
 message-board = { path = "../message-board", version = "0.1.96" }
 serde.workspace = true
 serde_json.workspace = true

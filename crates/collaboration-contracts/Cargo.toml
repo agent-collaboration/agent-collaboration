@@ -14,8 +14,8 @@ workspace = true
 
 [dependencies]
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
-fleet-sync-protocol.workspace = true
-fleet-sync-writer.workspace = true
+fleet-protocol.workspace = true
+fleet-project-writer.workspace = true
 runtime-primitives.workspace = true
 collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.93" }
 message-board = { path = "../message-board", version = "0.1.20" }
@@ -31,6 +31,6 @@ nix.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-fleet-sync-delivery = { workspace = true, features = ["test-support"] }
+fleet-mail-delivery = { workspace = true, features = ["test-support"] }
 tokio = { workspace = true, features = ["test-util"] }
 uuid.workspace = true

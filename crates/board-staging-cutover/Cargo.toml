@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 durable-steps.workspace = true
-fleet-sync-delivery.workspace = true
+fleet-mail-delivery.workspace = true
 collaboration-contracts = { path = "../collaboration-contracts", version = "0.1.123" }
 collaboration-service = { path = "../collaboration-service", version = "0.1.123" }
 interaction-storage = { path = "../interaction-storage", version = "0.1.123" }
@@ -37,8 +37,8 @@ tempfile = "3.27.0"
 url.workspace = true
 uuid.workspace = true
 board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.123" }
-fleet-sync-lease.workspace = true
-fleet-sync-writer.workspace = true
+fleet-project-lease.workspace = true
+fleet-project-writer.workspace = true
 message-board = { path = "../message-board", version = "0.1.123" }
 message-board-storage = { path = "../message-board-storage", version = "0.1.123" }
 runtime-primitives.workspace = true
@@ -48,7 +48,7 @@ tokio.workspace = true
 codex-router-host.workspace = true
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.121" }
 collaboration-runtime = { path = "../collaboration-runtime", version = "0.1.121" }
-fleet-sync-protocol.workspace = true
+fleet-protocol.workspace = true
 nix.workspace = true
 thiserror.workspace = true
 
@@ -59,9 +59,11 @@ codex-native-integration.workspace = true
 axum.workspace = true
 collaboration-central-conformance = { path = "../collaboration-central-conformance", version = "0.1.123" }
 board-central-test-support = { path = "../board-central-test-support", version = "0.1.123", features = ["conformance"] }
-fleet-sync-receiver.workspace = true
-fleet-sync-tokio-runner.workspace = true
-fleet-sync-session.workspace = true
+fleet-project-copy.workspace = true
+fleet-native-writer.workspace = true
+fleet-session-client.workspace = true
+fleet-tokio-objects.workspace = true
+fleet-session.workspace = true
 
 [[test]]
 name = "integration"

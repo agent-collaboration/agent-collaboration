@@ -17,9 +17,9 @@ collaboration-central-core = { version = "0.1.126", path = "../collaboration-cen
 collaboration-central-conformance = { version = "0.1.126", path = "../collaboration-central-conformance", features = ["client"] }
 collaboration-central-tokio = { version = "0.1.126", path = "../collaboration-central-tokio", features = ["conformance"] }
 collaboration-runtime = { version = "0.1.126", path = "../collaboration-runtime" }
-fleet-sync-lease.workspace = true
-fleet-sync-protocol.workspace = true
-fleet-sync-session.workspace = true
+fleet-project-lease.workspace = true
+fleet-protocol.workspace = true
+fleet-session.workspace = true
 tokio = { workspace = true, features = ["io-std"] }
 chrono = { workspace = true, features = ["serde"] }
 fs2.workspace = true
