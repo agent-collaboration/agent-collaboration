@@ -9,7 +9,7 @@ publish.workspace = true
 
 [features]
 test-fault = ["fleet-tokio-objects/test-fault"]
-test-support = ["durable-steps/test-support", "fleet-native-writer/test-support", "fleet-native-session/test-support", "fleet-mail-delivery/test-support", "dep:fleet-project-writer"]
+test-support = ["durable-steps/test-support", "fleet-native-writer/test-support", "fleet-native-session/test-support", "fleet-mail-delivery/test-support", "dep:fleet-project-writer", "tokio/io-std"]
 
 [dependencies]
 fleet-mail-delivery = { workspace = true }
@@ -32,7 +32,7 @@ sqlx = {workspace=true,features=["migrate","macros"]}
 sqlx-core = {workspace=true,features=["migrate"]}
 sqlx-turso.workspace = true
 thiserror.workspace = true
-tokio = {workspace=true,features=["fs", "io-std"]}
+tokio = {workspace=true,features=["fs"]}
 tracing.workspace = true
 
 [dev-dependencies]

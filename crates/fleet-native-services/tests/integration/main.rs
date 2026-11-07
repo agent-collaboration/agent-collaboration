@@ -11,7 +11,7 @@ mod migration_stack;
 mod claim_gate;
 #[cfg(feature = "test-support")]
 mod consumer_checked_queries;
-#[cfg(feature = "test-support")]
+#[cfg(all(feature = "test-support", feature = "test-fault"))]
 #[allow(dead_code, unused_imports)]
 #[path = "../support/consumer/lib.rs"]
 mod consumer_fixture;
@@ -29,7 +29,7 @@ mod native_registry_settlement;
 mod native_rename_adoption;
 #[cfg(all(feature = "test-support", feature = "test-fault"))]
 mod native_upgrade_refusal;
-#[cfg(feature = "test-support")]
+#[cfg(all(feature = "test-support", feature = "test-fault"))]
 #[allow(dead_code, unused_imports)]
 #[path = "../support/process/mod.rs"]
 mod support;
