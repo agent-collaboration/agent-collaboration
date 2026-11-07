@@ -67,6 +67,11 @@ unwrap_used = "deny"
 name = "integration"
 path = "tests/integration/main.rs"
 
+[[test]]
+name = "e2e"
+path = "tests/e2e/main.rs"
+required-features = ["test-support", "test-fault"]
+
 [[bin]]
 name = "fleet-sync-test-consumer"
 path = "tests/support/consumer/main.rs"

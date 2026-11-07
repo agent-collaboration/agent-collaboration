@@ -1,0 +1,589 @@
+{
+  "sourceRepository": "agent-collaboration/agent-fleet-sync",
+  "sourceRevision": "b9470dcbfc177afc061203365b6bd6edbec35aa1",
+  "package": "fleet-native-services",
+  "cases": [
+    {
+      "source": "tests/consumer/tests/claim_gate.rs::settlement_before_reserve_closes_the_claim_after_reopen_and_conflicting_outcome_refuses",
+      "target": "integration",
+      "identity": "claim_gate::settlement_before_reserve_closes_the_claim_after_reopen_and_conflicting_outcome_refuses",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/delivery_concurrent_recovery.rs::restart_during_unanswered_local_effect_keeps_one_uncertain_effect",
+      "target": "e2e",
+      "identity": "delivery_concurrent_recovery::restart_during_unanswered_local_effect_keeps_one_uncertain_effect",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/delivery_containment.rs::delivery_node_connect_waits_for_registry_acceptance_and_welcome",
+      "target": "e2e",
+      "identity": "delivery_containment::delivery_node_connect_waits_for_registry_acceptance_and_welcome",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/delivery_expiry.rs::offline_recipient_expires_at_the_injected_deadline_and_stays_expired_after_restart",
+      "target": "e2e",
+      "identity": "delivery_expiry::offline_recipient_expires_at_the_injected_deadline_and_stays_expired_after_restart",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/delivery_handshake.rs::a_publication_before_welcome_uses_the_same_frame_pump_and_is_acknowledged",
+      "target": "e2e",
+      "identity": "delivery_handshake::a_publication_before_welcome_uses_the_same_frame_pump_and_is_acknowledged",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/delivery_journey.rs::a_first_submit_that_is_already_expired_converges_to_the_canonical_receipt_over_websocket",
+      "target": "e2e",
+      "identity": "delivery_journey::a_first_submit_that_is_already_expired_converges_to_the_canonical_receipt_over_websocket",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/delivery_journey.rs::queued_relay_offline_then_recipient_offline_drains_real_custody_once",
+      "target": "e2e",
+      "identity": "delivery_journey::queued_relay_offline_then_recipient_offline_drains_real_custody_once",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/delivery_journey.rs::a_lost_answer_at_every_hop_preserves_one_effect_and_monotone_status",
+      "target": "e2e",
+      "identity": "delivery_journey::a_lost_answer_at_every_hop_preserves_one_effect_and_monotone_status",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/delivery_journey.rs::killing_a_process_at_every_committed_hop_recovers_without_duplicate_effects",
+      "target": "e2e",
+      "identity": "delivery_journey::killing_a_process_at_every_committed_hop_recovers_without_duplicate_effects",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/delivery_journey.rs::killing_after_committed_report_recovers_without_duplicate_effects",
+      "target": "e2e",
+      "identity": "delivery_journey::killing_after_committed_report_recovers_without_duplicate_effects",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/delivery_journey.rs::oversized_receipt_is_bounded_at_durable_checkpoint_across_process_restart",
+      "target": "e2e",
+      "identity": "delivery_journey::oversized_receipt_is_bounded_at_durable_checkpoint_across_process_restart",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/delivery_relay_restart.rs::relay_kills_after_committed_custody_receipt_report_and_publication_preserve_state",
+      "target": "e2e",
+      "identity": "delivery_relay_restart::relay_kills_after_committed_custody_receipt_report_and_publication_preserve_state",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/delivery_service.rs::native_relay_custody_and_status_stream_are_bound_to_the_authenticated_origin",
+      "target": "e2e",
+      "identity": "delivery_service::native_relay_custody_and_status_stream_are_bound_to_the_authenticated_origin",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/delivery_service.rs::native_status_route_comes_from_the_verified_binding_and_ignores_declared_mail_addresses",
+      "target": "e2e",
+      "identity": "delivery_service::native_status_route_comes_from_the_verified_binding_and_ignores_declared_mail_addresses",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/delivery_service.rs::corrupt_typed_relay_row_is_unavailable_without_poisoning_other_items",
+      "target": "e2e",
+      "identity": "delivery_service::corrupt_typed_relay_row_is_unavailable_without_poisoning_other_items",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/delivery_status_owner.rs::status_stream_corruption_keeps_the_service_error_path_and_relay_custody_healthy",
+      "target": "e2e",
+      "identity": "delivery_status_owner::status_stream_corruption_keeps_the_service_error_path_and_relay_custody_healthy",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/delivery_storage_retry.rs::submit_begin_failure_keeps_sender_custody_and_recovers_once_without_quarantining",
+      "target": "e2e",
+      "identity": "delivery_storage_retry::submit_begin_failure_keeps_sender_custody_and_recovers_once_without_quarantining",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/engine_keys.rs::audited_engine_keys_declare_not_null_and_reject_null_without_rowid_assignment",
+      "target": "integration",
+      "identity": "engine_keys::audited_engine_keys_declare_not_null_and_reject_null_without_rowid_assignment",
+      "adaptation": "**nonmechanical: fleet here; journal audit retained upstream** |"
+    },
+    {
+      "source": "tests/consumer/tests/integration/native_frame_shapes.rs::identified_bad_bodies_are_correlated_and_the_same_session_stays_usable",
+      "target": "e2e",
+      "identity": "native_frame_shapes::identified_bad_bodies_are_correlated_and_the_same_session_stays_usable",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/integration/native_frame_shapes.rs::unreadable_kind_or_frame_id_closes_as_malformed_without_routing",
+      "target": "e2e",
+      "identity": "native_frame_shapes::unreadable_kind_or_frame_id_closes_as_malformed_without_routing",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/integration/native_frame_shapes.rs::unknown_fields_with_backticks_keep_their_complete_correlated_names",
+      "target": "e2e",
+      "identity": "native_frame_shapes::unknown_fields_with_backticks_keep_their_complete_correlated_names",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/integration/native_frame_shapes.rs::unknown_fields_choose_the_actual_empty_or_nonempty_diagnostic_suffix",
+      "target": "e2e",
+      "identity": "native_frame_shapes::unknown_fields_choose_the_actual_empty_or_nonempty_diagnostic_suffix",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/integration/native_frame_shapes.rs::unknown_fields_are_not_confused_with_declared_names_or_nested_input_keys",
+      "target": "e2e",
+      "identity": "native_frame_shapes::unknown_fields_are_not_confused_with_declared_names_or_nested_input_keys",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/integration/native_frame_shapes.rs::discarded_backtracking_errors_do_not_replace_the_final_reported_field",
+      "target": "e2e",
+      "identity": "native_frame_shapes::discarded_backtracking_errors_do_not_replace_the_final_reported_field",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/integration/native_frame_shapes.rs::missing_and_duplicate_declared_fields_keep_their_exact_names",
+      "target": "e2e",
+      "identity": "native_frame_shapes::missing_and_duplicate_declared_fields_keep_their_exact_names",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/integration/settle_claims.rs::legacy_settle_refuses_other_machine_and_project_claims_before_custody",
+      "target": "e2e",
+      "identity": "settle_claims::legacy_settle_refuses_other_machine_and_project_claims_before_custody",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_bootstrap_prefix_keys.rs::warm_published_prefix_refuses_key_assignment",
+      "target": "integration",
+      "identity": "native_bootstrap_prefix_keys::warm_published_prefix_refuses_key_assignment",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_bootstrap_prefix_keys.rs::reopened_published_prefix_refuses_key_assignment",
+      "target": "integration",
+      "identity": "native_bootstrap_prefix_keys::reopened_published_prefix_refuses_key_assignment",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_bootstrap_prefix_keys.rs::warm_published_prefix_refuses_invalid_insert",
+      "target": "integration",
+      "identity": "native_bootstrap_prefix_keys::warm_published_prefix_refuses_invalid_insert",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_bootstrap_prefix_keys.rs::reopened_published_prefix_refuses_invalid_insert",
+      "target": "integration",
+      "identity": "native_bootstrap_prefix_keys::reopened_published_prefix_refuses_invalid_insert",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_capture_restart.rs::split_capture_survives_receiver_kill_and_lost_final_answer_then_updates_and_deletes",
+      "target": "e2e",
+      "identity": "native_capture_restart::split_capture_survives_receiver_kill_and_lost_final_answer_then_updates_and_deletes",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_capture_restart.rs::receiver_kill_after_copy_commit_before_delivery_retries_the_admitted_follow_up_once",
+      "target": "e2e",
+      "identity": "native_capture_restart::receiver_kill_after_copy_commit_before_delivery_retries_the_admitted_follow_up_once",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_client_readiness.rs::a_request_during_transport_activation_is_also_not_sent",
+      "target": "integration",
+      "identity": "native_client_readiness::a_request_during_transport_activation_is_also_not_sent",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_client_readiness.rs::production_pump_refuses_unsent_operations_until_the_matching_welcome",
+      "target": "e2e",
+      "identity": "native_client_readiness::production_pump_refuses_unsent_operations_until_the_matching_welcome",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_column_migrations.rs::replace_column_in_one_migration_with_live_copy",
+      "target": "e2e",
+      "identity": "native_column_migrations::replace_column_in_one_migration_with_live_copy",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_column_migrations.rs::replace_column_in_one_migration_with_offline_copy",
+      "target": "e2e",
+      "identity": "native_column_migrations::replace_column_in_one_migration_with_offline_copy",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_column_migrations.rs::add_then_drop_in_one_writer_open_with_live_copy",
+      "target": "e2e",
+      "identity": "native_column_migrations::add_then_drop_in_one_writer_open_with_live_copy",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_column_migrations.rs::add_then_drop_in_one_writer_open_with_offline_copy",
+      "target": "e2e",
+      "identity": "native_column_migrations::add_then_drop_in_one_writer_open_with_offline_copy",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_copy_claim_retry.rs::a_real_damaged_copy_keeps_the_claim_reserved_across_restart_then_grants_the_same_attempt",
+      "target": "e2e",
+      "identity": "native_copy_claim_retry::a_real_damaged_copy_keeps_the_claim_reserved_across_restart_then_grants_the_same_attempt",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_copy_containment.rs::a_damaged_copy_is_typed_while_its_peer_progresses_and_the_same_piece_recovers_once",
+      "target": "e2e",
+      "identity": "native_copy_containment::a_damaged_copy_is_typed_while_its_peer_progresses_and_the_same_piece_recovers_once",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_copy_containment.rs::committed_apply_keeps_its_answer_when_the_actual_copy_wake_fails",
+      "target": "e2e",
+      "identity": "native_copy_containment::committed_apply_keeps_its_answer_when_the_actual_copy_wake_fails",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_copy_containment.rs::an_unknown_commit_reconciles_the_identical_piece_without_a_second_effect",
+      "target": "e2e",
+      "identity": "native_copy_containment::an_unknown_commit_reconciles_the_identical_piece_without_a_second_effect",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_copy_discard.rs::native_discarding_refusal_clears_staging_without_publishing_rows",
+      "target": "e2e",
+      "identity": "native_copy_discard::native_discarding_refusal_clears_staging_without_publishing_rows",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_copy_discard.rs::native_cleanup_sql_failure_is_unknown_then_identical_resend_recovers",
+      "target": "e2e",
+      "identity": "native_copy_discard::native_cleanup_sql_failure_is_unknown_then_identical_resend_recovers",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_engine_identities.rs::real_session_stores_v7_keys_and_refuses_a_v4_seed_before_receipt",
+      "target": "e2e",
+      "identity": "native_engine_identities::real_session_stores_v7_keys_and_refuses_a_v4_seed_before_receipt",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_idle_successor_move.rs::seeded_successor_moves_without_a_write_in_its_epoch_and_keeps_inherited_rows",
+      "target": "e2e",
+      "identity": "native_idle_successor_move::seeded_successor_moves_without_a_write_in_its_epoch_and_keeps_inherited_rows",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_lease_transitions.rs::withdrawal_keeps_original_real_clock_deadline_then_fresh_renewal_resumes_same_epoch",
+      "target": "e2e",
+      "identity": "native_lease_transitions::withdrawal_keeps_original_real_clock_deadline_then_fresh_renewal_resumes_same_epoch",
+      "adaptation": "**nonmechanical: injected time; every assertion retained** |"
+    },
+    {
+      "source": "tests/consumer/tests/native_lease_transitions.rs::stale_holder_move_refuses_then_a_recently_renewed_holder_moves_over_its_session",
+      "target": "e2e",
+      "identity": "native_lease_transitions::stale_holder_move_refuses_then_a_recently_renewed_holder_moves_over_its_session",
+      "adaptation": "**nonmechanical: injected time; every assertion retained** |"
+    },
+    {
+      "source": "tests/consumer/tests/native_lease_transitions.rs::authoritative_copy_refuses_the_takeover_tail_while_old_writer_keeps_it_readable",
+      "target": "e2e",
+      "identity": "native_lease_transitions::authoritative_copy_refuses_the_takeover_tail_while_old_writer_keeps_it_readable",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_lifecycle.rs::claimed_import_origin_survives_fresh_attempts_and_registry_restart",
+      "target": "e2e",
+      "identity": "native_lifecycle::claimed_import_origin_survives_fresh_attempts_and_registry_restart",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_lifecycle.rs::cancelled_claim_dispatches_terminal_settlement_before_the_reservation_answers",
+      "target": "e2e",
+      "identity": "native_lifecycle::cancelled_claim_dispatches_terminal_settlement_before_the_reservation_answers",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_lifecycle.rs::import_claim_settlement_and_renewal_replay_survive_registry_restart_and_revocation",
+      "target": "e2e",
+      "identity": "native_lifecycle::import_claim_settlement_and_renewal_replay_survive_registry_restart_and_revocation",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_lifecycle.rs::retirement_of_an_imported_unheld_database_refuses_new_requests_and_replays",
+      "target": "e2e",
+      "identity": "native_lifecycle::retirement_of_an_imported_unheld_database_refuses_new_requests_and_replays",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_migration_rename.rs::warm_rename_and_next_write_replicate",
+      "target": "e2e",
+      "identity": "native_migration_rename::warm_rename_and_next_write_replicate",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_migration_rename.rs::reopened_v1_rename_and_next_write_replicate",
+      "target": "e2e",
+      "identity": "native_migration_rename::reopened_v1_rename_and_next_write_replicate",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_migration_rename.rs::fresh_full_bundle_rename_and_next_write_replicate",
+      "target": "e2e",
+      "identity": "native_migration_rename::fresh_full_bundle_rename_and_next_write_replicate",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_migration_rename.rs::fresh_rename_chain_and_next_write_replicate",
+      "target": "e2e",
+      "identity": "native_migration_rename::fresh_rename_chain_and_next_write_replicate",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_migration_rename.rs::local_history_rows_schema_and_pieces_stay_private_across_drop",
+      "target": "e2e",
+      "identity": "native_migration_rename::local_history_rows_schema_and_pieces_stay_private_across_drop",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_move_aside.rs::rejected_registration_moves_aside_after_kills_before_link_between_names_and_after_unlink",
+      "target": "e2e",
+      "identity": "native_move_aside::rejected_registration_moves_aside_after_kills_before_link_between_names_and_after_unlink",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_move_copy_retry.rs::actual_move_ack_and_fence_calls_retry_damage_across_restart_without_ending_the_attempt",
+      "target": "e2e",
+      "identity": "native_move_copy_retry::actual_move_ack_and_fence_calls_retry_damage_across_restart_without_ending_the_attempt",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_move_link.rs::hard_link_refuses_occupied_destination_and_survives_kill_before_source_unlink",
+      "target": "e2e",
+      "identity": "native_move_link::hard_link_refuses_occupied_destination_and_survives_kill_before_source_unlink",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_reauthorization.rs::restored_permission_starts_a_new_session_without_reviving_old_bindings_or_verifications",
+      "target": "e2e",
+      "identity": "native_reauthorization::restored_permission_starts_a_new_session_without_reviving_old_bindings_or_verifications",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_reauthorization.rs::another_peers_revocation_keeps_an_in_flight_verification_valid",
+      "target": "e2e",
+      "identity": "native_reauthorization::another_peers_revocation_keeps_an_in_flight_verification_valid",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_receiver_foreign_keys.rs::captured_child_before_parent_and_parent_first_delete_replay_without_reordering",
+      "target": "integration",
+      "identity": "native_receiver_foreign_keys::captured_child_before_parent_and_parent_first_delete_replay_without_reordering",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_registration.rs::adopted_registration_freezes_provisional_writes_and_restarts_seed_from_same_position_after_writer_kill",
+      "target": "e2e",
+      "identity": "native_registration::adopted_registration_freezes_provisional_writes_and_restarts_seed_from_same_position_after_writer_kill",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_registration.rs::empty_registration_and_periodic_renewals_use_owned_durable_tasks_over_real_websocket",
+      "target": "e2e",
+      "identity": "native_registration::empty_registration_and_periodic_renewals_use_owned_durable_tasks_over_real_websocket",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_registry_settlement.rs::import_waits_for_its_runner_owned_operation_to_complete",
+      "target": "integration",
+      "identity": "native_registry_settlement::import_waits_for_its_runner_owned_operation_to_complete",
+      "adaptation": "**pre-existing negative timeout, moved unchanged; follow-up: causal settlement probe in durable-steps, then convert** |"
+    },
+    {
+      "source": "tests/consumer/tests/native_registry_settlement.rs::import_execution_corruption_preserves_the_service_storage_error",
+      "target": "integration",
+      "identity": "native_registry_settlement::import_execution_corruption_preserves_the_service_storage_error",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_rename_adoption.rs::sqlx_v1_adoption_migrates_rename_and_seeds_then_follows_the_copy",
+      "target": "e2e",
+      "identity": "native_rename_adoption::sqlx_v1_adoption_migrates_rename_and_seeds_then_follows_the_copy",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_rename_adoption.rs::sqlx_v1_adoption_still_refuses_an_invalid_key_before_capture_setup",
+      "target": "integration",
+      "identity": "native_rename_adoption::sqlx_v1_adoption_still_refuses_an_invalid_key_before_capture_setup",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_rename_bootstrap.rs::new_writer_publishes_v1_prefix_then_renames_writes_and_replicates",
+      "target": "e2e",
+      "identity": "native_rename_bootstrap::new_writer_publishes_v1_prefix_then_renames_writes_and_replicates",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_retention.rs::stalled_follower_passes_retention_restarts_from_snapshot_and_follows_the_same_copy",
+      "target": "e2e",
+      "identity": "native_retention::stalled_follower_passes_retention_restarts_from_snapshot_and_follows_the_same_copy",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_schema_admission.rs::native_admission_freezes_before_drive_and_keeps_that_value_across_restart",
+      "target": "e2e",
+      "identity": "native_schema_admission::native_admission_freezes_before_drive_and_keeps_that_value_across_restart",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_schema_admission.rs::pending_new_report_orders_admin_admission_before_attach_and_own_claim_after_welcome",
+      "target": "e2e",
+      "identity": "native_schema_admission::pending_new_report_orders_admin_admission_before_attach_and_own_claim_after_welcome",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_schema_publication.rs::a_held_report_blocks_welcome_and_requests_without_blocking_other_input_or_close",
+      "target": "e2e",
+      "identity": "native_schema_publication::a_held_report_blocks_welcome_and_requests_without_blocking_other_input_or_close",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_schema_publication.rs::finalization_rollback_discards_registration_welcome_and_local_step_then_retries_once",
+      "target": "e2e",
+      "identity": "native_schema_publication::finalization_rollback_discards_registration_welcome_and_local_step_then_retries_once",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_schema_publication.rs::closed_and_replaced_connections_are_not_resurrected_by_a_delayed_finalization",
+      "target": "e2e",
+      "identity": "native_schema_publication::closed_and_replaced_connections_are_not_resurrected_by_a_delayed_finalization",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_schema_publication.rs::restart_before_finalization_keeps_the_next_attach_sequence_and_never_welcomes_the_old_connection",
+      "target": "e2e",
+      "identity": "native_schema_publication::restart_before_finalization_keeps_the_next_attach_sequence_and_never_welcomes_the_old_connection",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_seed_copy_retry.rs::seed_begin_page_and_complete_keep_their_generation_and_pinned_snapshot_when_copy_waits",
+      "target": "e2e",
+      "identity": "native_seed_copy_retry::seed_begin_page_and_complete_keep_their_generation_and_pinned_snapshot_when_copy_waits",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_seed_copy_retry.rs::oversized_seed_page_fails_the_deduplicated_seed_operation_without_a_retry",
+      "target": "e2e",
+      "identity": "native_seed_copy_retry::oversized_seed_page_fails_the_deduplicated_seed_operation_without_a_retry",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_service.rs::native_writer_to_service_preserves_cells_hook_rollback_and_follow_up_across_process_kill",
+      "target": "e2e",
+      "identity": "native_service::native_writer_to_service_preserves_cells_hook_rollback_and_follow_up_across_process_kill",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_service.rs::opening_revocation_blocks_late_hello_and_nonholder_cannot_start_seed",
+      "target": "e2e",
+      "identity": "native_service::opening_revocation_blocks_late_hello_and_nonholder_cannot_start_seed",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_snapshot.rs::attached_websocket_source_resumes_same_install_after_process_kill_and_waits_for_reattachment",
+      "target": "e2e",
+      "identity": "native_snapshot::attached_websocket_source_resumes_same_install_after_process_kill_and_waits_for_reattachment",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_snapshot.rs::refused_snapshot_ready_rolls_back_hook_rows_and_follow_up_admission",
+      "target": "e2e",
+      "identity": "native_snapshot::refused_snapshot_ready_rolls_back_hook_rows_and_follow_up_admission",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_snapshot.rs::failed_installs_project_file_owned_positions_in_status_and_fresh_welcome",
+      "target": "e2e",
+      "identity": "native_snapshot::failed_installs_project_file_owned_positions_in_status_and_fresh_welcome",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_target_capability.rs::claim_uses_the_targets_accepted_support_and_replays_its_frozen_refusal",
+      "target": "e2e",
+      "identity": "native_target_capability::claim_uses_the_targets_accepted_support_and_replays_its_frozen_refusal",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_upgrade_refusal.rs::real_service_keeps_unknown_upgrade_refusal",
+      "target": "integration",
+      "identity": "native_upgrade_refusal::real_service_keeps_unknown_upgrade_refusal",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_upgrade_refusal.rs::real_service_keeps_expired_upgrade_refusal",
+      "target": "integration",
+      "identity": "native_upgrade_refusal::real_service_keeps_expired_upgrade_refusal",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_upgrade_refusal.rs::real_service_keeps_revoked_upgrade_refusal",
+      "target": "integration",
+      "identity": "native_upgrade_refusal::real_service_keeps_revoked_upgrade_refusal",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_upgrade_refusal.rs::real_service_keeps_wrong_kind_upgrade_refusal",
+      "target": "integration",
+      "identity": "native_upgrade_refusal::real_service_keeps_wrong_kind_upgrade_refusal",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_writer_bootstrap.rs::new_writer_resumes_converted_snapshot_after_process_kill_then_migrates_and_follows",
+      "target": "e2e",
+      "identity": "native_writer_bootstrap::new_writer_resumes_converted_snapshot_after_process_kill_then_migrates_and_follows",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_writer_bootstrap.rs::new_writer_resumes_published_snapshot_after_process_kill_before_reopen",
+      "target": "e2e",
+      "identity": "native_writer_bootstrap::new_writer_resumes_published_snapshot_after_process_kill_before_reopen",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_writer_cancel.rs::cancel_unanswered_release_restores_same_epoch_after_pruning_and_writer_reopen",
+      "target": "e2e",
+      "identity": "native_writer_cancel::cancel_unanswered_release_restores_same_epoch_after_pruning_and_writer_reopen",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_writer_cancel.rs::cancel_answered_release_while_copy_is_behind_prevents_fencing_and_resumes_writer",
+      "target": "e2e",
+      "identity": "native_writer_cancel::cancel_answered_release_while_copy_is_behind_prevents_fencing_and_resumes_writer",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_writer_cancel.rs::takeover_supersedes_a_cancelling_move_with_an_unanswered_withdrawal",
+      "target": "e2e",
+      "identity": "native_writer_cancel::takeover_supersedes_a_cancelling_move_with_an_unanswered_withdrawal",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/native_writer_move.rs::idle_writer_answers_release_and_clean_move_keeps_every_accepted_row",
+      "target": "e2e",
+      "identity": "native_writer_move::idle_writer_answers_release_and_clean_move_keeps_every_accepted_row",
+      "adaptation": "crate/path/module |"
+    },
+    {
+      "source": "tests/consumer/tests/status_acknowledgement.rs::empty_status_acknowledgement_uses_the_status_owner_and_replays_after_service_restart",
+      "target": "e2e",
+      "identity": "status_acknowledgement::empty_status_acknowledgement_uses_the_status_owner_and_replays_after_service_restart",
+      "adaptation": "crate/path/module |"
+    }
+  ]
+}
