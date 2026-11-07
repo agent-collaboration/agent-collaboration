@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Databases: one consolidated plan for both designs</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content"></ex-nav>
+<ex-document id="content">
+<h1>Databases: one consolidated plan for both designs</h1>
+<p>Your rule is to consolidate, not to add. Neither design adds a database, and both put their new data into stores that already exist. Central goes from several object types to one Fleet store plus one store per project, which is D1. Each Router ends up with <strong>one store for its link to central</strong>, <code>fleet.sqlite</code>, instead of two databases and three kinds of JSON file. It goes from 10 files plus project files down to at most 8, through D3 and D4b, with further merges checked in D3. This page covers the central storage reset design (codex-router) and the Fleet access design (agent-vm). Both Leads agree to it (the Fleet access Lead concurred with corrections, all folded in).</p>
+
+<ex-callout title="Rules both designs follow" tone="decision" icon="database">
+<p><strong>No new database file and no new storage crate.</strong> New data goes in as tables in an existing store, with a prefix for its concern. Every table gets a UUIDv7 primary key, <code>created_at</code> and <code>updated_at</code>, typed columns, and CHECK constraints only for booleans. A store is a separate file only when there's a written reason, and “it was added that way” isn't one. Re-enrollment clears named tables, never whole files.</p>
+</ex-callout>
+
+<h2 id="central">Central</h2>
+<table>
+<thead><tr><th>Before D1</th><th>After D1</th></tr></thead>
+<tbody>
+<tr><td>Registry object, one Connection object per machine, Mailbox object, Fleet object, project objects</td><td><strong>One Fleet store per organization</strong> (enrollments, leases, directory, Fleet outbox, journal); D1 serves one organization, and Fleet access keys the Fleet store by organization from its step B2 plus <strong>one store per project</strong>. Registry, Connection and Mailbox are deleted.</td></tr>
+</tbody>
+</table>
+<p>Fleet access adds <strong>tables only</strong>, inside each organization's Fleet store, from its step B2: the reshaped <code>machine_enrollments</code>, <code>machine_allowances</code>, <code>machine_activity</code>, <code>machine_presence</code> (who is logged in; name and full table list approved by the owner, 2026-11-04), <code>session_registrations</code>, <code>session_activity</code>, <code>session_isolation_records</code>, <code>session_remote_starts</code>, <code>organization_change_records</code>, and one task kind on the Fleet's existing journal (organization setup). There are no new objects.</p>
+<p>One database lives outside codex-router: the <strong>sign-in service's store</strong> (agent-vm switchboard; D1 on Cloudflare, SQLite on Node). It holds Better Auth's tables, the approved organization tables and <code>sign_in_audit</code>. It is separate, and you said that's fine. One pending choice would add tables there, not files: on Node, the sign-in setup task tables (<code>sign_in_task_*</code>). “One machine, one organization” is deferred by the owner (“solve this later”), so <code>sign_in_machine_claims</code> is not proposed for now.</p>
+
+<h2 id="router">Each Router</h2>
+<table>
+<thead><tr><th>File today</th><th>What it holds</th><th>Plan</th><th>Who</th></tr></thead>
+<tbody>
+<tr><td><code>interaction.sqlite</code></td><td>mail inbox and outbox, approvals, questions, history</td><td>keep; tables get one prefix per concern</td><td>D3</td></tr>
+<tr><td><code>fleet-cache.sqlite</code></td><td>what the Router learned from central, resume and install state</td><td>keep as <strong>the one store for this machine's link to central</strong>, renamed <code>fleet.sqlite</code> because it will hold more than a cache (this is today's <code>fleet-cache.sqlite</code>, not the withdrawn crate's file of the same name). It holds the login tables (<code>fleet_login</code>, <code>fleet_session_registrations</code>), the request queue (below), the caches, and resume and install state. Re-enrollment clears only the named cache tables, and never <code>fleet_login</code> or <code>fleet_session_registrations</code>.</td><td>D1 (reset fix), Fleet access (login tables)</td></tr>
+<tr><td><code>fleet-outbox.sqlite</code></td><td>not mail: a queue of the Router's requests to central (<code>fleet_outbox_requests</code>, <code>project_creation_inputs</code>)</td><td><strong>merge into that one store</strong> as <code>fleet_requests</code> (the Router's directory requests, kept until central decides; they survive re-enrollment and go to the new central) and <code>fleet_request_creation_inputs</code>. The answers central already gave are a cache and are cleared on re-enrollment. No reason for a second file has been found: both were added together and are opened side by side (<code>fleet_client.rs:110–111</code>).</td><td>D3</td></tr>
+<tr><td><code>fleet/enrollment.json</code></td><td>enrollment settings</td><td>untouched until Fleet access step 2 (production login still reads the whole file, credential included). At step 2 the enrollment facts move into <code>fleet_login</code>, and the file shrinks to the Cloudflare Access reference. At step 3 the file is deleted. D3 doesn't move or shrink it.</td><td>Fleet access</td></tr>
+<tr><td><code>machine-session/*.json</code>, <code>snapshot-install-attempts/*.json</code></td><td>connection resume and install-attempt state</td><td><strong>delete</strong>; it moves into tables in <code>fleet-cache.sqlite</code></td><td>D3</td></tr>
+<tr><td><code>automation.sqlite</code></td><td>local wakes and schedules</td><td><strong>delete</strong>; automations move to central</td><td>D4b</td></tr>
+<tr><td><code>provider-operations.sqlite</code></td><td>Claude and Cursor provider operations</td><td>keep; prefixes and keys. D3 checks whether it can join <code>interaction.sqlite</code>.</td><td>D3</td></tr>
+<tr><td><code>session-registry.sqlite</code></td><td>session lifecycle journal</td><td>keep; prefixes and keys. D3 checks whether it can join another store.</td><td>D3</td></tr>
+<tr><td><code>agent-proxy-ui.sqlite</code>, <code>agent-sessions-ui.sqlite</code></td><td>UI preferences for two tools</td><td>D3 checks merging them into one preferences store</td><td>D3</td></tr>
+<tr><td><code>state.sqlite</code></td><td>model proxy (accounts, quota, routing)</td><td>untouched: the proxy is protected</td><td>none</td></tr>
+<tr><td><code>projects/&lt;id&gt;/eN.sqlite</code></td><td>project content</td><td>untouched: project tables are out of scope</td><td>none</td></tr>
+</tbody>
+</table>
+
+<ex-callout title="A correction made today" tone="risk" icon="bug">
+<p>This morning I had agreed to a new <code>fleet-client.sqlite</code> for login, and Fleet access had already built a separate <code>fleet.sqlite</code> crate. Fleet access had also planned an Organization Registry store on central, per-organization authority objects and per-machine Connection presence. All of these are withdrawn in favour of tables in existing stores. I also found that the new enrollment reset deleted <code>fleet-cache.sqlite</code> as a whole file, which would have wiped the login tables. The Router lane is changing it in D1 to clear only the named cache tables.</p>
+</ex-callout>
+
+<ex-callout title="Decided: remote start to an offline machine" tone="decision" icon="clock">
+<p>Refused for now, with no queue and no redelivery, as a marked workaround until remote start is redesigned (owner, 2026-11-03: "make it clear in design it's a workaround, and in the code until redesign"). D2's Program Design follows this (d2-fleet-sends-and-remote-create.md).</p>
+</ex-callout>
+
+<h2 id="open">What D3 still decides</h2>
+<p>For each “D3 checks” row, D3 either merges the store or writes down the reason it stays separate. The likely reasons are a different writer process (the two UI tools run separately from the Host) and a store that must survive while another one is being reset. Each D3 decision goes to both Leads and to you before code.</p>
+</ex-document>
+</body>
+</html>

@@ -8,7 +8,7 @@ How D4a realizes U5, U6 (notification cadence), U14, U15, U16. Builds on D1's Fl
 
 ## Wakes: definitions only, firing from the definition
 
-`automation_wakes` (Fleet store) holds only what the owner or an agent defined:
+`automation_wakes` (Fleet store) holds only what the owner or an agent defined: A wake is addressed by machine and session only (owner, 2026-11-03: “wakes are different, they are based on session id and machine routing”). It has no workspace or project, unlike a schedule.
 
 | Column | Meaning |
 | --- | --- |
