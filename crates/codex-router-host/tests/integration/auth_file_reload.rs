@@ -7,8 +7,8 @@ use codex_router_host::{
     HostCoordinationPaths, HostDeadlines, HostRuntime, ManagedChildLaunchPlans,
     ManagedUpdateInputs, OperatorFrame, OperatorRequest,
 };
-use codex_router_test_support::router_health::PersistentRouterHealthFixture;
 use futures_util::{SinkExt, StreamExt};
+use router_peer_test_support::router_health::PersistentRouterHealthFixture;
 use serde_json::{Value, json};
 
 use crate::operator_client;

@@ -67,6 +67,7 @@ members = [
     "crates/codex-router-selection",
     "crates/codex-router-state",
     "crates/codex-router-test-support",
+    "crates/router-peer-test-support",
     "crates/owned-process-test-support",
     "prototypes/ux_prototype",
     "crates/workspace-architecture-check",

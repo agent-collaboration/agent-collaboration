@@ -11,23 +11,23 @@ workspace = true
 
 [dependencies]
 node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
-collaboration-client = { path = "../collaboration-client", version = "0.1.14" }
 codex-router-cli = { path = "../codex-router-cli", version = "0.1.4", features = ["keychain-test-support"] }
 codex-native-integration.workspace = true
 codex-router-core.workspace = true
 codex-router-proxy = { path = "../codex-router-proxy", version = "0.1.4" }
 codex-router-secret-store = { path = "../codex-router-secret-store", version = "0.1.4", features = ["test-support"] }
 codex-router-state = { path = "../codex-router-state", version = "0.1.4", features = ["sync-rusqlite-fixtures"] }
-futures-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sha2.workspace = true
 tokio.workspace = true
-tokio-util.workspace = true
-tokio-tungstenite.workspace = true
 tungstenite = "0.28.0"
 
 [dev-dependencies]
+router-peer-test-support = { path = "../router-peer-test-support", version = "0.1.134" }
+tokio-util.workspace = true
+sha2.workspace = true
+futures-util.workspace = true
+collaboration-client = { path = "../collaboration-client", version = "0.1.14" }
 owned-process-test-support = { path = "../owned-process-test-support", version = "0.1.126" }
 tempfile = "3.27.0"
 codex-router-secret-store = { path = "../codex-router-secret-store", version = "0.1.4", features = ["keychain-test-guard", "test-support"] }

@@ -5,7 +5,7 @@ use super::{
     fixture::{BoardFixture, at},
     legacy_publisher::{PublishLegacyFixtureRequest, publish_legacy_fixture_to_central},
 };
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use sha2::{Digest, Sha256};
 use std::{os::unix::fs::PermissionsExt, path::Path};
 

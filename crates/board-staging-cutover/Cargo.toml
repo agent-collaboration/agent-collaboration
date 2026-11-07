@@ -53,8 +53,9 @@ nix.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+codex-router-host = { workspace = true, features = ["keychain-test-support"] }
 codex-router-core.workspace = true
-codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.123" }
+router-peer-test-support = { path = "../router-peer-test-support", version = "0.1.123" }
 codex-native-integration.workspace = true
 axum.workspace = true
 collaboration-central-conformance = { path = "../collaboration-central-conformance", version = "0.1.123" }

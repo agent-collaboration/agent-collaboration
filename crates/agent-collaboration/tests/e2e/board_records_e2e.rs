@@ -46,8 +46,8 @@ mod scope_inbox;
 mod stopped_faults;
 
 use crate::takeover_readbacks;
-use codex_router_test_support::FixtureResult;
 use fixture::scenario;
+use router_peer_test_support::FixtureResult;
 use serde_json::json;
 
 #[expect(

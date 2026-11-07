@@ -4,9 +4,9 @@ use super::{
     owned_host::{BoardHost, StoppedHost},
 };
 use board_central_test_support::{EnrolledTestMachine, TestCentral};
-use codex_router_test_support::FixtureResult;
 use collaboration_client::protocol::InstallationIdentity;
 use owned_process_test_support::scenario_finalization::run_scenario;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 use std::{ops::AsyncFnOnce, os::unix::fs::DirBuilderExt, path::PathBuf, time::Duration};
 

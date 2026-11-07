@@ -18,7 +18,7 @@ mod takeover_prefixes;
 use crate::takeover_readbacks;
 #[path = "../board_e2e/takeover_recipients.rs"]
 mod takeover_recipients;
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use takeover_prefixes::ReplicatedPrefix;
 
 #[tokio::test]

@@ -1,6 +1,6 @@
 //! Shared literal setup for the board process journeys, always through public entry points.
 use super::fixture::{BoardFixture, accepted, at, fields, header, identity};
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 
 impl BoardFixture {

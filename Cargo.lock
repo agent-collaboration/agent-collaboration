@@ -205,7 +205,6 @@ dependencies = [
  "claude-code-peer-messaging",
  "codex-native-integration",
  "codex-router-host",
- "codex-router-test-support",
  "collaboration-application-test-support",
  "collaboration-central-admin-protocol",
  "collaboration-central-conformance",
@@ -238,6 +237,7 @@ dependencies = [
  "owned-process-test-support",
  "reqwest 0.12.28",
  "rmcp",
+ "router-peer-test-support",
  "runtime-primitives",
  "rustls",
  "serde",
@@ -1023,7 +1023,6 @@ dependencies = [
  "codex-router-core",
  "codex-router-host",
  "codex-router-secret-store",
- "codex-router-test-support",
  "collaboration-central-admin-protocol",
  "collaboration-central-conformance",
  "collaboration-central-core",
@@ -1050,6 +1049,7 @@ dependencies = [
  "message-board-storage",
  "nix",
  "reqwest 0.12.28",
+ "router-peer-test-support",
  "runtime-primitives",
  "rustix 1.1.4",
  "serde",
@@ -1424,6 +1424,7 @@ dependencies = [
  "clap",
  "codex-native-integration",
  "codex-router-auth",
+ "codex-router-cli",
  "codex-router-core",
  "codex-router-host",
  "codex-router-proxy",
@@ -1432,7 +1433,6 @@ dependencies = [
  "codex-router-secret-store",
  "codex-router-selection",
  "codex-router-state",
- "codex-router-test-support",
  "collaboration-central-core",
  "collaboration-central-tokio",
  "collaboration-client",
@@ -1455,6 +1455,7 @@ dependencies = [
  "opentelemetry_sdk",
  "owned-process-test-support",
  "reqwest 0.12.28",
+ "router-peer-test-support",
  "rustix 1.1.4",
  "serde",
  "serde_json",
@@ -1508,7 +1509,6 @@ dependencies = [
  "codex-router-core",
  "codex-router-host",
  "codex-router-secret-store",
- "codex-router-test-support",
  "collaboration-application-test-support",
  "collaboration-central-conformance",
  "collaboration-central-tokio",
@@ -1543,6 +1543,7 @@ dependencies = [
  "owned-process-test-support",
  "reqwest 0.12.28",
  "reqwest-websocket",
+ "router-peer-test-support",
  "runtime-primitives",
  "rustix 1.1.4",
  "serde",
@@ -1747,12 +1748,12 @@ dependencies = [
  "futures-util",
  "node-test-fixture",
  "owned-process-test-support",
+ "router-peer-test-support",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
  "tokio",
- "tokio-tungstenite",
  "tokio-util",
  "tungstenite 0.28.0",
 ]
@@ -5575,6 +5576,22 @@ checksum = "1dedc5658c6ecb3bdb5ef5f3295bb9253f42dcf3fd1402c03f6b1f7659c3c4a9"
 dependencies = [
  "bytemuck",
  "byteorder",
+]
+
+[[package]]
+name = "router-peer-test-support"
+version = "0.1.134"
+dependencies = [
+ "codex-router-core",
+ "collaboration-client",
+ "futures-util",
+ "owned-process-test-support",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
 ]
 
 [[package]]

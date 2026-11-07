@@ -6,9 +6,9 @@ use crate::{central_pair, fixture};
 mod readback;
 #[path = "../mail_retirement/wake_and_capacity.rs"]
 mod wake_and_capacity;
-use codex_router_test_support::{FixtureResult, owned_peer_fixture::PeerFixture};
 use collaboration_client::protocol::{EndpointRef, SessionRef};
 use owned_process_test_support::scenario_finalization::run_scenario;
+use router_peer_test_support::{FixtureResult, owned_peer_fixture::PeerFixture};
 use serde_json::json;
 
 #[tokio::test]

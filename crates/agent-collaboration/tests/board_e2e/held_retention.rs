@@ -6,10 +6,10 @@ use super::{
     notification_peer::NotificationPeer,
     takeover_readbacks::{deliveries, handoffs},
 };
-use codex_router_test_support::FixtureResult;
 use collaboration_client::protocol::{EndpointId, EndpointRef};
 use collaboration_protocol::{PushDeliveryState, PushRecord, PushRecordShowResult};
 use owned_process_test_support::scenario_finalization::run_scenario;
+use router_peer_test_support::FixtureResult;
 use serde_json::json;
 
 const CONTROL_BODY: &str = "row16 independent terminal history pruning control";

@@ -9,9 +9,9 @@ use board_central_test_support::{
     DispatchCallSelector, DispatchFaultObservation, DispatchKey, ObjectAddress, RuntimeControl,
 };
 use board_sync_protocol::BoardDeliveryTypes;
-use codex_router_test_support::FixtureResult;
 use fleet_protocol::{DeliveryItem, ReplicationPosition};
 use owned_process_test_support::scenario_finalization::run_scenario;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 use std::ops::AsyncFnOnce;
 

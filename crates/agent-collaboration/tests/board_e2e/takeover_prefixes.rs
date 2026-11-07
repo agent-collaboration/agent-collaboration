@@ -11,10 +11,10 @@ use super::{
 };
 use board_central_test_support::{DispatchCallSelector, ObjectAddress};
 use board_sync_protocol::{BoardAnnotation, BoardDeliveryTypes};
-use codex_router_test_support::FixtureResult;
 use fleet_project_writer::CapturedTransaction;
 use fleet_protocol::{DeliveryItem, ReplicationPosition, ReplicationRequest};
 use message_board_storage::CapturedProjectChanges;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 
 #[derive(Clone, Copy)]

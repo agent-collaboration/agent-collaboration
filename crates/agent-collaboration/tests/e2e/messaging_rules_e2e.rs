@@ -16,8 +16,8 @@ mod messaging_surface;
 #[path = "../board_e2e/messaging_uncertainty.rs"]
 mod messaging_uncertainty;
 
-use codex_router_test_support::FixtureResult;
 use messaging_fixture::mail_scenario;
+use router_peer_test_support::FixtureResult;
 
 #[tokio::test]
 async fn valid_until_expiry_is_visible_to_the_sender() -> FixtureResult {

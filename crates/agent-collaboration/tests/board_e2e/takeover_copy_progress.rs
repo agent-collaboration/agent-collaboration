@@ -5,7 +5,7 @@ use super::super::{
     takeover_controls::{self as controls, BOUND},
 };
 use board_central_test_support::{DispatchFaultObservation, ObjectAddress, RuntimeControl};
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use serde_json::Value;
 
 pub async fn copy_project(fixture: &mut BoardFixture) -> FixtureResult {

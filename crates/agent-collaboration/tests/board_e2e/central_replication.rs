@@ -4,7 +4,7 @@ use super::{
     fixture::{BoardFixture, accepted, at},
     records_reopen,
 };
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 
 pub async fn replication(fixture: &mut BoardFixture, reader: &mut SecondHost) -> FixtureResult {

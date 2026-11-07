@@ -2,8 +2,8 @@
 use super::{fixture::identity, messaging_fixture::MessagingCase, messaging_stopped_owner};
 use board_central_test_support::{MailWireEvent, MailWireObservation};
 use board_sync_protocol::BoardDeliveryTypes;
-use codex_router_test_support::FixtureResult;
 use fleet_protocol::{DeliveryRefusal, DeliveryTypes, PushResult};
+use router_peer_test_support::FixtureResult;
 use serde_json::json;
 use std::os::unix::fs::OpenOptionsExt;
 

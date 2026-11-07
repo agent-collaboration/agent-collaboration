@@ -194,7 +194,7 @@ async fn native_child_entrypoint() -> TestResult {
     let Some(socket) = std::env::var_os("CODEX_HOST_N1_NATIVE_SOCKET") else {
         return Ok(());
     };
-    codex_router_test_support::native_app_server::run_native_app_server_fixture(
+    router_peer_test_support::native_app_server::run_native_app_server_fixture(
         Path::new(&socket),
         "1.2.3",
         None,

@@ -1,8 +1,8 @@
 //! Prepare private fault input on stopped owners; read custody through the pinned SDK observer.
 use super::{native_sql::SqlHost, owned_host::StoppedHost};
-use codex_router_test_support::FixtureResult;
 use durable_steps::turso_store::TursoScope;
 use fleet_mail_delivery::test_support::DeliveryObservation;
+use router_peer_test_support::FixtureResult;
 use sqlx_turso::sqlx::{ConnectOptions, Connection};
 use std::os::unix::fs::OpenOptionsExt as _;
 

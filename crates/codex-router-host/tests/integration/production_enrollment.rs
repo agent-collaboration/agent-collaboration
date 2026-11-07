@@ -6,9 +6,9 @@ use codex_router_host::{
     HostCoordinationPaths, HostDeadlines, HostRuntime, HostedReadiness, ManagedChildLaunchPlans,
     ManagedUpdateInputs, OperatorFrame, OperatorRequest,
 };
-use codex_router_test_support::router_health::PersistentRouterHealthFixture;
 use collaboration_client::CollaborationClient;
 use message_board::public_replies::{RequestDecision, RequestResult, WriteReply};
+use router_peer_test_support::router_health::PersistentRouterHealthFixture;
 use std::{
     error::Error,
     io,
@@ -503,7 +503,7 @@ async fn production_enrollment_native_child() -> TestResult {
     let native =
         std::env::var_os("CODEX_ENROLLMENT_NATIVE_SOCKET").ok_or("native socket missing")?;
     let log = std::env::var_os("CODEX_ENROLLMENT_PROCESS_LOG").ok_or("process log missing")?;
-    codex_router_test_support::native_app_server::run_native_app_server_fixture(
+    router_peer_test_support::native_app_server::run_native_app_server_fixture(
         Path::new(&native),
         "1.2.3",
         Some(Path::new(&log)),

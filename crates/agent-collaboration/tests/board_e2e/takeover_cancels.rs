@@ -12,9 +12,9 @@ use super::{
 };
 use board_central_test_support::{DispatchCallSelector, ObjectAddress, RuntimeControl};
 use board_sync_protocol::BoardDeliveryTypes;
-use codex_router_test_support::FixtureResult;
 use collaboration_protocol::PushDeliveryState;
 use fleet_protocol::{DeliveryEnvelope, DeliveryItem};
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 
 #[path = "takeover_copy_progress.rs"]

@@ -574,7 +574,7 @@ async fn live_composed_cursor_native_mcp_requires_typed_call_and_router_result()
                 owned_host_endpoint_fixture().executable,
                 owned_host_endpoint_fixture().arguments,
             )?;
-            codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
+            router_peer_test_support::global_claude_fixture::declare_global_claude_fixture(
                 root.path(),
                 &mut binding.launch.environment,
             )?;

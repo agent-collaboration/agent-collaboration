@@ -1,8 +1,8 @@
 //! Two owned Hosts share real central enrollment; cache inspection requires a joined owner.
 use super::owned_host::BoardHost;
 use board_central_test_support::{EnrolledTestMachine, TestCentral};
-use codex_router_test_support::FixtureResult;
 use message_board::ActorOrigin;
+use router_peer_test_support::FixtureResult;
 use serde_json::json;
 use sqlx_turso::sqlx::{AssertSqlSafe, ConnectOptions, Connection, Row};
 use std::{os::unix::fs::DirBuilderExt, path::PathBuf, time::Duration};

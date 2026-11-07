@@ -10,7 +10,7 @@ mod mail_migration;
 #[path = "../board_e2e/mail_wakes.rs"]
 mod mail_wakes;
 use crate::owned_host;
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 
 #[tokio::test]
 async fn lm01_legacy_migration_retains_ids_terminal_answers_and_never_reinjects() -> FixtureResult {

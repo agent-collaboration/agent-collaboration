@@ -1,6 +1,6 @@
 //! BR09 / VD §5a U2,U26–31,U42,U47: continuations cross CLI/MCP without loss or duplication.
 use super::fixture::{BoardFixture, accepted, at, fields, header, human};
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 
 fn records(page: &Value, field: &str) -> FixtureResult<Vec<Value>> {

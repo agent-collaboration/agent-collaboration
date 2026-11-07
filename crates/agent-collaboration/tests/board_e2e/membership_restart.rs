@@ -1,6 +1,6 @@
 //! BR03 / S-R2-F1: one corrupt membership stays unavailable while its reader's healthy project works.
 use super::fixture::{BoardFixture, at, fields, header, human};
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 use sqlx_turso::sqlx::{ConnectOptions, Connection};
 

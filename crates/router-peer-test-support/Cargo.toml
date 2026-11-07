@@ -1,0 +1,24 @@
+[package]
+autotests = false
+name = "router-peer-test-support"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+collaboration-client = { path = "../collaboration-client", version = "0.1.14" }
+codex-router-core.workspace = true
+futures-util.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tokio-tungstenite.workspace = true
+
+[dev-dependencies]
+owned-process-test-support = { path = "../owned-process-test-support", version = "0.1.126" }
+tempfile = "3.27.0"

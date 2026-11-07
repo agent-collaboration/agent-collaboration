@@ -4,7 +4,7 @@ use super::{
     host_operator,
     offline_cli_fixture::TestResult,
 };
-use codex_router_test_support::router_health::PersistentRouterHealthFixture;
+use router_peer_test_support::router_health::PersistentRouterHealthFixture;
 use std::{
     os::unix::fs::OpenOptionsExt,
     path::{Path, PathBuf},

@@ -1,10 +1,11 @@
 //! Permanent real-peer lifetime and returned-error/panic reduction cases.
-use crate::{FixtureResult as ProofResult, owned_peer_fixture::PeerFixture};
+use crate::FixtureResult as ProofResult;
 use collaboration_client::protocol::EndpointRef;
 use futures_util::FutureExt as _;
 use owned_process_test_support::scenario_finalization::{
     CleanupFailures, MatrixError, ScenarioCleanupFailure, run_scenario as run_matrix_scenario,
 };
+use router_peer_test_support::owned_peer_fixture::PeerFixture;
 use serde_json::json;
 use sha2::{Digest as _, Sha256};
 use std::{

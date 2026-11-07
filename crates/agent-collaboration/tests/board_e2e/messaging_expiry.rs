@@ -1,6 +1,6 @@
 //! A production remote-wake item expires at its sender and never creates recipient work.
 use super::{messaging_fixture::MessagingCase, messaging_stopped_owner};
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use runtime_primitives::SyncTime;
 use serde_json::{Value, json};
 

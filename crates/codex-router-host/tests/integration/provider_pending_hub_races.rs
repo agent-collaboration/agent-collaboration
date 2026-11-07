@@ -50,7 +50,7 @@ async fn start_host(root: &Path) -> TestResult<CollaborationRuntime> {
                 provider,
                 vec![root.join("exit.sock").display().to_string()],
             )?;
-            codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
+            router_peer_test_support::global_claude_fixture::declare_global_claude_fixture(
                 root,
                 &mut binding.launch.environment,
             )?;

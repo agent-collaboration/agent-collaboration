@@ -18,8 +18,8 @@ use codex_router_host::OperatorFrame;
 use codex_router_host::OperatorRequest;
 use codex_router_host::TerminalClassification;
 use codex_router_host::inherited_lock_environment;
-use codex_router_test_support::native_app_server::run_native_app_server_fixture;
-use codex_router_test_support::router_health::PersistentRouterHealthFixture;
+use router_peer_test_support::native_app_server::run_native_app_server_fixture;
+use router_peer_test_support::router_health::PersistentRouterHealthFixture;
 
 use crate::operator_client;
 use operator_client::send_operator_request;

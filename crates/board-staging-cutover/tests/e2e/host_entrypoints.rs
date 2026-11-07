@@ -77,7 +77,7 @@ async fn owned_host_child() -> Result<(), Box<dyn std::error::Error>> {
 #[ignore = "owned native protocol child selected by the cutover Host fixture"]
 async fn owned_native_child() -> Result<(), Box<dyn std::error::Error>> {
     let root = declared_root()?;
-    codex_router_test_support::native_app_server::run_native_app_server_fixture(
+    router_peer_test_support::native_app_server::run_native_app_server_fixture(
         &root.join("native.sock"),
         "1.2.3",
         Some(&root.join("native-pids.log")),

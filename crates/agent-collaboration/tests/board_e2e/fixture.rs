@@ -1,7 +1,7 @@
 //! Per-scenario resources and literal board inputs shared by the process journeys.
 use super::owned_host::BoardHost;
-use codex_router_test_support::FixtureResult;
 use owned_process_test_support::scenario_finalization::run_scenario;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 use std::{
     ffi::OsStr, ops::AsyncFnOnce, os::unix::fs::DirBuilderExt, path::PathBuf, time::Duration,

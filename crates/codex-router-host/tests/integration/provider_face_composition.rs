@@ -68,7 +68,7 @@ async fn composed_acp_connection_admits_provider_without_codex_generation() {
         vec![ExternalProviderStartup::Launch({
             let mut binding = ExternalProviderLaunchBinding::claude(provider, Vec::new())
                 .expect("provider binding");
-            codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
+            router_peer_test_support::global_claude_fixture::declare_global_claude_fixture(
                 root.path(),
                 &mut binding.launch.environment,
             )
@@ -199,7 +199,7 @@ async fn app_server_socket_creates_and_prompts_with_the_owner_identity() {
         vec![ExternalProviderStartup::Launch({
             let mut binding = ExternalProviderLaunchBinding::claude(provider, Vec::new())
                 .expect("provider binding");
-            codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
+            router_peer_test_support::global_claude_fixture::declare_global_claude_fixture(
                 root.path(),
                 &mut binding.launch.environment,
             )

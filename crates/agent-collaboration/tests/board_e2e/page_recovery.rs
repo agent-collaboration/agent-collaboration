@@ -1,6 +1,6 @@
 //! BR04/05: unavailable aggregate members stay explicit and retain their unread resume positions.
 use super::fixture::{BoardFixture, at, fields, header, human, identity};
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 
 pub async fn main_post(

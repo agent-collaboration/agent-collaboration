@@ -5,10 +5,10 @@ use super::{
     messaging_stopped_owner, records_reopen,
 };
 use board_sync_protocol::BoardDeliveryBody;
-use codex_router_test_support::FixtureResult;
 use fleet_protocol::DeliveryEnvelope;
 use message_board::{IntentState, NotifyIntent, PostId};
 use message_board_storage::MailHandoffItem;
+use router_peer_test_support::FixtureResult;
 use serde_json::json;
 use std::time::Duration;
 

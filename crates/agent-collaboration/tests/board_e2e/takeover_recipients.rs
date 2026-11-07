@@ -1,8 +1,8 @@
 //! Real private Unix peers observe injections; finalization always joins both peers.
 use super::{central_pair::SecondHost, fixture::BoardFixture, owned_host::BoardHost};
-use codex_router_test_support::{FixtureResult, owned_peer_fixture::PeerFixture};
 use collaboration_protocol::SessionRef;
 use owned_process_test_support::scenario_finalization::run_scenario;
+use router_peer_test_support::{FixtureResult, owned_peer_fixture::PeerFixture};
 use serde_json::json;
 use std::{ops::AsyncFnOnce, os::unix::fs::DirBuilderExt, path::Path};
 

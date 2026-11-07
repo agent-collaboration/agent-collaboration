@@ -1,6 +1,6 @@
 //! BR02/06 / VD §5a U9,U10,U14,U42,U47: exact scope and ACK atomicity through real listeners.
 use super::fixture::{BoardFixture, at, fields, header, human, identity};
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 
 pub fn post_ids(page: &Value) -> FixtureResult<Vec<Value>> {

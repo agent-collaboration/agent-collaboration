@@ -66,7 +66,7 @@ async fn public_source_load_and_resume_use_exact_stored_policy_directory_and_app
                         provider,
                         vec![provider_log.display().to_string()],
                     )?;
-                    codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
+                    router_peer_test_support::global_claude_fixture::declare_global_claude_fixture(
                             &root_path,
                             &mut binding.launch.environment,
                         )?;

@@ -3,7 +3,7 @@ use super::{
     fixture::{BoardFixture, at, human},
     role_checks::{Roles, active, records, role_required},
 };
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 
 pub async fn authority_and_cardinality(fixture: &mut BoardFixture) -> FixtureResult {

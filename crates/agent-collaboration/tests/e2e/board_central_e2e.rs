@@ -17,8 +17,8 @@ mod central_replication;
 use crate::fixture;
 use crate::owned_host;
 use crate::records_reopen;
-use codex_router_test_support::FixtureResult;
 use legacy_upgrade_test_support::actual_cli as legacy_publisher;
+use router_peer_test_support::FixtureResult;
 
 #[tokio::test]
 async fn bc01_replicated_prefix_mapping_replay_and_owning_reopen() -> FixtureResult {

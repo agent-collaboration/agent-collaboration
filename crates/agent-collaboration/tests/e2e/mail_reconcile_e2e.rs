@@ -7,7 +7,7 @@ mod connected_status;
 
 use crate::fixture;
 
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 
 #[tokio::test]
 async fn connected_timer_repairs_lost_live_status_without_reconnect_or_another_send()

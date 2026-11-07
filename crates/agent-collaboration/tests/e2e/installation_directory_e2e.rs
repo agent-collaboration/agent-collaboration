@@ -3,9 +3,9 @@
 #[path = "../board_e2e/installation_directory_pair.rs"]
 mod installation_directory_pair;
 use crate::owned_host;
-use codex_router_test_support::FixtureResult;
 use installation_directory_pair::DirectoryPair;
 use owned_process_test_support::scenario_finalization::run_scenario;
+use router_peer_test_support::FixtureResult;
 
 #[tokio::test]
 async fn welcome_refresh_queues_a_never_looked_up_recipient_after_central_stops() -> FixtureResult {

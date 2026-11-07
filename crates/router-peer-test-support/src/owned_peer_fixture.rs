@@ -357,5 +357,5 @@ fn remove_created_artifacts(created_artifacts: &[PathBuf]) -> io::Result<()> {
 }
 
 #[cfg(test)]
-#[path = "owned_peer_fixture_tests.rs"]
+#[path = "owned_peer_fixture_test.rs"]
 mod tests;

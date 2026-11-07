@@ -89,7 +89,7 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
                     ],
                 )
                 .expect("Claude binding");
-                codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
+                router_peer_test_support::global_claude_fixture::declare_global_claude_fixture(
                     root.path(),
                     &mut binding.launch.environment,
                 )
@@ -343,7 +343,7 @@ async fn host_composed_permission_push_preserves_selected_option_through_provide
                     ],
                 )
                 .expect("requester binding");
-                codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
+                router_peer_test_support::global_claude_fixture::declare_global_claude_fixture(
                     root.path(),
                     &mut binding.launch.environment,
                 )

@@ -2,7 +2,7 @@
 #![deny(clippy::too_many_lines)]
 use super::fixture::{BoardFixture, accepted, at, fields, header, human, identity};
 use super::repository_fixture::{attach_repository, repository_cli};
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 use sqlx_turso::sqlx::{ConnectOptions, Connection, Row};
 use std::path::Path;

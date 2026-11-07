@@ -50,7 +50,7 @@ async fn collaboration_api_reaches_host_owned_provider_and_reuses_target() {
         vec![ExternalProviderStartup::Launch({
             let mut binding = ExternalProviderLaunchBinding::claude(provider, Vec::new())
                 .expect("provider binding");
-            codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
+            router_peer_test_support::global_claude_fixture::declare_global_claude_fixture(
                 root.path(),
                 &mut binding.launch.environment,
             )
@@ -226,7 +226,7 @@ async fn provider_process_exit_retires_advertisement_and_rejects_new_admission()
                 vec![barrier_path.display().to_string()],
             )
             .expect("binding");
-            codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
+            router_peer_test_support::global_claude_fixture::declare_global_claude_fixture(
                 root.path(),
                 &mut binding.launch.environment,
             )

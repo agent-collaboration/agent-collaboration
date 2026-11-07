@@ -4,7 +4,7 @@ use super::{
     central_replication::matching_posts,
     fixture::{BoardFixture, accepted, at, fields, identity},
 };
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 
 pub async fn verified_origin(fixture: &mut BoardFixture, sender: &mut SecondHost) -> FixtureResult {

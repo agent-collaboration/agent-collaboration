@@ -27,8 +27,8 @@ use codex_router_host::RecoveryBudget;
 use codex_router_host::RouterCondition;
 use codex_router_host::SelectedHostPort;
 use codex_router_host::TerminalClassification;
-use codex_router_test_support::native_app_server::run_native_app_server_fixture;
-use codex_router_test_support::router_health::PersistentRouterHealthFixture;
+use router_peer_test_support::native_app_server::run_native_app_server_fixture;
+use router_peer_test_support::router_health::PersistentRouterHealthFixture;
 
 use crate::operator_client;
 use operator_client::send_operator_request;

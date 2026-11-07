@@ -8,8 +8,8 @@ use super::super::{
     takeover_recipients::Recipients,
 };
 use super::{FrontierCut, HeldFollow, RemoteEndPrefix, assert_end_groups};
-use codex_router_test_support::FixtureResult;
 use collaboration_protocol::PushDeliveryState;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 
 #[derive(Debug, serde::Deserialize)]

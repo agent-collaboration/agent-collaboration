@@ -1,6 +1,6 @@
 //! Named faults touch only an owned native fixture after its Host has exited.
 use super::fixture::BoardFixture;
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use serde_json::Value;
 use sqlx_turso::sqlx::{ConnectOptions, Connection};
 

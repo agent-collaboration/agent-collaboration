@@ -1,6 +1,6 @@
 //! A real Unix peer write whose journal receipt cannot commit remains uncertain.
 use super::{messaging_fixture::MessagingCase, messaging_stopped_owner};
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use serde_json::json;
 
 pub async fn carrier_receipt_is_lost(scope: &mut MessagingCase<'_>) -> FixtureResult {

@@ -1,6 +1,6 @@
 //! Actual CLI/MCP requests and bounded public sender observations.
 use super::messaging_fixture::MessagingCase;
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 use std::{ffi::OsStr, time::Duration};
 

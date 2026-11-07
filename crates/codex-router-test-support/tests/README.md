@@ -10,6 +10,9 @@ cargo nextest run --locked --profile ci -p codex-router-test-support
 The external root holds opt-in installed-Codex scenarios; both retain their ignored status. Other library unit tests remain colocated with their implementations. The 15 owned-process
 and finalization cases stay in their original library modules to preserve their identities;
 their helpers are implemented by owned-process-test-support, a dev-dependency.
+Scripted Router and peer fixtures, including the 11 peer lifetime cases, live in
+router-peer-test-support. The retained finalization tests use it only as a
+dev-dependency.
 
 Each aggregate declares shared helper implementations once. Existing fixture
 directories remain in place. Only nonempty test categories are declared in

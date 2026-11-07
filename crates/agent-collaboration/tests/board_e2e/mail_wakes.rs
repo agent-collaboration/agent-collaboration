@@ -1,6 +1,6 @@
 //! LM04/LM05: creator-bound slots and due-relative ends through real listeners.
 use super::mail_fixture::{MailFixture, at, identity, set_field};
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 use std::time::Duration;
 

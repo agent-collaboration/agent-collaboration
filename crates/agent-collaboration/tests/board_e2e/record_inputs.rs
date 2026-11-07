@@ -1,6 +1,6 @@
 //! Literal fact, task and trail inputs shared by BR07/08; no product rule implementation.
 use super::fixture::{BoardFixture, accepted, at, identity};
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 
 pub fn reference(kind: &str, id: &str) -> Value {

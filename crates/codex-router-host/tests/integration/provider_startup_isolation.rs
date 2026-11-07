@@ -60,7 +60,7 @@ async fn missing_executable_isolated_from_other_provider_and_codex() {
                     Vec::new(),
                 )
                 .expect("Claude binding");
-                codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
+                router_peer_test_support::global_claude_fixture::declare_global_claude_fixture(
                     root.path(),
                     &mut binding.launch.environment,
                 )
@@ -138,7 +138,7 @@ async fn failed_initialize_isolated_from_other_provider() {
             ExternalProviderStartup::Launch({
                 let mut binding = ExternalProviderLaunchBinding::claude(failing, Vec::new())
                     .expect("Claude binding");
-                codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
+                router_peer_test_support::global_claude_fixture::declare_global_claude_fixture(
                     root.path(),
                     &mut binding.launch.environment,
                 )

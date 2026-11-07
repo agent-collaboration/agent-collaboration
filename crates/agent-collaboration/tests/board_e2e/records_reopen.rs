@@ -1,6 +1,6 @@
 //! BR07/08/10/11 records overlay: PD2 §3a keys/schema and VD §2 owning reopen.
 use super::fixture::BoardFixture;
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use sqlx_turso::sqlx::{AssertSqlSafe, ConnectOptions, Connection, Row};
 use std::{collections::BTreeMap, path::PathBuf};
 

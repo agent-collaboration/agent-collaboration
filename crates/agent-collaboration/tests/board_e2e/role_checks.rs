@@ -1,6 +1,6 @@
 //! Public role mutations and independent assignment/history readbacks shared by journeys.
 use super::fixture::{BoardFixture, accepted, at, decision};
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 
 pub fn role_required(requirement: Value) -> Value {

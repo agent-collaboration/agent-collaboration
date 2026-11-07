@@ -1,8 +1,8 @@
 //! Owned child adapter around the single shared authenticated Rust peer fixture.
 #![deny(clippy::too_many_lines)]
 use super::owned_host::artifact_command;
-use codex_router_test_support::{FixtureResult, owned_peer_fixture::PeerFixture};
 use collaboration_client::protocol::{EndpointRef, SessionId, SessionRef};
+use router_peer_test_support::{FixtureResult, owned_peer_fixture::PeerFixture};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::OpenOptions,

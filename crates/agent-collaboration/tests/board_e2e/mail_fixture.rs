@@ -1,7 +1,7 @@
 //! Owned local-mail resources; public Host access stays in B's shared launcher.
 use super::owned_host::{BoardHost, StoppedHost};
-use codex_router_test_support::{FixtureResult, owned_peer_fixture::PeerFixture};
 use owned_process_test_support::scenario_finalization::run_scenario;
+use router_peer_test_support::{FixtureResult, owned_peer_fixture::PeerFixture};
 use serde_json::{Value, json};
 use std::{
     ffi::OsStr,

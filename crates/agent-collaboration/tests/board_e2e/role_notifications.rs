@@ -5,11 +5,11 @@ use super::{
     notification_peer::NotificationPeer,
     role_checks::Roles,
 };
-use codex_router_test_support::FixtureResult;
 use collaboration_client::protocol::{EndpointId, EndpointRef, RouterLink, SessionRef};
 use owned_process_test_support::{
     owned_cli_process::run_cli_output, scenario_finalization::run_scenario,
 };
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 use std::{ffi::OsStr, path::Path, time::Duration};
 

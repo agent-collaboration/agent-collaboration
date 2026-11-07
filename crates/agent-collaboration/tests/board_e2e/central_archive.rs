@@ -4,8 +4,8 @@ use super::{
     central_replication::matching_posts,
     fixture::{BoardFixture, at, fields, header, identity},
 };
-use codex_router_test_support::FixtureResult;
 use message_board_storage::{MachineNoticeProgressObservation, observe_machine_notice_progress};
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
 

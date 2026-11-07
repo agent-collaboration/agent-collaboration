@@ -1,7 +1,7 @@
 //! Public identity conflicts and a real lost mailbox reply preserve one recipient effect.
 use super::{messaging_fixture::MessagingCase, messaging_stopped_owner};
 use board_central_test_support::{DispatchCallSelector, ObjectAddress, RuntimeControl};
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 
 const DELIVERED: &str = "peerMessageWritten";

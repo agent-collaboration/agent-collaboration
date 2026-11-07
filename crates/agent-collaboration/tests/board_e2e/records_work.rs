@@ -3,7 +3,7 @@ use super::{
     fixture::{BoardFixture, accepted, at, decision, fields, header, identity},
     record_inputs::evaluator,
 };
-use codex_router_test_support::FixtureResult;
+use router_peer_test_support::FixtureResult;
 use serde_json::{Value, json};
 
 fn reasons(reply: &Value) -> FixtureResult<Vec<Value>> {

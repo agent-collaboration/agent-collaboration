@@ -1,6 +1,6 @@
 //! Owned process and public listener access for the real board Host fixture.
-use codex_router_test_support::FixtureResult;
 use owned_process_test_support::owned_cli_process::run_cli_output;
+use router_peer_test_support::FixtureResult;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{

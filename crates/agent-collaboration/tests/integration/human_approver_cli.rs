@@ -39,7 +39,7 @@ async fn cli_human_approver_from_create_can_decide_provider_permission() -> Test
         },
         vec![ExternalProviderStartup::Launch({
             let mut binding = ExternalProviderLaunchBinding::claude(provider_path, vec![])?;
-            codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
+            router_peer_test_support::global_claude_fixture::declare_global_claude_fixture(
                 root.path(),
                 &mut binding.launch.environment,
             )?;

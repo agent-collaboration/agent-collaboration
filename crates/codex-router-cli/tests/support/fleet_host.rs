@@ -50,7 +50,7 @@ where
     Observe: for<'host> std::ops::AsyncFnOnce(&'host OwnedHost) -> TestResult,
 {
     let router =
-        codex_router_test_support::router_health::PersistentRouterHealthFixture::start().await?;
+        router_peer_test_support::router_health::PersistentRouterHealthFixture::start().await?;
     let host = match OwnedHost::spawn(root, router.address()) {
         Ok(host) => host,
         Err(error) => {
@@ -62,7 +62,7 @@ where
         (host, router),
         async |(host, _): &mut (
             OwnedHost,
-            codex_router_test_support::router_health::PersistentRouterHealthFixture,
+            router_peer_test_support::router_health::PersistentRouterHealthFixture,
         )| {
             observe(host)
                 .await
@@ -218,7 +218,7 @@ async fn native_child() -> TestResult {
     let native =
         std::env::var_os("CODEX_ENROLLMENT_NATIVE_SOCKET").ok_or("native socket missing")?;
     let log = std::env::var_os("CODEX_ENROLLMENT_PROCESS_LOG").ok_or("process log missing")?;
-    codex_router_test_support::native_app_server::run_native_app_server_fixture(
+    router_peer_test_support::native_app_server::run_native_app_server_fixture(
         Path::new(&native),
         "1.2.3",
         Some(Path::new(&log)),

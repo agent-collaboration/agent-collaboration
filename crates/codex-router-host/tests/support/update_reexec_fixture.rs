@@ -20,7 +20,7 @@ use codex_router_host::OperatorFrame;
 use codex_router_host::OperatorRequest;
 use codex_router_host::TerminalClassification;
 use codex_router_host::UpdateDeadlines;
-use codex_router_test_support::router_health::PersistentRouterHealthFixture;
+use router_peer_test_support::router_health::PersistentRouterHealthFixture;
 
 use super::operator_client::send_operator_request;
 

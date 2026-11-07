@@ -76,13 +76,14 @@ unicode-width.workspace = true
 ui-preference-store = { path = "../ui-preference-store", version = "0.1.118" }
 
 [dev-dependencies]
+codex-router-cli = { path = ".", features = ["keychain-test-support"] }
 codex-router-quota-reset-test-harness = { path = "../codex-router-quota-reset-test-harness", version = "0.1.126", default-features = false }
 agent-collaboration-tui = { workspace = true, features = ["test-support"] }
 owned-process-test-support = { path = "../owned-process-test-support", version = "0.1.126" }
 agent-router-quota-tui = { version = "0.1.105", path = "../agent-router-quota-tui", features = ["test-support"] }
 codex-router-quota-service = { version = "0.1.105", path = "../codex-router-quota-service", features = ["test-support"] }
 board-central-test-support = { path = "../board-central-test-support", version = "0.1.96" }
-codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.96" }
+router-peer-test-support = { path = "../router-peer-test-support", version = "0.1.96" }
 tempfile = "3.27.0"
 codex-router-host = { path = "../codex-router-host", version = "0.1.4", features = ["keychain-test-support"] }
 collaboration-client = { path = "../collaboration-client", version = "0.1.14" }
