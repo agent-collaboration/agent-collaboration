@@ -20,6 +20,9 @@ pub fn router_fleet_database(root: &Path) -> PathBuf {
     crate::router_collaboration_directory(root).join(FleetStore::FILE_NAME)
 }
 
+/// Settings files step 0007 carries into `settings.jsonc` and then removes.
+const LEGACY_SETTINGS_FILES: [&str; 2] = ["providers.json", "ports.json"];
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RouterUpdateRequirement {
     NotRequired,
@@ -39,6 +42,8 @@ pub enum RequiredRouterUpdate {
     BothFleetDatabaseNames { current: PathBuf, former: PathBuf },
     /// A store the update merges or renames away is still here after its step.
     LegacyStoreRemains { path: PathBuf },
+    /// A settings file the update carries into `settings.jsonc` is still here.
+    LegacySettingsFile { path: PathBuf },
 }
 
 impl std::fmt::Display for RequiredRouterUpdate {
@@ -72,6 +77,11 @@ impl std::fmt::Display for RequiredRouterUpdate {
                 "{} is left from an older layout; run agent-router-update with the Host stopped",
                 path.display()
             ),
+            Self::LegacySettingsFile { path } => write!(
+                formatter,
+                "{} is an older settings file the Host no longer reads; run agent-router-update with the Host stopped to carry it into settings.jsonc",
+                path.display()
+            ),
         }
     }
 }
@@ -93,6 +103,17 @@ pub async fn inspect_router_update_requirement(
     let former = router_fleet_cache_database(root);
     // An unreadable existence check counts as present, so the guard fails closed.
     let exists = |path: &Path| path.try_exists().unwrap_or(true);
+    // The Host reads settings.jsonc only, so an older settings file means step 0007
+    // hasn't carried it yet, even on a root whose Fleet database was never opened.
+    if let Some(path) = LEGACY_SETTINGS_FILES
+        .iter()
+        .map(|file| root.join(file))
+        .find(|path| exists(path))
+    {
+        return Ok(RouterUpdateRequirement::Required(
+            RequiredRouterUpdate::LegacySettingsFile { path },
+        ));
+    }
     let (current_exists, former_exists) = (exists(&current), exists(&former));
     if current_exists && former_exists {
         return Ok(RouterUpdateRequirement::Required(

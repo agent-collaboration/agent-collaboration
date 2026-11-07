@@ -32,6 +32,14 @@ pub enum RouterUpdateError {
         "{path} still has a write-ahead log or shared-memory file after the checkpoint; the rename stopped so no committed row is lost"
     )]
     LogRemainsAfterCheckpoint { path: PathBuf },
+    #[error(
+        "both {settings} and {older} exist, and {settings} was not written from it by an update; keep the settings you want in {settings}, move {older} aside, then run agent-router-update again"
+    )]
+    SettingsConflict { settings: PathBuf, older: PathBuf },
+    #[error(
+        "{path} is not valid settings JSON ({message}); fix or move it aside, then run agent-router-update again"
+    )]
+    MalformedSettingsFile { path: PathBuf, message: String },
     #[error("{store}: {source}")]
     Store {
         store: PathBuf,

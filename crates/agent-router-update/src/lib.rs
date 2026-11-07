@@ -22,10 +22,12 @@ mod project_transform;
 mod rename_step;
 mod root_layout;
 mod router_update;
+mod settings_step;
 pub use root_layout::RouterUpdateError;
 pub use router_update::{
     PendingUpdateStep, PlannedChange, RouterUpdatePlan, plan_router_update, run_router_update,
 };
+pub use settings_step::{MachineListChange, SettingsChange, SettingsFileChange};
 mod update_barrier;
 mod upgrade_prepare;
 mod upgrade_report;

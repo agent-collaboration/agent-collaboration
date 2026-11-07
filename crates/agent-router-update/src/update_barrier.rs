@@ -20,6 +20,16 @@ pub(crate) enum UpdateBarrier {
     SourceRemoved(LegacyFleetSource),
     /// Step 0005 recorded itself done.
     MergeDone,
+    /// Step 0007 renamed the complete `settings.jsonc` into place, before the ledger row.
+    SettingsFileWritten,
+    /// Step 0007 recorded `settings.jsonc` written.
+    SettingsRecordedWritten,
+    /// Step 0007 removed one carried old settings file.
+    SettingsOldFileRemoved,
+    /// Step 0007 renamed `routers.jsonc` to `agent-sessions.jsonc`.
+    MachineListRenamed,
+    /// Step 0007 recorded itself done.
+    SettingsDone,
     /// Step 0010 recorded itself in progress, before the checkpoint.
     RenameBeforeCheckpoint,
     /// Step 0010 checkpointed and closed the store, before the rename.
@@ -47,6 +57,11 @@ impl UpdateBarrier {
             Self::SourceDatabaseRemoved(source) => source_marker(source, "database-removed"),
             Self::SourceRemoved(source) => source_marker(source, "removed"),
             Self::MergeDone => "step-0005:done".to_owned(),
+            Self::SettingsFileWritten => "step-0007:settings-written".to_owned(),
+            Self::SettingsRecordedWritten => "step-0007:recorded-written".to_owned(),
+            Self::SettingsOldFileRemoved => "step-0007:old-file-removed".to_owned(),
+            Self::MachineListRenamed => "step-0007:machine-list-renamed".to_owned(),
+            Self::SettingsDone => "step-0007:done".to_owned(),
             Self::RenameBeforeCheckpoint => "step-0010:before-checkpoint".to_owned(),
             Self::RenameCheckpointed => "step-0010:checkpointed".to_owned(),
             Self::Renamed => "step-0010:renamed".to_owned(),
