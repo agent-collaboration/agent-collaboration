@@ -1,6 +1,8 @@
 //! Per-project native Turso stores and the Router's fleet/local storage.
 mod cursor_store;
 mod fleet_cache;
+#[cfg(feature = "test-support")]
+pub use fleet_cache::{MachineNoticeProgressObservation, observe_machine_notice_progress};
 mod fleet_outbox;
 mod fleet_record_codec;
 mod fleet_storage_error;

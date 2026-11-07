@@ -49,6 +49,22 @@ pub(crate) struct SessionAlarmObservation {
     peer: PeerId,
     session_id: SessionId,
     alarm_at_millis: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    logical_now_millis: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    holder_reply_deadline_millis: Option<String>,
+}
+
+impl SessionAlarmObservation {
+    pub(crate) fn with_holder_deadline(
+        mut self,
+        now: SyncTime,
+        deadline: Option<SyncTime>,
+    ) -> Self {
+        self.logical_now_millis = Some(now.unix_millis().to_string());
+        self.holder_reply_deadline_millis = deadline.map(|at| at.unix_millis().to_string());
+        self
+    }
 }
 
 impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
@@ -189,6 +205,8 @@ impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
             peer: attachment.peer,
             session_id,
             alarm_at_millis: alarm.map(|at| at.to_string()),
+            logical_now_millis: None,
+            holder_reply_deadline_millis: None,
         })
     }
 }

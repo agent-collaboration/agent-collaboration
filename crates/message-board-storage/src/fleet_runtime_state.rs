@@ -10,8 +10,13 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 mod legacy;
 #[path = "fleet_link_rows.rs"]
 mod links;
+#[cfg(feature = "test-support")]
+#[path = "fleet_notice_progress_observer.rs"]
+mod observation;
 #[path = "fleet_session_rows.rs"]
 mod sessions;
+#[cfg(feature = "test-support")]
+pub use observation::{MachineNoticeProgressObservation, observe_machine_notice_progress};
 #[cfg(test)]
 #[path = "fleet_runtime_state_test.rs"]
 mod tests;

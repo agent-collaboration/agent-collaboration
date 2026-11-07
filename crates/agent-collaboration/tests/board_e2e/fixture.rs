@@ -49,6 +49,28 @@ pub fn accepted(reply: &Value) -> FixtureResult<&Value> {
     Ok(decision)
 }
 
+pub fn assert_enrolled_installation(
+    expected: &collaboration_client::protocol::InstallationIdentity,
+    reply: Value,
+    endpoint: &str,
+) -> FixtureResult {
+    let actual: collaboration_client::protocol::InstallationIdentity =
+        serde_json::from_value(reply)?;
+    if actual.service_id != expected.service_id
+        || actual.machine_label != expected.machine_label
+        || actual.peer_id != expected.peer_id
+    {
+        return Err(format!("installation identity changed after enrollment: {actual:?}").into());
+    }
+    let record = actual.central.record().ok_or_else(|| {
+        format!("enrolled installation has no available central observation: {actual:?}")
+    })?;
+    if record.peer.to_string() != expected.peer_id.as_str() || record.endpoint != endpoint {
+        return Err(format!("central observation differs from this enrollment: {record:?}").into());
+    }
+    Ok(())
+}
+
 pub struct BoardFixture {
     pub root: tempfile::TempDir,
     pub directory: PathBuf,
@@ -128,9 +150,16 @@ impl BoardFixture {
         self.installation = Some(installation.clone());
         self.reopen_host().await?;
         let reply = self.host()?.mcp("installation_show", json!({})).await?;
-        if reply != serde_json::to_value(&installation)? {
-            return Err(format!("installation changed after enrollment: {reply}").into());
-        }
+        assert_enrolled_installation(
+            &installation,
+            reply,
+            self.central
+                .as_ref()
+                .ok_or("central absent")?
+                .session_inputs()?
+                .endpoint
+                .as_str(),
+        )?;
         tokio::time::timeout(Duration::from_secs(20), async {
             while !self
                 .central

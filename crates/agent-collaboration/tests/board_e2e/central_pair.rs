@@ -63,10 +63,11 @@ impl SecondHost {
         );
         self.installation = Some(installation.clone());
         self.reopen_host().await?;
-        assert_eq!(
+        fixture::assert_enrolled_installation(
+            &installation,
             self.host()?.mcp("installation_show", json!({})).await?,
-            serde_json::to_value(installation)?
-        );
+            self.enrolled_machine()?.session_inputs()?.endpoint.as_str(),
+        )?;
         let machine = self.enrolled_machine()?;
         tokio::time::timeout(Duration::from_secs(20), async {
             while machine.session_connections() != 1 {

@@ -15,6 +15,107 @@ use codex_router_host::TerminalClassification;
 use super::*;
 
 #[test]
+fn central_refusal_is_named_in_readiness_without_changing_local_readiness() {
+    use serde_json::json;
+    for (remote_control, classification, baseline) in [
+        (
+            RemoteControlCondition::Connected,
+            TerminalClassification::Ready,
+            "ready",
+        ),
+        (
+            RemoteControlCondition::Unavailable,
+            TerminalClassification::LocalReadyRemoteDegraded,
+            "local ready (Remote Control degraded)",
+        ),
+    ] {
+        let snapshot = HostSnapshot::new(HostSnapshotDimensions {
+            phase: HostPhase::Steady,
+            router: RouterCondition::ExternalReachable,
+            app_server: AppServerCondition::NativeReady {
+                running_version: "1.2.3".to_owned(),
+            },
+            remote_control,
+            remote_control_identity: None,
+            executable_relation: ExecutableRelation::Match,
+            router_executable_relation: codex_router_host::RouterExecutableRelation::Match,
+            recovery_budget: RecoveryBudget::Available,
+            last_lifecycle_outcome: None,
+        });
+        let readiness = snapshot.hosted_readiness();
+        for (state, refusal) in [
+            (
+                json!({"kind":"refused","reason":"identityInUseElsewhere","at":"2026-11-06T12:00:00Z"}),
+                Some("IdentityInUseElsewhere"),
+            ),
+            (
+                json!({"kind":"refused","reason":{"credentialRejected":{"reason":"unknown"}},"at":"2026-11-06T12:00:00Z"}),
+                Some("CredentialRejected { reason: Unknown }"),
+            ),
+            (
+                json!({"kind":"connected","since":"2026-11-06T12:00:00Z","lastContact":"2026-11-06T12:00:20Z"}),
+                None,
+            ),
+            (
+                json!({"kind":"connecting","since":"2026-11-06T12:00:00Z","attempts":2}),
+                None,
+            ),
+            (
+                json!({"kind":"disconnected","since":"2026-11-06T12:00:00Z"}),
+                None,
+            ),
+        ] {
+            // Arrange: decode the actual operator snapshot shape, with one link
+            // observation shared by the central line and both readiness summaries.
+            let mut wire = serde_json::to_value(&snapshot).unwrap();
+            wire["fleet"] = json!({"kind":"available","central":{
+                "peer":"019f0000-0000-7000-8000-000000008131",
+                "endpoint":"wss://central.example/session","instance":0,"connection":1,"revision":2,
+                "state":state
+            },"stuckMail":{"kind":"empty"}});
+            let actual: HostSnapshot = serde_json::from_value(wire).unwrap();
+            let mut output = Vec::new();
+
+            // Act: use the complete status presenter that operators consume.
+            render_terminal_frame(
+                &mut output,
+                &[OperatorFrame::terminal(HostTerminalResponse::new(
+                    OperatorRequest::Status,
+                    classification,
+                    actual.clone(),
+                    "status".to_owned(),
+                ))],
+            )
+            .unwrap();
+
+            // Assert: refusal is visible in both summaries; transient states keep
+            // their text and no presentation decision changes ready-gating state.
+            let rendered = String::from_utf8(output).unwrap();
+            let expected = refusal.map_or_else(
+                || baseline.to_owned(),
+                |reason| {
+                    if remote_control == RemoteControlCondition::Connected {
+                        format!("local ready (central refused: {reason})")
+                    } else {
+                        format!("local ready (Remote Control degraded, central refused: {reason})")
+                    }
+                },
+            );
+            for field in ["result", "readiness"] {
+                assert!(
+                    rendered
+                        .lines()
+                        .any(|line| line == format!("{field}: {expected}")),
+                    "{rendered}"
+                );
+            }
+            assert!(rendered.lines().any(|line| line == "phase: steady"));
+            assert_eq!(actual.hosted_readiness(), readiness);
+        }
+    }
+}
+
+#[test]
 fn central_status_shows_contact_drop_and_stuck_mail_age() {
     let central: collaboration_protocol::FleetLinkRecord = serde_json::from_value(serde_json::json!({
         "peer":"019f0000-0000-7000-8000-000000008131", "endpoint":"wss://central.example/session",

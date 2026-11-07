@@ -27,6 +27,8 @@ pub use rebuild::FleetCacheRebuild;
 #[path = "fleet_runtime_state.rs"]
 mod runtime;
 pub use runtime::SnapshotInstallAttempt;
+#[cfg(feature = "test-support")]
+pub use runtime::{MachineNoticeProgressObservation, observe_machine_notice_progress};
 
 static CACHE_MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./fleet_cache_migrations");
 

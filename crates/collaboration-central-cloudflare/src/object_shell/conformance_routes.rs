@@ -196,13 +196,15 @@ impl ShellActor {
             .map(Some);
         }
         if request.path() == "/test/session-alarm" {
-            if !matches!(runtime, RuntimeFace::Fleet(_)) {
+            let RuntimeFace::Fleet(runtime) = runtime else {
                 return Err(error("alarm observation requires a Connection object"));
-            }
+            };
+            let (now, deadline) = runtime.conformance_holder_deadline().map_err(error)?;
             return Response::from_json(
                 &host
                     .conformance_session_alarm(request.json().await?)
-                    .await?,
+                    .await?
+                    .with_holder_deadline(now, deadline),
             )
             .map(Some);
         }

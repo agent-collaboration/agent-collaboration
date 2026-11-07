@@ -41,7 +41,13 @@ async fn installation_show_transmits_the_observed_central_record_over_mcp() {
     // Assert: returning identity alone or dropping refusal details must fail.
     assert_ne!(result.is_error, Some(true));
     let identity = result.structured_content.expect("installation identity");
+    assert!(
+        emitted_result_schema_tests::advertised_output_validator("installation_show")
+            .is_valid(&identity),
+        "advertised installation schema rejected the real MCP result: {identity}"
+    );
     assert_eq!(identity["peerId"], peer.to_string());
+    assert_eq!(identity["central"]["kind"], "available");
     assert_eq!(
         identity["central"]["record"],
         serde_json::to_value(record).expect("link record")
