@@ -125,7 +125,7 @@ pub(crate) fn render_restart_result<W: Write>(
             writeln!(
                 stdout,
                 "result: {}",
-                classification_label(response.classification())
+                classification_label(response.classification(), response.snapshot().fleet())
             )?;
             writeln!(stdout, "message: {}", response.message())?;
             render_snapshot(stdout, response.snapshot())
@@ -149,7 +149,7 @@ pub(crate) fn render_terminal_frame<W: Write>(
         writeln!(
             stdout,
             "result: {}",
-            classification_label(response.classification())
+            classification_label(response.classification(), response.snapshot().fleet())
         )?;
         writeln!(stdout, "message: {}", response.message())?;
         render_snapshot(stdout, response.snapshot())?;
@@ -233,7 +233,7 @@ fn render_snapshot<W: Write>(stdout: &mut W, snapshot: &HostSnapshot) -> std::io
     writeln!(
         stdout,
         "readiness: {}",
-        readiness_label(snapshot.hosted_readiness())
+        readiness_label(snapshot.hosted_readiness(), snapshot.fleet())
     )?;
     writeln!(stdout, "phase: {}", phase_label(snapshot.phase()))?;
     writeln!(stdout, "router: {}", router_label(snapshot.router()))?;
@@ -415,26 +415,53 @@ fn render_fleet_status<W: Write>(
     }
 }
 
-fn classification_label(classification: codex_router_host::TerminalClassification) -> &'static str {
+fn classification_label(
+    classification: codex_router_host::TerminalClassification,
+    fleet: &codex_router_host::FleetHostObservation,
+) -> String {
     match classification {
-        codex_router_host::TerminalClassification::Ready => "ready",
-        codex_router_host::TerminalClassification::LocalReadyRemoteDegraded => {
-            "local ready (Remote Control degraded)"
+        codex_router_host::TerminalClassification::Ready => {
+            readiness_label(codex_router_host::HostedReadiness::Ready, fleet)
         }
-        codex_router_host::TerminalClassification::Unavailable => "unavailable",
-        codex_router_host::TerminalClassification::Succeeded => "succeeded",
-        codex_router_host::TerminalClassification::Failed => "failed",
-        codex_router_host::TerminalClassification::Busy => "busy",
+        codex_router_host::TerminalClassification::LocalReadyRemoteDegraded => readiness_label(
+            codex_router_host::HostedReadiness::LocalReadyRemoteDegraded,
+            fleet,
+        ),
+        codex_router_host::TerminalClassification::Unavailable => "unavailable".to_owned(),
+        codex_router_host::TerminalClassification::Succeeded => "succeeded".to_owned(),
+        codex_router_host::TerminalClassification::Failed => "failed".to_owned(),
+        codex_router_host::TerminalClassification::Busy => "busy".to_owned(),
     }
 }
 
-fn readiness_label(readiness: codex_router_host::HostedReadiness) -> &'static str {
-    match readiness {
-        codex_router_host::HostedReadiness::Ready => "ready",
-        codex_router_host::HostedReadiness::LocalReadyRemoteDegraded => {
-            "local ready (Remote Control degraded)"
+fn readiness_label(
+    readiness: codex_router_host::HostedReadiness,
+    fleet: &codex_router_host::FleetHostObservation,
+) -> String {
+    use codex_router_host::{FleetHostObservation, HostedReadiness};
+    use collaboration_protocol::FleetLinkState;
+    if let FleetHostObservation::Available {
+        central: Some(record),
+        ..
+    } = fleet
+        && let FleetLinkState::Refused { reason, .. } = &record.state
+    {
+        match readiness {
+            HostedReadiness::Ready => return format!("local ready (central refused: {reason:?})"),
+            HostedReadiness::LocalReadyRemoteDegraded => {
+                return format!(
+                    "local ready (Remote Control degraded, central refused: {reason:?})"
+                );
+            }
+            HostedReadiness::Unavailable => {}
         }
-        codex_router_host::HostedReadiness::Unavailable => "unavailable",
+    }
+    match readiness {
+        HostedReadiness::Ready => "ready".to_owned(),
+        HostedReadiness::LocalReadyRemoteDegraded => {
+            "local ready (Remote Control degraded)".to_owned()
+        }
+        HostedReadiness::Unavailable => "unavailable".to_owned(),
     }
 }
 

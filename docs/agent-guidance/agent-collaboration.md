@@ -97,6 +97,10 @@ connection and revision counters, last contact and failure details. An unavailab
 observation includes a diagnostic message while preserving the installation
 identity. Reading this tool does not enroll a machine or mint an identity.
 
+`codex-router host status` names a central refusal in its local readiness summary,
+alongside any Remote Control degradation. A refusal preserves local readiness and
+lifecycle phase. Transient disconnects and reconnects retain the existing summary.
+
 ## CLI discovery
 
 ```sh
