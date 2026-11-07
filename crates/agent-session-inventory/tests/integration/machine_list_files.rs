@@ -6,6 +6,10 @@ use agent_session_inventory::sessions::{
 };
 use std::path::Path;
 
+#[expect(
+    clippy::expect_used,
+    reason = "A fixture that cannot be written fails the test."
+)]
 fn write_machine_list(root: &Path, file_name: &str, machine_name: &str, service_id: &str) {
     let document = serde_json::json!({"version": 1, "routers": [{
         "name": machine_name,
@@ -34,6 +38,7 @@ fn write_old_list(root: &Path) {
 }
 
 /// The text the picker shows for a rejected list (picker_machine_controls.rs).
+#[expect(clippy::panic, reason = "An accepted list fails the refusal case.")]
 fn picker_notice(read: RouterRegistryRead) -> String {
     match read {
         RouterRegistryRead::Rejected(error) => error.to_string(),
