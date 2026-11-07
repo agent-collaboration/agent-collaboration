@@ -53,6 +53,18 @@ enum Command {
         service: message_board::ServiceId,
         connection: fleet_sync_protocol::ConnectionId,
     },
+    #[cfg(feature = "conformance-faults")]
+    SeedSessionAlarm {
+        service: message_board::ServiceId,
+        now: collaboration_central_core::RegistryTime,
+        at: collaboration_central_core::RegistryTime,
+    },
+    #[cfg(feature = "conformance-faults")]
+    SessionWake {
+        service: message_board::ServiceId,
+        connection: fleet_sync_protocol::ConnectionId,
+        at: collaboration_central_core::RegistryTime,
+    },
     SessionFault {
         service: message_board::ServiceId,
         command: collaboration_central_conformance::SessionFaultControl,
@@ -69,6 +81,22 @@ pub(crate) async fn fetch(mut request: Request, env: Env) -> Result<Response> {
 
 async fn forward_command(command: Command, env: Env) -> Result<Response> {
     let (address, path, body) = match command {
+        #[cfg(feature = "conformance-faults")]
+        Command::SessionWake {
+            service,
+            connection,
+            at,
+        } => (
+            ObjectAddress::Connection(service),
+            "/test/request-session-wake",
+            Some(serde_json::to_string(&(connection, at))?),
+        ),
+        #[cfg(feature = "conformance-faults")]
+        Command::SeedSessionAlarm { service, now, at } => (
+            ObjectAddress::Connection(service),
+            "/test/seed-session-alarm",
+            Some(serde_json::to_string(&(now, at))?),
+        ),
         #[cfg(feature = "conformance-faults")]
         Command::SessionBarrier {
             service,

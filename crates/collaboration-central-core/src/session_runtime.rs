@@ -64,6 +64,30 @@ where
     }
 
     pub async fn on_alarm(&self) -> Result<DriveReport, StoreError> {
+        let driven = self.drive_session_alarm().await;
+        // Maintenance can fail before Engine::drive_due reaches its own rearm.
+        // Keep the journal's original work/deadlines alive even on that path.
+        let rearmed = async {
+            use durable_steps::{JournalScope, storage::JournalStorage};
+            let (store, _) = self.session_store()?;
+            store
+                .transaction(|scope| {
+                    Box::pin(async move {
+                        if let Some(at) = scope.earliest().await? {
+                            scope.ensure_wake(at).await?;
+                        }
+                        Ok(())
+                    })
+                })
+                .await
+        }
+        .await;
+        let report = driven?;
+        rearmed?;
+        Ok(report)
+    }
+
+    async fn drive_session_alarm(&self) -> Result<DriveReport, StoreError> {
         use runtime_primitives::{Clock, WakeScheduler};
         if let ObjectWork::Session {
             replies,

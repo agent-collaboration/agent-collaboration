@@ -10,12 +10,308 @@ mod session_fixture;
 #[path = "machine_notices/support.rs"]
 mod support;
 use board_sync_protocol::*;
-use durable_steps::StoreError;
+use durable_steps::{AtomicStore, StoreError};
 use fleet_sync_protocol::*;
 use fleet_sync_session::SessionKey;
 use session_fixture::{Fixture, TestError};
 use std::sync::atomic::Ordering;
 use support::*;
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The production-shaped prefix must prune exactly and preserve admitted work."
+)]
+#[tokio::test]
+async fn production_floor_98_prunes_99_through_110_and_drives_the_pending_job()
+-> Result<(), TestError> {
+    // Arrange: production's numeric boundary, with a valid seven-day interval
+    // on every row. Only 99..110 have expired at the fixture's fixed clock.
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path()).await?;
+    let state_id = durable_steps::Uuid::now_v7().to_string();
+    let mut seeded = Vec::new();
+    for position in 99..=120 {
+        let expires_at = if position <= 110 {
+            1_792_281_599_999_i64
+        } else {
+            1_792_281_601_000_i64
+        };
+        seeded.push((
+            durable_steps::Uuid::now_v7().to_string(),
+            position,
+            serde_json::to_string(&notice(position)?)?,
+            expires_at - RETENTION,
+            expires_at,
+        ));
+    }
+    fixture.host.store.object.transaction(move |scope| Box::pin(async move {
+        use durable_steps::storage::TransactionScope;
+        use sqlx_core::query::query;
+        query::<sqlx_turso::Turso>("INSERT INTO machine_notice_state(state_id,name,last_position,pruned_through,peer_id) VALUES(?,'machine',120,98,NULL)")
+            .bind(state_id).execute(scope.executor()).await.map_err(StoreError::backend)?;
+        for (id, position, kind, created, expires) in seeded {
+            query::<sqlx_turso::Turso>("INSERT INTO machine_notices(notice_id,position,kind,created_at,expires_at) VALUES(?,?,?,?,?)")
+                .bind(id).bind(i64::try_from(position).map_err(StoreError::backend)?).bind(kind).bind(created).bind(expires)
+                .execute(scope.executor()).await.map_err(StoreError::backend)?;
+        }
+        Ok(())
+    })).await?;
+    let call = invocation(&notice(121)?)?;
+    assert!(matches!(
+        fixture.runtime.delivery()?.on_call(call.clone()).await,
+        Err(durable_steps::CallFailure::AnswerLost)
+    ));
+
+    // Act: the same alarm performs retention and drives the admitted append.
+    fixture.runtime.on_alarm().await?;
+
+    // Assert: no lexical gap, exact floor and suffix, same completed job.
+    assert_eq!(fixture.runtime.delivery()?.on_call(call).await?, b"null");
+    assert_eq!(
+        retained_notice_rows(&fixture)
+            .await?
+            .into_iter()
+            .map(|row| row.0)
+            .collect::<Vec<_>>(),
+        (111..=121).collect::<Vec<i64>>()
+    );
+    let floor = fixture
+        .host
+        .store
+        .object
+        .transaction(|scope| {
+            Box::pin(async move {
+                use durable_steps::storage::TransactionScope;
+                use sqlx_core::row::Row;
+                sqlx_core::query::query::<sqlx_turso::Turso>(
+                    "SELECT pruned_through FROM machine_notice_state",
+                )
+                .fetch_one(scope.executor())
+                .await
+                .map_err(StoreError::backend)?
+                .try_get::<i64, _>("pruned_through")
+                .map_err(StoreError::backend)
+            })
+        })
+        .await?;
+    assert_eq!(floor, 110);
+    fixture.objects.close().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn machine_notice_reads_keep_numeric_position_order_beyond_nine() -> Result<(), TestError> {
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path()).await?;
+    let mut expected = Vec::new();
+    for position in 1..=12 {
+        let kind = notice(position)?;
+        deliver(&fixture, &invocation(&kind)?).await?;
+        expected.push((position, kind));
+    }
+    let (binding, _, mut socket) =
+        admit(&fixture, PeerId::new(durable_steps::Uuid::now_v7())?).await?;
+
+    let actual = read(&fixture, binding, &mut socket, None).await?;
+
+    assert_page(actual, &expected);
+    fixture.objects.close().await?;
+    Ok(())
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Regression assertions reject lost journal progress and incorrect retention."
+)]
+#[tokio::test]
+async fn inverted_notice_expiry_retains_the_blocked_suffix_and_drives_due_jobs()
+-> Result<(), TestError> {
+    // Arrange: position 2 expires before position 1, as concurrent callers can.
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path()).await?;
+    fixture
+        .io
+        .clock_offset_millis
+        .store(1_000, Ordering::SeqCst);
+    deliver(&fixture, &invocation(&notice(1)?)?).await?;
+    fixture.io.clock_offset_millis.store(0, Ordering::SeqCst);
+    deliver(&fixture, &invocation(&notice(2)?)?).await?;
+    let original = retained_notice_rows(&fixture).await?;
+    fixture
+        .io
+        .clock_offset_millis
+        .store(RETENTION, Ordering::SeqCst);
+    let third = invocation(&notice(3)?)?;
+    assert!(matches!(
+        fixture.runtime.delivery()?.on_call(third.clone()).await,
+        Err(durable_steps::CallFailure::AnswerLost)
+    ));
+    fixture
+        .io
+        .wakes
+        .lock()
+        .map_err(|_| "wake lock poisoned")?
+        .clear();
+
+    // Act: maintenance must leave both original notices and run the new job.
+    fixture.runtime.on_alarm().await?;
+
+    // Assert: the original operation completed, without losing the blocked row.
+    assert_eq!(fixture.runtime.delivery()?.on_call(third).await?, b"null");
+    assert_eq!(rows(&fixture).await?, 3);
+    assert_eq!(
+        retained_notice_rows(&fixture)
+            .await?
+            .into_iter()
+            .take(2)
+            .collect::<Vec<_>>(),
+        original
+    );
+    assert!(
+        fixture
+            .io
+            .wakes
+            .lock()
+            .map_err(|_| "wake lock poisoned")?
+            .iter()
+            .any(|at| at.unix_millis() == 1_792_886_401_000),
+        "wake must follow position 1's expiry, rather than position 2's already expired timestamp"
+    );
+    fixture
+        .io
+        .clock_offset_millis
+        .store(RETENTION + 1_000, Ordering::SeqCst);
+    fixture.runtime.on_alarm().await?;
+    assert_eq!(rows(&fixture).await?, 1);
+    fixture.objects.close().await?;
+    Ok(())
+}
+
+async fn retained_notice_rows(fixture: &Fixture) -> Result<Vec<(i64, i64, i64)>, TestError> {
+    Ok(fixture
+        .host
+        .store
+        .object
+        .transaction(|scope| {
+            Box::pin(async move {
+                use durable_steps::storage::TransactionScope;
+                use sqlx_core::row::Row;
+                sqlx_core::query::query::<sqlx_turso::Turso>(
+                    "SELECT position,created_at,expires_at FROM machine_notices ORDER BY position",
+                )
+                .fetch_all(scope.executor())
+                .await
+                .map_err(StoreError::backend)?
+                .into_iter()
+                .map(|row| {
+                    Ok((
+                        row.try_get("position").map_err(StoreError::backend)?,
+                        row.try_get("created_at").map_err(StoreError::backend)?,
+                        row.try_get("expires_at").map_err(StoreError::backend)?,
+                    ))
+                })
+                .collect::<Result<Vec<_>, StoreError>>()
+            })
+        })
+        .await?)
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "A missing retained position must remain a corruption error."
+)]
+#[tokio::test]
+async fn an_unexpired_prefix_cannot_hide_a_missing_notice_position() -> Result<(), TestError> {
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path()).await?;
+    for position in 1..=3 {
+        deliver(&fixture, &invocation(&notice(position)?)?).await?;
+    }
+    fixture
+        .host
+        .store
+        .object
+        .transaction(|scope| {
+            Box::pin(async move {
+                use durable_steps::storage::TransactionScope;
+                sqlx_core::query::query::<sqlx_turso::Turso>(
+                    "DELETE FROM machine_notices WHERE position=2",
+                )
+                .execute(scope.executor())
+                .await
+                .map_err(StoreError::backend)?;
+                Ok(())
+            })
+        })
+        .await?;
+
+    let result = fixture.runtime.on_alarm().await;
+
+    assert!(
+        matches!(&result, Err(StoreError::Corrupt { field, .. }) if field == "fleet.machine_notices.range"),
+        "{result:?}"
+    );
+    assert_eq!(rows(&fixture).await?, 2);
+    fixture.objects.close().await?;
+    Ok(())
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "An early maintenance error must not strand the admitted operation."
+)]
+#[tokio::test]
+async fn session_alarm_rearms_admitted_work_after_retention_failure() -> Result<(), TestError> {
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path()).await?;
+    let call = invocation(&notice(1)?)?;
+    assert!(matches!(
+        fixture.runtime.delivery()?.on_call(call.clone()).await,
+        Err(durable_steps::CallFailure::AnswerLost)
+    ));
+    insert_zero_position(&fixture).await?;
+    fixture
+        .io
+        .wakes
+        .lock()
+        .map_err(|_| "wake lock poisoned")?
+        .clear();
+
+    let result = fixture.runtime.on_alarm().await;
+
+    assert!(matches!(result, Err(StoreError::Corrupt { .. })));
+    assert!(
+        !fixture
+            .io
+            .wakes
+            .lock()
+            .map_err(|_| "wake lock poisoned")?
+            .is_empty(),
+        "retention error stranded the pending job without a wake"
+    );
+    fixture
+        .host
+        .store
+        .object
+        .transaction(|scope| {
+            Box::pin(async move {
+                use durable_steps::storage::TransactionScope;
+                sqlx_core::query::query::<sqlx_turso::Turso>(
+                    "DELETE FROM machine_notices WHERE position=0",
+                )
+                .execute(scope.executor())
+                .await
+                .map_err(StoreError::backend)?;
+                Ok(())
+            })
+        })
+        .await?;
+    fixture.runtime.on_alarm().await?;
+    assert_eq!(fixture.runtime.delivery()?.on_call(call).await?, b"null");
+    assert_eq!(rows(&fixture).await?, 1);
+    fixture.objects.close().await?;
+    Ok(())
+}
 
 #[expect(
     clippy::panic_in_result_fn,

@@ -111,19 +111,6 @@
       ]
     },
     {
-      "name": "read_expired_machine_notices",
-      "sql": "sql/machine_notices/read_expired_machine_notices.sql",
-      "row": "StoredMachineNotice",
-      "result": "many",
-      "parameters": [
-        {
-          "name": "now",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
       "name": "prune_machine_notices",
       "sql": "sql/machine_notices/prune_machine_notices.sql",
       "row": null,

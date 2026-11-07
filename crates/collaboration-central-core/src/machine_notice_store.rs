@@ -129,20 +129,36 @@ where
         return Ok(());
     };
     let mut floor = stored.floor;
-    for row in queries::read_expired_machine_notices(scope, now.unix_millis().to_string())
+    let mut previous = stored.floor;
+    let mut expired_prefix = true;
+    for row in queries::read_machine_notices(scope, stored.floor.to_string())
         .await
         .map_err(StoreError::backend)?
     {
+        let expires_at = integer(
+            row.expires_at.clone(),
+            row.expiry_class.clone(),
+            "machine_notices.expires_at",
+        )?;
         let notice = decode(row)?;
-        if floor.checked_add(1) != Some(notice.position.value())
+        if previous.checked_add(1) != Some(notice.position.value())
             || notice.position.value() > stored.head
         {
             return Err(corrupt(
-                "machine_notices.retention",
-                "expired notices are not a contiguous prefix",
+                "machine_notices.range",
+                "stored notices are not the exact contiguous range",
             ));
         }
-        floor = notice.position.value();
+        previous = notice.position.value();
+        // Callers sample time before acquiring their transaction, so expiry
+        // order need not match position order. Retention only advances a prefix.
+        expired_prefix &= expires_at <= now.unix_millis();
+        if expired_prefix {
+            floor = previous;
+        }
+    }
+    if previous != stored.head {
+        return Err(corrupt("machine_notices.range", "missing notice"));
     }
     if floor != stored.floor {
         queries::advance_machine_notice_floor(scope, floor.to_string())

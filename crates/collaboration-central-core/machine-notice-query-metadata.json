@@ -53,7 +53,7 @@
     "generator:sqlx-turso/src/lib.rs": "32ec3ac4ca4d0d703a452496262928a3a00ddfdf71eac8cbbe4ce1a3da69d9b5",
     "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
-    "machine-notice-queries.json": "14c2442359160bcb92dd886c2008712bce3092afee752abfd6c8d230a3781a11",
+    "machine-notice-queries.json": "8e9b3fcf1924f3831bae0932ae0979292e06fe4144bf5113dcbfe4fce6fca5bc",
     "session_migrations/0001_machine_notices.sql": "c716ca292ae09a28394b7b03cb459baf796bb037e70e18ec518a7c7085dcefb0",
     "session_migrations/0002_forward_correlations.sql": "f07f026d7a1058b0aefba392b243b9853b6607dee9122ac7c79107e360650e8c",
     "sql/machine_notices/advance_machine_notice_floor.sql": "730eb869493dd765aa0c154a3eb1ace2693b47ef1c93584e3c6a2eb63b9fe41e",
@@ -61,15 +61,14 @@
     "sql/machine_notices/append_machine_notice.sql": "e2f575dc660bad95cc7fa98731dcb8100c28d7f7a2f498a2bddb8916fca0e147",
     "sql/machine_notices/initialize_machine_notice_state.sql": "d9cf55cabb6d344ba19fcd5c6b824be11d94547bbed015acb2d25f8c581aa40b",
     "sql/machine_notices/prune_machine_notices.sql": "08f930e7dbad3cbf9b5eb12dcdef87135d1745a61ef829f20d5479db6bbe1d9d",
-    "sql/machine_notices/read_expired_machine_notices.sql": "81fd29da790ece1b09fe04cc528c11821b9480f424a1095405f3bba4ecbfa7f1",
     "sql/machine_notices/read_machine_notice_bounds.sql": "1705b4fb7f061efa3a895f62f6819d1b3691bef952f1a7125aae808f099720f1",
-    "sql/machine_notices/read_machine_notice_expiry.sql": "ef3a3df18a051211ce061802a06107482dbcaf6e7d06eb9f06b2536cbf9100e5",
+    "sql/machine_notices/read_machine_notice_expiry.sql": "e1096a6c9b23746f1405aa08246fdc2bbd9cc4f500f405692dabb1176daedf16",
     "sql/machine_notices/read_machine_notice_state.sql": "83ee8155959e2c1fc7d275b53d031435327e77a44a57cba9af63ad0ed78ff21b",
-    "sql/machine_notices/read_machine_notices.sql": "f47c1d6037026bf3d0f93ad93c39e7dcbdb20d3c2ac96431cca42823c73c4ce9",
+    "sql/machine_notices/read_machine_notices.sql": "68cf6700d9f8935b466483044f4884c90c2d47fa2e78825361a5d1148a280172",
     "sql/machine_notices/remember_machine_notice_peer.sql": "d634fe8aa8c4e10de41e2236a11f6fa6b4c7a1ee0d24e7243277869b0b55720f",
-    "src/generated_machine_notices.rs": "302673166b7d0e59b72a868a60ea5e789cf554a7437125d23de95da5f5dbc787"
+    "src/generated_machine_notices.rs": "b37e3772be55ed1291f0438b76a90b214173c022554225fa9ed4763efd1237c4"
   },
-  "queries_digest": "9b38b2431c6d8a8bb6720ad196581d5ff2453a72f61d2dc5f237aa452336d5b2",
+  "queries_digest": "24f10b8c809942e521e63b84189b3b1c511e26575e121dc700ca746fe28a87ae",
   "queries": [
     {
       "name": "read_machine_notice_state",
@@ -153,68 +152,6 @@
     },
     {
       "name": "read_machine_notices",
-      "bind_slots": 1,
-      "columns": [
-        {
-          "name": "notice_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "position",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "cast"
-        },
-        {
-          "name": "position_class",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "typeof"
-        },
-        {
-          "name": "kind",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "created_at",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "cast"
-        },
-        {
-          "name": "created_class",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "typeof"
-        },
-        {
-          "name": "expires_at",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "cast"
-        },
-        {
-          "name": "expiry_class",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "typeof"
-        }
-      ]
-    },
-    {
-      "name": "read_expired_machine_notices",
       "bind_slots": 1,
       "columns": [
         {

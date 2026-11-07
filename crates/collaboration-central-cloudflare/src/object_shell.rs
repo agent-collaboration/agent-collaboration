@@ -298,10 +298,35 @@ impl ShellActor {
                 .await?;
             self.faults.restore_clock(now).map_err(error)?;
         }
+        self.rearm_stale_alarm().await?;
         let (host, runtime) = self.runtime_handles(address)?;
         host.migrate_store().await.map_err(error)?;
         runtime.initialize().await?;
         Ok((host, runtime))
+    }
+
+    async fn rearm_stale_alarm(&self) -> Result<()> {
+        #[cfg(feature = "conformance")]
+        let faults = self.faults.clone();
+        let storage = self.state.storage();
+        // Repair at event entry, before any store or runtime can ask the shared
+        // library owner for a wake. The platform gate excludes competing events
+        // from this read/replace; future alarms keep the library's arbitration.
+        let repair = async move {
+            let existing = storage.get_alarm().await?;
+            let now = chrono::Utc::now();
+            #[cfg(feature = "conformance")]
+            let now = faults.clock().map_or(now, |now| now.0);
+            if existing.is_some_and(|at| at < now.timestamp_millis()) {
+                storage.set_alarm(worker::ScheduledTime::from(now)).await?;
+            }
+            Ok::<_, Error>(())
+        };
+        // Match with_local_section: an I/O error is a returned value, not a
+        // thrown blockConcurrencyWhile callback that resets the whole object.
+        self.state
+            .block_concurrency_while(async move { Ok(repair.await) })
+            .await?
     }
     async fn fetch(&self, mut request: Request) -> Result<Response> {
         let requested = request

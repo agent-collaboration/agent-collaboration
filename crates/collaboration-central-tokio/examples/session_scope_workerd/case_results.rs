@@ -78,7 +78,7 @@ impl Scenario {
                 "SESSION_FAILURE_RESULT 5 passed; 0 failed; 0 ignored (normal enrolled sessions, targeted real postcommit publication failure, same-socket Register refusal, callback/SQL rollback and real retry, exact public journal/ordered socket barrier)"
             ),
             Scenario::SessionCapabilities => println!(
-                "SESSION_CAPABILITY_RESULT 2 passed; 0 failed; 0 ignored (normal enrollment and session, real workers-rs attachment roundtrip and original origin, actual same-Connection-object alarm; old SqlTx pointer identity retired)"
+                "SESSION_CAPABILITY_RESULT 3 passed; 0 failed; 0 ignored (normal enrollment/session, workers-rs attachment/origin, same-object alarm arbitration and injected-time stale platform alarm recovery)"
             ),
             Scenario::OwnerRetirement => println!(
                 "OWNER_RETIREMENT_RESULT 1 passed; 0 failed; 0 ignored (conformance import/unheld/seed setup on actual composed stores, normal HTTP retirement, before-row/read-after-retired, exact Fleet acknowledgement and stable receipt/replay/Migrate; D1b HTTP import, physical file row count and process restart unobserved)"
