@@ -179,10 +179,10 @@ sign_profile_bins() {
     warn_unsigned "${profile_directory}" "could not list its executables"
     return 0
   fi
-  # The executable about to run is always checked: find lists only regular
-  # files in the profile directory, so a symlink there would otherwise be
-  # skipped.
-  if [[ -n "${requested}" ]] && { [[ "$(dirname "${requested}")" != "${profile_directory}" ]] || [[ -L "${requested}" ]]; }; then
+  # The executable about to run is always checked, whatever its name or kind:
+  # the scan above skips symlinks and some names, and a duplicate check of a
+  # listed file costs only a line in the verified list.
+  if [[ -n "${requested}" ]]; then
     printf '%s\0' "${requested}" >> "${sweep_listing}"
   fi
   while IFS= read -r -d '' candidate; do

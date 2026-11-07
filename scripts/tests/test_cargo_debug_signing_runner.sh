@@ -172,6 +172,15 @@ output="$("$runner" "$profile/linked-tool")"
 grep -q '^# SIGNED ' "$profile/linked-tool"
 no_sweep_leftovers
 
+# 6b. A requested executable whose name the scan skips is still checked.
+make_executable "$profile/tool.signing.saved"
+if FAKE_NO_IDENTITY=1 "$runner" "$profile/tool.signing.saved" > "$fixture_root/named.out" 2> /dev/null; then
+  echo "runner ran an unsigned executable the scan skips" >&2
+  exit 1
+fi
+[[ ! -s "$fixture_root/named.out" ]]
+no_sweep_leftovers
+
 # 7. A failure creating the second sweep file refuses and leaves no file.
 if FAKE_MKTEMP_FAIL_NEXT=1 "$runner" "$profile/deps/integration-0123456789abcdef" > "$fixture_root/mk.out" 2> /dev/null; then
   echo "runner ran after a failed sweep allocation" >&2
