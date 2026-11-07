@@ -65,6 +65,17 @@ if [[ -n "\${FAKE_FIND_FAIL:-}" ]]; then
 fi
 exec "$real_find" "\$@"
 EOF
+# mktemp: the real one, or with FAKE_MKTEMP_FAIL_NEXT a failure for the second
+# sweep file only.
+real_mktemp="$(command -v mktemp)"
+cat > "$fake_tools/mktemp" <<EOF
+#!/usr/bin/env bash
+if [[ -n "\${FAKE_MKTEMP_FAIL_NEXT:-}" && "\$1" == *".next."* ]]; then
+  echo "mktemp: no space" >&2
+  exit 1
+fi
+exec "$real_mktemp" "\$@"
+EOF
 chmod +x "$fake_tools"/*
 
 profile="$fixture_root/target/debug"
@@ -147,7 +158,38 @@ if FAKE_NO_IDENTITY=1 "$runner" --sign-only "$profile/deps/integration-fedcba987
   exit 1
 fi
 
-# 6. In GitHub Actions the same build runs linker-signed with a warning.
+# 6. A symlinked executable at the top of the profile directory is still
+# checked: refused without an identity, signed before it runs with one.
+make_executable "$fixture_root/linked-target"
+ln -s "$fixture_root/linked-target" "$profile/linked-tool"
+if FAKE_NO_IDENTITY=1 "$runner" "$profile/linked-tool" > "$fixture_root/link.out" 2> "$fixture_root/link.err"; then
+  echo "runner ran an unsigned symlinked executable" >&2
+  exit 1
+fi
+[[ ! -s "$fixture_root/link.out" ]]
+output="$("$runner" "$profile/linked-tool")"
+[[ "$output" == "ran linked-target" ]]
+grep -q '^# SIGNED ' "$profile/linked-tool"
+no_sweep_leftovers
+
+# 6b. A requested executable whose name the scan skips is still checked.
+make_executable "$profile/tool.signing.saved"
+if FAKE_NO_IDENTITY=1 "$runner" "$profile/tool.signing.saved" > "$fixture_root/named.out" 2> /dev/null; then
+  echo "runner ran an unsigned executable the scan skips" >&2
+  exit 1
+fi
+[[ ! -s "$fixture_root/named.out" ]]
+no_sweep_leftovers
+
+# 7. A failure creating the second sweep file refuses and leaves no file.
+if FAKE_MKTEMP_FAIL_NEXT=1 "$runner" "$profile/deps/integration-0123456789abcdef" > "$fixture_root/mk.out" 2> /dev/null; then
+  echo "runner ran after a failed sweep allocation" >&2
+  exit 1
+fi
+[[ ! -s "$fixture_root/mk.out" ]]
+no_sweep_leftovers
+
+# 8. In GitHub Actions the same build runs linker-signed with a warning.
 output="$(GITHUB_ACTIONS=true FAKE_NO_IDENTITY=1 "$runner" "$profile/deps/integration-fedcba9876543210" 2> "$fixture_root/ci.err")"
 [[ "$output" == "ran integration-fedcba9876543210" ]]
 grep -q 'stays linker-signed' "$fixture_root/ci.err"
