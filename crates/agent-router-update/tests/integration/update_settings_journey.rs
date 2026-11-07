@@ -26,13 +26,13 @@ const OLD_PORTS: &str = "{\"router\": 28741, \"mcp\": 28742, \"tailscaleHttps\":
 const OLD_MACHINE_LIST: &str =
     "{\n  // machines I open sessions on\n  \"version\": 1,\n  \"routers\": [],\n}\n";
 
-struct OldSettings {
+pub struct OldSettings {
     providers: PathBuf,
     ports: PathBuf,
     machine_list: PathBuf,
 }
 
-fn write_old_settings(root: &Path) -> UpdateResult<OldSettings> {
+pub fn write_old_settings(root: &Path) -> UpdateResult<OldSettings> {
     let old = OldSettings {
         providers: root.join("providers.json"),
         ports: root.join("ports.json"),
@@ -46,7 +46,11 @@ fn write_old_settings(root: &Path) -> UpdateResult<OldSettings> {
 
 /// After a finished step 0007: values through the Host's readers, the files left, the
 /// ledger and the guard.
-async fn assert_settings_carried(root: &Path, old: &OldSettings, context: &str) -> UpdateResult {
+pub async fn assert_settings_carried(
+    root: &Path,
+    old: &OldSettings,
+    context: &str,
+) -> UpdateResult {
     let settings = std::fs::read_to_string(router_settings_path(root))?;
     for (file, section) in [(OLD_PROVIDERS, "providers"), (OLD_PORTS, "ports")] {
         assert!(

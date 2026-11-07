@@ -40,6 +40,7 @@ mod update_proxy_store_journey;
 mod update_reset_and_dead_files;
 mod update_settings_journey;
 mod update_source_checks;
+mod update_whole_journey;
 mod upgrade_singleton;
 mod upload_publication;
 mod watch_row_fidelity;

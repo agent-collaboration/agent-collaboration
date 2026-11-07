@@ -26,7 +26,7 @@ const LOCK_FILE: &str = "update-proof.lock";
 const LOCK_CONTENT: &[u8] = b"held by an account write before the update";
 
 /// The values seeded into the old store, which must read back unchanged.
-struct ProxyValues {
+pub struct ProxyValues {
     account: AccountRecord,
     snapshot: PersistedQuotaSnapshot,
     affinity: SessionAccountAffinity,
@@ -38,7 +38,7 @@ fn account_id() -> UpdateResult<AccountId> {
 
 /// Writes the values with the store's own writer and copies the store into `root` as
 /// `state.sqlite` while the writer is still open, so they are only in its log there.
-async fn seed_old_proxy_store(root: &Path) -> UpdateResult<ProxyValues> {
+pub async fn seed_old_proxy_store(root: &Path) -> UpdateResult<ProxyValues> {
     let writer_directory = tempfile::tempdir()?;
     let writer_path = writer_directory.path().join("state.sqlite");
     let writer = AsyncSqliteStateStore::open(&writer_path).await?;
@@ -96,7 +96,7 @@ async fn assert_rows_only_in_log(root: &Path) -> UpdateResult {
     Ok(())
 }
 
-async fn assert_proxy_store_renamed(
+pub async fn assert_proxy_store_renamed(
     root: &Path,
     values: &ProxyValues,
     context: &str,

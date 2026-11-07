@@ -28,7 +28,13 @@ before any store moves, a pending reset on a root with no Fleet store, an
 unreadable journal, approval routes imported before
 the dead files are removed, the root listing afterwards, malformed routes, and
 the Host guard on a dead file, including one back after the update and one on a
-never-connected root. These cases sign the binary with
+never-connected root. Its `update_whole_journey` root (J0 and J4 together) runs
+every PR A step in order on one root holding everything an older Router leaves:
+the populated stores, old settings, the old proxy store with rows only in its
+log, dead files with approval routes and an unfinished reset. A full update, and
+a kill at every barrier of every step followed by a rerun, end at the same root:
+each step's values through their owners and an exact listing of the root. These
+cases sign the binary with
 the debug runner before launching it, and read values raw from the stores, so
 their oracle is independent of the tool's code.
 `e2e/main.rs` retains the former `upgrade_binary_e2e` root, which drives the real

@@ -16,10 +16,10 @@ use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
 
 const RESET_GENERATION: &str = "019f0000-0000-7000-8000-00000000d3a1";
-const ROUTE_THREAD: &str = "019f0000-0000-7000-8000-00000000d3e1";
+pub const ROUTE_THREAD: &str = "019f0000-0000-7000-8000-00000000d3e1";
 
 /// Writes the journal an older Router keeps its enrollment reset in, in `phase`.
-fn write_reset_journal(root: &Path, phase: &str) -> UpdateResult<PathBuf> {
+pub fn write_reset_journal(root: &Path, phase: &str) -> UpdateResult<PathBuf> {
     let journal = router_collaboration_directory(root).join("enrollment-reset.json");
     std::fs::write(
         &journal,
@@ -43,7 +43,7 @@ fn legacy_approval_routes() -> String {
 }
 
 /// The thread ids `interaction.sqlite` holds approval routes for, read only.
-async fn imported_route_threads(root: &Path) -> UpdateResult<Vec<String>> {
+pub async fn imported_route_threads(root: &Path) -> UpdateResult<Vec<String>> {
     use sqlx::ConnectOptions;
     let mut connection = sqlx_turso::TursoConnectOptions::new()
         .filename(router_collaboration_directory(root).join("interaction.sqlite"))
@@ -60,7 +60,7 @@ async fn imported_route_threads(root: &Path) -> UpdateResult<Vec<String>> {
 }
 
 /// Every dead file an older Router may leave, an export folder, and a valid routes file.
-fn write_dead_files(root: &Path) -> UpdateResult<Vec<PathBuf>> {
+pub fn write_dead_files(root: &Path) -> UpdateResult<Vec<PathBuf>> {
     let directory = router_collaboration_directory(root);
     let export = directory.join("native-schema-export-0001");
     std::fs::create_dir_all(&export)?;
@@ -83,7 +83,7 @@ fn write_dead_files(root: &Path) -> UpdateResult<Vec<PathBuf>> {
     Ok(paths)
 }
 
-fn names_in(directory: &Path) -> UpdateResult<Vec<String>> {
+pub fn names_in(directory: &Path) -> UpdateResult<Vec<String>> {
     let mut names = std::fs::read_dir(directory)?
         .map(|entry| Ok(entry?.file_name().to_string_lossy().into_owned()))
         .collect::<UpdateResult<Vec<_>>>()?;
