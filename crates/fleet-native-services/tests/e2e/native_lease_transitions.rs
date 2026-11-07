@@ -5,10 +5,32 @@ use fleet_project_writer::*;
 use fleet_protocol::*;
 use fleet_session::TransportConnection;
 use fleet_websocket_transport::WebSocketConnection;
-use runtime_primitives::{Clock, SystemClock, TokioWakeTimer, WakeScheduler};
+use runtime_primitives::{Clock, SystemClock};
 use sqlx_core::{query::query, row::Row};
-use std::{path::Path, sync::Arc, time::Duration};
+use std::{
+    path::Path,
+    sync::{
+        Arc,
+        atomic::{AtomicI64, Ordering},
+    },
+    time::Duration,
+};
 use tokio::sync::Mutex;
+
+struct ControlledClock(AtomicI64);
+impl ControlledClock {
+    fn new() -> Self {
+        Self(AtomicI64::new(1_700_000_000_000))
+    }
+    fn advance_to(&self, at: SyncTime) {
+        self.0.store(at.unix_millis(), Ordering::SeqCst);
+    }
+}
+impl Clock for ControlledClock {
+    fn now(&self) -> SyncTime {
+        SyncTime::from_unix_millis(self.0.load(Ordering::SeqCst))
+    }
+}
 
 struct Annotation;
 impl PieceAnnotation for Annotation {
@@ -46,33 +68,44 @@ struct ManualWriter {
     sender: Sender,
     lease: LeaseStatus,
     started: SyncTime,
+    clock: Arc<dyn Clock>,
     session: SessionId,
     receiver: ReceiverId,
 }
 impl ManualWriter {
     async fn open(path: &Path, service: &ServiceProcess) -> TestResult<Self> {
+        Self::open_with_clock(path, service, Arc::new(SystemClock)).await
+    }
+    async fn open_with_clock(
+        path: &Path,
+        service: &ServiceProcess,
+        clock: Arc<dyn Clock>,
+    ) -> TestResult<Self> {
         let peer = PeerId::new(durable_steps::Uuid::from_u128(
             0x019eef00000070008000000000000002,
         ))?;
         let receiver = ReceiverId::new(durable_steps::Uuid::from_u128(
             0x019eef00000070008000000000000003,
         ))?;
+        let database_id = DatabaseId::new(durable_steps::Uuid::now_v7())?;
+        let policy = LeasePolicy {
+            lease_duration: Duration::from_secs(600),
+            renew_interval: Duration::from_secs(1),
+        };
         let database = Arc::new(
-            ReplicatedDatabase::create(
+            ReplicatedDatabase::open_with(
                 path,
+                database_id,
                 SampleSchema::new()?,
-                peer,
-                LeasePolicy {
-                    lease_duration: Duration::from_secs(600),
-                    renew_interval: Duration::from_secs(1),
-                },
+                fleet_project_lease::LeaseHolder::provisional(database_id, peer, policy),
+                clock.clone(),
                 WriterOptions::default(),
             )
             .await?,
         );
         let session = SessionId::new(durable_steps::Uuid::now_v7())?;
         let mut socket = service.peer(2, session).await?;
-        let started = SystemClock.now();
+        let started = clock.now();
         let lease = match request(
             &mut socket,
             OperationRequest::Lease(LeaseRequest::Register(Registration {
@@ -115,6 +148,7 @@ impl ManualWriter {
             sender,
             lease,
             started,
+            clock,
             session,
             receiver,
         };
@@ -141,8 +175,18 @@ impl ManualWriter {
 async fn withdrawal_keeps_original_real_clock_deadline_then_fresh_renewal_resumes_same_epoch()
 -> TestResult {
     let root = tempfile::tempdir()?;
-    let service = ServiceProcess::start_with_lease(&root.path().join("service"), 3, 5_000).await?;
-    let writer = ManualWriter::open(&root.path().join("writer.db"), &service).await?;
+    let clock = Arc::new(ControlledClock::new());
+    let service = ServiceProcess::start_with_clock(
+        &root.path().join("service"),
+        3,
+        5_000,
+        60_000,
+        Some(clock.now()),
+    )
+    .await?;
+    let writer =
+        ManualWriter::open_with_clock(&root.path().join("writer.db"), &service, clock.clone())
+            .await?;
     let database = writer.database.database();
     let mut control = service
         .connect("control", "Bearer consumer-control")
@@ -222,12 +266,9 @@ async fn withdrawal_keeps_original_real_clock_deadline_then_fresh_renewal_resume
     let original_deadline = writer
         .started
         .after(Duration::from_millis(writer.lease.remaining_ms));
-    let timer = TokioWakeTimer::new(SystemClock);
-    // This is the lease's actual recorded time event, not a proxy for work finishing.
-    timer
-        .wake_at(original_deadline.max(writer.lease.expires_at))
-        .await?;
-    timer.wait().await;
+    let deadline = original_deadline.max(writer.lease.expires_at);
+    clock.advance_to(deadline);
+    control_request(&mut control, ControlRequest::AdvanceClock { to: deadline }).await?;
     assert!(
         matches!(writer.database.begin_write().await, Err(WriteRefusal::LeaseExpired { expired_at, .. }) if expired_at==original_deadline)
     );
@@ -241,7 +282,7 @@ async fn withdrawal_keeps_original_real_clock_deadline_then_fresh_renewal_resume
     old.close(CloseReason::ClientClosed).await;
     let (mut socket, statuses) = service.peer_with_statuses(2, writer.session).await?;
     assert!(statuses.iter().any(|status| matches!(status, DatabaseStatus::Ready { lease, .. } if lease.epoch==writer.lease.epoch && lease.state==LeaseState::Expired)));
-    let started = SystemClock.now();
+    let started = writer.clock.now();
     let answer = match request(
         &mut socket,
         OperationRequest::Lease(LeaseRequest::Renew(RenewRequest {
@@ -282,19 +323,26 @@ async fn withdrawal_keeps_original_real_clock_deadline_then_fresh_renewal_resume
 async fn stale_holder_move_refuses_then_a_recently_renewed_holder_moves_over_its_session()
 -> TestResult {
     let root = tempfile::tempdir()?;
-    let service =
-        ServiceProcess::start_with_policy(&root.path().join("service"), 3, 20_000, 1_000).await?;
-    let writer = ManualWriter::open(&root.path().join("writer.db"), &service).await?;
+    let clock = Arc::new(ControlledClock::new());
+    let service = ServiceProcess::start_with_clock(
+        &root.path().join("service"),
+        3,
+        20_000,
+        1_000,
+        Some(clock.now()),
+    )
+    .await?;
+    let writer =
+        ManualWriter::open_with_clock(&root.path().join("writer.db"), &service, clock.clone())
+            .await?;
     let database = writer.database.database();
     let renewed_at = SyncTime::from_unix_millis(writer.lease.expires_at.unix_millis() - 20_000);
-    let timer = TokioWakeTimer::new(SystemClock);
-    timer
-        .wake_at(renewed_at.after(Duration::from_millis(1_001)))
-        .await?;
-    timer.wait().await;
+    let stale_at = renewed_at.after(Duration::from_millis(1_001));
+    clock.advance_to(stale_at);
     let mut control = service
         .connect("control", "Bearer consumer-control")
         .await?;
+    control_request(&mut control, ControlRequest::AdvanceClock { to: stale_at }).await?;
     let _capability_stale = service
         .peer(4, SessionId::new(durable_steps::Uuid::now_v7())?)
         .await?;

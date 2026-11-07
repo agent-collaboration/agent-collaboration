@@ -50,7 +50,7 @@ impl ServiceProcess {
     pub async fn start_at(path: &Path, clock: SyncTime) -> TestResult<Self> {
         Self::start_with_clock(path, 3, 600_000, 60_000, Some(clock)).await
     }
-    async fn start_with_clock(
+    pub async fn start_with_clock(
         path: &Path,
         receiver: u128,
         lease_ms: u64,
