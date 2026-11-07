@@ -36,6 +36,7 @@ import { reattachSettlement } from "../observations/operation-settlement.ts";
 import type { McpCallOutcome } from "../transport/streaming-mcp-client.ts";
 import {
   attachedPrompt,
+  restoreDeclaredModel,
   baseline,
   closeSession,
   createSession,
@@ -265,7 +266,9 @@ export async function reattach(
     tool === "conversation_load" ? "loaded" : "resumed",
   );
   if (settled.kind === "unknown") return inconclusive(settled.reason);
-  return settled.kind === "refused" ? failed(settled.reason) : null;
+  if (settled.kind === "refused") return failed(settled.reason);
+  await restoreDeclaredModel(inputs, target, `reattach-${tool}`);
+  return null;
 }
 
 export type ReattachedHistory =

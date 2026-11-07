@@ -325,7 +325,12 @@ test("a real provider cannot run the held caller-loss or explicit-cancel cases",
               ...plan,
               peer: {
                 kind: "provider",
-                selection: { model: "haiku", selectOnCreate: true, requiredOptions: {} },
+                selection: {
+                  model: "haiku",
+                  selectOnCreate: true,
+                  selectOnRestore: true,
+                  requiredOptions: {},
+                },
               },
               cases: [held],
               holdText: "hold",

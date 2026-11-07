@@ -10,6 +10,7 @@ const target = {
 const cursor = {
   model: "grok-4.7",
   selectOnCreate: false,
+  selectOnRestore: false,
   requiredOptions: { reasoning_effort: "low", fast: "false" },
 };
 const option = (id: string, value: string): unknown => ({
@@ -78,7 +79,7 @@ test("Claude's haiku catalog alias needs no extra required options", () => {
         },
       },
       target,
-      { model: "haiku", selectOnCreate: true, requiredOptions: {} },
+      { model: "haiku", selectOnCreate: true, selectOnRestore: true, requiredOptions: {} },
     ),
   );
 });

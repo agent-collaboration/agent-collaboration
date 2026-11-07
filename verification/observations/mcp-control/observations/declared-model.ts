@@ -5,6 +5,7 @@ import { sameSession, sessionRefSchema, type SessionRef } from "./observation-mo
 export const declaredProviderSelectionSchema = z.strictObject({
   model: z.string().trim().min(1),
   selectOnCreate: z.boolean(),
+  selectOnRestore: z.boolean(),
   requiredOptions: z.record(z.string().min(1), z.string()),
 });
 export type DeclaredProviderSelection = z.infer<typeof declaredProviderSelectionSchema>;

@@ -20,6 +20,7 @@ const declaration = {
 	selection: {
 		model: 'grok-4.7',
 		selectOnCreate: false,
+		selectOnRestore: false,
 		requiredOptions: { reasoning_effort: 'low', fast: 'false' },
 	},
 	prompt: 'Reply with only the product of 4321 and 5678, digits only',

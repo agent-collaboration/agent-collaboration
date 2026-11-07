@@ -43,6 +43,15 @@ export interface StandInOptions {
   readonly configOptionsAfterLoad?: readonly Json[];
   readonly modelAfterResume?: string;
   readonly modelAfterLoad?: string;
+  readonly restoreSettingsGate?: boolean;
+  readonly settingsSetOutcome?:
+    | "success"
+    | "providerRejected"
+    | "outcomeUnknown"
+    | "malformed"
+    | "foreignTarget";
+  readonly settingsSetKeepsModel?: boolean;
+  readonly settingsSetPhase?: "resume" | "load";
   readonly createNotApplied?: boolean;
   readonly createdWithoutSettings?: boolean;
   readonly endpointId?: string;
@@ -185,6 +194,8 @@ class ScriptedHost {
   private readonly kinds = new Map<string, string>();
   private created = 0;
   private currentModel: string;
+  private settingsGated = false;
+  private restoredVia: "resume" | "load" | null = null;
   private configOptions: readonly Json[];
   private readonly options: StandInOptions;
   readonly store: string;
@@ -233,6 +244,8 @@ class ScriptedHost {
         return { result: this.snapshot(z.string().parse(args["operationId"])) };
       case "conversation_operation_wait":
         return this.wait(z.string().parse(args["operationId"]));
+      case "conversation_settings_set":
+        return this.setModel(this.session(name, sessionId), args);
       case "provider_session_inspect":
         return {
           result: {
@@ -270,6 +283,34 @@ class ScriptedHost {
 
   private target(sessionId: string): StandInTarget {
     return target(this.options, sessionId);
+  }
+
+  private setModel(session: SessionState & { id: string }, args: Json): Answer {
+    const request = z
+      .object({ setting: z.literal("model"), value: z.string(), actor: z.unknown() })
+      .parse(args);
+    const configuredPhase =
+      this.options.settingsSetPhase === undefined ||
+      this.options.settingsSetPhase === this.restoredVia;
+    const outcome = configuredPhase ? (this.options.settingsSetOutcome ?? "success") : "success";
+    if (outcome === "providerRejected" || outcome === "outcomeUnknown")
+      return {
+        error: {
+          mcpResult: "error",
+          kind: outcome,
+          target: this.target(session.id),
+          message: "setting did not confirm",
+        },
+      };
+    if (outcome === "malformed") return { result: { target: this.target(session.id) } };
+    if (!configuredPhase || !this.options.settingsSetKeepsModel) this.currentModel = request.value;
+    this.settingsGated = false;
+    return {
+      result: {
+        target: this.target(outcome === "foreignTarget" ? "foreign-session" : session.id),
+        effectiveSettings: { model: request.value },
+      },
+    };
   }
 
   private create(operationId: string): Answer {
@@ -312,6 +353,15 @@ class ScriptedHost {
   }
 
   private prompt(session: SessionState & { id: string }, operationId: string, args: Json): Answer {
+    if (this.settingsGated)
+      return {
+        error: {
+          mcpResult: "error",
+          kind: "unavailable",
+          target: this.target(session.id),
+          message: "settings unresolved",
+        },
+      };
     const message = z.object({ text: z.string() }).parse(args["message"]);
     // Each turn's reply is distinct, so a reordered replay is visible.
     const exchange = {
@@ -370,6 +420,8 @@ class ScriptedHost {
       });
     }
     if (tool === "resume") {
+      this.restoredVia = "resume";
+      this.settingsGated = this.options.restoreSettingsGate ?? false;
       this.currentModel = this.options.modelAfterResume ?? this.currentModel;
       this.configOptions = this.options.configOptionsAfterResume ?? this.configOptions;
       this.openEpoch(session, replayed(session.history, this.options.resumeReplay ?? "none"), {
@@ -388,10 +440,12 @@ class ScriptedHost {
   }
 
   private load(session: SessionState & { id: string }, operationId: string): Answer {
+    this.restoredVia = "load";
     if ((this.options.unsupported ?? []).includes("load"))
       return this.refuse(operationId, session.id, "load");
     this.recordOperation(operationId, "conversationLoad", session.id);
     this.receiptRow("session/load", session.id);
+    this.settingsGated = this.options.restoreSettingsGate ?? false;
     this.currentModel = this.options.modelAfterLoad ?? this.currentModel;
     this.configOptions = this.options.configOptionsAfterLoad ?? this.configOptions;
     const shape = this.options.loadReplay ?? "faithful";

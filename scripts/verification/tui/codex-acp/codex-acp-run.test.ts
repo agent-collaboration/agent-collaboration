@@ -103,6 +103,7 @@ const PROMPT = {
 	selection: {
 		model: 'grok-4.7',
 		selectOnCreate: false,
+		selectOnRestore: false,
 		requiredOptions: { reasoning_effort: 'low', fast: 'false' },
 	},
 	prompt: 'Reply with only the product of 4321 and 5678, digits only',
@@ -120,14 +121,16 @@ test('ordinary provider plans accept a complete catalog selection without fixed 
 	const selection = {
 		model: 'other-catalog-model',
 		selectOnCreate: false,
+		selectOnRestore: false,
 		requiredOptions: { optional_mode: 'exact-value' },
 	};
 	const parsed = codexAcpRunPlanSchema.parse({ ...plan, journey: { ...PROMPT, selection } });
 	expect(parsed.journey).toMatchObject({ selection });
 	for (const incomplete of [
+		{ model: 'grok-4.7', selectOnCreate: false, requiredOptions: {} },
 		{ model: 'grok-4.7', requiredOptions: {} },
 		{ model: 'grok-4.7', selectOnCreate: false },
-		{ model: '', selectOnCreate: false, requiredOptions: {} },
+		{ model: '', selectOnCreate: false, selectOnRestore: false, requiredOptions: {} },
 	])
 		expect(() =>
 			codexAcpRunPlanSchema.parse({ ...plan, journey: { ...PROMPT, selection: incomplete } }),
@@ -493,7 +496,7 @@ const CLAUDE_ROUTE = {
 const CLAUDE_PROMPT = {
 	...PROMPT,
 	provider: 'claude',
-	selection: { model: 'haiku', selectOnCreate: true, requiredOptions: {} },
+	selection: { model: 'haiku', selectOnCreate: true, selectOnRestore: true, requiredOptions: {} },
 };
 
 test('a Claude route proof is admitted only for a bounded Claude prompt or selected-skill plan', async () => {

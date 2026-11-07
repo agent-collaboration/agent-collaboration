@@ -5,7 +5,11 @@
 import { z } from "zod";
 import { requireSelectedModel } from "../observations/declared-model.ts";
 import { reattachSettlement } from "../observations/operation-settlement.ts";
-import { sessionRefSchema, type SessionRef } from "../observations/observation-models.ts";
+import {
+  sameSession,
+  sessionRefSchema,
+  type SessionRef,
+} from "../observations/observation-models.ts";
 import type { ObservationRead } from "../observations/observation-ledger.ts";
 import { foldObservationReads } from "../observations/observation-ledger.ts";
 import {
@@ -231,6 +235,42 @@ async function requireDeclaredModel(
     target,
     inputs.plan.peer.selection,
   );
+}
+
+const restoredSettingsSchema = z.looseObject({
+  target: sessionRefSchema,
+  effectiveSettings: z.looseObject({ model: z.string() }),
+});
+
+/** The caller explicitly reselects after restore; the Router does not persist the selection. */
+export async function restoreDeclaredModel(
+  inputs: CaseInputs,
+  target: SessionRef,
+  step: string,
+): Promise<void> {
+  const peer = inputs.plan.peer;
+  if (peer.kind !== "provider" || !peer.selection.selectOnRestore) return;
+  const selected = restoredSettingsSchema.parse(
+    answered(
+      await callTool(
+        inputs.context,
+        `${step}-model-set`,
+        "conversation_settings_set",
+        {
+          target,
+          actor: requests.providerIdentity(inputs.plan.actor),
+          setting: "model",
+          value: peer.selection.model,
+        },
+        { timeoutMs: 30_000 },
+      ),
+      `${step} model set`,
+    ),
+  );
+  if (!sameSession(selected.target, target)) throw new Error("model set names another Session");
+  if (selected.effectiveSettings.model !== peer.selection.model)
+    throw new Error("model set did not confirm the declared model");
+  await requireDeclaredModel(inputs, target, step);
 }
 
 export async function attachedPrompt(
