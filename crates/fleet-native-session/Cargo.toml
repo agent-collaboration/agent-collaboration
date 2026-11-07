@@ -8,7 +8,6 @@ publish.workspace = true
 
 [features]
 test-support = []
-test-fault = []
 
 [dependencies]
 durable-steps = { workspace = true, features = ["turso"] }
@@ -28,7 +27,6 @@ tracing = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 tempfile = "3.27.0"
-fleet-project-lease.workspace = true
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -8,7 +8,6 @@ publish.workspace = true
 
 [features]
 test-support = ["fleet-project-writer/test-support"]
-test-fault = ["fleet-tokio-objects/test-fault"]
 
 [dependencies]
 durable-steps = { workspace = true, features = ["turso"] }
