@@ -5,7 +5,7 @@ use crate::{
     update_barrier::{UpdateBarrier, wait_at},
 };
 use message_board_storage::{RouterUpdateStep, UpdateLedger, UpdateStepProgress};
-use std::path::Path;
+use std::{os::unix::fs::DirBuilderExt, path::Path};
 
 /// Whether step 0001 migrates an existing Fleet database or creates a missing one.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -28,9 +28,13 @@ pub(crate) async fn create_ledger(
             .await
             .map_err(storage_error)?,
         LedgerStoreOpen::Create => {
+            // The Host refuses a collaboration directory others can read, so the update
+            // creates it, and a missing root above it, owner-only as the Host would.
             let directory = codex_router_host::router_collaboration_directory(root);
-            tokio::fs::create_dir_all(&directory)
-                .await
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(&directory)
                 .map_err(|source| RouterUpdateError::File {
                     path: directory,
                     source,

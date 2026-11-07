@@ -26,6 +26,8 @@ mod compiled_cli_host_fixture;
 use compiled_cli_host_fixture::{sign_debug_binary, stop_fixture_processes};
 #[path = "compiled_cli_host_fixture_test.rs"]
 mod fixture_tests;
+#[path = "compiled_cli_host_updated_root_test.rs"]
+mod updated_root_tests;
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 

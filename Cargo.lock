@@ -1416,6 +1416,7 @@ version = "0.1.133"
 dependencies = [
  "agent-collaboration-tui",
  "agent-router-quota-tui",
+ "agent-router-update",
  "base64 0.22.1",
  "board-central-test-support",
  "chrono",
