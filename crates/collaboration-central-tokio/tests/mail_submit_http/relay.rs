@@ -5,8 +5,8 @@ use super::*;
 use board_sync_protocol::BoardDeliveryTypes;
 use collaboration_central_conformance::{ConformanceClient, enroll_admitted_peer};
 use durable_steps::Uuid;
-use fleet_sync_delivery::DeliveryLimits;
-use fleet_sync_protocol::{
+use fleet_mail_delivery::DeliveryLimits;
+use fleet_protocol::{
     DeliveryEnvelope, DeliveryItem, DeliveryRefusal, ItemId, PeerId, PushResult, ServerCall,
     Submitter,
 };
@@ -49,7 +49,7 @@ async fn normal_recipient_session_pushes_receipts_and_reports_original_mail()
             let no_room=DeliveryLimits::new::<BoardDeliveryTypes>(1_000_000,
 100,
 0,
-fleet_sync_delivery::minimum_settlement_allowance::<BoardDeliveryTypes>()?,)?;
+fleet_mail_delivery::minimum_settlement_allowance::<BoardDeliveryTypes>()?,)?;
             let refused=inbox.accept_with_limits(actual,offered,no_room).await?;
             if !matches!(refused,PushResult::Refused {reason:DeliveryRefusal::MailboxFull})||inbox.count().await?!=0 {return Err("full real Inbox took custody".into());}
             pushed(&mut recipient.socket,frame,refused).await?;
@@ -60,7 +60,7 @@ fleet_sync_delivery::minimum_settlement_allowance::<BoardDeliveryTypes>()?,)?;
             if !matches!(receipt,PushResult::Accepted {..}) {return Err("real SDK did not accept fresh custody".into());}
             pushed(&mut recipient.socket,frame,receipt).await?;
             wait_for_receipt(&mut sender.socket, &item, owner).await?;
-            let reference=fleet_sync_protocol::DeliveryItemRef {item:item.id(),digest:item.digest().clone()};
+            let reference=fleet_protocol::DeliveryItemRef {item:item.id(),digest:item.digest().clone()};
             let saved=inbox.payload(reference).await?;
             require(serde_json::to_value(saved)?,serde_json::to_value(&item)?.get("value").cloned().ok_or("item payload absent")?)?;
             if inbox.count().await?!=1 || inbox.used_bytes().await?==0 {return Err("Push retry duplicated custody or lost its quota accounting".into());}

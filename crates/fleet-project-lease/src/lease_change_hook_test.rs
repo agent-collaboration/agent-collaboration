@@ -185,7 +185,7 @@ async fn renew_at(
     attempt: u128,
     milliseconds: i64,
 ) -> TestResult<RenewAnswer> {
-    let request = fleet_sync_protocol::RenewRequest {
+    let request = fleet_protocol::RenewRequest {
         attempt: import_request(attempt, "a")?.attempt,
         database: database()?,
         epoch: Epoch::new(1)?,
@@ -316,14 +316,14 @@ async fn renewal_reports_same_holder_revision_and_expiry_with_replay_noop_and_at
     Ok(())
 }
 
-fn retirement_request() -> TestResult<fleet_sync_protocol::Retirement> {
-    Ok(fleet_sync_protocol::Retirement {
+fn retirement_request() -> TestResult<fleet_protocol::Retirement> {
+    Ok(fleet_protocol::Retirement {
         attempt: import_request(501, "a")?.attempt,
         database: database()?,
         expect_fence: Epoch::new(1)?,
-        expect_acked: fleet_sync_protocol::ReplicationPosition::new(
+        expect_acked: fleet_protocol::ReplicationPosition::new(
             Epoch::new(1)?,
-            fleet_sync_protocol::CommitSequence::new(0),
+            fleet_protocol::CommitSequence::new(0),
         ),
     })
 }
@@ -336,7 +336,7 @@ async fn import_once(engine: &TestEngine) -> TestResult {
             request
         )
         .await?,
-        fleet_sync_protocol::ImportAnswer::Imported
+        fleet_protocol::ImportAnswer::Imported
     );
     Ok(())
 }
@@ -366,14 +366,14 @@ async fn import_and_both_retirement_lifecycle_commits_are_projected_without_repl
             repeated
         )
         .await?,
-        fleet_sync_protocol::ImportAnswer::AlreadyImported
+        fleet_protocol::ImportAnswer::AlreadyImported
     );
     assert_eq!(changes(&store).await?, imported);
     host.now.store(1200, Ordering::SeqCst);
     let request = retirement_request()?;
     let key = lifecycle_request_key(request.attempt)?;
     assert!(
-        matches!(task_answer::<RetirementTask<TestStore,Turso,ProjectionHook>>(&engine,&key,request.clone()).await?,fleet_sync_protocol::RetirementAnswer::Retired {at} if at==SyncTime::from_unix_millis(1200))
+        matches!(task_answer::<RetirementTask<TestStore,Turso,ProjectionHook>>(&engine,&key,request.clone()).await?,fleet_protocol::RetirementAnswer::Retired {at} if at==SyncTime::from_unix_millis(1200))
     );
     let observed = changes(&store).await?;
     assert_eq!(observed.len(), 3);
@@ -476,14 +476,13 @@ async fn grant_projection_failure_rolls_back_holder_epoch_revision_and_history_u
     let before_changes = changes(&store).await?;
     hook.fail_after_write.store(true, Ordering::SeqCst);
     host.now.store(1500, Ordering::SeqCst);
-    let attempt =
-        fleet_sync_protocol::TransferId::new(import_request(601, "a")?.attempt.as_uuid())?;
-    let request = fleet_sync_protocol::HolderChangeRequest::Move {
+    let attempt = fleet_protocol::TransferId::new(import_request(601, "a")?.attempt.as_uuid())?;
+    let request = fleet_protocol::HolderChangeRequest::Move {
         attempt,
         database: database()?,
         from_epoch: Epoch::new(1)?,
         to: peer(2)?,
-        reason: fleet_sync_protocol::HolderChangeReason::new("projection transaction")?,
+        reason: fleet_protocol::HolderChangeReason::new("projection transaction")?,
     };
     let key = holder_change_request_key(attempt)?;
     let operation = engine

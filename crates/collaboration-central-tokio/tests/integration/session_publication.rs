@@ -3,8 +3,8 @@
 use crate::session_publication_fixture as support;
 use collaboration_central_core::ObjectHost;
 use collaboration_central_tokio::SocketCommand;
-use fleet_sync_protocol::{CloseReason, SchemaSupport};
-use fleet_sync_session::ConnectionRegistration;
+use fleet_protocol::{CloseReason, SchemaSupport};
+use fleet_session::ConnectionRegistration;
 use std::{future::Future, sync::atomic::Ordering, task::Poll, time::Duration};
 use support::{Fixture, TestError};
 
@@ -22,7 +22,7 @@ async fn closed_socket_cleanup_does_not_require_a_live_admission_and_other_sessi
         durable_steps::Uuid::now_v7().to_string().try_into()?;
     let (healthy, healthy_session, mut healthy_socket) = fixture
         .socket_as(
-            fleet_sync_protocol::PeerId::new(durable_steps::Uuid::now_v7())?,
+            fleet_protocol::PeerId::new(durable_steps::Uuid::now_v7())?,
             healthy_installation.clone(),
         )
         .await?;
@@ -73,10 +73,10 @@ async fn closed_socket_cleanup_does_not_require_a_live_admission_and_other_sessi
     };
     assert!(matches!(
         serde_json::from_slice::<
-            fleet_sync_protocol::ServerFrame<board_sync_protocol::BoardConsumerProtocol>,
+            fleet_protocol::ServerFrame<board_sync_protocol::BoardConsumerProtocol>,
         >(&bytes)?,
-        fleet_sync_protocol::ServerFrame::Notice {
-            body: fleet_sync_protocol::Notice::Consumer(board_sync_protocol::PositionedBoardNotice {
+        fleet_protocol::ServerFrame::Notice {
+            body: fleet_protocol::Notice::Consumer(board_sync_protocol::PositionedBoardNotice {
                 position,
                 kind: board_sync_protocol::BoardNotice::ProjectListChanged {},
             }),
@@ -100,7 +100,7 @@ async fn closed_socket_cleanup_does_not_require_a_live_admission_and_other_sessi
     ));
     let (fresh, fresh_session, mut fresh_socket) = fixture
         .socket_as(
-            fleet_sync_protocol::PeerId::new(durable_steps::Uuid::now_v7())?,
+            fleet_protocol::PeerId::new(durable_steps::Uuid::now_v7())?,
             durable_steps::Uuid::now_v7().to_string().try_into()?,
         )
         .await?;
@@ -122,10 +122,10 @@ async fn closed_socket_cleanup_does_not_require_a_live_admission_and_other_sessi
 async fn close_callback_for_absent_native_socket_is_idempotent() -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
     let fixture = Fixture::open(directory.path()).await?;
-    let binding = fleet_sync_session::ConnectionBinding::new(
-        fleet_sync_protocol::ConnectionId::new(durable_steps::Uuid::now_v7())?,
-        fleet_sync_session::VerifiedPeer {
-            peer: fleet_sync_protocol::PeerId::new(durable_steps::Uuid::now_v7())?,
+    let binding = fleet_session::ConnectionBinding::new(
+        fleet_protocol::ConnectionId::new(durable_steps::Uuid::now_v7())?,
+        fleet_session::VerifiedPeer {
+            peer: fleet_protocol::PeerId::new(durable_steps::Uuid::now_v7())?,
             expires_at: runtime_primitives::SyncTime::from_unix_millis(1_900_000_000_000),
         },
     );

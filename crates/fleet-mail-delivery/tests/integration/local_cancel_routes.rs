@@ -2,7 +2,7 @@
 use super::cancellation_support::*;
 use super::support;
 use durable_steps::AtomicStore;
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use std::sync::atomic::Ordering;
 use support::{network::*, *};
 

@@ -49,7 +49,7 @@ async fn message_to_missing_endpoint_reports_no_native_effects() {
 
     let (identity, native_mail) = native_mail_owner::start(
         identity,
-        fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).unwrap(),
+        fleet_protocol::PeerId::new(uuid::Uuid::now_v7()).unwrap(),
         collaboration_service::MailPushDeliveryProps {
             interactions,
             actors: subscription_delivery.clone(),

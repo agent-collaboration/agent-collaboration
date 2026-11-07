@@ -30,8 +30,8 @@ async fn reject_and_move_creation(
     drop(store);
     let database = fixture._registry.database(project).await?;
     database
-        .reject_registration(fleet_sync_protocol::GateReason {
-            code: fleet_sync_protocol::GateReasonCode::new("consumer.refused")?,
+        .reject_registration(fleet_protocol::GateReason {
+            code: fleet_protocol::GateReasonCode::new("consumer.refused")?,
             detail: "projection fixture registration refused".to_owned(),
         })
         .await?;

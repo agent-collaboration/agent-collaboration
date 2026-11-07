@@ -3,7 +3,7 @@ use crate::{
     writer_release_record::{ReleaseState, WriterReleaseRecord, read_releases, save_release},
 };
 use durable_steps::CallId;
-use fleet_sync_protocol::{ReleaseRequest, WithdrawAnswer, WithdrawRelease};
+use fleet_protocol::{ReleaseRequest, WithdrawAnswer, WithdrawRelease};
 use sqlx_core::connection::Connection;
 
 impl<S: ReplicatedSchema> ReplicatedDatabase<S> {

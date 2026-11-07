@@ -31,11 +31,11 @@ pub(super) struct MailHarness {
     pub mail: mail_owner::MailOwner,
     pub welcomed: watch::Sender<bool>,
     pub transport: NoticeTransport,
-    pub relay: fleet_sync_protocol::PeerId,
+    pub relay: fleet_protocol::PeerId,
     directory: Option<tempfile::TempDir>,
     central: TestFleet,
     ledger: Arc<NoticeLedger>,
-    requests: fleet_sync_tokio_runner::SessionRequests<BoardConsumerProtocol>,
+    requests: fleet_session_client::SessionRequests<BoardConsumerProtocol>,
     stop: watch::Sender<bool>,
     tasks: JoinSet<io::Result<()>>,
     projects: Arc<ProjectWriters>,
@@ -63,7 +63,7 @@ impl MailHarness {
     }
     pub(super) async fn open_manual(
         base: &Path,
-        peer: Option<fleet_sync_protocol::PeerId>,
+        peer: Option<fleet_protocol::PeerId>,
     ) -> Result<Self, TestError> {
         Self::open_configured(base, None, false, true, peer, None).await
     }
@@ -72,7 +72,7 @@ impl MailHarness {
         directory: Option<tempfile::TempDir>,
         initial_notice: bool,
         manual: bool,
-        peer: Option<fleet_sync_protocol::PeerId>,
+        peer: Option<fleet_protocol::PeerId>,
         existing_central: Option<TestFleet>,
     ) -> Result<Self, TestError> {
         let root = base.join("router");
@@ -231,21 +231,16 @@ impl MailHarness {
     }
     // Recipient outcome is an explicit external setup input. The real relay
     // validates its authenticated peer and owns status publication/history.
-    pub(super) async fn report_held(
-        &self,
-        item: fleet_sync_protocol::ItemId,
-    ) -> Result<(), TestError> {
-        self.report_outcome(item, fleet_sync_protocol::RecipientOutcome::Held)
+    pub(super) async fn report_held(&self, item: fleet_protocol::ItemId) -> Result<(), TestError> {
+        self.report_outcome(item, fleet_protocol::RecipientOutcome::Held)
             .await
     }
     pub(super) async fn report_outcome(
         &self,
-        item: fleet_sync_protocol::ItemId,
-        outcome: fleet_sync_protocol::RecipientOutcome<
-            collaboration_mail_protocol::CarrierAcceptance,
-        >,
+        item: fleet_protocol::ItemId,
+        outcome: fleet_protocol::RecipientOutcome<collaboration_mail_protocol::CarrierAcceptance>,
     ) -> Result<(), TestError> {
-        use fleet_sync_protocol::{
+        use fleet_protocol::{
             DeliveryAnswer, DeliveryRequest, RecipientReport, ReportResult, ReportSeq,
         };
         let report_seq = ReportSeq::new(1);
@@ -277,7 +272,7 @@ impl MailHarness {
     pub(super) async fn next_publication(
         &mut self,
     ) -> Result<ClientEvent<BoardConsumerProtocol>, TestError> {
-        use fleet_sync_protocol::{ServerCall, ServerRequest};
+        use fleet_protocol::{ServerCall, ServerRequest};
         loop {
             match self.next_manual_event().await? {
                 event @ ClientEvent::Request {
@@ -344,7 +339,7 @@ impl MailHarness {
             .map_err(|_| io::Error::other("Welcome gate closed"))?;
         Ok(())
     }
-    pub fn peer(&self) -> fleet_sync_protocol::PeerId {
+    pub fn peer(&self) -> fleet_protocol::PeerId {
         self.central.peer
     }
     pub async fn establish_epoch_two(
@@ -378,9 +373,9 @@ impl MailHarness {
     }
     pub async fn submit_generic(
         &self,
-        item: fleet_sync_protocol::DeliveryEnvelope<board_sync_protocol::BoardDeliveryTypes>,
+        item: fleet_protocol::DeliveryEnvelope<board_sync_protocol::BoardDeliveryTypes>,
     ) -> Result<
-        fleet_sync_protocol::SubmitResult<collaboration_mail_protocol::CarrierAcceptance>,
+        fleet_protocol::SubmitResult<collaboration_mail_protocol::CarrierAcceptance>,
         TestError,
     > {
         let call = runtime_primitives::CallId {
@@ -390,21 +385,19 @@ impl MailHarness {
         match self
             .requests
             .request(OperationRequest::Delivery(
-                fleet_sync_protocol::DeliveryRequest::Submit { call, item },
+                fleet_protocol::DeliveryRequest::Submit { call, item },
             ))
             .await?
         {
-            OperationAnswer::Delivery(fleet_sync_protocol::DeliveryAnswer::Submit(answer)) => {
-                Ok(answer)
-            }
+            OperationAnswer::Delivery(fleet_protocol::DeliveryAnswer::Submit(answer)) => Ok(answer),
             _ => Err(io::Error::other("real relay returned a different submit answer").into()),
         }
     }
     pub async fn query(
         &self,
-        items: Vec<fleet_sync_protocol::ItemId>,
+        items: Vec<fleet_protocol::ItemId>,
     ) -> Result<
-        fleet_sync_protocol::QueryResult<collaboration_mail_protocol::CarrierAcceptance>,
+        fleet_protocol::QueryResult<collaboration_mail_protocol::CarrierAcceptance>,
         TestError,
     > {
         let call = runtime_primitives::CallId {
@@ -414,7 +407,7 @@ impl MailHarness {
         match self
             .requests
             .request(OperationRequest::Delivery(
-                fleet_sync_protocol::DeliveryRequest::Query {
+                fleet_protocol::DeliveryRequest::Query {
                     call,
                     mailbox: self.peer(),
                     items,
@@ -422,9 +415,7 @@ impl MailHarness {
             ))
             .await?
         {
-            OperationAnswer::Delivery(fleet_sync_protocol::DeliveryAnswer::Query(answer)) => {
-                Ok(answer)
-            }
+            OperationAnswer::Delivery(fleet_protocol::DeliveryAnswer::Query(answer)) => Ok(answer),
             _ => Err(io::Error::other("real relay returned a different query answer").into()),
         }
     }
@@ -433,7 +424,7 @@ impl MailHarness {
         after: u64,
         limit: u32,
     ) -> Result<
-        fleet_sync_protocol::StatusFetchResult<collaboration_mail_protocol::CarrierAcceptance>,
+        fleet_protocol::StatusFetchResult<collaboration_mail_protocol::CarrierAcceptance>,
         TestError,
     > {
         let call = runtime_primitives::CallId {
@@ -443,15 +434,15 @@ impl MailHarness {
         match self
             .requests
             .request(OperationRequest::Delivery(
-                fleet_sync_protocol::DeliveryRequest::StatusFetch {
+                fleet_protocol::DeliveryRequest::StatusFetch {
                     call,
-                    after: fleet_sync_protocol::StatusCursor::new(after),
+                    after: fleet_protocol::StatusCursor::new(after),
                     limit,
                 },
             ))
             .await?
         {
-            OperationAnswer::Delivery(fleet_sync_protocol::DeliveryAnswer::StatusFetch(batch)) => {
+            OperationAnswer::Delivery(fleet_protocol::DeliveryAnswer::StatusFetch(batch)) => {
                 Ok(batch)
             }
             _ => Err(io::Error::other("real relay returned a different status answer").into()),

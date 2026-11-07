@@ -2,7 +2,7 @@
 use super::*;
 use board_legacy_upgrade::{UpgradePublisher, prepare_sources};
 use board_sync_protocol::{ProjectClaimReply, ProjectClaimRequest};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CopyStatusAnswer, OperationAnswer, OperationRequest, ReplicationAnswer, ReplicationRequest,
 };
 use sqlx_turso::sqlx::{ConnectOptions, Connection, Executor};
@@ -128,7 +128,7 @@ async fn run_claim_after_import(interrupted: bool) -> TestResult {
         ))
         .await?;
     assert!(
-        matches!(before, OperationAnswer::Replication(ReplicationAnswer::CopyStatus(CopyStatusAnswer::Status(status))) if status.acked == prefix && status.holder.is_none() && status.fence == fleet_sync_protocol::Epoch::new(1)?),
+        matches!(before, OperationAnswer::Replication(ReplicationAnswer::CopyStatus(CopyStatusAnswer::Status(status))) if status.acked == prefix && status.holder.is_none() && status.fence == fleet_protocol::Epoch::new(1)?),
         "the actual import did not publish its exact unheld prefix before Claim"
     );
     let request = ProjectClaimRequest {
@@ -148,7 +148,7 @@ async fn run_claim_after_import(interrupted: bool) -> TestResult {
     let ProjectClaimReply::Claimed { epoch, start, .. } = answer else {
         return Err(format!("actual imported Claim did not complete: {answer:?}").into());
     };
-    assert_eq!(epoch, fleet_sync_protocol::Epoch::new(2)?);
+    assert_eq!(epoch, fleet_protocol::Epoch::new(2)?);
     assert_eq!(start, prefix);
     let store = registry
         .existing_project(&project)
@@ -210,7 +210,7 @@ async fn run_claim_after_import(interrupted: bool) -> TestResult {
             ))
             .await?;
         let OperationAnswer::Replication(ReplicationAnswer::SnapshotPage(
-            fleet_sync_protocol::SnapshotRead::Page(actual),
+            fleet_protocol::SnapshotRead::Page(actual),
         )) = actual
         else {
             return Err("advanced Copy snapshot unavailable after import completion".into());

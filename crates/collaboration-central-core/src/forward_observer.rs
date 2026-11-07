@@ -6,7 +6,7 @@ use crate::{
     step_driver::{StepCallback, StepDriver, StepResult},
 };
 use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::FrameId;
+use fleet_protocol::FrameId;
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,

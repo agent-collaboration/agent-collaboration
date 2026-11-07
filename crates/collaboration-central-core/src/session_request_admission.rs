@@ -1,8 +1,8 @@
 //! A session may register a writer only under its authenticated peer identity.
 
 use board_sync_protocol::BoardConsumerProtocol;
-use fleet_sync_protocol::{LeaseRequest, OperationRequest, RegistrationRefusal};
-use fleet_sync_session::SessionKey;
+use fleet_protocol::{LeaseRequest, OperationRequest, RegistrationRefusal};
+use fleet_session::SessionKey;
 
 pub(crate) fn refuse_register_from_another_peer(
     session: SessionKey,
@@ -21,7 +21,7 @@ pub(crate) fn refuse_register_from_another_peer(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fleet_sync_protocol::{DatabaseId, Origin, PeerId, Registration, RequestId, SessionId};
+    use fleet_protocol::{DatabaseId, Origin, PeerId, Registration, RequestId, SessionId};
 
     #[test]
     fn the_authenticated_writer_is_not_refused_by_the_session_peer_guard()

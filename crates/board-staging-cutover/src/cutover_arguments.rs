@@ -1,7 +1,7 @@
 //! Parse the declared Host identity without defaults or account-state discovery.
 use board_staging_cutover::OwnerAuthentication;
 use collaboration_protocol::UuidIdentity;
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use std::{ffi::OsString, path::PathBuf};
 use url::Url;
 

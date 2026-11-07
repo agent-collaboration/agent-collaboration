@@ -10,7 +10,7 @@ use collaboration_central_conformance::{
 use collaboration_central_core::{ObjectAddress, RegistryTime};
 use durable_steps::Uuid;
 use fleet_admission::{FleetOperation, FleetRequest, FleetRequestResult};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, CommitSequence, DatabaseId, Epoch, FrameId, LeaseAnswer, LeaseRequest,
     OperationAnswer, OperationRequest, Origin, PeerId, Piece, PieceContents, Registration,
     RegistrationAnswer, RegistrationRefusal, ReplicatedTransaction, ReplicationAnswer,
@@ -91,13 +91,13 @@ pub(super) async fn run(base_url: &str) -> ConformanceResult<()> {
             return Err("normal Fleet then Register did not admit the first real Copy piece".into());
         }
         println!("CREATION_PIECE_CASE registered_first_epoch_accepts_its_first_piece passed");
-        await_directory_copy(&mut creator.socket,database,fleet_admission::CopyMetadata {latest_record_at,as_of:fleet_admission::CopyMetadataAsOf {position:through,acked_at:fleet_sync_protocol::SyncTime::from_unix_millis(copy_now.0.timestamp_millis())}}).await?;
+        await_directory_copy(&mut creator.socket,database,fleet_admission::CopyMetadata {latest_record_at,as_of:fleet_admission::CopyMetadataAsOf {position:through,acked_at:fleet_protocol::SyncTime::from_unix_millis(copy_now.0.timestamp_millis())}}).await?;
         println!("CREATION_COPY_PROJECTION_CASE exact_precise_summary_position_and_own_copy_ack_clock passed");
         match operation_answer(&mut other.socket,OperationRequest::Lease(LeaseRequest::Claim {
             attempt:RequestId::new(Uuid::now_v7())?,database,
         })).await? {
-            OperationAnswer::Lease(LeaseAnswer::Claim(fleet_sync_protocol::HolderChangeAnswer::Refused(
-                fleet_sync_protocol::HolderChangeRefusal::AlreadyHeld {holder},
+            OperationAnswer::Lease(LeaseAnswer::Claim(fleet_protocol::HolderChangeAnswer::Refused(
+                fleet_protocol::HolderChangeRefusal::AlreadyHeld {holder},
             ))) if holder==PeerId::new(creator.peer)?=>{},
             _=>return Err("normal Claim did not preserve the actual existing holder".into()),
         }
@@ -110,10 +110,10 @@ pub(super) async fn run(base_url: &str) -> ConformanceResult<()> {
                     match operation_answer(&mut other.socket, OperationRequest::Lease(LeaseRequest::Claim {
                         attempt: unknown_attempt, database: unknown,
                     })).await? {
-                        OperationAnswer::Lease(LeaseAnswer::Claim(fleet_sync_protocol::HolderChangeAnswer::Refused(
-                            fleet_sync_protocol::HolderChangeRefusal::NotFound,
+                        OperationAnswer::Lease(LeaseAnswer::Claim(fleet_protocol::HolderChangeAnswer::Refused(
+                            fleet_protocol::HolderChangeRefusal::NotFound,
                         ))) => return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(()),
-                        OperationAnswer::Lease(LeaseAnswer::Claim(fleet_sync_protocol::HolderChangeAnswer::Pending { transfer }))
+                        OperationAnswer::Lease(LeaseAnswer::Claim(fleet_protocol::HolderChangeAnswer::Pending { transfer }))
                             if transfer.as_uuid() == unknown_attempt.as_uuid() => tokio::task::yield_now().await,
                         _ => return Err("unknown Claim did not preserve its correlated NotFound refusal".into()),
                     }
@@ -327,7 +327,7 @@ pub(super) async fn operation_answer(
 async fn await_registration_publication(
     socket: &mut WebSocket,
     database: DatabaseId,
-    expected_expiry: fleet_sync_protocol::SyncTime,
+    expected_expiry: fleet_protocol::SyncTime,
 ) -> ConformanceResult<()> {
     use board_sync_protocol::{BoardReadPage, BoardReadScope};
     use fleet_admission::{

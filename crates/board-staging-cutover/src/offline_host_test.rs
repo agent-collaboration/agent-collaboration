@@ -2,7 +2,7 @@ use super::{OfflineHost, OfflineHostError};
 use crate::cutover_host_fixture::CutoverHostFixture;
 use codex_router_host::{HostCoordinationPaths, HostInstanceLock, InstanceAcquireError};
 use collaboration_protocol::UuidIdentity;
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use std::os::unix::fs::PermissionsExt;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;

@@ -1,6 +1,6 @@
 //! Orphaned files expose only ledger lookups, with no migration or writer capability.
 use crate::{ProjectSnapshot, ProjectStorageError};
-use fleet_sync_writer::{ReplicatedSchema, RetainedFile, WriterRegistrationOutcome};
+use fleet_project_writer::{ReplicatedSchema, RetainedFile, WriterRegistrationOutcome};
 use message_board::{
     FeedCursor, ProjectId, ProjectRegistrationRejection, Record, RequestId, RequestLedgerEntry,
 };
@@ -59,7 +59,7 @@ impl ProjectLedgerReader {
     pub fn rejection_reason(&self) -> Option<ProjectRegistrationRejection> {
         match &self.registration {
             WriterRegistrationOutcome::Refused {
-                reason: fleet_sync_protocol::RegistrationRefusal::DatabaseRejected { reason },
+                reason: fleet_protocol::RegistrationRefusal::DatabaseRejected { reason },
             } => Some(ProjectRegistrationRejection {
                 code: reason.code.as_str().to_owned(),
                 detail: reason.detail.clone(),

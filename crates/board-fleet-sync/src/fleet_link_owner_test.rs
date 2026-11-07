@@ -1,7 +1,7 @@
 use super::*;
 use board_sync_protocol::{FleetLinkDropReason, FleetLinkRefusal};
-use fleet_sync_protocol::{AuthRefusal, CloseReason, SessionId};
-use fleet_sync_tokio_runner::{SessionConnectFailureKind, SessionDrop, SessionDropReason};
+use fleet_protocol::{AuthRefusal, CloseReason, SessionId};
+use fleet_session_client::{SessionConnectFailureKind, SessionDrop, SessionDropReason};
 use runtime_primitives::SyncTime;
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 

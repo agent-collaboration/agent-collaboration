@@ -1,11 +1,11 @@
 use crate::{ServiceConsumer, ServiceError, delivery_relay::*, service_state::ServiceState};
 use durable_steps::AtomicStore;
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliveryTransactionFailure, Outbox, StatusStream, classify_delivery_store_error,
     delivery_rollback,
 };
-use fleet_sync_protocol::*;
-use fleet_sync_session::PeerAuthenticator;
+use fleet_protocol::*;
+use fleet_session::PeerAuthenticator;
 use runtime_primitives::{Clock, WakeScheduler};
 
 impl<

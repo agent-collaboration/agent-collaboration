@@ -2,7 +2,7 @@
 use super::per_item;
 use super::support;
 use durable_steps::{AtomicStore, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use per_item::*;
 use sqlx_core::row::Row;
 use support::*;
@@ -106,7 +106,7 @@ async fn invalid_body_bound_is_refused_before_any_custody_write() {
                     .enqueue(
                         variable_item(1, "invalid"),
                         peer(3),
-                        fleet_sync_delivery::Submitter::Machine(peer(1)),
+                        fleet_mail_delivery::Submitter::Machine(peer(1)),
                         SyncTime::from_unix_millis(0)
                     )
                     .await,
@@ -153,7 +153,7 @@ async fn stored_bound_rejects_oversized_acceptance_after_sender_and_relay_releas
                     .enqueue(
                         variable_item(1, "small"),
                         peer(3),
-                        fleet_sync_delivery::Submitter::Machine(peer(1)),
+                        fleet_mail_delivery::Submitter::Machine(peer(1)),
                         SyncTime::from_unix_millis(0),
                     )
                     .await
@@ -256,7 +256,7 @@ async fn per_item_bound_survives_reopen_and_legacy_absence_uses_global() {
                         .enqueue(
                             variable_item(identity, "small"),
                             peer(3),
-                            fleet_sync_delivery::Submitter::Machine(peer(1)),
+                            fleet_mail_delivery::Submitter::Machine(peer(1)),
                             SyncTime::from_unix_millis(0),
                         )
                         .await

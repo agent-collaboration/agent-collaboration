@@ -4,7 +4,7 @@ use super::{
     project_state,
 };
 use crate::{ProjectStore, project_test_support::origin};
-use fleet_sync_protocol::SqlValue;
+use fleet_protocol::SqlValue;
 use message_board::*;
 
 #[expect(

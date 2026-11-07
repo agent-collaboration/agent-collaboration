@@ -9,7 +9,7 @@ use durable_steps::{
     AtomicStore, BoxFuture, Engine, OperationId,
     storage::{JournalStorage, OperationExecution},
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_turso::Turso;
 use std::sync::{
     Arc,
@@ -126,7 +126,7 @@ async fn cancelling_each_kind_before_check_survives_restart_without_external_deb
         let request = match kind {
             "move" => move_request(id)?,
             "takeover" => HolderChangeRequest::Takeover {
-                reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+                reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
                 attempt: id,
                 database: database()?,
                 to: peer(3)?,

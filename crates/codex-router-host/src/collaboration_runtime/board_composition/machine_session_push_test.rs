@@ -2,7 +2,7 @@
 use super::*;
 use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use collaboration_mail_protocol::{CarrierAcceptance, MailDeliveryMode, MailSender, MessageBody};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CallId, DeliveryEnvelope, DeliveryItem, DeliveryStatus, FrameId, ItemId, PeerId, PushResult,
     Recipient, ServerCall, ServerFrame, ServerRequest,
 };
@@ -48,10 +48,10 @@ pub(super) fn push_frame(
 ) -> Result<(FrameId, Vec<u8>), TestError> {
     let submitter = match item.sender() {
         MailSender::Project { project } => {
-            fleet_sync_protocol::Submitter::Project(project.as_str().to_owned().try_into()?)
+            fleet_protocol::Submitter::Project(project.as_str().to_owned().try_into()?)
         }
         MailSender::Session(_) | MailSender::HumanUser { .. } => {
-            fleet_sync_protocol::Submitter::Machine(machine)
+            fleet_protocol::Submitter::Machine(machine)
         }
     };
     let frame = FrameId::new(durable_steps::Uuid::now_v7())?;

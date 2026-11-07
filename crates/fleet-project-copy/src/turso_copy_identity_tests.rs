@@ -1,7 +1,7 @@
 //! Original copy creation remains immutable after its live fence and holder change.
 #![allow(clippy::panic_in_result_fn)]
 use crate::{turso_rule_fixture::*, *};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::connection::Connection;
 
 #[tokio::test]
@@ -54,7 +54,7 @@ async fn changed_creation_identity_is_refused_and_original_retry_never_restores_
             epoch: Epoch::new(1)?,
             acked: position(0)?,
         },
-        target_schema: Some(fleet_sync_protocol::SchemaSupport { max_version: 1 }),
+        target_schema: Some(fleet_protocol::SchemaSupport { max_version: 1 }),
         holder: next_writer,
     };
     assert!(matches!(

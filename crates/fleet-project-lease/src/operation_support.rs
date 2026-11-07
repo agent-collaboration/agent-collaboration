@@ -7,7 +7,7 @@ use durable_steps::{
     OperationFailure, OperationId, RequestKey, StepError, StepName,
     storage::{JournalStorage, TransactionScope},
 };
-use fleet_sync_protocol::{FailureCode, RequestId, SyncTime};
+use fleet_protocol::{FailureCode, RequestId, SyncTime};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,

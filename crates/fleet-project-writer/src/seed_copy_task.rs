@@ -6,7 +6,7 @@ use crate::{
 use durable_steps::{
     BoxFuture, Host, OperationContext, OperationFailure, RequestKey, StoreError, Task,
 };
-use fleet_sync_protocol::SeedComplete;
+use fleet_protocol::SeedComplete;
 use std::{marker::PhantomData, sync::Arc};
 
 pub struct SeedCopy<S, H> {
@@ -26,7 +26,7 @@ impl<S: ReplicatedSchema, H: Host> Task for SeedCopy<S, H> {
     const VERSION: u32 = 1;
     type Store = WriterJournalStore<S, H>;
     type Input = SeedCopyInput;
-    type Output = fleet_sync_protocol::ReplicationPosition;
+    type Output = fleet_protocol::ReplicationPosition;
     async fn run<C: OperationContext<Store = Self::Store>>(
         &self,
         ctx: &mut C,

@@ -20,7 +20,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use durable_steps::{CallFailure, CallId, CallTarget, NotSentReason, OperationId, StepName};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DatabaseId, Import, ImportAnswer, ReplicationAnswer, RequestId, SeedAnswer, SeedPageAnswer,
 };
 use std::sync::Arc;
@@ -63,7 +63,7 @@ pub(crate) async fn project<Platform: CentralPlatform>(
         )
             .into_response(),
         Ok(AdminProjectImportAnswer::CopyUnavailable { reason }) => {
-            crate::owner_http_routes::failed(fleet_sync_receiver::retryable_copy(reason))
+            crate::owner_http_routes::failed(fleet_project_copy::retryable_copy(reason))
         }
         Ok(answer) => Json(answer).into_response(),
         Err(failure) => crate::owner_http_routes::failed(failure),
@@ -399,8 +399,8 @@ mod integrity_refusal_tests {
     fn seed_integrity_refusal_retains_both_tables_in_the_admin_answer()
     -> Result<(), Box<dyn std::error::Error>> {
         let refusal = SeedAnswer::IntegrityViolation {
-            table: fleet_sync_protocol::TableName::new("posts")?,
-            references: fleet_sync_protocol::TableName::new("threads")?,
+            table: fleet_protocol::TableName::new("posts")?,
+            references: fleet_protocol::TableName::new("threads")?,
         };
         let answer = copy_failure(ReplicationAnswer::SeedComplete(refusal.clone()))
             .map_err(|error| format!("unexpected call failure: {error:?}"))?;

@@ -1,12 +1,13 @@
-use crate::{LocalStateCarryError, PublishError, native_carry_schema::FileScope};
+use crate::{LocalStateCarryError, native_carry_schema::FileScope};
 use durable_steps::{BoxFuture, StoreError};
-use fleet_sync_protocol::{
+use fleet_project_copy::{
+    InstallPageReceipt, SnapshotInstall, SnapshotInstallError, SnapshotInstallRules,
+};
+use fleet_protocol::{
     CopyStatus, ReplicationPosition, SnapshotCursor, SnapshotManifest, SnapshotManifestAnswer,
     SnapshotPage, SnapshotRead,
 };
-use fleet_sync_receiver::{
-    InstallPageReceipt, SnapshotInstall, SnapshotInstallError, SnapshotInstallRules,
-};
+use fleet_tokio_objects::PublishError;
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
@@ -24,9 +25,9 @@ use tokio::sync::{Mutex, OwnedMutexGuard};
 #[derive(Debug, thiserror::Error)]
 pub enum StagingError {
     #[error(transparent)]
-    ReadCopy(#[from] fleet_sync_writer::ReadCopyError),
+    ReadCopy(#[from] fleet_project_writer::ReadCopyError),
     #[error(transparent)]
-    Bootstrap(#[from] fleet_sync_writer::BootstrapError),
+    Bootstrap(#[from] fleet_project_writer::BootstrapError),
     #[error("snapshot source call failed: {failure}")]
     SourceCall { failure: durable_steps::CallFailure },
     #[error(transparent)]
@@ -73,9 +74,9 @@ pub enum StagedVerification {
 /// commit together, and only the receipt is returned to the control journal.
 pub struct StagingStore {
     directory: PathBuf,
-    files: Mutex<BTreeMap<fleet_sync_protocol::InstallId, Arc<Mutex<()>>>>,
+    files: Mutex<BTreeMap<fleet_protocol::InstallId, Arc<Mutex<()>>>>,
 }
-static COPY_MIGRATIONS: Migrator = sqlx::migrate!("../fleet-sync-receiver/migrations");
+static COPY_MIGRATIONS: Migrator = sqlx::migrate!("../fleet-project-copy/migrations");
 impl StagingStore {
     pub async fn open(directory: impl AsRef<Path>) -> Result<Self, StagingError> {
         tokio::fs::create_dir_all(directory.as_ref())

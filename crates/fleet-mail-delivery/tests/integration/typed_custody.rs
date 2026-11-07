@@ -1,6 +1,6 @@
 use super::support::*;
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::{query::query, row::Row};
 
 #[tokio::test]
@@ -84,7 +84,7 @@ async fn released_outbox_retains_deadline_identity_reserve_and_timestamps_after_
                         .enqueue(
                             original,
                             peer(9),
-                            fleet_sync_delivery::Submitter::Machine(peer(1)),
+                            fleet_mail_delivery::Submitter::Machine(peer(1)),
                             SyncTime::from_unix_millis(1_718_000_000_011),
                         )
                         .await
@@ -179,7 +179,7 @@ async fn typed_upgrade_preserves_existing_custody_and_marks_unknown_historical_t
         assert!(row.try_get::<Option<i64>,_>("admitted_at")?.is_none());
         assert!(row.try_get::<Option<i64>,_>("handed_off_at")?.is_none());
         assert_eq!(row.try_get::<i64,_>("last_report_seq")?,0);
-        assert_eq!(backfill_submitters::<TestTypes,_, _>(scope, fleet_sync_delivery::DeliveryHostRole::Machine, &FixtureBindings,SyncTime::from_unix_millis(0)).await.map_err(storage_error)?,1);
+        assert_eq!(backfill_submitters::<TestTypes,_, _>(scope, fleet_mail_delivery::DeliveryHostRole::Machine, &FixtureBindings,SyncTime::from_unix_millis(0)).await.map_err(storage_error)?,1);
         let resolved = Outbox::<_,TestTypes, _>::new(scope,limits(), &FixtureBindings).resolve_submit(&DeliveryItemRef { item:item_id(100), digest:item(100,"migrated content").digest().clone() })
             .await.map_err(storage_error)?;
         assert_eq!(serde_json::to_string(&resolved.item).unwrap(),serde_json::to_string(&item(100,"migrated content")).unwrap());

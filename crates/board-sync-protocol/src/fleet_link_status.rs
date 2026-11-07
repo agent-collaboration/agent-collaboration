@@ -1,6 +1,6 @@
 //! The Router's observed central link, independent of enrollment validity.
 use chrono::{DateTime, Utc};
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Serialize};
 
@@ -50,7 +50,7 @@ pub enum FleetLinkRefusal {
     IdentityInUseElsewhere,
     CredentialRejected {
         #[schemars(schema_with = "crate::fleet_link_failure::auth_refusal_schema")]
-        reason: fleet_sync_protocol::AuthRefusal,
+        reason: fleet_protocol::AuthRefusal,
     },
     SessionFailure {
         reason: crate::FleetLinkFailureReason,

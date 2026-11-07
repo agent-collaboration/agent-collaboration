@@ -9,7 +9,7 @@ use collaboration_central_core::{
     AdminProjectImportRequest,
 };
 use fleet_admission::FleetImportResult;
-use fleet_sync_protocol::{ReplicationPosition, RequestId};
+use fleet_protocol::{ReplicationPosition, RequestId};
 use message_board::CanonicalHash;
 use runtime_primitives::SystemClock;
 use serde::{Serialize, de::DeserializeOwned};

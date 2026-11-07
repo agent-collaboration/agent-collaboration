@@ -4,7 +4,7 @@ use super::{
     RecipientOutcome, RemoteCancelReplay, RouterDeliveryTypes, StoreError,
 };
 use board_sync_protocol::BoardDeliveryTypes;
-use fleet_sync_protocol::{DeliveryEnvelope, ItemStatusState};
+use fleet_protocol::{DeliveryEnvelope, ItemStatusState};
 
 impl MailDeliveryRuntime {
     pub(crate) async fn await_native_outcome_commit(&self, item: ItemId) -> Result<(), StoreError> {
@@ -56,7 +56,7 @@ impl MailDeliveryRuntime {
         let DeliveryEnvelope::Item(item) = envelope else {
             return Err(StoreError::backend("retired handoff is not an original"));
         };
-        if self.host.now() >= fleet_sync_delivery::removal_deadline(item.id()) {
+        if self.host.now() >= fleet_mail_delivery::removal_deadline(item.id()) {
             return Ok(true);
         }
         let reference = DeliveryItemRef {
@@ -85,7 +85,7 @@ impl MailDeliveryRuntime {
             // The public local retirement contract intentionally retains controls.
             return Ok(control.recipient().peer == self.config.owner);
         }
-        if self.host.now() >= fleet_sync_delivery::removal_deadline(control.id()) {
+        if self.host.now() >= fleet_mail_delivery::removal_deadline(control.id()) {
             return Ok(true);
         }
         let Some(canonical) = self

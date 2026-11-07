@@ -5,7 +5,7 @@ use crate::{
     retained_file_fixture::{ReadOnlyFixture, TestResult, snapshot},
     *,
 };
-use fleet_sync_protocol::{CommitSequence, Epoch, ReplicationPosition};
+use fleet_protocol::{CommitSequence, Epoch, ReplicationPosition};
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     query::query,

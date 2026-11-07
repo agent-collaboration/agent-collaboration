@@ -1,7 +1,7 @@
 use crate::{ServiceConsumer, ServiceError, ServiceHandle};
-use fleet_sync_delivery::test_support::{DeliveryObservation, snapshot};
-use fleet_sync_protocol::{ConsumerProtocol, DeliveryTypes};
-use fleet_sync_session::PeerAuthenticator;
+use fleet_mail_delivery::test_support::{DeliveryObservation, snapshot};
+use fleet_protocol::{ConsumerProtocol, DeliveryTypes};
+use fleet_session::PeerAuthenticator;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -29,7 +29,7 @@ impl<
                 Box::pin(async move {
                     snapshot::<_, P::Delivery, _>(
                         scope,
-                        fleet_sync_delivery::DeliveryHostRole::Relay,
+                        fleet_mail_delivery::DeliveryHostRole::Relay,
                         binding.as_ref(),
                     )
                     .await

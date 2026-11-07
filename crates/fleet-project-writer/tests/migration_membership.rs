@@ -1,8 +1,8 @@
 #![allow(clippy::panic_in_result_fn)]
 use durable_steps::Uuid;
-use fleet_sync_lease::{LeaseHolder, LeasePolicy};
-use fleet_sync_protocol::*;
-use fleet_sync_writer::*;
+use fleet_project_lease::{LeaseHolder, LeasePolicy};
+use fleet_project_writer::*;
+use fleet_protocol::*;
 use runtime_primitives::{Clock, SystemClock};
 use sqlx_core::{migrate::MigrationType, query::query, row::Row, sql_str::SqlSafeStr};
 use sqlx_turso::Turso;

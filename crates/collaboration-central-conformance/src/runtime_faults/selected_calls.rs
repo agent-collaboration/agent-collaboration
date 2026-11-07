@@ -1,6 +1,6 @@
 //! Select the owned invocation tag without interpreting or changing its request.
 use crate::DispatchCallSelector;
-use fleet_sync_protocol::{ItemId, PeerId};
+use fleet_protocol::{ItemId, PeerId};
 use serde::Deserialize;
 
 #[derive(Clone)]

@@ -69,7 +69,7 @@ pub fn retention_engine(fixture: &Fixture) -> Engine<TestStore, TestHost> {
     let mut engine = Engine::new(fixture.store.clone(), fixture.host.clone());
     engine
         .register(RecordRemoval::new(
-            fleet_sync_delivery::DeliveryHostRole::Machine,
+            fleet_mail_delivery::DeliveryHostRole::Machine,
         ))
         .unwrap();
     engine

@@ -1,7 +1,7 @@
 //! The expected catalog comes from the declared keys and indexes, not the live schema.
 use super::support::*;
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::DELIVERY_MIGRATOR;
+use fleet_mail_delivery::DELIVERY_MIGRATOR;
 use sqlx_core::{migrate::Migrator, query::query, row::Row, sql_str::AssertSqlSafe};
 use sqlx_turso::Turso;
 

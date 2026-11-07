@@ -3,7 +3,7 @@ use super::follow_admission_proofs::proposal;
 use super::native_follow_mail_proofs::{follow_application_with_replication, frozen_follow};
 use super::*;
 use crate::frozen_mail_query_fixture as query_fixture;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CancelBody, CancelResult, DeliveryCancel, DeliveryEnvelope, DeliveryItemRef, DeliveryStatus,
     ItemId, ItemStatus, ItemStatusState, StatusVersion, TooLateAt,
 };
@@ -112,7 +112,7 @@ async fn local_generation_replacement_reaches_native_delivery_while_another_read
                     .local_outcome_for_test(local_original.id())
                     .await
                     .unwrap(),
-                Some(fleet_sync_protocol::RecipientOutcome::Prevented { .. })
+                Some(fleet_protocol::RecipientOutcome::Prevented { .. })
             ) {
                 break;
             }

@@ -6,31 +6,31 @@ use super::{
 use collaboration_central_core::{AccessCaller, OwnerIdentity, RevocationDecision};
 use collaboration_central_tokio::SocketCommand;
 use durable_steps::{AtomicStore, StoreError};
-use fleet_sync_protocol::{DeliveryStatus, ItemId, ItemStatus, ItemStatusState};
+use fleet_protocol::{DeliveryStatus, ItemId, ItemStatus, ItemStatusState};
 use serde_json::json;
 
 type Acceptance =
-    <board_sync_protocol::BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Acceptance;
+    <board_sync_protocol::BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Acceptance;
 
 async fn status(fixture: &Fixture, item: ItemId) -> TestResult<ItemStatus<Acceptance>> {
     Ok(fixture
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::Outbox::<_, board_sync_protocol::BoardDeliveryTypes, _>::new(
+                fleet_mail_delivery::Outbox::<_, board_sync_protocol::BoardDeliveryTypes, _>::new(
                     scope,
                     collaboration_central_core::fleet_outbox_limits()
                         .map_err(StoreError::backend)?,
                     &collaboration_central_core::FleetSenderBinding,
                 )
                 .relay_query(
-                    fleet_sync_protocol::Submitter::Machine(
+                    fleet_protocol::Submitter::Machine(
                         A.to_owned().try_into().map_err(StoreError::backend)?,
                     ),
                     item,
                 )
                 .await
-                .map_err(fleet_sync_delivery::delivery_rollback)
+                .map_err(fleet_mail_delivery::delivery_rollback)
             })
         })
         .await?)
@@ -45,7 +45,7 @@ async fn selected_push_held_by_native_backpressure_can_finish_after_revoke_witho
 -> TestResult {
     use board_sync_protocol::BoardConsumerProtocol;
     use durable_steps::storage::TransactionScope;
-    use fleet_sync_protocol::{ServerCall, ServerFrame, ServerRequest};
+    use fleet_protocol::{ServerCall, ServerFrame, ServerRequest};
     use sqlx_core::{query::query, row::Row};
     let root = tempfile::tempdir()?;
     let fixture = Fixture::open(root.path(), NOW).await?;
@@ -320,7 +320,7 @@ async fn never_readmitted_recipient_custody_is_removed_at_day_sixty_and_then_too
         RevocationDecision::MachineRevoked
     );
     fixture.runtime.on_alarm().await?;
-    let deadline = fleet_sync_delivery::removal_deadline(item.id()).unix_millis();
+    let deadline = fleet_mail_delivery::removal_deadline(item.id()).unix_millis();
     fixture.io.advance(deadline - NOW - 1);
     assert!(fixture.runtime.on_alarm().await?.failed.is_empty());
     assert!(matches!(

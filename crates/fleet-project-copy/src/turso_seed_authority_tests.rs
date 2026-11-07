@@ -4,7 +4,7 @@ use crate::{
     turso_seed_tests::{NoHook, TursoScope, database, position, setup_with_holder, snapshot},
     *,
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{connection::Connection, row::Row};
 use sqlx_turso::{Turso, TursoConnection};
 use uuid::Uuid;
@@ -168,7 +168,7 @@ async fn seed_authority_comes_from_immutable_creation_after_the_current_holder_c
                     epoch: Epoch::new(1)?,
                     acked: position()?
                 },
-                target_schema: Some(fleet_sync_protocol::SchemaSupport { max_version: 10 }),
+                target_schema: Some(fleet_protocol::SchemaSupport { max_version: 10 }),
                 holder: writer(2)?
             }
         )

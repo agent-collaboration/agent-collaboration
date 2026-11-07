@@ -3,9 +3,9 @@
 mod opening_revocation;
 #[path = "../support/mod.rs"]
 mod support;
-use fleet_sync_protocol::*;
-use fleet_sync_session::*;
-use fleet_sync_transport_websocket::{WebSocketConnection, WebSocketTransport};
+use fleet_protocol::*;
+use fleet_session::*;
+use fleet_websocket_transport::{WebSocketConnection, WebSocketTransport};
 use runtime_primitives::{Backoff, Clock, IdSource, WakeFailure, WakeScheduler};
 use std::{
     path::Path,
@@ -541,3 +541,6 @@ async fn session_host_process() -> TestResult {
         .ok_or("run this helper through the process journey")?;
     support::session_fixture_server::run_server(std::path::Path::new(&path)).await
 }
+
+#[path = "../upgrade_refusal.rs"]
+mod upgrade_refusal;

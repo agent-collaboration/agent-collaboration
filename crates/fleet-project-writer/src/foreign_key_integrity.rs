@@ -3,7 +3,7 @@ use crate::{
     schema_inspection::{read_layout, text, unsigned},
     writer_scope::WriterScope,
 };
-use fleet_sync_protocol::TableName;
+use fleet_protocol::TableName;
 use sqlx_core::{
     query::query,
     sql_str::{AssertSqlSafe, SqlSafeStr},

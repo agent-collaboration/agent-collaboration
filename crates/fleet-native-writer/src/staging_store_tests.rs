@@ -3,8 +3,11 @@ use crate::*;
 use durable_steps::{
     AtomicStore, CallFailure, NotSentReason, StoreError, storage::TransactionScope,
 };
-use fleet_sync_protocol::*;
-use fleet_sync_receiver::{SnapshotInstall, SnapshotInstallError, SnapshotInstallRules};
+use fleet_project_copy::{SnapshotInstall, SnapshotInstallError, SnapshotInstallRules};
+use fleet_protocol::*;
+use fleet_tokio_objects::{
+    CallEnvelope, CallRouter, ObjectKey, ObjectOptions, ObjectStore, TokioHost,
+};
 use runtime_primitives::SystemClock;
 use sqlx_core::{executor::Executor, query::query, row::Row};
 use std::sync::Arc;
@@ -45,7 +48,7 @@ pub(super) fn snapshot() -> TestResult<(SnapshotInstall, CopyStatus, SnapshotPag
     digest.push_row(rows.first().ok_or("no fixture row")?)?;
     Ok((
         SnapshotInstall {
-            install_id: fleet_sync_protocol::InstallId::new(durable_steps::Uuid::now_v7())?,
+            install_id: fleet_protocol::InstallId::new(durable_steps::Uuid::now_v7())?,
             database,
             position,
             schema: schema.clone(),
@@ -127,7 +130,7 @@ async fn publication_exposes_only_verified_rows_and_replays_after_staging_file_w
         )
         .await?;
     target.transaction(|scope|Box::pin(async move {
-        let mut migrator = sqlx::migrate!("../fleet-sync-receiver/migrations");
+        let mut migrator = sqlx::migrate!("../fleet-project-copy/migrations");
         migrator.dangerous_set_table_name("_fleet_sync_copy_migrations");
         migrator.run_direct(None, scope.executor(), false).await.map_err(StoreError::backend)?;
         scope.executor().execute("CREATE TABLE old_local(value TEXT); INSERT INTO old_local VALUES('target local')").await.map_err(StoreError::backend)?;
@@ -177,7 +180,7 @@ async fn publication_exposes_only_verified_rows_and_replays_after_staging_file_w
     let still_old = target
         .transaction(|scope| {
             Box::pin(async move {
-                fleet_sync_receiver::snapshot_page(scope, None)
+                fleet_project_copy::snapshot_page(scope, None)
                     .await
                     .map_err(StoreError::backend)
             })
@@ -197,7 +200,7 @@ async fn publication_exposes_only_verified_rows_and_replays_after_staging_file_w
                     .await
                     .map_err(StoreError::backend)?
                     .ok_or_else(|| StoreError::backend("missing marker"))?;
-                let page = fleet_sync_receiver::snapshot_page(scope, None)
+                let page = fleet_project_copy::snapshot_page(scope, None)
                     .await
                     .map_err(StoreError::backend)?;
                 let local = query::<sqlx_turso::Turso>("SELECT value FROM old_local")

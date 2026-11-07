@@ -2,13 +2,15 @@
 use super::*;
 use crate::{ConsumerHandler, ServiceScope, service_state::SourceRunner};
 use durable_steps::{CallFailure, CallId, NotSentReason, OperationId, StepName, Uuid};
-use fleet_sync_lease::{GateFailure, HolderChangeGate, LeasePolicy, LifecycleGate, RegistryConfig};
-use fleet_sync_protocol::*;
-use fleet_sync_receiver::{
+use fleet_project_copy::{
     AppliedPiece, FollowUpDone, FollowUpFailure, FollowUpHandler, HookError, ReceiverRules,
 };
-use fleet_sync_session::VerifiedPeer;
-use fleet_sync_tokio_runner::{CallEnvelope, CallRouter};
+use fleet_project_lease::{
+    GateFailure, HolderChangeGate, LeasePolicy, LifecycleGate, RegistryConfig,
+};
+use fleet_protocol::*;
+use fleet_session::VerifiedPeer;
+use fleet_tokio_objects::{CallEnvelope, CallRouter};
 use std::{
     future::{Future, poll_fn},
     sync::atomic::{AtomicUsize, Ordering},
@@ -27,12 +29,12 @@ impl ConsumerHandler<NoConsumer> for UnusedConsumer {
         panic!("shutdown must not route a consumer request")
     }
 }
-impl fleet_sync_delivery::SenderBinding<ServiceScope<'_>, NoDelivery> for UnusedConsumer {
+impl fleet_mail_delivery::SenderBinding<ServiceScope<'_>, NoDelivery> for UnusedConsumer {
     async fn resolve_submitter<'a>(
         &'a self,
         _: &'a mut ServiceScope<'_>,
         sender: &'a Submitter,
-    ) -> Result<Submitter, fleet_sync_delivery::SenderBindingFailure> {
+    ) -> Result<Submitter, fleet_mail_delivery::SenderBindingFailure> {
         Ok(*sender)
     }
 }
@@ -95,7 +97,7 @@ impl PeerAuthenticator for UnusedAuthenticator {
 fn follow_up_call(step: &str) -> TestResult<CallEnvelope> {
     Ok(CallEnvelope {
         kind: "fleet-sync.apply-follow-up",
-        target: serde_json::to_value(fleet_sync_receiver::FollowUpCall::<()>::new(
+        target: serde_json::to_value(fleet_project_copy::FollowUpCall::<()>::new(
             DatabaseId::new(Uuid::now_v7())?,
         ))?,
         request: serde_json::Value::Null,

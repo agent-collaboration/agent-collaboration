@@ -3,8 +3,8 @@ use crate::{CoreHost, ObjectAddress, PlatformIo, generated_enrollment};
 use durable_steps::{
     AtomicStore, CallFailure, NotSentReason, StoreError, storage::TransactionScope,
 };
-use fleet_sync_protocol::{PeerId, ReceiverId};
-use fleet_sync_tokio_runner::{ObjectKey, ObjectStore, TokioObject};
+use fleet_protocol::{PeerId, ReceiverId};
+use fleet_tokio_objects::{ObjectKey, ObjectStore, TokioObject};
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use sqlx_core::executor::Executor;
 use std::sync::Arc;

@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use super::support;
 use durable_steps::{AtomicStore, SyncTime};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use std::sync::atomic::Ordering;
 use support::{network::*, *};
 
@@ -26,7 +26,7 @@ async fn enqueue_expiring(network: &NetworkFixture, expiry: i64) {
                     .enqueue_and_admit::<SubmitTask, RecordRemoval>(
                         original,
                         peer(3),
-                        fleet_sync_delivery::Submitter::Machine(peer(1)),
+                        fleet_mail_delivery::Submitter::Machine(peer(1)),
                         SyncTime::from_unix_millis(0),
                     )
                     .await

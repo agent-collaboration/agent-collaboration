@@ -3,12 +3,12 @@ use super::*;
 use crate::fleet_storage_fixture::{FixtureIo, FleetStorageFixture, NOW, TestError};
 use board_sync_protocol::BoardDeliveryBody;
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::{CustodyRow, DeliveryTransactionFailure, Outbox};
-use fleet_sync_protocol::{
+use fleet_mail_delivery::{CustodyRow, DeliveryTransactionFailure, Outbox};
+use fleet_protocol::{
     DeliveryEnvelope, DeliveryItem, DeliveryItemRef, DeliveryStatus, ItemId, PeerId, Recipient,
     SubmitResult,
 };
-use fleet_sync_tokio_runner::TokioObject;
+use fleet_tokio_objects::TokioObject;
 use serde_json::{Value, json};
 use sqlx_core::{query::query, row::Row};
 
@@ -62,7 +62,7 @@ async fn prepare_custody() -> TestResult<(FleetStorageFixture, PeerId, PeerId)> 
         .object
         .transaction(|scope| {
             Box::pin(async move {
-                fleet_sync_delivery::DELIVERY_MIGRATOR
+                fleet_mail_delivery::DELIVERY_MIGRATOR
                     .run_direct(None, scope.executor(), false)
                     .await
                     .map_err(StoreError::backend)
@@ -100,7 +100,7 @@ async fn submit(
                     NOW,
                 )
                 .await
-                .map_err(fleet_sync_delivery::delivery_rollback)?;
+                .map_err(fleet_mail_delivery::delivery_rollback)?;
                 serde_json::to_value(answer).map_err(StoreError::backend)
             })
         })
@@ -128,7 +128,7 @@ async fn every_sender_variant_resolves_without_changing_its_source_bytes_after_r
     fixture.enroll(first, SERVICE_A).await?;
     fixture.enroll(second, SERVICE_B).await?;
     let fixture = fixture.reopen().await?;
-    let project = fleet_sync_protocol::DatabaseId::new(durable_steps::Uuid::now_v7())?;
+    let project = fleet_protocol::DatabaseId::new(durable_steps::Uuid::now_v7())?;
     for (sender, expected) in [
         (
             serde_json::from_value::<MailSender>(
@@ -260,7 +260,7 @@ async fn admission_compares_independent_binding_and_claim_before_any_custody_or_
                 )
                 .resolve_push(&reference, NOW)
                 .await
-                .map_err(fleet_sync_delivery::delivery_rollback)
+                .map_err(fleet_mail_delivery::delivery_rollback)
             })
         })
         .await?
@@ -290,7 +290,7 @@ async fn rolled_back_read(fixture: &FleetStorageFixture, item: ItemId) -> StoreE
                 )
                 .status(item)
                 .await
-                .map_err(fleet_sync_delivery::delivery_rollback)
+                .map_err(fleet_mail_delivery::delivery_rollback)
             })
         })
         .await;
@@ -323,7 +323,7 @@ async fn confirmed_binding_rollback_is_retryable_and_retains_custody_and_origina
     submit(&fixture, Submitter::Machine(sender), item).await?;
     let before = counts(&fixture).await?;
     assert!(
-        matches!(fleet_sync_delivery::classify_delivery_store_error(rolled_back_read(&fixture,id).await),
+        matches!(fleet_mail_delivery::classify_delivery_store_error(rolled_back_read(&fixture,id).await),
         DeliveryTransactionFailure::BindingUnavailable {row:CustodyRow::Outbox(actual),reason:SenderBindingFailure::Unavailable} if actual==id)
     );
     let failure = crate::mail_push_dispatch::store_failure(rolled_back_read(&fixture, id).await);
@@ -352,7 +352,7 @@ async fn confirmed_binding_rollback_is_retryable_and_retains_custody_and_origina
                 )
                 .resolve_push(&reference, NOW)
                 .await
-                .map_err(fleet_sync_delivery::delivery_rollback)
+                .map_err(fleet_mail_delivery::delivery_rollback)
             })
         })
         .await?

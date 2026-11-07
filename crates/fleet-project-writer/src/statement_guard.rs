@@ -1,7 +1,7 @@
 use crate::migration_ownership::{MigrationKind, writer_error};
 use crate::{OpenError, TableLayout};
-use fleet_sync_protocol::schema_catalog::MigrationClassifier;
-use fleet_sync_protocol::{SchemaEntry, TableName};
+use fleet_protocol::schema_catalog::MigrationClassifier;
+use fleet_protocol::{SchemaEntry, TableName};
 use std::collections::HashMap;
 use turso_parser::{
     ast::{Cmd, Stmt},
@@ -53,7 +53,7 @@ struct CheckedProfiles {
     maintenance: Result<(), StatementRefusal>,
 }
 
-pub(crate) use fleet_sync_protocol::schema_catalog::MigrationPlan;
+pub(crate) use fleet_protocol::schema_catalog::MigrationPlan;
 
 impl StatementGuard {
     pub fn new(tables: Vec<TableLayout>) -> Self {
@@ -174,14 +174,14 @@ fn check_statements(
             Stmt::Pragma { .. } if read_only => None,
             Stmt::Pragma { .. } => Some(StatementForm::PragmaWrite),
             Stmt::Insert { tbl_name, .. } | Stmt::Delete { tbl_name, .. } => {
-                fleet_sync_protocol::reserved_namespace(tbl_name.name.as_str()).then(|| {
+                fleet_protocol::reserved_namespace(tbl_name.name.as_str()).then(|| {
                     StatementForm::ProtectedTable {
                         table: tbl_name.name.as_str().into(),
                     }
                 })
             }
             Stmt::Update(update) => {
-                fleet_sync_protocol::reserved_namespace(update.tbl_name.name.as_str()).then(|| {
+                fleet_protocol::reserved_namespace(update.tbl_name.name.as_str()).then(|| {
                     StatementForm::ProtectedTable {
                         table: update.tbl_name.name.as_str().into(),
                     }
@@ -223,7 +223,7 @@ fn check_statements(
                 .primary_key()
                 .iter()
                 .filter_map(|index| table.columns().get(*index))
-                .any(|key| fleet_sync_protocol::assigns_replicated_key(&command, key))
+                .any(|key| fleet_protocol::assigns_replicated_key(&command, key))
             && profiles.write.is_ok()
         {
             profiles.write = Err(refuse(StatementForm::KeyChange {

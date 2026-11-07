@@ -51,7 +51,7 @@ async fn orphan_progress_replays_cache_and_lifecycle_notices_idempotently() -> T
         &writer
     ));
     assert!(
-        matches!(writer.store.writer_state().await?, fleet_sync_lease::WriterState::Writing { epoch } if epoch == runtime.epoch)
+        matches!(writer.store.writer_state().await?, fleet_project_lease::WriterState::Writing { epoch } if epoch == runtime.epoch)
     );
     assert_eq!(runtime.progress().await?, NoticePosition::new(4));
     drop(writer);

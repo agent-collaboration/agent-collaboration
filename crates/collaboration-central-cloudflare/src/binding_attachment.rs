@@ -11,8 +11,8 @@
 )]
 
 use collaboration_central_core::AdmissionOrigin;
-use fleet_sync_protocol::{AttachSequence, ConnectionId, PeerId, SchemaSupport, SessionId};
-use fleet_sync_session::{ConnectionBinding, ConnectionRegistration, VerifiedPeer};
+use fleet_protocol::{AttachSequence, ConnectionId, PeerId, SchemaSupport, SessionId};
+use fleet_session::{ConnectionBinding, ConnectionRegistration, VerifiedPeer};
 use runtime_primitives::SyncTime;
 use serde::{Deserialize, Serialize};
 

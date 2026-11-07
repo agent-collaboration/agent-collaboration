@@ -1,9 +1,9 @@
 //! Pin one selected native writer's unchanged rows under the declared Host lock.
 use crate::{OfflineHost, PreparedSnapshotPage, SnapshotTransportError, reframe_import_page};
 use board_fleet_sync::{BOARD_LEASE_POLICY, BoardProjectSchema, BoardProjectSchemaError};
-use fleet_sync_lease::LeaseHolder;
-use fleet_sync_protocol::{DatabaseId, Epoch, PeerId, SnapshotCursor, SnapshotManifest};
-use fleet_sync_writer::{ReplicatedDatabase, RetainedFile, WriterOptions, WriterSnapshot};
+use fleet_project_lease::LeaseHolder;
+use fleet_project_writer::{ReplicatedDatabase, RetainedFile, WriterOptions, WriterSnapshot};
+use fleet_protocol::{DatabaseId, Epoch, PeerId, SnapshotCursor, SnapshotManifest};
 use message_board::{
     EpochLine, EpochNumber, FeedCursor, FeedPosition, FeedRead, ProjectId, Record, RecordTime,
 };
@@ -63,7 +63,7 @@ pub enum NativeSourceError {
     #[error("the closed retained reader still holds native admission")]
     ReaderStillAdmitted,
     #[error("cannot inspect the selected native source")]
-    Writer(#[from] fleet_sync_writer::OpenError),
+    Writer(#[from] fleet_project_writer::OpenError),
     #[error("source project data is invalid")]
     Project(#[from] message_board_storage::ProjectStorageError),
     #[error("source schema is unavailable")]
@@ -179,8 +179,8 @@ pub(crate) async fn admit_selected_source(
     if retained.authority().is_some()
         || matches!(
             retained.registration_outcome(),
-            fleet_sync_writer::WriterRegistrationOutcome::Refused { .. }
-                | fleet_sync_writer::WriterRegistrationOutcome::Failed { .. }
+            fleet_project_writer::WriterRegistrationOutcome::Refused { .. }
+                | fleet_project_writer::WriterRegistrationOutcome::Failed { .. }
         )
     {
         return Err(NativeSourceError::AuthorityLost);
@@ -243,7 +243,7 @@ async fn require_current_source(
         if !metadata.is_file() || metadata.uid() != nix::unistd::geteuid().as_raw() {
             return Err(NativeSourceError::UnsafePath);
         }
-        let inspected = fleet_sync_writer::inspect_native_file(&path).await?;
+        let inspected = fleet_project_writer::inspect_native_file(&path).await?;
         let epoch = inspected.origin.epoch;
         if inspected.origin.database != database || name != format!("e{}.sqlite", epoch.value()) {
             return Err(NativeSourceError::FileIdentityMismatch);
@@ -320,7 +320,7 @@ async fn open_after_retained(
             )
             .await
             {
-                Err(fleet_sync_writer::OpenError::FileInUse) => tokio::task::yield_now().await,
+                Err(fleet_project_writer::OpenError::FileInUse) => tokio::task::yield_now().await,
                 result => return result.map_err(NativeSourceError::from),
             }
         }

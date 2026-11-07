@@ -1,7 +1,7 @@
 use crate::{
     LeaseError, checked_queries::StoredLifecycleRow, registry_records::*, registry_row::*,
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 impl StoredLifecycleRow {
     pub(crate) fn lifecycle_record(&self) -> Result<LifecycleAttempt, LeaseError> {
         let request_payload = [

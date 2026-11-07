@@ -17,12 +17,12 @@ pub async fn prepare_registered_creation(
     settle_accepted_creation(fleet, request, origin).await?;
     let store = registry.open_project(&request.project_id).await?;
     match store.registration_outcome().await? {
-        fleet_sync_writer::WriterRegistrationOutcome::Ready { .. } => return Ok(()),
-        fleet_sync_writer::WriterRegistrationOutcome::Pending => {}
-        fleet_sync_writer::WriterRegistrationOutcome::Failed { reason } => {
+        fleet_project_writer::WriterRegistrationOutcome::Ready { .. } => return Ok(()),
+        fleet_project_writer::WriterRegistrationOutcome::Pending => {}
+        fleet_project_writer::WriterRegistrationOutcome::Failed { reason } => {
             return Err(format!("fixture registration failed: {reason:?}").into());
         }
-        fleet_sync_writer::WriterRegistrationOutcome::Refused { .. } => {
+        fleet_project_writer::WriterRegistrationOutcome::Refused { .. } => {
             return Err("fixture registration is refused".into());
         }
     }
@@ -31,13 +31,13 @@ pub async fn prepare_registered_creation(
         .database(&request.project_id)
         .await?
         .observe_registration(
-            fleet_sync_protocol::LeaseStatus {
-                database: fleet_sync_protocol::DatabaseId::new(uuid::Uuid::parse_str(
+            fleet_protocol::LeaseStatus {
+                database: fleet_protocol::DatabaseId::new(uuid::Uuid::parse_str(
                     request.project_id.as_str(),
                 )?)?,
-                epoch: fleet_sync_protocol::Epoch::new(1)?,
+                epoch: fleet_protocol::Epoch::new(1)?,
                 holder: fixture_peer()?,
-                state: fleet_sync_protocol::LeaseState::Held,
+                state: fleet_protocol::LeaseState::Held,
                 expires_at: now.after(board_fleet_sync::BOARD_LEASE_POLICY.lease_duration),
                 remaining_ms: u64::try_from(
                     board_fleet_sync::BOARD_LEASE_POLICY

@@ -5,8 +5,8 @@ use crate::{
     writer_file_record::{read_file_record, write_file_record},
 };
 use durable_steps::Uuid;
-use fleet_sync_lease::{LeaseHolder, LeasePolicy};
-use fleet_sync_protocol::*;
+use fleet_project_lease::{LeaseHolder, LeasePolicy};
+use fleet_protocol::*;
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
 use std::{sync::atomic::Ordering, time::Duration};

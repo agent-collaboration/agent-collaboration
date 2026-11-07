@@ -9,7 +9,7 @@ use collaboration_central_core::{
     EngineSchema, HistoryCorruption,
 };
 use durable_steps::StoreError;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CopyStatusAnswer, CopyUnavailableReason, DatabaseId, ItemStatusState, ReplicationAnswer,
 };
 use serde::Deserialize;
@@ -98,7 +98,7 @@ impl Client {
 }
 
 fn schemas() -> [(&'static str, EngineSchema, usize, Option<BootstrapProbe>); 4] {
-    let delivery_migration_count = fleet_sync_delivery::DELIVERY_MIGRATOR
+    let delivery_migration_count = fleet_mail_delivery::DELIVERY_MIGRATOR
         .iter()
         .filter(|migration| migration.migration_type.is_up_migration())
         .count();
@@ -214,12 +214,12 @@ async fn first_process(client: &Client) -> ConformanceResult<String> {
                 );
             }
             let migrations: Vec<_> = match row.corpus.as_str() {
-                "fleet-sync-lease" => fleet_sync_lease::LEASE_MIGRATOR.sql_migrations().collect(),
-                "fleet-sync-receiver" => fleet_sync_receiver::RECEIVER_MIGRATOR.iter().collect(),
-                "fleet-sync-session" => fleet_sync_session::SESSION_MIGRATOR
+                "fleet-sync-lease" => fleet_project_lease::LEASE_MIGRATOR
                     .sql_migrations()
                     .collect(),
-                "fleet-sync-delivery" => fleet_sync_delivery::DELIVERY_MIGRATOR.iter().collect(),
+                "fleet-sync-receiver" => fleet_project_copy::RECEIVER_MIGRATOR.iter().collect(),
+                "fleet-sync-session" => fleet_session::SESSION_MIGRATOR.sql_migrations().collect(),
+                "fleet-sync-delivery" => fleet_mail_delivery::DELIVERY_MIGRATOR.iter().collect(),
                 _ => continue,
             };
             let migration = migrations
@@ -341,7 +341,7 @@ fn enrolled_peer(response: &serde_json::Value) -> ConformanceResult<String> {
         .pointer("/value/peer")
         .and_then(serde_json::Value::as_str)
         .ok_or("enrollment omitted peer")?;
-    let peer_id = fleet_sync_protocol::PeerId::try_from(peer.to_owned())?;
+    let peer_id = fleet_protocol::PeerId::try_from(peer.to_owned())?;
     if peer_id.to_string() != ENROLLED_PEER {
         return Err("enrollment did not retain the supplied installation peer".into());
     }
@@ -548,7 +548,7 @@ async fn main() -> ConformanceResult<()> {
     };
     let jwks = JwksFixtureServer::start().await?;
     let settings = WorkerdSettings {
-        relay_peer: fleet_sync_protocol::PeerId::try_from(
+        relay_peer: fleet_protocol::PeerId::try_from(
             "019f0000-0000-7000-8000-000000005240".to_owned(),
         )?,
         node,

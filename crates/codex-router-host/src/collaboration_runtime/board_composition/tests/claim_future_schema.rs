@@ -1,7 +1,7 @@
 //! A real newer native consumer snapshot is refused before local seed construction.
 use super::*;
-use fleet_sync_protocol::{SnapshotPage, TableName};
-use fleet_sync_writer::{Migration, ReplicatedDatabase, ReplicatedSchema, WriterOptions};
+use fleet_project_writer::{Migration, ReplicatedDatabase, ReplicatedSchema, WriterOptions};
+use fleet_protocol::{SnapshotPage, TableName};
 use sqlx::{SqlSafeStr, migrate::MigrationType};
 use std::sync::LazyLock;
 
@@ -66,13 +66,13 @@ async fn future_schema_public_posts_keep_the_typed_refusal_without_forwarding() 
     let project_directory = directory.path().join("projects").join(project.as_str());
     std::fs::create_dir_all(&project_directory)?;
     let path = project_directory.join("e1.sqlite");
-    let database = fleet_sync_protocol::DatabaseId::try_from(project.as_str().to_owned())?;
-    let peer = fleet_sync_protocol::PeerId::new(durable_steps::Uuid::now_v7())?;
+    let database = fleet_protocol::DatabaseId::try_from(project.as_str().to_owned())?;
+    let peer = fleet_protocol::PeerId::new(durable_steps::Uuid::now_v7())?;
     let source = ReplicatedDatabase::open_with(
         &path,
         database,
         FutureBoardSchema::new()?,
-        fleet_sync_lease::LeaseHolder::provisional(
+        fleet_project_lease::LeaseHolder::provisional(
             database,
             peer,
             board_fleet_sync::BOARD_LEASE_POLICY,
@@ -223,7 +223,7 @@ async fn claim_schema_too_new_preserves_the_actual_copy_identity_and_supported_v
             &source_path,
             database,
             FutureBoardSchema::new()?,
-            fleet_sync_lease::LeaseHolder::provisional(
+            fleet_project_lease::LeaseHolder::provisional(
                 database,
                 peer,
                 board_fleet_sync::BOARD_LEASE_POLICY,

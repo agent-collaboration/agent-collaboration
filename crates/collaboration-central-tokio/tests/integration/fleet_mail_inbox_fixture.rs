@@ -3,34 +3,34 @@ use super::composed_fleet_fixture::{A, B, C, Io, SERVICE_A, SERVICE_B, SERVICE_C
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use collaboration_central_core::CoreHost;
 use durable_steps::{AtomicStore, CallId, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliveryConsumer, DeliveryError, DeliveryLimits, GateDecision, Inbox, LocalDelivery,
     LocalOutcome, SenderBinding, SenderBindingFailure,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DeliveryEnvelope, DeliveryHeader, DeliveryItem, DeliveryTypes, PeerId, PushResult, ReceiverId,
     Submitter,
 };
-use fleet_sync_tokio_runner::{ObjectKey, ObjectStore, TokioObject};
+use fleet_tokio_objects::{ObjectKey, ObjectStore, TokioObject};
 use runtime_primitives::Clock;
 use sqlx_core::{query::query, row::Row};
 use std::{path::Path, sync::Arc};
 
 type Store = TokioObject<CoreHost<Io>>;
-type Attempt = fleet_sync_delivery::DeliverLocally<
+type Attempt = fleet_mail_delivery::DeliverLocally<
     Store,
     sqlx_turso::Turso,
     BoardDeliveryTypes,
     HeldConsumer,
     InboxSenderBinding,
 >;
-type Report = fleet_sync_delivery::ReportOutcome<
+type Report = fleet_mail_delivery::ReportOutcome<
     Store,
     sqlx_turso::Turso,
     BoardDeliveryTypes,
     InboxSenderBinding,
 >;
-type Removal = fleet_sync_delivery::RemoveDeliveryRecord<Store, sqlx_turso::Turso>;
+type Removal = fleet_mail_delivery::RemoveDeliveryRecord<Store, sqlx_turso::Turso>;
 type Acceptance = <BoardDeliveryTypes as DeliveryTypes>::Acceptance;
 type Sender = <BoardDeliveryTypes as DeliveryTypes>::Sender;
 
@@ -133,7 +133,7 @@ impl RecipientInbox {
         store
             .transaction(|scope| {
                 Box::pin(async move {
-                    fleet_sync_delivery::DELIVERY_MIGRATOR
+                    fleet_mail_delivery::DELIVERY_MIGRATOR
                         .run_direct(None, scope.executor(), false)
                         .await
                         .map_err(StoreError::backend)
@@ -187,7 +187,7 @@ impl RecipientInbox {
                         now,
                     )
                     .await
-                    .map_err(fleet_sync_delivery::delivery_rollback)
+                    .map_err(fleet_mail_delivery::delivery_rollback)
                 })
             })
             .await?)
@@ -208,7 +208,7 @@ impl RecipientInbox {
             })
             .await?)
     }
-    pub(super) async fn contains(&self, item: fleet_sync_protocol::ItemId) -> TestResult<bool> {
+    pub(super) async fn contains(&self, item: fleet_protocol::ItemId) -> TestResult<bool> {
         Ok(self
             .store
             .transaction(move |scope| {

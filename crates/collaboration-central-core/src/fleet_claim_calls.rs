@@ -10,7 +10,7 @@ use crate::{
 use durable_steps::{
     AtomicStore, CallFailure, CallTarget, NotSentReason, storage::TransactionScope,
 };
-use fleet_sync_protocol::{HolderChangeRequest, SettleOutcome, SettlementRecorded};
+use fleet_protocol::{HolderChangeRequest, SettleOutcome, SettlementRecorded};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -43,10 +43,10 @@ where
         let ObjectWork::Fleet { host, io, .. } = &self.work else {
             return Err(refused());
         };
-        let step = if call.kind == fleet_sync_lease::ClaimReservation::KIND {
-            let _: fleet_sync_lease::ClaimReservation =
+        let step = if call.kind == fleet_project_lease::ClaimReservation::KIND {
+            let _: fleet_project_lease::ClaimReservation =
                 serde_json::from_value(call.target).map_err(|_| refused())?;
-            let request: fleet_sync_protocol::ClaimReservation =
+            let request: fleet_protocol::ClaimReservation =
                 serde_json::from_value(call.request).map_err(|_| refused())?;
             let HolderChangeRequest::Claim {
                 database, attempt, ..
@@ -61,9 +61,9 @@ where
                     .ok_or(CallFailure::AnswerLost)?,
             }
         } else {
-            let _: fleet_sync_lease::ClaimSettlement =
+            let _: fleet_project_lease::ClaimSettlement =
                 serde_json::from_value(call.target).map_err(|_| refused())?;
-            let request: fleet_sync_protocol::ClaimSettlement =
+            let request: fleet_protocol::ClaimSettlement =
                 serde_json::from_value(call.request).map_err(|_| refused())?;
             let HolderChangeRequest::Claim {
                 database, attempt, ..

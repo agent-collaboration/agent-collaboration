@@ -3,13 +3,13 @@ use board_sync_protocol::{BoardConsumerProtocol, BoardNotice, PositionedBoardNot
 use durable_steps::{
     AtomicStore, CallFailure, Host, StoreError, storage::TransactionScope, turso_store::TursoScope,
 };
-use fleet_sync_protocol::{ClientFrame, ConnectionId, Notice, NoticePosition, PeerId, SyncTime};
-use fleet_sync_session::{
+use fleet_protocol::{ClientFrame, ConnectionId, Notice, NoticePosition, PeerId, SyncTime};
+use fleet_session::{
     ConnectionBinding, ConnectionRegistration, PublishSchemaSupportInput, SessionEffect,
     SessionKey, SessionScope, VerifiedPeer, complete_schema_publication, connection_opened,
     frame_received, publish_notice_to_peer,
 };
-use fleet_sync_tokio_runner::{
+use fleet_tokio_objects::{
     CallEnvelope, CallRouter, ObjectKey, ObjectOptions, ObjectStore, TokioHost, TokioObject,
 };
 use runtime_primitives::{Clock, SystemClock};
@@ -26,7 +26,7 @@ pub(super) fn positioned_notice(position: u64) -> Result<PositionedBoardNotice, 
             project: "019f0000-0000-7000-8000-000000091001"
                 .to_owned()
                 .try_into()?,
-            epoch: fleet_sync_protocol::Epoch::new(1)?,
+            epoch: fleet_protocol::Epoch::new(1)?,
         },
     })
 }
@@ -69,16 +69,11 @@ impl<H: Host> SessionScope for NoticeScope<'_, '_, H> {
         &mut self,
         input: PublishSchemaSupportInput,
         _: SyncTime,
-    ) -> Result<(), fleet_sync_session::StoreError> {
+    ) -> Result<(), fleet_session::StoreError> {
         self.publications.push(input);
         Ok(())
     }
-    fn welcome_after_commit(
-        &mut self,
-        _: ConnectionId,
-        _: PeerId,
-        _: fleet_sync_protocol::SessionId,
-    ) {
+    fn welcome_after_commit(&mut self, _: ConnectionId, _: PeerId, _: fleet_protocol::SessionId) {
         // The generic FleetService supplies the actual Welcome. This separate
         // notice ledger supplies no fabricated registry/copy status or frame.
     }
@@ -104,7 +99,7 @@ impl NoticeLedger {
         store
             .transaction(|scope| {
                 Box::pin(async move {
-                    fleet_sync_session::SESSION_MIGRATOR
+                    fleet_session::SESSION_MIGRATOR
                         .with_history_table("_fleet_sync_session_history")
                         .run_direct(None, scope.executor(), false)
                         .await
@@ -122,7 +117,7 @@ impl NoticeLedger {
     }
 
     /// Input is the Hello actually encoded by SessionClient, never a fixture-built frame.
-    pub async fn attach(&self, hello: &[u8]) -> Result<Vec<fleet_sync_session::Bytes>, TestError> {
+    pub async fn attach(&self, hello: &[u8]) -> Result<Vec<fleet_session::Bytes>, TestError> {
         let ClientFrame::<BoardConsumerProtocol>::Hello { session_id, .. } =
             serde_json::from_slice(hello)?
         else {
@@ -175,10 +170,7 @@ impl NoticeLedger {
         Self::notice_frames(effects)
     }
 
-    pub async fn publish(
-        &self,
-        position: u64,
-    ) -> Result<Vec<fleet_sync_session::Bytes>, TestError> {
+    pub async fn publish(&self, position: u64) -> Result<Vec<fleet_session::Bytes>, TestError> {
         if self.key.lock().await.is_none() {
             return Err(io::Error::other("notice source has not seen Hello").into());
         }
@@ -213,12 +205,12 @@ impl NoticeLedger {
     }
     fn notice_frames(
         effects: Vec<SessionEffect<BoardConsumerProtocol>>,
-    ) -> Result<Vec<fleet_sync_session::Bytes>, TestError> {
+    ) -> Result<Vec<fleet_session::Bytes>, TestError> {
         effects
             .into_iter()
             .filter_map(|effect| match effect {
                 SessionEffect::Send {
-                    frame: frame @ fleet_sync_protocol::ServerFrame::Notice { .. },
+                    frame: frame @ fleet_protocol::ServerFrame::Notice { .. },
                     ..
                 } => Some(
                     serde_json::to_vec(&frame)

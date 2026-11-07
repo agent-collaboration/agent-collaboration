@@ -1,6 +1,6 @@
 //! Worker fault injection borrows the native owner's writer transaction.
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost};
+use fleet_tokio_objects::{CallEnvelope, CallRouter, TokioHost};
 use interaction_storage::{InteractionAtomicStore, InteractionStore};
 use runtime_primitives::SystemClock;
 use std::sync::Arc;

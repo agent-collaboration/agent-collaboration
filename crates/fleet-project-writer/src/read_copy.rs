@@ -1,9 +1,9 @@
 //! Guarded access to one verified immutable follower file, without a writer.
 use crate::{OpenError, ReadPool, file_admission::FileAdmission, writer_scope::WriterScope};
-use fleet_sync_protocol::CopyRole;
-use fleet_sync_receiver::{
+use fleet_project_copy::{
     CopyInspection, InstalledSnapshot, SnapshotInstall, SnapshotInstallError, SnapshotInstallRules,
 };
+use fleet_protocol::CopyRole;
 use sqlx_core::pool::PoolOptions;
 use sqlx_turso::{Turso, TursoConnectOptions};
 use std::path::Path;
@@ -73,7 +73,7 @@ impl ReadCopy {
             if !state.verified {
                 return Err(SnapshotInstallError::NotVerified.into());
             }
-            match fleet_sync_receiver::inspect_copy(&mut scope).await {
+            match fleet_project_copy::inspect_copy(&mut scope).await {
                 CopyInspection::Live {
                     status,
                     fingerprint,

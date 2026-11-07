@@ -2,7 +2,7 @@ use crate::{
     LocalStateCarryError,
     native_carry_schema::{SchemaObject, columns, invalid, quoted},
 };
-use fleet_sync_protocol::SqlValue;
+use fleet_protocol::SqlValue;
 use futures_util::TryStreamExt;
 use sqlx_core::{
     query::query,

@@ -23,7 +23,7 @@ mod lease_holder_seed_tests;
 mod lease_holder_withdrawal_tests;
 mod lease_values;
 mod workflow_values;
-pub use fleet_sync_protocol::ActorRef;
+pub use fleet_protocol::ActorRef;
 pub use workflow_values::*;
 mod epoch_history;
 mod lease_change_hook;
@@ -44,7 +44,7 @@ mod turso_schema_support_tests;
 pub use registry_reads::{EpochGrant, database_ids, epoch_holder};
 pub use schema_support_rules::{accepted_schema_support, report_schema_support};
 
-pub use fleet_sync_protocol::{
+pub use fleet_protocol::{
     Epoch, HolderChangeAnswer, HolderChangeRefusal, HolderChangeRequest, LeaseRefusal, LeaseState,
     LeaseStatus, RenewAnswer, RenewRequest, RenewResult, ReplicationPosition, SyncTime, TransferId,
 };
@@ -67,7 +67,7 @@ pub use call_targets::*;
 mod operation_support;
 pub use operation_support::lifecycle_request_key;
 
-pub use fleet_sync_protocol::{GateAnswer, SettleOutcome};
+pub use fleet_protocol::{GateAnswer, SettleOutcome};
 
 mod registration_rules;
 pub use registration_rules::register;

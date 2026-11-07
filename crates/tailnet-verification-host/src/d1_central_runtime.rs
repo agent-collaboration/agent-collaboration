@@ -12,7 +12,7 @@ use collaboration_central_conformance::{
 };
 use collaboration_central_core::{EnrollMachine, EnrollmentDecision};
 use collaboration_central_tokio::{TokioServer, TokioSettings};
-use fleet_sync_lease::{LeasePolicy, RegistryConfig};
+use fleet_project_lease::{LeasePolicy, RegistryConfig};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -102,8 +102,8 @@ async fn enroll(
     directory: PathBuf,
     output: PathBuf,
     endpoint: Option<String>,
-    receiver: fleet_sync_protocol::ReceiverId,
-    relay: fleet_sync_protocol::PeerId,
+    receiver: fleet_protocol::ReceiverId,
+    relay: fleet_protocol::PeerId,
 ) -> DriverResult<()> {
     require_service_directory(&plan.repository, &directory)?;
     plan.output_path(&output)?;

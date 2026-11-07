@@ -18,7 +18,7 @@ use crate::{
 use durable_steps::{
     AtomicStore, CallFailure, OperationState, RequestKey, storage::TransactionScope,
 };
-use fleet_sync_protocol::PreviewTakeover;
+use fleet_protocol::PreviewTakeover;
 use runtime_primitives::Clock;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -122,7 +122,7 @@ where
     }
     async fn owner_transfer(
         &self,
-        database: fleet_sync_protocol::DatabaseId,
+        database: fleet_protocol::DatabaseId,
         offer: OwnerTransferOffer,
     ) -> Result<OwnerTransferAnswer, CallFailure> {
         let ObjectWork::Fleet {

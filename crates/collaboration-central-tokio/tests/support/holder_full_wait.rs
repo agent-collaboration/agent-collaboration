@@ -6,9 +6,7 @@ use super::holder_writer_retry::{
 use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, enroll_admitted_peer,
 };
-use fleet_sync_protocol::{
-    FrameId, ReleaseAnswer, ReplicationPosition, ServerCall, ServerCallAnswer,
-};
+use fleet_protocol::{FrameId, ReleaseAnswer, ReplicationPosition, ServerCall, ServerCallAnswer};
 use serde_json::{Value, json};
 use std::{
     future::Future,
@@ -69,7 +67,7 @@ where
         if observe().await? != vec![retry_frame] {
             return Err("crossing the original drive expiry lost or duplicated the replacement waiter".into());
         }
-        let answer = ReleaseAnswer::Released { final_position: ReplicationPosition::new(request.epoch, fleet_sync_protocol::CommitSequence::new(0)) };
+        let answer = ReleaseAnswer::Released { final_position: ReplicationPosition::new(request.epoch, fleet_protocol::CommitSequence::new(0)) };
         send(&mut peer.socket, retry_frame, ServerCallAnswer::Release(answer.clone())).await?;
         let expected = json!({"kind":"completed","value":{"kind":"release","value":answer}});
         tokio::time::timeout(Duration::from_secs(5), async {

@@ -9,7 +9,7 @@ use durable_steps::{
     OperationId,
     storage::{CallReach, StepRecord, StepState},
 };
-use fleet_sync_protocol::{ReleaseAnswer, ServerCall, ServerCallAnswer};
+use fleet_protocol::{ReleaseAnswer, ServerCall, ServerCallAnswer};
 use serde_json::{Value, json};
 use std::time::Duration;
 use tokio::task::JoinSet;
@@ -42,8 +42,8 @@ pub async fn run(base: &str) -> ConformanceResult<()> {
             return Err("mapped holder did not receive the normal Release".into());
         };
         let answer = ReleaseAnswer::Released {
-            final_position: fleet_sync_protocol::ReplicationPosition::new(
-                request.epoch, fleet_sync_protocol::CommitSequence::new(0)
+            final_position: fleet_protocol::ReplicationPosition::new(
+                request.epoch, fleet_protocol::CommitSequence::new(0)
             )
         };
         send(&mut peer.socket, frame, ServerCallAnswer::Release(answer.clone())).await?;

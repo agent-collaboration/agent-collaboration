@@ -1,6 +1,6 @@
 use crate::StoreError;
 use durable_steps::{CallId, storage::TransactionScope};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ConsumerProtocol, DatabaseId, Epoch, FailureCode, HookRefusal, PeerId, PieceRefusal,
     ReplicatedTransaction, ReplicationPosition, TransactionKey,
 };
@@ -19,7 +19,7 @@ pub struct AppliedPiece<'piece, A> {
 pub struct InstalledSnapshot {
     pub database: DatabaseId,
     pub position: ReplicationPosition,
-    pub schema: fleet_sync_protocol::SchemaIdentity,
+    pub schema: fleet_protocol::SchemaIdentity,
 }
 
 /// Supplied by the authenticated host, never decoded from a replication frame.
@@ -35,7 +35,7 @@ pub enum SeedDecision<TFollowUp> {
         position: ReplicationPosition,
         follow_ups: Vec<TFollowUp>,
     },
-    Answer(fleet_sync_protocol::SeedAnswer),
+    Answer(fleet_protocol::SeedAnswer),
 }
 
 /// A consumer policy refusal is terminal; a storage failure keeps its storage class.
@@ -185,12 +185,12 @@ impl From<ReceiverError> for ApplyFailure {
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ReceiverError {
     #[error(transparent)]
-    UnitTooLarge(#[from] fleet_sync_protocol::unit_budget::UnitTooLarge),
+    UnitTooLarge(#[from] fleet_protocol::unit_budget::UnitTooLarge),
     #[error("current snapshot schema encodes to {encoded_size} bytes, exceeding 256 KiB")]
     SnapshotSchema { encoded_size: usize },
     #[error("unsupported replicated schema: {form:?}")]
     SchemaUnsupported {
-        form: fleet_sync_protocol::SchemaStatementForm,
+        form: fleet_protocol::SchemaStatementForm,
     },
     #[error(transparent)]
     Storage(#[from] StoreError),
@@ -207,7 +207,5 @@ pub enum ReceiverError {
     #[error("fence identity has different content")]
     FenceConflict,
     #[error("seed publication refused: {answer:?}; host must roll back")]
-    SeedRefused {
-        answer: fleet_sync_protocol::SeedAnswer,
-    },
+    SeedRefused { answer: fleet_protocol::SeedAnswer },
 }

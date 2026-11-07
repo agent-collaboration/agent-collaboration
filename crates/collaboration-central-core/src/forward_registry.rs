@@ -20,7 +20,7 @@ use durable_steps::{
     AtomicStore, BoxFuture, CallFailure, CallTarget, NotSentReason, StoreError,
     storage::TransactionScope,
 };
-use fleet_sync_protocol::{DatabaseId, PeerId};
+use fleet_protocol::{DatabaseId, PeerId};
 use message_board::ServiceId;
 use runtime_primitives::{Clock, SyncTime};
 use sqlx_core::{
@@ -165,9 +165,9 @@ where
                     let database = DatabaseId::try_from(request.project.as_str().to_owned())
                         .map_err(StoreError::backend)?;
                     let lease =
-                        match fleet_sync_lease::lease_status(scope, database, self.now).await {
+                        match fleet_project_lease::lease_status(scope, database, self.now).await {
                             Ok(lease) => lease,
-                            Err(fleet_sync_lease::LeaseError::Retired) => None,
+                            Err(fleet_project_lease::LeaseError::Retired) => None,
                             Err(error) => return Err(StoreError::backend(error)),
                         };
                     let route = match lease {

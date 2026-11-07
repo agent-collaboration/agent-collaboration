@@ -1,6 +1,6 @@
 //! Map the actual library refusal; writer state is never queried while a write is held.
 use super::ProjectAdmissionError;
-use fleet_sync_writer::{OpenError, SchemaForm, WriteRefusal};
+use fleet_project_writer::{OpenError, SchemaForm, WriteRefusal};
 use message_board::{EpochNumber, RequestResult, SchemaRefusal, TransferId};
 use message_board_storage::ProjectStorageError;
 
@@ -28,7 +28,7 @@ pub(super) fn gate_result(
     Ok(match error {
         ProjectStorageError::Writer(OpenError::Holder {
             error:
-                fleet_sync_lease::HolderError::Refused(fleet_sync_protocol::LeaseRefusal::NotRegistered),
+                fleet_project_lease::HolderError::Refused(fleet_protocol::LeaseRefusal::NotRegistered),
         }) => Some(RequestResult::NotWriter { current: None }),
         ProjectStorageError::SchemaNotReady(refusal) => {
             Some(RequestResult::SchemaNotReady(refusal.clone()))

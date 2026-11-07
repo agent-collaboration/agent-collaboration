@@ -11,10 +11,10 @@
 enum StatusOutput {
     Missing,
     Progress {
-        import_id: fleet_sync_protocol::RequestId,
+        import_id: fleet_protocol::RequestId,
         phase: collaboration_central_core::AdminImportPhase,
-        digest: fleet_sync_protocol::ImportDigest,
-        position: fleet_sync_protocol::ReplicationPosition,
+        digest: fleet_protocol::ImportDigest,
+        position: fleet_protocol::ReplicationPosition,
     },
     Failed {
         reason: String,

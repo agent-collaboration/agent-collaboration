@@ -25,7 +25,7 @@ async fn enqueue_with_answer(
                         .enqueue_and_admit::<NativeSubmit, NativeRetention>(
                             item,
                             PeerId::new(uuid::Uuid::now_v7()).unwrap(),
-                            fleet_sync_protocol::Submitter::Machine(native_sender_peer()),
+                            fleet_protocol::Submitter::Machine(native_sender_peer()),
                             NoDispatchHost.now(),
                         )
                         .await

@@ -1,6 +1,6 @@
 //! Answer-kind and causal deadline proof; no positive receiving-store ACK is manufactured.
 use super::*;
-use fleet_sync_protocol::PushResult;
+use fleet_protocol::PushResult;
 use std::future::{pending, ready};
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;

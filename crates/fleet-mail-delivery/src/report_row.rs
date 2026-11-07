@@ -1,7 +1,7 @@
 use crate::{
     DeliveryError, custody_record::*, delivery_storage_rows::StoredReportRow, stored_outcome::*,
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 
 pub(crate) fn decode_report<D: DeliveryTypes>(
     row: &StoredReportRow,

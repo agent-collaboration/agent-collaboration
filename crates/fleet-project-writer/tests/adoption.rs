@@ -1,13 +1,13 @@
 #![allow(clippy::panic_in_result_fn)]
 
 use durable_steps::Uuid;
-use fleet_sync_lease::LeasePolicy;
-use fleet_sync_protocol::PeerId;
-use fleet_sync_protocol::TableName;
-use fleet_sync_writer::{
+use fleet_project_lease::LeasePolicy;
+use fleet_project_writer::{
     AdoptionHistory, Migration, OpenError, ReplicatedDatabase, ReplicatedSchema, RetainedFile,
     RetainedFileOrigin, RetainedFileOriginKind, WriterOptions,
 };
+use fleet_protocol::PeerId;
+use fleet_protocol::TableName;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     executor::Executor,
@@ -20,7 +20,7 @@ use std::{sync::LazyLock, time::Duration};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 static MIGRATIONS: Migrator = sqlx::migrate!("./tests/fixtures/adoption");
-static TABLES: LazyLock<Result<Vec<TableName>, fleet_sync_protocol::TextValueError>> =
+static TABLES: LazyLock<Result<Vec<TableName>, fleet_protocol::TextValueError>> =
     LazyLock::new(|| {
         ["text_records", "composite_records", "real_records"]
             .into_iter()
@@ -121,10 +121,10 @@ async fn adoption_preserves_prefix_data_and_captures_only_later_migrations() -> 
     snapshot.close().await?;
     let expected = RetainedFileOrigin {
         database: writer.database(),
-        epoch: fleet_sync_protocol::Epoch::new(1)?,
-        start: fleet_sync_protocol::ReplicationPosition::new(
-            fleet_sync_protocol::Epoch::new(1)?,
-            fleet_sync_protocol::CommitSequence::new(0),
+        epoch: fleet_protocol::Epoch::new(1)?,
+        start: fleet_protocol::ReplicationPosition::new(
+            fleet_protocol::Epoch::new(1)?,
+            fleet_protocol::CommitSequence::new(0),
         ),
         kind: RetainedFileOriginKind::Adopted,
     };
@@ -159,33 +159,33 @@ impl durable_steps::storage::TransactionScope for CopyScope<'_> {
     }
 }
 struct CopyHook;
-impl fleet_sync_receiver::ReceiverRules<CopyScope<'_>> for CopyHook {
-    type Protocol = fleet_sync_protocol::NoConsumer;
+impl fleet_project_copy::ReceiverRules<CopyScope<'_>> for CopyHook {
+    type Protocol = fleet_protocol::NoConsumer;
     type FollowUp = ();
     async fn on_applied(
         &self,
         _: &mut CopyScope<'_>,
-        _: &fleet_sync_receiver::AppliedPiece<'_, ()>,
-    ) -> Result<Vec<()>, fleet_sync_receiver::HookError> {
+        _: &fleet_project_copy::AppliedPiece<'_, ()>,
+    ) -> Result<Vec<()>, fleet_project_copy::HookError> {
         Ok(Vec::new())
     }
 }
-impl fleet_sync_receiver::FollowUpHandler for CopyHook {
+impl fleet_project_copy::FollowUpHandler for CopyHook {
     type Item = ();
     async fn follow_up(
         &self,
         _: &(),
         _: durable_steps::CallId,
-    ) -> Result<fleet_sync_receiver::FollowUpDone, fleet_sync_receiver::FollowUpFailure> {
-        Ok(fleet_sync_receiver::FollowUpDone)
+    ) -> Result<fleet_project_copy::FollowUpDone, fleet_project_copy::FollowUpFailure> {
+        Ok(fleet_project_copy::FollowUpDone)
     }
 }
 
 async fn seed_into_real_copy(
     path: &std::path::Path,
-    snapshot: &mut fleet_sync_writer::WriterSnapshot,
+    snapshot: &mut fleet_project_writer::WriterSnapshot,
 ) -> TestResult {
-    use fleet_sync_protocol::{
+    use fleet_protocol::{
         CopyOrigin, CreateCopy, PageDigest, SeedAnswer, SeedComplete, SeedPage, SeedPageAnswer,
     };
     let mut connection = TursoConnectOptions::new()
@@ -195,15 +195,15 @@ async fn seed_into_real_copy(
         .connect()
         .await?;
     let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
-    let mut migrator = sqlx::migrate!("../fleet-sync-receiver/migrations");
+    let mut migrator = sqlx::migrate!("../fleet-project-copy/migrations");
     migrator.dangerous_set_table_name("_fleet_sync_copy_migrations");
     migrator.run_direct(None, &mut *transaction, false).await?;
     let manifest = snapshot.manifest().await?;
     let peer = PeerId::new(Uuid::from_u128(0x019eef00000070008000000000000002))?;
-    let authority = fleet_sync_receiver::SeedAuthority::Writer(peer);
+    let authority = fleet_project_copy::SeedAuthority::Writer(peer);
     let mut scope = CopyScope(&mut transaction);
-    fleet_sync_receiver::initialize_hook(&mut scope, &CopyHook).await?;
-    fleet_sync_receiver::create_copy(
+    fleet_project_copy::initialize_hook(&mut scope, &CopyHook).await?;
+    fleet_project_copy::create_copy(
         &mut scope,
         &CreateCopy {
             database: manifest.database,
@@ -215,12 +215,10 @@ async fn seed_into_real_copy(
         },
     )
     .await?;
-    let seed = fleet_sync_receiver::seed_begin(
+    let seed = fleet_project_copy::seed_begin(
         &mut scope,
         manifest.database,
-        fleet_sync_protocol::SeedAttemptId::new(Uuid::from_u128(
-            0x019eef0000007000800000000000000a,
-        ))?,
+        fleet_protocol::SeedAttemptId::new(Uuid::from_u128(0x019eef0000007000800000000000000a))?,
         &authority,
     )
     .await?;
@@ -236,7 +234,7 @@ async fn seed_into_real_copy(
             contents,
         };
         assert_eq!(
-            fleet_sync_receiver::seed_page(&mut scope, &page, &authority).await?,
+            fleet_project_copy::seed_page(&mut scope, &page, &authority).await?,
             SeedPageAnswer::Staged
         );
         pages += 1;
@@ -257,10 +255,10 @@ async fn seed_into_real_copy(
             .collect(),
     };
     assert!(
-        matches!(fleet_sync_receiver::seed_complete(&mut scope, &done, &CopyHook, &authority).await?, fleet_sync_receiver::SeedDecision::Published { position, .. } if position == done.position)
+        matches!(fleet_project_copy::seed_complete(&mut scope, &done, &CopyHook, &authority).await?, fleet_project_copy::SeedDecision::Published { position, .. } if position == done.position)
     );
     assert!(
-        matches!(fleet_sync_receiver::seed_complete(&mut scope, &done, &CopyHook, &authority).await?, fleet_sync_receiver::SeedDecision::Answer(SeedAnswer::Published { position }) if position == done.position)
+        matches!(fleet_project_copy::seed_complete(&mut scope, &done, &CopyHook, &authority).await?, fleet_project_copy::SeedDecision::Answer(SeedAnswer::Published { position }) if position == done.position)
     );
     transaction.commit().await?;
     let row = query::<Turso>(

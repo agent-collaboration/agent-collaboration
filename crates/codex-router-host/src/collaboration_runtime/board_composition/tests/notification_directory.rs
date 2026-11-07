@@ -16,7 +16,7 @@ async fn a_live_installation_lookup_freezes_its_peer_outside_the_project_lock_an
     let service: ServiceId = "00000000-0000-4000-8000-000000000111"
         .to_owned()
         .try_into()?;
-    let peer = fleet_sync_protocol::PeerId::new(durable_steps::Uuid::now_v7())?;
+    let peer = fleet_protocol::PeerId::new(durable_steps::Uuid::now_v7())?;
     fixture
         .harness
         .central

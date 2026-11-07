@@ -2,7 +2,7 @@
 use super::cancellation_support::*;
 use super::support;
 use durable_steps::{AtomicStore, Engine, JournalScope, Task, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::query::query;
 use sqlx_turso::Turso;
 use std::{sync::Arc, time::Duration};

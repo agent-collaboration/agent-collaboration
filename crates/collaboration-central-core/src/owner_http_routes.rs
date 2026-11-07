@@ -19,11 +19,9 @@ use std::sync::Arc;
 pub(crate) fn failed(failure: durable_steps::CallFailure) -> Response {
     let body = match failure {
         durable_steps::CallFailure::Retryable { reason } => {
-            match fleet_sync_protocol::CopyUnavailableReason::decode_retry(
-                &reason.code,
-                &reason.detail,
-            ) {
-                Ok(fleet_sync_protocol::CopyUnavailableReason::StorageFull) => {
+            match fleet_protocol::CopyUnavailableReason::decode_retry(&reason.code, &reason.detail)
+            {
+                Ok(fleet_protocol::CopyUnavailableReason::StorageFull) => {
                     OwnerOperationFailure::CentralCopyFull
                 }
                 Ok(reason) => OwnerOperationFailure::CopyUnavailable { reason },
@@ -37,7 +35,7 @@ pub(crate) fn failed(failure: durable_steps::CallFailure) -> Response {
 pub(crate) async fn health<Platform: CentralPlatform>(
     State(app): State<Arc<CentralApplication<Platform>>>,
     Extension(caller): Extension<AccessCaller>,
-    Path(database): Path<fleet_sync_protocol::DatabaseId>,
+    Path(database): Path<fleet_protocol::DatabaseId>,
 ) -> Response {
     let owner = match OwnerIdentity::from_access(caller) {
         Ok(owner) => owner,
@@ -103,7 +101,7 @@ pub(crate) async fn copies<Platform: CentralPlatform>(
 pub(crate) async fn repair<Platform: CentralPlatform>(
     State(app): State<Arc<CentralApplication<Platform>>>,
     Extension(caller): Extension<AccessCaller>,
-    Path(database): Path<fleet_sync_protocol::DatabaseId>,
+    Path(database): Path<fleet_protocol::DatabaseId>,
 ) -> Response {
     let owner = match OwnerIdentity::from_access(caller) {
         Ok(owner) => owner,
@@ -180,17 +178,17 @@ pub(crate) async fn migrate<Platform: CentralPlatform>(
     };
     let mut results = Vec::with_capacity(page.projects.len());
     for entry in page.projects {
-        let database =
-            match fleet_sync_protocol::DatabaseId::try_from(entry.project.as_str().to_owned()) {
-                Ok(database) => database,
-                Err(_) => {
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(OwnerOperationFailure::ObjectUnavailable),
-                    )
-                        .into_response();
-                }
-            };
+        let database = match fleet_protocol::DatabaseId::try_from(entry.project.as_str().to_owned())
+        {
+            Ok(database) => database,
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(OwnerOperationFailure::ObjectUnavailable),
+                )
+                    .into_response();
+            }
+        };
         let result = match app
             .call_from_owner::<FleetKind, _>(
                 owner.clone(),
@@ -229,7 +227,7 @@ pub(crate) async fn migrate<Platform: CentralPlatform>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fleet_sync_protocol::CopyUnavailableReason;
+    use fleet_protocol::CopyUnavailableReason;
     use serde_json::json;
 
     #[test]
@@ -252,7 +250,7 @@ mod tests {
             ),
         ] {
             // The reference is PD3's public 503 body; input uses the real shared codec.
-            let response = failed(fleet_sync_receiver::retryable_copy(reason));
+            let response = failed(fleet_project_copy::retryable_copy(reason));
             if response.status() != StatusCode::SERVICE_UNAVAILABLE {
                 return Err("owner operation failure lost HTTP503".into());
             }

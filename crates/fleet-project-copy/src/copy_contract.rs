@@ -1,5 +1,5 @@
 use crate::StoreError;
-use fleet_sync_protocol::{CopyStatus, DatabaseId, SyncTime};
+use fleet_protocol::{CopyStatus, DatabaseId, SyncTime};
 use serde::{Deserialize, Serialize};
 
 pub(crate) fn validate_copy_status(status: &CopyStatus) -> Result<(), StoreError> {
@@ -26,11 +26,11 @@ pub(crate) fn validate_copy_status(status: &CopyStatus) -> Result<(), StoreError
 pub(crate) enum CopyRecord {
     Starting {
         status: CopyStatus,
-        install_id: fleet_sync_protocol::InstallId,
+        install_id: fleet_protocol::InstallId,
     },
     Seeding {
         status: CopyStatus,
-        expected_position: Option<fleet_sync_protocol::ReplicationPosition>,
+        expected_position: Option<fleet_protocol::ReplicationPosition>,
     },
     Following(CopyStatus),
     Retired {
@@ -50,9 +50,7 @@ impl CopyRecord {
     }
     pub(crate) fn validate(&self) -> Result<(), StoreError> {
         match self {
-            Self::Starting { status, .. }
-                if status.role != fleet_sync_protocol::CopyRole::Follower =>
-            {
+            Self::Starting { status, .. } if status.role != fleet_protocol::CopyRole::Follower => {
                 Err(StoreError::Corrupt {
                     field: "starting copy marker".into(),
                 })

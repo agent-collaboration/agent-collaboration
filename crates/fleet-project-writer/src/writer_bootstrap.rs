@@ -9,9 +9,9 @@ use crate::{
     writer_scope::WriterScope,
 };
 use durable_steps::BoxFuture;
-use fleet_sync_lease::{LeaseHolder, LeasePolicy};
-use fleet_sync_protocol::{LeaseState, LeaseStatus, ReplicationPosition, SyncTime};
-use fleet_sync_receiver::{SnapshotInstall, SnapshotInstallRules, SnapshotInstallState};
+use fleet_project_copy::{SnapshotInstall, SnapshotInstallRules, SnapshotInstallState};
+use fleet_project_lease::{LeaseHolder, LeasePolicy};
+use fleet_protocol::{LeaseState, LeaseStatus, ReplicationPosition, SyncTime};
 use runtime_primitives::SystemClock;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
@@ -40,7 +40,7 @@ pub enum BootstrapError {
     #[error(transparent)]
     Publish(#[from] PublishError),
     #[error(transparent)]
-    Snapshot(#[from] fleet_sync_receiver::SnapshotInstallError),
+    Snapshot(#[from] fleet_project_copy::SnapshotInstallError),
 }
 impl From<sqlx_core::Error> for BootstrapError {
     fn from(error: sqlx_core::Error) -> Self {
@@ -119,7 +119,7 @@ impl<S: ReplicatedSchema> ReplicatedDatabase<S> {
         let tables = layouts
             .iter()
             .map(|layout| {
-                fleet_sync_protocol::TableName::new(layout.name())
+                fleet_protocol::TableName::new(layout.name())
                     .map_err(|_| OpenError::corrupt("migration.membership"))
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -180,7 +180,7 @@ impl<S: ReplicatedSchema> ReplicatedDatabase<S> {
         staging: &Path,
         install: &SnapshotInstall,
         prefix: Vec<Migration>,
-        tables: Vec<fleet_sync_protocol::TableName>,
+        tables: Vec<fleet_protocol::TableName>,
         carry: F,
         probe: crate::bootstrap_publish_probe::BootstrapPublishProbe,
     ) -> Result<(), BootstrapError>
@@ -217,7 +217,7 @@ impl<S: ReplicatedSchema> ReplicatedDatabase<S> {
             .await;
         staged.close().await?;
         if !state?.is_some_and(|state| state.install == *install && state.verified) {
-            return Err(fleet_sync_receiver::SnapshotInstallError::NotVerified.into());
+            return Err(fleet_project_copy::SnapshotInstallError::NotVerified.into());
         }
         carry(live, staging).await?;
         let converted_admission =
@@ -248,7 +248,7 @@ impl<S: ReplicatedSchema> ReplicatedDatabase<S> {
         staged: &mut TursoConnection,
         install: &SnapshotInstall,
         prefix: Vec<Migration>,
-        tables: &[fleet_sync_protocol::TableName],
+        tables: &[fleet_protocol::TableName],
     ) -> Result<(), BootstrapError> {
         let mut transaction = staged.begin_with("BEGIN IMMEDIATE").await?;
         let mut record = read_file_record(&mut transaction)
@@ -309,7 +309,7 @@ impl<S: ReplicatedSchema> ReplicatedDatabase<S> {
     pub async fn mark_bootstrap_ready(
         &self,
         install: &SnapshotInstall,
-        receiver: fleet_sync_protocol::ReceiverId,
+        receiver: fleet_protocol::ReceiverId,
     ) -> Result<(), OpenError> {
         let mut control = self.control.lock().await;
         let mut connection = self.maintenance.acquire().await?;

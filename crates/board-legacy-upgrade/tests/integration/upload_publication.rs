@@ -96,7 +96,7 @@ async fn assert_imported_digest_conflict(
         .await
         .map_err(promote_error)?;
     let mut different = header.clone();
-    different.digest = fleet_sync_protocol::ImportDigest::new("b".repeat(64))?;
+    different.digest = fleet_protocol::ImportDigest::new("b".repeat(64))?;
     let answer: AdminProjectImportAnswer = http
         .post(format!(
             "{}/admin/v1/import/projects/{}",
@@ -158,7 +158,7 @@ async fn assert_nonimported_copy_conflict(
         .await
         .map_err(promote_error)?;
     let mut ordinary = header.clone();
-    ordinary.manifest.database = fleet_sync_protocol::DatabaseId::try_from(database.to_owned())?;
+    ordinary.manifest.database = fleet_protocol::DatabaseId::try_from(database.to_owned())?;
     let answer: AdminProjectImportAnswer = http
         .post(format!("{endpoint}/admin/v1/import/projects/{database}"))
         .json(&AdminProjectImportRequest::Begin { header: ordinary })

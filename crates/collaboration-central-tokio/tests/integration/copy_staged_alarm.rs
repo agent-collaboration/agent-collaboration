@@ -4,8 +4,8 @@
 use crate::copy_receiver_fixture as support;
 use board_sync_protocol::BoardAnnotation;
 use durable_steps::{AtomicStore, StoreError};
-use fleet_sync_protocol::*;
-use fleet_sync_receiver::{CopyInspection, StagedTransaction};
+use fleet_project_copy::{CopyInspection, StagedTransaction};
+use fleet_protocol::*;
 use runtime_primitives::SyncTime;
 use serde_json::json;
 use std::sync::atomic::Ordering;
@@ -52,7 +52,7 @@ async fn staged(fixture: &Fixture) -> TestResult<Vec<StagedTransaction>> {
         .copy
         .transaction(|scope| {
             Box::pin(
-                async move { Ok::<_, StoreError>(fleet_sync_receiver::inspect_copy(scope).await) },
+                async move { Ok::<_, StoreError>(fleet_project_copy::inspect_copy(scope).await) },
             )
         })
         .await?;

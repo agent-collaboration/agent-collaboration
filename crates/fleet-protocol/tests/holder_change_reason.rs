@@ -1,5 +1,5 @@
 #![allow(clippy::unwrap_used)]
-use fleet_sync_protocol::{HolderChangeReason, HolderChangeReasonError, HolderChangeRequest};
+use fleet_protocol::{HolderChangeReason, HolderChangeReasonError, HolderChangeRequest};
 use serde_json::{Value, json};
 
 fn request(kind: &str) -> Value {

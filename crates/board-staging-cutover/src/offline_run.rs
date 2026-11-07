@@ -4,7 +4,7 @@ use crate::{
     OfflineHost, OfflineRunPlan, OwnerAuthentication, PreparedProjectBundle, ProjectBundleError,
     SourceArchiveOutcome, StagingPublisher, archive_confirmed_source,
 };
-use fleet_sync_protocol::{ReplicationPosition, RequestId as ImportId};
+use fleet_protocol::{ReplicationPosition, RequestId as ImportId};
 use message_board::{ProjectId, RequestId};
 use serde::Serialize;
 use std::path::{Path, PathBuf};

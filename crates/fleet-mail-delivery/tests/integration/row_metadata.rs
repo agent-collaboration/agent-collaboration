@@ -13,8 +13,8 @@ async fn portable_sql_metadata_mints_distinct_uuidv7_keys_and_preserves_keys_on_
         let first=rows.first().unwrap().try_get::<String,_>("id")?;
         let second=rows.last().unwrap().try_get::<String,_>("id")?;
         assert_ne!(first,second);
-        assert!(fleet_sync_protocol::ItemId::try_from(first.clone()).is_ok());
-        assert!(fleet_sync_protocol::ItemId::try_from(second).is_ok());
+        assert!(fleet_protocol::ItemId::try_from(first.clone()).is_ok());
+        assert!(fleet_protocol::ItemId::try_from(second).is_ok());
         let created=rows.first().unwrap().try_get::<i64,_>("created_at")?;
         assert!(created>0);
         query::<Turso>("INSERT INTO test_row_metadata(natural_key) VALUES('first') ON CONFLICT(natural_key) DO UPDATE SET updated_at=excluded.updated_at").execute(scope.executor()).await?;

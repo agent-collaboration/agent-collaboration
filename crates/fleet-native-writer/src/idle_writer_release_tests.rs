@@ -1,9 +1,10 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::{writer_bootstrap_fixture::*, *};
 use durable_steps::{CallId, OperationId, StepName, Uuid};
-use fleet_sync_lease::WriterState;
-use fleet_sync_protocol::*;
-use fleet_sync_writer::{BootstrapGrant, OpenError, ReplicatedDatabase, WriteRefusal};
+use fleet_project_lease::WriterState;
+use fleet_project_writer::{BootstrapGrant, OpenError, ReplicatedDatabase, WriteRefusal};
+use fleet_protocol::*;
+use fleet_tokio_objects::{ObjectKey, ObjectOptions, ObjectStore, TokioHost};
 use runtime_primitives::SystemClock;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},

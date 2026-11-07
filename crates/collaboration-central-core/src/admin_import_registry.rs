@@ -12,8 +12,8 @@ use durable_steps::{
     AtomicStore, BoxFuture, CallFailure, CallTarget, JournalScope, NotSentReason, OperationId,
     OperationState, StoreError, storage::TransactionScope,
 };
-use fleet_sync_lease::{ImportTask, lifecycle_request_key};
-use fleet_sync_protocol::{Import, ImportAnswer};
+use fleet_project_lease::{ImportTask, lifecycle_request_key};
+use fleet_protocol::{Import, ImportAnswer};
 use runtime_primitives::{Clock, SyncTime};
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
@@ -125,7 +125,7 @@ where
         Box::pin(async move {
             let key = lifecycle_request_key(self.input.attempt).map_err(StoreError::backend)?;
             let admitted = scope
-                .admit::<ImportTask<Store, Driver, fleet_sync_lease::NoLeaseChangeHook>>(
+                .admit::<ImportTask<Store, Driver, fleet_project_lease::NoLeaseChangeHook>>(
                     &key,
                     &self.input,
                 )

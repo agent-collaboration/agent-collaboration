@@ -3,7 +3,7 @@ use crate::FixtureResult;
 use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerProtocol, BoardReadPage, FleetFeedRead,
 };
-use fleet_sync_protocol::{OperationAnswer, ServerFrame};
+use fleet_protocol::{OperationAnswer, ServerFrame};
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

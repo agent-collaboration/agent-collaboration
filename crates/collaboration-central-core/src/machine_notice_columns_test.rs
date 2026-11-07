@@ -1,6 +1,6 @@
 use super::{NoticeColumns, decode_notice};
 use board_sync_protocol::BoardNotice;
-use fleet_sync_protocol::Epoch;
+use fleet_protocol::Epoch;
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 

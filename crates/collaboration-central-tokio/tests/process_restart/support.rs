@@ -7,7 +7,7 @@ use collaboration_central_core::{
     ClaimReservationState, ObjectAddress, StepControl, StepControlReply,
 };
 use durable_steps::StoreError;
-use fleet_sync_protocol::{DatabaseId, TransferId};
+use fleet_protocol::{DatabaseId, TransferId};
 use serde_json::Value;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},

@@ -3,7 +3,7 @@ use crate::{
     schema_inspection::{text, unsigned},
     writer_scope::WriterScope,
 };
-use fleet_sync_protocol::{CommitSequence, DatabaseId, Epoch, PeerId, ReplicationPosition};
+use fleet_protocol::{CommitSequence, DatabaseId, Epoch, PeerId, ReplicationPosition};
 use serde::{Deserialize, Serialize};
 use sqlx_turso::TursoConnection;
 
@@ -13,9 +13,9 @@ pub(crate) const BOOKKEEPING_HISTORY_TABLE: &str = "_fleet_sync_writer_engine_hi
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct WriterFileRecord {
-    pub bootstrap: Option<fleet_sync_receiver::SnapshotInstallState>,
+    pub bootstrap: Option<fleet_project_copy::SnapshotInstallState>,
     pub origin: RetainedFileOriginKind,
-    pub registration_attempt: Option<fleet_sync_protocol::RequestId>,
+    pub registration_attempt: Option<fleet_protocol::RequestId>,
     pub registration_failure: Option<durable_steps::OperationFailure>,
     pub renewal_operation: Option<crate::renewal_task::RenewalOperation>,
     pub renewal_failure: Option<durable_steps::OperationFailure>,
@@ -90,9 +90,10 @@ pub(crate) async fn read_file_record(
         authority.validate_database(record.database)?;
         if let crate::writer_authority::AuthorityObservation::Renewal {
             answer:
-                fleet_sync_protocol::RenewAnswer::Refused(
-                    fleet_sync_protocol::LeaseRefusal::StaleEpoch { epoch_ended_at, .. },
-                ),
+                fleet_protocol::RenewAnswer::Refused(fleet_protocol::LeaseRefusal::StaleEpoch {
+                    epoch_ended_at,
+                    ..
+                }),
             ..
         } = authority
             && record.epoch_ended_at != Some(*epoch_ended_at)

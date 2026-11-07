@@ -3,15 +3,16 @@ use crate::*;
 use durable_steps::{
     AtomicStore, CallFailure, NotSentReason, StoreError, storage::TransactionScope,
 };
-use fleet_sync_lease::LeasePolicy;
-use fleet_sync_protocol::*;
-use fleet_sync_receiver::{
+use fleet_project_copy::{
     AppliedPiece, ApplyDecision, FollowUpDone, FollowUpFailure, ReceiverRules, SnapshotInstall,
 };
-use fleet_sync_writer::{
+use fleet_project_lease::LeasePolicy;
+use fleet_project_writer::{
     BootstrapGrant, Migration, ReplicatedDatabase, ReplicatedSchema, ReplicationTransport,
     SendFailure, WriterOptions,
 };
+use fleet_protocol::*;
+use fleet_tokio_objects::{CallEnvelope, CallRouter, TokioHost, TokioObject};
 use runtime_primitives::{Clock, SystemClock};
 use sqlx_core::{migrate::MigrationType, sql_str::SqlSafeStr};
 use std::{
@@ -84,11 +85,11 @@ impl<S: TransactionScope> ReceiverRules<S> for Hook {
         &self,
         _: &mut S,
         _: &AppliedPiece<'_, ()>,
-    ) -> Result<Vec<()>, fleet_sync_receiver::HookError> {
+    ) -> Result<Vec<()>, fleet_project_copy::HookError> {
         Ok(Vec::new())
     }
 }
-impl fleet_sync_receiver::FollowUpHandler for Hook {
+impl fleet_project_copy::FollowUpHandler for Hook {
     type Item = ();
     async fn follow_up(
         &self,
@@ -113,7 +114,7 @@ impl ReplicationTransport<NoConsumer> for CopyTransport {
         self.copy
             .transaction(move |scope| {
                 Box::pin(async move {
-                    let answer = fleet_sync_receiver::apply_piece(
+                    let answer = fleet_project_copy::apply_piece(
                         scope,
                         &piece,
                         &sender,
@@ -168,7 +169,7 @@ pub(super) async fn stage(
 ) -> TestResult<(SnapshotInstall, CopyStatus)> {
     let mut read = source.snapshot().await?;
     let install = SnapshotInstall {
-        install_id: fleet_sync_protocol::InstallId::new(durable_steps::Uuid::now_v7())?,
+        install_id: fleet_protocol::InstallId::new(durable_steps::Uuid::now_v7())?,
         database: source.database(),
         position: read.position(),
         schema: read.schema().clone(),
@@ -226,7 +227,7 @@ struct PendingAfterConversion;
 impl durable_steps::Task for PendingAfterConversion {
     const KIND: &'static str = "test.pending-after-bootstrap-conversion";
     const VERSION: u32 = 1;
-    type Store = fleet_sync_writer::WriterJournalStore<Schema, TestHost>;
+    type Store = fleet_project_writer::WriterJournalStore<Schema, TestHost>;
     type Input = ();
     type Output = ();
     async fn run<C: durable_steps::OperationContext<Store = Self::Store>>(

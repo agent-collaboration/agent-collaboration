@@ -1,8 +1,8 @@
 use durable_steps::storage::TransactionScope;
-use fleet_sync_lease::{LeaseHolder, LeasePolicy};
-use fleet_sync_protocol::*;
-use fleet_sync_receiver::{AppliedPiece, HookError, ReceiverRules};
-use fleet_sync_writer::{Migration, ReplicatedDatabase, ReplicatedSchema, WriterOptions};
+use fleet_project_copy::{AppliedPiece, HookError, ReceiverRules};
+use fleet_project_lease::{LeaseHolder, LeasePolicy};
+use fleet_project_writer::{Migration, ReplicatedDatabase, ReplicatedSchema, WriterOptions};
+use fleet_protocol::*;
 use runtime_primitives::Clock;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
@@ -144,10 +144,10 @@ pub async fn prepare_writer(path: &Path, rows: usize, body_bytes: usize) -> Meas
 pub async fn prepare_copy(path: &Path, rows: usize, body_bytes: usize) -> MeasurementResult {
     let mut connection = connection(path).await?;
     let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
-    fleet_sync_receiver::RECEIVER_MIGRATOR
+    fleet_project_copy::RECEIVER_MIGRATOR
         .run_direct(None, &mut *transaction, false)
         .await?;
-    fleet_sync_receiver::create_copy(
+    fleet_project_copy::create_copy(
         &mut TursoScope(&mut transaction),
         &CreateCopy {
             database: database()?,
@@ -176,7 +176,7 @@ pub async fn prepare_copy(path: &Path, rows: usize, body_bytes: usize) -> Measur
         part: None,
         annotation: None,
     })?;
-    fleet_sync_receiver::apply_piece(
+    fleet_project_copy::apply_piece(
         &mut TursoScope(&mut transaction),
         &schema,
         &peer()?,

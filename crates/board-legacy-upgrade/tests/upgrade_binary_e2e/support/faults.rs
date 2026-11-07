@@ -48,7 +48,7 @@ pub async fn reserve_first_project(
 pub async fn import_status(
     central: &CentralHarness,
     project: &str,
-    digest: fleet_sync_protocol::ImportDigest,
+    digest: fleet_protocol::ImportDigest,
 ) -> E2eResult<AdminImportPhase> {
     let client = promote_result(central_fixture::owner_client())?;
     let response = client

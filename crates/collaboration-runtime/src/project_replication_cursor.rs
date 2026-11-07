@@ -4,7 +4,7 @@ use message_board::{BoardError, EpochNumber, FeedCursor, FeedPosition};
 /// A native mapping failure is unavailable state, never a successful zero cursor.
 pub async fn project_replication_cursor(
     store: &crate::NativeProjectStore,
-    through: fleet_sync_protocol::ReplicationPosition,
+    through: fleet_protocol::ReplicationPosition,
     empty_epoch: EpochNumber,
 ) -> Result<FeedCursor, BoardError> {
     let marks = store.acknowledged_capture(through).await.map_err(|error| {

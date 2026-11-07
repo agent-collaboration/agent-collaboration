@@ -3,7 +3,7 @@ use super::super::forwarded_notification_fixture::MailWorkerStart;
 use super::*;
 use board_sync_protocol::BoardDeliveryTypes;
 use collaboration_service::{IntentHandoffInput, IntentRecipientEnrollment};
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, PeerId};
+use fleet_protocol::{DeliveryEnvelope, DeliveryItem, PeerId};
 use message_board_storage::MailHandoffItem;
 
 #[path = "messaging_rule_machine.rs"]

@@ -3,7 +3,7 @@ use crate::{InteractionStore, StorageError, push_record_rows};
 use chrono::{DateTime, Utc};
 use collaboration_mail_protocol::{CancelCause, CarrierAcceptance, MailItemId};
 use durable_steps::{Host, storage::TransactionScope, turso_store::TursoScope};
-use fleet_sync_protocol::RecipientOutcome;
+use fleet_protocol::RecipientOutcome;
 use sqlx::Transaction;
 use sqlx_turso::{Turso, TursoConnection};
 

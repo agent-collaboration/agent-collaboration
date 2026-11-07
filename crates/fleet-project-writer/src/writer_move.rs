@@ -6,7 +6,7 @@ use crate::{
     writer_file_record::{WriterFileRecord, read_file_record},
     writer_move_probe::{MoveAsidePhase, MoveAsideProbe},
 };
-use fleet_sync_protocol::DatabaseId;
+use fleet_protocol::DatabaseId;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     executor::Executor,

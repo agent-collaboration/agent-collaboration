@@ -34,7 +34,7 @@ pub(super) fn proposal(
         activated_at: member.activated_at(),
         generation: member.generation(),
         roots: vec![RootRange::new(fixture.root.clone(), position, position, 1).unwrap()],
-        item: fleet_sync_protocol::ItemId::new(uuid::Uuid::now_v7()).unwrap(),
+        item: fleet_protocol::ItemId::new(uuid::Uuid::now_v7()).unwrap(),
         preventions: Vec::new(),
         enrollment: crate::IntentRecipientEnrollment {
             service: SERVICE_ID.to_owned().try_into().unwrap(),
@@ -163,7 +163,7 @@ async fn follow_admission_refuses_overlapping_ranges_within_and_across_handoffs(
             .is_some()
     );
     let mut second = original;
-    second.item = fleet_sync_protocol::ItemId::new(uuid::Uuid::now_v7()).unwrap();
+    second.item = fleet_protocol::ItemId::new(uuid::Uuid::now_v7()).unwrap();
     assert!(
         fixture
             .admission
@@ -217,7 +217,7 @@ async fn poll_project_membership_freezes_one_handoff_per_root_and_rechecks_shape
             activated_at: window.activated_at,
             generation: window.generation,
             roots: window.roots,
-            item: fleet_sync_protocol::ItemId::new(uuid::Uuid::now_v7()).unwrap(),
+            item: fleet_protocol::ItemId::new(uuid::Uuid::now_v7()).unwrap(),
             enrollment: proposal(
                 &fixture,
                 &current_membership(&fixture).await,

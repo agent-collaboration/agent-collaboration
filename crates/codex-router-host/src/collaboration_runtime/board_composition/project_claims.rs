@@ -4,7 +4,7 @@ use board_sync_protocol::{ProjectClaimRefusal, ProjectClaimReply, ProjectClaimRe
 use collaboration_contracts::ProjectClaim;
 use collaboration_contracts::ProjectClaimError;
 use collaboration_contracts::ProjectClaimFuture;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DatabaseId, HolderChangeAnswer, HolderChangeRefusal, LeaseAnswer, LeaseRequest,
     OperationAnswer, OperationRequest,
 };
@@ -30,9 +30,8 @@ impl ProjectWriters {
             return Err(io::Error::other("machine session is not ready"));
         }
         let project = &request.project_id;
-        let attempt =
-            fleet_sync_protocol::RequestId::try_from(request.request_id.as_str().to_owned())
-                .map_err(io::Error::other)?;
+        let attempt = fleet_protocol::RequestId::try_from(request.request_id.as_str().to_owned())
+            .map_err(io::Error::other)?;
         let database =
             DatabaseId::try_from(project.as_str().to_owned()).map_err(io::Error::other)?;
         let answer = self
@@ -132,10 +131,9 @@ mod refusal_tests {
     fn claim_refusals_preserve_frozen_native_details_and_name_only_the_archive_gate() -> TestResult
     {
         let id = "019f0000-0000-7000-8000-000000009710";
-        let holder = fleet_sync_protocol::PeerId::try_from(id.to_owned())?;
-        let transfer = fleet_sync_protocol::TransferId::try_from(id.to_owned())?;
-        let schema =
-            fleet_sync_protocol::SchemaIdentity::new(7, "expected-native-fingerprint".into())?;
+        let holder = fleet_protocol::PeerId::try_from(id.to_owned())?;
+        let transfer = fleet_protocol::TransferId::try_from(id.to_owned())?;
+        let schema = fleet_protocol::SchemaIdentity::new(7, "expected-native-fingerprint".into())?;
         for (input, expected) in [
             (
                 HolderChangeRefusal::AlreadyHeld { holder },
@@ -159,8 +157,8 @@ mod refusal_tests {
             (HolderChangeRefusal::Retired, ProjectClaimRefusal::Retired),
             (
                 HolderChangeRefusal::GateRefused {
-                    reason: fleet_sync_protocol::GateReason {
-                        code: fleet_sync_protocol::GateReasonCode::new("board_archived")?,
+                    reason: fleet_protocol::GateReason {
+                        code: fleet_protocol::GateReasonCode::new("board_archived")?,
                         detail: "actual archive gate".into(),
                     },
                 },
@@ -172,8 +170,8 @@ mod refusal_tests {
         assert!(claim_refusal(HolderChangeRefusal::Unavailable).is_err());
         assert!(
             claim_refusal(HolderChangeRefusal::GateRefused {
-                reason: fleet_sync_protocol::GateReason {
-                    code: fleet_sync_protocol::GateReasonCode::new("unrelated_gate")?,
+                reason: fleet_protocol::GateReason {
+                    code: fleet_protocol::GateReasonCode::new("unrelated_gate")?,
                     detail: "not archived".into()
                 }
             })

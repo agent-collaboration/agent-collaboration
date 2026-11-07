@@ -4,7 +4,7 @@ use crate::{
     turso_registry_fixture::*, turso_registry_snapshot_fixture::*, turso_workflow_tests::attempt, *,
 };
 use durable_steps::AtomicStore;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_turso::Turso;
 use std::sync::{Arc, atomic::Ordering};
 

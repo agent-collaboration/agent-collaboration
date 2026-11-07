@@ -6,7 +6,7 @@ use crate::{
     registry_row::{stored_epoch, stored_scalar},
 };
 use durable_steps::{OperationId, storage::TransactionScope};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde::de::DeserializeOwned;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,

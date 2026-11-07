@@ -6,8 +6,8 @@ use super::{
 };
 use board_sync_protocol::BoardDeliveryTypes;
 use collaboration_mail_protocol::CancelCause;
-use fleet_sync_delivery::{DeliveryTransactionFailure, Outbox, OutboxStatusState};
-use fleet_sync_protocol::{
+use fleet_mail_delivery::{DeliveryTransactionFailure, Outbox, OutboxStatusState};
+use fleet_protocol::{
     CancelResult, DeliveryAnswer, DeliveryEnvelope, DeliveryRefusal, DeliveryRequest,
     ItemStatusState, OperationAnswer, OperationRequest,
 };
@@ -112,7 +112,7 @@ impl MailDeliveryRuntime {
 
     pub(super) async fn remote_frozen_cancel_reference(
         &self,
-        control: &fleet_sync_protocol::DeliveryCancel<BoardDeliveryTypes>,
+        control: &fleet_protocol::DeliveryCancel<BoardDeliveryTypes>,
         replay: RemoteCancelReplay,
     ) -> Result<Option<DeliveryItemRef>, StoreError> {
         let config = self.config;
@@ -142,7 +142,7 @@ impl MailDeliveryRuntime {
         let observed = match state {
             OutboxStatusState::Known {
                 status:
-                    fleet_sync_protocol::DeliveryStatus::Refused {
+                    fleet_protocol::DeliveryStatus::Refused {
                         reason: DeliveryRefusal::CancelAlreadyRequested { existing },
                     },
                 ..

@@ -2,7 +2,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::{turso_change_tests::register_first, turso_registry_fixture::*, *};
 use durable_steps::{AtomicStore, OperationState, RequestKey, Uuid, storage::TransactionScope};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_turso::Turso;
 use std::sync::{Arc, atomic::Ordering};
 
@@ -33,7 +33,7 @@ async fn move_holder(
         engine,
         &holder_change_request_key(attempt)?,
         HolderChangeRequest::Move {
-            reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+            reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
             attempt,
             database: database()?,
             from_epoch: Epoch::new(from)?,

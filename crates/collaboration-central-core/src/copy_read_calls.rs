@@ -6,7 +6,7 @@ use crate::{
     step_driver::{StepCallback, StepDriver, StepResult},
 };
 use durable_steps::{AtomicStore, BoxFuture, CallTarget, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CopyStatusAnswer, CopyUnavailableReason, DatabaseId, ReceiverId, ReplicationAnswer,
     ReplicationPosition, SnapshotCursor,
 };
@@ -58,7 +58,7 @@ where
 {
     pub(crate) async fn read_copy(&self, request: CopyReadRequest) -> ReplicationAnswer {
         let ObjectWork::Copy { host, database, .. } = &self.work else {
-            return fleet_sync_receiver::classify_copy_store_error(StoreError::Aborted {
+            return fleet_project_copy::classify_copy_store_error(StoreError::Aborted {
                 reason: "copy read reached a different face".into(),
             })
             .answer();
@@ -76,7 +76,7 @@ where
                 }
             }
             Ok((answer, _)) => answer,
-            Err(error) => fleet_sync_receiver::classify_copy_store_error(error).answer(),
+            Err(error) => fleet_project_copy::classify_copy_store_error(error).answer(),
         }
     }
 }
@@ -102,9 +102,9 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
-            let status = fleet_sync_receiver::copy_status(scope)
+            let status = fleet_project_copy::copy_status(scope)
                 .await
-                .map_err(fleet_sync_receiver::receiver_rollback)?;
+                .map_err(fleet_project_copy::receiver_rollback)?;
             if let CopyStatusAnswer::Status(status) = &status
                 && status.database != self.database
             {
@@ -116,14 +116,14 @@ where
             let answer = match self.request {
                 CopyReadRequest::Status => ReplicationAnswer::CopyStatus(status),
                 CopyReadRequest::Manifest { position } => ReplicationAnswer::SnapshotManifest(
-                    fleet_sync_receiver::snapshot_manifest(scope, position)
+                    fleet_project_copy::snapshot_manifest(scope, position)
                         .await
-                        .map_err(fleet_sync_receiver::receiver_rollback)?,
+                        .map_err(fleet_project_copy::receiver_rollback)?,
                 ),
                 CopyReadRequest::Page { cursor } => ReplicationAnswer::SnapshotPage(
-                    fleet_sync_receiver::snapshot_page(scope, cursor)
+                    fleet_project_copy::snapshot_page(scope, cursor)
                         .await
-                        .map_err(fleet_sync_receiver::receiver_rollback)?,
+                        .map_err(fleet_project_copy::receiver_rollback)?,
                 ),
             };
             Ok((answer, Vec::new()))

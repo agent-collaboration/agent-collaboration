@@ -2,12 +2,12 @@
 use super::*;
 use board_sync_protocol::{ProjectClaimReply, ProjectClaimRequest};
 use collaboration_contracts::ProjectClaim;
-use fleet_sync_protocol::{
+use fleet_native_writer::{InstallRecord, NativeWriterRuntime};
+use fleet_project_writer::{BootstrapGrant, WriteRefusal};
+use fleet_protocol::{
     DatabaseId, Epoch, HolderChangeAnswer, LeaseAnswer, LeaseRequest, LeaseState, LeaseStatus,
     OperationAnswer, OperationRequest, PeerId, ReceiverId, ReplicationPosition,
 };
-use fleet_sync_tokio_runner::{InstallRecord, NativeWriterRuntime};
-use fleet_sync_writer::{BootstrapGrant, WriteRefusal};
 use runtime_primitives::Clock;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -35,7 +35,7 @@ enum RestartJourney {
 #[derive(Clone, Serialize, Deserialize)]
 struct ChildGrant {
     epoch: Epoch,
-    expires_at: fleet_sync_protocol::SyncTime,
+    expires_at: fleet_protocol::SyncTime,
     start: ReplicationPosition,
 }
 
@@ -207,7 +207,7 @@ async fn run_restart_journey(journey: RestartJourney) -> TestResult {
         let attempt_path = attempt_key(
             &config.root,
             &config.request.project_id,
-            fleet_sync_protocol::Epoch::new(2)?,
+            fleet_protocol::Epoch::new(2)?,
         );
         let root_record = if receiving {
             Some(attempt_bytes(&attempt_path).await?)
@@ -383,12 +383,12 @@ async fn claim_restart_child() -> TestResult {
     }
     // These are the fixture's synthetic Access inputs, never production credentials.
     let session = board_fleet_sync::BoardSessionInputs {
-        endpoint: fleet_sync_session::Endpoint::new(&inputs.endpoint)?,
+        endpoint: fleet_session::Endpoint::new(&inputs.endpoint)?,
         access: board_fleet_sync::AccessServiceToken::new(
             "board-fixture-client",
             "board-fixture-secret",
         )?,
-        credential: fleet_sync_session::PeerCredential::new("Bearer board-central-native-fixture")?,
+        credential: fleet_session::PeerCredential::new("Bearer board-central-native-fixture")?,
         peer: inputs.peer,
         relay: inputs.relay,
         receiver: inputs.receiver,

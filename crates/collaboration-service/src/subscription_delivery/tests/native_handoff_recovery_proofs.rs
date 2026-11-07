@@ -3,8 +3,8 @@
 use super::native_intent_publisher_proofs::{create_addressed_intent, frozen_item};
 use super::*;
 use durable_steps::{AtomicStore, CallFailure, StoreError};
-use fleet_sync_protocol::DeliveryItem;
-use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost};
+use fleet_protocol::DeliveryItem;
+use fleet_tokio_objects::{CallEnvelope, CallRouter, TokioHost};
 
 #[tokio::test]
 async fn committed_handoff_recovers_the_same_item_after_reopen_before_outbox_admission() {
@@ -16,7 +16,7 @@ async fn committed_handoff_recovers_the_same_item_after_reopen_before_outbox_adm
         u64::try_from(now.timestamp()).unwrap(),
         now.timestamp_subsec_nanos(),
     );
-    let item = fleet_sync_protocol::ItemId::new(uuid::Uuid::new_v7(timestamp)).unwrap();
+    let item = fleet_protocol::ItemId::new(uuid::Uuid::new_v7(timestamp)).unwrap();
     let session = target_session(&fixture.reader).unwrap();
     fixture
         .admission
@@ -127,13 +127,13 @@ async fn assert_recovered_custody(
     let rows = observer
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::test_support::snapshot::<
+                fleet_mail_delivery::test_support::snapshot::<
                     _,
                     collaboration_contracts::RouterDeliveryTypes,
                     _,
                 >(
                     scope,
-                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    fleet_mail_delivery::DeliveryHostRole::Machine,
                     binding.as_ref(),
                 )
                 .await

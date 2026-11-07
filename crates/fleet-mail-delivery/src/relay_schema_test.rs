@@ -162,7 +162,7 @@ async fn relay_retirement_preserves_relay_api_calls_across_reopen() {
                 assert!(matches!(settled, SettleResult::Settled { .. }));
                 backfill_submitters::<TestTypes, _, _>(
                     scope,
-                    fleet_sync_delivery::DeliveryHostRole::Relay,
+                    fleet_mail_delivery::DeliveryHostRole::Relay,
                     &FixtureBindings,
                     SyncTime::from_unix_millis(0),
                 )
@@ -171,7 +171,7 @@ async fn relay_retirement_preserves_relay_api_calls_across_reopen() {
                 assert_eq!(
                     admit_existing_record_removals::<_, RecordRemoval>(
                         scope,
-                        fleet_sync_delivery::DeliveryHostRole::Relay,
+                        fleet_mail_delivery::DeliveryHostRole::Relay,
                         SyncTime::from_unix_millis(0)
                     )
                     .await
@@ -201,8 +201,8 @@ async fn relay_retirement_preserves_relay_api_calls_across_reopen() {
         let mut migrations=sqlx_core::migrate::Migrator::with_migrations(DELIVERY_MIGRATOR.iter().cloned().collect::<Vec<_>>());
         migrations.dangerous_set_table_name("_fleet_sync_delivery_migrations");
         migrations.run_direct(None,scope.executor(),false).await.map_err(StoreError::backend)?;
-        backfill_submitters::<TestTypes,_,_>(scope, fleet_sync_delivery::DeliveryHostRole::Relay,&FixtureBindings,SyncTime::from_unix_millis(0)).await.map_err(delivery_rollback)?;
-        assert_eq!(admit_existing_record_removals::<_,RecordRemoval>(scope, fleet_sync_delivery::DeliveryHostRole::Relay,SyncTime::from_unix_millis(0)).await.map_err(delivery_rollback)?,0);
+        backfill_submitters::<TestTypes,_,_>(scope, fleet_mail_delivery::DeliveryHostRole::Relay,&FixtureBindings,SyncTime::from_unix_millis(0)).await.map_err(delivery_rollback)?;
+        assert_eq!(admit_existing_record_removals::<_,RecordRemoval>(scope, fleet_mail_delivery::DeliveryHostRole::Relay,SyncTime::from_unix_millis(0)).await.map_err(delivery_rollback)?,0);
         let status=Outbox::<_,TestTypes,_>::new(scope,limits(),&FixtureBindings).relay_query(Submitter::Machine(peer(1)),item_id(1)).await.map_err(delivery_rollback)?;
         assert!(matches!(status.state,ItemStatusState::Known {status:DeliveryStatus::Delivered {acceptance},version,..} if acceptance.receipt=="real report"&&version.value()==3));
         let stream=StatusStream::<_,TestTypes>::new(scope,Submitter::Machine(peer(1)),"route".into()).fetch(Submitter::Machine(peer(1)),StatusCursor::new(0),10).await.map_err(delivery_rollback)?;
@@ -226,7 +226,7 @@ async fn relay_retirement_preserves_relay_api_calls_across_reopen() {
     let mut engine = Engine::new(reopened.clone(), host);
     engine
         .register(RecordRemoval::new(
-            fleet_sync_delivery::DeliveryHostRole::Relay,
+            fleet_mail_delivery::DeliveryHostRole::Relay,
         ))
         .unwrap();
     for identity in [1, 2] {

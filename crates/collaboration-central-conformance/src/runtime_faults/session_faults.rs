@@ -2,7 +2,7 @@
 
 use super::{RuntimeControlFailure, RuntimeFaults};
 use collaboration_central_core::{SessionFinalizeFailure, SessionFinalizeFault};
-use fleet_sync_protocol::ConnectionId;
+use fleet_protocol::ConnectionId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -6,7 +6,7 @@ use super::{
     relay_transport::{operation, relay_request},
 };
 use collaboration_central_conformance::{ConformanceClient, ConformanceResult};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CancelBody, DeliveryCancel, DeliveryEnvelope, FrameId, ItemId, PeerId, PushResult,
     RecipientOutcome, ServerCall, Submitter,
 };
@@ -79,7 +79,7 @@ pub(super) async fn run(base: &str) -> ConformanceResult<()> {
         let original_receipt=inbox.accept(original_claim,offered_original).await?;
         if !matches!(original_receipt,PushResult::Accepted {..})||inbox.count().await?!=2 {return Err("original did not meet its exact pending control in real custody".into());}
         pushed(&mut pair.recipient.socket,original_frame,original_receipt).await?;
-        let allowed=[fleet_sync_protocol::DeliveryItemRef {item:original.id(),digest:original.digest().clone()},fleet_sync_protocol::DeliveryItemRef {item:cancel.id(),digest:cancel.digest().clone()}];
+        let allowed=[fleet_protocol::DeliveryItemRef {item:original.id(),digest:original.digest().clone()},fleet_protocol::DeliveryItemRef {item:cancel.id(),digest:cancel.digest().clone()}];
         for item in [original.id(),cancel.id()] {
             let report=inbox.report(item).await?;
             if !matches!(report.outcome,RecipientOutcome::Prevented {cancel:actual} if actual==cancel.id()) {return Err("recipient did not decide exact original/control prevention".into());}

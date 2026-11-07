@@ -3,7 +3,7 @@ use crate::{
     native_object::{ObjectConnection, open_existing_connection},
 };
 use durable_steps::{BoxFuture, Host, StoreError};
-pub use fleet_sync_writer::native_file::{PublishError, checkpoint_for_publish};
+pub use fleet_project_writer::native_file::{PublishError, checkpoint_for_publish};
 use sqlx_turso::sqlx::Connection;
 use std::path::Path;
 

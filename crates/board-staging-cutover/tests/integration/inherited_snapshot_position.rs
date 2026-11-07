@@ -6,10 +6,10 @@ use crate::{
 use board_central_test_support::TestCentral;
 use board_fleet_sync::{BOARD_LEASE_POLICY, BoardProjectSchema};
 use board_staging_cutover::{NativeProjectSnapshot, SelectedWriterFile, reframe_import_manifest};
-use fleet_sync_protocol::{Epoch, InstallId};
-use fleet_sync_receiver::SnapshotInstall;
-use fleet_sync_tokio_runner::StagingStore;
-use fleet_sync_writer::ReplicatedDatabase;
+use fleet_native_writer::StagingStore;
+use fleet_project_copy::SnapshotInstall;
+use fleet_project_writer::ReplicatedDatabase;
+use fleet_protocol::{Epoch, InstallId};
 use message_board::ActorOrigin;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -111,7 +111,7 @@ async fn installed_before_activation(with_pending_intent: bool) -> TestResult {
         installed.close().await?;
         seeded.close().await;
         drop(seeded);
-        let retained = fleet_sync_writer::RetainedFile::open_read_only(
+        let retained = fleet_project_writer::RetainedFile::open_read_only(
             &installed_path,
             BoardProjectSchema::new()?,
         )
@@ -141,7 +141,7 @@ async fn installed_before_activation(with_pending_intent: bool) -> TestResult {
             .tables
             .first_mut()
             .ok_or("source table manifest absent")?
-            .digest = fleet_sync_protocol::TableDigest::new("0".repeat(64))?;
+            .digest = fleet_protocol::TableDigest::new("0".repeat(64))?;
         assert!(matches!(
             exported.verify_replicated_tables(&altered),
             Err(board_staging_cutover::NativeSourceError::ReplicatedTablesMismatch)

@@ -3,7 +3,7 @@ use super::settled_frontier::{FollowCompletion, MailFrontierContext};
 use super::{BoardError, ProjectId, PublisherInner};
 use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use collaboration_mail_protocol::NotificationSource;
-use fleet_sync_protocol::DeliveryEnvelope;
+use fleet_protocol::DeliveryEnvelope;
 use message_board::{
     EndReason, FeedContent, FeedRead, HandoffSeq, Placement, Record, RecordKind, RecordRef,
     SubscriptionMode, ThreadId,

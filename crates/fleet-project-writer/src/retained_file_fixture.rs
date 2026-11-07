@@ -2,8 +2,8 @@
 use crate::{
     OpenError, ReadPool, ReplicatedDatabase, WriterOptions, read_transaction_tests::ReadSchema,
 };
-use fleet_sync_lease::{LeaseHolder, LeasePolicy};
-use fleet_sync_protocol::{DatabaseId, PeerId};
+use fleet_project_lease::{LeaseHolder, LeasePolicy};
+use fleet_protocol::{DatabaseId, PeerId};
 use sha2::{Digest, Sha256};
 use sqlx_core::{executor::Executor, row::Row};
 use std::{

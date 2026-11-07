@@ -4,12 +4,14 @@ use crate::fleet_storage_fixture::TestError;
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
 use sqlx_core::{query::query, row::Row};
 fn projection(
-    lifecycle: fleet_sync_lease::DatabaseLifecycle,
+    lifecycle: fleet_project_lease::DatabaseLifecycle,
     epoch: u64,
     change: u64,
 ) -> Result<crate::lease_projection::LeaseProjection, TestError> {
-    use fleet_sync_lease::{DatabaseLifecycle, RegistryGrant, RegistryRevision, RegistrySnapshot};
-    use fleet_sync_protocol::{Epoch, SyncTime};
+    use fleet_project_lease::{
+        DatabaseLifecycle, RegistryGrant, RegistryRevision, RegistrySnapshot,
+    };
+    use fleet_protocol::{Epoch, SyncTime};
     let epoch = Epoch::new(epoch)?;
     let held = matches!(lifecycle, DatabaseLifecycle::Registered { .. });
     crate::lease_projection::LeaseProjection::from_snapshot(
@@ -91,9 +93,9 @@ async fn lease(
 )]
 async fn directory_lease_variants_and_full_u64_counters_survive_reopen() -> Result<(), TestError> {
     use crate::lease_projection::LeaseProjectionResult;
-    use fleet_sync_lease::{DatabaseLifecycle, ImportOrigin};
-    use fleet_sync_protocol::{CommitSequence, Epoch, Origin, ReplicationPosition, SyncTime};
-    let digest = fleet_sync_protocol::ImportDigest::new("ab".repeat(32))?;
+    use fleet_project_lease::{DatabaseLifecycle, ImportOrigin};
+    use fleet_protocol::{CommitSequence, Epoch, Origin, ReplicationPosition, SyncTime};
+    let digest = fleet_protocol::ImportDigest::new("ab".repeat(32))?;
     for lifecycle in [
         DatabaseLifecycle::Registered {
             origin: Origin::Empty,
@@ -147,7 +149,7 @@ async fn directory_lease_variants_and_full_u64_counters_survive_reopen() -> Resu
 async fn directory_lease_older_conflicting_and_newer_revisions_keep_original_rules()
 -> Result<(), TestError> {
     use crate::lease_projection::LeaseProjectionResult;
-    use fleet_sync_lease::DatabaseLifecycle;
+    use fleet_project_lease::DatabaseLifecycle;
     let fixture = seeded().await?;
     let original = projection(
         DatabaseLifecycle::Retiring {
@@ -234,7 +236,7 @@ async fn directory_copy_summary_keeps_full_position_domain_time_and_ack_across_r
 -> Result<(), TestError> {
     use crate::fleet_storage_fixture::NOW;
     use board_sync_protocol::BoardAnnotation;
-    use fleet_sync_protocol::{CommitSequence, Epoch, ReplicationPosition, SyncTime};
+    use fleet_protocol::{CommitSequence, Epoch, ReplicationPosition, SyncTime};
     use message_board::RecordTime;
     for offered in [
         RecordTime::LegacyUnknown,
@@ -315,7 +317,7 @@ async fn directory_copy_summary_keeps_full_position_domain_time_and_ack_across_r
 async fn directory_lease_rejects_unknown_partial_noncanonical_and_wrong_class_fields()
 -> Result<(), TestError> {
     use super::workspace_columns_tests::mutate;
-    use fleet_sync_lease::DatabaseLifecycle;
+    use fleet_project_lease::DatabaseLifecycle;
     for sql in [
         "UPDATE fleet_project_directory SET lease_epoch='01'",
         "UPDATE fleet_project_directory SET lease_epoch='0'",

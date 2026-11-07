@@ -6,7 +6,7 @@ use crate::{
     row_apply::{TableColumn, plan_row_change},
 };
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::{RowChange, SqlValue};
+use fleet_protocol::{RowChange, SqlValue};
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     row::Row,

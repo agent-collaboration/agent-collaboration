@@ -8,7 +8,7 @@ use durable_steps::{StoreError, storage::TransactionScope};
 use fleet_admission::{
     CopyMetadata, CopyMetadataAsOf, DirectoryEntry, DirectoryQuery, DirectorySide,
 };
-use fleet_sync_protocol::SyncTime;
+use fleet_protocol::SyncTime;
 use message_board::{Record, RecordId, RecordKind, RecordRef};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,

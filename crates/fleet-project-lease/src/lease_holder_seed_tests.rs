@@ -1,6 +1,6 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::{HolderError, LeaseHolder, LeasePolicy, WriterState};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use std::time::Duration;
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 fn holder() -> Result<LeaseHolder, Box<dyn std::error::Error + Send + Sync>> {

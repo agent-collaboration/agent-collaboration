@@ -22,7 +22,7 @@ pub struct WriterJournalStore<S: ReplicatedSchema, H: Host> {
 pub struct WriterJournalScope<'transaction, H: Host> {
     pub(crate) maintenance: MaintenanceTransaction<'transaction>,
     pub(crate) host: &'transaction H,
-    pub(crate) holder: fleet_sync_lease::LeaseHolder,
+    pub(crate) holder: fleet_project_lease::LeaseHolder,
     pub(crate) copies_changed: bool,
 }
 
@@ -88,7 +88,7 @@ impl<S: ReplicatedSchema, H: Host> WriterJournalStore<S, H> {
 
     pub async fn start_registration(
         &self,
-        receiver: fleet_sync_protocol::ReceiverId,
+        receiver: fleet_protocol::ReceiverId,
     ) -> Result<durable_steps::OperationId, StartRefusal> {
         let key = crate::registration_bookkeeping::registration_key()?;
         let operation = self
@@ -115,7 +115,7 @@ impl<S: ReplicatedSchema, H: Host> WriterJournalStore<S, H> {
     }
     pub async fn ensure_renewal(
         &self,
-        receiver: fleet_sync_protocol::ReceiverId,
+        receiver: fleet_protocol::ReceiverId,
     ) -> Result<(), StoreError> {
         self.transaction(move |scope| {
             Box::pin(async move {
@@ -133,7 +133,7 @@ impl<S: ReplicatedSchema, H: Host> WriterJournalStore<S, H> {
     }
     pub async fn prompt_renewal(
         &self,
-        receiver: fleet_sync_protocol::ReceiverId,
+        receiver: fleet_protocol::ReceiverId,
     ) -> Result<durable_steps::OperationId, StartRefusal> {
         let key = crate::registration_bookkeeping::renewal_key(self.host.new_id())?;
         let operation = self
@@ -236,13 +236,13 @@ impl<'transaction, H: Host> TransactionScope for WriterJournalScope<'transaction
 impl<H: Host> WriterJournalScope<'_, H> {
     pub async fn begin_seeding(
         &mut self,
-    ) -> Result<fleet_sync_protocol::ReplicationPosition, OpenError> {
+    ) -> Result<fleet_protocol::ReplicationPosition, OpenError> {
         crate::writer_registration_state::begin_seed(self.maintenance.connection, &mut self.holder)
             .await
     }
     pub async fn observe_registration(
         &mut self,
-        lease: fleet_sync_protocol::LeaseStatus,
+        lease: fleet_protocol::LeaseStatus,
         started: SyncTime,
     ) -> Result<(), OpenError> {
         crate::writer_registration_state::record_grant(

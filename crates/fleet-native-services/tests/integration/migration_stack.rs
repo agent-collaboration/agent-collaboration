@@ -1,8 +1,8 @@
 //! Every public migration path must fit beneath its host's retained caller frames.
 use durable_steps::turso_store::migrate_journal;
-use fleet_sync_delivery::DELIVERY_MIGRATOR;
-use fleet_sync_lease::LEASE_MIGRATOR;
-use fleet_sync_session::SESSION_MIGRATOR;
+use fleet_mail_delivery::DELIVERY_MIGRATOR;
+use fleet_project_lease::LEASE_MIGRATOR;
+use fleet_session::SESSION_MIGRATOR;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     migrate::{Migration, Migrator},

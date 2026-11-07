@@ -1,7 +1,7 @@
 //! Delivery certainty is assigned from the final store result after rollback.
 use crate::DeliveryError;
 use durable_steps::{OperationFailure, StoreError};
-use fleet_sync_protocol::DeliveryRefusal;
+use fleet_protocol::DeliveryRefusal;
 use serde::{Deserialize, Serialize};
 
 const DELIVERY_REFUSED: &str = "delivery_refused";

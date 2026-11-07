@@ -118,7 +118,7 @@ async fn report_sequence_and_cancel_identity_survive_real_release_and_reopen() {
                 header.last_report_seq = ReportSeq::new(9);
                 header.submit_attempted = true;
                 outbox
-                    .update_header(&header, fleet_sync_protocol::SyncTime::from_unix_millis(0))
+                    .update_header(&header, fleet_protocol::SyncTime::from_unix_millis(0))
                     .await
                     .map_err(storage_error)?;
                 let DeliveryEnvelope::Cancel(control) = cancel(91, 90) else {

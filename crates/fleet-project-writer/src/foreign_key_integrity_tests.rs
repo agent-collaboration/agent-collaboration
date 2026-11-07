@@ -2,7 +2,7 @@
 
 use super::{orphan_statement, quote_identifier, read_foreign_keys, reject_orphans};
 use crate::{OpenError, SchemaForm};
-use fleet_sync_protocol::TableName;
+use fleet_protocol::TableName;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     executor::Executor,

@@ -1,11 +1,12 @@
 //! Inspect the real published bootstrap before native local migrations exist.
 #![allow(clippy::panic_in_result_fn)]
+
 use crate::{StagingStore, writer_bootstrap_fixture::*};
-use fleet_sync_protocol::{Epoch, ReceiverId};
-use fleet_sync_receiver::SnapshotInstallState;
-use fleet_sync_writer::{
+use fleet_project_copy::SnapshotInstallState;
+use fleet_project_writer::{
     ReplicatedDatabase, RetainedFileOrigin, RetainedFileOriginKind, inspect_native_file,
 };
+use fleet_protocol::{Epoch, ReceiverId};
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
 use std::{

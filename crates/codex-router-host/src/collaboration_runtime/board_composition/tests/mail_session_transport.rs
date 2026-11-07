@@ -52,22 +52,22 @@ impl NoticeTransport {
 #[derive(Clone, Debug)]
 pub(super) enum WireEvent {
     Pushed {
-        frame: fleet_sync_protocol::FrameId,
-        result: fleet_sync_protocol::PushResult<collaboration_mail_protocol::CarrierAcceptance>,
+        frame: fleet_protocol::FrameId,
+        result: fleet_protocol::PushResult<collaboration_mail_protocol::CarrierAcceptance>,
     },
-    Renewal(fleet_sync_protocol::Epoch),
+    Renewal(fleet_protocol::Epoch),
     Notice(u64),
-    MailSubmit(fleet_sync_protocol::ItemId),
+    MailSubmit(fleet_protocol::ItemId),
     SubmissionEpoch {
-        item: fleet_sync_protocol::ItemId,
+        item: fleet_protocol::ItemId,
         epoch: Option<u64>,
     },
-    GenericSubmit(fleet_sync_protocol::ItemId),
+    GenericSubmit(fleet_protocol::ItemId),
     Settle {
-        item: fleet_sync_protocol::ItemId,
-        submitter: fleet_sync_protocol::Submitter,
+        item: fleet_protocol::ItemId,
+        submitter: fleet_protocol::Submitter,
     },
-    Report(fleet_sync_protocol::ItemId),
+    Report(fleet_protocol::ItemId),
     StatusFetch {
         after: u64,
         limit: u32,
@@ -86,12 +86,12 @@ pub(super) enum WireEvent {
         through: u64,
     },
     Publication {
-        frame: fleet_sync_protocol::FrameId,
-        item: fleet_sync_protocol::ItemId,
-        status: fleet_sync_protocol::DeliveryStatus<collaboration_mail_protocol::CarrierAcceptance>,
+        frame: fleet_protocol::FrameId,
+        item: fleet_protocol::ItemId,
+        status: fleet_protocol::DeliveryStatus<collaboration_mail_protocol::CarrierAcceptance>,
     },
     Published {
-        frame: fleet_sync_protocol::FrameId,
+        frame: fleet_protocol::FrameId,
         applied: bool,
     },
 }
@@ -122,15 +122,13 @@ impl WireObserver {
     }
 
     fn lose_ack_before_send(&self, bytes: &[u8]) -> bool {
-        if let Ok(fleet_sync_protocol::ClientFrame::Request {
+        if let Ok(fleet_protocol::ClientFrame::Request {
             body:
-                OperationRequest::Delivery(fleet_sync_protocol::DeliveryRequest::StatusAck {
-                    through,
-                    ..
+                OperationRequest::Delivery(fleet_protocol::DeliveryRequest::StatusAck {
+                    through, ..
                 }),
             ..
-        }) =
-            serde_json::from_slice::<fleet_sync_protocol::ClientFrame<BoardConsumerProtocol>>(bytes)
+        }) = serde_json::from_slice::<fleet_protocol::ClientFrame<BoardConsumerProtocol>>(bytes)
             && self.lose_status_ack.swap(false, Ordering::SeqCst)
         {
             self.record(WireEvent::LostStatusAck {
@@ -167,7 +165,7 @@ impl WireObserver {
     }
     pub fn hold_next_mail_submit(
         &self,
-        item: fleet_sync_protocol::ItemId,
+        item: fleet_protocol::ItemId,
     ) -> (
         tokio::sync::oneshot::Receiver<()>,
         tokio::sync::oneshot::Sender<()>,
@@ -193,11 +191,9 @@ impl WireObserver {
     }
     fn take_hold(&self, bytes: &[u8]) -> Option<HeldReply> {
         let frame =
-            serde_json::from_slice::<fleet_sync_protocol::ClientFrame<BoardConsumerProtocol>>(
-                bytes,
-            )
-            .ok()?;
-        let fleet_sync_protocol::ClientFrame::Request { frame, body } = frame else {
+            serde_json::from_slice::<fleet_protocol::ClientFrame<BoardConsumerProtocol>>(bytes)
+                .ok()?;
+        let fleet_protocol::ClientFrame::Request { frame, body } = frame else {
             return None;
         };
         let kind = match body {
@@ -205,12 +201,10 @@ impl WireObserver {
                 scope: board_sync_protocol::BoardReadScope::Notices,
                 ..
             }) => ReplyKind::NoticeRead,
-            OperationRequest::Delivery(fleet_sync_protocol::DeliveryRequest::StatusFetch {
-                ..
-            }) => ReplyKind::Status,
-            OperationRequest::Lease(fleet_sync_protocol::LeaseRequest::Renew(_)) => {
-                ReplyKind::Renewal
+            OperationRequest::Delivery(fleet_protocol::DeliveryRequest::StatusFetch { .. }) => {
+                ReplyKind::Status
             }
+            OperationRequest::Lease(fleet_protocol::LeaseRequest::Renew(_)) => ReplyKind::Renewal,
             OperationRequest::Consumer(board_sync_protocol::BoardConsumerRequest::MailSubmit {
                 item,
                 ..
@@ -256,13 +250,13 @@ impl WireObserver {
         .map_err(|_| io::Error::other(failure))?
     }
     fn sent(&self, bytes: &[u8]) {
-        use fleet_sync_protocol::{
+        use fleet_protocol::{
             ClientAnswer, ClientFrame, DeliveryRequest, ServerCallAnswer, StatusPublicationResult,
         };
         if let Ok(frame) = serde_json::from_slice::<ClientFrame<BoardConsumerProtocol>>(bytes) {
             let event = match frame {
                 ClientFrame::Request {
-                    body: OperationRequest::Lease(fleet_sync_protocol::LeaseRequest::Renew(request)),
+                    body: OperationRequest::Lease(fleet_protocol::LeaseRequest::Renew(request)),
                     ..
                 } => Some(WireEvent::Renewal(request.epoch)),
                 ClientFrame::Request {
@@ -328,7 +322,7 @@ impl WireObserver {
         }
     }
     fn received(&self, bytes: &[u8]) {
-        use fleet_sync_protocol::{DeliveryAnswer, ServerCall, ServerFrame, ServerRequest};
+        use fleet_protocol::{DeliveryAnswer, ServerCall, ServerFrame, ServerRequest};
         if let Ok(frame) = serde_json::from_slice::<ServerFrame<BoardConsumerProtocol>>(bytes) {
             match frame {
                 ServerFrame::Notice { position, .. } => {
@@ -344,7 +338,7 @@ impl WireObserver {
                 ServerFrame::Answer {
                     body:
                         OperationAnswer::Delivery(DeliveryAnswer::StatusAck(
-                            fleet_sync_protocol::StatusAckResult::Acknowledged { floor },
+                            fleet_protocol::StatusAckResult::Acknowledged { floor },
                         )),
                     ..
                 } => self.record(WireEvent::StatusAcked {
@@ -367,7 +361,7 @@ impl SessionTransport for NoticeTransport {
     type Connection = NoticeConnection;
     async fn connect(
         &self,
-        endpoint: &fleet_sync_session::Endpoint,
+        endpoint: &fleet_session::Endpoint,
         credential: &PeerCredential,
     ) -> Result<Self::Connection, ConnectFailure> {
         Ok(NoticeConnection {
@@ -387,10 +381,8 @@ impl TransportConnection for NoticeConnection {
             return Err(ConnectionClosed::Transport);
         }
         if matches!(
-            serde_json::from_slice::<fleet_sync_protocol::ClientFrame<BoardConsumerProtocol>>(
-                &frame
-            ),
-            Ok(fleet_sync_protocol::ClientFrame::Hello { .. })
+            serde_json::from_slice::<fleet_protocol::ClientFrame<BoardConsumerProtocol>>(&frame),
+            Ok(fleet_protocol::ClientFrame::Hello { .. })
         ) {
             let mut frames = self
                 .ledger
@@ -451,8 +443,8 @@ impl TransportConnection for NoticeConnection {
             if let Some(Ok(bytes)) = &received {
                 if let Some(held) = self.held.as_mut()
                     && held.bytes.is_none()
-                    && matches!(serde_json::from_slice::<fleet_sync_protocol::ServerFrame<BoardConsumerProtocol>>(bytes),
-                        Ok(fleet_sync_protocol::ServerFrame::Answer { frame, .. }) if frame == held.frame)
+                    && matches!(serde_json::from_slice::<fleet_protocol::ServerFrame<BoardConsumerProtocol>>(bytes),
+                        Ok(fleet_protocol::ServerFrame::Answer { frame, .. }) if frame == held.frame)
                 {
                     held.bytes = Some(bytes.clone());
                     if let Some(entered) = held.entered.take() {
@@ -465,7 +457,7 @@ impl TransportConnection for NoticeConnection {
             return received;
         }
     }
-    async fn close(self, reason: fleet_sync_protocol::CloseReason) {
+    async fn close(self, reason: fleet_protocol::CloseReason) {
         self.inner.close(reason).await;
     }
 }
@@ -480,10 +472,10 @@ enum ReplyKind {
     NoticeRead,
     Status,
     Renewal,
-    MailSubmit(fleet_sync_protocol::ItemId),
+    MailSubmit(fleet_protocol::ItemId),
 }
 struct HeldReply {
-    frame: fleet_sync_protocol::FrameId,
+    frame: fleet_protocol::FrameId,
     entered: Option<tokio::sync::oneshot::Sender<()>>,
     released: tokio::sync::oneshot::Receiver<()>,
     bytes: Option<Bytes>,

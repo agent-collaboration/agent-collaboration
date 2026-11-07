@@ -4,7 +4,7 @@ use crate::{turso_hook_storage_fixture::*, *};
 use durable_steps::{
     AtomicStore, StoreError as AtomicError, storage::TransactionScope, turso_store::TursoStore,
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::query::query;
 use sqlx_turso::Turso;
 use std::sync::Arc;

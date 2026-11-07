@@ -1,7 +1,7 @@
 //! Adapt pure SQL ownership refusals to the native writer's existing errors.
 use crate::{OpenError, SchemaForm, WriteRefusal};
-use fleet_sync_protocol::schema_catalog::MigrationError;
-pub(crate) use fleet_sync_protocol::schema_catalog::MigrationKind;
+use fleet_protocol::schema_catalog::MigrationError;
+pub(crate) use fleet_protocol::schema_catalog::MigrationKind;
 
 pub(crate) fn writer_error(error: MigrationError) -> OpenError {
     let form = match error {
@@ -40,7 +40,7 @@ pub(crate) fn writer_error(error: MigrationError) -> OpenError {
 }
 
 #[cfg(test)]
-use fleet_sync_protocol::{SchemaEntry, SchemaObjectKind, TableName};
+use fleet_protocol::{SchemaEntry, SchemaObjectKind, TableName};
 #[cfg(test)]
 #[path = "migration_ownership_tests.rs"]
 mod tests;

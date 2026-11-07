@@ -1,5 +1,5 @@
 //! Order and digest values for the committed library lease projection.
-use fleet_sync_protocol::PieceDigest;
+use fleet_protocol::PieceDigest;
 use serde::{Deserialize, Serialize};
 use std::num::NonZeroU64;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
@@ -30,7 +30,7 @@ impl LeaseContentDigest {
     pub(crate) fn as_str(&self) -> &str {
         self.0.as_str()
     }
-    pub fn new(value: impl Into<String>) -> Result<Self, fleet_sync_protocol::DigestError> {
+    pub fn new(value: impl Into<String>) -> Result<Self, fleet_protocol::DigestError> {
         PieceDigest::try_from(value.into()).map(Self)
     }
 }

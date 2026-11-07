@@ -2,8 +2,8 @@
 use super::super::{mailbox_rule_fixture::MailboxPair, relay_transport::operation};
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use durable_steps::{CallFailure, CallId, CallTarget, Host, Uuid};
-use fleet_sync_delivery::ReportCall;
-use fleet_sync_protocol::{
+use fleet_mail_delivery::ReportCall;
+use fleet_protocol::{
     DeliveryAnswer, DeliveryFailureKind, DeliveryRefusal, OperationAnswer, ReportResult,
 };
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};

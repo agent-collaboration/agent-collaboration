@@ -2,7 +2,7 @@
 use super::*;
 use crate::mail_delivery_runtime::{FrozenCancelSettlement, RemoteCancelReplay};
 use board_sync_protocol::BoardDeliveryTypes;
-use fleet_sync_protocol::DeliveryEnvelope;
+use fleet_protocol::DeliveryEnvelope;
 
 #[tokio::test]
 async fn a_frozen_local_child_rederives_the_earlier_control_after_reopen_without_false_custody() {

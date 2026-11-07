@@ -11,7 +11,7 @@ use collaboration_central_conformance::{
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 use durable_steps::{Uuid, storage::TransactionScope};
 use fleet_admission::{FleetOperation, FleetRequest, FleetRequestResult};
-use fleet_sync_protocol::{ClientFrame, FrameId, OperationAnswer, OperationRequest, ServerFrame};
+use fleet_protocol::{ClientFrame, FrameId, OperationAnswer, OperationRequest, ServerFrame};
 use futures_util::{SinkExt, StreamExt};
 use message_board::{ChangeOutcome, Record, RequestDecision};
 use reqwest_websocket::{Message, WebSocket};
@@ -191,7 +191,7 @@ async fn archiving_nine_empty_boards_returns_all_ten_exact_effect_identities()
 fn settings(root: &std::path::Path, jwks: &str) -> ConformanceResult<TokioSettings> {
     Ok(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },
@@ -250,7 +250,7 @@ async fn operation(
             // and answer. The separate notice scenarios assert their contents.
             ServerFrame::Notice {
                 body:
-                    fleet_sync_protocol::Notice::Consumer(board_sync_protocol::PositionedBoardNotice {
+                    fleet_protocol::Notice::Consumer(board_sync_protocol::PositionedBoardNotice {
                         kind: board_sync_protocol::BoardNotice::ProjectListChanged {},
                         ..
                     }),

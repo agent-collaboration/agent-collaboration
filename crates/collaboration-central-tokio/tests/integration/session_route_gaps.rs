@@ -11,7 +11,7 @@ use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, JwksFixtureServer, enroll_admitted_peer, fixture_policy,
 };
 use collaboration_central_tokio::{TokioServer, TokioSettings};
-use fleet_sync_protocol::{ClientFrame, FrameId, OperationAnswer, OperationRequest, ServerFrame};
+use fleet_protocol::{ClientFrame, FrameId, OperationAnswer, OperationRequest, ServerFrame};
 use futures_util::{SinkExt, StreamExt};
 use reqwest_websocket::Message;
 use std::time::Duration;
@@ -45,7 +45,7 @@ async fn run_case(case: BoardRouteCase) -> ConformanceResult<()> {
     let jwks = JwksFixtureServer::start().await?;
     let server = TokioServer::start(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },

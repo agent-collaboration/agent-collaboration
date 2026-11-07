@@ -1,7 +1,7 @@
 //! Replicated notification allocations retain the original SDK identity and bytes.
 use crate::{ProjectSnapshot, ProjectStorageError, ProjectWriteTransaction};
 use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
-use fleet_sync_protocol::DeliveryEnvelope;
+use fleet_protocol::DeliveryEnvelope;
 use message_board::{
     EndReason, FeedCursor, HandoffSeq, MailItemRef, ProjectId, SubscriptionGeneration,
 };

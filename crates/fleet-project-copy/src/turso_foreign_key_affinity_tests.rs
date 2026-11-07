@@ -4,7 +4,7 @@ use crate::turso_foreign_key_tests::{NoHook, apply, export, incoming, relation_s
 use crate::turso_rule_fixture::{uuid_key, writer};
 use crate::turso_seed_tests::{TursoScope, database, position, setup};
 use crate::*;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::connection::{ConnectOptions, Connection};
 use sqlx_turso::{Turso, TursoConnectOptions};
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;

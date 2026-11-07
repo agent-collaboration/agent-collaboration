@@ -6,9 +6,9 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use fleet_sync_protocol::{AuthRefusal, ConsumerProtocol};
-use fleet_sync_session::PeerAuthenticator;
-use fleet_sync_tokio_runner::SessionAdmission;
+use fleet_native_session::SessionAdmission;
+use fleet_protocol::{AuthRefusal, ConsumerProtocol};
+use fleet_session::PeerAuthenticator;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
@@ -24,7 +24,7 @@ struct UpgradeState<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > {
     sessions: Arc<crate::service_state::ServiceSessions<P, C, A>>,
@@ -35,7 +35,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > Clone for UpgradeState<P, C, A>
 {
@@ -51,7 +51,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > FleetService<P, C, A>
 {
@@ -73,7 +73,7 @@ async fn upgrade<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 >(
     State(state): State<UpgradeState<P, C, A>>,
@@ -121,6 +121,6 @@ fn auth_refusal_response(reason: AuthRefusal) -> Response {
     let mut response = status.into_response();
     response
         .headers_mut()
-        .insert(fleet_sync_transport_websocket::AUTH_REFUSAL_HEADER, value);
+        .insert(fleet_websocket_transport::AUTH_REFUSAL_HEADER, value);
     response
 }

@@ -3,9 +3,12 @@ use crate::{
     call_router::ServiceCalls, copy_owner::CopyOwner, session_handler::ServiceSessionHandler,
 };
 use durable_steps::{BoxFuture, Engine};
-use fleet_sync_protocol::{ConsumerProtocol, DatabaseId, ReceiverId};
-use fleet_sync_session::PeerAuthenticator;
-use fleet_sync_tokio_runner::{InstallCoordinator, ObjectStore, SessionHost, SessionRequests};
+use fleet_native_session::SessionHost;
+use fleet_native_writer::InstallCoordinator;
+use fleet_protocol::{ConsumerProtocol, DatabaseId, ReceiverId};
+use fleet_session::PeerAuthenticator;
+use fleet_session_client::SessionRequests;
+use fleet_tokio_objects::ObjectStore;
 use std::{
     collections::BTreeMap,
     sync::{Arc, OnceLock, Weak},
@@ -13,7 +16,7 @@ use std::{
 use tokio::sync::{Mutex, Notify, OnceCell, watch};
 
 pub(crate) struct SourceRunner {
-    pub run: BoxFuture<'static, Result<(), fleet_sync_session::ClientError>>,
+    pub run: BoxFuture<'static, Result<(), fleet_session::ClientError>>,
     pub stop: watch::Sender<bool>,
 }
 
@@ -24,7 +27,7 @@ pub(crate) struct ServiceState<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > {
     pub options: ServiceOptions,
@@ -53,7 +56,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > ServiceState<P, C, A>
 {

@@ -1,7 +1,7 @@
 //! Real registry and copy transitions for the public history projection.
 use crate::{turso_registry_fixture::*, *};
 use durable_steps::{AtomicStore, RequestKey, storage::TransactionScope};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::row::Row;
 use sqlx_turso::Turso;
 use std::sync::Arc;
@@ -32,7 +32,7 @@ pub(super) async fn move_to(
         engine,
         &holder_change_request_key(id)?,
         HolderChangeRequest::Move {
-            reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+            reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
             attempt: id,
             database: database()?,
             from_epoch: Epoch::new(from)?,
@@ -59,7 +59,7 @@ pub(super) async fn takeover(
         engine,
         &holder_change_request_key(id)?,
         HolderChangeRequest::Takeover {
-            reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+            reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
             attempt: id,
             database: database()?,
             preview,

@@ -1,6 +1,6 @@
 use super::{session_fixture_contract::*, session_fixture_store::*};
-use fleet_sync_protocol::*;
-use fleet_sync_session::*;
+use fleet_protocol::*;
+use fleet_session::*;
 use sqlx_turso::{TursoConnection, sqlx::Connection};
 use std::{collections::BTreeMap, path::Path, sync::Arc, time::Duration};
 use tokio::sync::{Mutex, mpsc, oneshot, watch};

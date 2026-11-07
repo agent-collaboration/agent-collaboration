@@ -3,7 +3,7 @@ use super::{configuration, native_fleet, registry_setup};
 use collaboration_central_conformance::ConformanceResult;
 use collaboration_central_core::ConformanceBoardState;
 use fleet_admission::{FleetImportRecord, FleetImportResult, ImportedBoardState};
-use fleet_sync_protocol::DatabaseId;
+use fleet_protocol::DatabaseId;
 
 pub(super) async fn arrange_imported_unheld_board(
     root: &std::path::Path,

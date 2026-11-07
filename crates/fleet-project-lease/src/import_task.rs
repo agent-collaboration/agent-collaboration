@@ -3,7 +3,7 @@ use durable_steps::{
     AtomicStore, BoxFuture, OperationContext, OperationFailure, RequestKey, StoreError, Task,
     storage::TransactionScope,
 };
-use fleet_sync_protocol::{Import, ImportAnswer};
+use fleet_protocol::{Import, ImportAnswer};
 use runtime_primitives::Clock;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,

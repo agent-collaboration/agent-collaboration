@@ -2,7 +2,7 @@ use crate::{
     CopyStatus, ReceiverError, StoreError, copy_contract::CopyRecord, copy_storage::CopyStorage,
 };
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::{FenceRequest, FenceResult};
+use fleet_protocol::{FenceRequest, FenceResult};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,

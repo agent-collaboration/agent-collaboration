@@ -151,7 +151,7 @@ async fn alarm_owner(base: &str) -> ConformanceResult<()> {
     use super::holder_writer_retry::{read_status, received, send, start};
     use collaboration_central_conformance::{RuntimeControl, RuntimeControlRequest};
     use collaboration_central_core::{ObjectAddress, RegistryTime};
-    use fleet_sync_protocol::{ReleaseAnswer, ReplicationPosition, ServerCall, ServerCallAnswer};
+    use fleet_protocol::{ReleaseAnswer, ReplicationPosition, ServerCall, ServerCallAnswer};
     use tokio::task::JoinSet;
 
     let client = ConformanceClient::new(base)?;
@@ -235,14 +235,14 @@ async fn alarm_owner(base: &str) -> ConformanceResult<()> {
         let ServerCall::Release { call: later_call, request: later_request } = later_request else { return Err("competing alarm did not receive its second real holder call".into()); };
         let actual = observe(base, command.clone()).await?;
         if actual.get("alarmAtMillis") != Some(&json!("1900000020000")) { return Err(format!("later pending deadline replaced the earliest same-object alarm: {actual}").into()); }
-        let later_answer = ReleaseAnswer::Released { final_position: ReplicationPosition::new(later_request.epoch, fleet_sync_protocol::CommitSequence::new(0)) };
+        let later_answer = ReleaseAnswer::Released { final_position: ReplicationPosition::new(later_request.epoch, fleet_protocol::CommitSequence::new(0)) };
         send(&mut peer.socket, later_frame, ServerCallAnswer::Release(later_answer.clone())).await?;
         tokio::time::timeout(Duration::from_secs(10), async { loop {
             if read_status(&http, base, later_call.operation).await? == json!({"kind":"completed","value":{"kind":"release","value":later_answer}}) { return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(()); }
             tokio::task::yield_now().await;
         }}).await??;
         let answer = ReleaseAnswer::Released {
-            final_position: ReplicationPosition::new(request.epoch, fleet_sync_protocol::CommitSequence::new(0)),
+            final_position: ReplicationPosition::new(request.epoch, fleet_protocol::CommitSequence::new(0)),
         };
         send(&mut peer.socket, frame, ServerCallAnswer::Release(answer.clone())).await?;
         let expected = json!({"kind":"completed","value":{"kind":"release","value":answer}});

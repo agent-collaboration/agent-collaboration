@@ -16,7 +16,7 @@ use fleet_admission::{
     CopyMetadata, CopyMetadataAsOf, DirectoryEntry, DirectoryLease, DirectoryLeaseState,
     DirectoryQuery, DirectorySide, LeaseMetadata,
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use message_board::{BoardId, RecordTime, ServiceId, WorkspaceId};
 use std::{path::Path, time::Duration};
 

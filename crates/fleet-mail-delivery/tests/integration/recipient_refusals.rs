@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use super::support;
 use durable_steps::{AtomicStore, Engine, storage::TransactionScope, turso_store::TursoScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use serde_json::{Value, json};
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
@@ -199,11 +199,11 @@ async fn coded_recipient_refusal_survives_native_delivery_report_status_and_repl
                 Box::pin(async move {
                     let events = StatusStream::<_, TestTypes>::new(
                         scope,
-                        fleet_sync_delivery::Submitter::Machine(peer(1)),
+                        fleet_mail_delivery::Submitter::Machine(peer(1)),
                         "fixture-route".into(),
                     )
                     .fetch(
-                        fleet_sync_delivery::Submitter::Machine(peer(1)),
+                        fleet_mail_delivery::Submitter::Machine(peer(1)),
                         StatusCursor::new(0),
                         100,
                     )

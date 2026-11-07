@@ -1,9 +1,9 @@
 use board_fleet_sync::BoardPieceAnnotation;
 use board_sync_protocol::BoardAnnotation;
-use fleet_sync_protocol::{
+use fleet_project_writer::{CapturedTransaction, PieceAnnotation};
+use fleet_protocol::{
     CommitSequence, Epoch, ReplicatedTransaction, ReplicationPosition, RowChange, SqlValue,
 };
-use fleet_sync_writer::{CapturedTransaction, PieceAnnotation};
 use message_board::RecordTime;
 use message_board_storage::CapturedProjectChanges;
 

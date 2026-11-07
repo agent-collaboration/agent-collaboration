@@ -3,7 +3,7 @@ use crate::{
     ProjectStorageError, ProjectStore, project_store_tests::project_record,
     project_test_support::origin,
 };
-use fleet_sync_protocol::SqlValue;
+use fleet_protocol::SqlValue;
 use message_board::*;
 use serde::Serialize;
 #[path = "project_record_maximum_decisions.rs"]

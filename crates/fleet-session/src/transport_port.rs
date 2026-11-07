@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use fleet_sync_protocol::{AuthRefusal, CloseReason};
+use fleet_protocol::{AuthRefusal, CloseReason};
 use std::future::Future;
 
 #[derive(Clone, Debug, Eq, PartialEq)]

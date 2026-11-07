@@ -3,7 +3,7 @@ use crate::machine_enrollment_record::{
     EnrollmentIdentity, EnrollmentState, StoredMachine, corrupt,
 };
 use durable_steps::{StoreError, storage::TransactionScope};
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use runtime_primitives::SyncTime;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,

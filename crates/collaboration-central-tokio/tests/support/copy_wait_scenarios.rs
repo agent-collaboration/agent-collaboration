@@ -5,7 +5,7 @@ use durable_steps::{
     OperationId,
     storage::{CallReach, StepRecord, StepState},
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     AwaitAcked, AwaitAckedAnswer, CommitSequence, CopyOrigin, CopyUnavailableReason, CreateCopy,
     CreateCopyAnswer, DatabaseId, Epoch, FenceExpectation, FenceRequest, FenceResult, PeerId,
     ReceiverId, ReplicationPosition, RetireCopy, RetireCopyAnswer, SchemaSupport, TransferId,

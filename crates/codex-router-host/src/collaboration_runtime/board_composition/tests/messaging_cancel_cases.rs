@@ -4,7 +4,7 @@ use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerRequest, BoardDeliveryTypes, MailSubmitAnswer,
 };
 use collaboration_central_conformance::DispatchCallSelector;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DeliveryEnvelope, DeliveryStream, Epoch, OperationAnswer, OperationRequest, SubmitResult,
 };
 use message_board_storage::MailCancelGroup;
@@ -34,7 +34,7 @@ mod inherited_cancel;
 async fn hold_lost_receipt_submit(
     fixture: &RuleFixture,
     fleet: ObjectAddress,
-    peer: fleet_sync_protocol::PeerId,
+    peer: fleet_protocol::PeerId,
     item: ItemId,
 ) -> TestResult {
     fixture
@@ -535,7 +535,7 @@ async fn decide_and_replay(
                 &answer,
                 OperationAnswer::Consumer(BoardConsumerAnswer::MailSubmit(
                     MailSubmitAnswer::Submitted(SubmitResult::Replayed {
-                        status: fleet_sync_protocol::DeliveryStatus::Cancelled,
+                        status: fleet_protocol::DeliveryStatus::Cancelled,
                         ..
                     })
                 ))

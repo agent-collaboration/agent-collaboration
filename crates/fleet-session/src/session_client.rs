@@ -1,5 +1,5 @@
 use crate::*;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use runtime_primitives::{Backoff, Clock, IdSource, WakeFailure, WakeScheduler};
 use serde::{Deserialize, Serialize};
 use std::{

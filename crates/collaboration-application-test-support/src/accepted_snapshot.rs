@@ -1,21 +1,21 @@
 //! Real writer snapshot, staging, publication and reopen; central's grant/readiness are typed inputs.
 use super::board_fixture::{BoardFixture, TestError, fixture_peer};
-use fleet_sync_protocol::{
+use fleet_native_writer::StagingStore;
+use fleet_project_copy::SnapshotInstall;
+use fleet_project_writer::{BootstrapGrant, ReplicatedDatabase};
+use fleet_protocol::{
     CommitSequence, CopyRole, CopyStatus, Epoch, InstallId, LeaseState, LeaseStatus, ReceiverId,
     ReplicationPosition,
 };
-use fleet_sync_receiver::SnapshotInstall;
-use fleet_sync_tokio_runner::StagingStore;
-use fleet_sync_writer::{BootstrapGrant, ReplicatedDatabase};
 use message_board::{EpochNumber, FeedCursor, ProjectId};
 use runtime_primitives::{Clock, SystemClock};
 use std::sync::Arc;
 
 struct NoCalls;
-impl fleet_sync_tokio_runner::CallRouter for NoCalls {
+impl fleet_tokio_objects::CallRouter for NoCalls {
     async fn dispatch(
         &self,
-        _: fleet_sync_tokio_runner::CallEnvelope,
+        _: fleet_tokio_objects::CallEnvelope,
     ) -> Result<serde_json::Value, durable_steps::CallFailure> {
         Err(durable_steps::CallFailure::AnswerLost)
     }
@@ -28,7 +28,7 @@ pub async fn prepare_snapshot_baseline(
         .installed_snapshot()
         .await?
         .ok_or("published native snapshot")?;
-    let host = Arc::new(fleet_sync_tokio_runner::TokioHost::new(
+    let host = Arc::new(fleet_tokio_objects::TokioHost::new(
         Arc::new(NoCalls),
         SystemClock,
     ));
@@ -177,10 +177,10 @@ async fn bootstrap_with_readiness(
             .await?;
         target_database.migrate().await?;
         assert!(matches!(target_database.writer_state().await?,
-            fleet_sync_lease::WriterState::Writing { epoch: actual } if actual == epoch));
+            fleet_project_lease::WriterState::Writing { epoch: actual } if actual == epoch));
     } else {
         assert!(matches!(target_database.writer_state().await?,
-            fleet_sync_lease::WriterState::Seeding { epoch: actual } if actual == epoch));
+            fleet_project_lease::WriterState::Seeding { epoch: actual } if actual == epoch));
     }
     if baseline {
         prepare_snapshot_baseline(&target_database).await?;

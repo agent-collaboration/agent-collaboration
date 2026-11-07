@@ -1,12 +1,13 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::{writer_bootstrap_fixture::*, *};
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_lease::WriterState;
-use fleet_sync_protocol::*;
-use fleet_sync_receiver::SnapshotInstallRules;
-use fleet_sync_writer::{
+use fleet_project_copy::SnapshotInstallRules;
+use fleet_project_lease::WriterState;
+use fleet_project_writer::{
     BootstrapError, ReplicatedDatabase, ReplicationSender, SenderOptions, WriteRefusal,
 };
+use fleet_protocol::*;
+use fleet_tokio_objects::{ObjectKey, ObjectOptions, ObjectStore, PublishError, TokioHost};
 use futures_util::StreamExt;
 use runtime_primitives::SystemClock;
 use sqlx_core::{executor::Executor, migrate::Migrator, query::query, row::Row};
@@ -47,7 +48,7 @@ async fn real_snapshot_bootstraps_without_replaying_dml_and_later_migration_foll
     coordinator
         .start(
             InstallRequest {
-                attempt: fleet_sync_protocol::InstallAttemptId::new(install.install_id.as_uuid())?,
+                attempt: fleet_protocol::InstallAttemptId::new(install.install_id.as_uuid())?,
                 target: key.clone(),
                 database: install.database,
                 source: ReceiverId::new(durable_steps::Uuid::from_u128(
@@ -133,7 +134,7 @@ async fn real_snapshot_bootstraps_without_replaying_dml_and_later_migration_foll
     coordinator
         .start(
             InstallRequest {
-                attempt: fleet_sync_protocol::InstallAttemptId::new(install.install_id.as_uuid())?,
+                attempt: fleet_protocol::InstallAttemptId::new(install.install_id.as_uuid())?,
                 target: key,
                 database: install.database,
                 source: ReceiverId::new(durable_steps::Uuid::from_u128(
@@ -170,7 +171,7 @@ async fn real_snapshot_bootstraps_without_replaying_dml_and_later_migration_foll
         .await?;
     copy.transaction(|scope| {
         Box::pin(async move {
-            let mut migrations: Migrator = sqlx::migrate!("../fleet-sync-receiver/migrations");
+            let mut migrations: Migrator = sqlx::migrate!("../fleet-project-copy/migrations");
             migrations.dangerous_set_table_name("_fleet_sync_copy_migrations");
             migrations
                 .run_direct(None, scope.executor(), false)
@@ -200,12 +201,12 @@ async fn real_snapshot_bootstraps_without_replaying_dml_and_later_migration_foll
             epoch: install.position.epoch,
             acked: install.position,
         },
-        target_schema: Some(fleet_sync_protocol::SchemaSupport { max_version: 3 }),
+        target_schema: Some(fleet_protocol::SchemaSupport { max_version: 3 }),
         holder: grant.lease.holder,
     };
     assert!(matches!(
         copy.transaction(move |scope| Box::pin(async move {
-            fleet_sync_receiver::fence(scope, &fence)
+            fleet_project_copy::fence(scope, &fence)
                 .await
                 .map_err(StoreError::backend)
         }))
@@ -286,14 +287,14 @@ async fn real_snapshot_bootstraps_without_replaying_dml_and_later_migration_foll
     drop(sender);
     drop(owned);
     drop(target);
-    let expected = fleet_sync_writer::RetainedFileOrigin {
+    let expected = fleet_project_writer::RetainedFileOrigin {
         database: install.database,
         epoch: Epoch::new(2)?,
         start: install.position,
-        kind: fleet_sync_writer::RetainedFileOriginKind::Bootstrap,
+        kind: fleet_project_writer::RetainedFileOriginKind::Bootstrap,
     };
     for _ in 0..2 {
-        let retained = fleet_sync_writer::RetainedFile::open_read_only(
+        let retained = fleet_project_writer::RetainedFile::open_read_only(
             &root.path().join("target.db"),
             Schema {
                 count: 3,
@@ -340,7 +341,7 @@ async fn different_consumer_prefix_refuses_bootstrap_before_target_file_or_wal_c
     assert!(matches!(
         staging.publish_writer(&install, &target).await,
         Err(StagingError::Bootstrap(BootstrapError::Writer(
-            fleet_sync_writer::OpenError::BootstrapSchemaMismatch { .. }
+            fleet_project_writer::OpenError::BootstrapSchemaMismatch { .. }
         )))
     ));
     assert_eq!(images(target.path()).await?, before);
@@ -394,7 +395,7 @@ async fn interrupted_before_rename(same_arc: bool) -> TestResult {
     coordinator
         .start(
             InstallRequest {
-                attempt: fleet_sync_protocol::InstallAttemptId::new(install.install_id.as_uuid())?,
+                attempt: fleet_protocol::InstallAttemptId::new(install.install_id.as_uuid())?,
                 target: key.clone(),
                 database: install.database,
                 source: ReceiverId::new(durable_steps::Uuid::from_u128(
@@ -517,7 +518,7 @@ async fn transient_reopen_failure_after_rename_recovers_the_published_file_on_sa
     coordinator
         .start(
             InstallRequest {
-                attempt: fleet_sync_protocol::InstallAttemptId::new(install.install_id.as_uuid())?,
+                attempt: fleet_protocol::InstallAttemptId::new(install.install_id.as_uuid())?,
                 target: key,
                 database: install.database,
                 source: ReceiverId::new(durable_steps::Uuid::from_u128(

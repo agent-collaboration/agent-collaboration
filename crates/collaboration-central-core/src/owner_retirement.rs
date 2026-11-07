@@ -13,8 +13,8 @@ use durable_steps::{
     StoreError,
     storage::{JournalStorage, StepState, TransactionScope},
 };
-use fleet_sync_lease::DatabaseLifecycle;
-use fleet_sync_protocol::{
+use fleet_project_lease::DatabaseLifecycle;
+use fleet_protocol::{
     CopyUnavailableReason, DatabaseId, Retirement, RetirementAnswer, SyncTime, TransferId,
 };
 use sqlx_core::{
@@ -46,7 +46,7 @@ where
             return Err(CallFailure::AnswerLost);
         };
         let attempt = request.request_id;
-        let key = fleet_sync_lease::lifecycle_request_key(attempt)
+        let key = fleet_project_lease::lifecycle_request_key(attempt)
             .map_err(crate::object_call_envelope::encode_refusal)?;
         // Always bind the request before consulting current lifecycle. A final
         // tombstone cannot make changed content under the same ID acceptable.
@@ -132,7 +132,7 @@ where
     async fn retirement_directory_result(
         &self,
         database: DatabaseId,
-        request_id: fleet_sync_protocol::RequestId,
+        request_id: fleet_protocol::RequestId,
         at: SyncTime,
     ) -> Result<OwnerRetirementAnswer, CallFailure> {
         let ObjectWork::Fleet { shared_host, .. } = &self.work else {
@@ -176,7 +176,7 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
-            let lifecycle = fleet_sync_lease::database_lifecycle(scope, self.database)
+            let lifecycle = fleet_project_lease::database_lifecycle(scope, self.database)
                 .await
                 .map_err(StoreError::backend)?;
             let mut copy_unavailable = None;
@@ -190,7 +190,7 @@ where
                 {
                     let (kind, _): (String, serde_json::Value) =
                         serde_json::from_str(&intent.target).map_err(StoreError::backend)?;
-                    if kind == fleet_sync_lease::CopyRetire::KIND {
+                    if kind == fleet_project_lease::CopyRetire::KIND {
                         copy_unavailable = Some(
                             CopyUnavailableReason::decode_retry(&reason.code, &reason.detail)
                                 .map_err(StoreError::backend)?,

@@ -2,7 +2,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::{turso_registry_fixture::*, *};
 use durable_steps::{AtomicStore, OperationState, Uuid};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_turso::Turso;
 use std::sync::{Arc, atomic::Ordering};
 
@@ -69,7 +69,7 @@ async fn register_creates_copy_before_grant_and_replay_never_issues_another_epoc
     let mut copies = host.copies.lock().await;
     let copy = copies.get_mut(&database()?).ok_or("copy missing")?;
     assert!(
-        matches!(fleet_sync_receiver::copy_status(&mut CopyScope(copy)).await?,CopyStatusAnswer::Status(CopyStatus{holder:Some(current),fence,..}) if current==peer(1)?&&fence==Epoch::new(1)?)
+        matches!(fleet_project_copy::copy_status(&mut CopyScope(copy)).await?,CopyStatusAnswer::Status(CopyStatus{holder:Some(current),fence,..}) if current==peer(1)?&&fence==Epoch::new(1)?)
     );
     Ok(())
 }
@@ -273,7 +273,7 @@ async fn import_repeats_and_conflicts_then_retirement_precedes_cached_engine_ans
     let mut copies = host.copies.lock().await;
     let copy = copies.get_mut(&database()?).ok_or("copy missing")?;
     assert_eq!(
-        fleet_sync_receiver::copy_status(&mut CopyScope(copy)).await?,
+        fleet_project_copy::copy_status(&mut CopyScope(copy)).await?,
         CopyStatusAnswer::Retired
     );
     Ok(())

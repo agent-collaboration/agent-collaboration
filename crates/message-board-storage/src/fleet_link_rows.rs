@@ -4,7 +4,7 @@ use super::{
     validate_times,
 };
 use board_sync_protocol::{FleetLinkDrop, FleetLinkFailure, FleetLinkRecord, FleetLinkState};
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 
 #[path = "fleet_link_details.rs"]
 mod details;

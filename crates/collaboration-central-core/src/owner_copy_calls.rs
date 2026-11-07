@@ -93,7 +93,7 @@ where
     }
     pub(crate) async fn inspection(
         &self,
-    ) -> Result<fleet_sync_receiver::CopyInspection, StoreError> {
+    ) -> Result<fleet_project_copy::CopyInspection, StoreError> {
         let ObjectWork::Copy { host, .. } = &self.work else {
             return Err(StoreError::backend("copy inspection reached another face"));
         };
@@ -141,15 +141,15 @@ where
                     self.inspection()
                         .await
                         .map_err(|_| CallFailure::AnswerLost)?,
-                    fleet_sync_receiver::CopyInspection::Retired { .. }
+                    fleet_project_copy::CopyInspection::Retired { .. }
                 ) {
                     self.initialize().await.map_err(|error| {
                         match crate::migration_failure::MigrationFailure::from_rollback(&error) {
                             Some(failure) => {
-                                fleet_sync_receiver::retryable_copy(failure.unavailable())
+                                fleet_project_copy::retryable_copy(failure.unavailable())
                             }
                             None => {
-                                fleet_sync_receiver::classify_copy_store_error(error).call_failure()
+                                fleet_project_copy::classify_copy_store_error(error).call_failure()
                             }
                         }
                     })?;
@@ -157,11 +157,11 @@ where
                 match self
                     .read_copy_status()
                     .await
-                    .map_err(fleet_sync_receiver::CopyTransactionFailure::call_failure)?
+                    .map_err(fleet_project_copy::CopyTransactionFailure::call_failure)?
                 {
-                    fleet_sync_protocol::CopyStatusAnswer::Retired => CopyOpsAnswer::Retired,
-                    fleet_sync_protocol::CopyStatusAnswer::Status(_)
-                    | fleet_sync_protocol::CopyStatusAnswer::NotInitialized => {
+                    fleet_protocol::CopyStatusAnswer::Retired => CopyOpsAnswer::Retired,
+                    fleet_protocol::CopyStatusAnswer::Status(_)
+                    | fleet_protocol::CopyStatusAnswer::NotInitialized => {
                         self.on_alarm().await.map_err(|_| CallFailure::AnswerLost)?;
                         CopyOpsAnswer::Repaired
                     }
@@ -186,12 +186,12 @@ where
     for<'value> Option<String>: Type<Driver> + Decode<'value, Driver> + Encode<'value, Driver>,
     for<'row> &'row str: ColumnIndex<Driver::Row>,
 {
-    type Output = fleet_sync_receiver::CopyInspection;
+    type Output = fleet_project_copy::CopyInspection;
     type Effect = std::convert::Infallible;
     fn run<'scope, 'transaction>(
         self,
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, crate::step_driver::StepResult<Self::Output, Self::Effect>> {
-        Box::pin(async move { Ok((fleet_sync_receiver::inspect_copy(scope).await, Vec::new())) })
+        Box::pin(async move { Ok((fleet_project_copy::inspect_copy(scope).await, Vec::new())) })
     }
 }

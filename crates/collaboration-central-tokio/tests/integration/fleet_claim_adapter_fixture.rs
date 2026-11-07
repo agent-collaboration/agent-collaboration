@@ -5,9 +5,9 @@ use collaboration_central_core::{CoreHost, ObjectAddress};
 use durable_steps::{
     AtomicStore, JournalScope, OperationId, RequestKey, StoreError, storage::TransactionScope,
 };
-use fleet_sync_lease::SettleReservationTask;
-use fleet_sync_protocol::{ClaimSettlement, Epoch, HolderChangeRequest, SettleOutcome, TransferId};
-use fleet_sync_tokio_runner::TokioObject;
+use fleet_project_lease::SettleReservationTask;
+use fleet_protocol::{ClaimSettlement, Epoch, HolderChangeRequest, SettleOutcome, TransferId};
+use fleet_tokio_objects::TokioObject;
 use serde_json::{Value, json};
 use sqlx_core::{query::query, row::Row};
 use std::{path::Path, time::Duration};

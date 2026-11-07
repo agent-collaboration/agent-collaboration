@@ -15,7 +15,7 @@ impl ShellActor {
         if request.path() == "/test/request-session-wake" {
             use durable_steps::{AtomicStore, JournalScope};
             let (connection, at): (
-                fleet_sync_protocol::ConnectionId,
+                fleet_protocol::ConnectionId,
                 collaboration_central_core::RegistryTime,
             ) = request.json().await?;
             let at = SyncTime::from_unix_millis(at.0.timestamp_millis());
@@ -221,7 +221,7 @@ impl ShellActor {
                 return Err(error("import fixture requires Registry"));
             };
             let (database, owner, board_state): (
-                fleet_sync_protocol::DatabaseId,
+                fleet_protocol::DatabaseId,
                 collaboration_central_core::OwnerIdentity,
                 collaboration_central_core::ConformanceBoardState,
             ) = request.json().await?;
@@ -252,7 +252,7 @@ impl ShellActor {
             let RuntimeFace::Fleet(runtime) = runtime else {
                 return Err(error("holder identity requires a Connection object"));
             };
-            let connection: fleet_sync_protocol::ConnectionId = request.json().await?;
+            let connection: fleet_protocol::ConnectionId = request.json().await?;
             host.conformance_session_alarm(connection).await?;
             runtime
                 .conformance_holder_session_identity()

@@ -3,8 +3,8 @@
 use collaboration_central_core::{
     AdmissionOrigin, RegistrationEdits, RegistrationSnapshot, SocketFailure,
 };
-use fleet_sync_protocol::{CloseReason, ConnectionId};
-use fleet_sync_session::{Bytes, ConnectionBinding, ConnectionRegistration};
+use fleet_protocol::{CloseReason, ConnectionId};
+use fleet_session::{Bytes, ConnectionBinding, ConnectionRegistration};
 use std::collections::BTreeMap;
 use tokio::sync::{Mutex, mpsc};
 

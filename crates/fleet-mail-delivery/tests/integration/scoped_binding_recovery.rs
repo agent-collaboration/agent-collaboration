@@ -3,7 +3,7 @@ use durable_steps::{
     AtomicStore,
     storage::{CallReach, JournalStorage, StepState, TransactionScope},
 };
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
 use std::{

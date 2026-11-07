@@ -4,15 +4,15 @@ use crate::{
     service_state::{ServiceState, SourceRunner},
 };
 use durable_steps::CallFailure;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ConsumerProtocol, OperationAnswer, OperationRequest, ReceiverId, ReplicationAnswer,
     ReplicationRequest,
 };
-use fleet_sync_session::{
+use fleet_session::{
     ClientEvent, Endpoint, PeerAuthenticator, PeerCredential, SessionClient, SessionClientStore,
     SessionTransport,
 };
-use fleet_sync_tokio_runner::{SessionPump, SessionRequests};
+use fleet_session_client::{SessionPump, SessionRequests};
 use tokio::sync::{mpsc, watch};
 
 /// The consumer handles server requests and notices on its existing session.
@@ -25,7 +25,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > ServiceHandle<P, C, A>
 {
@@ -74,7 +74,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > ServiceState<P, C, A>
 {
@@ -94,7 +94,7 @@ impl<
             .await?
         {
             OperationAnswer::Replication(ReplicationAnswer::CopyUnavailable { reason }) => {
-                Err(fleet_sync_receiver::retryable_copy(reason))
+                Err(fleet_project_copy::retryable_copy(reason))
             }
             OperationAnswer::Replication(ReplicationAnswer::OutcomeUnknown { .. }) => {
                 Err(CallFailure::AnswerLost)

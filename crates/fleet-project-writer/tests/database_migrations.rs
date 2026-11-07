@@ -1,12 +1,12 @@
 #![allow(clippy::panic_in_result_fn)]
 
 use durable_steps::Uuid;
-use fleet_sync_lease::{LeaseHolder, LeasePolicy};
-use fleet_sync_protocol::{DatabaseId, PeerId, TableName};
-use fleet_sync_writer::{
+use fleet_project_lease::{LeaseHolder, LeasePolicy};
+use fleet_project_writer::{
     Migration, OpenError, ReplicatedDatabase, ReplicatedSchema, SchemaForm, WriteRefusal,
     WriterOptions,
 };
+use fleet_protocol::{DatabaseId, PeerId, TableName};
 use sqlx_core::{executor::Executor, migrate::Migrator, query::query, row::Row};
 use sqlx_turso::Turso;
 use std::{sync::LazyLock, time::Duration};
@@ -15,7 +15,7 @@ type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 static REGULAR: Migrator = sqlx::migrate!("./tests/fixtures/regular");
 static LOCAL: Migrator = sqlx::migrate!("./tests/fixtures/local");
 static RANDOM: Migrator = sqlx::migrate!("./tests/fixtures/nondeterministic");
-static TABLES: LazyLock<Result<Vec<TableName>, fleet_sync_protocol::TextValueError>> =
+static TABLES: LazyLock<Result<Vec<TableName>, fleet_protocol::TextValueError>> =
     LazyLock::new(|| {
         ["text_records", "composite_records", "real_records"]
             .into_iter()
@@ -61,7 +61,7 @@ fn policy() -> LeasePolicy {
 #[tokio::test]
 async fn schema_step_readback_keeps_the_bound_version_instead_of_an_assigned_rowid() -> TestResult {
     static GAP: Migrator = sqlx::migrate!("./tests/fixtures/version-gap");
-    static GAP_TABLES: LazyLock<Result<Vec<TableName>, fleet_sync_protocol::TextValueError>> =
+    static GAP_TABLES: LazyLock<Result<Vec<TableName>, fleet_protocol::TextValueError>> =
         LazyLock::new(|| Ok(vec![TableName::new("records")?]));
     let directory = tempfile::tempdir()?;
     let database = ReplicatedDatabase::create(

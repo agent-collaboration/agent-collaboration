@@ -9,10 +9,10 @@ use super::{
 use board_central_test_support::TestCentral;
 use board_fleet_sync::{BOARD_LEASE_POLICY, BoardProjectSchema};
 use board_staging_cutover::{NativeProjectSnapshot, PreparedProjectBundle};
-use fleet_sync_protocol::{Epoch, InstallId, LeaseRefusal, RenewAnswer};
-use fleet_sync_receiver::SnapshotInstall;
-use fleet_sync_tokio_runner::StagingStore;
-use fleet_sync_writer::{ReplicatedDatabase, RetainedAuthority};
+use fleet_native_writer::StagingStore;
+use fleet_project_copy::SnapshotInstall;
+use fleet_project_writer::{ReplicatedDatabase, RetainedAuthority};
+use fleet_protocol::{Epoch, InstallId, LeaseRefusal, RenewAnswer};
 use message_board::{
     ActorOrigin, Record, RecordId, RequestId, TrailSubject, WorkTrailRow, WorkTrailRowId,
 };
@@ -69,7 +69,7 @@ async fn selection_case(current: bool) -> TestResult {
             let mut found = false;
             for index in 0..bundle.manifest().header.pages {
                 let page = bundle.page(index)?;
-                if page.table=="work_trail_rows" { found |= page.rows.iter().flatten().any(|cell|matches!(cell,fleet_sync_protocol::SqlValue::Text(value) if value==UNIQUE)); }
+                if page.table=="work_trail_rows" { found |= page.rows.iter().flatten().any(|cell|matches!(cell,fleet_protocol::SqlValue::Text(value) if value==UNIQUE)); }
             }
             require(found,"newer unique record was not exported")?;
             require(before == source_files(&bundle.manifest().backup_directory)?, "whole original directory was not preserved intact")?;
@@ -102,9 +102,11 @@ async fn persisted_supersession_refuses_before_a_writable_source_can_open() -> T
         .await?;
     database.close().await;
     drop(database);
-    let retained =
-        fleet_sync_writer::RetainedFile::open_read_only(&source.path, BoardProjectSchema::new()?)
-            .await?;
+    let retained = fleet_project_writer::RetainedFile::open_read_only(
+        &source.path,
+        BoardProjectSchema::new()?,
+    )
+    .await?;
     require(
         matches!(
             retained.authority(),
@@ -116,9 +118,11 @@ async fn persisted_supersession_refuses_before_a_writable_source_can_open() -> T
     let before = source_files(source.path.parent().ok_or("source directory missing")?)?;
     let mut host = fixture.acquire().map_err(boxed)?;
     // Act with a second retained reader held: a writable reopen would take the five-second admission path.
-    let retained =
-        fleet_sync_writer::RetainedFile::open_read_only(&source.path, BoardProjectSchema::new()?)
-            .await?;
+    let retained = fleet_project_writer::RetainedFile::open_read_only(
+        &source.path,
+        BoardProjectSchema::new()?,
+    )
+    .await?;
     let outcome = NativeProjectSnapshot::open(&mut host, source.selected).await;
     let error = match outcome {
         Err(error) => error,
@@ -211,7 +215,7 @@ pub(super) async fn newer_writer(
         .await?
         .ok_or("verified seed receipt missing")?;
     let journal = database
-        .journal_store(Arc::new(fleet_sync_tokio_runner::TokioHost::new(
+        .journal_store(Arc::new(fleet_tokio_objects::TokioHost::new(
             Arc::new(NoCalls),
             SystemClock,
         )))
@@ -273,10 +277,10 @@ pub(super) async fn newer_writer(
 }
 
 struct NoCalls;
-impl fleet_sync_tokio_runner::CallRouter for NoCalls {
+impl fleet_tokio_objects::CallRouter for NoCalls {
     async fn dispatch(
         &self,
-        _: fleet_sync_tokio_runner::CallEnvelope,
+        _: fleet_tokio_objects::CallEnvelope,
     ) -> Result<serde_json::Value, durable_steps::CallFailure> {
         Err(durable_steps::CallFailure::NotSent {
             reason: durable_steps::NotSentReason::Overloaded,

@@ -6,7 +6,7 @@ use crate::{
 use durable_steps::{
     BoxFuture, Host, OperationContext, OperationFailure, RequestKey, Resume, StoreError, Task,
 };
-use fleet_sync_protocol::{CommitSequence, Origin, ReplicationPosition};
+use fleet_protocol::{CommitSequence, Origin, ReplicationPosition};
 use std::{marker::PhantomData, sync::Arc};
 
 pub struct RegisterDatabase<S, H> {

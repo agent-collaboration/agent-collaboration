@@ -1,7 +1,7 @@
-use crate::ObjectKey;
 use durable_steps::{OperationFailure, StoreError};
-use fleet_sync_protocol::{DatabaseId, InstallAttemptId, InstallId, ReceiverId};
-use fleet_sync_receiver::SnapshotInstall;
+use fleet_project_copy::SnapshotInstall;
+use fleet_protocol::{DatabaseId, InstallAttemptId, InstallId, ReceiverId};
+use fleet_tokio_objects::ObjectKey;
 use serde::{Deserialize, Serialize};
 
 /// Stable identities only. Snapshot rows remain in the staging file.

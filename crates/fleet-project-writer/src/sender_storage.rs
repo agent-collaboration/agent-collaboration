@@ -2,7 +2,7 @@ use crate::{
     OpenError, RejectedTail, SenderError, checked_queries, schema_inspection::text,
     writer_file_record::WriterFileRecord, writer_scope::WriterScope,
 };
-use fleet_sync_protocol::{CopyRole, PieceDigest, ReceiverId, ReplicationPosition};
+use fleet_protocol::{CopyRole, PieceDigest, ReceiverId, ReplicationPosition};
 use serde::{Deserialize, Serialize};
 use sqlx_turso::TursoConnection;
 

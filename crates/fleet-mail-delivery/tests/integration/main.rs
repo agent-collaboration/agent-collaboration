@@ -100,3 +100,10 @@ mod scoped_binding_reopen;
 mod publication_order;
 
 mod settle_claims;
+
+#[path = "../cancel_outcome_hooks.rs"]
+mod cancel_outcome_hooks;
+#[path = "../local_cancel_capacity.rs"]
+mod local_cancel_capacity;
+#[path = "../numeric_reader_order.rs"]
+mod numeric_reader_order;

@@ -7,7 +7,7 @@ use crate::{
     *,
 };
 use durable_steps::Uuid;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::connection::Connection;
 use sqlx_turso::Turso;
 use std::{sync::Arc, time::Duration};
@@ -43,12 +43,12 @@ pub(super) async fn retire_copy(host: &TestHost) -> TestResult {
     let copy = copies.get_mut(&database()?).ok_or("copy missing")?;
     let mut tx = copy.begin_with("BEGIN IMMEDIATE").await?;
     let CopyStatusAnswer::Status(status) =
-        fleet_sync_receiver::copy_status(&mut CopyScope(&mut tx)).await?
+        fleet_project_copy::copy_status(&mut CopyScope(&mut tx)).await?
     else {
         return Err("copy not following".into());
     };
     assert_eq!(
-        fleet_sync_receiver::retire_copy(
+        fleet_project_copy::retire_copy(
             &mut CopyScope(&mut tx),
             &RetireCopy {
                 database: database()?,
@@ -68,12 +68,12 @@ async fn advance_copy(host: &TestHost, to: u64) -> TestResult {
     let copy = copies.get_mut(&database()?).ok_or("copy missing")?;
     let mut tx = copy.begin_with("BEGIN IMMEDIATE").await?;
     let CopyStatusAnswer::Status(status) =
-        fleet_sync_receiver::copy_status(&mut CopyScope(&mut tx)).await?
+        fleet_project_copy::copy_status(&mut CopyScope(&mut tx)).await?
     else {
         return Err("copy not following".into());
     };
     assert!(matches!(
-        fleet_sync_receiver::fence(
+        fleet_project_copy::fence(
             &mut CopyScope(&mut tx),
             &FenceRequest {
                 database: database()?,
@@ -85,7 +85,7 @@ async fn advance_copy(host: &TestHost, to: u64) -> TestResult {
                     epoch: status.fence,
                     acked: status.acked
                 },
-                target_schema: Some(fleet_sync_protocol::SchemaSupport { max_version: 10 }),
+                target_schema: Some(fleet_protocol::SchemaSupport { max_version: 10 }),
                 holder: peer(1)?
             }
         )
@@ -357,7 +357,7 @@ async fn a_copy_missing_after_status_keeps_the_claim_pending_until_seed_repair()
         .await?;
     let mut transaction = repaired.begin_with("BEGIN IMMEDIATE").await?;
     assert_eq!(
-        fleet_sync_receiver::create_copy(
+        fleet_project_copy::create_copy(
             &mut CopyScope(&mut transaction),
             &CreateCopy {
                 database: database()?,

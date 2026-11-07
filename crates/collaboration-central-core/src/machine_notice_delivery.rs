@@ -90,17 +90,15 @@ where
                             MachineNoticeAppend::Hint { peer, notice } => (notice, Some(peer)),
                         };
                         if let Some(peer) = peer {
-                            let effects = fleet_sync_session::publish_notice_to_peer::<
-                                _,
-                                BoardConsumerProtocol,
-                            >(
-                                scope,
-                                &peer,
-                                fleet_sync_protocol::Notice::Consumer(notice),
-                                now,
-                            )
-                            .await
-                            .map_err(StoreError::backend)?;
+                            let effects =
+                                fleet_session::publish_notice_to_peer::<_, BoardConsumerProtocol>(
+                                    scope,
+                                    &peer,
+                                    fleet_protocol::Notice::Consumer(notice),
+                                    now,
+                                )
+                                .await
+                                .map_err(StoreError::backend)?;
                             scope.stage_transport(effects, None)?;
                             if let Some(at) =
                                 crate::machine_notice_store::next_expiry(scope, peer).await?

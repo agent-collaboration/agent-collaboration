@@ -1,10 +1,11 @@
+use crate::checked_queries;
 use crate::{
-    StoreError, checked_queries,
+    StoreError,
     copy_storage::{decode_record, encode_record},
 };
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::SeedAttemptId;
-use fleet_sync_protocol::{DatabaseId, PageDigest, SeedComplete, SeedId, SeedPage};
+use fleet_protocol::SeedAttemptId;
+use fleet_protocol::{DatabaseId, PageDigest, SeedComplete, SeedId, SeedPage};
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -83,9 +84,13 @@ where
         attempt: SeedAttemptId,
         seed: SeedId,
     ) -> Result<(), StoreError> {
-        checked_queries::write_seed_attempt(self.0, attempt.to_string(), encode_record(&seed)?)
-            .await
-            .map_err(crate::sql_transport::sql_error)
+        checked_queries::write_seed_attempt(
+            self.0,
+            attempt.to_string(),
+            encode_record(&seed)?,
+        )
+        .await
+        .map_err(crate::sql_transport::sql_error)
     }
     pub(crate) async fn page(&mut self, page: &SeedPage) -> Result<Option<SeedPage>, StoreError> {
         let Some(row) = checked_queries::read_seed_page(
@@ -141,7 +146,7 @@ where
     }
     pub(crate) async fn save_page(&mut self, page: &SeedPage) -> Result<SeedPageWrite, StoreError> {
         let payload = encode_record(page)?;
-        if !fleet_sync_protocol::unit_budget::encoded_seed_page_fits_unit_limit(page, &payload) {
+        if !fleet_protocol::unit_budget::encoded_seed_page_fits_unit_limit(page, &payload) {
             return Ok(SeedPageWrite::UnitTooLarge);
         }
         checked_queries::write_seed_page(

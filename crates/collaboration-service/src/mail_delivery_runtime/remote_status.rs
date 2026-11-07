@@ -2,8 +2,8 @@
 use super::{
     AtomicStore, CallId, CarrierAcceptance, MailDeliveryRuntime, RouterDeliveryTypes, StoreError,
 };
-use fleet_sync_delivery::{Outbox, delivery_rollback};
-use fleet_sync_protocol::{
+use fleet_mail_delivery::{Outbox, delivery_rollback};
+use fleet_protocol::{
     DeliveryAnswer, DeliveryRequest, ItemId, OperationAnswer, OperationRequest, StatusAckResult,
     StatusPublication,
 };
@@ -19,13 +19,13 @@ pub(super) fn status_call(step: &str) -> Result<CallId, StoreError> {
 
 impl MailDeliveryRuntime {
     pub(crate) fn custody_record_is_past_retention(&self, item: ItemId) -> bool {
-        fleet_sync_delivery::item_is_too_old(item, self.host.now())
+        fleet_mail_delivery::item_is_too_old(item, self.host.now())
     }
 
     pub(crate) async fn outbox_status(
         &self,
         item: ItemId,
-    ) -> Result<fleet_sync_delivery::OutboxStatusState<CarrierAcceptance>, StoreError> {
+    ) -> Result<fleet_mail_delivery::OutboxStatusState<CarrierAcceptance>, StoreError> {
         let limits = self.config.limits;
         self.store
             .transaction({

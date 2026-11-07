@@ -1,5 +1,5 @@
 use durable_steps::{CallFailure, NotSentReason, turso_store::TursoScope};
-use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost, TokioObject};
+use fleet_tokio_objects::{CallEnvelope, CallRouter, TokioHost, TokioObject};
 use serde_json::Value;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};

@@ -4,7 +4,7 @@ use board_central_test_support::{
     ConformanceBoardState, DispatchFaultObservation, ObjectAddress, RuntimeControl,
 };
 use board_sync_protocol::{ProjectClaimRefusal, ProjectClaimReply};
-use fleet_sync_protocol::{DatabaseId, Epoch, TransferId};
+use fleet_protocol::{DatabaseId, Epoch, TransferId};
 
 use super::claim_fixture::ClaimFixture;
 #[path = "claim_future_schema.rs"]
@@ -124,7 +124,7 @@ async fn claim_observes_real_retirement_in_progress_then_retired_without_seeding
             },
         )
         .await?;
-    let retirement = fleet_sync_protocol::RequestId::new(durable_steps::Uuid::now_v7())?;
+    let retirement = fleet_protocol::RequestId::new(durable_steps::Uuid::now_v7())?;
     let central = fixture.central.clone();
     let mut retiring = tokio::spawn(async move {
         central

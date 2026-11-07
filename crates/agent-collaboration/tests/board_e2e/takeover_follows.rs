@@ -12,7 +12,7 @@ use super::{
 use board_central_test_support::{DispatchCallSelector, ObjectAddress};
 use board_sync_protocol::BoardDeliveryTypes;
 use codex_router_test_support::FixtureResult;
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, ReplicationPosition};
+use fleet_protocol::{DeliveryEnvelope, DeliveryItem, ReplicationPosition};
 use serde_json::{Value, json};
 
 #[derive(Clone, Copy)]

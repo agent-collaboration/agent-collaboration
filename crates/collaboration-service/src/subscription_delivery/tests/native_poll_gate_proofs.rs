@@ -4,7 +4,7 @@ use super::*;
 use crate::subscription_delivery::subscription_service::OwnerObservation;
 use crate::{SubscriptionWaitFilter, SubscriptionWaitResult};
 use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem};
+use fleet_protocol::{DeliveryEnvelope, DeliveryItem};
 use message_board::{SubscriptionMode, WhenIdle};
 use message_board_storage::MailHandoffItem;
 use sqlx::Connection;

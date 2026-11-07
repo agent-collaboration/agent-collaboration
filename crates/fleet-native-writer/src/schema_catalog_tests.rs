@@ -4,11 +4,12 @@ use crate::{
     *,
 };
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::*;
-use fleet_sync_receiver::{
+use fleet_project_copy::{
     AppliedPiece, HookError, ReceiverRules, SnapshotInstall, SnapshotInstallRules,
 };
-use fleet_sync_writer::{Migration, ReplicatedDatabase, ReplicatedSchema, WriterOptions};
+use fleet_project_writer::{Migration, ReplicatedDatabase, ReplicatedSchema, WriterOptions};
+use fleet_protocol::*;
+use fleet_tokio_objects::{ObjectKey, ObjectOptions, ObjectStore, TokioHost, TokioObject};
 use runtime_primitives::SystemClock;
 use sqlx_core::{
     migrate::MigrationType,
@@ -87,13 +88,13 @@ async fn copy(
     target
         .transaction(|scope| {
             Box::pin(async move {
-                let mut migrator = sqlx::migrate!("../fleet-sync-receiver/migrations");
+                let mut migrator = sqlx::migrate!("../fleet-project-copy/migrations");
                 migrator.dangerous_set_table_name("_fleet_sync_copy_migrations");
                 migrator
                     .run_direct(None, scope.executor(), false)
                     .await
                     .map_err(StoreError::backend)?;
-                fleet_sync_receiver::initialize_hook(scope, &Hook)
+                fleet_project_copy::initialize_hook(scope, &Hook)
                     .await
                     .map_err(StoreError::backend)?;
                 Ok(())
@@ -147,7 +148,7 @@ async fn copy_pages(
     Ok(copy
         .transaction(|scope| {
             Box::pin(async move {
-                let CopyStatusAnswer::Status(status) = fleet_sync_receiver::copy_status(scope)
+                let CopyStatusAnswer::Status(status) = fleet_project_copy::copy_status(scope)
                     .await
                     .map_err(StoreError::backend)?
                 else {
@@ -156,10 +157,9 @@ async fn copy_pages(
                 let mut cursor = None;
                 let mut pages = Vec::new();
                 loop {
-                    let SnapshotRead::Page(page) =
-                        fleet_sync_receiver::snapshot_page(scope, cursor)
-                            .await
-                            .map_err(StoreError::backend)?
+                    let SnapshotRead::Page(page) = fleet_project_copy::snapshot_page(scope, cursor)
+                        .await
+                        .map_err(StoreError::backend)?
                     else {
                         return Err(StoreError::backend(
                             "snapshot moved inside owned transaction",
@@ -172,7 +172,7 @@ async fn copy_pages(
                     }
                 }
                 let SnapshotManifestAnswer::Manifest(manifest) =
-                    fleet_sync_receiver::snapshot_manifest(scope, status.acked)
+                    fleet_project_copy::snapshot_manifest(scope, status.acked)
                         .await
                         .map_err(StoreError::backend)?
                 else {

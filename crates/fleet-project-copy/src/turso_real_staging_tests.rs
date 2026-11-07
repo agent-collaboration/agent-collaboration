@@ -1,7 +1,7 @@
 //! Real values survive both JSON staging paths, file reopen, and canonical digest verification.
 #![allow(clippy::panic_in_result_fn)]
 use crate::{turso_rule_fixture::*, *};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     row::Row,

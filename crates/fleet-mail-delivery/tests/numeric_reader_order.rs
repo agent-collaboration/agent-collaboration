@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 mod support;
 use durable_steps::AtomicStore;
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use support::*;
 
 const COUNT: u64 = 101;
@@ -15,7 +15,7 @@ async fn status_fetch_keeps_numeric_cursor_order_across_both_decimal_boundaries(
             Box::pin(async move {
                 let mut stream = StatusStream::<_, TestTypes>::new(
                     scope,
-                    fleet_sync_delivery::Submitter::Machine(peer(1)),
+                    fleet_mail_delivery::Submitter::Machine(peer(1)),
                     "route".into(),
                 );
                 for identity in 1..=COUNT {
@@ -27,14 +27,14 @@ async fn status_fetch_keeps_numeric_cursor_order_across_both_decimal_boundaries(
                                 version: StatusVersion::new(1),
                                 cancel: None,
                             },
-                            fleet_sync_protocol::SyncTime::from_unix_millis(0),
+                            fleet_protocol::SyncTime::from_unix_millis(0),
                         )
                         .await
                         .map_err(storage_error)?;
                 }
                 let result = stream
                     .fetch(
-                        fleet_sync_delivery::Submitter::Machine(peer(1)),
+                        fleet_mail_delivery::Submitter::Machine(peer(1)),
                         StatusCursor::new(0),
                         101,
                     )

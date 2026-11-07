@@ -47,20 +47,20 @@ pub async fn run_sender_revocation_conformance(
                 Some(durable_steps::OperationState::Running { .. }))).await?;
         // A normal Hello proves that this is the still-attached old session.
         live(&mut sender.socket, SESSION).await?;
-        let item = fleet_sync_protocol::DeliveryEnvelope::<board_sync_protocol::BoardDeliveryTypes>::Item(
-            fleet_sync_protocol::DeliveryItem::new(
-                fleet_sync_protocol::ItemId::new(durable_steps::Uuid::now_v7())?,
+        let item = fleet_protocol::DeliveryEnvelope::<board_sync_protocol::BoardDeliveryTypes>::Item(
+            fleet_protocol::DeliveryItem::new(
+                fleet_protocol::ItemId::new(durable_steps::Uuid::now_v7())?,
                 serde_json::from_value(json!({"kind":"humanUser","installation":SENDER}))?,
                 serde_json::from_value(json!({"peer":recipient.peer,"address":{
                     "endpoint":{"serviceId":service,"endpointId":"codex-local"},
                     "sessionId":"revocation-recipient"}}))?, None,
                 serde_json::from_value(json!({"kind":"message","text":"must never enter custody",
                     "delivery":"auto","guard":null,"senderDisplayName":null,"replyTo":null}))?)?);
-        let cancel = fleet_sync_protocol::DeliveryEnvelope::<board_sync_protocol::BoardDeliveryTypes>::Cancel(
-            fleet_sync_protocol::DeliveryCancel::new(
-                fleet_sync_protocol::ItemId::new(durable_steps::Uuid::now_v7())?,
+        let cancel = fleet_protocol::DeliveryEnvelope::<board_sync_protocol::BoardDeliveryTypes>::Cancel(
+            fleet_protocol::DeliveryCancel::new(
+                fleet_protocol::ItemId::new(durable_steps::Uuid::now_v7())?,
                 item.sender().clone(), item.recipient().clone(), None,
-                fleet_sync_protocol::CancelBody { target: item.id() })?);
+                fleet_protocol::CancelBody { target: item.id() })?);
         for envelope in [item, cancel] {
             let answer = operation(&mut sender.socket, json!({"kind":"consumer","value":{
                 "kind":"mailSubmit","value":{"item":envelope,"originEpoch":null}}})).await?;

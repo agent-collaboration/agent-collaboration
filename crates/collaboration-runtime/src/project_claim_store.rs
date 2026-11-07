@@ -2,8 +2,8 @@
 use crate::project_store_registry::{ProjectRuntime, ProjectStoreRegistry};
 use crate::{NativeProjectStore, ProjectRegistryError};
 use board_fleet_sync::{BOARD_LEASE_POLICY, BoardProjectSchema};
-use fleet_sync_protocol::ReplicationPosition;
-use fleet_sync_writer::{BootstrapGrant, ReplicatedDatabase};
+use fleet_project_writer::{BootstrapGrant, ReplicatedDatabase};
+use fleet_protocol::ReplicationPosition;
 use message_board::ProjectId;
 use std::sync::Arc;
 use tokio::sync::{OnceCell, RwLock};
@@ -134,7 +134,7 @@ impl ProjectStoreRegistry {
                 .writer_state()
                 .await
                 .map_err(message_board_storage::ProjectStorageError::from)?,
-            fleet_sync_lease::WriterState::Writing { .. }
+            fleet_project_lease::WriterState::Writing { .. }
         ) {
             return Err(ProjectRegistryError::InvalidTransition);
         }

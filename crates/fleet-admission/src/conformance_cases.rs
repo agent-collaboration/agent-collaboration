@@ -93,9 +93,9 @@ fn report_step(
             report: ArchiveReport {
                 board: board.clone(),
                 project,
-                position: fleet_sync_protocol::ReplicationPosition::new(
-                    fleet_sync_protocol::Epoch::new(1)?,
-                    fleet_sync_protocol::CommitSequence::new(7),
+                position: fleet_protocol::ReplicationPosition::new(
+                    fleet_protocol::Epoch::new(1)?,
+                    fleet_protocol::CommitSequence::new(7),
                 ),
                 installation: ServiceId::try_from(
                     "00000000-0000-4000-8000-000000000001".to_owned(),

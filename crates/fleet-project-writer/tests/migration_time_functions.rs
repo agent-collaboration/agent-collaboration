@@ -1,10 +1,10 @@
 #![allow(clippy::panic_in_result_fn)]
 use durable_steps::Uuid;
-use fleet_sync_lease::LeasePolicy;
-use fleet_sync_protocol::{PeerId, TableName, TextValueError};
-use fleet_sync_writer::{
+use fleet_project_lease::LeasePolicy;
+use fleet_project_writer::{
     Migration, OpenError, ReplicatedDatabase, ReplicatedSchema, SchemaForm, WriterOptions,
 };
+use fleet_protocol::{PeerId, TableName, TextValueError};
 use sqlx_core::{migrate::MigrationType, query::query, row::Row, sql_str::SqlSafeStr};
 use sqlx_turso::{Turso, TursoConnectOptions};
 use std::{sync::LazyLock, time::Duration};

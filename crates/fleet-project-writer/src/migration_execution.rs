@@ -6,8 +6,8 @@ use crate::{
     schema_inspection::{inspect_replicated_tables, schema_entries},
     writer_scope::WriterScope,
 };
-use fleet_sync_lease::WriterState;
-use fleet_sync_protocol::TableName;
+use fleet_project_lease::WriterState;
+use fleet_protocol::TableName;
 use sqlx_core::{
     connection::Connection,
     executor::Executor,
@@ -27,7 +27,7 @@ pub(crate) async fn inspect_present_tables(
         .filter(|table| {
             entries.iter().any(|(entry, _)| {
                 entry.name.eq_ignore_ascii_case(table.as_str())
-                    && entry.kind == fleet_sync_protocol::SchemaObjectKind::Table
+                    && entry.kind == fleet_protocol::SchemaObjectKind::Table
             })
         })
         .cloned()

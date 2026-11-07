@@ -1,7 +1,7 @@
 //! Explicit registry stand-in behind actual session requests; no custody policy.
 use board_sync_protocol::{InstallationPeerLookup, InstallationPeerPage};
-use fleet_sync_protocol::PeerId;
-use fleet_sync_service::ServiceError;
+use fleet_native_services::ServiceError;
+use fleet_protocol::PeerId;
 use message_board::ServiceId;
 use std::collections::HashMap;
 use tokio::sync::{Mutex, oneshot};

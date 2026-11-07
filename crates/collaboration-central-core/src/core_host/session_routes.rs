@@ -74,8 +74,8 @@ pub(super) fn classify_session(
                 identity,
             )
         }
-        fleet_sync_session::SchemaSupportRegistry::KIND => {
-            encode_shared_call::<SessionKind, RegistryKind, fleet_sync_session::SchemaSupportRegistry>(
+        fleet_session::SchemaSupportRegistry::KIND => {
+            encode_shared_call::<SessionKind, RegistryKind, fleet_session::SchemaSupportRegistry>(
                 caller,
                 (),
                 decode(target)?,

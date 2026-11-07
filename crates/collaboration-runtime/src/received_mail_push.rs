@@ -6,8 +6,8 @@ use collaboration_protocol::{
     PushActivityRange, PushActivitySnapshot, PushHeaderFacts, PushId, PushKind, PushOrigin,
     PushRecordDraft, RouterOriginRef, SessionRef,
 };
-use fleet_sync_delivery::DeliveryError;
-use fleet_sync_protocol::DeliveryItem;
+use fleet_mail_delivery::DeliveryError;
+use fleet_protocol::DeliveryItem;
 
 /// Poll batches are handed to a waiter and have no native push.
 pub fn received_mail_push(

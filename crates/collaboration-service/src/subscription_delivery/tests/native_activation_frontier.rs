@@ -185,7 +185,7 @@ async fn assert_reactivated_frontier(resolved: bool) {
             .local_outcome_for_test(first.id())
             .await
             .unwrap(),
-        Some(fleet_sync_protocol::RecipientOutcome::Prevented { .. })
+        Some(fleet_protocol::RecipientOutcome::Prevented { .. })
     ));
     let frozen = frozen_follow(&fixture).await;
     assert_eq!(
@@ -236,7 +236,7 @@ async fn assert_reactivated_frontier(resolved: bool) {
             .local_outcome_for_test(first.id())
             .await
             .unwrap(),
-        Some(fleet_sync_protocol::RecipientOutcome::Prevented { .. })
+        Some(fleet_protocol::RecipientOutcome::Prevented { .. })
     ));
     recovery.shutdown().await;
     drop(recovery);
@@ -268,7 +268,7 @@ async fn assert_reactivated_frontier(resolved: bool) {
             .local_outcome_for_test(first.id())
             .await
             .unwrap(),
-        Some(fleet_sync_protocol::RecipientOutcome::Prevented { .. })
+        Some(fleet_protocol::RecipientOutcome::Prevented { .. })
     ));
     assert!(runtime.requests.lock().await.try_recv().is_err());
     publisher.shutdown().await;

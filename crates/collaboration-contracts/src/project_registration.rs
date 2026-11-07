@@ -1,5 +1,5 @@
 //! The fleet client asks the Host-owned writer runtime to drive durable registration.
-use fleet_sync_writer::WriterRegistrationOutcome;
+use fleet_project_writer::WriterRegistrationOutcome;
 use message_board::ProjectId;
 use std::{future::Future, pin::Pin};
 

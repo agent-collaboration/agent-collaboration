@@ -1,4 +1,4 @@
-use fleet_sync_protocol::{Piece, PieceDigest, ReplicatedTransaction};
+use fleet_protocol::{Piece, PieceDigest, ReplicatedTransaction};
 use serde::Serialize;
 
 pub(crate) fn assemble_transaction<A: Serialize>(
@@ -58,7 +58,7 @@ pub(crate) fn assemble_transaction<A: Serialize>(
 mod tests {
     #![allow(clippy::expect_used, clippy::panic)]
     use super::*;
-    use fleet_sync_protocol::{
+    use fleet_protocol::{
         CommitSequence, DatabaseId, Epoch, PieceContents, ReplicationPosition, RowChange, SqlValue,
         TransactionKey, TransactionPart,
     };

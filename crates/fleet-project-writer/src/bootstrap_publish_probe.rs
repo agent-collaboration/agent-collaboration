@@ -7,7 +7,7 @@ pub(crate) struct BootstrapPublishProbe {
 struct State {
     reopen_blocked: std::sync::atomic::AtomicBool,
     armed: std::sync::atomic::AtomicU8,
-    observed: tokio::sync::watch::Sender<Option<fleet_sync_receiver::SnapshotInstall>>,
+    observed: tokio::sync::watch::Sender<Option<fleet_project_copy::SnapshotInstall>>,
     release: tokio::sync::Notify,
 }
 #[cfg(feature = "test-support")]
@@ -41,7 +41,7 @@ impl BootstrapPublishProbe {
             .reopen_blocked
             .store(blocked, std::sync::atomic::Ordering::SeqCst);
     }
-    pub async fn converted(&self, _install: &fleet_sync_receiver::SnapshotInstall) {
+    pub async fn converted(&self, _install: &fleet_project_copy::SnapshotInstall) {
         #[cfg(feature = "test-support")]
         if self
             .state
@@ -58,7 +58,7 @@ impl BootstrapPublishProbe {
             self.state.release.notified().await;
         }
     }
-    pub async fn published(&self, _install: &fleet_sync_receiver::SnapshotInstall) {
+    pub async fn published(&self, _install: &fleet_project_copy::SnapshotInstall) {
         #[cfg(feature = "test-support")]
         if self
             .state
@@ -90,7 +90,7 @@ impl BootstrapPublishProbe {
             .store(2, std::sync::atomic::Ordering::SeqCst);
     }
     #[cfg(feature = "test-support")]
-    pub async fn wait(&self) -> Result<fleet_sync_receiver::SnapshotInstall, crate::OpenError> {
+    pub async fn wait(&self) -> Result<fleet_project_copy::SnapshotInstall, crate::OpenError> {
         let mut changed = self.state.observed.subscribe();
         loop {
             if let Some(install) = changed.borrow().clone() {

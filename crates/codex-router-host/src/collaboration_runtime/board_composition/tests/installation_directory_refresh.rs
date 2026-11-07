@@ -1,7 +1,7 @@
 //! Literal central pages cross the real pump, event owner and installation store.
 use super::*;
 use board_sync_protocol::InstallationPeerPage;
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use message_board::ServiceId;
 
 #[tokio::test]

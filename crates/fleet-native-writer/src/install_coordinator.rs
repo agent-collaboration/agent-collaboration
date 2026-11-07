@@ -1,14 +1,14 @@
 use crate::{
-    InstallFileAnswer, InstallProgress, InstallRecord, InstallRequest, InstallStatus, ObjectKey,
-    SnapshotTarget, StagingError, StagingStore, TokioObject, WriterInstallTarget,
-    install_contract::corrupt, install_records::InstallRecords, native_carry_schema::FileScope,
-    native_object::ObjectConnection,
+    InstallFileAnswer, InstallProgress, InstallRecord, InstallRequest, InstallStatus,
+    SnapshotTarget, StagingError, StagingStore, WriterInstallTarget, install_contract::corrupt,
+    install_records::InstallRecords, native_carry_schema::FileScope,
 };
 use durable_steps::{
     Admitted, BoxFuture, Host, JournalScope, OperationId, StartRefusal, StoreError,
     turso_store::TursoScope,
 };
-use fleet_sync_receiver::{SnapshotInstall, SnapshotInstallRules};
+use fleet_project_copy::{SnapshotInstall, SnapshotInstallRules};
+use fleet_tokio_objects::{ObjectKey, TokioObject, native_object::ObjectConnection};
 use sqlx_core::{connection::Connection, migrate::Migrator};
 use std::sync::Arc;
 
@@ -50,13 +50,10 @@ impl<H: Host> InstallHandle<H> {
 impl<H: Host> InstallCoordinator<H> {
     pub async fn wait_for_attempt(
         &self,
-        install: fleet_sync_protocol::InstallAttemptId,
+        install: fleet_protocol::InstallAttemptId,
     ) -> Result<InstallRecord, StoreError> {
         let initial = self
-            .record(
-                fleet_sync_protocol::InstallId::new(install.as_uuid())
-                    .map_err(StoreError::backend)?,
-            )
+            .record(fleet_protocol::InstallId::new(install.as_uuid()).map_err(StoreError::backend)?)
             .await?;
         let mut changes = self.control.subscribe_commits();
         loop {
@@ -161,7 +158,7 @@ impl<H: Host> InstallCoordinator<H> {
             InstallRecords(&mut scope)
                 .reserve(
                     &input,
-                    fleet_sync_protocol::InstallId::new(input.attempt.as_uuid())
+                    fleet_protocol::InstallId::new(input.attempt.as_uuid())
                         .map_err(StoreError::backend)?,
                 )
                 .await?;
@@ -180,10 +177,7 @@ impl<H: Host> InstallCoordinator<H> {
             operation,
         })
     }
-    pub async fn record(
-        &self,
-        id: fleet_sync_protocol::InstallId,
-    ) -> Result<InstallRecord, StoreError> {
+    pub async fn record(&self, id: fleet_protocol::InstallId) -> Result<InstallRecord, StoreError> {
         self.control
             .rule_transaction(move |scope| {
                 Box::pin(async move { InstallRecords(scope).get(id).await })
@@ -212,7 +206,7 @@ impl<H: Host> InstallCoordinator<H> {
     }
     pub async fn publish<T: SnapshotTarget + ?Sized>(
         &self,
-        id: fleet_sync_protocol::InstallId,
+        id: fleet_protocol::InstallId,
         target: &T,
     ) -> Result<InstallFileAnswer, StagingError> {
         let mut owner = self.control.connection.lock().await;
@@ -255,7 +249,7 @@ impl<H: Host> InstallCoordinator<H> {
     }
     pub async fn mark_ready_with<F>(
         &self,
-        id: fleet_sync_protocol::InstallId,
+        id: fleet_protocol::InstallId,
         target: &TokioObject<H>,
         ready: F,
     ) -> Result<InstallFileAnswer, StagingError>
@@ -288,9 +282,9 @@ impl<H: Host> InstallCoordinator<H> {
         })
         .await
     }
-    pub async fn mark_writer_ready<S: fleet_sync_writer::ReplicatedSchema>(
+    pub async fn mark_writer_ready<S: fleet_project_writer::ReplicatedSchema>(
         &self,
-        id: fleet_sync_protocol::InstallId,
+        id: fleet_protocol::InstallId,
         target: &WriterInstallTarget<S>,
     ) -> Result<InstallFileAnswer, StagingError> {
         let source = self.record(id).await?.request.source;
@@ -299,14 +293,14 @@ impl<H: Host> InstallCoordinator<H> {
                 .database()
                 .mark_bootstrap_ready(&expected, source)
                 .await
-                .map_err(fleet_sync_writer::BootstrapError::from)
+                .map_err(fleet_project_writer::BootstrapError::from)
                 .map_err(Into::into)
         })
         .await
     }
     async fn finish_ready<T, F, Fut>(
         &self,
-        id: fleet_sync_protocol::InstallId,
+        id: fleet_protocol::InstallId,
         target: &T,
         ready: F,
     ) -> Result<InstallFileAnswer, StagingError>

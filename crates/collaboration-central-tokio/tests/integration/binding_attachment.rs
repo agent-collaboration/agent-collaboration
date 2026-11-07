@@ -5,8 +5,8 @@
 mod worker_attachment_codec;
 
 use collaboration_central_core::AdmissionOrigin;
-use fleet_sync_protocol::{AttachSequence, ConnectionId, PeerId, SchemaSupport, SessionId};
-use fleet_sync_session::ConnectionRegistration;
+use fleet_protocol::{AttachSequence, ConnectionId, PeerId, SchemaSupport, SessionId};
+use fleet_session::ConnectionRegistration;
 use runtime_primitives::SyncTime;
 use worker_attachment_codec::BindingAttachment;
 

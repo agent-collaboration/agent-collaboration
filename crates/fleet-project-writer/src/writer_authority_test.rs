@@ -6,8 +6,8 @@ use crate::{
     writer_release_tests::{TestClock, create},
 };
 use durable_steps::{AtomicStore, StoreError};
-use fleet_sync_lease::{HolderError, WriterState};
-use fleet_sync_protocol::{GateReasonCode, LeaseState, LeaseStatus, RenewResult};
+use fleet_project_lease::{HolderError, WriterState};
+use fleet_protocol::{GateReasonCode, LeaseState, LeaseStatus, RenewResult};
 use runtime_primitives::Clock;
 use std::sync::{Arc, atomic::AtomicI64};
 
@@ -16,7 +16,7 @@ pub(super) fn clock() -> Arc<TestClock> {
     Arc::new(TestClock(AtomicI64::new(100)))
 }
 pub(super) fn renewal(database: DatabaseId, holder: PeerId, epoch: u64) -> TestResult<RenewAnswer> {
-    let epoch = fleet_sync_protocol::Epoch::new(epoch)?;
+    let epoch = fleet_protocol::Epoch::new(epoch)?;
     Ok(RenewAnswer::Renewed {
         recorded: RenewResult {
             epoch,

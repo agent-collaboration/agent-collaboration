@@ -5,7 +5,7 @@ use crate::{
     *,
 };
 use durable_steps::{RequestKey, Uuid};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::connection::Connection;
 use sqlx_turso::Turso;
 use std::{sync::Arc, time::Duration};
@@ -27,11 +27,11 @@ pub(super) async fn advance_copy(host: &TestHost, from: u64, to: u64) -> TestRes
             epoch: Epoch::new(from)?,
             acked: ReplicationPosition::new(Epoch::new(1)?, CommitSequence::new(0)),
         },
-        target_schema: Some(fleet_sync_protocol::SchemaSupport { max_version: 10 }),
+        target_schema: Some(fleet_protocol::SchemaSupport { max_version: 10 }),
         holder: peer(1)?,
     };
     assert!(
-        matches!(fleet_sync_receiver::fence(&mut CopyScope(&mut transaction), &request).await?, FenceResult::Fenced { new_epoch, .. } if new_epoch == Epoch::new(to)?)
+        matches!(fleet_project_copy::fence(&mut CopyScope(&mut transaction), &request).await?, FenceResult::Fenced { new_epoch, .. } if new_epoch == Epoch::new(to)?)
     );
     transaction.commit().await?;
     Ok(())
@@ -60,7 +60,7 @@ async fn restored_registry_reserves_above_the_fresh_previews_copy_fence() -> Tes
     .await?;
     assert_eq!(preview.fence, Epoch::new(5)?);
     let request = HolderChangeRequest::Takeover {
-        reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+        reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
         attempt: transfer(911)?,
         database: database()?,
         preview,
@@ -125,7 +125,7 @@ async fn fence_not_advanced_repairs_once_from_the_real_copys_proven_fence() -> T
         .await
         .insert(transfer(912)?, Arc::clone(&gate));
     let request = HolderChangeRequest::Takeover {
-        reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+        reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
         attempt: transfer(912)?,
         database: database()?,
         preview,
@@ -194,7 +194,7 @@ async fn a_second_floor_refusal_keeps_its_reservation_without_granting_or_changi
         .await
         .insert(transfer(913)?, Arc::clone(&gate));
     let request = HolderChangeRequest::Takeover {
-        reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+        reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
         attempt: transfer(913)?,
         database: database()?,
         preview,

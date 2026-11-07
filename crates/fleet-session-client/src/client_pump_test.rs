@@ -4,8 +4,8 @@ use crate::{
     CredentialRejectedRecovery, SessionEndedRecovery, SessionLinkEvent, SessionLinkEventKind,
     SessionRecoveryPolicy,
 };
-use fleet_sync_protocol::*;
-use fleet_sync_session::{
+use fleet_protocol::*;
+use fleet_session::{
     Bytes, ClientSessionState, ConnectFailure, ConnectionClosed, StoreError, TransportConnection,
 };
 use runtime_primitives::{Backoff, SyncTime, UuidV7Ids};

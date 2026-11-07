@@ -2,7 +2,7 @@
 use super::{native_sql::SqlHost, owned_host::StoppedHost};
 use codex_router_test_support::FixtureResult;
 use durable_steps::turso_store::TursoScope;
-use fleet_sync_delivery::test_support::DeliveryObservation;
+use fleet_mail_delivery::test_support::DeliveryObservation;
 use sqlx_turso::sqlx::{ConnectOptions, Connection};
 use std::os::unix::fs::OpenOptionsExt as _;
 
@@ -48,13 +48,13 @@ pub async fn delivery_rows(stopped: &StoppedHost) -> FixtureResult<Vec<DeliveryO
         .await?;
     let observed: FixtureResult<Vec<DeliveryObservation>> = async {
         let mut transaction = connection.begin().await?;
-        let rows = fleet_sync_delivery::test_support::snapshot::<
+        let rows = fleet_mail_delivery::test_support::snapshot::<
             _,
             collaboration_contracts::RouterDeliveryTypes,
             _,
         >(
             &mut TursoScope::new(&mut transaction, &SqlHost),
-            fleet_sync_delivery::DeliveryHostRole::Machine,
+            fleet_mail_delivery::DeliveryHostRole::Machine,
             &binding,
         )
         .await?;

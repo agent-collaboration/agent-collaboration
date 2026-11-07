@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, dead_code)]
 use crate::support::*;
 use durable_steps::{AtomicStore, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::row::Row;
 
 pub fn local_item(id: u64) -> DeliveryItem<TestTypes> {

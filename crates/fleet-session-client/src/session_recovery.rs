@@ -1,5 +1,5 @@
-use fleet_sync_protocol::{AuthRefusal, CloseReason, SessionId};
-pub use fleet_sync_session::ConnectionReplacedRecovery;
+use fleet_protocol::{AuthRefusal, CloseReason, SessionId};
+pub use fleet_session::ConnectionReplacedRecovery;
 use runtime_primitives::{Backoff, SyncTime};
 use std::time::Duration;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

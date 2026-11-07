@@ -1,6 +1,6 @@
 //! Competing real Fleet calls cannot consume the selected lost-receipt fault.
 use super::*;
-use fleet_sync_protocol::{CancelBody, DeliveryCancel};
+use fleet_protocol::{CancelBody, DeliveryCancel};
 
 pub(super) async fn drop_held_reply(
     fixture: &RuleFixture,
@@ -244,13 +244,13 @@ fn assert_competing_answers(answers: Vec<(&str, NativeAnswer)>) -> TestResult {
         match kind {
             "query" => assert!(matches!(
                 answer,
-                OperationAnswer::Delivery(fleet_sync_protocol::DeliveryAnswer::Query(_))
+                OperationAnswer::Delivery(fleet_protocol::DeliveryAnswer::Query(_))
             )),
             "submit" => assert!(matches!(
                 answer,
                 OperationAnswer::Consumer(BoardConsumerAnswer::MailSubmit(
                     MailSubmitAnswer::Submitted(SubmitResult::Replayed {
-                        status: fleet_sync_protocol::DeliveryStatus::Held,
+                        status: fleet_protocol::DeliveryStatus::Held,
                         ..
                     })
                 ))
@@ -332,12 +332,12 @@ fn sender_query_for_item(
     item: ItemId,
 ) -> ProofResult<OperationRequest<board_sync_protocol::BoardConsumerProtocol>> {
     Ok(OperationRequest::Delivery(
-        fleet_sync_protocol::DeliveryRequest::Query {
+        fleet_protocol::DeliveryRequest::Query {
             call: runtime_primitives::CallId {
                 operation: runtime_primitives::OperationId::new(durable_steps::Uuid::now_v7())?,
                 step: runtime_primitives::StepName::new("lost-receipt-competing-query")?,
             },
-            mailbox: fleet_sync_protocol::PeerId::new(fixture.recipient.peer)?,
+            mailbox: fleet_protocol::PeerId::new(fixture.recipient.peer)?,
             items: vec![item],
         },
     ))

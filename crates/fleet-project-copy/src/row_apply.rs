@@ -1,5 +1,5 @@
 use crate::{BoundStatement, StoreError, bound_sql::quoted_identifier};
-use fleet_sync_protocol::{RowChange, SqlValue, reserved_namespace};
+use fleet_protocol::{RowChange, SqlValue, reserved_namespace};
 
 /// The declared column order and primary-key order read from the copy's schema.
 #[derive(Clone, Debug)]
@@ -35,8 +35,14 @@ pub(crate) fn plan_row_change(
     if columns.is_empty() || keys.is_empty() {
         return Err(invalid("replicated table must have a declared primary key"));
     }
-    if key.len() != keys.len() || key.iter().any(|value| !matches!(value, SqlValue::Text(key) if fleet_sync_protocol::canonical_uuid_v7(key))) {
-        return Err(StoreError::Corrupt {field: "replicated UUIDv7 row key".into()});
+    if key.len() != keys.len()
+        || key.iter().any(
+            |value| !matches!(value, SqlValue::Text(key) if fleet_protocol::canonical_uuid_v7(key)),
+        )
+    {
+        return Err(StoreError::Corrupt {
+            field: "replicated UUIDv7 row key".into(),
+        });
     }
     let table_name = quoted_identifier(table);
     match row {

@@ -6,10 +6,10 @@ use crate::{
     step_driver::{StepCallback, StepDriver, StepResult},
 };
 use durable_steps::{AtomicStore, BoxFuture, CallFailure, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{
+use fleet_project_copy::CopyTransactionFailure;
+use fleet_protocol::{
     AwaitAckedAnswer, CopyStatusAnswer, DatabaseId, ReceiverId, ReplicationPosition,
 };
-use fleet_sync_receiver::CopyTransactionFailure;
 use runtime_primitives::WakeScheduler;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -62,7 +62,7 @@ where
 
     pub async fn read_copy_status(&self) -> Result<CopyStatusAnswer, CopyTransactionFailure> {
         let ObjectWork::Copy { host, database, .. } = &self.work else {
-            return Err(fleet_sync_receiver::classify_copy_store_error(
+            return Err(fleet_project_copy::classify_copy_store_error(
                 StoreError::Aborted {
                     reason: "copy runtime has a different face".into(),
                 },
@@ -115,8 +115,8 @@ where
                 CopyStatusAnswer::Status(_) => {}
                 CopyStatusAnswer::Retired => return Ok(AwaitAckedAnswer::Retired),
                 CopyStatusAnswer::NotInitialized => {
-                    return Err(fleet_sync_receiver::retryable_copy(
-                        fleet_sync_protocol::CopyUnavailableReason::Uninitialized,
+                    return Err(fleet_project_copy::retryable_copy(
+                        fleet_protocol::CopyUnavailableReason::Uninitialized,
                     ));
                 }
             }
@@ -188,7 +188,7 @@ where
         }
         if matches!(
             self.inspection().await?,
-            fleet_sync_receiver::CopyInspection::Retired { .. }
+            fleet_project_copy::CopyInspection::Retired { .. }
         ) {
             return Ok(());
         }
@@ -243,7 +243,7 @@ where
         let (answer, _effects) = self
             .run(ReadCopyStatus { database })
             .await
-            .map_err(fleet_sync_receiver::classify_copy_store_error)?;
+            .map_err(fleet_project_copy::classify_copy_store_error)?;
         Ok(answer)
     }
 }
@@ -275,9 +275,9 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
-            let answer = fleet_sync_receiver::copy_status(scope)
+            let answer = fleet_project_copy::copy_status(scope)
                 .await
-                .map_err(fleet_sync_receiver::receiver_rollback)?;
+                .map_err(fleet_project_copy::receiver_rollback)?;
             if let CopyStatusAnswer::Status(status) = &answer
                 && status.database != self.database
             {

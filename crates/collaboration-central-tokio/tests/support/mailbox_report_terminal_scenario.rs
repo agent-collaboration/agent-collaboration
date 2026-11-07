@@ -10,10 +10,8 @@ use super::{
 };
 use collaboration_central_conformance::ConformanceResult;
 use durable_steps::{Engine, OperationFailure, OperationState};
-use fleet_sync_delivery::{DeliveryTaskConfig, LocalDeliveryConfig, delivery_request_key};
-use fleet_sync_protocol::{
-    CancelBody, DeliveryCancel, DeliveryEnvelope, ItemId, PeerId, ServerCall,
-};
+use fleet_mail_delivery::{DeliveryTaskConfig, LocalDeliveryConfig, delivery_request_key};
+use fleet_protocol::{CancelBody, DeliveryCancel, DeliveryEnvelope, ItemId, PeerId, ServerCall};
 use report_host::{ReportHost, SharedPair};
 use report_store::{ReportSenderBinding, ReportTask, limits, open_store, prepare_report};
 use std::sync::Arc;
@@ -85,10 +83,10 @@ async fn run_report(pair: SharedPair) -> ConformanceResult<()> {
     let (report, receipt) = prepare_report(&store, &host, item, cancel, submitter, relay).await?;
     pushed(&mut pair.lock().await.recipient.socket, frame, receipt).await?;
     let mut engine = Engine::new(store, host.clone());
-    engine.register(fleet_sync_delivery::RemoveDeliveryRecord::<
+    engine.register(fleet_mail_delivery::RemoveDeliveryRecord::<
         report_store::ReportStore,
         sqlx_turso::Turso,
-    >::new(fleet_sync_delivery::DeliveryHostRole::Machine))?;
+    >::new(fleet_mail_delivery::DeliveryHostRole::Machine))?;
     engine.register(ReportTask::new(
         DeliveryTaskConfig {
             local: LocalDeliveryConfig {

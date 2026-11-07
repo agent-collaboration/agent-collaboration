@@ -1,5 +1,5 @@
 use crate::TableLayout;
-use fleet_sync_protocol::{RowChange, SqlValue};
+use fleet_protocol::{RowChange, SqlValue};
 use turso::core::{
     Numeric,
     types::{ValueIterator, ValueRef},
@@ -111,8 +111,14 @@ fn row_key(table: &TableLayout, values: &[SqlValue]) -> Result<Vec<SqlValue>, Ca
                 })
         })
         .collect::<Result<Vec<_>, _>>()?;
-    if key.is_empty() || key.iter().any(|value|!matches!(value,SqlValue::Text(key) if fleet_sync_protocol::canonical_uuid_v7(key))) {
-        return Err(CaptureError::InvalidKey {table:table.name().into()});
+    if key.is_empty()
+        || key.iter().any(
+            |value| !matches!(value,SqlValue::Text(key) if fleet_protocol::canonical_uuid_v7(key)),
+        )
+    {
+        return Err(CaptureError::InvalidKey {
+            table: table.name().into(),
+        });
     }
     Ok(key)
 }

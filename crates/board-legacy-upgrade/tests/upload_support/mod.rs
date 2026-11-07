@@ -148,7 +148,7 @@ pub async fn published_copies(
             state.get("state").and_then(serde_json::Value::as_str),
             Some("following")
         );
-        let status: fleet_sync_protocol::CopyStatus =
+        let status: fleet_protocol::CopyStatus =
             serde_json::from_value(state.get("copy").cloned().ok_or("copy authority missing")?)?;
         assert_eq!(status.holder, None);
         assert_eq!(status.fence.value(), 1);

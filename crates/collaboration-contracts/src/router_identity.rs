@@ -1,7 +1,7 @@
 //! Immutable validated facts identifying one Router installation and run.
 use crate::MachineIdentity;
 use collaboration_protocol::UuidIdentity;
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 
 #[derive(Clone, Debug)]
 pub struct RouterIdentity {
@@ -56,7 +56,7 @@ mod tests {
     use super::{RouterIdentity, RouterIdentityError};
     use crate::MachineIdentity;
     use collaboration_protocol::UuidIdentity;
-    use fleet_sync_protocol::PeerId;
+    use fleet_protocol::PeerId;
 
     #[test]
     fn router_identity_rejects_a_machine_from_another_service() {

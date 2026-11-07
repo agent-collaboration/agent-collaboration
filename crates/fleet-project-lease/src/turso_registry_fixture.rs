@@ -4,7 +4,7 @@ use durable_steps::{
     AtomicStore, CallFailure, CallId, CallTarget, Engine, Host, OperationState, RequestKey, Task,
     Uuid, WakeFailure, storage::TransactionScope, turso_store::TursoStore,
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use runtime_primitives::{Clock, IdSource, WakeScheduler};
 use serde::{Serialize, de::DeserializeOwned};
 use sqlx_core::{
@@ -149,7 +149,7 @@ impl TestHost {
         let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
         let mut migrator = sqlx_core::migrate::Migrator::new(Path::new(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../fleet-sync-receiver/migrations"
+            "/../fleet-project-copy/migrations"
         )))
         .await?;
         migrator.dangerous_set_table_name("_fleet_sync_copy_migrations");
@@ -201,7 +201,7 @@ impl Host for TestHost {
                 encode(WithdrawAnswer::Withdrawn)?
             }
             "fleet-sync.registration-admission" => {
-                let request: fleet_sync_protocol::RegistrationAdmission = decode(request)?;
+                let request: fleet_protocol::RegistrationAdmission = decode(request)?;
                 encode(
                     self.gate
                         .admit_registration(&request.database, &request.writer, call)
@@ -210,7 +210,7 @@ impl Host for TestHost {
                 )?
             }
             "fleet-sync.retirement-admission" => {
-                let request: fleet_sync_protocol::RetirementAdmission = decode(request)?;
+                let request: fleet_protocol::RetirementAdmission = decode(request)?;
                 encode(
                     self.gate
                         .admit_retirement(&request.database, call)
@@ -219,7 +219,7 @@ impl Host for TestHost {
                 )?
             }
             "fleet-sync.claim-reservation" => {
-                let request: fleet_sync_protocol::ClaimReservation = decode(request)?;
+                let request: fleet_protocol::ClaimReservation = decode(request)?;
                 let answer = self
                     .gate
                     .reserve(&request.change, call)
@@ -236,7 +236,7 @@ impl Host for TestHost {
                         reason: durable_steps::NotSentReason::Unreachable { last_seen: None },
                     });
                 }
-                let request: fleet_sync_protocol::ClaimSettlement = decode(request)?;
+                let request: fleet_protocol::ClaimSettlement = decode(request)?;
                 self.gate
                     .settle(&request.change, request.outcome, call)
                     .await
@@ -340,7 +340,7 @@ pub(super) async fn open_store(
                         report_schema_support(
                             scope,
                             &report,
-                            fleet_sync_protocol::SyncTime::from_unix_millis(1000),
+                            fleet_protocol::SyncTime::from_unix_millis(1000),
                         )
                         .await
                         .map_err(storage)?;

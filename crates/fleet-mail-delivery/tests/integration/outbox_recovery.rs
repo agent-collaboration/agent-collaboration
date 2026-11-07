@@ -1,6 +1,6 @@
 use super::support::*;
 use durable_steps::AtomicStore;
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 
 #[tokio::test]
 async fn recovered_terminal_status_survives_a_stale_submit_answer() {

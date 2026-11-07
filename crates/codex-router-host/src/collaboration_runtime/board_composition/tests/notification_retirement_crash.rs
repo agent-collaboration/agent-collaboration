@@ -3,7 +3,7 @@ use super::*;
 use super::super::notification_owner::ProjectNotificationFixture;
 use crate::collaboration_runtime::board_composition::tests::notification_publisher::project_fixture::NotificationSeed;
 use collaboration_contracts::ProjectReplicationPosition;
-use fleet_sync_protocol::{CancelBody, DeliveryCancel, RecipientOutcome};
+use fleet_protocol::{CancelBody, DeliveryCancel, RecipientOutcome};
 use message_board::{FeedCursor, HandoffSeq, MailItemRef};
 use message_board_storage::MailHandoffItem;
 
@@ -13,7 +13,7 @@ const REJECT_PROGRESS: &str = "CREATE TEMP TRIGGER reject_retirement_progress BE
 #[serde(deny_unknown_fields)]
 struct RetirementCheckpoint {
     seed: NotificationSeed,
-    receiver: fleet_sync_protocol::ReceiverId,
+    receiver: fleet_protocol::ReceiverId,
     through: HandoffSeq,
     feed: FeedCursor,
     frozen: serde_json::Value,

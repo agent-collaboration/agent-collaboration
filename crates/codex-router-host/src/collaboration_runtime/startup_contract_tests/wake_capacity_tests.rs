@@ -1,7 +1,7 @@
 use super::{BOUND, client, start_host, target};
 use collaboration_mail_protocol::{MailSender, WakeBody};
 use collaboration_protocol::{OperationId, WakeMutationRequest, WakeSendRequest, WakeShowRequest};
-use fleet_sync_protocol::{DeliveryItem, ItemId, Recipient};
+use fleet_protocol::{DeliveryItem, ItemId, Recipient};
 use serde_json::json;
 
 #[tokio::test]

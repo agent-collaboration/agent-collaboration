@@ -1,6 +1,6 @@
 #![allow(dead_code, clippy::unwrap_used)]
 use crate::support::*;
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 pub struct VariableTypes;
 impl DeliveryTypes for VariableTypes {
     const MAX_SENDER_BYTES: u32 = 64;

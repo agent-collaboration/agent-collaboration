@@ -1,6 +1,6 @@
 use board_fleet_sync::MachineSessionStore;
-use fleet_sync_protocol::{NoticePosition, SessionId};
-use fleet_sync_session::{ClientSessionState, SessionClientStore};
+use fleet_protocol::{NoticePosition, SessionId};
+use fleet_session::{ClientSessionState, SessionClientStore};
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 

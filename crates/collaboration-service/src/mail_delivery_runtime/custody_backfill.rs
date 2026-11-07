@@ -1,6 +1,6 @@
 //! Library-owned startup markers commit with their custody changes and admissions.
 use super::{AtomicStore, MailDeliveryRuntime, RemoveMailRecord, RouterDeliveryTypes, StoreError};
-use fleet_sync_delivery::{admit_existing_record_removals, backfill_submitters, delivery_rollback};
+use fleet_mail_delivery::{admit_existing_record_removals, backfill_submitters, delivery_rollback};
 use runtime_primitives::Clock;
 
 impl MailDeliveryRuntime {
@@ -13,7 +13,7 @@ impl MailDeliveryRuntime {
                 Box::pin(async move {
                     let admitted = admit_existing_record_removals::<_, RemoveMailRecord>(
                         scope,
-                        fleet_sync_delivery::DeliveryHostRole::Machine,
+                        fleet_mail_delivery::DeliveryHostRole::Machine,
                         now,
                     )
                     .await
@@ -38,7 +38,7 @@ impl MailDeliveryRuntime {
                     Box::pin(async move {
                         backfill_submitters::<RouterDeliveryTypes, _, _>(
                             scope,
-                            fleet_sync_delivery::DeliveryHostRole::Machine,
+                            fleet_mail_delivery::DeliveryHostRole::Machine,
                             binding.as_ref(),
                             now,
                         )
@@ -50,9 +50,9 @@ impl MailDeliveryRuntime {
             match result {
                 Err(error) => {
                     if matches!(
-                        fleet_sync_delivery::classify_delivery_store_error(error.clone()),
-                        fleet_sync_delivery::DeliveryTransactionFailure::BindingUnavailable {
-                            reason: fleet_sync_protocol::SenderBindingFailure::Unknown,
+                        fleet_mail_delivery::classify_delivery_store_error(error.clone()),
+                        fleet_mail_delivery::DeliveryTransactionFailure::BindingUnavailable {
+                            reason: fleet_protocol::SenderBindingFailure::Unknown,
                             ..
                         }
                     ) && super::installation_directory::refresh_sender_bindings(

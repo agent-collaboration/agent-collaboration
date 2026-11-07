@@ -3,7 +3,7 @@ use super::{MailItemRef, ProjectAdmissionError, ProjectWriteTransaction, Subscri
 use crate::notification_publisher::GenerationPreventedFollow;
 use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::NotificationSource;
-use fleet_sync_protocol::{DeliveryEnvelope, ItemId};
+use fleet_protocol::{DeliveryEnvelope, ItemId};
 use message_board_storage::{MailCancelGroupCause, MailHandoffItem};
 use std::collections::HashSet;
 

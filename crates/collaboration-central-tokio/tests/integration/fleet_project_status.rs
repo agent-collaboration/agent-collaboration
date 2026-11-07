@@ -11,18 +11,18 @@ use durable_steps::{
     AtomicStore, CallId, OperationId, StoreError, Task,
     storage::{CallReach, JournalStorage, OperationExecution, StepState},
 };
-use fleet_sync_delivery::{PublicationRef, PublicationTarget, PublishStatus, StatusStream};
-use fleet_sync_protocol::{
+use fleet_mail_delivery::{PublicationRef, PublicationTarget, PublishStatus, StatusStream};
+use fleet_protocol::{
     ClientFrame, DeliveryAnswer, DeliveryRequest, DeliveryStatus, FrameId, ItemId, OperationAnswer,
     OperationRequest, ServerCall, ServerFrame, ServerRequest, StatusCursor, StatusPublication,
     StatusVersion, Submitter,
 };
-use fleet_sync_tokio_runner::TokioObject;
+use fleet_tokio_objects::TokioObject;
 use runtime_primitives::Clock;
 use serde_json::json;
 
 type Publisher = PublishStatus<TokioObject<CoreHost<Io>>, sqlx_turso::Turso, BoardDeliveryTypes>;
-type Acceptance = <BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Acceptance;
+type Acceptance = <BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Acceptance;
 type Publication = StatusPublication<Acceptance>;
 
 async fn admit(fixture: &Fixture) -> TestResult<(OperationId, Publication)> {
@@ -48,7 +48,7 @@ async fn admit(fixture: &Fixture) -> TestResult<(OperationId, Publication)> {
                 )
                 .append_and_admit::<Publisher>(&input, now)
                 .await
-                .map_err(fleet_sync_delivery::delivery_rollback)?;
+                .map_err(fleet_mail_delivery::delivery_rollback)?;
                 let mut publications = Vec::new();
                 for id in scope.due(now).await? {
                     let record = scope

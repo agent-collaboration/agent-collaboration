@@ -1,7 +1,7 @@
 //! Central's one-day retention rule uses only the receiver's public inspection and discard APIs.
 use crate::step_driver::{StepCallback, StepResult};
 use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScope};
-use fleet_sync_receiver::{CopyInspection, StagedTransaction};
+use fleet_project_copy::{CopyInspection, StagedTransaction};
 use runtime_primitives::SyncTime;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -38,7 +38,7 @@ where
         Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    match fleet_sync_receiver::inspect_copy(scope).await {
+    match fleet_project_copy::inspect_copy(scope).await {
         CopyInspection::Live { staged_parts, .. } => {
             let mut next = None::<SyncTime>;
             for transaction in staged_parts {
@@ -72,7 +72,7 @@ where
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
             let mut next = None::<SyncTime>;
-            match fleet_sync_receiver::inspect_copy(scope).await {
+            match fleet_project_copy::inspect_copy(scope).await {
                 CopyInspection::Live {
                     status,
                     staged_parts,
@@ -87,12 +87,12 @@ where
                         if transaction.transaction_key.epoch < status.fence
                             || at.is_some_and(|at| self.now >= at)
                         {
-                            fleet_sync_receiver::discard_staged_parts(
+                            fleet_project_copy::discard_staged_parts(
                                 scope,
                                 &transaction.transaction_key,
                             )
                             .await
-                            .map_err(fleet_sync_receiver::receiver_rollback)?;
+                            .map_err(fleet_project_copy::receiver_rollback)?;
                         } else if let Some(at) = at {
                             next = Some(next.map_or(at, |previous| previous.min(at)));
                         }

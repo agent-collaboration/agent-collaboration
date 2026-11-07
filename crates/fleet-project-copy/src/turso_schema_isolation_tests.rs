@@ -1,7 +1,7 @@
 //! Local hook tables stay outside the copy's replicated schema and snapshot.
 #![allow(clippy::panic_in_result_fn)]
 use crate::{turso_rule_fixture::*, *};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{connection::Connection, row::Row};
 use sqlx_turso::Turso;
 

@@ -3,8 +3,8 @@ use crate::{
     session_host::{SessionInput, SocketPeer},
 };
 use durable_steps::Host;
-use fleet_sync_protocol::*;
-use fleet_sync_session::*;
+use fleet_protocol::*;
+use fleet_session::*;
 use std::{sync::Arc, time::Duration};
 use tokio::{
     sync::{mpsc, watch},
@@ -13,7 +13,7 @@ use tokio::{
 
 impl<
     P: ConsumerProtocol,
-    A: PeerAuthenticator<Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute>,
+    A: PeerAuthenticator<Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute>,
     D: SessionHandler<P>,
     H: Host,
 > SessionHost<P, A, D, H>

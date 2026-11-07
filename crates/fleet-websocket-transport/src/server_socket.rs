@@ -1,6 +1,6 @@
 use axum::extract::ws::{Message, WebSocket};
-use fleet_sync_protocol::CloseReason;
-use fleet_sync_session::{Bytes, ConnectionClosed, TransportConnection};
+use fleet_protocol::CloseReason;
+use fleet_session::{Bytes, ConnectionClosed, TransportConnection};
 use std::time::Duration;
 use tokio::time::timeout;
 

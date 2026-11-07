@@ -1,13 +1,13 @@
 use crate::{SessionHandler, SessionHost, session_host::PendingPeerCall};
 use durable_steps::{CallFailure, Host, NotSentReason};
-use fleet_sync_protocol::*;
-use fleet_sync_session::*;
+use fleet_protocol::*;
+use fleet_session::*;
 use std::time::Duration;
 use tokio::sync::oneshot;
 
 impl<
     P: ConsumerProtocol,
-    A: PeerAuthenticator<Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute>,
+    A: PeerAuthenticator<Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute>,
     D: SessionHandler<P>,
     H: Host,
 > SessionHost<P, A, D, H>

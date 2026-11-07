@@ -11,8 +11,8 @@ use collaboration_protocol::{
     WakeSnapshot, WakeState,
 };
 use durable_steps::{AtomicStore, StoreError};
-use fleet_sync_delivery::{Outbox, delivery_rollback};
-use fleet_sync_protocol::{
+use fleet_mail_delivery::{Outbox, delivery_rollback};
+use fleet_protocol::{
     DeliveryItem, DeliveryStatus, ItemId, PeerId, StatusPublication, StatusVersion,
 };
 use serde_json::json;
@@ -85,7 +85,7 @@ async fn publish_recorded_status(
         collaboration_mail_protocol::MailSender::HumanUser {
             installation: String::from(service(1)).try_into().unwrap(),
         },
-        fleet_sync_protocol::Recipient {
+        fleet_protocol::Recipient {
             peer: recipient.fixture.host.config.local.owner,
             address: serde_json::from_value(serde_json::to_value(request.target).unwrap()).unwrap(),
         },
@@ -99,7 +99,7 @@ async fn publish_recorded_status(
     let relay = PeerId::new(uuid::Uuid::now_v7()).unwrap();
     let limits = source.fixture.host.config.local.limits;
     let binding = source.fixture.host.binding.clone();
-    let submitter = fleet_sync_protocol::Submitter::Machine(source.fixture.host.config.local.owner);
+    let submitter = fleet_protocol::Submitter::Machine(source.fixture.host.config.local.owner);
     let observed_at = runtime_primitives::Clock::now(source.fixture.host.as_ref());
     source
         .fixture
@@ -243,7 +243,7 @@ async fn wake_operations_remote_expired_new_request_has_no_custody() {
         .unwrap();
     assert!(matches!(
         state,
-        fleet_sync_delivery::OutboxStatusState::Unknown
+        fleet_mail_delivery::OutboxStatusState::Unknown
     ));
     drop(mail);
     source.close().await;

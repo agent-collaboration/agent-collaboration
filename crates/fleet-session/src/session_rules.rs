@@ -6,7 +6,7 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 
 // Identify correlation independently from the consumer's body types. Unknown
 // fields are checked by ClientFrame's full decoder after this envelope is read.

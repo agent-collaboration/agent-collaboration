@@ -1,6 +1,6 @@
 use super::support::{outbox_projection::*, *};
 use durable_steps::AtomicStore;
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 
 fn failed_status() -> DeliveryStatus<Acceptance> {
     DeliveryStatus::Refused {

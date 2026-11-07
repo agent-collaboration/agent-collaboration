@@ -10,9 +10,9 @@ use board_central_test_support::{
 };
 use board_sync_protocol::{ProjectClaimReply, ProjectClaimRequest};
 use collaboration_contracts::ProjectClaim;
-use fleet_sync_protocol::*;
-use fleet_sync_session::SessionClientStore;
-use fleet_sync_writer::BootstrapGrant;
+use fleet_project_writer::BootstrapGrant;
+use fleet_protocol::*;
+use fleet_session::SessionClientStore;
 use message_board::{ProjectId, ProtocolVersion};
 use runtime_primitives::{Clock, SystemClock};
 use std::time::Duration;
@@ -205,7 +205,7 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
             .is_some_and(|receipt| receipt.verified && receipt.ready)
     );
     assert!(
-        matches!(database.writer_state().await?, fleet_sync_lease::WriterState::Paused { epoch: actual, .. } if actual == epoch)
+        matches!(database.writer_state().await?, fleet_project_lease::WriterState::Paused { epoch: actual, .. } if actual == epoch)
     );
     let claiming = projects.clone();
     let mut claimed = tokio::spawn(async move { claiming.claim(&request).await });
@@ -240,7 +240,7 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
         central.runtime_control(connection.clone(), RuntimeControl::ResumeDispatch { key: board_central_test_support::DispatchKey::any(board_central_test_support::ObjectAddress::Fleet) }).await?;
         assert!(matches!(timeout(BOUND, &mut claimed).await???, ProjectClaimReply::Claimed { epoch: actual, start: actual_start, .. } if actual == epoch && actual_start == start));
         assert!(registry.existing_project(&project).await?.is_some());
-        assert!(matches!(database.writer_state().await?, fleet_sync_lease::WriterState::Writing { epoch: actual } if actual == epoch));
+        assert!(matches!(database.writer_state().await?, fleet_project_lease::WriterState::Writing { epoch: actual } if actual == epoch));
         // A repeated cancelled/finished install can inspect its native receipt
         // after the drained install-control pool has closed.
         install.finish_install().await?;
@@ -259,7 +259,7 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
                         .await?
                         .is_some_and(|state| state.notice_cursor >= grant_position)
                     {
-                        return Ok::<_, fleet_sync_session::StoreError>(());
+                        return Ok::<_, fleet_session::StoreError>(());
                     }
                     tokio::task::yield_now().await;
                 }

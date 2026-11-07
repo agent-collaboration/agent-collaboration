@@ -4,7 +4,7 @@ use crate::{
     retained_file_fixture::*,
     *,
 };
-use fleet_sync_protocol::{GateReason, GateReasonCode};
+use fleet_protocol::{GateReason, GateReasonCode};
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     executor::Executor,
@@ -17,7 +17,7 @@ async fn read_and_check_guard(path: &std::path::Path) -> TestResult {
     assert_eq!(
         retained.registration_outcome(),
         &WriterRegistrationOutcome::Refused {
-            reason: fleet_sync_protocol::RegistrationRefusal::DatabaseRejected {
+            reason: fleet_protocol::RegistrationRefusal::DatabaseRejected {
                 reason: GateReason {
                     code: GateReasonCode::new("fixture_rejected")?,
                     detail: "retain after rejection".into(),
@@ -175,7 +175,7 @@ async fn retained_application_history_is_checked_without_running_migrations() ->
 
 #[tokio::test]
 async fn retained_grant_reports_the_exact_persisted_ready_outcome() -> TestResult {
-    use fleet_sync_protocol::{Epoch, LeaseState, LeaseStatus};
+    use fleet_protocol::{Epoch, LeaseState, LeaseStatus};
     use runtime_primitives::Clock;
     use std::time::Duration;
     let directory = tempfile::tempdir()?;
@@ -253,7 +253,7 @@ async fn retained_unknown_or_invalid_authority_is_refused_without_repair() -> Te
 
 #[tokio::test]
 async fn retained_authority_for_another_database_is_refused_without_repair() -> TestResult {
-    use fleet_sync_protocol::{
+    use fleet_protocol::{
         DatabaseId, Epoch, LeaseState, LeaseStatus, RenewAnswer, RenewResult, SyncTime,
     };
     let directory = tempfile::tempdir()?;
@@ -301,7 +301,7 @@ async fn retained_authority_for_another_database_is_refused_without_repair() -> 
 
     match RetainedFile::open_read_only(&path, ReadSchema).await {
         Err(OpenError::Holder {
-            error: fleet_sync_lease::HolderError::LeaseMismatch,
+            error: fleet_project_lease::HolderError::LeaseMismatch,
         }) => {}
         Err(error) => return Err(format!("wrong authority refusal: {error:?}").into()),
         Ok(retained) => {

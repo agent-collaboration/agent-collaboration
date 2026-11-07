@@ -5,7 +5,7 @@ use collaboration_central_core::{
     CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
 };
 use durable_steps::{CallFailure, NotSentReason};
-use fleet_sync_lease::RegistryConfig;
+use fleet_project_lease::RegistryConfig;
 use runtime_primitives::{AlarmOwner, Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use std::{cell::OnceCell, future::Future, sync::Arc};
 use worker::{
@@ -418,8 +418,7 @@ impl ShellActor {
                     .map_err(error)?;
                 let attachment: BindingAttachment = serde_json::from_slice(&bytes)?;
                 if address != ObjectAddress::Fleet
-                    || attachment.registration
-                        != fleet_sync_session::ConnectionRegistration::Opening
+                    || attachment.registration != fleet_session::ConnectionRegistration::Opening
                 {
                     return Err(error("session binding address mismatch"));
                 }

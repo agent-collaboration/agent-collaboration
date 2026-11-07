@@ -4,14 +4,14 @@ use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, enroll_admitted_peer, owner_assertion,
 };
 use durable_steps::OperationId;
-use fleet_sync_lease::{LeaseHolder, LeasePolicy, WriterState};
-use fleet_sync_protocol::{
+use fleet_project_lease::{LeaseHolder, LeasePolicy, WriterState};
+use fleet_project_writer::{
+    Migration, ReplicatedDatabase, ReplicatedSchema, WriteRefusal, WriterOptions,
+};
+use fleet_protocol::{
     ClientAnswer, ClientFrame, DatabaseId, Epoch, FrameId, LeaseState, LeaseStatus, NoConsumer,
     PeerId, ReleaseAnswer, ReleaseRefusal, ReleaseRequest, ServerCall, ServerCallAnswer,
     ServerFrame, ServerRequest, TransferId, WithdrawAnswer, WithdrawRelease,
-};
-use fleet_sync_writer::{
-    Migration, ReplicatedDatabase, ReplicatedSchema, WriteRefusal, WriterOptions,
 };
 use futures_util::{SinkExt, StreamExt};
 use reqwest_websocket::{Message, WebSocket};
@@ -42,23 +42,22 @@ static MIGRATIONS: LazyLock<Vec<Migration>> = LazyLock::new(|| {
         false,
     )]
 });
-static TABLES: LazyLock<
-    Result<Vec<fleet_sync_protocol::TableName>, fleet_sync_protocol::TextValueError>,
-> = LazyLock::new(|| {
-    ["holder_records"]
-        .into_iter()
-        .map(fleet_sync_protocol::TableName::new)
-        .collect()
-});
+static TABLES: LazyLock<Result<Vec<fleet_protocol::TableName>, fleet_protocol::TextValueError>> =
+    LazyLock::new(|| {
+        ["holder_records"]
+            .into_iter()
+            .map(fleet_protocol::TableName::new)
+            .collect()
+    });
 
 pub(super) struct HolderSchema {
-    tables: &'static [fleet_sync_protocol::TableName],
+    tables: &'static [fleet_protocol::TableName],
 }
 impl ReplicatedSchema for HolderSchema {
     fn migrations(&self) -> &'static [Migration] {
         MIGRATIONS.as_slice()
     }
-    fn replicated_tables(&self) -> &'static [fleet_sync_protocol::TableName] {
+    fn replicated_tables(&self) -> &'static [fleet_protocol::TableName] {
         self.tables
     }
 }

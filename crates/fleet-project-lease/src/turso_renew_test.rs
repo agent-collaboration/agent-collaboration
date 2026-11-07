@@ -2,7 +2,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::{registry_records::*, registry_storage::RegistryStorage, *};
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::connection::{ConnectOptions, Connection};
 use sqlx_turso::{Turso, TursoConnectOptions, TursoConnection};
 use std::time::Duration;
@@ -66,7 +66,7 @@ async fn setup() -> TestResult<TursoConnection> {
                 Epoch::new(1)?,
                 now(0),
             ),
-            fleet_sync_protocol::SyncTime::from_unix_millis(1000),
+            fleet_protocol::SyncTime::from_unix_millis(1000),
         )
         .await?;
     RegistryStorage(&mut scope)
@@ -78,14 +78,14 @@ async fn setup() -> TestResult<TursoConnection> {
                 last_renewed_at: now(0),
                 expires_at: now(200),
             },
-            fleet_sync_protocol::SyncTime::from_unix_millis(1000),
+            fleet_protocol::SyncTime::from_unix_millis(1000),
         )
         .await?;
     RegistryStorage(&mut scope)
         .save_floor(
             database,
             Epoch::new(1)?,
-            fleet_sync_protocol::SyncTime::from_unix_millis(1000),
+            fleet_protocol::SyncTime::from_unix_millis(1000),
         )
         .await?;
     RegistryStorage(&mut scope)
@@ -97,7 +97,7 @@ async fn setup() -> TestResult<TursoConnection> {
                 granted_at: now(0),
                 ended_at: None,
             },
-            fleet_sync_protocol::SyncTime::from_unix_millis(1000),
+            fleet_protocol::SyncTime::from_unix_millis(1000),
         )
         .await?;
     transaction.commit().await?;
@@ -203,13 +203,13 @@ async fn replay_preserves_recorded_answer_but_returns_current_lease_after_later_
     let ended = ReplicationPosition::new(Epoch::new(1)?, CommitSequence::new(9));
     old.ended_at = Some(ended);
     RegistryStorage(&mut scope)
-        .save_history(&old, fleet_sync_protocol::SyncTime::from_unix_millis(1000))
+        .save_history(&old, fleet_protocol::SyncTime::from_unix_millis(1000))
         .await?;
     RegistryStorage(&mut scope)
         .save_floor(
             database()?,
             Epoch::new(2)?,
-            fleet_sync_protocol::SyncTime::from_unix_millis(1000),
+            fleet_protocol::SyncTime::from_unix_millis(1000),
         )
         .await?;
     RegistryStorage(&mut scope)
@@ -221,7 +221,7 @@ async fn replay_preserves_recorded_answer_but_returns_current_lease_after_later_
                 last_renewed_at: now(260),
                 expires_at: now(460),
             },
-            fleet_sync_protocol::SyncTime::from_unix_millis(1000),
+            fleet_protocol::SyncTime::from_unix_millis(1000),
         )
         .await?;
     let mut record = RegistryStorage(&mut scope)
@@ -230,10 +230,7 @@ async fn replay_preserves_recorded_answer_but_returns_current_lease_after_later_
         .ok_or("database missing")?;
     record.advance_revision(Epoch::new(2)?, now(260))?;
     RegistryStorage(&mut scope)
-        .save_database(
-            &record,
-            fleet_sync_protocol::SyncTime::from_unix_millis(1000),
-        )
+        .save_database(&record, fleet_protocol::SyncTime::from_unix_millis(1000))
         .await?;
     let replay = renew(
         &mut scope,
@@ -273,7 +270,7 @@ async fn open_transfer_does_not_stop_renewal_and_retired_marker_precedes_saved_a
     let mut scope = TursoScope(&mut transaction);
     let transfer = TransferId::new(uuid::Uuid::from_u128(0x019eef00000070008000000000000014))?;
     let offered = HolderChangeRequest::Move {
-        reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+        reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
         attempt: transfer,
         database: database()?,
         from_epoch: Epoch::new(1)?,
@@ -291,7 +288,7 @@ async fn open_transfer_does_not_stop_renewal_and_retired_marker_precedes_saved_a
                 target_schema: None,
                 follow_up: None,
             },
-            fleet_sync_protocol::SyncTime::from_unix_millis(1000),
+            fleet_protocol::SyncTime::from_unix_millis(1000),
         )
         .await?;
     RegistryStorage(&mut scope)
@@ -304,7 +301,7 @@ async fn open_transfer_does_not_stop_renewal_and_retired_marker_precedes_saved_a
                 },
                 now(200),
             ),
-            fleet_sync_protocol::SyncTime::from_unix_millis(1000),
+            fleet_protocol::SyncTime::from_unix_millis(1000),
         )
         .await?;
     assert!(
@@ -324,10 +321,7 @@ async fn open_transfer_does_not_stop_renewal_and_retired_marker_precedes_saved_a
         .ok_or("database missing")?;
     record.change_lifecycle(DatabaseLifecycle::Retired { at: now(500) }, now(500))?;
     RegistryStorage(&mut scope)
-        .save_database(
-            &record,
-            fleet_sync_protocol::SyncTime::from_unix_millis(1000),
-        )
+        .save_database(&record, fleet_protocol::SyncTime::from_unix_millis(1000))
         .await?;
     assert_eq!(
         renew(

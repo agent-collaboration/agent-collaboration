@@ -6,8 +6,8 @@ use codex_router_secret_store::{
     model::SecretKey,
     runtime_credential_store::RuntimeCredentialStore,
 };
-use fleet_sync_protocol::{PeerId, ReceiverId};
-use fleet_sync_session::{Endpoint, PeerCredential};
+use fleet_protocol::{PeerId, ReceiverId};
+use fleet_session::{Endpoint, PeerCredential};
 use serde::{Deserialize, Serialize};
 use std::{
     io,

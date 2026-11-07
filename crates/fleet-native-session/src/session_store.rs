@@ -1,15 +1,16 @@
 //! Session tasks borrow the same SQL journal and staged registrations as socket inputs.
 use crate::session_host::SessionRuntime;
-use crate::{SessionHandler, SessionHost, SessionHostError, TokioObject};
+use crate::{SessionHandler, SessionHost, SessionHostError};
 use durable_steps::{
     AtomicStore, BoxFuture, Engine, Host, JournalScope, StoreError, storage::TransactionScope,
     turso_store::TursoScope,
 };
-use fleet_sync_protocol::*;
-use fleet_sync_session::{
+use fleet_protocol::*;
+use fleet_session::{
     ConnectionRegistration, PeerAuthenticator, PublishSchemaSupport, PublishSchemaSupportInput,
     SessionEffect, SessionScope, schema_support_request_key,
 };
+use fleet_tokio_objects::TokioObject;
 use sqlx_turso::{Turso, TursoConnection};
 use std::{
     collections::BTreeMap,
@@ -20,7 +21,7 @@ use tokio::sync::Mutex;
 
 pub(crate) struct SessionStore<
     P: ConsumerProtocol,
-    A: PeerAuthenticator<Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute>,
+    A: PeerAuthenticator<Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute>,
     D: SessionHandler<P>,
     H: Host,
 > {
@@ -33,7 +34,7 @@ pub(crate) struct SessionStore<
 pub(crate) struct SessionTransaction<
     't,
     P: ConsumerProtocol,
-    A: PeerAuthenticator<Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute>,
+    A: PeerAuthenticator<Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute>,
     D: SessionHandler<P>,
     H: Host,
 > {
@@ -46,7 +47,7 @@ pub(crate) struct SessionTransaction<
 impl<
     't,
     P: ConsumerProtocol,
-    A: PeerAuthenticator<Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute>,
+    A: PeerAuthenticator<Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute>,
     D: SessionHandler<P>,
     H: Host,
 > SessionTransaction<'t, P, A, D, H>
@@ -67,7 +68,7 @@ impl<
 }
 impl<
     P: ConsumerProtocol,
-    A: PeerAuthenticator<Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute>,
+    A: PeerAuthenticator<Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute>,
     D: SessionHandler<P>,
     H: Host,
 > TransactionScope for SessionTransaction<'_, P, A, D, H>
@@ -83,7 +84,7 @@ impl<
 }
 impl<
     P: ConsumerProtocol,
-    A: PeerAuthenticator<Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute>,
+    A: PeerAuthenticator<Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute>,
     D: SessionHandler<P>,
     H: Host,
 > SessionScope for SessionTransaction<'_, P, A, D, H>
@@ -102,7 +103,7 @@ impl<
         &mut self,
         input: PublishSchemaSupportInput,
         now: SyncTime,
-    ) -> Result<(), fleet_sync_session::StoreError> {
+    ) -> Result<(), fleet_session::StoreError> {
         let key = schema_support_request_key(&input.report).map_err(session_error)?;
         self.admit::<PublishSchemaSupport<SessionStore<P, A, D, H>, Turso>>(&key, &input)
             .await
@@ -124,14 +125,14 @@ impl<
         });
     }
 }
-fn session_error(error: impl std::fmt::Display) -> fleet_sync_session::StoreError {
-    fleet_sync_session::StoreError::Unavailable {
+fn session_error(error: impl std::fmt::Display) -> fleet_session::StoreError {
+    fleet_session::StoreError::Unavailable {
         message: error.to_string(),
     }
 }
 impl<
     P: ConsumerProtocol,
-    A: PeerAuthenticator<Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute>,
+    A: PeerAuthenticator<Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute>,
     D: SessionHandler<P>,
     H: Host,
 > AtomicStore for SessionStore<P, A, D, H>
@@ -198,12 +199,12 @@ impl<
 
 pub(crate) type SessionEngine<P, A, D, H> = Engine<SessionStore<P, A, D, H>, H>;
 
-impl<P, A, D, R, C> SessionHost<P, A, D, crate::TokioHost<R, C>>
+impl<P, A, D, R, C> SessionHost<P, A, D, fleet_tokio_objects::TokioHost<R, C>>
 where
     P: ConsumerProtocol,
-    A: PeerAuthenticator<Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute>,
+    A: PeerAuthenticator<Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute>,
     D: SessionHandler<P>,
-    R: crate::CallRouter,
+    R: fleet_tokio_objects::CallRouter,
     C: runtime_primitives::Clock + 'static,
 {
     /// Own and join the session publication engine alongside the service's other runners.
@@ -215,7 +216,7 @@ where
             .owner
             .set(Arc::downgrade(&self))
             .map_err(|_| SessionHostError::rule("session runner already owned"))?;
-        crate::TokioRunner::new(self.engine.clone(), self.object.host())
+        fleet_tokio_objects::TokioRunner::new(self.engine.clone(), self.object.host())
             .run(shutdown)
             .await
             .map_err(Into::into)

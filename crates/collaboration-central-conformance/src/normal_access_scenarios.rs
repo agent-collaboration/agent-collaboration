@@ -5,7 +5,7 @@ use crate::{
     fixture_claims, machine_assertion, owner_assertion, sign_assertion,
 };
 use collaboration_central_core::{AccessCaller, AccessRefusal};
-use fleet_sync_protocol::AuthRefusal;
+use fleet_protocol::AuthRefusal;
 use futures_util::StreamExt;
 use reqwest_websocket::{Message, RequestBuilderExt, WebSocket};
 use serde_json::{Value, json};

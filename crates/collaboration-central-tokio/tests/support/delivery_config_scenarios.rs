@@ -4,7 +4,7 @@ use collaboration_central_core::{
     RevocationControl, RevocationControlInput, RevocationObservation,
 };
 use durable_steps::OperationState;
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use serde_json::{Value, json};
 use std::time::Duration;
 

@@ -3,7 +3,7 @@ use super::projection;
 use super::support;
 
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use projection::*;
 use sqlx_core::row::Row;
 use sqlx_turso::Turso;

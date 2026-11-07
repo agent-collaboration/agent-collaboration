@@ -1,6 +1,6 @@
 use crate::{OpenError, schema_inspection::schema_entries, writer_scope::WriterScope};
-use fleet_sync_protocol::schema_catalog::{current_replicated_catalog, snapshot_schema_statements};
-use fleet_sync_protocol::{SchemaEntry, SchemaIdentity, TableName, schema_fingerprint};
+use fleet_protocol::schema_catalog::{current_replicated_catalog, snapshot_schema_statements};
+use fleet_protocol::{SchemaEntry, SchemaIdentity, TableName, schema_fingerprint};
 use sqlx_turso::TursoConnection;
 
 pub(crate) async fn snapshot_schema(

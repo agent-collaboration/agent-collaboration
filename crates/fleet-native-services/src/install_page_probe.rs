@@ -1,7 +1,7 @@
 use crate::{ServiceConsumer, ServiceError, ServiceHandle};
-use fleet_sync_protocol::ConsumerProtocol;
-use fleet_sync_receiver::InstallPageReceipt;
-use fleet_sync_session::PeerAuthenticator;
+use fleet_project_copy::InstallPageReceipt;
+use fleet_protocol::ConsumerProtocol;
+use fleet_session::PeerAuthenticator;
 use tokio::sync::{Notify, watch};
 
 #[derive(Clone, Default)]
@@ -14,7 +14,7 @@ enum ProbeState {
 pub(crate) struct InstallPageProbe {
     state: watch::Sender<ProbeState>,
     release: Notify,
-    missing: watch::Sender<Option<fleet_sync_protocol::ReceiverId>>,
+    missing: watch::Sender<Option<fleet_protocol::ReceiverId>>,
 }
 impl Default for InstallPageProbe {
     fn default() -> Self {
@@ -26,7 +26,7 @@ impl Default for InstallPageProbe {
     }
 }
 impl InstallPageProbe {
-    pub(crate) fn source_missing(&self, receiver: fleet_sync_protocol::ReceiverId) {
+    pub(crate) fn source_missing(&self, receiver: fleet_protocol::ReceiverId) {
         self.missing.send_replace(Some(receiver));
     }
     pub(crate) async fn after_commit(&self, receipt: InstallPageReceipt) {
@@ -47,13 +47,13 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > ServiceHandle<P, C, A>
 {
     pub async fn wait_source_unattached(
         &self,
-        receiver: fleet_sync_protocol::ReceiverId,
+        receiver: fleet_protocol::ReceiverId,
     ) -> Result<(), ServiceError> {
         let mut changes = self.state.install_page_probe.missing.subscribe();
         loop {

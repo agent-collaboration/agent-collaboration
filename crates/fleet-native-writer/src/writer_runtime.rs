@@ -1,10 +1,12 @@
-use crate::{SessionRequests, TokioHost, TokioRunner, WriterSessionCalls};
+use crate::WriterSessionCalls;
 use durable_steps::{Engine, OperationId, StoreError};
-use fleet_sync_protocol::{ConsumerProtocol, ReceiverId};
-use fleet_sync_writer::{
+use fleet_project_writer::{
     OpenError, RegisterDatabase, RenewLease, ReplicatedDatabase, ReplicatedSchema, SeedCopy,
     WriterJournalStore, WriterRegistrationOutcome,
 };
+use fleet_protocol::{ConsumerProtocol, ReceiverId};
+use fleet_session_client::SessionRequests;
+use fleet_tokio_objects::{TokioHost, TokioRunner};
 use runtime_primitives::SystemClock;
 use std::sync::Arc;
 use tokio::sync::watch;
@@ -77,7 +79,7 @@ impl<S: ReplicatedSchema, P: ConsumerProtocol> NativeWriterRuntime<S, P> {
     }
     pub async fn install_snapshot(
         &self,
-        attempt: fleet_sync_protocol::InstallAttemptId,
+        attempt: fleet_protocol::InstallAttemptId,
     ) -> Result<crate::InstallHandle<WriterHost<S, P>>, durable_steps::StartRefusal> {
         self.installer
             .as_ref()
@@ -89,7 +91,7 @@ impl<S: ReplicatedSchema, P: ConsumerProtocol> NativeWriterRuntime<S, P> {
     }
     pub async fn wait_install(
         &self,
-        attempt: fleet_sync_protocol::InstallAttemptId,
+        attempt: fleet_protocol::InstallAttemptId,
     ) -> Result<crate::InstallRecord, StoreError> {
         self.installer
             .as_ref()
@@ -101,7 +103,7 @@ impl<S: ReplicatedSchema, P: ConsumerProtocol> NativeWriterRuntime<S, P> {
     }
     pub async fn install_record(
         &self,
-        install: fleet_sync_protocol::InstallId,
+        install: fleet_protocol::InstallId,
     ) -> Result<crate::InstallRecord, StoreError> {
         self.installer
             .as_ref()
@@ -113,9 +115,9 @@ impl<S: ReplicatedSchema, P: ConsumerProtocol> NativeWriterRuntime<S, P> {
     }
     pub async fn answer_release(
         &self,
-        frame: fleet_sync_protocol::FrameId,
+        frame: fleet_protocol::FrameId,
         call: durable_steps::CallId,
-        request: &fleet_sync_protocol::ReleaseRequest,
+        request: &fleet_protocol::ReleaseRequest,
     ) -> Result<(), StoreError> {
         #[cfg(feature = "test-support")]
         let observed_call = call.clone();
@@ -146,9 +148,9 @@ impl<S: ReplicatedSchema, P: ConsumerProtocol> NativeWriterRuntime<S, P> {
     }
     pub async fn answer_withdrawal(
         &self,
-        frame: fleet_sync_protocol::FrameId,
+        frame: fleet_protocol::FrameId,
         call: durable_steps::CallId,
-        request: &fleet_sync_protocol::WithdrawRelease,
+        request: &fleet_protocol::WithdrawRelease,
     ) -> Result<(), StoreError> {
         #[cfg(feature = "test-support")]
         let observed_call = call.clone();

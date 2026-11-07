@@ -3,7 +3,7 @@ use super::support::{
     *,
 };
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
 type PushTask = PushItem<TestStore, Turso, TestTypes, PublishTask, FixtureBindings>;
@@ -155,7 +155,7 @@ async fn admit(
                 );
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
                     .submit_relay::<PushTask, RecordRemoval>(
-                        fleet_sync_delivery::Submitter::Machine(peer(submitter)),
+                        fleet_mail_delivery::Submitter::Machine(peer(submitter)),
                         envelope,
                         peer(9),
                         format!("route-{submitter}"),
@@ -362,7 +362,7 @@ async fn rolled_back_next_holder_acceptance_keeps_content_and_receipt_release_is
                     .enqueue(
                         original,
                         peer(9),
-                        fleet_sync_delivery::Submitter::Machine(peer(1)),
+                        fleet_mail_delivery::Submitter::Machine(peer(1)),
                         SyncTime::from_unix_millis(10),
                     )
                     .await
@@ -378,7 +378,7 @@ async fn rolled_back_next_holder_acceptance_keeps_content_and_receipt_release_is
             Box::pin(async move {
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
                     .submit_relay::<PushTask, RecordRemoval>(
-                        fleet_sync_delivery::Submitter::Machine(peer(1)),
+                        fleet_mail_delivery::Submitter::Machine(peer(1)),
                         item(1, "body-a"),
                         peer(9),
                         "route-1".into(),
@@ -437,7 +437,7 @@ async fn rolled_back_next_holder_acceptance_keeps_content_and_receipt_release_is
         .transaction(|scope| {
             Box::pin(async move {
                 Inbox::<_, TestTypes, _>::new(scope, peer(2), limits(), &FixtureBindings)
-                    .accept_push::<DeliverTask,super::support::network::ReportTask,RecordRemoval,_>(fleet_sync_delivery::Submitter::Machine(peer(1)),
+                    .accept_push::<DeliverTask,super::support::network::ReportTask,RecordRemoval,_>(fleet_mail_delivery::Submitter::Machine(peer(1)),
                         item(1, "body-a"),
                         peer(9),
                         &TestConsumer,
@@ -456,7 +456,7 @@ async fn rolled_back_next_holder_acceptance_keeps_content_and_receipt_release_is
         .transaction(|scope| {
             Box::pin(async move {
                 Inbox::<_, TestTypes, _>::new(scope, peer(2), limits(), &FixtureBindings)
-                    .accept_push::<DeliverTask,super::support::network::ReportTask,RecordRemoval,_>(fleet_sync_delivery::Submitter::Machine(peer(1)),
+                    .accept_push::<DeliverTask,super::support::network::ReportTask,RecordRemoval,_>(fleet_mail_delivery::Submitter::Machine(peer(1)),
                         item(1, "body-a"),
                         peer(9),
                         &TestConsumer,

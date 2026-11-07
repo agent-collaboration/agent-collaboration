@@ -1,6 +1,6 @@
 //! Authoritative status pages cross the same real session, including a lost prefix ACK.
 use super::*;
-use fleet_sync_protocol::{DeliveryEnvelope, SubmitResult};
+use fleet_protocol::{DeliveryEnvelope, SubmitResult};
 use transport::WireEvent;
 
 #[tokio::test]

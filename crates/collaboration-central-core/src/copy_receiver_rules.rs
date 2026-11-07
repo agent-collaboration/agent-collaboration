@@ -2,8 +2,8 @@
 
 use board_sync_protocol::{BoardAnnotation, BoardConsumerProtocol};
 use durable_steps::{StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{DatabaseId, HookRefusal, HookRefusalCode, ReplicationPosition};
-use fleet_sync_receiver::{AppliedPiece, HookError, InstalledSnapshot, ReceiverRules};
+use fleet_project_copy::{AppliedPiece, HookError, InstalledSnapshot, ReceiverRules};
+use fleet_protocol::{DatabaseId, HookRefusal, HookRefusalCode, ReplicationPosition};
 use runtime_primitives::SyncTime;
 use serde::{Deserialize, Serialize};
 use sqlx_core::{arguments::IntoArguments, database::Database, encode::Encode, types::Type};
@@ -67,7 +67,7 @@ impl CopyReceiverRules {
             serde_json::to_string(&summary).map_err(|error| self.refused(error))?,
         )
         .await
-        .map_err(fleet_sync_receiver::classify_sqlx_error)?;
+        .map_err(fleet_project_copy::classify_sqlx_error)?;
         Ok(vec![summary])
     }
 }

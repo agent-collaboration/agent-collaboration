@@ -100,7 +100,7 @@ async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_
     let writer = harness.projects.ensure(&seed.project).await?;
     assert!(matches!(
         writer.store.writer_state().await?,
-        fleet_sync_lease::WriterState::Writing { .. }
+        fleet_project_lease::WriterState::Writing { .. }
     ));
     // Execute the real SDK copy while its real Welcome is gated before the Host.
     // Discard only this returned prompt, modelling a gap in event delivery.
@@ -113,7 +113,7 @@ async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_
                 .await?;
             assert!(events.iter().any(|event| matches!(
                 event,
-                fleet_sync_writer::ReplicationEvents::Acknowledged { .. }
+                fleet_project_writer::ReplicationEvents::Acknowledged { .. }
             )));
             if replication
                 .acknowledged_mail_changes(&seed.project)
@@ -169,7 +169,7 @@ async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_
     harness.close().await?;
     assert_eq!(
         publication?,
-        Some(fleet_sync_protocol::Epoch::new(seed.epoch.get())?)
+        Some(fleet_protocol::Epoch::new(seed.epoch.get())?)
     );
     Ok(())
 }

@@ -4,7 +4,7 @@ use crate::{turso_follow_up_fixture::*, *};
 use durable_steps::{
     Engine, OperationContext, OperationFailure, StepName, Task, turso_store::TursoStore,
 };
-use fleet_sync_protocol::FailureCode;
+use fleet_protocol::FailureCode;
 use std::sync::{Arc, atomic::Ordering};
 
 type Store = TursoStore<TestHost>;

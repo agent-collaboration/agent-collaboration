@@ -9,7 +9,7 @@ use collaboration_central_conformance::{
     ConformanceResult, RuntimeControl, RuntimeFaultObservation,
 };
 use collaboration_central_core::{ObjectAddress, RegistryTime};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientAnswer, ClientFrame, DatabaseId, FrameId, OperationAnswer, ServerFrame, ServerRequest,
 };
 use message_board::ProjectId;

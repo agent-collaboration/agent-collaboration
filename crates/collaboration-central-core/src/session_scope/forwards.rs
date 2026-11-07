@@ -12,8 +12,8 @@ use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerProtocol, ForwardOutcome, ForwardedPost,
     VerifiedForwardedPost,
 };
-use fleet_sync_protocol::{FrameId, OperationAnswer, ServerFrame};
-use fleet_sync_session::SessionKey;
+use fleet_protocol::{FrameId, OperationAnswer, ServerFrame};
+use fleet_session::SessionKey;
 
 impl<Host: ObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
 where

@@ -5,7 +5,7 @@ mod fixture;
 mod refusal_tests;
 use crate::{sender_test_fixture::*, *};
 use fixture::*;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
 use std::{
@@ -214,7 +214,7 @@ async fn individually_fitting_row_and_annotation_use_an_empty_final_part_when_co
 
 #[tokio::test]
 async fn individually_oversize_annotation_is_refused_with_its_originating_commit() -> TestResult {
-    use fleet_sync_protocol::unit_budget::UnitTooLarge;
+    use fleet_protocol::unit_budget::UnitTooLarge;
     let source = SenderFixture::open().await?;
     let (after, captured) = last_capture(source.database.as_ref()).await?;
     let result = crate::piece_builder::cut_transaction(

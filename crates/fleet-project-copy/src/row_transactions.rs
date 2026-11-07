@@ -1,9 +1,10 @@
+use crate::checked_queries;
 use crate::{
-    ApplyFailure, ReceiverError, StoreError, checked_queries, copy_storage::encode_record,
+    ApplyFailure, ReceiverError, StoreError, copy_storage::encode_record,
     row_apply::plan_row_change, schema_reads::SchemaReads,
 };
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::{ReplicatedTransaction, RowChange, SchemaIdentity};
+use fleet_protocol::{ReplicatedTransaction, RowChange, SchemaIdentity};
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -93,7 +94,7 @@ where
                 .await?
             {
                 return Err(ApplyFailure::Refused(
-                    fleet_sync_protocol::PieceRefusal::IntegrityViolation {
+                    fleet_protocol::PieceRefusal::IntegrityViolation {
                         table: violation.table,
                         references: violation.references,
                     },
@@ -156,7 +157,7 @@ where
                     .iter()
                     .map(|key| row.value(key).cloned())
                     .collect::<Result<Vec<_>, _>>()?;
-                if after.iter().any(|value|!matches!(value,fleet_sync_protocol::SqlValue::Text(key) if fleet_sync_protocol::canonical_uuid_v7(key))) {
+                if after.iter().any(|value|!matches!(value,fleet_protocol::SqlValue::Text(key) if fleet_protocol::canonical_uuid_v7(key))) {
                     return Err(StoreError::Corrupt {field:"schema step UUIDv7 row key".into()}.into());
                 }
             }

@@ -44,7 +44,7 @@ impl TableLayout {
         if name.is_empty() || columns.iter().any(String::is_empty) {
             return Err(LayoutError::EmptyName);
         }
-        if fleet_sync_protocol::reserved_namespace(&name) {
+        if fleet_protocol::reserved_namespace(&name) {
             return Err(LayoutError::ReservedTable { table: name });
         }
         if primary_key.is_empty() {

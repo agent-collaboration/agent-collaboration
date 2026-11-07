@@ -12,7 +12,7 @@ use board_sync_protocol::{
 };
 use collaboration_central_core::{ObjectAddress, RegistryTime};
 use fleet_admission::{FleetOperation, FleetRequest, FleetRequestResult};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, CommitSequence, CopyStatusAnswer, CopyUnavailableReason, DatabaseId, Epoch,
     FrameId, OperationAnswer, OperationRequest, Piece, PieceContents, ReplicatedTransaction,
     ReplicationAnswer, ReplicationPosition, ReplicationRequest, RowChange, ServerFrame, SqlValue,
@@ -31,7 +31,7 @@ pub async fn run_runtime_control_conformance(client: &ConformanceClient) -> Conf
         &durable_steps::Uuid::now_v7().to_string(),
     )
     .await?;
-    let copy = ObjectAddress::Copy(fleet_sync_protocol::DatabaseId::try_from(
+    let copy = ObjectAddress::Copy(fleet_protocol::DatabaseId::try_from(
         fixture.database.to_string(),
     )?);
     let session = ObjectAddress::Fleet;
@@ -206,14 +206,14 @@ async fn refused_controls(
 async fn independent_copy_progress(
     client: &ConformanceClient,
     socket: &mut WebSocket,
-    holder: fleet_sync_protocol::PeerId,
+    holder: fleet_protocol::PeerId,
 ) -> ConformanceResult<()> {
     let database = DatabaseId::new(durable_steps::Uuid::now_v7())?;
-    let created = copy_probe(client, serde_json::json!({"kind":"create","value":fleet_sync_protocol::CreateCopy {
-        database, epoch: Epoch::new(1)?, holder: Some(holder), origin: fleet_sync_protocol::CopyOrigin::Empty,
+    let created = copy_probe(client, serde_json::json!({"kind":"create","value":fleet_protocol::CreateCopy {
+        database, epoch: Epoch::new(1)?, holder: Some(holder), origin: fleet_protocol::CopyOrigin::Empty,
     }})).await?;
     if created
-        != serde_json::json!({"kind":"created","value":fleet_sync_protocol::CreateCopyAnswer::CopyCreated})
+        != serde_json::json!({"kind":"created","value":fleet_protocol::CreateCopyAnswer::CopyCreated})
     {
         return Err("independent copy was not created".into());
     }

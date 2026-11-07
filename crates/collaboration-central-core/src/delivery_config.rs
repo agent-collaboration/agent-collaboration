@@ -1,5 +1,5 @@
 //! Central owns its deployment relay identity independently of lease policy.
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use serde::{Deserialize, Serialize};
 
 /// The configured relay identity returned to Routers at enrollment.

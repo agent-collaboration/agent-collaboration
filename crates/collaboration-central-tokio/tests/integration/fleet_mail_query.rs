@@ -5,7 +5,7 @@ use super::{
 };
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use durable_steps::StoreError;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, DeliveryAnswer, DeliveryRefusal, DeliveryRequest, DeliveryStatus, FrameId, ItemId,
     ItemStatusState, OperationAnswer, OperationRequest, ServerFrame,
 };

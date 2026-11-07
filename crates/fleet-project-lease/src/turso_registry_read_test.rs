@@ -5,7 +5,7 @@ use crate::{
     turso_change_tests::register_first, turso_registry_fixture::*, *,
 };
 use durable_steps::{AtomicStore, Uuid, storage::TransactionScope};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::row::Row;
 use sqlx_turso::Turso;
 use std::sync::Arc;
@@ -65,7 +65,7 @@ async fn database_inventory_is_read_only_and_excludes_retired_and_unregistered_i
                                 Epoch::new(1).map_err(storage)?,
                                 SyncTime::from_unix_millis(100),
                             ),
-                            fleet_sync_protocol::SyncTime::from_unix_millis(1000),
+                            fleet_protocol::SyncTime::from_unix_millis(1000),
                         )
                         .await
                         .map_err(storage)?;
@@ -185,7 +185,7 @@ async fn epoch_holder_preserves_the_historical_grant_after_a_real_move_and_store
         &engine,
         &holder_change_request_key(attempt)?,
         HolderChangeRequest::Move {
-            reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+            reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
             attempt,
             database: database()?,
             from_epoch: Epoch::new(1)?,

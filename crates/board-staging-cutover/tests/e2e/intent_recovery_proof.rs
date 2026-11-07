@@ -6,7 +6,7 @@ use super::{
 use board_staging_cutover::{NativeProjectSnapshot, PreparedProjectBundle};
 use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::{MailSender, NotificationSource};
-use fleet_sync_protocol::{DeliveryEnvelope, PeerId};
+use fleet_protocol::{DeliveryEnvelope, PeerId};
 use message_board::{
     ChangeOutcome, FeedContent, FeedCursor, IntentState, NotifyIntent, Record, RecordId,
     RecordPlacement, RecordedActor, RequestLedgerEntry, RouterComponent, StoredDecision,

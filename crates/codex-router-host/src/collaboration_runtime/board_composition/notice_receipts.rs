@@ -1,5 +1,5 @@
 //! One session owner acknowledges only its received, successfully handled prefix.
-use fleet_sync_protocol::NoticePosition;
+use fleet_protocol::NoticePosition;
 use std::collections::{BTreeMap, btree_map::Entry};
 
 enum NoticeReceipt {

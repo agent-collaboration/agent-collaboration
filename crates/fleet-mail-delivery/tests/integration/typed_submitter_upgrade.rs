@@ -1,6 +1,6 @@
 use super::support::*;
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::{migrate::Migrator, query::query, row::Row};
 use sqlx_turso::Turso;
 

@@ -1,10 +1,11 @@
+use crate::checked_queries;
 use crate::{
-    BoundStatement, ReceiverError, StoreError, bound_sql::quoted_identifier, checked_queries,
+    BoundStatement, ReceiverError, StoreError, bound_sql::quoted_identifier,
     copy_storage::encode_record, row_apply::primary_columns, row_transactions::SchemaStepRecord,
     schema_reads::SchemaReads,
 };
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::{SeedAnswer, SeedComplete, SeedPage, TableDigestBuilder, TableName};
+use fleet_protocol::{SeedAnswer, SeedComplete, SeedPage, TableDigestBuilder, TableName};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -42,7 +43,7 @@ where
         }
     }
     for sql in &first.contents.schema_steps {
-        fleet_sync_protocol::admit_replicated_schema_statement(sql)
+        fleet_protocol::admit_replicated_schema_statement(sql)
             .map_err(|error| ReceiverError::SchemaUnsupported { form: error.form })?;
     }
     crate::foreign_key_integrity::ForeignKeyIntegrity(scope)

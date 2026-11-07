@@ -5,7 +5,7 @@ use super::{
 };
 
 impl SubscriptionDeliveryService {
-    pub(crate) fn prompt_project_mail_outcome(&self, item: fleet_sync_protocol::ItemId) {
+    pub(crate) fn prompt_project_mail_outcome(&self, item: fleet_protocol::ItemId) {
         if self.inner.shutdown.is_cancelled() {
             return;
         }

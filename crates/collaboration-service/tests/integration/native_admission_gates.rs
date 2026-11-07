@@ -2,7 +2,7 @@
 use crate::board_fixture;
 use crate::controlled_clock::ControlledClock;
 use board_fixture::{BoardFixture, TestError, accepted, fixture_peer};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DatabaseId, Epoch, LeaseRefusal, LeaseState, LeaseStatus, RenewAnswer, RenewResult,
 };
 use message_board::*;
@@ -223,7 +223,7 @@ async fn an_unregistered_native_owner_refuses_the_first_write_and_registration_e
     // Act: even the initial project row must wait for a real registration state.
     match store.begin_admission(fixture.record_origin()?).await {
         Err(message_board_storage::ProjectStorageError::WriteRefused(
-            fleet_sync_writer::WriteRefusal::Provisional,
+            fleet_project_writer::WriteRefusal::Provisional,
         )) => {}
         Err(error) => return Err(format!("unexpected unregistered refusal: {error}").into()),
         Ok(write) => {

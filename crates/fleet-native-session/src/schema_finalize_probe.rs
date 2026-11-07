@@ -1,7 +1,7 @@
 //! Test-only rollback after finalization has staged its registration and local journal step.
 use durable_steps::StoreError;
-use fleet_sync_protocol::{ConsumerProtocol, PeerId};
-use fleet_sync_session::SessionEffect;
+use fleet_protocol::{ConsumerProtocol, PeerId};
+use fleet_session::SessionEffect;
 use tokio::sync::watch;
 
 #[derive(Clone, Copy, Default)]

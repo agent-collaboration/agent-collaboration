@@ -1,7 +1,7 @@
 use crate::{StatementGuard, WriteRefusal};
 use either::Either;
-use fleet_sync_lease::{HolderError, LeaseHolder, WriterState};
-use fleet_sync_protocol::Epoch;
+use fleet_project_lease::{HolderError, LeaseHolder, WriterState};
+use fleet_protocol::Epoch;
 use futures_core::{future::BoxFuture, stream::BoxStream};
 use futures_util::{FutureExt, StreamExt, stream};
 use runtime_primitives::Clock;

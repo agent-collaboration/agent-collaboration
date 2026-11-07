@@ -2,7 +2,7 @@ use crate::{
     DeliveryError, custody_record::*, delivery_storage_rows::StoredInboxRow, inbox_record::*,
     stored_outcome::*,
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 
 #[expect(
     clippy::manual_async_fn,

@@ -2,7 +2,7 @@
 //! This checks typed error propagation, not physical disk exhaustion.
 use super::*;
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::{CopyUnavailableReason, PeerId};
+use fleet_protocol::{CopyUnavailableReason, PeerId};
 use futures_util::{
     future::BoxFuture,
     stream::{self, BoxStream},
@@ -162,7 +162,7 @@ async fn summary_storage_full_is_preserved_as_copy_unavailable_after_real_rollba
         runtime_primitives::SyncTime::from_unix_millis(1_792_281_600_000),
         None,
     )?;
-    let error = fleet_sync_receiver::apply_piece(
+    let error = fleet_project_copy::apply_piece(
         &mut CapacityScope(&mut transaction),
         &piece,
         &PeerId::try_from("019f0000-0000-7000-8000-000000000901".to_owned())?,
@@ -172,9 +172,9 @@ async fn summary_storage_full_is_preserved_as_copy_unavailable_after_real_rollba
     .await
     .err()
     .ok_or("the summary executor must fail")?;
-    let marker = fleet_sync_receiver::apply_rollback(error);
+    let marker = fleet_project_copy::apply_rollback(error);
     transaction.rollback().await?;
-    let answer = fleet_sync_receiver::classify_copy_store_error(marker).answer();
+    let answer = fleet_project_copy::classify_copy_store_error(marker).answer();
     let row = sqlx_core::query::query::<Turso>(
         "SELECT count(*) AS tables FROM sqlite_schema WHERE name='board_rows'",
     )

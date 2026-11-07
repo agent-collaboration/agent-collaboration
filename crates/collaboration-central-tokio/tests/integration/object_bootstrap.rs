@@ -8,10 +8,10 @@ use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{
     AtomicStore, CallFailure, NotSentReason, StoreError, storage::TransactionScope,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CopyStatusAnswer, CopyUnavailableReason, DatabaseId, ReceiverId, ReplicationAnswer,
 };
-use fleet_sync_tokio_runner::{ObjectKey, ObjectStore, TokioObject};
+use fleet_tokio_objects::{ObjectKey, ObjectStore, TokioObject};
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use sqlx_core::{executor::Executor, query::query, row::Row};
 use std::{path::Path, sync::Arc};
@@ -142,7 +142,7 @@ async fn exported_engine_corpora_initialize_once_and_reopen_without_reapplying_t
                 BootstrapProbeReply::Delivery(query) => assert!(
                     query.statuses.iter().all(|status| matches!(
                         status.state,
-                        fleet_sync_protocol::ItemStatusState::Unknown
+                        fleet_protocol::ItemStatusState::Unknown
                     )) && query.statuses.len() == 1
                 ),
             }
@@ -194,7 +194,7 @@ async fn a_real_late_sql_error_rolls_back_all_earlier_migrations_and_history()
         .object
         .transaction(|scope| {
             Box::pin(async move {
-                let conflict = fleet_sync_receiver::RECEIVER_MIGRATOR
+                let conflict = fleet_project_copy::RECEIVER_MIGRATOR
                     .iter()
                     .find(|migration| migration.version == 3)
                     .ok_or_else(|| StoreError::Aborted {
@@ -465,7 +465,7 @@ async fn repeated_migration_failure_upsert_preserves_its_uuid_across_reopen()
         .object
         .transaction(|scope| {
             Box::pin(async move {
-                let collision = fleet_sync_receiver::RECEIVER_MIGRATOR
+                let collision = fleet_project_copy::RECEIVER_MIGRATOR
                     .iter()
                     .find(|migration| migration.version == 3)
                     .ok_or_else(|| StoreError::backend("receiver v3 missing"))?;

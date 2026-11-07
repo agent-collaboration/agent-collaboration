@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use super::support;
 use durable_steps::{AtomicStore, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::row::Row;
 use std::sync::atomic::Ordering;
 use support::{network::*, *};
@@ -237,7 +237,7 @@ async fn header_loss_before_first_gate_reconciles_same_digest_conflict_and_unkno
                             .enqueue(
                                 item,
                                 peer(3),
-                                fleet_sync_delivery::Submitter::Machine(peer(1)),
+                                fleet_mail_delivery::Submitter::Machine(peer(1)),
                                 SyncTime::from_unix_millis(0)
                             )
                             .await

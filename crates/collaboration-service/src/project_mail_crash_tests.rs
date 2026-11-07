@@ -2,7 +2,7 @@
 use super::*;
 use durable_steps::AtomicStore;
 use durable_steps::storage::JournalStorage as _;
-use fleet_sync_delivery::{Outbox, OutboxStatusState};
+use fleet_mail_delivery::{Outbox, OutboxStatusState};
 use interaction_storage::{InteractionAtomicStore, InteractionStore};
 use serde::{Deserialize, Serialize};
 use std::{os::unix::process::ExitStatusExt as _, path::PathBuf, process::Stdio, sync::Arc};
@@ -156,14 +156,14 @@ async fn project_outbox_crash_child_entry() {
     let kind: ProjectCrashKind =
         serde_json::from_slice(&std::fs::read(root.join("kind.json")).unwrap()).unwrap();
     let item = match kind {
-        ProjectCrashKind::Original => fleet_sync_protocol::DeliveryEnvelope::Item(original),
-        ProjectCrashKind::Cancel => fleet_sync_protocol::DeliveryEnvelope::Cancel(
-            fleet_sync_protocol::DeliveryCancel::new(
+        ProjectCrashKind::Original => fleet_protocol::DeliveryEnvelope::Item(original),
+        ProjectCrashKind::Cancel => fleet_protocol::DeliveryEnvelope::Cancel(
+            fleet_protocol::DeliveryCancel::new(
                 ItemId::new(uuid::Uuid::now_v7()).unwrap(),
                 original.sender().clone(),
                 original.recipient().clone(),
                 None,
-                fleet_sync_protocol::CancelBody {
+                fleet_protocol::CancelBody {
                     target: original.id(),
                 },
             )
@@ -176,10 +176,10 @@ async fn project_outbox_crash_child_entry() {
     };
     std::fs::write(root.join("state.json"), serde_json::to_vec(&state).unwrap()).unwrap();
     let result = match item {
-        fleet_sync_protocol::DeliveryEnvelope::Item(item) => {
+        fleet_protocol::DeliveryEnvelope::Item(item) => {
             mail.enqueue_project_item(item, 2.try_into().unwrap()).await
         }
-        fleet_sync_protocol::DeliveryEnvelope::Cancel(cancel) => {
+        fleet_protocol::DeliveryEnvelope::Cancel(cancel) => {
             mail.enqueue_project_cancel(cancel, 2.try_into().unwrap())
                 .await
         }

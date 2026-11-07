@@ -1,11 +1,11 @@
 //! Session hints start only a grant confirmed by central's Copy and Registry.
 use super::{project_installation::SnapshotAdmission, project_writers::ProjectWriters};
-use fleet_sync_protocol::{
+use fleet_project_writer::BootstrapGrant;
+use fleet_protocol::{
     CopyRole, CopyStatusAnswer, DatabaseId, Epoch, LeaseAnswer, LeaseRequest, LeaseState,
     OperationAnswer, OperationRequest, RenewAnswer, RenewRequest, ReplicationAnswer,
     ReplicationRequest, RequestId,
 };
-use fleet_sync_writer::BootstrapGrant;
 use message_board::ProjectId;
 use runtime_primitives::{Clock, IdSource, SystemClock, UuidV7Ids};
 use std::{io, sync::Arc};
@@ -34,13 +34,13 @@ impl ProjectWriters {
             match registry.existing_project(project).await {
                 Ok(Some(store)) => {
                     let state = store.writer_state().await.map_err(io::Error::other)?;
-                    if matches!(state, fleet_sync_lease::WriterState::Provisional)
+                    if matches!(state, fleet_project_lease::WriterState::Provisional)
                         && matches!(
                             store
                                 .registration_outcome()
                                 .await
                                 .map_err(io::Error::other)?,
-                            fleet_sync_writer::WriterRegistrationOutcome::Pending
+                            fleet_project_writer::WriterRegistrationOutcome::Pending
                         )
                     {
                         // Fleet commits the grant notice with Registration. Its
@@ -49,9 +49,9 @@ impl ProjectWriters {
                         return Ok(());
                     }
                     if matches!(state,
-                    fleet_sync_lease::WriterState::Writing { epoch }
-                    | fleet_sync_lease::WriterState::Paused { epoch, .. }
-                    | fleet_sync_lease::WriterState::Seeding { epoch } if epoch == hinted_epoch)
+                    fleet_project_lease::WriterState::Writing { epoch }
+                    | fleet_project_lease::WriterState::Paused { epoch, .. }
+                    | fleet_project_lease::WriterState::Seeding { epoch } if epoch == hinted_epoch)
                     {
                         // The current-epoch local file already has its own native
                         // writer. Prompt that owner; do not seed over it.
@@ -163,7 +163,7 @@ impl ProjectWriters {
             return Ok(None);
         }
         Ok(Some(BootstrapGrant {
-            lease: fleet_sync_protocol::LeaseStatus {
+            lease: fleet_protocol::LeaseStatus {
                 remaining_ms: 0,
                 ..current
             },

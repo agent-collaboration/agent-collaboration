@@ -1,6 +1,6 @@
 //! Publish a real seeded Copy for the imported-Claim session scenario.
 use super::{ConformanceResult, Copy};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde_json::{Value, json};
 
 pub(super) async fn publish(

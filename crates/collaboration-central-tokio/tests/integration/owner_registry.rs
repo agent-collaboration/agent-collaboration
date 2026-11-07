@@ -28,7 +28,7 @@ use collaboration_central_conformance::{
 use collaboration_central_tokio::TokioServer;
 use fixture::{Fixture, confirm, refused};
 use fleet_admission::DirectoryEntry;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use futures_util::{SinkExt, StreamExt};
 use message_board::{BoardId, ProjectId, WorkspaceId};
 use reqwest_websocket::{Message, WebSocket};

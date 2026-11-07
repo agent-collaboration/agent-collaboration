@@ -4,7 +4,7 @@ use super::{
     support::{Fixture, TestResult, position},
 };
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     Piece, PieceContents, ReplicatedTransaction, ReplicationAnswer, SchemaEntry, SchemaObjectKind,
     SnapshotManifest, SnapshotManifestAnswer,
 };
@@ -15,12 +15,12 @@ async fn manifest(fixture: &Fixture) -> TestResult<SnapshotManifest> {
         .copy
         .transaction(|scope| {
             Box::pin(async move {
-                fleet_sync_receiver::snapshot_manifest(
+                fleet_project_copy::snapshot_manifest(
                     scope,
                     position(1).map_err(StoreError::backend)?,
                 )
                 .await
-                .map_err(fleet_sync_receiver::receiver_rollback)
+                .map_err(fleet_project_copy::receiver_rollback)
             })
         })
         .await?;
@@ -44,7 +44,7 @@ async fn own_history_and_failure_tables_are_excluded_and_cannot_be_claimed_by_pr
         })).await?;
         if owned_tables != 2 {return Err("Copy prelude did not create both own metadata tables before admission".into());}
         let before = manifest(&fixture).await?;
-        let expected = fleet_sync_protocol::schema_fingerprint(&[SchemaEntry {
+        let expected = fleet_protocol::schema_fingerprint(&[SchemaEntry {
             kind: SchemaObjectKind::Table,
             name: "board_rows".into(),
             sql: "CREATE TABLE board_rows(id TEXT NOT NULL PRIMARY KEY,value TEXT NOT NULL)".into(),
@@ -68,7 +68,7 @@ async fn own_history_and_failure_tables_are_excluded_and_cannot_be_claimed_by_pr
             })?;
             let answer = fixture.apply(piece).await?;
             if !matches!(&answer, ReplicationAnswer::CopyUnavailable {
-                reason: fleet_sync_protocol::CopyUnavailableReason::Damaged { detail }
+                reason: fleet_protocol::CopyUnavailableReason::Damaged { detail }
             } if detail.contains(&format!("replicated schema conflicts with local object {table}"))) {
                 return Err(format!("collision on central's own table {table} returned {answer:?}").into());
             }

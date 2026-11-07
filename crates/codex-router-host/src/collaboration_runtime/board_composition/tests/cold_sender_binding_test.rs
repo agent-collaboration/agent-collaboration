@@ -2,7 +2,7 @@
 use super::*;
 use board_sync_protocol::{BoardDeliveryTypes, InstallationPeerLookup};
 use collaboration_mail_protocol::MailSender;
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, PeerId, PushResult};
+use fleet_protocol::{DeliveryEnvelope, DeliveryItem, PeerId, PushResult};
 
 #[tokio::test]
 #[expect(

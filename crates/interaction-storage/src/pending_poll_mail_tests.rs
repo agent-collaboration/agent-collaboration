@@ -255,7 +255,7 @@ async fn accepted_sdk_accounting_index_and_genuine_preceding_prefix_reopen_but_b
         .await
         .unwrap();
     let mut sdk = sqlx::migrate::Migrator::with_migrations(
-        fleet_sync_delivery::DELIVERY_MIGRATOR
+        fleet_mail_delivery::DELIVERY_MIGRATOR
             .iter()
             .take(2)
             .cloned()

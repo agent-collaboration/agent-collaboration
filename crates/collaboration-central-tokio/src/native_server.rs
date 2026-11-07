@@ -4,7 +4,7 @@ use crate::{TokioCentralPlatform, TokioPlatformError};
 use collaboration_central_core::{
     AccessKeyCache, AccessPolicy, CentralApplication, central_router,
 };
-use fleet_sync_lease::RegistryConfig;
+use fleet_project_lease::RegistryConfig;
 use runtime_primitives::SystemClock;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tokio_util::sync::CancellationToken;

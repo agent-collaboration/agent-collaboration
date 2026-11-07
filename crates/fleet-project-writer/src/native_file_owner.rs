@@ -7,7 +7,7 @@ use crate::{
     writer_file_record::{WriterFileRecord, read_file_record},
 };
 use durable_steps::{BoxFuture, StoreError};
-use fleet_sync_receiver::{SnapshotInstall, SnapshotInstallState};
+use fleet_project_copy::{SnapshotInstall, SnapshotInstallState};
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     executor::Executor,
@@ -30,9 +30,9 @@ enum OwnerState {
     Closed,
 }
 struct PublicationReceipt {
-    database: fleet_sync_protocol::DatabaseId,
-    peer: fleet_sync_protocol::PeerId,
-    epoch: fleet_sync_protocol::Epoch,
+    database: fleet_protocol::DatabaseId,
+    peer: fleet_protocol::PeerId,
+    epoch: fleet_protocol::Epoch,
     previous: Option<SnapshotInstallState>,
     expected: Option<SnapshotInstall>,
 }

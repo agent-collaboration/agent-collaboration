@@ -1,6 +1,6 @@
 use super::support::{legacy_submitters::*, sender_binding::*, *};
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
 
@@ -44,7 +44,7 @@ async fn released_live_service_sources_backfill_from_host_mapping_without_changi
                 assert_eq!(
                     backfill_submitters::<TestTypes, _, _>(
                         scope,
-                        fleet_sync_delivery::DeliveryHostRole::Machine,
+                        fleet_mail_delivery::DeliveryHostRole::Machine,
                         &FixtureBindings,
                         startup_time()
                     )
@@ -109,7 +109,7 @@ async fn unavailable_backfill(conflict: bool) {
             Box::pin(async move {
                 Ok(backfill_submitters::<TestTypes, _, _>(
                     scope,
-                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    fleet_mail_delivery::DeliveryHostRole::Machine,
                     &FixtureBindings,
                     startup_time(),
                 )

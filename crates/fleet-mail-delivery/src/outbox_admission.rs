@@ -1,6 +1,6 @@
 use crate::{DeliveryError, custody_record::*, delivery_storage_rows as queries, outbox_record::*};
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,

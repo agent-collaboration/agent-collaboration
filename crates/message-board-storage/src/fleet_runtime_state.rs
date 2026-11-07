@@ -1,8 +1,8 @@
 //! Router-owned session, link observation and unfinished installs in FleetCache.
 use super::{FleetCache, RouterLocalStorageError};
 use chrono::{DateTime, Utc};
-use fleet_sync_protocol::{Epoch, InstallAttemptId, NoticePosition};
-use fleet_sync_session::ClientSessionState;
+use fleet_protocol::{Epoch, InstallAttemptId, NoticePosition};
+use fleet_session::ClientSessionState;
 use message_board::ProjectId;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 

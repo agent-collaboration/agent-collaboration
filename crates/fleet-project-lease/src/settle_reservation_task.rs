@@ -1,6 +1,6 @@
 use crate::{ClaimSettlement, operation_support::step};
 use durable_steps::{AtomicStore, OperationContext, OperationFailure, Task};
-use fleet_sync_protocol::{ClaimSettlement as SettlementRequest, SettlementRecorded};
+use fleet_protocol::{ClaimSettlement as SettlementRequest, SettlementRecorded};
 use std::marker::PhantomData;
 
 /// Settlement debt admitted atomically when a claim's engine operation fails.

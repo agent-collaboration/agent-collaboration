@@ -1,7 +1,7 @@
 use crate::turso_registry_fixture::*;
 use durable_steps::CallId;
-use fleet_sync_protocol::*;
-use fleet_sync_receiver::{AppliedPiece, FollowUpDone, FollowUpFailure, ReceiverRules};
+use fleet_project_copy::{AppliedPiece, FollowUpDone, FollowUpFailure, ReceiverRules};
+use fleet_protocol::*;
 use sqlx_core::connection::Connection;
 use std::sync::Arc;
 
@@ -13,11 +13,11 @@ impl ReceiverRules<CopyScope<'_>> for EmptyHook {
         &self,
         _: &mut CopyScope<'_>,
         _: &AppliedPiece<'_, ()>,
-    ) -> Result<Vec<()>, fleet_sync_receiver::HookError> {
+    ) -> Result<Vec<()>, fleet_project_copy::HookError> {
         Ok(Vec::new())
     }
 }
-impl fleet_sync_receiver::FollowUpHandler for EmptyHook {
+impl fleet_project_copy::FollowUpHandler for EmptyHook {
     type Item = ();
     async fn follow_up(&self, _: &(), _: CallId) -> Result<FollowUpDone, FollowUpFailure> {
         Ok(FollowUpDone)
@@ -32,7 +32,7 @@ pub(super) async fn push_rows(
     let copy = copies.get_mut(&database()?).ok_or("copy missing")?;
     let mut transaction = copy.begin_with("BEGIN IMMEDIATE").await?;
     let mut scope = CopyScope(&mut transaction);
-    let CopyStatusAnswer::Status(status) = fleet_sync_receiver::copy_status(&mut scope).await?
+    let CopyStatusAnswer::Status(status) = fleet_project_copy::copy_status(&mut scope).await?
     else {
         return Err("copy is not following".into());
     };
@@ -76,7 +76,7 @@ pub(super) async fn push_rows(
         part: None,
         annotation: None,
     })?;
-    fleet_sync_receiver::apply_piece(
+    fleet_project_copy::apply_piece(
         &mut scope,
         &piece,
         &status.holder.ok_or("holder missing")?,
@@ -92,13 +92,13 @@ pub(super) async fn seed_import(host: &Arc<TestHost>) -> TestResult<ReplicationP
     let copy = copies.get_mut(&database()?).ok_or("copy missing")?;
     let mut transaction = copy.begin_with("BEGIN IMMEDIATE").await?;
     let mut scope = CopyScope(&mut transaction);
-    let seed = fleet_sync_receiver::seed_begin(
+    let seed = fleet_project_copy::seed_begin(
         &mut scope,
         database()?,
         SeedAttemptId::new(durable_steps::Uuid::from_u128(
             0x019eef00000070008000000000000384,
         ))?,
-        &fleet_sync_receiver::SeedAuthority::Admin,
+        &fleet_project_copy::SeedAuthority::Admin,
     )
     .await?;
     let position = ReplicationPosition::new(Epoch::new(1)?, CommitSequence::new(7));
@@ -130,12 +130,8 @@ pub(super) async fn seed_import(host: &Arc<TestHost>) -> TestResult<ReplicationP
         digest: PageDigest::of(&contents)?,
         contents,
     };
-    if fleet_sync_receiver::seed_page(
-        &mut scope,
-        &page,
-        &fleet_sync_receiver::SeedAuthority::Admin,
-    )
-    .await?
+    if fleet_project_copy::seed_page(&mut scope, &page, &fleet_project_copy::SeedAuthority::Admin)
+        .await?
         != SeedPageAnswer::Staged
     {
         return Err("seed page not staged".into());
@@ -150,7 +146,7 @@ pub(super) async fn seed_import(host: &Arc<TestHost>) -> TestResult<ReplicationP
         schema,
         table_digests: vec![(TableName::new("records")?, digest.finish())],
     };
-    if !matches!(fleet_sync_receiver::seed_complete(&mut scope, &done, &EmptyHook, &fleet_sync_receiver::SeedAuthority::Admin).await?, fleet_sync_receiver::SeedDecision::Published { position: actual, follow_ups } if actual == position && follow_ups.is_empty())
+    if !matches!(fleet_project_copy::seed_complete(&mut scope, &done, &EmptyHook, &fleet_project_copy::SeedAuthority::Admin).await?, fleet_project_copy::SeedDecision::Published { position: actual, follow_ups } if actual == position && follow_ups.is_empty())
     {
         return Err("seed not published".into());
     }

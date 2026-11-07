@@ -8,7 +8,7 @@ impl TestCentral {
     pub async fn copy_status(
         &self,
         project: &ProjectId,
-    ) -> FixtureResult<fleet_sync_protocol::CopyStatus> {
+    ) -> FixtureResult<fleet_protocol::CopyStatus> {
         use collaboration_central_admin_protocol::{CopyHealth, CopyHealthRead};
 
         let health: CopyHealth = reqwest::Client::builder()

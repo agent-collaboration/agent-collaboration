@@ -22,8 +22,8 @@ impl PublisherInner {
                 .writer_state()
                 .await
                 .map_err(|_| BoardError::board_unavailable())?,
-            fleet_sync_lease::WriterState::Provisional
-                | fleet_sync_lease::WriterState::Writing { .. }
+            fleet_project_lease::WriterState::Provisional
+                | fleet_project_lease::WriterState::Writing { .. }
         ) {
             return Ok(());
         }

@@ -6,7 +6,7 @@ use sizing_oracle::cut_transaction_oracle;
 struct Annotator(Option<usize>);
 struct Protocol;
 impl ConsumerProtocol for Protocol {
-    type Delivery = fleet_sync_protocol::NoDelivery;
+    type Delivery = fleet_protocol::NoDelivery;
     type Request = ();
     type Answer = ();
     type ServerRequest = ();
@@ -33,10 +33,10 @@ fn compare(
 ) -> TestResult {
     let database = DatabaseId::new("019eef00-0000-7000-8000-000000000001".parse()?)?;
     let epoch = Epoch::new(1)?;
-    let after = ReplicationPosition::new(epoch, fleet_sync_protocol::CommitSequence::new(0));
+    let after = ReplicationPosition::new(epoch, fleet_protocol::CommitSequence::new(0));
     let captured = CapturedCommit {
         position: ReplicationPosition::new(epoch, transaction.commit_id()),
-        changed_at: fleet_sync_protocol::SyncTime::from_unix_millis(1),
+        changed_at: fleet_protocol::SyncTime::from_unix_millis(1),
         transaction,
         layout_after: vec![],
     };
@@ -87,7 +87,7 @@ fn compare(
 }
 fn rows(count: usize, bytes: usize) -> TestResult<ReplicatedTransaction> {
     Ok(ReplicatedTransaction::Rows {
-        commit_id: fleet_sync_protocol::CommitSequence::new(1),
+        commit_id: fleet_protocol::CommitSequence::new(1),
         rows: (0..count)
             .map(|index| {
                 RowChange::upsert(
@@ -121,7 +121,7 @@ fn generated_piece_fragments_match_oracle_with_linear_full_measures() -> TestRes
     ] {
         compare(
             ReplicatedTransaction::Rows {
-                commit_id: fleet_sync_protocol::CommitSequence::new(1),
+                commit_id: fleet_protocol::CommitSequence::new(1),
                 rows: vec![RowChange::upsert(
                     "records",
                     vec![SqlValue::Text(
@@ -144,7 +144,7 @@ fn generated_schema_fragments_match_oracle_with_linear_full_measures() -> TestRe
     for max in [1000, 7, 1] {
         compare(
             ReplicatedTransaction::SchemaStep {
-                commit_id: fleet_sync_protocol::CommitSequence::new(1),
+                commit_id: fleet_protocol::CommitSequence::new(1),
                 migration_version: 123456,
                 statements: (0..33)
                     .map(|index| format!("-- {index} {}", "\"\\雪🦀\n".repeat(4096)))
@@ -156,7 +156,7 @@ fn generated_schema_fragments_match_oracle_with_linear_full_measures() -> TestRe
     }
     compare(
         ReplicatedTransaction::SchemaStep {
-            commit_id: fleet_sync_protocol::CommitSequence::new(1),
+            commit_id: fleet_protocol::CommitSequence::new(1),
             migration_version: 9,
             statements: vec!["x".repeat(MAX_UNIT_BYTES + 1)],
         },

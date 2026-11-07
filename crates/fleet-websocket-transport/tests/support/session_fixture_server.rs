@@ -9,9 +9,9 @@ use axum::{
     response::{IntoResponse, Response},
     routing::get,
 };
-use fleet_sync_protocol::*;
-use fleet_sync_session::*;
-use fleet_sync_transport_websocket::AxumConnection;
+use fleet_protocol::*;
+use fleet_session::*;
+use fleet_websocket_transport::AxumConnection;
 use std::{future::IntoFuture, io::Write, path::Path, time::Duration};
 use tokio::{
     net::TcpListener,

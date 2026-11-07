@@ -7,7 +7,7 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 
 /// Append to every non-ended logical session in the caller's transaction.
 /// Send effects target attached connections and run only after commit.

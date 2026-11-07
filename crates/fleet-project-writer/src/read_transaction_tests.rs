@@ -1,7 +1,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::*;
-use fleet_sync_lease::LeasePolicy;
-use fleet_sync_protocol::{PeerId, TableName};
+use fleet_project_lease::LeasePolicy;
+use fleet_protocol::{PeerId, TableName};
 use sqlx_core::{executor::Executor, migrate::Migrator, row::Row};
 use std::time::Duration;
 

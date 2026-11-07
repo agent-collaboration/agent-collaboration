@@ -2,10 +2,10 @@ use crate::{
     ServiceConsumer, ServiceError, ServiceHost, ServiceObject, service_state::ServiceState,
 };
 use durable_steps::{AtomicStore, Engine, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{ConsumerProtocol, CopyStatusAnswer, CopyUnavailableReason, DatabaseId};
-use fleet_sync_receiver::{ApplyFollowUp, RECEIVER_MIGRATOR, initialize_hook};
-use fleet_sync_session::PeerAuthenticator;
-use fleet_sync_tokio_runner::{ObjectKey, ObjectOptions};
+use fleet_project_copy::{ApplyFollowUp, RECEIVER_MIGRATOR, initialize_hook};
+use fleet_protocol::{ConsumerProtocol, CopyStatusAnswer, CopyUnavailableReason, DatabaseId};
+use fleet_session::PeerAuthenticator;
+use fleet_tokio_objects::{ObjectKey, ObjectOptions};
 
 use sqlx_core::migrate::Migrator;
 use std::sync::Arc;
@@ -27,7 +27,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > ServiceState<P, C, A>
 {
@@ -113,9 +113,9 @@ impl<
             .object
             .transaction(|scope| {
                 Box::pin(async move {
-                    fleet_sync_receiver::copy_status(scope)
+                    fleet_project_copy::copy_status(scope)
                         .await
-                        .map_err(fleet_sync_receiver::receiver_rollback)
+                        .map_err(fleet_project_copy::receiver_rollback)
                 })
             })
             .await
@@ -125,9 +125,9 @@ impl<
     pub(crate) async fn await_acked(
         &self,
         database: DatabaseId,
-        through: fleet_sync_protocol::ReplicationPosition,
-    ) -> Result<fleet_sync_protocol::AwaitAckedAnswer, ServiceError> {
-        use fleet_sync_protocol::AwaitAckedAnswer;
+        through: fleet_protocol::ReplicationPosition,
+    ) -> Result<fleet_protocol::AwaitAckedAnswer, ServiceError> {
+        use fleet_protocol::AwaitAckedAnswer;
         let copy = self.copy(database).await?;
         let mut changed = copy.changed.subscribe();
         loop {

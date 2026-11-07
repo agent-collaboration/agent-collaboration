@@ -16,7 +16,7 @@ use durable_steps::{
     AtomicStore, CallFailure, CallId, CallTarget, Host, NotSentReason, SyncTime,
     turso_store::TursoStore,
 };
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use runtime_primitives::{Clock, IdSource, WakeFailure, WakeScheduler};
 use serde::{Deserialize, Serialize};
 use std::sync::{

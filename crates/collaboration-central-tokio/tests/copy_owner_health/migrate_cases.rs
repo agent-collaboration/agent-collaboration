@@ -44,7 +44,7 @@ async fn migrate_sweep_bounds_orders_and_continues_after_a_real_copy_failure()
         .create_if_missing(true)
         .connect()
         .await?;
-    let migration = fleet_sync_receiver::RECEIVER_MIGRATOR
+    let migration = fleet_project_copy::RECEIVER_MIGRATOR
         .iter()
         .find(|migration| migration.version == 1)
         .ok_or("public receiver migration1 missing")?;

@@ -3,7 +3,7 @@ use super::*;
 use collaboration_central_admin_protocol::{CopyHealth, CopyHealthRead, LiveCopyHealth};
 use collaboration_central_conformance::owner_assertion;
 use collaboration_central_core::RegistryTime;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CommitSequence, CopyStatus, DatabaseId, Epoch, PeerId, Piece, PieceContents, PieceDigest,
     ReplicatedTransaction, ReplicationAnswer, ReplicationPosition, ReplicationRequest,
     TransactionKey, TransactionPart,
@@ -90,7 +90,7 @@ async fn stage_before_process_death(
             &mut holder.socket,
             database,
             writer,
-            fleet_sync_protocol::RequestId::new(Uuid::now_v7())?,
+            fleet_protocol::RequestId::new(Uuid::now_v7())?,
         )
         .await?;
         creation_scenarios::registered(&registered, writer)?;

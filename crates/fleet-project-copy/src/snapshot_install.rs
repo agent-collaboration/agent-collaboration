@@ -1,13 +1,14 @@
+use crate::checked_queries;
 use crate::{
     CopyStatus, InstallPageReceipt, ReceiverError, ReceiverRules, SnapshotInstall,
-    SnapshotInstallError, SnapshotInstallState, SnapshotReady, StoreError, checked_queries,
+    SnapshotInstallError, SnapshotInstallState, SnapshotReady, StoreError,
     copy_contract::{CopyRecord, validate_copy_status},
     copy_storage::{CopyStorage, encode_record},
     schema_reads::SchemaReads,
     snapshot_install_storage::{InstallMarker, InstallStorage},
 };
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CopyRole, PageDigest, SnapshotCursor, SnapshotManifest, SnapshotManifestAnswer, SnapshotPage,
 };
 use sqlx_core::{

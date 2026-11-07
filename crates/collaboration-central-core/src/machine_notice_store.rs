@@ -7,7 +7,7 @@ use crate::{
 };
 use board_sync_protocol::{BoardNotice, NoticeRead, PositionedBoardNotice};
 use durable_steps::{AtomicStore, JournalScope, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{NoticePosition, PeerId, SyncTime};
+use fleet_protocol::{NoticePosition, PeerId, SyncTime};
 use notice_columns::{NoticeColumns, decode_notice};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,

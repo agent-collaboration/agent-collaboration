@@ -7,8 +7,8 @@ use durable_steps::{
     AtomicStore, CallFailure, NotSentReason, StoreError, storage::TransactionScope,
 };
 use fleet_admission::{FleetImportBundle, FleetImportResult};
-use fleet_sync_protocol::ReceiverId;
-use fleet_sync_tokio_runner::{ObjectKey, ObjectStore, TokioObject};
+use fleet_protocol::ReceiverId;
+use fleet_tokio_objects::{ObjectKey, ObjectStore, TokioObject};
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use serde_json::json;
 use sqlx_core::{query::query, row::Row};
@@ -121,9 +121,9 @@ impl Fixture {
         let runtime = ObjectRuntime::fleet(
             Arc::new(TokioStorageHost::new(object.clone())),
             io,
-            fleet_sync_lease::RegistryConfig {
+            fleet_project_lease::RegistryConfig {
                 authoritative_receiver: receiver,
-                lease: fleet_sync_lease::LeasePolicy {
+                lease: fleet_project_lease::LeasePolicy {
                     lease_duration: std::time::Duration::from_secs(60),
                     renew_interval: std::time::Duration::from_secs(20),
                 },

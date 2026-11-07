@@ -1,6 +1,6 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::sender_test_fixture::{SenderFixture, TestResult};
-use fleet_sync_protocol::{SqlValue, TableDigestBuilder};
+use fleet_protocol::{SqlValue, TableDigestBuilder};
 use sqlx_core::executor::Executor;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -101,10 +101,10 @@ async fn all_pages_and_manifest_stay_at_one_position_while_live_rows_change() ->
 }
 
 fn assert_complete_snapshot_units_fit(
-    page: &fleet_sync_protocol::SnapshotPage,
+    page: &fleet_protocol::SnapshotPage,
     limit: usize,
 ) -> TestResult {
-    use fleet_sync_protocol::*;
+    use fleet_protocol::*;
     let frame = FrameId::new(durable_steps::Uuid::from_u128(
         0x019eef00000070008000000000000001,
     ))?;
@@ -143,7 +143,7 @@ fn assert_complete_snapshot_units_fit(
 
 #[tokio::test]
 async fn byte_short_writer_pages_continue_in_the_same_table_and_preserve_manifest() -> TestResult {
-    use fleet_sync_protocol::SqlValue;
+    use fleet_protocol::SqlValue;
     use sqlx_core::query::query;
     use sqlx_turso::Turso;
     let fixture = SenderFixture::open().await?;
@@ -243,7 +243,7 @@ async fn byte_short_writer_pages_continue_in_the_same_table_and_preserve_manifes
 
 #[tokio::test]
 async fn oversize_writer_row_is_refused_before_a_page_is_emitted() -> TestResult {
-    use fleet_sync_protocol::SnapshotCursor;
+    use fleet_protocol::SnapshotCursor;
     use sqlx_core::query::query;
     use sqlx_turso::Turso;
     let fixture = SenderFixture::open().await?;
@@ -265,7 +265,7 @@ async fn oversize_writer_row_is_refused_before_a_page_is_emitted() -> TestResult
         .await;
     assert!(
         matches!(result, Err(crate::OpenError::UnitTooLarge(
-        fleet_sync_protocol::unit_budget::UnitTooLarge::Row { table, key, encoded_size }
+        fleet_protocol::unit_budget::UnitTooLarge::Row { table, key, encoded_size }
     )) if table == "text_records" && key == ["019eef00-0000-7000-8000-000000000001"] && encoded_size > 1536 * 1024),
         "an oversize row was emitted or lost its actual table/key context"
     );
@@ -275,7 +275,7 @@ async fn oversize_writer_row_is_refused_before_a_page_is_emitted() -> TestResult
 
 #[tokio::test]
 async fn first_writer_row_above_target_still_progresses_below_the_hard_cap() -> TestResult {
-    use fleet_sync_protocol::SnapshotCursor;
+    use fleet_protocol::SnapshotCursor;
     use sqlx_core::query::query;
     use sqlx_turso::Turso;
     let fixture = SenderFixture::open().await?;

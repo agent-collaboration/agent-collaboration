@@ -5,7 +5,7 @@ use durable_steps::{
     RequestKey, Resume, StepError, StepName, StoreError, Task, storage::TransactionScope,
     turso_store::TursoScope,
 };
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::row::Row;
 use std::{
     sync::{Arc, atomic::Ordering},

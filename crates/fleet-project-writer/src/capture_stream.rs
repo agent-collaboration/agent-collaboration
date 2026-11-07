@@ -3,7 +3,7 @@ use crate::{
     normalize_capture_change, schema_inspection::text, writer_file_record::WriterFileRecord,
     writer_scope::WriterScope,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CommitSequence, ReplicatedTransaction, ReplicationPosition, SqlValue, SyncTime,
 };
 use sqlx_turso::TursoConnection;
@@ -402,9 +402,6 @@ pub(crate) async fn capture_head(
     Ok(if marker == 0 {
         record.start
     } else {
-        ReplicationPosition::new(
-            record.epoch,
-            fleet_sync_protocol::CommitSequence::new(marker),
-        )
+        ReplicationPosition::new(record.epoch, fleet_protocol::CommitSequence::new(marker))
     })
 }

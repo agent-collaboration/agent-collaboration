@@ -5,7 +5,7 @@ use collaboration_mail_protocol::{CancelCause, MailItemId};
 use collaboration_protocol::{
     DeliveryOutcome, DeliveryReceipt, MailReadContext, MessageSendResult, QueuedMessageSend,
 };
-use fleet_sync_protocol::{DeliveryFailureKind, DeliveryRefusal, RecipientOutcome};
+use fleet_protocol::{DeliveryFailureKind, DeliveryRefusal, RecipientOutcome};
 use message_board::{EpochNumber, ProjectId};
 
 fn at(value: &str) -> chrono::DateTime<chrono::Utc> {

@@ -1,10 +1,8 @@
-use crate::{
-    TokioObject,
-    session_store::{SessionEngine, SessionStore, SessionTransaction},
-};
+use crate::session_store::{SessionEngine, SessionStore, SessionTransaction};
 use durable_steps::{AtomicStore, Host, StoreError, Uuid, storage::TransactionScope};
-use fleet_sync_protocol::*;
-use fleet_sync_session::*;
+use fleet_protocol::*;
+use fleet_session::*;
+use fleet_tokio_objects::TokioObject;
 use sqlx_turso::Turso;
 use std::{collections::BTreeMap, future::Future, sync::Arc, time::Duration};
 use tokio::sync::{Mutex, mpsc, oneshot, watch};
@@ -60,7 +58,7 @@ pub struct SessionAdmission<R> {
 
 pub struct SessionHost<
     P: ConsumerProtocol,
-    A: PeerAuthenticator<Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute>,
+    A: PeerAuthenticator<Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute>,
     D: SessionHandler<P>,
     H: Host,
 > {
@@ -101,7 +99,7 @@ pub(crate) enum SessionInput {
 
 impl<
     P: ConsumerProtocol,
-    A: PeerAuthenticator<Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute>,
+    A: PeerAuthenticator<Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute>,
     D: SessionHandler<P>,
     H: Host,
 > SessionHost<P, A, D, H>

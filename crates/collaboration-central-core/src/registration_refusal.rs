@@ -1,6 +1,6 @@
 //! A registration gate preserves the stable refusal kind and readable detail.
 use durable_steps::CallFailure;
-use fleet_sync_protocol::{GateReason, GateReasonCode};
+use fleet_protocol::{GateReason, GateReasonCode};
 use message_board::Refusal;
 
 pub(crate) fn render(reason: &Refusal) -> Result<GateReason, CallFailure> {

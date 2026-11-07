@@ -3,13 +3,13 @@ use board_fleet_sync::{
     BoardProjectSchema, BoardSessionInputs, MachineSessionStore, ReqwestSessionTransport,
 };
 use board_sync_protocol::BoardConsumerProtocol;
-use fleet_sync_protocol::{
+use fleet_project_writer::BootstrapGrant;
+use fleet_protocol::{
     DatabaseId, HolderChangeAnswer, LeaseAnswer, LeaseRequest, LeaseState, LeaseStatus,
     OperationAnswer, OperationRequest, RequestId, SchemaSupport,
 };
-use fleet_sync_session::{ClientEvent, SessionClient};
-use fleet_sync_tokio_runner::{SessionPump, SessionRequests};
-use fleet_sync_writer::BootstrapGrant;
+use fleet_session::{ClientEvent, SessionClient};
+use fleet_session_client::{SessionPump, SessionRequests};
 use runtime_primitives::{Backoff, Clock, SystemClock, UuidV7Ids};
 use std::{path::Path, time::Duration};
 use tokio::{
@@ -22,7 +22,7 @@ const BOUND: Duration = Duration::from_secs(20);
 
 pub struct ClaimSession {
     requests: SessionRequests<BoardConsumerProtocol>,
-    peer: fleet_sync_protocol::PeerId,
+    peer: fleet_protocol::PeerId,
     stop: watch::Sender<bool>,
     tasks: JoinSet<TestResult>,
 }

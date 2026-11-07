@@ -1,7 +1,5 @@
 //! Installation-authorized claim outcomes retain the native lease and copy identities.
-use fleet_sync_protocol::{
-    Epoch, PeerId, ReplicationPosition, SchemaIdentity, SyncTime, TransferId,
-};
+use fleet_protocol::{Epoch, PeerId, ReplicationPosition, SchemaIdentity, SyncTime, TransferId};
 use message_board::{ProjectId, ProtocolVersion, RequestId};
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Serialize};

@@ -3,7 +3,7 @@ use super::support::{
     *,
 };
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
 use std::sync::{
@@ -104,7 +104,7 @@ async fn pushed_acceptance_hook_and_attempt_commit_together_and_replay_is_curren
                 Box::pin(async move {
                     Inbox::<_, TestTypes, _>::new(scope, peer(2), limits(), &FixtureBindings)
                         .accept_push::<DeliverTask, ReportTask, RecordRemoval, _>(
-                            fleet_sync_delivery::Submitter::Machine(peer(1)),
+                            fleet_mail_delivery::Submitter::Machine(peer(1)),
                             item(1, "projected once"),
                             peer(9),
                             consumer.as_ref(),
@@ -120,7 +120,7 @@ async fn pushed_acceptance_hook_and_attempt_commit_together_and_replay_is_curren
     assert_eq!(counts(&store).await, (0, 0, 0));
     consumer.reject.store(false, Ordering::SeqCst);
     store.transaction({let consumer=consumer.clone();move|scope|Box::pin(async move {
-        let answer=Inbox::<_,TestTypes, _>::new(scope,peer(2),limits(), &FixtureBindings).accept_push::<DeliverTask,ReportTask,RecordRemoval,_>(fleet_sync_delivery::Submitter::Machine(peer(1)), item(1,"projected once"),peer(9),consumer.as_ref(),SyncTime::from_unix_millis(17)).await.map_err(storage_error)?;
+        let answer=Inbox::<_,TestTypes, _>::new(scope,peer(2),limits(), &FixtureBindings).accept_push::<DeliverTask,ReportTask,RecordRemoval,_>(fleet_mail_delivery::Submitter::Machine(peer(1)), item(1,"projected once"),peer(9),consumer.as_ref(),SyncTime::from_unix_millis(17)).await.map_err(storage_error)?;
         assert!(matches!(answer,PushResult::Accepted {accepted_at} if accepted_at==SyncTime::from_unix_millis(17)));
         Ok(())
     })}).await.unwrap();
@@ -145,8 +145,8 @@ async fn pushed_acceptance_hook_and_attempt_commit_together_and_replay_is_curren
         .unwrap();
     reopened.transaction({let consumer=consumer.clone();move|scope|Box::pin(async move {
         let mut inbox=Inbox::<_,TestTypes, _>::new(scope,peer(2),limits(), &FixtureBindings);
-        assert!(matches!(inbox.accept_push::<DeliverTask,ReportTask,RecordRemoval,_>(fleet_sync_delivery::Submitter::Machine(peer(1)), item(1,"projected once"),peer(9),consumer.as_ref(),SyncTime::from_unix_millis(24)).await.map_err(storage_error)?,PushResult::Replayed {status:DeliveryStatus::Held,..}));
-        assert!(matches!(inbox.accept_push::<DeliverTask,ReportTask,RecordRemoval,_>(fleet_sync_delivery::Submitter::Machine(peer(1)), item(1,"changed content"),peer(9),consumer.as_ref(),SyncTime::from_unix_millis(24)).await.map_err(storage_error)?,PushResult::Conflict {existing} if existing==*item(1,"projected once").digest()));
+        assert!(matches!(inbox.accept_push::<DeliverTask,ReportTask,RecordRemoval,_>(fleet_mail_delivery::Submitter::Machine(peer(1)), item(1,"projected once"),peer(9),consumer.as_ref(),SyncTime::from_unix_millis(24)).await.map_err(storage_error)?,PushResult::Replayed {status:DeliveryStatus::Held,..}));
+        assert!(matches!(inbox.accept_push::<DeliverTask,ReportTask,RecordRemoval,_>(fleet_mail_delivery::Submitter::Machine(peer(1)), item(1,"changed content"),peer(9),consumer.as_ref(),SyncTime::from_unix_millis(24)).await.map_err(storage_error)?,PushResult::Conflict {existing} if existing==*item(1,"projected once").digest()));
         Ok(())
     })}).await.unwrap();
     assert_eq!(counts(&reopened).await, (1, 1, 0));
@@ -174,7 +174,7 @@ async fn wrong_machine_and_full_inbox_pushes_leave_no_custody_projection_or_atte
                     assert!(matches!(
                         Inbox::<_, TestTypes, _>::new(scope, peer(3), limits(), &FixtureBindings)
                             .accept_push::<DeliverTask, ReportTask, RecordRemoval, _>(
-                                fleet_sync_delivery::Submitter::Machine(peer(1)),
+                                fleet_mail_delivery::Submitter::Machine(peer(1)),
                                 item(1, "wrong recipient"),
                                 peer(9),
                                 consumer.as_ref(),
@@ -197,7 +197,7 @@ async fn wrong_machine_and_full_inbox_pushes_leave_no_custody_projection_or_atte
                     assert!(matches!(
                         Inbox::<_, TestTypes, _>::new(scope, peer(2), tiny, &FixtureBindings)
                             .accept_push::<DeliverTask, ReportTask, RecordRemoval, _>(
-                                fleet_sync_delivery::Submitter::Machine(peer(1)),
+                                fleet_mail_delivery::Submitter::Machine(peer(1)),
                                 item(1, "no capacity"),
                                 peer(9),
                                 consumer.as_ref(),

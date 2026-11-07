@@ -4,7 +4,7 @@ use fleet_identity_protocol::{
     AgentIsolation, InstallationId, IsolationKind, LaunchContext, MachineEnvironment,
     OrganizationId, SequenceNumber, StartedBy, UnixMillis,
 };
-use fleet_sync_protocol::ConnectionId;
+use fleet_protocol::ConnectionId;
 use message_board::{MachineLabel, ProjectId, ResourceName, SessionRef, WorkspaceId};
 use schemars::JsonSchema;
 use schemars::{Schema, SchemaGenerator, json_schema};

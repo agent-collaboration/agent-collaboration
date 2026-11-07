@@ -4,7 +4,7 @@ use board_sync_protocol::{BoardConsumerProtocol, BoardConsumerRequest, BoardDeli
 use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, enroll_admitted_peer,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CancelBody, ClientFrame, DeliveryCancel, DeliveryEnvelope, DeliveryItem, Epoch, FrameId,
     ItemId, OperationRequest, PeerId, Recipient,
 };

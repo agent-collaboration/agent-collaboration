@@ -2,8 +2,8 @@ use crate::{
     OpenError,
     writer_file_record::{read_file_record, write_file_record},
 };
-use fleet_sync_lease::{HolderError, LeaseHolder, WriterState};
-use fleet_sync_protocol::{LeaseStatus, RenewAnswer, RenewResult, ReplicationPosition, SyncTime};
+use fleet_project_lease::{HolderError, LeaseHolder, WriterState};
+use fleet_protocol::{LeaseStatus, RenewAnswer, RenewResult, ReplicationPosition, SyncTime};
 use serde::{Deserialize, Serialize};
 use sqlx_turso::TursoConnection;
 
@@ -44,9 +44,9 @@ pub(crate) enum RegistrationSeed {
 impl RegistrationState {
     pub(crate) fn validate(
         &self,
-        database: fleet_sync_protocol::DatabaseId,
-        peer: fleet_sync_protocol::PeerId,
-        epoch: fleet_sync_protocol::Epoch,
+        database: fleet_protocol::DatabaseId,
+        peer: fleet_protocol::PeerId,
+        epoch: fleet_protocol::Epoch,
         start: ReplicationPosition,
     ) -> bool {
         let position = match self {

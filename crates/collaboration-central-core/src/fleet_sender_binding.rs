@@ -2,8 +2,8 @@
 use board_sync_protocol::BoardDeliveryTypes;
 use collaboration_mail_protocol::MailSender;
 use durable_steps::storage::TransactionScope;
-use fleet_sync_delivery::{SenderBinding, SenderBindingFailure};
-use fleet_sync_protocol::Submitter;
+use fleet_mail_delivery::{SenderBinding, SenderBindingFailure};
+use fleet_protocol::Submitter;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -37,7 +37,7 @@ where
         async move {
             let installation = match sender {
                 MailSender::Project { project } => {
-                    return fleet_sync_protocol::DatabaseId::try_from(project.as_str().to_owned())
+                    return fleet_protocol::DatabaseId::try_from(project.as_str().to_owned())
                         .map(Submitter::Project)
                         .map_err(|_| SenderBindingFailure::Conflict);
                 }

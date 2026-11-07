@@ -4,7 +4,7 @@ use collaboration_central_conformance::RuntimeFaults;
 use durable_steps::{
     AtomicStore, BoxFuture, OperationFailure, ReborrowScope, StoreError, storage::TransactionScope,
 };
-use fleet_sync_protocol::CopyUnavailableReason;
+use fleet_protocol::CopyUnavailableReason;
 use sqlx_core::{query::query, row::Row};
 use std::sync::Arc;
 

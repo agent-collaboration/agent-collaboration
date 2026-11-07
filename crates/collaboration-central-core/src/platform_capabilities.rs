@@ -1,8 +1,8 @@
 //! Capabilities supplied by the runtime for one central object.
 
 use durable_steps::AtomicStore;
-use fleet_sync_protocol::{CloseReason, ConnectionId};
-use fleet_sync_session::{Bytes, ConnectionRegistration};
+use fleet_protocol::{CloseReason, ConnectionId};
+use fleet_session::{Bytes, ConnectionRegistration};
 use runtime_primitives::WakeScheduler;
 use sqlx_core::database::Database;
 use std::collections::BTreeMap;
@@ -53,7 +53,7 @@ pub trait CentralPlatform: Clone + Send + Sync + 'static {
     fn upgrade_session(
         &self,
         request: http::request::Parts,
-        binding: fleet_sync_session::ConnectionBinding,
+        binding: fleet_session::ConnectionBinding,
         admission_origin: AdmissionOrigin,
     ) -> impl Future<Output = Result<http::Response<axum::body::Body>, UpgradeFailure>> + Send;
     fn fetch_access_keys(&self) -> impl Future<Output = Result<RawJwks, KeyFetchFailure>> + Send;
@@ -122,7 +122,7 @@ pub trait ObjectHost: Send + Sync + 'static {
     fn admission_binding(
         &self,
         connection: ConnectionId,
-    ) -> impl Future<Output = Result<fleet_sync_session::ConnectionBinding, SocketFailure>> + Send;
+    ) -> impl Future<Output = Result<fleet_session::ConnectionBinding, SocketFailure>> + Send;
     fn publish_registrations(
         &self,
         edits: RegistrationEdits,

@@ -2,7 +2,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::{turso_copy_rollback_fixture::*, *};
 use durable_steps::{AtomicStore, OperationFailure, StoreError as AtomicError};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 
 #[tokio::test]
 async fn stale_epoch_refusal_crosses_atomic_store_with_its_exact_cutoff() -> TestResult {

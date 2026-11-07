@@ -11,8 +11,8 @@ use crate::{
 use durable_steps::{
     AtomicStore, BoxFuture, JournalScope, StartRefusal, StoreError, storage::TransactionScope,
 };
-use fleet_sync_lease::{DatabaseLifecycle, HolderChangeTask};
-use fleet_sync_protocol::{
+use fleet_project_lease::{DatabaseLifecycle, HolderChangeTask};
+use fleet_protocol::{
     ActorRef, DatabaseId, HolderChangeAnswer, HolderChangeRefusal, HolderChangeRequest, PeerId,
 };
 use runtime_primitives::SyncTime;
@@ -55,7 +55,7 @@ where
                 ));
             };
             let attempt = self.offer.attempt();
-            let saved = fleet_sync_lease::holder_change_view(scope, attempt)
+            let saved = fleet_project_lease::holder_change_view(scope, attempt)
                 .await
                 .map_err(StoreError::backend)?
                 .map(|view| view.request);
@@ -72,7 +72,7 @@ where
                             ));
                         }
                         None => {
-                            match fleet_sync_lease::lease_status(scope, self.database, self.now)
+                            match fleet_project_lease::lease_status(scope, self.database, self.now)
                                 .await
                             {
                                 Ok(Some(lease)) => lease.epoch,
@@ -86,7 +86,7 @@ where
                                         Vec::new(),
                                     ));
                                 }
-                                Err(fleet_sync_lease::LeaseError::Retired) => {
+                                Err(fleet_project_lease::LeaseError::Retired) => {
                                     return Ok((
                                         PreparedOwnerTransfer::Refused(
                                             OwnerTransferAnswer::Refused(
@@ -122,13 +122,13 @@ where
                     Vec::new(),
                 ));
             }
-            let key = fleet_sync_lease::holder_change_request_key(attempt)
+            let key = fleet_project_lease::holder_change_request_key(attempt)
                 .map_err(StoreError::backend)?;
             // The public lease admission erases StartRefusal into LeaseError text.
             // Check the same idempotent journal admission first to preserve a
             // typed conflict, including an ID used by another task kind.
             match scope
-                .admit::<HolderChangeTask<Store, Driver, fleet_sync_lease::NoLeaseChangeHook>>(
+                .admit::<HolderChangeTask<Store, Driver, fleet_project_lease::NoLeaseChangeHook>>(
                     &key, &request,
                 )
                 .await
@@ -145,7 +145,7 @@ where
                     return Err(StoreError::backend("holder-change task unavailable"));
                 }
             }
-            fleet_sync_lease::admit_holder_change::<Store, Driver>(
+            fleet_project_lease::admit_holder_change::<Store, Driver>(
                 scope,
                 &request,
                 &ActorRef::new("owner").map_err(StoreError::backend)?,
@@ -218,7 +218,7 @@ where
                 }
             };
             // A canonical answer preserves a grant even when later work failed.
-            let answer = fleet_sync_lease::holder_change_answer(scope, &self.request)
+            let answer = fleet_project_lease::holder_change_answer(scope, &self.request)
                 .await
                 .map_err(StoreError::backend)?;
             let reply = match answer {
@@ -242,7 +242,7 @@ where
                     OwnerTransferAnswer::Failed { reason }
                 }
                 Some(HolderChangeAnswer::Pending { .. }) | None => {
-                    let view = fleet_sync_lease::holder_change_view(scope, attempt)
+                    let view = fleet_project_lease::holder_change_view(scope, attempt)
                         .await
                         .map_err(StoreError::backend)?;
                     match view
@@ -287,7 +287,7 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
-            let checked = match fleet_sync_lease::database_lifecycle(scope, self.database)
+            let checked = match fleet_project_lease::database_lifecycle(scope, self.database)
                 .await
                 .map_err(StoreError::backend)?
             {
@@ -296,10 +296,10 @@ where
                     OwnerPreviewCheck::Refused(OwnerPreviewAnswer::Retired)
                 }
                 Some(_) => {
-                    match fleet_sync_lease::lease_status(scope, self.database, self.now).await {
+                    match fleet_project_lease::lease_status(scope, self.database, self.now).await {
                         Ok(Some(_)) => OwnerPreviewCheck::Held,
                         Ok(None) => OwnerPreviewCheck::Refused(OwnerPreviewAnswer::NotFound),
-                        Err(fleet_sync_lease::LeaseError::Retired) => {
+                        Err(fleet_project_lease::LeaseError::Retired) => {
                             OwnerPreviewCheck::Refused(OwnerPreviewAnswer::Retired)
                         }
                         Err(error) => return Err(StoreError::backend(error)),
@@ -312,7 +312,7 @@ where
 }
 
 pub(crate) struct ReadOwnerPreviewDisplay {
-    pub preview: fleet_sync_protocol::TakeoverPreview,
+    pub preview: fleet_protocol::TakeoverPreview,
 }
 impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for ReadOwnerPreviewDisplay
 where

@@ -3,8 +3,8 @@ use super::*;
 use crate::push_record_delivery::PushDeliveryFailure;
 use collaboration_mail_protocol::MailRefusal;
 use durable_steps::{AtomicStore, StoreError};
-use fleet_sync_delivery::{DeliveryError, DeliveryLimits, Inbox, minimum_settlement_allowance};
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItemRef};
+use fleet_mail_delivery::{DeliveryError, DeliveryLimits, Inbox, minimum_settlement_allowance};
+use fleet_protocol::{DeliveryEnvelope, DeliveryItemRef};
 #[path = "local_mail_interruption_tests.rs"]
 mod interruption;
 
@@ -190,13 +190,13 @@ async fn a_full_real_inbox_refuses_new_projections_but_reserves_space_to_cancel_
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                let row = fleet_sync_delivery::test_support::snapshot::<
+                let row = fleet_mail_delivery::test_support::snapshot::<
                     _,
                     collaboration_contracts::RouterDeliveryTypes,
                     _,
                 >(
                     scope,
-                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    fleet_mail_delivery::DeliveryHostRole::Machine,
                     binding.as_ref(),
                 )
                 .await

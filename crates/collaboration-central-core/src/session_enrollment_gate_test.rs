@@ -4,12 +4,12 @@ use crate::session_scope::CoreSessionScope;
 use crate::{LocalSectionFailure, ObjectHost, SocketFailure};
 use durable_steps::storage::TransactionScope;
 use durable_steps::{AtomicStore, ReborrowScope, StoreError};
-use fleet_sync_protocol::{ConnectionId, FrameId, OperationRequest, SessionId};
-use fleet_sync_session::{Bytes, SessionEffect, SessionKey};
+use fleet_protocol::{ConnectionId, FrameId, OperationRequest, SessionId};
+use fleet_session::{Bytes, SessionEffect, SessionKey};
 use serde_json::{Value, json};
 use sqlx_core::executor::Executor;
 use std::{marker::PhantomData, sync::Arc};
-type Store = fleet_sync_tokio_runner::TokioObject<crate::CoreHost<FixtureIo>>;
+type Store = fleet_tokio_objects::TokioObject<crate::CoreHost<FixtureIo>>;
 const PEER: &str = "019f0000-0000-7000-8000-00000000a101";
 const SERVICE: &str = "019f0000-0000-7000-8000-00000000a102";
 const PROJECT: &str = "019f0000-0000-7000-8000-00000000a103";
@@ -41,7 +41,7 @@ impl ObjectHost for ScopeHost {
     async fn close_connection(
         &self,
         _: ConnectionId,
-        _: fleet_sync_protocol::CloseReason,
+        _: fleet_protocol::CloseReason,
     ) -> Result<(), SocketFailure> {
         Err(SocketFailure::NotConnected)
     }
@@ -57,7 +57,7 @@ impl ObjectHost for ScopeHost {
     async fn admission_binding(
         &self,
         _: ConnectionId,
-    ) -> Result<fleet_sync_session::ConnectionBinding, SocketFailure> {
+    ) -> Result<fleet_session::ConnectionBinding, SocketFailure> {
         Err(SocketFailure::NotConnected)
     }
     async fn publish_registrations(
@@ -200,7 +200,7 @@ async fn revoked_seed_begin_selects_no_copy_write() -> Result<(), TestError> {
     selection(json!({"kind":"replication","value":{"kind":"seedBegin","value":{"database":PROJECT,"attempt":PROJECT}}}),replication_refusal()).await
 }
 fn piece() -> Result<Value, TestError> {
-    use fleet_sync_protocol::{
+    use fleet_protocol::{
         CommitSequence, Epoch, Piece, PieceContents, ReplicatedTransaction, ReplicationPosition,
     };
     let epoch = Epoch::new(1)?;
@@ -226,14 +226,14 @@ async fn revoked_piece_selects_no_copy_write() -> Result<(), TestError> {
     )
     .await
 }
-fn page() -> Result<fleet_sync_protocol::SnapshotPage, TestError> {
-    Ok(fleet_sync_protocol::SnapshotPage {
+fn page() -> Result<fleet_protocol::SnapshotPage, TestError> {
+    Ok(fleet_protocol::SnapshotPage {
         database: PROJECT.to_owned().try_into()?,
-        position: fleet_sync_protocol::ReplicationPosition::new(
-            fleet_sync_protocol::Epoch::new(1)?,
-            fleet_sync_protocol::CommitSequence::new(0),
+        position: fleet_protocol::ReplicationPosition::new(
+            fleet_protocol::Epoch::new(1)?,
+            fleet_protocol::CommitSequence::new(0),
         ),
-        schema: fleet_sync_protocol::SchemaIdentity::new(1, "gate-fixture".into())?,
+        schema: fleet_protocol::SchemaIdentity::new(1, "gate-fixture".into())?,
         schema_steps: Vec::new(),
         table: "".into(),
         rows: Vec::new(),
@@ -243,10 +243,10 @@ fn page() -> Result<fleet_sync_protocol::SnapshotPage, TestError> {
 #[tokio::test]
 async fn revoked_seed_page_selects_no_copy_write() -> Result<(), TestError> {
     let page = page()?;
-    let request = fleet_sync_protocol::SeedPage {
-        seed: fleet_sync_protocol::SeedId { generation: 1 },
+    let request = fleet_protocol::SeedPage {
+        seed: fleet_protocol::SeedId { generation: 1 },
         page: 0,
-        digest: fleet_sync_protocol::PageDigest::of_canonical(&page)?,
+        digest: fleet_protocol::PageDigest::of_canonical(&page)?,
         contents: page,
     };
     selection(

@@ -1,9 +1,9 @@
 #![allow(clippy::panic_in_result_fn)]
-use fleet_sync_protocol::{AuthRefusal, CloseReason};
-use fleet_sync_session::{
+use fleet_protocol::{AuthRefusal, CloseReason};
+use fleet_session::{
     ConnectFailure, Endpoint, PeerCredential, SessionTransport, TransportConnection,
 };
-use fleet_sync_transport_websocket::WebSocketTransport;
+use fleet_websocket_transport::WebSocketTransport;
 use std::time::Duration;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},

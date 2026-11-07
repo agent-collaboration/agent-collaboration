@@ -1,7 +1,7 @@
 //! Observe real mail frames and lose one selected live publication without closing the socket.
 use crate::{BOUND, FixtureResult};
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientAnswer, ClientFrame, DeliveryAnswer, DeliveryRequest, DeliveryTypes, FrameId, ItemId,
     OperationAnswer, OperationRequest, PushResult, RecipientOutcome, ReportResult, ReportSeq,
     ServerCall, ServerCallAnswer, ServerFrame, ServerRequest, StatusCursor, StatusFetchResult,
@@ -41,7 +41,7 @@ pub enum MailWireEvent {
     SettleSent {
         frame: FrameId,
         item: ItemId,
-        submitter: fleet_sync_protocol::Submitter,
+        submitter: fleet_protocol::Submitter,
     },
 }
 

@@ -7,8 +7,8 @@ use crate::{
     writer_scope::WriterScope,
 };
 use durable_steps::Uuid;
-use fleet_sync_lease::{LeaseHolder, LeasePolicy};
-use fleet_sync_protocol::{PeerId, ReplicatedTransaction, RowChange, SqlValue, TableName};
+use fleet_project_lease::{LeaseHolder, LeasePolicy};
+use fleet_protocol::{PeerId, ReplicatedTransaction, RowChange, SqlValue, TableName};
 use sqlx_core::{
     connection::Connection,
     executor::Executor,
@@ -19,7 +19,7 @@ use std::{sync::LazyLock, time::Duration};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 static REGULAR: Migrator = sqlx::migrate!("./tests/fixtures/regular");
-static TABLES: LazyLock<Result<Vec<TableName>, fleet_sync_protocol::TextValueError>> =
+static TABLES: LazyLock<Result<Vec<TableName>, fleet_protocol::TextValueError>> =
     LazyLock::new(|| {
         ["text_records", "composite_records", "real_records"]
             .into_iter()

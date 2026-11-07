@@ -1,7 +1,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use super::*;
 use crate::turso_rule_fixture::*;
-use fleet_sync_protocol::{CopyStatus, SqlValue};
+use fleet_protocol::{CopyStatus, SqlValue};
 use sqlx_core::{connection::Connection, executor::Executor, query::query};
 use sqlx_turso::{Turso, TursoConnection};
 
@@ -36,8 +36,8 @@ async fn compare_page(
             );
             assert_eq!(serde_json::to_vec(&actual)?, serde_json::to_vec(&expected)?);
             assert_eq!(
-                fleet_sync_protocol::PageDigest::of(&actual)?,
-                fleet_sync_protocol::PageDigest::of(&expected)?
+                fleet_protocol::PageDigest::of(&actual)?,
+                fleet_protocol::PageDigest::of(&expected)?
             );
             Ok(actual.next)
         }
@@ -163,7 +163,7 @@ async fn final_copy_size_mismatch_is_corrupt() -> TestResult {
 
 #[tokio::test]
 async fn copy_table_transitions_and_invalid_cursors_match_oracle() -> TestResult {
-    use fleet_sync_protocol::*;
+    use fleet_protocol::*;
     let mut connection = connection().await?;
     let mut tx = connection.begin_with("BEGIN IMMEDIATE").await?;
     let incoming = Piece::<()>::new(PieceContents {

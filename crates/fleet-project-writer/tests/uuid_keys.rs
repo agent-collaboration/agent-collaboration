@@ -1,11 +1,11 @@
 #![allow(clippy::panic_in_result_fn, clippy::expect_used)]
 use durable_steps::Uuid;
-use fleet_sync_lease::{LeaseHolder, LeasePolicy};
-use fleet_sync_protocol::{PeerId, TableName};
-use fleet_sync_writer::{
+use fleet_project_lease::{LeaseHolder, LeasePolicy};
+use fleet_project_writer::{
     Migration, OpenError, ReplicatedDatabase, ReplicatedSchema, SchemaForm, WriteRefusal,
     WriterOptions,
 };
+use fleet_protocol::{PeerId, TableName};
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     executor::Executor,

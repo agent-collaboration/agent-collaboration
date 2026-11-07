@@ -64,7 +64,7 @@ use collaboration_protocol::{
     PushHeaderFacts, PushKind, PushOrigin, PushRecordDraft, PushRecordShowParams,
     SessionMessageSendParams,
 };
-use fleet_sync_protocol::{DeliveryItemRef, PeerId};
+use fleet_protocol::{DeliveryItemRef, PeerId};
 use native_mail_owner::NativeMailOwner;
 use std::sync::Arc;
 use std::time::Duration;

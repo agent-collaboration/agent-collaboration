@@ -2,7 +2,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::turso_seed_tests::{TursoScope, database, position};
 use crate::*;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::connection::{ConnectOptions, Connection};
 use sqlx_turso::TursoConnectOptions;
 type TestResult = Result<(), Box<dyn std::error::Error>>;

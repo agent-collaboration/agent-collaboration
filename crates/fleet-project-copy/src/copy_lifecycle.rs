@@ -3,7 +3,7 @@ use crate::{
     copy_contract::CopyRecord, copy_storage::CopyStorage, schema_reads::SchemaReads,
 };
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CommitSequence, CopyOrigin, CreateCopy, CreateCopyAnswer, ReplicationPosition, RetireCopy,
     RetireCopyAnswer, SchemaIdentity,
 };
@@ -111,7 +111,7 @@ where
 #[allow(clippy::manual_async_fn)]
 pub fn copy_status<'scope, S>(
     scope: &'scope mut S,
-) -> impl std::future::Future<Output = Result<fleet_sync_protocol::CopyStatusAnswer, ReceiverError>>
+) -> impl std::future::Future<Output = Result<fleet_protocol::CopyStatusAnswer, ReceiverError>>
 + Send
 + 'scope
 where
@@ -124,7 +124,7 @@ where
     for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
 {
     async move {
-        use fleet_sync_protocol::CopyStatusAnswer;
+        use fleet_protocol::CopyStatusAnswer;
         match following_status(scope).await {
             Ok(status) => Ok(CopyStatusAnswer::Status(status)),
             Err(ReceiverError::NotInitialized) => Ok(CopyStatusAnswer::NotInitialized),
@@ -140,7 +140,7 @@ where
 pub fn retire_copy<'scope, S>(
     scope: &'scope mut S,
     request: &'scope RetireCopy,
-    now: fleet_sync_protocol::SyncTime,
+    now: fleet_protocol::SyncTime,
 ) -> impl std::future::Future<Output = Result<RetireCopyAnswer, ReceiverError>> + Send + 'scope
 where
     S: TransactionScope + 'scope,

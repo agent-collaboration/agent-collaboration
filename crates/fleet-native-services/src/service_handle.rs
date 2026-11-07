@@ -1,10 +1,10 @@
 use crate::{ServiceConsumer, ServiceError, ServiceHandle, ServiceObject};
 use durable_steps::{AtomicStore, RequestKey};
-use fleet_sync_lease::{
+use fleet_project_lease::{
     DatabaseLifecycle, ImportTask, PreviewTakeoverTask, RetirementTask, lifecycle_request_key,
 };
-use fleet_sync_protocol::*;
-use fleet_sync_session::PeerAuthenticator;
+use fleet_protocol::*;
+use fleet_session::PeerAuthenticator;
 use runtime_primitives::{Clock, WakeScheduler};
 use sqlx_turso::Turso;
 
@@ -26,7 +26,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > ServiceHandle<P, C, A>
 {
@@ -74,7 +74,7 @@ impl<
         }
         let key = lifecycle_request_key(request.attempt).map_err(ServiceError::rule)?;
         self.state
-            .execute_registry::<ImportTask<ServiceObject, Turso, fleet_sync_lease::NoLeaseChangeHook>>(key, request)
+            .execute_registry::<ImportTask<ServiceObject, Turso, fleet_project_lease::NoLeaseChangeHook>>(key, request)
             .await
     }
     pub async fn seed_import(
@@ -89,7 +89,7 @@ impl<
             ImportSeedRequest::Complete(done) => ReplicationRequest::SeedComplete(done),
         };
         self.state
-            .replicate_with_authority(fleet_sync_receiver::SeedAuthority::Admin, request)
+            .replicate_with_authority(fleet_project_copy::SeedAuthority::Admin, request)
             .await
     }
     pub async fn retire(&self, request: Retirement) -> Result<RetirementAnswer, ServiceError> {
@@ -102,7 +102,7 @@ impl<
         }
         let key = lifecycle_request_key(request.attempt).map_err(ServiceError::rule)?;
         self.state
-            .execute_registry::<RetirementTask<ServiceObject, Turso, fleet_sync_lease::NoLeaseChangeHook>>(key, request)
+            .execute_registry::<RetirementTask<ServiceObject, Turso, fleet_project_lease::NoLeaseChangeHook>>(key, request)
             .await
     }
     pub async fn preview_takeover(
@@ -129,21 +129,21 @@ impl<
     }
     pub async fn cancel_holder_change(
         &self,
-        cancel: fleet_sync_lease::CancelHolderChange,
-    ) -> Result<fleet_sync_lease::CancelAnswer, ServiceError> {
+        cancel: fleet_project_lease::CancelHolderChange,
+    ) -> Result<fleet_project_lease::CancelAnswer, ServiceError> {
         let now = self.state.registry.host().now();
         let answer = self
             .state
             .registry
             .transaction(move |scope| {
                 Box::pin(async move {
-                    fleet_sync_lease::cancel_holder_change(scope, &cancel, now)
+                    fleet_project_lease::cancel_holder_change(scope, &cancel, now)
                         .await
                         .map_err(durable_steps::StoreError::backend)
                 })
             })
             .await?;
-        if matches!(answer, fleet_sync_lease::CancelAnswer::Accepted { .. }) {
+        if matches!(answer, fleet_project_lease::CancelAnswer::Accepted { .. }) {
             self.state
                 .registry
                 .host()
@@ -156,12 +156,12 @@ impl<
     pub async fn holder_change_view(
         &self,
         attempt: TransferId,
-    ) -> Result<Option<fleet_sync_lease::HolderChangeView>, ServiceError> {
+    ) -> Result<Option<fleet_project_lease::HolderChangeView>, ServiceError> {
         self.state
             .registry
             .rule_transaction(move |scope| {
                 Box::pin(async move {
-                    fleet_sync_lease::holder_change_view(scope, attempt)
+                    fleet_project_lease::holder_change_view(scope, attempt)
                         .await
                         .map_err(durable_steps::StoreError::backend)
                 })
@@ -194,8 +194,8 @@ impl<
     pub async fn wait_holder_change_phase(
         &self,
         attempt: TransferId,
-        expected: fleet_sync_lease::HolderChangePhase,
-    ) -> Result<fleet_sync_lease::HolderChangeView, ServiceError> {
+        expected: fleet_project_lease::HolderChangePhase,
+    ) -> Result<fleet_project_lease::HolderChangeView, ServiceError> {
         let mut changed = self.state.registry.subscribe_commits();
         loop {
             if let Some(view) = self.holder_change_view(attempt).await?
@@ -210,7 +210,7 @@ impl<
     pub async fn wait_holder_change_settled(
         &self,
         attempt: TransferId,
-    ) -> Result<fleet_sync_lease::HolderChangeView, ServiceError> {
+    ) -> Result<fleet_project_lease::HolderChangeView, ServiceError> {
         let mut changed = self.state.registry.subscribe_commits();
         loop {
             if let Some(view) = self.holder_change_view(attempt).await?
@@ -236,7 +236,7 @@ impl<
                 .registry
                 .rule_transaction(move |scope| {
                     Box::pin(async move {
-                        fleet_sync_lease::holder_change_answer(scope, &reading)
+                        fleet_project_lease::holder_change_answer(scope, &reading)
                             .await
                             .map_err(durable_steps::StoreError::backend)
                     })

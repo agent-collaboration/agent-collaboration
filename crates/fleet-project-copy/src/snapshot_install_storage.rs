@@ -1,9 +1,10 @@
+use crate::checked_queries;
 use crate::{
-    InstallPageReceipt, SnapshotInstall, SnapshotInstallError, StoreError, checked_queries,
+    InstallPageReceipt, SnapshotInstall, SnapshotInstallError, StoreError,
     copy_storage::{decode_record, encode_record},
 };
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::{CopyStatus, SnapshotManifest};
+use fleet_protocol::{CopyStatus, SnapshotManifest};
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -62,7 +63,7 @@ where
     }
     pub async fn pages(
         &mut self,
-        id: fleet_sync_protocol::InstallId,
+        id: fleet_protocol::InstallId,
     ) -> Result<Vec<InstallPageReceipt>, SnapshotInstallError> {
         let mut receipts = Vec::new();
         for row in checked_queries::read_install_pages(self.0).await? {

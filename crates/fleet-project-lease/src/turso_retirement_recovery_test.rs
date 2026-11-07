@@ -5,7 +5,7 @@ use crate::{
     *,
 };
 use durable_steps::{AtomicStore, OperationState};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::row::Row;
 use sqlx_turso::Turso;
 use std::sync::{Arc, atomic::Ordering};
@@ -115,7 +115,7 @@ async fn failed_retirement_keeps_its_seal_and_a_new_attempt_finishes_the_real_co
     let mut copies = host.copies.lock().await;
     let copy = copies.get_mut(&database()?).ok_or("copy missing")?;
     assert_eq!(
-        fleet_sync_receiver::copy_status(&mut CopyScope(copy)).await?,
+        fleet_project_copy::copy_status(&mut CopyScope(copy)).await?,
         CopyStatusAnswer::Retired
     );
     let row =

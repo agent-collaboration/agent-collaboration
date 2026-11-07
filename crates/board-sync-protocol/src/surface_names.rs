@@ -4,7 +4,7 @@ use crate::surface_codecs::{
     CancelResultCodec, ClaimAnswerCodec, DeliveryStatusCodec, LeaseRefusalCodec, PieceRefusalCodec,
     RegistrationRefusalCodec,
 };
-use fleet_sync_protocol as wire;
+use fleet_protocol as wire;
 use serde::{Deserialize, Serialize};
 
 macro_rules! surface_wrapper {

@@ -3,11 +3,11 @@ use crate::native_fleet as fleet_fixture;
 
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
 use fleet_fixture::{Fixture, TestResult};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DatabaseId, Epoch, LeaseAnswer, LeaseRequest, PeerId, RenewAnswer, RenewRequest, RequestId,
     SessionId,
 };
-use fleet_sync_session::SessionKey;
+use fleet_session::SessionKey;
 use serde_json::{Value, json};
 use sqlx_core::{executor::Executor, query::query, row::Row};
 
@@ -63,7 +63,7 @@ fn renew_call(attempt: RequestId) -> TestResult<Vec<u8>> {
 }
 async fn observe(fixture: &Fixture) -> TestResult<(Value, Option<String>, i64, i64)> {
     Ok(fixture.object.transaction(|scope| Box::pin(async move {
-        let snapshot = fleet_sync_lease::registry_snapshot(scope, PROJECT.to_owned().try_into().map_err(StoreError::backend)?).await.map_err(StoreError::backend)?;
+        let snapshot = fleet_project_lease::registry_snapshot(scope, PROJECT.to_owned().try_into().map_err(StoreError::backend)?).await.map_err(StoreError::backend)?;
         let projection = collaboration_central_core::read_fleet_lease_projection_in_scope(scope,PROJECT.parse().map_err(StoreError::backend)?).await?;
         let row = query::<sqlx_turso::Turso>("SELECT project_id,(SELECT count(*) FROM lease_incarnation) AS versions,(SELECT count(*) FROM machine_control_project_notices) AS notices FROM fleet_project_directory WHERE project_id=?")
             .bind(PROJECT).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;

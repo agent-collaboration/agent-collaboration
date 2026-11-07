@@ -1,5 +1,5 @@
 #![allow(clippy::unwrap_used)]
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, ser::SerializeMap};
 use std::collections::BTreeMap;
 

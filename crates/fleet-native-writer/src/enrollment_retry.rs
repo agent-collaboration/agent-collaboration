@@ -1,6 +1,6 @@
 //! Enrollment admission refusals stay pending before a durable call caches an answer.
 use durable_steps::{CallFailure, CallRetryReason};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     LeaseRefusal, PieceRefusal, RegistrationAnswer, RegistrationRefusal, RenewAnswer,
     ReplicationAnswer,
 };

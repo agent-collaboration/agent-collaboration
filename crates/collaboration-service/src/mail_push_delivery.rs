@@ -9,8 +9,8 @@ use collaboration_contracts::TargetPresenceProbe;
 use collaboration_runtime::MailPushPreparation;
 use collaboration_runtime::mail_push_preparation::prepare_mail_push_with_load_policy;
 use collaboration_runtime::received_mail_push;
-use fleet_sync_delivery::{DeliveryError, LocalDelivery, LocalOutcome};
-use fleet_sync_protocol::DeliveryItem;
+use fleet_mail_delivery::{DeliveryError, LocalDelivery, LocalOutcome};
+use fleet_protocol::DeliveryItem;
 use interaction_storage::InteractionStore;
 use runtime_primitives::{CallId, SyncTime};
 use std::sync::Arc;
@@ -113,7 +113,7 @@ impl MailPushDelivery {
                         .actors
                         .attempt_follow_mail_once(
                             project.clone(),
-                            fleet_sync_protocol::DeliveryItemRef {
+                            fleet_protocol::DeliveryItemRef {
                                 item: item.id(),
                                 digest: item.digest().clone(),
                             },

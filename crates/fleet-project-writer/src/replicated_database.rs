@@ -9,8 +9,8 @@ use crate::{
         write_file_record,
     },
 };
-use fleet_sync_lease::{LeaseHolder, LeasePolicy, WriterState};
-use fleet_sync_protocol::{DatabaseId, Epoch, PeerId};
+use fleet_project_lease::{LeaseHolder, LeasePolicy, WriterState};
+use fleet_protocol::{DatabaseId, Epoch, PeerId};
 use runtime_primitives::{Clock, IdSource, SystemClock, UuidV7Ids};
 use sqlx_core::{
     connection::Connection,
@@ -235,7 +235,7 @@ impl<S: ReplicatedSchema> ReplicatedDatabase<S> {
                 && !adopting
                 && entries
                     .iter()
-                    .any(|(entry, _)| !fleet_sync_protocol::reserved_namespace(&entry.name))
+                    .any(|(entry, _)| !fleet_protocol::reserved_namespace(&entry.name))
             {
                 return Err(OpenError::UnmanagedFile);
             }

@@ -1,5 +1,6 @@
 //! Compare receiver bookkeeping with its own migration corpus, without migrating.
-use crate::{StoreError, checked_queries, schema_reads::required_text};
+use crate::checked_queries;
+use crate::{StoreError, schema_reads::required_text};
 use durable_steps::storage::TransactionScope;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,

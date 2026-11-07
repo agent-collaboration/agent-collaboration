@@ -3,7 +3,7 @@ use super::cancellation_support::*;
 use super::projection::{ProjectionConsumer, prepare_projection_table, read_committed_state};
 use super::support;
 use durable_steps::{AtomicStore, Engine};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use std::sync::{Arc, atomic::Ordering};
 use std::time::Duration;
 use support::{network::*, *};

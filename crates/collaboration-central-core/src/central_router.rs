@@ -12,7 +12,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use fleet_sync_protocol::{AuthRefusal, ConnectionId};
+use fleet_protocol::{AuthRefusal, ConnectionId};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;

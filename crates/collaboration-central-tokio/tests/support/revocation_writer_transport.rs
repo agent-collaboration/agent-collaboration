@@ -1,7 +1,7 @@
 //! Fixture Access assertions around the real websocket; SessionClient and pump stay unchanged.
 use collaboration_central_conformance::{ConformanceResult, machine_assertion};
-use fleet_sync_protocol::CloseReason;
-use fleet_sync_session::{
+use fleet_protocol::CloseReason;
+use fleet_session::{
     Bytes, ConnectFailure, ConnectionClosed, Endpoint, PeerCredential, SessionTransport,
     TransportConnection,
 };
@@ -74,7 +74,7 @@ impl TransportConnection for FixtureConnection {
 pub(super) async fn enroll(
     base: &str,
     service: &str,
-    peer: fleet_sync_protocol::PeerId,
+    peer: fleet_protocol::PeerId,
     credential: &str,
 ) -> ConformanceResult<serde_json::Value> {
     let hash = ring::digest::digest(&ring::digest::SHA256, credential.as_bytes())
@@ -91,10 +91,10 @@ pub(super) async fn enroll(
 
 pub(super) async fn adopted_writer(
     path: &std::path::Path,
-    peer: fleet_sync_protocol::PeerId,
-) -> ConformanceResult<fleet_sync_writer::ReplicatedDatabase<board_fleet_sync::BoardProjectSchema>>
+    peer: fleet_protocol::PeerId,
+) -> ConformanceResult<fleet_project_writer::ReplicatedDatabase<board_fleet_sync::BoardProjectSchema>>
 {
-    use fleet_sync_writer::ReplicatedSchema;
+    use fleet_project_writer::ReplicatedSchema;
     use sqlx_core::connection::{ConnectOptions, Connection};
     let schema = board_fleet_sync::BoardProjectSchema::new()?;
     let mut connection = sqlx_turso::TursoConnectOptions::new()
@@ -106,15 +106,15 @@ pub(super) async fn adopted_writer(
         .run_direct(None, &mut connection, false)
         .await?;
     connection.close().await?;
-    Ok(fleet_sync_writer::ReplicatedDatabase::adopt(
+    Ok(fleet_project_writer::ReplicatedDatabase::adopt(
         path,
         schema,
         peer,
-        fleet_sync_lease::LeasePolicy {
+        fleet_project_lease::LeasePolicy {
             lease_duration: std::time::Duration::from_secs(14400),
             renew_interval: std::time::Duration::from_secs(900),
         },
-        fleet_sync_writer::WriterOptions::default(),
+        fleet_project_writer::WriterOptions::default(),
     )
     .await?)
 }

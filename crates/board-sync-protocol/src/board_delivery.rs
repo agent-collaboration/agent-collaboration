@@ -1,7 +1,7 @@
 use collaboration_mail_protocol::{
     CarrierAcceptance, MailSender, MailValidationError, MessageBody, NotificationBody,
 };
-use fleet_sync_protocol::DeliveryTypes;
+use fleet_protocol::DeliveryTypes;
 use serde::{Deserialize, Serialize};
 
 pub struct BoardDeliveryTypes;

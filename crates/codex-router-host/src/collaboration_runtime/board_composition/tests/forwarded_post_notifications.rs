@@ -2,7 +2,7 @@
 use super::*;
 use board_central_test_support::{DispatchFaultObservation, ObjectAddress, RuntimeControl};
 use collaboration_protocol::{PushDeliveryState, PushHeaderFacts};
-use fleet_sync_protocol::{DatabaseId, ItemId};
+use fleet_protocol::{DatabaseId, ItemId};
 use message_board_storage::MailHandoff;
 
 async fn cause_intents(

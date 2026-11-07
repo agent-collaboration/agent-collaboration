@@ -1,5 +1,5 @@
 #![allow(clippy::unwrap_used)]
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 
 #[test]
 fn replicated_keys_require_non_null_text_in_every_column_while_local_keys_stay_unrestricted() {

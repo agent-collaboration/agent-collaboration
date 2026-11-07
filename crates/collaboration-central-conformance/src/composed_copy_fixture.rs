@@ -5,7 +5,7 @@ use crate::{
     enroll_admitted_peer,
 };
 use board_sync_protocol::BoardAnnotation;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CommitSequence, CopyOrigin, CopyStatus, CopyStatusAnswer, CreateCopy, CreateCopyAnswer,
     DatabaseId, Epoch, FenceRequest, FenceResult, OperationAnswer, OperationRequest, PeerId, Piece,
     PieceContents, PieceDigest, ReplicatedTransaction, ReplicationAnswer, ReplicationPosition,
@@ -57,7 +57,7 @@ impl CopyFixture {
     }
     pub fn address(&self) -> ConformanceResult<collaboration_central_core::ObjectAddress> {
         Ok(collaboration_central_core::ObjectAddress::Copy(
-            fleet_sync_protocol::DatabaseId::try_from(self.database.to_string())?,
+            fleet_protocol::DatabaseId::try_from(self.database.to_string())?,
         ))
     }
     pub async fn request(

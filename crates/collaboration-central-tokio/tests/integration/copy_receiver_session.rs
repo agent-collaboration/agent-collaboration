@@ -10,7 +10,7 @@ use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, JwksFixtureServer, enroll_admitted_peer, fixture_policy,
 };
 use collaboration_central_tokio::{TokioServer, TokioSettings};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use futures_util::{SinkExt, StreamExt};
 use message_board::RecordTime;
 use reqwest_websocket::{Message, WebSocket};
@@ -28,7 +28,7 @@ async fn a_normal_session_applies_annotations_and_another_peer_cannot_replay_its
     let root = tempfile::tempdir()?;
     let server = TokioServer::start(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },

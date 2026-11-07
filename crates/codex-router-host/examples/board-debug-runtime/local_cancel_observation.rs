@@ -1,7 +1,7 @@
 //! Test-only stdin queries drive real project copies and observe committed Local cancellation.
 use super::shutdown_signals::ShutdownSignals;
 use codex_router_host::CollaborationRuntime;
-use fleet_sync_protocol::ItemId;
+use fleet_protocol::ItemId;
 use serde::Deserialize;
 use std::io;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};

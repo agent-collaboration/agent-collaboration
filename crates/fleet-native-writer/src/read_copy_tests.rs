@@ -2,8 +2,11 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::{staging_store_tests::snapshot, *};
 use durable_steps::{AtomicStore, CallFailure, NotSentReason, StoreError};
-use fleet_sync_protocol::*;
-use fleet_sync_receiver::SnapshotInstall;
+use fleet_project_copy::SnapshotInstall;
+use fleet_protocol::*;
+use fleet_tokio_objects::{
+    CallEnvelope, CallRouter, ObjectKey, ObjectOptions, ObjectStore, TokioHost, TokioObject,
+};
 use runtime_primitives::SystemClock;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
@@ -93,7 +96,7 @@ impl Fixture {
             .transaction(|scope| {
                 Box::pin(async move {
                     use durable_steps::storage::TransactionScope;
-                    let mut migrator = sqlx::migrate!("../fleet-sync-receiver/migrations");
+                    let mut migrator = sqlx::migrate!("../fleet-project-copy/migrations");
                     migrator.dangerous_set_table_name("_fleet_sync_copy_migrations");
                     migrator
                         .run_direct(None, scope.executor(), false)
@@ -211,9 +214,9 @@ async fn verified_read_copy_has_typed_metadata_guarded_reads_and_no_writer_state
             .is_err()
     );
     assert!(matches!(
-        fleet_sync_writer::ReadCopy::open_verified(&path, &install).await,
-        Err(fleet_sync_writer::ReadCopyError::Open(
-            fleet_sync_writer::OpenError::FileInUse
+        fleet_project_writer::ReadCopy::open_verified(&path, &install).await,
+        Err(fleet_project_writer::ReadCopyError::Open(
+            fleet_project_writer::OpenError::FileInUse
         ))
     ));
     copy.close().await?;
@@ -301,7 +304,7 @@ async fn partial_install_after_store_reopen_and_wrong_schema_cannot_be_exposed()
             .read_copy(install.install_id, &target)
             .await,
         Err(StagingError::Rules(
-            fleet_sync_receiver::SnapshotInstallError::NotVerified
+            fleet_project_copy::SnapshotInstallError::NotVerified
         ))
     ));
     target.transaction(|_| Box::pin(async { Ok(()) })).await?;
@@ -311,9 +314,9 @@ async fn partial_install_after_store_reopen_and_wrong_schema_cannot_be_exposed()
     let staging = StagingStore::open(root.path().join("staging")).await?;
     assert!(staging.page_receipt(&install, 0).await?.is_some());
     assert!(matches!(
-        fleet_sync_writer::ReadCopy::open_verified(&staging_path, &install).await,
-        Err(fleet_sync_writer::ReadCopyError::Install(
-            fleet_sync_receiver::SnapshotInstallError::NotVerified
+        fleet_project_writer::ReadCopy::open_verified(&staging_path, &install).await,
+        Err(fleet_project_writer::ReadCopyError::Install(
+            fleet_project_copy::SnapshotInstallError::NotVerified
         ))
     ));
     assert!(staging_path.exists());
@@ -327,9 +330,9 @@ async fn partial_install_after_store_reopen_and_wrong_schema_cannot_be_exposed()
     let mut wrong = install.clone();
     wrong.schema.version += 1;
     assert!(matches!(
-        fleet_sync_writer::ReadCopy::open_verified(target.path(), &wrong).await,
-        Err(fleet_sync_writer::ReadCopyError::Install(
-            fleet_sync_receiver::SnapshotInstallError::IdentityConflict
+        fleet_project_writer::ReadCopy::open_verified(target.path(), &wrong).await,
+        Err(fleet_project_writer::ReadCopyError::Install(
+            fleet_project_copy::SnapshotInstallError::IdentityConflict
         ))
     ));
     assert!(target.path().exists());
@@ -343,9 +346,9 @@ async fn partial_install_after_store_reopen_and_wrong_schema_cannot_be_exposed()
         .await?;
     connection.close().await?;
     assert!(matches!(
-        fleet_sync_writer::ReadCopy::open_verified(target.path(), &install).await,
-        Err(fleet_sync_writer::ReadCopyError::Install(
-            fleet_sync_receiver::SnapshotInstallError::SchemaMismatch
+        fleet_project_writer::ReadCopy::open_verified(target.path(), &install).await,
+        Err(fleet_project_writer::ReadCopyError::Install(
+            fleet_project_copy::SnapshotInstallError::SchemaMismatch
         ))
     ));
     assert!(target.path().exists());
@@ -356,7 +359,7 @@ async fn partial_install_after_store_reopen_and_wrong_schema_cannot_be_exposed()
         .await?;
     connection.execute("DROP INDEX unexpected_catalog").await?;
     connection.close().await?;
-    let valid = fleet_sync_writer::ReadCopy::open_verified(target.path(), &install).await?;
+    let valid = fleet_project_writer::ReadCopy::open_verified(target.path(), &install).await?;
     valid.close().await?;
     fixture.objects.close().await?;
     Ok(())

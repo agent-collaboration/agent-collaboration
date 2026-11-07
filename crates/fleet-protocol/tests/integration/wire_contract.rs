@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

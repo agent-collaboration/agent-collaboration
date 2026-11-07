@@ -66,7 +66,7 @@ impl Controls {
     }
     async fn after_response(&self, bytes: &[u8]) -> TestResult<Option<Vec<u8>>> {
         use board_sync_protocol::{BoardConsumerAnswer, BoardPayload};
-        use fleet_sync_protocol::{OperationAnswer, ServerFrame};
+        use fleet_protocol::{OperationAnswer, ServerFrame};
         let answer: ServerFrame<BoardConsumerProtocol> = serde_json::from_slice(bytes)?;
         if let ServerFrame::Answer {
             frame,

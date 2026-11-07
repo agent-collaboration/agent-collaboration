@@ -5,7 +5,7 @@ use crate::{
     foreign_key_integrity::reject_orphans,
     schema_inspection::{inspect_replicated_tables, read_layout},
 };
-use fleet_sync_protocol::TableName;
+use fleet_protocol::TableName;
 use sqlx_core::{
     connection::ConnectOptions,
     executor::Executor,

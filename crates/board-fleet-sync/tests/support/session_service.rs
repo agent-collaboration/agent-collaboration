@@ -1,14 +1,14 @@
 use durable_steps::CallId;
-use fleet_sync_lease::{GateFailure, HolderChangeGate, LifecycleGate};
-use fleet_sync_protocol::{
+use fleet_native_services::{ConsumerHandler, ServiceConsumer, ServiceError, ServiceScope};
+use fleet_project_copy::{
+    AppliedPiece, FollowUpDone, FollowUpFailure, FollowUpHandler, HookError, ReceiverRules,
+};
+use fleet_project_lease::{GateFailure, HolderChangeGate, LifecycleGate};
+use fleet_protocol::{
     AuthRefusal, DatabaseId, GateAnswer, HolderChangeRequest, NoConsumer, NoDelivery, PeerId,
     SettleOutcome, Submitter,
 };
-use fleet_sync_receiver::{
-    AppliedPiece, FollowUpDone, FollowUpFailure, FollowUpHandler, HookError, ReceiverRules,
-};
-use fleet_sync_service::{ConsumerHandler, ServiceConsumer, ServiceError, ServiceScope};
-use fleet_sync_session::{
+use fleet_session::{
     ClientSessionState, PeerAuthenticator, SessionClientStore, StoreError, VerifiedPeer,
 };
 use runtime_primitives::{Clock, SystemClock};
@@ -36,12 +36,12 @@ impl ServiceConsumer<NoConsumer> for SessionConsumer {
     type HookItem = ();
 }
 
-impl fleet_sync_delivery::SenderBinding<ServiceScope<'_>, NoDelivery> for SessionConsumer {
+impl fleet_mail_delivery::SenderBinding<ServiceScope<'_>, NoDelivery> for SessionConsumer {
     async fn resolve_submitter<'a>(
         &'a self,
         _: &'a mut ServiceScope<'_>,
         sender: &'a Submitter,
-    ) -> Result<Submitter, fleet_sync_delivery::SenderBindingFailure> {
+    ) -> Result<Submitter, fleet_mail_delivery::SenderBindingFailure> {
         Ok(*sender)
     }
 }

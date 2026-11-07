@@ -1,5 +1,5 @@
 use crate::support;
-use fleet_sync_protocol::SqlValue;
+use fleet_protocol::SqlValue;
 use message_board::*;
 use std::collections::{BTreeMap, BTreeSet};
 use support::*;

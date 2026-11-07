@@ -5,7 +5,7 @@ use crate::{
 };
 use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use collaboration_mail_protocol::NotificationSource;
-use fleet_sync_protocol::DeliveryEnvelope;
+use fleet_protocol::DeliveryEnvelope;
 use message_board::{CancelExpansionSeq, MailItemRef, ProjectId};
 use sqlx::Executor;
 use sqlx_turso::Turso;

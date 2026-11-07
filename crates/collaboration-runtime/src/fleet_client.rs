@@ -4,8 +4,8 @@ use board_sync_protocol::{
     BoardReadScope, FleetRequestEnvelope,
 };
 use fleet_admission::{FleetRequest, FleetRequestResult};
-use fleet_sync_protocol::{OperationAnswer, OperationRequest};
-use fleet_sync_tokio_runner::SessionRequests;
+use fleet_protocol::{OperationAnswer, OperationRequest};
+use fleet_session_client::SessionRequests;
 use message_board::{Record, RecordRef, RequestDecision, RequestId, RequestResult};
 use message_board_storage::{
     FleetCache, FleetOutbox, FleetOutboxEntry, FleetOutboxState, FleetStorageError,

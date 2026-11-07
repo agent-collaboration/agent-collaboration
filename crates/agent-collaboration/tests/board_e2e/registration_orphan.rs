@@ -149,8 +149,8 @@ async fn reject_native(
             let database = registry.database(&project).await?;
             // The gate refusal is a controlled input. Normal Register policy remains separately tested.
             database
-                .reject_registration(fleet_sync_protocol::GateReason {
-                    code: fleet_sync_protocol::GateReasonCode::new("consumer.refused")?,
+                .reject_registration(fleet_protocol::GateReason {
+                    code: fleet_protocol::GateReasonCode::new("consumer.refused")?,
                     detail: "owned scope fixture registration refused".to_owned(),
                 })
                 .await?;

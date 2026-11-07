@@ -6,7 +6,7 @@ use crate::{
     schema_inspection::schema_entries,
     snapshot_schema::snapshot_schema,
 };
-use fleet_sync_protocol::{SchemaIdentity, TableName};
+use fleet_protocol::{SchemaIdentity, TableName};
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     migrate::{Migration, Migrator},

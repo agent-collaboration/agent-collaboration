@@ -1,5 +1,5 @@
 use crate::{MaintenanceTransaction, OpenError};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ConsumerProtocol, DatabaseId, Epoch, NoConsumer, Piece, ReceiverId, ReplicatedTransaction,
     ReplicationAnswer, ReplicationPosition,
 };
@@ -117,29 +117,29 @@ pub enum ReplicationEvents {
         copy: ReceiverId,
     },
     RejectedTail(RejectedTail),
-    LeaseChanged(fleet_sync_lease::WriterState),
+    LeaseChanged(fleet_project_lease::WriterState),
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum SenderError {
     #[error(transparent)]
-    UnitTooLarge(#[from] fleet_sync_protocol::unit_budget::UnitTooLarge),
+    UnitTooLarge(#[from] fleet_protocol::unit_budget::UnitTooLarge),
     #[error("copy {copy:?} is unavailable: {reason:?}")]
     CopyUnavailable {
         copy: ReceiverId,
-        reason: fleet_sync_protocol::CopyUnavailableReason,
+        reason: fleet_protocol::CopyUnavailableReason,
     },
     #[error("copy {copy:?} refused replication: {reason:?}")]
     Refused {
         copy: ReceiverId,
-        reason: fleet_sync_protocol::PieceRefusal,
+        reason: fleet_protocol::PieceRefusal,
     },
     #[error(transparent)]
     Storage(#[from] OpenError),
     #[error(transparent)]
     Bookkeeping(#[from] BookkeepingError),
     #[error(transparent)]
-    Piece(#[from] fleet_sync_protocol::PieceError),
+    Piece(#[from] fleet_protocol::PieceError),
     #[error(transparent)]
     Send(#[from] SendFailure),
     #[error("sender state is invalid: {field}")]

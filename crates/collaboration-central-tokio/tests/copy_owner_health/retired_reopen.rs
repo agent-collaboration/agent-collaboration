@@ -7,7 +7,7 @@ use crate::copy_owner_health::{
 };
 use collaboration_central_conformance::{RuntimeControl, RuntimeControlRequest, owner_assertion};
 use collaboration_central_core::{ConformanceBoardState, ObjectAddress, RegistryTime};
-use fleet_sync_protocol::DatabaseId;
+use fleet_protocol::DatabaseId;
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use sqlx_core::{

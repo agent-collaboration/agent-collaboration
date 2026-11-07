@@ -4,7 +4,7 @@ use super::{
     SharedTaskCaller, decode, encode_refusal, no_route,
 };
 use crate::CopyDirectorySummary;
-use fleet_sync_receiver::{
+use fleet_project_copy::{
     FollowUpAnswer, FollowUpCall, FollowUpDone, FollowUpFailure, FollowUpHandler,
 };
 

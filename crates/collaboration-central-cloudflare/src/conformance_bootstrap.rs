@@ -5,8 +5,8 @@ use collaboration_central_core::{
     AccessCaller, AccessClientId, BootstrapCommand, EnrollMachine, ObjectBootstrap, ObjectHost,
     ObjectRuntime, OwnerIdentity,
 };
-use fleet_sync_lease::{LeasePolicy, RegistryConfig};
-use fleet_sync_protocol::ReceiverId;
+use fleet_project_lease::{LeasePolicy, RegistryConfig};
+use fleet_protocol::ReceiverId;
 use serde::Deserialize;
 use std::time::Duration;
 use std::{cell::OnceCell, sync::Arc};
@@ -67,7 +67,7 @@ impl Fixture {
 enum Command {
     Bootstrap(BootstrapCommand),
     ImportedUnheld {
-        database: fleet_sync_protocol::DatabaseId,
+        database: fleet_protocol::DatabaseId,
         #[serde(rename = "boardState")]
         board_state: collaboration_central_core::ConformanceBoardState,
     },
@@ -102,7 +102,7 @@ fn registry(
             move_needs_renewal_within: None,
         },
         collaboration_central_core::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )
             .map_err(|error| worker::Error::RustError(error.to_string()))?,

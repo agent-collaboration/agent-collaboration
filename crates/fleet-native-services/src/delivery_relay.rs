@@ -1,8 +1,8 @@
 //! Delivery shares the reference service's existing registry store and engine.
 use crate::{RelayDeliveryConfig, ServiceConsumer, ServiceError, ServiceHost, ServiceObject};
 use durable_steps::{AtomicStore, Engine, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::{DELIVERY_MIGRATOR, PublishStatus, PushItem, RemoveDeliveryRecord};
-use fleet_sync_protocol::ConsumerProtocol;
+use fleet_mail_delivery::{DELIVERY_MIGRATOR, PublishStatus, PushItem, RemoveDeliveryRecord};
+use fleet_protocol::ConsumerProtocol;
 use runtime_primitives::Clock;
 use sqlx_turso::Turso;
 use std::sync::Arc;
@@ -30,20 +30,20 @@ pub(crate) async fn install<P: ConsumerProtocol, C: ServiceConsumer<P>>(
                     .run_direct(None, scope.executor(), false)
                     .await
                     .map_err(StoreError::backend)?;
-                fleet_sync_delivery::retire_relay_host_tables(scope)
+                fleet_mail_delivery::retire_relay_host_tables(scope)
                     .await
-                    .map_err(fleet_sync_delivery::delivery_rollback)?;
-                fleet_sync_delivery::backfill_submitters::<P::Delivery, _, _>(
+                    .map_err(fleet_mail_delivery::delivery_rollback)?;
+                fleet_mail_delivery::backfill_submitters::<P::Delivery, _, _>(
                     scope,
-                    fleet_sync_delivery::DeliveryHostRole::Relay,
+                    fleet_mail_delivery::DeliveryHostRole::Relay,
                     bindings.as_ref(),
                     now,
                 )
                 .await
-                .map_err(fleet_sync_delivery::delivery_rollback)?;
-                fleet_sync_delivery::admit_existing_record_removals::<_, RelayRemoval>(
+                .map_err(fleet_mail_delivery::delivery_rollback)?;
+                fleet_mail_delivery::admit_existing_record_removals::<_, RelayRemoval>(
                     scope,
-                    fleet_sync_delivery::DeliveryHostRole::Relay,
+                    fleet_mail_delivery::DeliveryHostRole::Relay,
                     now,
                 )
                 .await
@@ -59,7 +59,7 @@ pub(crate) async fn install<P: ConsumerProtocol, C: ServiceConsumer<P>>(
         binding,
     ))?;
     engine.register(RelayRemoval::new(
-        fleet_sync_delivery::DeliveryHostRole::Relay,
+        fleet_mail_delivery::DeliveryHostRole::Relay,
     ))?;
     Ok(())
 }

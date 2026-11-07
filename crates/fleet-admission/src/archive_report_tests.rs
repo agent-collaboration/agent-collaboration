@@ -108,9 +108,9 @@ fn fixture() -> TestResult<(ArchiveReport, FleetSnapshot)> {
     let report = ArchiveReport {
         board,
         project,
-        position: fleet_sync_protocol::ReplicationPosition::new(
-            fleet_sync_protocol::Epoch::new(1)?,
-            fleet_sync_protocol::CommitSequence::new(2),
+        position: fleet_protocol::ReplicationPosition::new(
+            fleet_protocol::Epoch::new(1)?,
+            fleet_protocol::CommitSequence::new(2),
         ),
         installation: provenance.installation,
         reported_at: "2026-10-16T00:00:00Z".parse()?,
@@ -135,7 +135,7 @@ fn first_partial_report_records_once_and_successor_resend_is_noop() -> TestResul
     );
     snapshot.archive_reports.push(report.project.clone());
     report.installation = ServiceId::try_from("00000000-0000-4000-8000-000000000002".to_owned())?;
-    report.position.sequence = fleet_sync_protocol::CommitSequence::new(999);
+    report.position.sequence = fleet_protocol::CommitSequence::new(999);
     assert_eq!(
         decide_archive_report(&report, &snapshot)
             .map_err(|refusal| format!("unexpected archive refusal: {refusal:?}"))?,

@@ -316,7 +316,7 @@ async fn a_missing_graph_parent_refuses_before_source_open_or_artifact_creation(
         .fleet
         .records
         .retain(|record| !matches!(record, FleetImportRecord::Workspace { .. }));
-    let retained = fleet_sync_writer::RetainedFile::open_read_only(
+    let retained = fleet_project_writer::RetainedFile::open_read_only(
         &fixture.source.path,
         board_fleet_sync::BoardProjectSchema::new()?,
     )

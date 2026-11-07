@@ -1,7 +1,7 @@
 //! A test-only ordering signal after a real page receipt; it supplies no data or result.
 use durable_steps::CallFailure;
-use fleet_sync_protocol::ReplicationPosition;
-use fleet_sync_receiver::InstallPageReceipt;
+use fleet_project_copy::InstallPageReceipt;
+use fleet_protocol::ReplicationPosition;
 use std::{path::PathBuf, time::Duration};
 use tokio::sync::{Mutex, oneshot, watch};
 

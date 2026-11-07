@@ -1,6 +1,6 @@
 //! Decode typed registry columns before they enter lease rules.
 use crate::{checked_queries::*, registry_records::*, *};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde::de::DeserializeOwned;
 
 pub(crate) fn corrupt_column(field: &str) -> LeaseError {

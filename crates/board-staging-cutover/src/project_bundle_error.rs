@@ -20,7 +20,7 @@ pub enum ProjectBundleError {
     #[error("cannot reframe native source")]
     Transport(#[from] crate::SnapshotTransportError),
     #[error("cannot seal prepared content")]
-    Digest(#[from] fleet_sync_protocol::DigestError),
+    Digest(#[from] fleet_protocol::DigestError),
     #[error("cannot encode prepared artifact")]
     Json(#[from] serde_json::Error),
     #[error("cannot persist prepared artifact")]

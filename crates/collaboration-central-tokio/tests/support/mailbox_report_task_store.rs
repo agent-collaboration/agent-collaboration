@@ -5,12 +5,12 @@ use collaboration_central_conformance::ConformanceResult;
 use durable_steps::{
     AtomicStore, CallId, StoreError, storage::TransactionScope, turso_store::TursoStore,
 };
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DELIVERY_MIGRATOR, DeliverLocally, DeliveryConsumer, DeliveryError, DeliveryLimits,
     GateDecision, Inbox, LocalDelivery, LocalOutcome, RemoveDeliveryRecord, ReportOutcome,
     ReportRef, SenderBinding, SenderBindingFailure, delivery_rollback,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DeliveryCancel, DeliveryEnvelope, DeliveryHeader, DeliveryItem, PeerId, PushResult,
     RecipientOutcome, Submitter,
 };
@@ -18,7 +18,7 @@ use runtime_primitives::Clock;
 use sqlx_core::{query::query, row::Row};
 use std::{path::Path, sync::Arc};
 
-type Sender = <BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Sender;
+type Sender = <BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Sender;
 pub(super) type ReportStore = TursoStore<ReportHost>;
 type LocalTask = DeliverLocally<
     ReportStore,
@@ -68,7 +68,7 @@ impl<S: TransactionScope<Database = sqlx_turso::Turso>> SenderBinding<S, BoardDe
             let raw: String = row
                 .try_get("peer_id")
                 .map_err(|_| SenderBindingFailure::Unavailable)?;
-            let peer: fleet_sync_protocol::PeerId = raw
+            let peer: fleet_protocol::PeerId = raw
                 .clone()
                 .try_into()
                 .map_err(|_| SenderBindingFailure::Unavailable)?;
@@ -108,7 +108,7 @@ pub(super) fn limits() -> ConformanceResult<DeliveryLimits> {
         1_000_000,
         100,
         1_000_000,
-        fleet_sync_delivery::minimum_settlement_allowance::<BoardDeliveryTypes>()?,
+        fleet_mail_delivery::minimum_settlement_allowance::<BoardDeliveryTypes>()?,
     )?)
 }
 pub(super) async fn open_store(
@@ -154,7 +154,7 @@ pub(super) async fn prepare_report(
     relay: PeerId,
 ) -> ConformanceResult<(
     ReportRef,
-    PushResult<<BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Acceptance>,
+    PushResult<<BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Acceptance>,
 )> {
     let now = host.now();
     let limits = limits()?;

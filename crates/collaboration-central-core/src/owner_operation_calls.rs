@@ -1,6 +1,6 @@
 //! Owner-only operations reuse the ordinary typed object-call envelope.
 use durable_steps::CallTarget;
-use fleet_sync_protocol::DatabaseId;
+use fleet_protocol::DatabaseId;
 use message_board::ProjectId;
 use serde::{Deserialize, Serialize};
 

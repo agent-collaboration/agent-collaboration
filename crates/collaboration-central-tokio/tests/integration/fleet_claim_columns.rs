@@ -4,7 +4,7 @@ use super::{
     fleet_claim_settlement::{receipts, settle},
 };
 use durable_steps::{AtomicStore, CallTarget, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{ClaimReservation, ClaimSettlement, HolderChangeRequest, SettleOutcome};
+use fleet_protocol::{ClaimReservation, ClaimSettlement, HolderChangeRequest, SettleOutcome};
 use serde_json::{Value, json};
 use sqlx_core::{query::query, row::Row};
 type ReceiptObservation = (
@@ -23,13 +23,13 @@ async fn call_claim_gate(
     refuse: bool,
 ) -> TestResult<Value> {
     let change = HolderChangeRequest::Claim {
-        attempt: fleet_sync_protocol::TransferId::new(attempt)?,
+        attempt: fleet_protocol::TransferId::new(attempt)?,
         database: PROJECT.to_owned().try_into()?,
         claimant: B.to_owned().try_into()?,
     };
     let (kind, request) = if refuse {
         (
-            fleet_sync_lease::ClaimSettlement::KIND,
+            fleet_project_lease::ClaimSettlement::KIND,
             serde_json::to_value(ClaimSettlement {
                 change,
                 outcome: SettleOutcome::Cancelled,
@@ -37,7 +37,7 @@ async fn call_claim_gate(
         )
     } else {
         (
-            fleet_sync_lease::ClaimReservation::KIND,
+            fleet_project_lease::ClaimReservation::KIND,
             serde_json::to_value(ClaimReservation { change })?,
         )
     };
@@ -88,7 +88,7 @@ async fn reservations_preserve_creation_time_on_settlement_and_late_reserve_is_r
     assert_eq!(read_reservation(&fixture, attempt).await?, settled);
     fixture.io.advance(10_000);
     assert!(
-        matches!(serde_json::from_value::<fleet_sync_protocol::GateAnswer>(call_claim_gate(&fixture,attempt,false).await?)?, fleet_sync_protocol::GateAnswer::Refused {reason} if reason.code.as_str()=="claim_already_settled")
+        matches!(serde_json::from_value::<fleet_protocol::GateAnswer>(call_claim_gate(&fixture,attempt,false).await?)?, fleet_protocol::GateAnswer::Refused {reason} if reason.code.as_str()=="claim_already_settled")
     );
     assert_eq!(read_reservation(&fixture, attempt).await?, settled);
     fixture.close().await
@@ -201,8 +201,8 @@ async fn older_receipt_stores_the_renewed_hook_version_and_refuses_partial_versi
         "request":{"kind":"renew","value":{"attempt":durable_steps::Uuid::now_v7(),"database":PROJECT,"epoch":1}}
     })).await?;
     assert!(matches!(
-        serde_json::from_value::<fleet_sync_protocol::LeaseAnswer>(answer)?,
-        fleet_sync_protocol::LeaseAnswer::Renew(fleet_sync_protocol::RenewAnswer::Renewed {
+        serde_json::from_value::<fleet_protocol::LeaseAnswer>(answer)?,
+        fleet_protocol::LeaseAnswer::Renew(fleet_protocol::RenewAnswer::Renewed {
             replayed: false,
             ..
         })

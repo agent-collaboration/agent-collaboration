@@ -7,7 +7,7 @@ use crate::{
     writer_registration_state::{RegistrationSeed, RegistrationState},
 };
 use durable_steps::{Host, OperationFailure, RequestKey, StartRefusal, Uuid};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 
 pub(crate) fn outcome(record: &WriterFileRecord) -> WriterRegistrationOutcome {
     if let RegistrationState::Granted {
@@ -61,18 +61,18 @@ impl<H: Host> WriterJournalScope<'_, H> {
             .ok_or_else(|| OpenError::corrupt("writer.record"))?;
         if record.origin == RetainedFileOriginKind::Bootstrap {
             return Err(OpenError::Holder {
-                error: fleet_sync_lease::HolderError::AlreadyGranted,
+                error: fleet_project_lease::HolderError::AlreadyGranted,
             });
         }
         if record.registration_attempt.is_none()
             && !matches!(
                 self.holder.writer_state(self.host.now()),
-                Ok(fleet_sync_lease::WriterState::Provisional
-                    | fleet_sync_lease::WriterState::Seeding { .. })
+                Ok(fleet_project_lease::WriterState::Provisional
+                    | fleet_project_lease::WriterState::Seeding { .. })
             )
         {
             return Err(OpenError::Holder {
-                error: fleet_sync_lease::HolderError::AlreadyGranted,
+                error: fleet_project_lease::HolderError::AlreadyGranted,
             });
         }
         let origin = match record.origin {

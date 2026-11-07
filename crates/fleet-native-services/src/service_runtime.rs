@@ -5,12 +5,11 @@ use crate::{
     service_state::{ServiceSessions, ServiceState},
     session_handler::ServiceSessionHandler,
 };
-use fleet_sync_protocol::{ConsumerProtocol, DatabaseId};
-use fleet_sync_session::PeerAuthenticator;
-use fleet_sync_tokio_runner::{
-    InstallCoordinator, InstallSnapshot, ObjectKey, ObjectOptions, ObjectStore, SessionHost,
-    StagingStore, TokioRunner,
-};
+use fleet_native_session::SessionHost;
+use fleet_native_writer::{InstallCoordinator, InstallSnapshot, StagingStore};
+use fleet_protocol::{ConsumerProtocol, DatabaseId};
+use fleet_session::PeerAuthenticator;
+use fleet_tokio_objects::{ObjectKey, ObjectOptions, ObjectStore, TokioRunner};
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -34,7 +33,7 @@ pub struct FleetService<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > {
     pub(crate) state: Arc<ServiceState<P, C, A>>,
@@ -46,7 +45,7 @@ pub struct ServiceHandle<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > {
     pub(crate) state: Arc<ServiceState<P, C, A>>,
@@ -57,7 +56,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > Clone for ServiceHandle<P, C, A>
 {
@@ -73,7 +72,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > FleetService<P, C, A>
 {
@@ -284,7 +283,7 @@ impl<
                 accepted=incoming.recv()=>if let Some(accepted)=accepted {
                     let sessions=self.sessions.clone();let socket_timeout=self.state.options.socket_timeout;let shutdown=stopped.clone();
                     tasks.spawn(async move {
-                        let result=sessions.serve_connection(fleet_sync_transport_websocket::AxumConnection::new(accepted.socket,socket_timeout),accepted.admission,shutdown).await.map_err(ServiceError::rule);
+                        let result=sessions.serve_connection(fleet_websocket_transport::AxumConnection::new(accepted.socket,socket_timeout),accepted.admission,shutdown).await.map_err(ServiceError::rule);
                         let _=accepted.done.send(());
                         result
                     });
@@ -367,7 +366,7 @@ impl<
             tasks.spawn(async move {
                 if let Err(error) = runner.run(shutdown).await {
                     *owner.health.lock().await =
-                        Some(fleet_sync_protocol::CopyUnavailableReason::Damaged {
+                        Some(fleet_protocol::CopyUnavailableReason::Damaged {
                             detail: error.to_string(),
                         });
                     tracing::warn!(?database,%error,"copy runner unavailable");

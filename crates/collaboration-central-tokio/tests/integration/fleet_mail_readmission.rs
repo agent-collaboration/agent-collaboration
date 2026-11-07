@@ -18,7 +18,7 @@ use collaboration_central_core::{
     ObjectAddress, RegistryTime, RevocationControl, RevocationControlInput, RevocationObservation,
 };
 use collaboration_central_tokio::{TokioServer, TokioSettings};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientAnswer, ClientFrame, DeliveryEnvelope, DeliveryStatus, FrameId, OperationAnswer,
     OperationRequest, PushResult, ServerCall, ServerCallAnswer, ServerFrame, ServerRequest,
     SubmitResult,

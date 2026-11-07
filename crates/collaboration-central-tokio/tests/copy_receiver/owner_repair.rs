@@ -5,19 +5,19 @@ use super::{
 };
 use board_sync_protocol::BoardAnnotation;
 use durable_steps::{AtomicStore, StoreError};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     Piece, PieceContents, PieceDigest, ReplicatedTransaction, ReplicationAnswer, TransactionKey,
     TransactionPart,
 };
 use serde_json::json;
 use std::sync::atomic::Ordering;
 
-async fn inspection(fixture: &Fixture) -> TestResult<fleet_sync_receiver::CopyInspection> {
+async fn inspection(fixture: &Fixture) -> TestResult<fleet_project_copy::CopyInspection> {
     Ok(fixture
         .copy
         .transaction(|scope| {
             Box::pin(
-                async move { Ok::<_, StoreError>(fleet_sync_receiver::inspect_copy(scope).await) },
+                async move { Ok::<_, StoreError>(fleet_project_copy::inspect_copy(scope).await) },
             )
         })
         .await?)
@@ -58,7 +58,7 @@ async fn owner_repair_discharges_real_directory_debt_and_expired_staged_parts() 
         if !matches!(fixture.apply(first).await?,ReplicationAnswer::PartStaged {index:0,acked,..} if acked==position(1)?) {
             return Err("Repair setup did not stage the actual incomplete transaction".into());
         }
-        let fleet_sync_receiver::CopyInspection::Live {staged_parts,..}=inspection(&fixture).await? else {
+        let fleet_project_copy::CopyInspection::Live {staged_parts,..}=inspection(&fixture).await? else {
             return Err("Repair setup has no public live Copy inspection".into());
         };
         if staged_parts.iter().map(|transaction|transaction.parts.len()).sum::<usize>()!=1 {
@@ -75,7 +75,7 @@ async fn owner_repair_discharges_real_directory_debt_and_expired_staged_parts() 
         if serde_json::from_slice::<serde_json::Value>(&reply)?!=json!({"kind":"repaired"}) {
             return Err("owner Repair lost its typed answer".into());
         }
-        let fleet_sync_receiver::CopyInspection::Live {status,staged_parts,..}=inspection(&fixture).await? else {
+        let fleet_project_copy::CopyInspection::Live {status,staged_parts,..}=inspection(&fixture).await? else {
             return Err("Repair damaged the actual Copy".into());
         };
         let directory=fixture.summary(true).await?;

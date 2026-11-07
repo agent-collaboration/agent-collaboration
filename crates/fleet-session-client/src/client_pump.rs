@@ -4,11 +4,11 @@ use crate::{
     SessionRecoveryPolicy,
 };
 use durable_steps::{CallFailure, NotSentReason, Uuid};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     AuthRefusal, ClientAnswer, CloseReason, ConsumerProtocol, FrameId, NoticePosition,
     OperationAnswer, OperationRequest, SessionId,
 };
-use fleet_sync_session::{
+use fleet_session::{
     ClientError, ClientEvent, ConnectFailure, ConnectionClosed, Endpoint, PeerCredential,
     SessionClient, SessionClientStore, SessionTransport,
 };

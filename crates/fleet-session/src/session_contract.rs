@@ -1,4 +1,4 @@
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 

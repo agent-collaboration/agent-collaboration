@@ -1,8 +1,8 @@
 //! Native-only observation seams for the real session publication adapter.
 use crate::{SessionHandler, SessionHost, SessionHostError};
 use durable_steps::{StoreError, storage::TransactionScope};
-use fleet_sync_protocol::*;
-use fleet_sync_session::{ConnectionRegistration, PeerAuthenticator, schema_support_request_key};
+use fleet_protocol::*;
+use fleet_session::{ConnectionRegistration, PeerAuthenticator, schema_support_request_key};
 use serde::{Deserialize, Serialize};
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
@@ -14,7 +14,7 @@ pub struct SchemaPublicationSnapshot {
 }
 impl<
     P: ConsumerProtocol,
-    A: PeerAuthenticator<Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute>,
+    A: PeerAuthenticator<Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute>,
     D: SessionHandler<P>,
     H: durable_steps::Host,
 > SessionHost<P, A, D, H>

@@ -1,11 +1,11 @@
 use super::*;
-use fleet_sync_protocol::AuthRefusal;
+use fleet_protocol::AuthRefusal;
 
 #[test]
 fn native_client_failure_codes_and_payloads_are_retained_exhaustively() {
     use FleetLinkFailureReason as Failure;
-    let expected = fleet_sync_protocol::SessionId::new(uuid::Uuid::now_v7()).unwrap();
-    let received = fleet_sync_protocol::SessionId::new(uuid::Uuid::now_v7()).unwrap();
+    let expected = fleet_protocol::SessionId::new(uuid::Uuid::now_v7()).unwrap();
+    let received = fleet_protocol::SessionId::new(uuid::Uuid::now_v7()).unwrap();
     let cases = [
         (
             ClientError::Revoked,
@@ -28,7 +28,7 @@ fn native_client_failure_codes_and_payloads_are_retained_exhaustively() {
         (
             ClientError::ConnectionReplaced,
             Failure::SessionClosed {
-                reason: fleet_sync_protocol::CloseReason::ConnectionReplaced,
+                reason: fleet_protocol::CloseReason::ConnectionReplaced,
             },
         ),
         (

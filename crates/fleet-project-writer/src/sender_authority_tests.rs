@@ -5,8 +5,8 @@ use crate::{
     writer_scope::WriterScope,
 };
 use durable_steps::{CallId, OperationId, StepName, Uuid};
-use fleet_sync_lease::WriterState;
-use fleet_sync_protocol::{
+use fleet_project_lease::WriterState;
+use fleet_protocol::{
     CopyStatusAnswer, Epoch, FenceExpectation, FenceRequest, FenceResult, LeaseState, LeaseStatus,
     PeerId, ReleaseAnswer, ReleaseRequest, RenewAnswer, RenewResult, TransferId,
 };
@@ -18,7 +18,7 @@ use std::sync::atomic::Ordering;
 async fn bounded_retention_releases_a_follower_but_keeps_every_unacknowledged_authoritative_change()
 -> TestResult {
     use crate::{ReplicationSender, Retention, SenderOptions};
-    use fleet_sync_protocol::{CopyRole, ReceiverId};
+    use fleet_protocol::{CopyRole, ReceiverId};
     use std::{sync::Arc, time::Duration};
     let fixture = SenderFixture::open().await?;
     fixture.migrate_copies().await?;
@@ -169,7 +169,7 @@ async fn release_stops_writes_but_sender_drains_every_accepted_commit_to_its_fin
             42
         );
         let CopyStatusAnswer::Status(status) =
-            fleet_sync_receiver::copy_status(&mut WriterScope(connection)).await?
+            fleet_project_copy::copy_status(&mut WriterScope(connection)).await?
         else {
             return Err("no copy status".into());
         };
@@ -199,11 +199,11 @@ async fn replayed_renewal_can_close_gate_before_authoritative_probe_records_the_
         let connection = connection.as_mut().ok_or("closed copy")?;
         let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
         let CopyStatusAnswer::Status(status) =
-            fleet_sync_receiver::copy_status(&mut WriterScope(&mut transaction)).await?
+            fleet_project_copy::copy_status(&mut WriterScope(&mut transaction)).await?
         else {
             return Err("no copy status".into());
         };
-        let result = fleet_sync_receiver::fence(
+        let result = fleet_project_copy::fence(
             &mut WriterScope(&mut transaction),
             &FenceRequest {
                 database: fixture.database.database(),
@@ -213,7 +213,7 @@ async fn replayed_renewal_can_close_gate_before_authoritative_probe_records_the_
                     epoch: Epoch::new(1)?,
                     acked: status.acked,
                 },
-                target_schema: Some(fleet_sync_protocol::SchemaSupport { max_version: 2 }),
+                target_schema: Some(fleet_protocol::SchemaSupport { max_version: 2 }),
                 holder: PeerId::new(Uuid::from_u128(0x019eef0000007000800000000000002b))?,
             },
         )
@@ -290,7 +290,7 @@ async fn replayed_renewal_can_close_gate_before_authoritative_probe_records_the_
     fixture
         .database
         .observe_renewal(
-            RenewAnswer::Refused(fleet_sync_protocol::LeaseRefusal::StaleEpoch {
+            RenewAnswer::Refused(fleet_protocol::LeaseRefusal::StaleEpoch {
                 current_epoch: Epoch::new(2)?,
                 epoch_ended_at: ended_at,
             }),

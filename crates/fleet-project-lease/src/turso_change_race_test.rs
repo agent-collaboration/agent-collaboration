@@ -5,7 +5,7 @@ use crate::{
     *,
 };
 use durable_steps::{AtomicStore, OperationState, RequestKey, Uuid};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_turso::Turso;
 use std::sync::atomic::Ordering;
 use std::{sync::Arc, time::Duration};
@@ -46,7 +46,7 @@ async fn superseded_move_finishes_after_reopen_without_resending_its_unanswered_
         let move_id = transfer(801)?;
         let takeover_id = transfer(802)?;
         let request = HolderChangeRequest::Move {
-            reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+            reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
             attempt: move_id,
             database: database()?,
             from_epoch: Epoch::new(1)?,
@@ -85,7 +85,7 @@ async fn superseded_move_finishes_after_reopen_without_resending_its_unanswered_
             &engine,
             &holder_change_request_key(takeover_id)?,
             HolderChangeRequest::Takeover {
-                reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+                reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
                 attempt: takeover_id,
                 database: database()?,
                 preview,
@@ -179,7 +179,7 @@ async fn dispatched_old_fence_and_takeover_interleave_without_two_grants_or_epoc
             .await
             .insert(takeover_id, Arc::clone(&new_gate));
         let old_request = HolderChangeRequest::Move {
-            reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+            reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
             attempt: move_id,
             database: database()?,
             from_epoch: Epoch::new(1)?,
@@ -187,7 +187,7 @@ async fn dispatched_old_fence_and_takeover_interleave_without_two_grants_or_epoc
         };
         let old_key = holder_change_request_key(move_id)?;
         let new_request = HolderChangeRequest::Takeover {
-            reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+            reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
             attempt: takeover_id,
             database: database()?,
             preview,
@@ -263,7 +263,7 @@ async fn dispatched_old_fence_and_takeover_interleave_without_two_grants_or_epoc
             .await?;
             assert_eq!(preview.fence, Epoch::new(2)?);
             let request = HolderChangeRequest::Takeover {
-                reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+                reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
                 attempt: transfer(703)?,
                 database: database()?,
                 preview,
@@ -304,7 +304,7 @@ async fn dispatched_old_fence_and_takeover_interleave_without_two_grants_or_epoc
         let mut copies = host.copies.lock().await;
         let copy = copies.get_mut(&database()?).ok_or("copy missing")?;
         assert!(
-            matches!(fleet_sync_receiver::copy_status(&mut CopyScope(copy)).await?, CopyStatusAnswer::Status(CopyStatus { fence, holder: Some(holder), .. }) if fence == expected && holder == peer(3)?)
+            matches!(fleet_project_copy::copy_status(&mut CopyScope(copy)).await?, CopyStatusAnswer::Status(CopyStatus { fence, holder: Some(holder), .. }) if fence == expected && holder == peer(3)?)
         );
     }
     Ok(())

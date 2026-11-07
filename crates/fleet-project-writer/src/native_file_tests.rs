@@ -1,7 +1,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::*;
-use fleet_sync_lease::LeasePolicy;
-use fleet_sync_protocol::{PeerId, TableName};
+use fleet_project_lease::LeasePolicy;
+use fleet_protocol::{PeerId, TableName};
 use futures_util::StreamExt;
 use sqlx_core::{executor::Executor, query::query, row::Row};
 use std::{
@@ -121,7 +121,7 @@ async fn failed_closed_path_callback_reopens_old_file_and_preserves_seeding_gate
     assert_eq!(writer.snapshot().await?.position(), position);
     assert_eq!(
         writer.writer_state().await?,
-        fleet_sync_lease::WriterState::Seeding {
+        fleet_project_lease::WriterState::Seeding {
             epoch: position.epoch
         }
     );

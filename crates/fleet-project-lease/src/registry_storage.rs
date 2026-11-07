@@ -1,6 +1,6 @@
 use crate::{LeaseError, checked_queries, registry_records::*};
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde::{Serialize, de::DeserializeOwned};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,

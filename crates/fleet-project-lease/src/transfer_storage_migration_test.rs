@@ -1,7 +1,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::{registry_records::*, registry_storage::RegistryStorage, turso_registry_fixture::*, *};
 use durable_steps::{AtomicStore, storage::TransactionScope};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{migrate::Migrator, query::query, row::Row};
 use sqlx_turso::Turso;
 

@@ -9,7 +9,7 @@ use durable_steps::{
     BoxFuture, Host, JournalScope, OperationContext, OperationFailure, OperationId, RequestKey,
     StepError, StepName, StoreError, Task,
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde::{Deserialize, Serialize};
 use std::{marker::PhantomData, time::Duration};
 
@@ -194,11 +194,11 @@ impl<H: Host> WriterJournalScope<'_, H> {
             Err(_) => return Ok(RenewalPlan::Stop),
         };
         let epoch = match state {
-            fleet_sync_lease::WriterState::Writing { epoch }
-            | fleet_sync_lease::WriterState::Paused { epoch, .. }
-            | fleet_sync_lease::WriterState::Seeding { epoch }
-            | fleet_sync_lease::WriterState::Draining { epoch, .. }
-            | fleet_sync_lease::WriterState::Released { epoch, .. } => epoch,
+            fleet_project_lease::WriterState::Writing { epoch }
+            | fleet_project_lease::WriterState::Paused { epoch, .. }
+            | fleet_project_lease::WriterState::Seeding { epoch }
+            | fleet_project_lease::WriterState::Draining { epoch, .. }
+            | fleet_project_lease::WriterState::Released { epoch, .. } => epoch,
             _ => return Ok(RenewalPlan::Stop),
         };
         let Some(due) = self.holder.renewal_at() else {

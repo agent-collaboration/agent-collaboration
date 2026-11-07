@@ -6,7 +6,7 @@ use board_sync_protocol::{
     ForwardedPost, ForwardedPostKind,
 };
 use collaboration_central_conformance::ConformanceResult;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientAnswer, ClientFrame, DatabaseId, FrameId, OperationAnswer, ServerFrame, ServerRequest,
 };
 use message_board::{ActorOrigin, ProjectId};

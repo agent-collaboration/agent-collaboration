@@ -3,8 +3,8 @@ use super::super::machine_notice_reactions::MachineNoticeReactions;
 use super::*;
 use board_fleet_sync::MachineNoticeProgressStore;
 use board_sync_protocol::{BoardConsumerProtocol, BoardNotice, NoticeRead, PositionedBoardNotice};
-use fleet_sync_protocol::{Epoch, NoticePosition};
-use fleet_sync_tokio_runner::SessionRequests;
+use fleet_protocol::{Epoch, NoticePosition};
+use fleet_session_client::SessionRequests;
 use message_board_storage::{FleetCache, FleetRecordSnapshot};
 
 #[path = "archive_sync_barrier.rs"]
@@ -553,7 +553,7 @@ async fn progress_write_failure_rehandles_the_hint_without_changing_lease_author
     );
     let writer = runtime.projects.ensure(&runtime.project).await?;
     assert!(
-        matches!(writer.store.writer_state().await?, fleet_sync_lease::WriterState::Writing { epoch } if epoch == runtime.epoch)
+        matches!(writer.store.writer_state().await?, fleet_project_lease::WriterState::Writing { epoch } if epoch == runtime.epoch)
     );
     drop(writer);
     runtime.close().await

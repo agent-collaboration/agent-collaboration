@@ -35,7 +35,7 @@ async fn typed_workflow_rows_keep_full_u64_and_phase_history_across_reopen() -> 
                 crate::report_schema_support(
                     scope,
                     &report,
-                    fleet_sync_protocol::SyncTime::from_unix_millis(1000),
+                    fleet_protocol::SyncTime::from_unix_millis(1000),
                 )
                 .await
                 .map_err(storage)?;
@@ -58,10 +58,7 @@ async fn typed_workflow_rows_keep_full_u64_and_phase_history_across_reopen() -> 
                     SyncTime::from_unix_millis(1000),
                 );
                 registry
-                    .save_transfer(
-                        &transfer,
-                        fleet_sync_protocol::SyncTime::from_unix_millis(1000),
-                    )
+                    .save_transfer(&transfer, fleet_protocol::SyncTime::from_unix_millis(1000))
                     .await
                     .map_err(storage)?;
                 transfer
@@ -74,10 +71,7 @@ async fn typed_workflow_rows_keep_full_u64_and_phase_history_across_reopen() -> 
                     .enter(HolderChangePhase::Fencing, SyncTime::from_unix_millis(1200))
                     .map_err(storage)?;
                 registry
-                    .save_transfer(
-                        &transfer,
-                        fleet_sync_protocol::SyncTime::from_unix_millis(1000),
-                    )
+                    .save_transfer(&transfer, fleet_protocol::SyncTime::from_unix_millis(1000))
                     .await
                     .map_err(storage)?;
                 let epoch = Epoch::new(u64::MAX).map_err(storage)?;
@@ -90,10 +84,7 @@ async fn typed_workflow_rows_keep_full_u64_and_phase_history_across_reopen() -> 
                     .enter(HolderChangePhase::Ended, SyncTime::from_unix_millis(1300))
                     .map_err(storage)?;
                 registry
-                    .save_transfer(
-                        &transfer,
-                        fleet_sync_protocol::SyncTime::from_unix_millis(1000),
-                    )
+                    .save_transfer(&transfer, fleet_protocol::SyncTime::from_unix_millis(1000))
                     .await
                     .map_err(storage)?;
                 let renewal = RenewalAttempt {
@@ -124,10 +115,7 @@ async fn typed_workflow_rows_keep_full_u64_and_phase_history_across_reopen() -> 
                     },
                 };
                 registry
-                    .save_renewal(
-                        &renewal,
-                        fleet_sync_protocol::SyncTime::from_unix_millis(1000),
-                    )
+                    .save_renewal(&renewal, fleet_protocol::SyncTime::from_unix_millis(1000))
                     .await
                     .map_err(storage)?;
                 Ok((admission, transfer, renewal))

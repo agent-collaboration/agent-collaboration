@@ -162,12 +162,12 @@ pub async fn terminal_readback(suite: &MailFixture, item: &str, original: &Value
             assert_eq!(serde_json::from_str::<Value>(&answer)?, *original);
             let mut transaction = connection.begin().await?;
             let observations =
-                fleet_sync_delivery::test_support::snapshot::<_, RouterDeliveryTypes, _>(
+                fleet_mail_delivery::test_support::snapshot::<_, RouterDeliveryTypes, _>(
                     &mut durable_steps::turso_store::TursoScope::new(
                         &mut transaction,
                         &crate::native_sql::SqlHost,
                     ),
-                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    fleet_mail_delivery::DeliveryHostRole::Machine,
                     &binding,
                 )
                 .await?;

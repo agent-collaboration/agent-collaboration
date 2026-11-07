@@ -1,7 +1,7 @@
 //! Custody belongs to the hop's transaction; hosts carry out durable calls.
 
 #[cfg(test)]
-extern crate self as fleet_sync_delivery;
+extern crate self as fleet_mail_delivery;
 #[cfg(test)]
 #[path = "../tests/support/mod.rs"]
 mod custody_fixture;
@@ -49,7 +49,7 @@ pub use delivery_host_role::DeliveryHostRole;
 pub use delivery_rollback::{
     DeliveryTransactionFailure, classify_delivery_store_error, delivery_rollback,
 };
-pub use fleet_sync_protocol::*;
+pub use fleet_protocol::*;
 pub use inbox_record::{
     DeliveryAttempt, DeliveryCheck, InboxEffects, LocalCancelAdmission, LocalItemAdmission,
     ReportRef, ResolvedDelivery,

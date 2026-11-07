@@ -4,7 +4,7 @@ use crate::{
     row_transactions::RowTransactions,
 };
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ConsumerProtocol, PeerId, Piece, PieceRefusal, ReplicatedTransaction, SchemaStatementForm,
     SyncTime, TransactionKey,
 };
@@ -192,7 +192,7 @@ fn unsupported_schema_form(transactions: &[ReplicatedTransaction]) -> Option<Sch
             return None;
         };
         statements.iter().find_map(|sql| {
-            fleet_sync_protocol::admit_replicated_schema_statement(sql)
+            fleet_protocol::admit_replicated_schema_statement(sql)
                 .err()
                 .map(|error| error.form)
         })

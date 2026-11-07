@@ -11,8 +11,8 @@ use crate::{
 use durable_steps::{
     AtomicStore, CallFailure, CallTarget, NotSentReason, storage::TransactionScope,
 };
-use fleet_sync_lease::{CopyAcknowledged, CopyCreate, CopyFence, CopyRead, CopyRetire};
-use fleet_sync_protocol::{
+use fleet_project_lease::{CopyAcknowledged, CopyCreate, CopyFence, CopyRead, CopyRetire};
+use fleet_protocol::{
     AwaitAcked, CopyStatusAnswer, CopyUnavailableReason, CreateCopy, FenceRequest, FenceResult,
     RetireCopy,
 };
@@ -62,12 +62,12 @@ where
             self.inspection()
                 .await
                 .map_err(|_| CallFailure::AnswerLost)?,
-            fleet_sync_receiver::CopyInspection::Retired { .. }
+            fleet_project_copy::CopyInspection::Retired { .. }
         ) {
             self.initialize().await.map_err(|error| {
                 match crate::migration_failure::MigrationFailure::from_rollback(&error) {
-                    Some(failure) => fleet_sync_receiver::retryable_copy(failure.unavailable()),
-                    None => fleet_sync_receiver::classify_copy_store_error(error).call_failure(),
+                    Some(failure) => fleet_project_copy::retryable_copy(failure.unavailable()),
+                    None => fleet_project_copy::classify_copy_store_error(error).call_failure(),
                 }
             })?;
         }
@@ -179,7 +179,7 @@ fn encode(answer: impl Serialize) -> Result<Vec<u8>, CallFailure> {
     serde_json::to_vec(&answer).map_err(|_| CallFailure::AnswerLost)
 }
 fn uninitialized() -> CallFailure {
-    fleet_sync_receiver::retryable_copy(CopyUnavailableReason::Uninitialized)
+    fleet_project_copy::retryable_copy(CopyUnavailableReason::Uninitialized)
 }
 fn refused() -> CallFailure {
     CallFailure::NotSent {

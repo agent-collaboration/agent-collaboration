@@ -1,6 +1,6 @@
 //! Validate the old wire records before applying the typed storage corpus.
 use crate::{checked_legacy_queries as legacy, *};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{
     arguments::IntoArguments,
     column::ColumnIndex,

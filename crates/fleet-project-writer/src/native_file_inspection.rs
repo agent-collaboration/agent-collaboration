@@ -2,7 +2,7 @@ use crate::{
     OpenError, RetainedAuthority, RetainedFileOrigin, file_admission::FileAdmission,
     writer_file_record::read_file_record,
 };
-use fleet_sync_receiver::SnapshotInstallState;
+use fleet_project_copy::SnapshotInstallState;
 use sqlx_core::connection::{ConnectOptions, Connection};
 use sqlx_turso::TursoConnectOptions;
 use std::path::Path;

@@ -1,12 +1,12 @@
-use fleet_sync_protocol::*;
-use fleet_sync_session::{SessionRecord, SessionState};
+use fleet_protocol::*;
+use fleet_session::{SessionRecord, SessionState};
 use serde::{Deserialize, Serialize};
 
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 pub struct FixtureProtocol;
 impl ConsumerProtocol for FixtureProtocol {
-    type Delivery = fleet_sync_protocol::NoDelivery;
+    type Delivery = fleet_protocol::NoDelivery;
     type Request = Increment;
     type Answer = IncrementAnswer;
     type ServerRequest = ();

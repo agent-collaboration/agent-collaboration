@@ -2,7 +2,7 @@
 use super::super::PrefixCase;
 use super::*;
 use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, DeliveryStream, ItemId};
+use fleet_protocol::{DeliveryEnvelope, DeliveryItem, DeliveryStream, ItemId};
 
 impl RuleFixture {
     pub async fn assert_successor_publication(

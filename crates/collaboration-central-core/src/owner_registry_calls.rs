@@ -4,7 +4,7 @@ pub(crate) use collaboration_central_admin_protocol::{
     OwnerRetirementPhase, OwnerTakeover, OwnerTransferAnswer,
 };
 use durable_steps::CallTarget;
-use fleet_sync_protocol::{DatabaseId, TransferId};
+use fleet_protocol::{DatabaseId, TransferId};
 use message_board::ServiceId;
 use serde::{Deserialize, Serialize};
 

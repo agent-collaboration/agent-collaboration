@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use super::support;
 use durable_steps::{AtomicStore, Engine, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::row::Row;
 use std::sync::atomic::Ordering;
 use support::{network::*, *};

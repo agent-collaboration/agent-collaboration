@@ -43,7 +43,7 @@ pub async fn require_cold_terminal(stopped: &StoppedHost, item: &str) -> Fixture
     let header = header.get("value").ok_or("SDK Outbox item header absent")?;
     assert_eq!(header.get("id"), Some(&json!(item)));
     assert_eq!(header.pointer("/status/kind"), Some(&json!("delivered")));
-    let _: fleet_sync_protocol::ItemDigest = serde_json::from_value(
+    let _: fleet_protocol::ItemDigest = serde_json::from_value(
         header
             .get("digest")
             .ok_or("retained digest absent")?

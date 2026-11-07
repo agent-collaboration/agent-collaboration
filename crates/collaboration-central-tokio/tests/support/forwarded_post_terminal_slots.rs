@@ -6,7 +6,7 @@ use collaboration_central_conformance::{
     ConformanceResult, RuntimeControl, RuntimeFaultObservation,
 };
 use collaboration_central_core::RegistryTime;
-use fleet_sync_protocol::{DatabaseId, FrameId};
+use fleet_protocol::{DatabaseId, FrameId};
 use reqwest_websocket::WebSocket;
 use std::{
     future::Future,

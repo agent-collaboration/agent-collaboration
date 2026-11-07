@@ -4,8 +4,8 @@ use crate::{
     ReadPool, StatementForm, StatementGuard, TableLayout, WriteRefusal, WriteTransaction,
     write_transaction::WriterControl,
 };
-use fleet_sync_lease::{LeaseHolder, LeasePolicy};
-use fleet_sync_protocol::{DatabaseId, Epoch, LeaseState, LeaseStatus, PeerId, SyncTime};
+use fleet_project_lease::{LeaseHolder, LeasePolicy};
+use fleet_protocol::{DatabaseId, Epoch, LeaseState, LeaseStatus, PeerId, SyncTime};
 use runtime_primitives::Clock;
 use sqlx_core::{
     executor::Executor,

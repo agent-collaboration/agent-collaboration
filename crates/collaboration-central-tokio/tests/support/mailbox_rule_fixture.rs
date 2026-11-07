@@ -3,7 +3,7 @@ use board_sync_protocol::BoardDeliveryTypes;
 use collaboration_central_conformance::{
     AdmittedPeerSocket, ConformanceClient, ConformanceResult, enroll_admitted_peer,
 };
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, ItemId, PeerId};
+use fleet_protocol::{DeliveryEnvelope, DeliveryItem, ItemId, PeerId};
 use serde_json::{Value, json};
 
 pub(super) const ORIGIN: &str = "550e8400-e29b-41d4-a716-446655441081";

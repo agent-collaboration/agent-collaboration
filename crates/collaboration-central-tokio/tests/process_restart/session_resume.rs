@@ -2,7 +2,7 @@
 use super::*;
 use collaboration_central_conformance::{AnswerFaultObservation, RuntimeControlRequest};
 use collaboration_central_core::RegistryTime;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, CommitSequence, DatabaseId, DatabaseStatus, Epoch, FrameId, LeaseAnswer,
     LeaseRequest, LeaseState, LeaseStatus, PeerId, Piece, PieceContents, RenewAnswer, RenewRequest,
     RenewResult, ReplicatedTransaction, ReplicationAnswer, ReplicationPosition, ReplicationRequest,
@@ -92,7 +92,7 @@ async fn prepare_lost_answers(base: &str) -> ConformanceResult<SavedSession> {
             &mut holder.socket,
             database,
             PeerId::new(holder.peer)?,
-            fleet_sync_protocol::RequestId::new(Uuid::now_v7())?,
+            fleet_protocol::RequestId::new(Uuid::now_v7())?,
         )
         .await?;
         creation_scenarios::registered(&registered, PeerId::new(holder.peer)?)?;
@@ -119,7 +119,7 @@ async fn prepare_lost_answers(base: &str) -> ConformanceResult<SavedSession> {
         .await?;
         pin_registry(base, RegistryTime(at.0 + chrono::TimeDelta::seconds(1))).await?;
         let renewal = RenewRequest {
-            attempt: fleet_sync_protocol::RequestId::new(Uuid::now_v7())?,
+            attempt: fleet_protocol::RequestId::new(Uuid::now_v7())?,
             database,
             epoch: Epoch::new(1)?,
         };
@@ -170,10 +170,7 @@ async fn drop_committed_answer(
 ) -> ConformanceResult<()> {
     let frame = FrameId::new(Uuid::now_v7())?;
     let connection = ConformanceClient::new(base)?
-        .active_connection(
-            SERVICE,
-            fleet_sync_protocol::PeerId::try_from(PEER.to_owned())?,
-        )
+        .active_connection(SERVICE, fleet_protocol::PeerId::try_from(PEER.to_owned())?)
         .await?;
     let address = ObjectAddress::Fleet;
     control(

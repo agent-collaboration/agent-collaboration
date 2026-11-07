@@ -140,7 +140,7 @@ async fn assert_local_injection_prevention(discard_group: bool) {
     if let Some(prefix) = kept_prefix
         && matches!(
             original_outcome,
-            Some(fleet_sync_protocol::RecipientOutcome::Prevented { .. })
+            Some(fleet_protocol::RecipientOutcome::Prevented { .. })
         )
     {
         let [child] = expansions.as_slice() else {
@@ -170,7 +170,7 @@ async fn assert_local_injection_prevention(discard_group: bool) {
             .await
             .unwrap();
         assert!(
-            matches!(after, Some(fleet_sync_protocol::RecipientOutcome::Prevented { cancel }) if cancel == child.expansion.envelope.id()),
+            matches!(after, Some(fleet_protocol::RecipientOutcome::Prevented { cancel }) if cancel == child.expansion.envelope.id()),
             "discarding the project group undid the SDK's decided prevention"
         );
         assert!(
@@ -209,11 +209,11 @@ async fn assert_local_injection_prevention(discard_group: bool) {
     };
     assert_eq!(child.expansion.target_item.as_str(), held.push_id.as_str());
     assert!(
-        matches!(original_outcome, Some(fleet_sync_protocol::RecipientOutcome::Prevented { cancel }) if cancel == child.expansion.envelope.id()),
+        matches!(original_outcome, Some(fleet_protocol::RecipientOutcome::Prevented { cancel }) if cancel == child.expansion.envelope.id()),
         "the SDK did not decide Prevented for the original"
     );
     assert!(
-        matches!(child_outcomes.as_slice(), [Some(fleet_sync_protocol::RecipientOutcome::Prevented { cancel })] if *cancel == child.expansion.envelope.id()),
+        matches!(child_outcomes.as_slice(), [Some(fleet_protocol::RecipientOutcome::Prevented { cancel })] if *cancel == child.expansion.envelope.id()),
         "the real child control did not settle Prevented"
     );
 }
@@ -224,7 +224,7 @@ async fn a_follow_recipient_with_no_sender_project_file_can_still_inject_normall
     use collaboration_mail_protocol::{
         MailSender, NotificationBody, NotificationSource, RecordPointer, RootRange,
     };
-    use fleet_sync_protocol::{DeliveryItem, ItemId, Recipient};
+    use fleet_protocol::{DeliveryItem, ItemId, Recipient};
     use message_board::{
         EpochNumber, FeedCursor, FeedPosition, Identity, ProjectId, RecordId,
         SubscriptionGeneration, SubscriptionPolicy,
@@ -332,6 +332,6 @@ async fn a_follow_recipient_with_no_sender_project_file_can_still_inject_normall
     );
     assert!(matches!(
         outcome,
-        Some(fleet_sync_protocol::RecipientOutcome::Delivered { .. })
+        Some(fleet_protocol::RecipientOutcome::Delivered { .. })
     ));
 }

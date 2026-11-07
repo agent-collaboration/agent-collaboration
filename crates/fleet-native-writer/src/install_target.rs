@@ -1,7 +1,8 @@
-use crate::{ObjectKey, StagingError, StagingStore, TokioObject};
+use crate::{StagingError, StagingStore};
 use durable_steps::{BoxFuture, Host, StoreError};
-use fleet_sync_receiver::{SnapshotInstall, SnapshotInstallRules, SnapshotInstallState};
-use fleet_sync_writer::{ReplicatedDatabase, ReplicatedSchema};
+use fleet_project_copy::{SnapshotInstall, SnapshotInstallRules, SnapshotInstallState};
+use fleet_project_writer::{ReplicatedDatabase, ReplicatedSchema};
+use fleet_tokio_objects::{ObjectKey, TokioObject};
 use std::{path::Path, sync::Arc};
 
 /// The control journal orders installs; each target owns its file and receipt.

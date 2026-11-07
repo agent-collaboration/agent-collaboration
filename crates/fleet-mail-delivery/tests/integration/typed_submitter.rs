@@ -3,7 +3,7 @@ use super::support::{
     *,
 };
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
 
@@ -223,7 +223,7 @@ async fn both_owner_kinds_survive_three_custody_records_replay_and_payload_relea
                                 item: item_id(11),
                                 digest: envelope(owner, 11).digest().clone(),
                             },
-                            fleet_sync_protocol::SyncTime::from_unix_millis(0),
+                            fleet_protocol::SyncTime::from_unix_millis(0),
                         )
                         .await
                         .map_err(storage_error)

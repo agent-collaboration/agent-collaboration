@@ -5,8 +5,8 @@ use crate::{
     *,
 };
 use durable_steps::{AtomicStore, CallResult, OperationContext, storage::TransactionScope};
-use fleet_sync_protocol as wire;
-use fleet_sync_protocol::*;
+use fleet_protocol as wire;
+use fleet_protocol::*;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,

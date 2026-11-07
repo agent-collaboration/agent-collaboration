@@ -6,7 +6,7 @@ async fn installation_show_transmits_the_observed_central_record_over_mcp() {
     use board_sync_protocol::{FleetLinkRecord, FleetLinkRefusal, FleetLinkState};
 
     // Arrange: the retained failed-start record is independent of a running session.
-    let peer = fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).expect("UUIDv7 peer");
+    let peer = fleet_protocol::PeerId::new(uuid::Uuid::now_v7()).expect("UUIDv7 peer");
     let record = FleetLinkRecord {
         peer,
         endpoint: "wss://central.example.test/session".to_owned(),
@@ -52,7 +52,7 @@ async fn installation_show_transmits_the_observed_central_record_over_mcp() {
 async fn installation_show_preserves_the_peer_when_its_central_observation_is_unavailable() {
     use crate::api_test_harness::{ServedApi, api_config, test_identity};
     // Arrange: identity is valid; the independently owned cache reader failed.
-    let peer = fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).expect("peer");
+    let peer = fleet_protocol::PeerId::new(uuid::Uuid::now_v7()).expect("peer");
     let application = test_identity()
         .with_installation_peer(peer)
         .expect("identity")

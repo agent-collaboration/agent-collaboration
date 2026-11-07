@@ -115,6 +115,6 @@ pub(super) struct PollWaiter {
     pub reply: oneshot::Sender<Result<Option<SubscriptionWaitResult>, BoardError>>,
     // Only immutable frozen-filter misses survive a rescan. Temporary gate
     // failures stay eligible for this same request's next existing hint.
-    pub poll_filter_mismatches: HashSet<fleet_sync_protocol::ItemId>,
-    pub poll_in_flight: Option<fleet_sync_protocol::ItemId>,
+    pub poll_filter_mismatches: HashSet<fleet_protocol::ItemId>,
+    pub poll_in_flight: Option<fleet_protocol::ItemId>,
 }

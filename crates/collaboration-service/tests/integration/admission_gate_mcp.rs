@@ -32,11 +32,11 @@ async fn native_expiry_does_not_record_a_request_and_same_epoch_renewal_evaluate
     let high_water = before.high_water();
     before.finish().await?;
     let expires = initial.after(board_fleet_sync::BOARD_LEASE_POLICY.lease_duration);
-    let lease = fleet_sync_protocol::LeaseStatus {
-        database: fleet_sync_protocol::DatabaseId::new(uuid::Uuid::parse_str(project.as_str())?)?,
-        epoch: fleet_sync_protocol::Epoch::new(1)?,
+    let lease = fleet_protocol::LeaseStatus {
+        database: fleet_protocol::DatabaseId::new(uuid::Uuid::parse_str(project.as_str())?)?,
+        epoch: fleet_protocol::Epoch::new(1)?,
         holder: fixture_peer()?,
-        state: fleet_sync_protocol::LeaseState::Held,
+        state: fleet_protocol::LeaseState::Held,
         expires_at: expires,
         remaining_ms: 14_400_000,
     };
@@ -71,7 +71,7 @@ async fn a_seeded_writer_replays_known_requests_and_evaluates_unknown_requests()
     accepted_snapshot::bootstrap_project(&source, &fixture, &project).await?;
     let store = fixture._registry.open_project(&project).await?;
     assert!(
-        matches!(store.writer_state().await?, fleet_sync_lease::WriterState::Writing { epoch } if epoch.value() == 2)
+        matches!(store.writer_state().await?, fleet_project_lease::WriterState::Writing { epoch } if epoch.value() == 2)
     );
     let task = TaskId::generate();
     let original=fixture.request(&project,json!({"kind":"taskCreate","taskId":task,"workstreamId":workstream,"title":"known","body":"","blockedBy":[],"relatedTo":[]}));
@@ -200,13 +200,13 @@ async fn seed_empty_project(
     let now = clock.now();
     database
         .observe_registration(
-            fleet_sync_protocol::LeaseStatus {
-                database: fleet_sync_protocol::DatabaseId::new(uuid::Uuid::parse_str(
+            fleet_protocol::LeaseStatus {
+                database: fleet_protocol::DatabaseId::new(uuid::Uuid::parse_str(
                     project.as_str(),
                 )?)?,
-                epoch: fleet_sync_protocol::Epoch::new(1)?,
+                epoch: fleet_protocol::Epoch::new(1)?,
                 holder: fixture_peer()?,
-                state: fleet_sync_protocol::LeaseState::Held,
+                state: fleet_protocol::LeaseState::Held,
                 expires_at: now.after(board_fleet_sync::BOARD_LEASE_POLICY.lease_duration),
                 remaining_ms: 14_400_000,
             },

@@ -4,11 +4,11 @@ use durable_steps::{
     StartRefusal, StoreError, storage::TransactionScope,
 };
 #[cfg(feature = "conformance")]
-use fleet_sync_lease::ImportTask;
-use fleet_sync_lease::{PreviewTakeoverTask, RegistrationTask, RetirementTask};
+use fleet_project_lease::ImportTask;
+use fleet_project_lease::{PreviewTakeoverTask, RegistrationTask, RetirementTask};
 #[cfg(feature = "conformance")]
-use fleet_sync_protocol::Import;
-use fleet_sync_protocol::{PreviewTakeover, Registration, Retirement};
+use fleet_protocol::Import;
+use fleet_protocol::{PreviewTakeover, Registration, Retirement};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -74,7 +74,7 @@ impl<Store: AtomicStore, Host: durable_steps::Host, Driver: Database, Hook> Flee
     for RegisteredFleetEngine<Store, Host, Driver, Hook>
 where
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
-    for<'transaction> Hook: fleet_sync_lease::LeaseChangeHook<Store::Scope<'transaction>>,
+    for<'transaction> Hook: fleet_project_lease::LeaseChangeHook<Store::Scope<'transaction>>,
     Driver::Arguments: IntoArguments<Driver>,
     for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
@@ -127,7 +127,7 @@ pub(crate) fn own_engine<Store: AtomicStore, Host: durable_steps::Host, Driver: 
 ) -> Arc<dyn FleetTaskEngine>
 where
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
-    for<'transaction> Hook: fleet_sync_lease::LeaseChangeHook<Store::Scope<'transaction>>,
+    for<'transaction> Hook: fleet_project_lease::LeaseChangeHook<Store::Scope<'transaction>>,
     Driver::Arguments: IntoArguments<Driver>,
     for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,

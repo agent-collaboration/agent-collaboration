@@ -88,8 +88,8 @@ async fn a_busy_move_checkpoint_keeps_the_source_and_pauses_new_admission() -> T
     assert!(
         matches!(
             result,
-            Err(fleet_sync_writer::MoveAsideError::Publish(
-                fleet_sync_writer::native_file::PublishError::CheckpointBusy { .. }
+            Err(fleet_project_writer::MoveAsideError::Publish(
+                fleet_project_writer::native_file::PublishError::CheckpointBusy { .. }
             ))
         ),
         "{result:?}"

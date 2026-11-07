@@ -16,23 +16,23 @@ pub struct ConformanceClient {
 }
 #[derive(serde::Deserialize)]
 struct AdmittedConnectionObservation {
-    connection: fleet_sync_protocol::ConnectionId,
-    peer: fleet_sync_protocol::PeerId,
-    registration: fleet_sync_session::ConnectionRegistration,
+    connection: fleet_protocol::ConnectionId,
+    peer: fleet_protocol::PeerId,
+    registration: fleet_session::ConnectionRegistration,
 }
 impl ConformanceClient {
     /// Select the actual live socket for a normally admitted peer.
     pub async fn active_connection(
         &self,
         service: &str,
-        peer: fleet_sync_protocol::PeerId,
-    ) -> ConformanceResult<fleet_sync_protocol::ConnectionId> {
+        peer: fleet_protocol::PeerId,
+    ) -> ConformanceResult<fleet_protocol::ConnectionId> {
         let connections = self.session_connections(Some(service)).await?;
         let mut live = connections.into_iter().filter(|connection| {
             connection.peer == peer
                 && !matches!(
                     connection.registration,
-                    fleet_sync_session::ConnectionRegistration::Closed
+                    fleet_session::ConnectionRegistration::Closed
                 )
         });
         let connection = live
@@ -65,7 +65,7 @@ impl ConformanceClient {
     /// Wake local injected-clock work after this Hello's admission has committed.
     pub async fn wake_due_after_hello(
         &self,
-        session: fleet_sync_protocol::SessionId,
+        session: fleet_protocol::SessionId,
     ) -> ConformanceResult<()> {
         if self.staging_access().is_some() {
             return Ok(());
@@ -85,10 +85,10 @@ impl ConformanceClient {
                 let connections = self.session_connections(None).await?;
                 let admitted = connections.iter().any(|connection| {
                     matches!(connection.registration,
-                        fleet_sync_session::ConnectionRegistration::Attaching {session_id,..}
-                        | fleet_sync_session::ConnectionRegistration::Attached {session_id,..} if session_id == session)
+                        fleet_session::ConnectionRegistration::Attaching {session_id,..}
+                        | fleet_session::ConnectionRegistration::Attached {session_id,..} if session_id == session)
                         && !connections.iter().any(|other| other.peer == connection.peer
-                            && matches!(other.registration, fleet_sync_session::ConnectionRegistration::Opening))
+                            && matches!(other.registration, fleet_session::ConnectionRegistration::Opening))
                 });
                 if admitted { return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(()); }
                 tokio::task::yield_now().await;

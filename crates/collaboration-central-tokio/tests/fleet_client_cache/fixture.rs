@@ -2,7 +2,7 @@ use super::*;
 use board_sync_protocol::{BoardConsumerAnswer, BoardPayload, FleetRequestEnvelope};
 use collaboration_central_conformance::AdmittedPeerSocket;
 use fleet_admission::FleetRequestResult;
-use fleet_sync_protocol::{FrameId, OperationAnswer, ServerFrame};
+use fleet_protocol::{FrameId, OperationAnswer, ServerFrame};
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     query::query,
@@ -17,7 +17,7 @@ impl Live {
     pub async fn start(root: &Path, jwks: &str) -> TestResult<Self> {
         let server = TokioServer::start(TokioSettings {
             delivery: collaboration_central_tokio::DeliveryConfig {
-                relay_peer: fleet_sync_protocol::PeerId::try_from(
+                relay_peer: fleet_protocol::PeerId::try_from(
                     "019f0000-0000-7000-8000-000000005240".to_owned(),
                 )?,
             },

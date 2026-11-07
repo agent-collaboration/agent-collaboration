@@ -1,13 +1,14 @@
 use crate::{
     InstallFile, InstallFileAnswer, InstallFileRequest, InstallFileResult, InstallRecord,
-    InstallRequest, InstallSource, InstallStatus, StagedPage, TokioObject,
-    install_contract::corrupt, install_records::InstallRecords,
+    InstallRequest, InstallSource, InstallStatus, StagedPage, install_contract::corrupt,
+    install_records::InstallRecords,
 };
 use durable_steps::{
     BoxFuture, Host, OperationContext, OperationFailure, RequestKey, Resume, StepName, StoreError,
     Task, turso_store::TursoScope,
 };
-use fleet_sync_receiver::SnapshotInstall;
+use fleet_project_copy::SnapshotInstall;
+use fleet_tokio_objects::TokioObject;
 use std::sync::Arc;
 
 pub struct InstallSnapshot<H: Host> {
@@ -29,7 +30,7 @@ impl<H: Host> Task for InstallSnapshot<H> {
         ctx: &mut C,
         input: &InstallRequest,
     ) -> Result<InstallRecord, OperationFailure> {
-        let first = fleet_sync_protocol::InstallId::new(input.attempt.as_uuid())
+        let first = fleet_protocol::InstallId::new(input.attempt.as_uuid())
             .map_err(|error| invalid(&error.to_string()))?;
         let mut record = ctx
             .local(step("start")?, move |scope| {
@@ -146,7 +147,7 @@ impl<H: Host> Task for InstallSnapshot<H> {
                             Ok(records
                                 .reserve(
                                     &request,
-                                    fleet_sync_protocol::InstallId::new(host.new_id())
+                                    fleet_protocol::InstallId::new(host.new_id())
                                         .map_err(StoreError::backend)?,
                                 )
                                 .await?)
@@ -254,15 +255,21 @@ pub(crate) fn request_key(request: &InstallRequest) -> Result<RequestKey, StoreE
 }
 fn parse_key(
     key: &RequestKey,
-) -> Result<(crate::ObjectKey, fleet_sync_protocol::InstallAttemptId), StoreError> {
+) -> Result<
+    (
+        fleet_tokio_objects::ObjectKey,
+        fleet_protocol::InstallAttemptId,
+    ),
+    StoreError,
+> {
     let (target, attempt) = key
         .as_str()
         .strip_prefix("install:")
         .and_then(|key| key.split_once(':'))
         .ok_or_else(|| corrupt("invalid install request key"))?;
     Ok((
-        crate::ObjectKey::new(target).map_err(StoreError::backend)?,
-        fleet_sync_protocol::InstallAttemptId::try_from(attempt.to_owned())
+        fleet_tokio_objects::ObjectKey::new(target).map_err(StoreError::backend)?,
+        fleet_protocol::InstallAttemptId::try_from(attempt.to_owned())
             .map_err(StoreError::backend)?,
     ))
 }

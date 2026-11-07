@@ -6,7 +6,7 @@ use crate::{
     lease_projection::LeaseProjectionResult,
 };
 use durable_steps::{CallId, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{DatabaseId, TransferId};
+use fleet_protocol::{DatabaseId, TransferId};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -204,8 +204,8 @@ fn result_columns(result: &LeaseProjectionResult) -> ReceiptColumns {
     }
 }
 pub(crate) struct ClaimReceipt {
-    pub attempt: fleet_sync_protocol::TransferId,
-    pub database: fleet_sync_protocol::DatabaseId,
+    pub attempt: fleet_protocol::TransferId,
+    pub database: fleet_protocol::DatabaseId,
     pub result: LeaseProjectionResult,
 }
 fn decode_receipt(
@@ -245,11 +245,9 @@ fn decode_receipt(
         ("applied", None, None, None) => LeaseProjectionResult::Applied,
         ("duplicate", None, None, None) => LeaseProjectionResult::Duplicate,
         ("older" | "conflict", Some(epoch), Some(incarnation), Some(change)) => {
-            let epoch = fleet_sync_protocol::Epoch::new(decode_version_counter(
-                epoch,
-                "claim.stored_epoch",
-            )?)
-            .map_err(StoreError::backend)?;
+            let epoch =
+                fleet_protocol::Epoch::new(decode_version_counter(epoch, "claim.stored_epoch")?)
+                    .map_err(StoreError::backend)?;
             let incarnation = crate::RegistryIncarnation::new(decode_version_counter(
                 incarnation,
                 "claim.stored_incarnation",
@@ -277,12 +275,11 @@ fn decode_receipt(
         }
     };
     Ok(ClaimReceipt {
-        attempt: fleet_sync_protocol::TransferId::new(
+        attempt: fleet_protocol::TransferId::new(
             durable_steps::Uuid::parse_str(&attempt).map_err(StoreError::backend)?,
         )
         .map_err(StoreError::backend)?,
-        database: fleet_sync_protocol::DatabaseId::try_from(database)
-            .map_err(StoreError::backend)?,
+        database: fleet_protocol::DatabaseId::try_from(database).map_err(StoreError::backend)?,
         result,
     })
 }

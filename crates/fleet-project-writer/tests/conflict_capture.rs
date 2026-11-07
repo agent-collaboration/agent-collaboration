@@ -1,6 +1,6 @@
 #![allow(clippy::panic_in_result_fn)]
-use fleet_sync_protocol::{RowChange, SqlValue};
-use fleet_sync_writer::{CaptureChange, TableLayout, normalize_capture_change};
+use fleet_project_writer::{CaptureChange, TableLayout, normalize_capture_change};
+use fleet_protocol::{RowChange, SqlValue};
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 const FIRST: &str = "019eef00-0000-7000-8000-000000000001";
 const SECOND: &str = "019eef00-0000-7000-8000-000000000002";

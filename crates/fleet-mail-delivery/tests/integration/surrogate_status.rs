@@ -1,6 +1,6 @@
 use super::support::*;
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
 
@@ -22,7 +22,7 @@ async fn corrupt_case(kind: &'static str) {
                     .enqueue(
                         original,
                         peer(9),
-                        fleet_sync_delivery::Submitter::Machine(peer(1)),
+                        fleet_mail_delivery::Submitter::Machine(peer(1)),
                         SyncTime::from_unix_millis(0),
                     )
                     .await
@@ -35,22 +35,19 @@ async fn corrupt_case(kind: &'static str) {
                 };
                 let (_, reference) = StatusStream::<_, TestTypes>::new(
                     scope,
-                    fleet_sync_delivery::Submitter::Machine(peer(1)),
+                    fleet_mail_delivery::Submitter::Machine(peer(1)),
                     "route".into(),
                 )
-                .append(
-                    &publication,
-                    fleet_sync_protocol::SyncTime::from_unix_millis(0),
-                )
+                .append(&publication, fleet_protocol::SyncTime::from_unix_millis(0))
                 .await
                 .map_err(storage_error)?;
                 let batch = StatusStream::<_, TestTypes>::new(
                     scope,
-                    fleet_sync_delivery::Submitter::Machine(peer(1)),
+                    fleet_mail_delivery::Submitter::Machine(peer(1)),
                     "route".into(),
                 )
                 .fetch(
-                    fleet_sync_delivery::Submitter::Machine(peer(1)),
+                    fleet_mail_delivery::Submitter::Machine(peer(1)),
                     StatusCursor::new(0),
                     10,
                 )
@@ -82,11 +79,11 @@ async fn corrupt_case(kind: &'static str) {
                 Ok(match kind {
                     "state" | "event" => StatusStream::<_, TestTypes>::new(
                         scope,
-                        fleet_sync_delivery::Submitter::Machine(peer(1)),
+                        fleet_mail_delivery::Submitter::Machine(peer(1)),
                         "route".into(),
                     )
                     .fetch(
-                        fleet_sync_delivery::Submitter::Machine(peer(1)),
+                        fleet_mail_delivery::Submitter::Machine(peer(1)),
                         StatusCursor::new(0),
                         10,
                     )
@@ -140,13 +137,10 @@ async fn corrupt_surrogate_read_rolls_back_business_write_and_keeps_custody_corr
                 };
                 StatusStream::<_, TestTypes>::new(
                     scope,
-                    fleet_sync_delivery::Submitter::Machine(peer(1)),
+                    fleet_mail_delivery::Submitter::Machine(peer(1)),
                     "route".into(),
                 )
-                .append(
-                    &publication,
-                    fleet_sync_protocol::SyncTime::from_unix_millis(0),
-                )
+                .append(&publication, fleet_protocol::SyncTime::from_unix_millis(0))
                 .await
                 .map_err(storage_error)?;
                 query::<Turso>("CREATE TABLE before_corrupt_read(value INTEGER NOT NULL)")
@@ -169,11 +163,11 @@ async fn corrupt_surrogate_read_rolls_back_business_write_and_keeps_custody_corr
                     .await?;
                 StatusStream::<_, TestTypes>::new(
                     scope,
-                    fleet_sync_delivery::Submitter::Machine(peer(1)),
+                    fleet_mail_delivery::Submitter::Machine(peer(1)),
                     "route".into(),
                 )
                 .fetch(
-                    fleet_sync_delivery::Submitter::Machine(peer(1)),
+                    fleet_mail_delivery::Submitter::Machine(peer(1)),
                     StatusCursor::new(0),
                     10,
                 )

@@ -6,7 +6,7 @@ use durable_steps::{
     storage::TransactionScope,
     turso_store::{TursoScope, TursoStore},
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use runtime_primitives::{Clock, IdSource, WakeFailure, WakeScheduler};
 use sqlx_core::{row::Row, sql_str::SqlSafeStr};
 use sqlx_turso::Turso;

@@ -1,8 +1,8 @@
 #![allow(clippy::panic_in_result_fn)]
 use super::fixture::last_capture;
 use crate::{sender_test_fixture::*, *};
-use fleet_sync_lease::LeasePolicy;
-use fleet_sync_protocol::{unit_budget::UnitTooLarge, *};
+use fleet_project_lease::LeasePolicy;
+use fleet_protocol::{unit_budget::UnitTooLarge, *};
 use sqlx_core::{
     migrate::{MigrationType, Migrator},
     query::query,

@@ -1,5 +1,5 @@
 use crate::{CapturedTransaction, PieceAnnotation, SenderError, capture_stream::CapturedCommit};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ConsumerProtocol, DatabaseId, Epoch, Piece, PieceContents, PieceDigest, ReplicatedTransaction,
     ReplicationPosition, RowChange, SqlValue, TransactionKey, TransactionPart,
     unit_budget::{

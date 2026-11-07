@@ -2,7 +2,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::{turso_registry_fixture::*, *};
 use durable_steps::{AtomicStore, Uuid};
-use fleet_sync_protocol::{CommitSequence, ReleaseAnswer};
+use fleet_protocol::{CommitSequence, ReleaseAnswer};
 use sqlx_turso::Turso;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -17,7 +17,7 @@ pub(super) fn attempt(value: u128) -> TestResult<TransferId> {
 }
 pub(super) fn move_request(id: TransferId) -> TestResult<HolderChangeRequest> {
     Ok(HolderChangeRequest::Move {
-        reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+        reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
         attempt: id,
         database: database()?,
         from_epoch: Epoch::new(1)?,

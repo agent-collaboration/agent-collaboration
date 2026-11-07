@@ -2,7 +2,7 @@ use crate::{RegistryConfig, preview_rules::preview_takeover};
 use durable_steps::{
     AtomicStore, OperationContext, OperationFailure, Task, storage::TransactionScope,
 };
-use fleet_sync_protocol::{PreviewTakeover, TakeoverPreview};
+use fleet_protocol::{PreviewTakeover, TakeoverPreview};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,

@@ -15,7 +15,7 @@ pub struct ApplicationFixture {
         Option<std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe>>,
     pub(crate) subscription_clock: std::sync::Arc<dyn crate::SubscriptionClock>,
     pub(crate) service_id: UuidIdentity,
-    pub(crate) installation_peer: Option<fleet_sync_protocol::PeerId>,
+    pub(crate) installation_peer: Option<fleet_protocol::PeerId>,
     pub(crate) fleet_link: board_fleet_sync::FleetLinkObservation,
     pub(crate) machine_identity: collaboration_contracts::MachineIdentity,
     pub(crate) configuration: collaboration_runtime::AutomationConfigurationHandle,
@@ -73,10 +73,7 @@ impl ApplicationFixture {
         Ok(self)
     }
 
-    pub fn with_installation_peer(
-        mut self,
-        peer: fleet_sync_protocol::PeerId,
-    ) -> Result<Self, String> {
+    pub fn with_installation_peer(mut self, peer: fleet_protocol::PeerId) -> Result<Self, String> {
         if self
             .installation_peer
             .is_some_and(|existing| existing != peer)
@@ -88,7 +85,7 @@ impl ApplicationFixture {
     }
 
     #[must_use]
-    pub fn installation_peer(&self) -> Option<fleet_sync_protocol::PeerId> {
+    pub fn installation_peer(&self) -> Option<fleet_protocol::PeerId> {
         self.installation_peer
     }
 

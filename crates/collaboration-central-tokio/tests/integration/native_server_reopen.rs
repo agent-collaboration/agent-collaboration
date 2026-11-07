@@ -11,11 +11,11 @@ use durable_steps::{
     CallId,
     storage::{CallReach, StepRecord, StepState},
 };
-use fleet_sync_lease::WriterState;
-use fleet_sync_protocol::{
+use fleet_project_lease::WriterState;
+use fleet_project_writer::WriteRefusal;
+use fleet_protocol::{
     Epoch, FrameId, PeerId, ReleaseAnswer, ReleaseRequest, ServerCall, ServerCallAnswer, TransferId,
 };
-use fleet_sync_writer::WriteRefusal;
 use serde_json::{Value, json};
 use sqlx_core::executor::Executor;
 use std::{path::Path, time::Duration};
@@ -37,7 +37,7 @@ async fn the_reopened_central_retries_its_stored_call_against_the_reopened_relea
     let settings = || {
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(TokioSettings {
             delivery: collaboration_central_tokio::DeliveryConfig {
-                relay_peer: fleet_sync_protocol::PeerId::try_from(
+                relay_peer: fleet_protocol::PeerId::try_from(
                     "019f0000-0000-7000-8000-000000005240".to_owned(),
                 )?,
             },

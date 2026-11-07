@@ -1,7 +1,7 @@
 //! One movable reaction owner serializes real SDK notice catch-up while requests continue.
 use super::super::super::{finish_reaction, notice_dispatch::NoticeReactionQueue};
 use super::*;
-use fleet_sync_protocol::{OperationAnswer, OperationRequest};
+use fleet_protocol::{OperationAnswer, OperationRequest};
 
 fn event_owners(harness: &MailHarness) -> MachineSessionEventOwners {
     MachineSessionEventOwners {
@@ -31,7 +31,7 @@ async fn actual_notice(
     position: u64,
 ) -> Result<
     (
-        fleet_sync_protocol::SessionId,
+        fleet_protocol::SessionId,
         NoticePosition,
         Notice<BoardConsumerProtocol>,
     ),

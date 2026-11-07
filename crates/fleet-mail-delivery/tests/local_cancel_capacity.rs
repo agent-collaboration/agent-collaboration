@@ -3,7 +3,7 @@
 mod local_cancellation;
 mod support;
 use durable_steps::{AtomicStore, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use local_cancellation::*;
 use support::*;
 

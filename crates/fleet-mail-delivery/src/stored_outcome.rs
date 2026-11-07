@@ -1,5 +1,5 @@
 use crate::{DeliveryError, custody_record::*};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde::de::DeserializeOwned;
 
 pub(crate) fn required(

@@ -4,7 +4,7 @@ use crate::{
     migration_lineage::migration_lineage,
     writer_scope::WriterScope,
 };
-use fleet_sync_protocol::{SchemaEntry, SchemaObjectKind, TableName, reserved_namespace};
+use fleet_protocol::{SchemaEntry, SchemaObjectKind, TableName, reserved_namespace};
 use sqlx_turso::TursoConnection;
 
 fn invalid(reason: AdoptionHistory) -> OpenError {

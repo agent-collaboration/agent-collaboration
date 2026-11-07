@@ -88,7 +88,7 @@ async fn four_keys_bound_retained_holds_and_each_releases_at_its_own_causal_end(
     let mut keys = Vec::new();
     for _ in 0..5 {
         keys.push(DispatchKey::any(ObjectAddress::Copy(
-            fleet_sync_protocol::DatabaseId::new(durable_steps::Uuid::now_v7())?,
+            fleet_protocol::DatabaseId::new(durable_steps::Uuid::now_v7())?,
         )));
     }
     for key in keys.iter().take(4) {

@@ -1,10 +1,8 @@
 //! Validate Push replies and preserve possible reach when a sent call's answer is lost.
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use durable_steps::{BoxFuture, CallFailure, CallId, CallRetryReason, StoreError};
-use fleet_sync_delivery::PushCall;
-use fleet_sync_protocol::{
-    ClientAnswer, DeliveryItemRef, DeliveryTypes, PushResult, ServerCallAnswer,
-};
+use fleet_mail_delivery::PushCall;
+use fleet_protocol::{ClientAnswer, DeliveryItemRef, DeliveryTypes, PushResult, ServerCallAnswer};
 use futures_util::future::{Either, select};
 use std::{future::Future, sync::Arc};
 
@@ -24,8 +22,8 @@ pub(crate) type PushDispatcher = Arc<
 >;
 
 pub(crate) fn store_failure(error: StoreError) -> CallFailure {
-    match fleet_sync_delivery::classify_delivery_store_error(error) {
-        fleet_sync_delivery::DeliveryTransactionFailure::BindingUnavailable { reason, .. } => {
+    match fleet_mail_delivery::classify_delivery_store_error(error) {
+        fleet_mail_delivery::DeliveryTransactionFailure::BindingUnavailable { reason, .. } => {
             CallFailure::Retryable {
                 reason: CallRetryReason {
                     code: reason.code().into(),

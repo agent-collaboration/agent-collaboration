@@ -3,7 +3,7 @@ use super::*;
 use crate::frozen_mail_query_fixture::FrozenMailQuery;
 use crate::mail_delivery_runtime::{FrozenCancelSettlement, RemoteCancelReplay};
 use board_sync_protocol::BoardDeliveryTypes;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CancelResult, DeliveryEnvelope, DeliveryStatus, ItemStatus, ItemStatusState, StatusVersion,
 };
 
@@ -219,7 +219,7 @@ async fn a_relay_refused_proposed_child_keeps_its_epoch_but_waits_for_the_other_
     let original = project_item(&runtime, ProjectId::generate());
     let proposed = ItemId::new(uuid::Uuid::now_v7()).unwrap();
     let cancel = child(&original, proposed);
-    let input = fleet_sync_delivery::SubmitInput {
+    let input = fleet_mail_delivery::SubmitInput {
         item: proposed,
         digest: cancel.digest().clone(),
         relay: query.session.relay,
@@ -242,12 +242,12 @@ async fn a_relay_refused_proposed_child_keeps_its_epoch_but_waits_for_the_other_
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::Outbox::<_, collaboration_contracts::RouterDeliveryTypes, _>::new(
+                fleet_mail_delivery::Outbox::<_, collaboration_contracts::RouterDeliveryTypes, _>::new(
                     scope, limits, binding.as_ref(),
                 )
                 .mark_submitted(
                     &input,
-                    fleet_sync_protocol::SubmitResult::CancelAlreadyRequested {
+                    fleet_protocol::SubmitResult::CancelAlreadyRequested {
                         existing: recorded,
                         status: DeliveryStatus::Held,
                         version: StatusVersion::new(1),

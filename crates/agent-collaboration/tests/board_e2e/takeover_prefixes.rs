@@ -12,8 +12,8 @@ use super::{
 use board_central_test_support::{DispatchCallSelector, ObjectAddress};
 use board_sync_protocol::{BoardAnnotation, BoardDeliveryTypes};
 use codex_router_test_support::FixtureResult;
-use fleet_sync_protocol::{DeliveryItem, ReplicationPosition, ReplicationRequest};
-use fleet_sync_writer::CapturedTransaction;
+use fleet_project_writer::CapturedTransaction;
+use fleet_protocol::{DeliveryItem, ReplicationPosition, ReplicationRequest};
 use message_board_storage::CapturedProjectChanges;
 use serde_json::{Value, json};
 
@@ -139,8 +139,8 @@ async fn prove_prefix(
     let old = readbacks::deliveries(readbacks::handoffs(&stopped, &fixture.project, 1).await?);
     let original = match prefix {
         ReplicatedPrefix::Neither => old.into_iter().next().and_then(|envelope| match envelope {
-            fleet_sync_protocol::DeliveryEnvelope::Item(item) => Some(item),
-            fleet_sync_protocol::DeliveryEnvelope::Cancel(_) => None,
+            fleet_protocol::DeliveryEnvelope::Item(item) => Some(item),
+            fleet_protocol::DeliveryEnvelope::Cancel(_) => None,
         }),
         ReplicatedPrefix::CauseOnly | ReplicatedPrefix::Both => {
             let item = only_item(old)?;

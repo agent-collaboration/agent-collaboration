@@ -15,7 +15,7 @@ pub struct WorkerdSettings {
     pub jwks_url: String,
     pub holder_answer_timeout: Duration,
     pub copy_ack_wait: Duration,
-    pub relay_peer: fleet_sync_protocol::PeerId,
+    pub relay_peer: fleet_protocol::PeerId,
 }
 pub struct WorkerdProcess {
     child: Child,

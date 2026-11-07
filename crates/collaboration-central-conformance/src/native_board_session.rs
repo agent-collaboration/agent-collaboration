@@ -13,7 +13,7 @@ impl NativeBoardSession {
         request: board_sync_protocol::BoardConsumerRequest,
     ) -> ConformanceResult<board_sync_protocol::BoardConsumerAnswer> {
         use board_sync_protocol::BoardConsumerProtocol;
-        use fleet_sync_protocol::{
+        use fleet_protocol::{
             ClientFrame, FrameId, OperationAnswer, OperationRequest, ServerFrame,
         };
         use futures_util::{SinkExt, StreamExt};

@@ -1,6 +1,6 @@
 use crate::{sender_test_fixture::*, *};
-use fleet_sync_protocol::*;
-use fleet_sync_receiver::{AppliedPiece, ApplyDecision, ApplyFailure, HookError, ReceiverRules};
+use fleet_project_copy::{AppliedPiece, ApplyDecision, ApplyFailure, HookError, ReceiverRules};
+use fleet_protocol::*;
 use sqlx_core::{connection::Connection, query::query, row::Row};
 use sqlx_turso::Turso;
 use std::sync::{
@@ -46,19 +46,19 @@ impl ReceiverRules<crate::writer_scope::WriterScope<'_>> for Rules {
         applied: &AppliedPiece<'_, Annotation>,
     ) -> Result<Vec<()>, HookError> {
         let annotation = applied.annotation.ok_or_else(|| {
-            HookError::Storage(fleet_sync_receiver::StoreError::Corrupt {
+            HookError::Storage(fleet_project_copy::StoreError::Corrupt {
                 field: "missing whole annotation".into(),
             })
         })?;
         query::<Turso>("INSERT INTO hook_calls(position) VALUES(?)")
             .bind(serde_json::to_string(annotation).map_err(|error| {
-                HookError::Storage(fleet_sync_receiver::StoreError::Corrupt {
+                HookError::Storage(fleet_project_copy::StoreError::Corrupt {
                     field: error.to_string(),
                 })
             })?)
             .execute(&mut *scope.0)
             .await
-            .map_err(fleet_sync_receiver::classify_sqlx_error)?;
+            .map_err(fleet_project_copy::classify_sqlx_error)?;
         Ok(Vec::new())
     }
 }
@@ -164,7 +164,7 @@ impl ReplicationTransport<Protocol> for MeasuredTransport {
             0x019eef00000070008000000000000002,
         ))
         .map_err(unavailable)?;
-        let decision = fleet_sync_receiver::apply_piece(
+        let decision = fleet_project_copy::apply_piece(
             &mut crate::writer_scope::WriterScope(&mut transaction),
             &piece,
             &peer,

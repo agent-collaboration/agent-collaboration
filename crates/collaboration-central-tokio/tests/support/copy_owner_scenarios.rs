@@ -1,7 +1,7 @@
 //! The owner HTTP surface uses the same Copy and Fleet core on both shells.
 use super::copy_wait_scenarios::CopyClient;
 use collaboration_central_conformance::{ConformanceResult, machine_assertion, owner_assertion};
-use fleet_sync_protocol::{DatabaseId, Epoch};
+use fleet_protocol::{DatabaseId, Epoch};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use std::time::Duration;

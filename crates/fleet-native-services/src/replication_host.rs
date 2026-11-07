@@ -1,8 +1,8 @@
 use crate::{ServiceConsumer, ServiceError, ServiceObject, service_state::ServiceState};
 use durable_steps::{AtomicStore, StoreError};
-use fleet_sync_protocol::*;
-use fleet_sync_receiver::{ApplyDecision, CopyTransactionFailure, admit_follow_ups};
-use fleet_sync_session::PeerAuthenticator;
+use fleet_project_copy::{ApplyDecision, CopyTransactionFailure, admit_follow_ups};
+use fleet_protocol::*;
+use fleet_session::PeerAuthenticator;
 use runtime_primitives::Clock;
 
 impl<
@@ -10,7 +10,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > ServiceState<P, C, A>
 {
@@ -19,13 +19,13 @@ impl<
         peer: PeerId,
         request: ReplicationRequest<P::Annotation>,
     ) -> Result<ReplicationAnswer, ServiceError> {
-        self.replicate_with_authority(fleet_sync_receiver::SeedAuthority::Writer(peer), request)
+        self.replicate_with_authority(fleet_project_copy::SeedAuthority::Writer(peer), request)
             .await
     }
 
     pub(crate) async fn replicate_with_authority(
         &self,
-        authority: fleet_sync_receiver::SeedAuthority,
+        authority: fleet_project_copy::SeedAuthority,
         request: ReplicationRequest<P::Annotation>,
     ) -> Result<ReplicationAnswer, ServiceError> {
         let database = match &request {
@@ -55,13 +55,12 @@ impl<
                 Box::pin(async move {
                     Ok(match request {
                         ReplicationRequest::Piece(piece) => {
-                            let fleet_sync_receiver::SeedAuthority::Writer(peer) = &authority
-                            else {
+                            let fleet_project_copy::SeedAuthority::Writer(peer) = &authority else {
                                 return Ok(ReplicationAnswer::Refused(PieceRefusal::NotWriter {
                                     current: None,
                                 }));
                             };
-                            match fleet_sync_receiver::apply_piece(
+                            match fleet_project_copy::apply_piece(
                                 scope,
                                 &piece,
                                 peer,
@@ -69,7 +68,7 @@ impl<
                                 now,
                             )
                             .await
-                            .map_err(fleet_sync_receiver::apply_rollback)?
+                            .map_err(fleet_project_copy::apply_rollback)?
                             {
                                 ApplyDecision::Applied {
                                     through,
@@ -102,38 +101,38 @@ impl<
                         }
                         ReplicationRequest::SeedBegin { attempt, .. } => {
                             ReplicationAnswer::SeedStarted {
-                                seed: fleet_sync_receiver::seed_begin(
+                                seed: fleet_project_copy::seed_begin(
                                     scope, database, attempt, &authority,
                                 )
                                 .await
-                                .map_err(fleet_sync_receiver::receiver_rollback)?,
+                                .map_err(fleet_project_copy::receiver_rollback)?,
                             }
                         }
                         ReplicationRequest::SeedPage(page) => ReplicationAnswer::SeedPage(
-                            fleet_sync_receiver::seed_page(scope, &page, &authority)
+                            fleet_project_copy::seed_page(scope, &page, &authority)
                                 .await
-                                .map_err(fleet_sync_receiver::receiver_rollback)?,
+                                .map_err(fleet_project_copy::receiver_rollback)?,
                         ),
                         ReplicationRequest::SeedComplete(done) => {
-                            match fleet_sync_receiver::seed_complete(
+                            match fleet_project_copy::seed_complete(
                                 scope,
                                 &done,
                                 consumer.as_ref(),
                                 &authority,
                             )
                             .await
-                            .map_err(fleet_sync_receiver::receiver_rollback)?
+                            .map_err(fleet_project_copy::receiver_rollback)?
                             {
-                                fleet_sync_receiver::SeedDecision::Published {
+                                fleet_project_copy::SeedDecision::Published {
                                     position,
                                     follow_ups,
                                 } => {
-                                    let installed = fleet_sync_receiver::InstalledSnapshot {
+                                    let installed = fleet_project_copy::InstalledSnapshot {
                                         database: done.database,
                                         position,
                                         schema: done.schema.clone(),
                                     };
-                                    fleet_sync_receiver::admit_snapshot_follow_ups::<
+                                    fleet_project_copy::admit_snapshot_follow_ups::<
                                         ServiceObject,
                                         C::HookItem,
                                     >(
@@ -145,29 +144,29 @@ impl<
                                         position,
                                     })
                                 }
-                                fleet_sync_receiver::SeedDecision::Answer(answer) => {
+                                fleet_project_copy::SeedDecision::Answer(answer) => {
                                     ReplicationAnswer::SeedComplete(answer)
                                 }
                             }
                         }
                         ReplicationRequest::SnapshotPage { cursor, .. } => {
                             ReplicationAnswer::SnapshotPage(
-                                fleet_sync_receiver::snapshot_page(scope, cursor)
+                                fleet_project_copy::snapshot_page(scope, cursor)
                                     .await
-                                    .map_err(fleet_sync_receiver::receiver_rollback)?,
+                                    .map_err(fleet_project_copy::receiver_rollback)?,
                             )
                         }
                         ReplicationRequest::SnapshotManifest { position, .. } => {
                             ReplicationAnswer::SnapshotManifest(
-                                fleet_sync_receiver::snapshot_manifest(scope, position)
+                                fleet_project_copy::snapshot_manifest(scope, position)
                                     .await
-                                    .map_err(fleet_sync_receiver::receiver_rollback)?,
+                                    .map_err(fleet_project_copy::receiver_rollback)?,
                             )
                         }
                         ReplicationRequest::CopyStatus { .. } => ReplicationAnswer::CopyStatus(
-                            fleet_sync_receiver::copy_status(scope)
+                            fleet_project_copy::copy_status(scope)
                                 .await
-                                .map_err(fleet_sync_receiver::receiver_rollback)?,
+                                .map_err(fleet_project_copy::receiver_rollback)?,
                         ),
                     })
                 })
@@ -177,7 +176,7 @@ impl<
         // storage boundary replaces them with Backend, losing refusal certainty.
         let answer = match result {
             Ok(answer) => answer,
-            Err(error) => match fleet_sync_receiver::classify_copy_store_error(error) {
+            Err(error) => match fleet_project_copy::classify_copy_store_error(error) {
                 CopyTransactionFailure::RefusedDiscardingParts {
                     refusal,
                     transaction,
@@ -186,14 +185,14 @@ impl<
                         .object
                         .transaction(move |scope| {
                             Box::pin(async move {
-                                fleet_sync_receiver::discard_staged_parts(scope, &transaction)
+                                fleet_project_copy::discard_staged_parts(scope, &transaction)
                                     .await
                                     .map_err(StoreError::backend)
                             })
                         })
                         .await
                     {
-                        return Ok(fleet_sync_receiver::classify_copy_store_error(error).answer());
+                        return Ok(fleet_project_copy::classify_copy_store_error(error).answer());
                     }
                     ReplicationAnswer::Refused(refusal)
                 }

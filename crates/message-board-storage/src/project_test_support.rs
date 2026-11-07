@@ -1,9 +1,9 @@
 //! Unit fixtures use the product schema and real library owner, with explicit provisional authority.
 use crate::{ProjectStorageError, ProjectStore};
 use board_fleet_sync::BoardProjectSchema;
-use fleet_sync_lease::{LeaseHolder, LeasePolicy};
-use fleet_sync_protocol::{DatabaseId, PeerId};
-use fleet_sync_writer::{ReplicatedDatabase, WriterOptions};
+use fleet_project_lease::{LeaseHolder, LeasePolicy};
+use fleet_project_writer::{ReplicatedDatabase, WriterOptions};
+use fleet_protocol::{DatabaseId, PeerId};
 use message_board::{ActorOrigin, MachineLabel, ProjectId, RecordPlacement, ServiceId};
 use std::{path::Path, sync::Arc, time::Duration};
 
@@ -22,10 +22,9 @@ pub(crate) fn placement(cursor: message_board::FeedCursor) -> RecordPlacement {
     })
 }
 
-pub(crate) fn rejection()
--> Result<fleet_sync_protocol::GateReason, fleet_sync_protocol::TextValueError> {
-    Ok(fleet_sync_protocol::GateReason {
-        code: fleet_sync_protocol::GateReasonCode::new("board.projectRejected")?,
+pub(crate) fn rejection() -> Result<fleet_protocol::GateReason, fleet_protocol::TextValueError> {
+    Ok(fleet_protocol::GateReason {
+        code: fleet_protocol::GateReasonCode::new("board.projectRejected")?,
         detail: "native move fixture".to_owned(),
     })
 }

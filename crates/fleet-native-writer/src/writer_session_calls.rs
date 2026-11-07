@@ -1,11 +1,12 @@
-use crate::{CallEnvelope, CallRouter, SessionRequests};
 use durable_steps::{CallFailure, CallTarget, Uuid};
-use fleet_sync_protocol::*;
-use fleet_sync_writer::{
+use fleet_project_writer::{
     OpenError, RegistryRegistration, RegistryRenewal, ReplicatedDatabase, ReplicatedSchema,
     ReplicationTransport, SeedCopyRefusal, SeedFile, SeedFileAnswer, SeedFileRequest, SendFailure,
     WriterSnapshot,
 };
+use fleet_protocol::*;
+use fleet_session_client::SessionRequests;
+use fleet_tokio_objects::{CallEnvelope, CallRouter};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
     collections::BTreeMap,
@@ -71,7 +72,7 @@ impl<S: ReplicatedSchema, P: ConsumerProtocol> WriterSessionCalls<S, P> {
         &self,
         frame: FrameId,
         answer: ReleaseAnswer,
-    ) -> Result<(), fleet_sync_session::ClientError> {
+    ) -> Result<(), fleet_session::ClientError> {
         self.requests
             .answer(
                 frame,
@@ -83,7 +84,7 @@ impl<S: ReplicatedSchema, P: ConsumerProtocol> WriterSessionCalls<S, P> {
         &self,
         frame: FrameId,
         answer: WithdrawAnswer,
-    ) -> Result<(), fleet_sync_session::ClientError> {
+    ) -> Result<(), fleet_session::ClientError> {
         self.requests
             .answer(
                 frame,
@@ -211,7 +212,7 @@ impl<S: ReplicatedSchema, P: ConsumerProtocol> WriterSessionCalls<S, P> {
                 {
                     ReplicationAnswer::SeedStarted { seed } => seed,
                     ReplicationAnswer::CopyUnavailable { reason } => {
-                        return Err(SeedHostError::Call(fleet_sync_receiver::retryable_copy(
+                        return Err(SeedHostError::Call(fleet_project_copy::retryable_copy(
                             reason,
                         )));
                     }
@@ -276,7 +277,7 @@ impl<S: ReplicatedSchema, P: ConsumerProtocol> WriterSessionCalls<S, P> {
                         SeedPageAnswer::Staged | SeedPageAnswer::AlreadyStaged,
                     ) => {}
                     ReplicationAnswer::CopyUnavailable { reason } => {
-                        return Err(SeedHostError::Call(fleet_sync_receiver::retryable_copy(
+                        return Err(SeedHostError::Call(fleet_project_copy::retryable_copy(
                             reason,
                         )));
                     }
@@ -375,7 +376,7 @@ impl<S: ReplicatedSchema, P: ConsumerProtocol> WriterSessionCalls<S, P> {
                         Ok(SeedFileAnswer::Published { position })
                     }
                     ReplicationAnswer::CopyUnavailable { reason } => Err(SeedHostError::Call(
-                        fleet_sync_receiver::retryable_copy(reason),
+                        fleet_project_copy::retryable_copy(reason),
                     )),
                     ReplicationAnswer::SeedComplete(reason) => {
                         Err(refused("seed_complete_refused", format!("{reason:?}")))
@@ -436,7 +437,7 @@ impl<S: ReplicatedSchema, P: ConsumerProtocol> CallRouter for WriterSessionCalls
                 {
                     OperationAnswer::Lease(LeaseAnswer::Renew(answer)) => {
                         #[cfg(feature = "test-support")]
-                        if target.cause == fleet_sync_writer::RenewalCause::Periodic {
+                        if target.cause == fleet_project_writer::RenewalCause::Periodic {
                             self.probe.periodic_renewed();
                         }
                         crate::enrollment_retry::renewal(answer)

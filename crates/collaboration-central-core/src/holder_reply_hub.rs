@@ -2,8 +2,8 @@
 
 use board_sync_protocol::BoardConsumerProtocol;
 use durable_steps::CallFailure;
-use fleet_sync_protocol::{ClientAnswer, ConnectionId, FrameId};
-use fleet_sync_session::SessionKey;
+use fleet_protocol::{ClientAnswer, ConnectionId, FrameId};
+use fleet_session::SessionKey;
 use futures_channel::oneshot;
 use runtime_primitives::SyncTime;
 use std::{
@@ -155,7 +155,7 @@ pub(crate) fn session_identity_probe(
     source: &(impl runtime_primitives::Clock + runtime_primitives::IdSource),
 ) -> Result<(), durable_steps::StoreError> {
     use durable_steps::StoreError;
-    use fleet_sync_protocol::{PeerId, ServerCallAnswer, SessionId, WithdrawAnswer};
+    use fleet_protocol::{PeerId, ServerCallAnswer, SessionId, WithdrawAnswer};
     let hub = Arc::new(HolderReplyHub::default());
     let session = SessionKey {
         peer: PeerId::new(source.new_id()).map_err(StoreError::backend)?,
@@ -234,7 +234,7 @@ impl Drop for ReplyWaiter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fleet_sync_protocol::{PeerId, ServerCallAnswer, SessionId, WithdrawAnswer};
+    use fleet_protocol::{PeerId, ServerCallAnswer, SessionId, WithdrawAnswer};
 
     fn key() -> Result<ReplyKey, Box<dyn std::error::Error>> {
         Ok(ReplyKey {

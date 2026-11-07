@@ -672,7 +672,7 @@ async fn exercise_held_empty_thread(
     .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone());
     let (identity, native_mail) = native_mail_owner::start(
         identity,
-        fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,
+        fleet_protocol::PeerId::new(uuid::Uuid::now_v7())?,
         collaboration_service::MailPushDeliveryProps {
             interactions,
             actors: subscription_delivery.clone(),

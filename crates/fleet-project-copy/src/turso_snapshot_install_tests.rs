@@ -2,7 +2,7 @@
 use crate::turso_rule_fixture::TursoScope;
 use crate::*;
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     query::query,
@@ -329,7 +329,7 @@ async fn target_fence_and_saved_transfer_survive_snapshot_and_older_snapshot_is_
             epoch: Epoch::new(1)?,
             acked: install.position,
         },
-        target_schema: Some(fleet_sync_protocol::SchemaSupport { max_version: 10 }),
+        target_schema: Some(fleet_protocol::SchemaSupport { max_version: 10 }),
     };
     let fenced = fence(&mut TursoScope(&mut old), &transfer).await?;
     assert!(matches!(fenced, FenceResult::Fenced { .. }));

@@ -6,9 +6,7 @@ use durable_steps::{
     AtomicStore, JournalScope, OperationContext, OperationFailure, RequestKey, Task,
     storage::{JournalStorage, OperationExecution},
 };
-use fleet_sync_protocol::{
-    CommitSequence, CopyStatusAnswer, DatabaseId, Epoch, ReplicationPosition,
-};
+use fleet_protocol::{CommitSequence, CopyStatusAnswer, DatabaseId, Epoch, ReplicationPosition};
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -309,7 +307,7 @@ async fn fleet_consumed_wake_recovers_its_saved_notice_after_prune_begin_failure
         let slot = objects.slot(ObjectAddress::Fleet).await?;
         ready(&slot).await?;
         let host = slot.host.get().ok_or("Fleet host missing")?;
-        let peer = fleet_sync_protocol::PeerId::new(durable_steps::Uuid::now_v7())?;
+        let peer = fleet_protocol::PeerId::new(durable_steps::Uuid::now_v7())?;
         let enrolled = installation.clone();
         host.object.transaction(move |scope|Box::pin(async move {
             use durable_steps::storage::TransactionScope;

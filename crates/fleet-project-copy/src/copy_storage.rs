@@ -1,6 +1,7 @@
-use crate::{StoreError, checked_queries, copy_contract::CopyRecord};
+use crate::checked_queries;
+use crate::{StoreError, copy_contract::CopyRecord};
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::{Piece, PieceDigest, TransactionKey};
+use fleet_protocol::{Piece, PieceDigest, TransactionKey};
 use serde::{Serialize, de::DeserializeOwned};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -26,10 +27,10 @@ pub(crate) fn decode_record<T: DeserializeOwned>(
 }
 
 fn validate_fenced_receipt(
-    request: &fleet_sync_protocol::FenceRequest,
-    result: &fleet_sync_protocol::FenceResult,
+    request: &fleet_protocol::FenceRequest,
+    result: &fleet_protocol::FenceResult,
 ) -> Result<(), StoreError> {
-    let fleet_sync_protocol::FenceResult::Fenced {
+    let fleet_protocol::FenceResult::Fenced {
         old_epoch,
         new_epoch,
         start,
@@ -134,7 +135,7 @@ where
 
     pub(crate) async fn creation(
         &mut self,
-    ) -> Result<Option<fleet_sync_protocol::CreateCopy>, StoreError> {
+    ) -> Result<Option<fleet_protocol::CreateCopy>, StoreError> {
         checked_queries::read_creation(self.0)
             .await
             .map_err(crate::sql_transport::sql_error)?
@@ -143,7 +144,7 @@ where
     }
     pub(crate) async fn save_creation(
         &mut self,
-        request: &fleet_sync_protocol::CreateCopy,
+        request: &fleet_protocol::CreateCopy,
     ) -> Result<(), StoreError> {
         checked_queries::write_creation(self.0, encode_record(request)?)
             .await
@@ -219,7 +220,7 @@ where
     pub(crate) async fn save_part<A: Serialize>(
         &mut self,
         piece: &Piece<A>,
-        staged_at: fleet_sync_protocol::SyncTime,
+        staged_at: fleet_protocol::SyncTime,
     ) -> Result<(), StoreError> {
         let part = piece.part.as_ref().ok_or_else(|| StoreError::Corrupt {
             field: "staged part".into(),
@@ -248,8 +249,8 @@ where
 
     pub(crate) async fn fence_receipt(
         &mut self,
-        request: &fleet_sync_protocol::FenceRequest,
-    ) -> Result<Option<fleet_sync_protocol::FenceResult>, crate::ReceiverError> {
+        request: &fleet_protocol::FenceRequest,
+    ) -> Result<Option<fleet_protocol::FenceResult>, crate::ReceiverError> {
         let Some(row) =
             checked_queries::read_fence_receipt(self.0, encode_record(&request.transfer_id)?)
                 .await
@@ -269,11 +270,11 @@ where
 
     pub(crate) async fn save_fence(
         &mut self,
-        request: &fleet_sync_protocol::FenceRequest,
-        old_holder: Option<fleet_sync_protocol::PeerId>,
-        result: &fleet_sync_protocol::FenceResult,
+        request: &fleet_protocol::FenceRequest,
+        old_holder: Option<fleet_protocol::PeerId>,
+        result: &fleet_protocol::FenceResult,
     ) -> Result<(), StoreError> {
-        let fleet_sync_protocol::FenceResult::Fenced { old_epoch, .. } = result else {
+        let fleet_protocol::FenceResult::Fenced { old_epoch, .. } = result else {
             return Err(StoreError::Corrupt {
                 field: "successful fence receipt".into(),
             });
@@ -294,11 +295,11 @@ where
 
     pub(crate) async fn epoch_end(
         &mut self,
-        epoch: fleet_sync_protocol::Epoch,
+        epoch: fleet_protocol::Epoch,
     ) -> Result<
         Option<(
-            Option<fleet_sync_protocol::PeerId>,
-            fleet_sync_protocol::ReplicationPosition,
+            Option<fleet_protocol::PeerId>,
+            fleet_protocol::ReplicationPosition,
         )>,
         StoreError,
     > {
@@ -313,9 +314,9 @@ where
             .old_holder
             .map(|value| decode_record(Some(value), "epoch holder"))
             .transpose()?;
-        let result: fleet_sync_protocol::FenceResult = decode_record(row.result, "epoch fence")?;
+        let result: fleet_protocol::FenceResult = decode_record(row.result, "epoch fence")?;
         validate_fenced_receipt(&request, &result)?;
-        let fleet_sync_protocol::FenceResult::Fenced {
+        let fleet_protocol::FenceResult::Fenced {
             old_epoch, start, ..
         } = result
         else {

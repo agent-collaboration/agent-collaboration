@@ -4,7 +4,7 @@ use durable_steps::{
     Task,
     storage::{JournalStorage, OperationExecution},
 };
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
 use std::sync::atomic::Ordering;
@@ -138,7 +138,7 @@ async fn payload_resolved_before_expiry_arrives_after_it_without_admitting_local
         .transaction(move |scope| {
             Box::pin(async move {
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .resolve_push(&lookup, fleet_sync_protocol::SyncTime::from_unix_millis(0))
+                    .resolve_push(&lookup, fleet_protocol::SyncTime::from_unix_millis(0))
                     .await
                     .map_err(storage_error)
             })

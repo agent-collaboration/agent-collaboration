@@ -3,8 +3,8 @@
 use crate::AdmissionOrigin;
 use board_sync_protocol::{BoardDeliveryTypes, MailSubmitAnswer};
 use durable_steps::CallTarget;
-use fleet_sync_protocol::{DeliveryEnvelope, Epoch};
-use fleet_sync_session::SessionKey;
+use fleet_protocol::{DeliveryEnvelope, Epoch};
+use fleet_session::SessionKey;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]

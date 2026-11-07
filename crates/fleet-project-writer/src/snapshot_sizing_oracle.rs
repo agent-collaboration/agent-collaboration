@@ -83,7 +83,7 @@ impl WriterSnapshot {
                 let key = key
                     .into_iter()
                     .map(|value| match value {
-                        fleet_sync_protocol::SqlValue::Text(value) => Ok(value),
+                        fleet_protocol::SqlValue::Text(value) => Ok(value),
                         _ => Err(OpenError::corrupt("snapshot.row_key")),
                     })
                     .collect::<Result<Vec<_>, _>>()?;

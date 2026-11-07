@@ -3,7 +3,7 @@ use crate::{
     ReplicationEvents, SenderError,
     sender_test_fixture::{SenderFixture, TestResult},
 };
-use fleet_sync_protocol::ReceiverId;
+use fleet_protocol::ReceiverId;
 use futures_util::FutureExt;
 use sqlx_core::{connection::Connection, executor::Executor, query::query, row::Row};
 use sqlx_turso::Turso;
@@ -300,7 +300,7 @@ async fn adding_a_copy_wakes_discovery_without_waiting_for_the_fallback() -> Tes
         .sender
         .add_copy(
             fixture.second,
-            fleet_sync_protocol::CopyRole::Follower,
+            fleet_protocol::CopyRole::Follower,
             checkpoint,
         )
         .await?;
@@ -366,7 +366,7 @@ async fn registration_copy_notification_is_published_after_its_journal_commit() 
         .journal_store(std::sync::Arc::new(crate::writer_journal_tests::LocalHost))
         .await?;
     let mut changed = fixture.database.copies_changes.subscribe();
-    let receiver = fleet_sync_protocol::ReceiverId::new(durable_steps::Uuid::now_v7())?;
+    let receiver = fleet_protocol::ReceiverId::new(durable_steps::Uuid::now_v7())?;
     let start = fixture
         .sender
         .copies()
@@ -386,7 +386,7 @@ async fn registration_copy_notification_is_published_after_its_journal_commit() 
         .await?;
     assert!(changed.has_changed()?);
     changed.borrow_and_update();
-    let receiver = fleet_sync_protocol::ReceiverId::new(durable_steps::Uuid::now_v7())?;
+    let receiver = fleet_protocol::ReceiverId::new(durable_steps::Uuid::now_v7())?;
     let result: Result<(), durable_steps::StoreError> = store
         .rule_transaction(move |scope| {
             Box::pin(async move {

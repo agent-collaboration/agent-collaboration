@@ -1,7 +1,7 @@
 //! A selected Copy refusal at the existing fixture edge; no selected write is forwarded.
 use crate::{BOUND, FixtureResult};
 use board_sync_protocol::BoardConsumerProtocol;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, DatabaseId, OperationAnswer, OperationRequest, PieceRefusal, ReplicationAnswer,
     ReplicationRequest, ServerFrame, TableName,
 };

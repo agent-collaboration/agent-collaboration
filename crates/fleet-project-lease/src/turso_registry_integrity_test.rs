@@ -2,7 +2,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::{turso_change_tests::register_first, turso_registry_fixture::*, *};
 use durable_steps::{AtomicStore, OperationState, Uuid};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_turso::Turso;
 use std::sync::{Arc, atomic::Ordering};
 
@@ -96,7 +96,7 @@ async fn a_pending_move_blocks_another_move_and_renewal_returns_fresh_authority_
     host.lose_release.store(true, Ordering::SeqCst);
     let attempt = TransferId::new(Uuid::from_u128(0x019eef0000007000800000000000076d))?;
     let request = HolderChangeRequest::Move {
-        reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+        reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
         attempt,
         database: database()?,
         from_epoch: Epoch::new(1)?,
@@ -114,7 +114,7 @@ async fn a_pending_move_blocks_another_move_and_renewal_returns_fresh_authority_
             &engine,
             &holder_change_request_key(other)?,
             HolderChangeRequest::Move {
-                reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+                reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
                 attempt: other,
                 database: database()?,
                 from_epoch: Epoch::new(1)?,

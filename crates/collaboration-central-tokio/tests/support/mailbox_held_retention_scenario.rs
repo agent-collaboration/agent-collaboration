@@ -6,7 +6,7 @@ use super::{
     relay_transport::{operation, relay_request},
 };
 use collaboration_central_conformance::ConformanceResult;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DeliveryItemRef, PeerId, PushResult, RecipientOutcome, ServerCall, Submitter,
 };
 use serde_json::{Value, json};

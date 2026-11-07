@@ -2,7 +2,7 @@
 
 use crate::core_host::{CoreHost, PlatformIo};
 use durable_steps::{AtomicStore, Engine, StoreError, storage::TransactionScope};
-use fleet_sync_lease::{
+use fleet_project_lease::{
     HolderChangeCancelTask, HolderChangeTask, ImportTask, PreviewTakeoverTask, RegistrationTask,
     RegistryConfig, RetirementTask, SettleReservationTask,
 };
@@ -20,7 +20,7 @@ pub(crate) fn registry_engine<Store, Driver, Io, Hook>(
 ) -> Result<Engine<Store, CoreHost<Io>>, StoreError>
 where
     Store: AtomicStore,
-    for<'transaction> Hook: fleet_sync_lease::LeaseChangeHook<Store::Scope<'transaction>>,
+    for<'transaction> Hook: fleet_project_lease::LeaseChangeHook<Store::Scope<'transaction>>,
     Driver: Database,
     Io: PlatformIo,
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,

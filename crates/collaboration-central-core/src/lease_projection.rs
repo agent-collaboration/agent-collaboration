@@ -1,7 +1,7 @@
 //! Committed registry facts keep the enrolled Router identity distinct from its peer.
 use crate::{LeaseContentDigest, RegistryIncarnation};
-use fleet_sync_lease::{DatabaseLifecycle, RegistrySnapshot};
-use fleet_sync_protocol::{DatabaseId, Epoch, TransferId};
+use fleet_project_lease::{DatabaseLifecycle, RegistrySnapshot};
+use fleet_protocol::{DatabaseId, Epoch, TransferId};
 use message_board::ServiceId;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -109,11 +109,11 @@ impl LeaseProjection {
 
     pub(crate) fn directory_metadata(
         &self,
-        now: fleet_sync_protocol::SyncTime,
+        now: fleet_protocol::SyncTime,
     ) -> Result<fleet_admission::LeaseMetadata, durable_steps::StoreError> {
         use fleet_admission::{DirectoryLease, DirectoryLeaseState, LeaseMetadata};
         let version = self.version();
-        let display_time = |time: fleet_sync_protocol::SyncTime| {
+        let display_time = |time: fleet_protocol::SyncTime| {
             chrono::DateTime::from_timestamp_millis(time.unix_millis()).ok_or_else(|| {
                 crate::fleet_row_codec::corrupt(
                     "directory.lease_time",

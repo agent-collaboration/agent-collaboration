@@ -1,5 +1,5 @@
 use crate::{OpenError, TableLayout, foreign_key_integrity::quote_identifier};
-use fleet_sync_protocol::SqlValue;
+use fleet_protocol::SqlValue;
 use sqlx_core::{
     query::query,
     row::Row,
@@ -104,8 +104,16 @@ pub(crate) fn row_key(table: &TableLayout, row: &[SqlValue]) -> Result<Vec<SqlVa
                 .ok_or_else(|| OpenError::corrupt("snapshot.row_key"))
         })
         .collect::<Result<Vec<_>, _>>()?;
-    if key.is_empty() || key.iter().any(|value|!matches!(value,SqlValue::Text(key) if fleet_sync_protocol::canonical_uuid_v7(key))) {
-        return Err(OpenError::WriteRefused {refusal:crate::WriteRefusal::InvalidKey {table:table.name().into()}});
+    if key.is_empty()
+        || key.iter().any(
+            |value| !matches!(value,SqlValue::Text(key) if fleet_protocol::canonical_uuid_v7(key)),
+        )
+    {
+        return Err(OpenError::WriteRefused {
+            refusal: crate::WriteRefusal::InvalidKey {
+                table: table.name().into(),
+            },
+        });
     }
     Ok(key)
 }

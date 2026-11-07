@@ -3,7 +3,7 @@ use super::*;
 pub(crate) async fn snapshot_page_oracle<'scope, S>(
     scope: &'scope mut S,
     cursor: Option<SnapshotCursor>,
-    status: fleet_sync_protocol::CopyStatus,
+    status: fleet_protocol::CopyStatus,
 ) -> Result<SnapshotRead, ReceiverError>
 where
     S: TransactionScope + 'scope,
@@ -88,13 +88,13 @@ where
         && (after.len() != keys.len()
             || after
                 .iter()
-                .any(|value| matches!(value, fleet_sync_protocol::SqlValue::Null)))
+                .any(|value| matches!(value, fleet_protocol::SqlValue::Null)))
     {
         return Err(ReceiverError::InvalidInput {
             field: "snapshot cursor key shape mismatch".into(),
         });
     }
-    let read_next = |after: &[fleet_sync_protocol::SqlValue]| {
+    let read_next = |after: &[fleet_protocol::SqlValue]| {
         let predicate = if after.is_empty() {
             String::new()
         } else {
@@ -150,7 +150,7 @@ where
             let key = key
                 .into_iter()
                 .map(|value| match value {
-                    fleet_sync_protocol::SqlValue::Text(value) => Ok(value),
+                    fleet_protocol::SqlValue::Text(value) => Ok(value),
                     _ => Err(StoreError::Corrupt {
                         field: "snapshot row key".into(),
                     }),

@@ -117,7 +117,7 @@ async fn legacy_sessions_notices_and_attach_sequences_migrate_without_rounding_f
         next_attach_sequence(
             &mut scope,
             key.peer,
-            fleet_sync_protocol::SyncTime::from_unix_millis(0)
+            fleet_protocol::SyncTime::from_unix_millis(0)
         )
         .await,
         Err(SessionError::AttachSequenceExhausted)
@@ -140,7 +140,7 @@ async fn legacy_sessions_notices_and_attach_sequences_migrate_without_rounding_f
     save_session(
         &mut scope,
         &record,
-        fleet_sync_protocol::SyncTime::from_unix_millis(0),
+        fleet_protocol::SyncTime::from_unix_millis(0),
     )
     .await
     .unwrap();
@@ -178,7 +178,7 @@ async fn typed_session_surrogate_id_refuses_notice_mutation_without_repair() {
             database: DatabaseId::try_from("019eef00-0000-7000-8000-000000000041".to_owned())
                 .unwrap(),
         },
-        fleet_sync_protocol::SyncTime::from_unix_millis(0),
+        fleet_protocol::SyncTime::from_unix_millis(0),
     )
     .await;
     assert!(
@@ -213,7 +213,7 @@ async fn typed_notice_surrogate_id_refuses_history_read_without_repair() {
             database: DatabaseId::try_from("019eef00-0000-7000-8000-000000000041".to_owned())
                 .unwrap(),
         },
-        fleet_sync_protocol::SyncTime::from_unix_millis(0),
+        fleet_protocol::SyncTime::from_unix_millis(0),
     )
     .await
     .unwrap();

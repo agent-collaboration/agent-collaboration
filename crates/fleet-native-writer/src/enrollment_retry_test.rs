@@ -3,7 +3,7 @@
     reason = "Assertions verify the exact refusal/retry contract; setup errors remain Results."
 )]
 use super::*;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     GateReason, GateReasonCode, HookRefusal, HookRefusalCode, PieceRefusal, RegistrationRefusal,
 };
 type TestResult = Result<(), Box<dyn std::error::Error>>;

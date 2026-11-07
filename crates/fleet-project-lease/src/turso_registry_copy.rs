@@ -5,7 +5,7 @@ use crate::{
     turso_registry_fixture::{CopyScope, TestHost, decode, encode, lost},
 };
 use durable_steps::{CallFailure, CallId, NotSentReason};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{connection::Connection, row::Row};
 use sqlx_turso::Turso;
 use std::{
@@ -42,7 +42,7 @@ impl TestHost {
         {
             // A controlled pre-apply refusal, outside any receiver write. The
             // native journey separately exercises real damaged-copy rollback.
-            return Err(fleet_sync_receiver::retryable_copy(
+            return Err(fleet_project_copy::retryable_copy(
                 CopyUnavailableReason::Damaged {
                     detail: "controlled pre-apply copy refusal".into(),
                 },
@@ -116,16 +116,16 @@ impl TestHost {
         let mut scope = CopyScope(&mut transaction);
         let answer = match kind {
             "fleet-sync.copy-create" => encode(
-                fleet_sync_receiver::create_copy(&mut scope, &decode(request)?)
+                fleet_project_copy::create_copy(&mut scope, &decode(request)?)
                     .await
                     .map_err(lost)?,
             ),
             "fleet-sync.copy-fence" => {
-                let answer = fleet_sync_receiver::fence(&mut scope, &decode(request)?)
+                let answer = fleet_project_copy::fence(&mut scope, &decode(request)?)
                     .await
                     .map_err(lost)?;
                 if answer == FenceResult::NotInitialized {
-                    Err(fleet_sync_receiver::retryable_copy(
+                    Err(fleet_project_copy::retryable_copy(
                         CopyUnavailableReason::Uninitialized,
                     ))
                 } else {
@@ -133,7 +133,7 @@ impl TestHost {
                 }
             }
             "fleet-sync.copy-retire" => encode(
-                fleet_sync_receiver::retire_copy(
+                fleet_project_copy::retire_copy(
                     &mut scope,
                     &decode(request)?,
                     runtime_primitives::Clock::now(self),
@@ -142,11 +142,11 @@ impl TestHost {
                 .map_err(lost)?,
             ),
             "fleet-sync.copy-status" => {
-                let answer = fleet_sync_receiver::copy_status(&mut scope)
+                let answer = fleet_project_copy::copy_status(&mut scope)
                     .await
                     .map_err(lost)?;
                 if answer == CopyStatusAnswer::NotInitialized {
-                    Err(fleet_sync_receiver::retryable_copy(
+                    Err(fleet_project_copy::retryable_copy(
                         CopyUnavailableReason::Uninitialized,
                     ))
                 } else {
@@ -155,7 +155,7 @@ impl TestHost {
             }
             "fleet-sync.copy-acknowledged" => {
                 let requested: AwaitAcked = decode(request)?;
-                let answer = match fleet_sync_receiver::copy_status(&mut scope)
+                let answer = match fleet_project_copy::copy_status(&mut scope)
                     .await
                     .map_err(lost)?
                 {
@@ -169,7 +169,7 @@ impl TestHost {
                     CopyStatusAnswer::Retired => AwaitAckedAnswer::Retired,
                 };
                 if answer == AwaitAckedAnswer::NotInitialized {
-                    Err(fleet_sync_receiver::retryable_copy(
+                    Err(fleet_project_copy::retryable_copy(
                         CopyUnavailableReason::Uninitialized,
                     ))
                 } else {
@@ -178,7 +178,7 @@ impl TestHost {
             }
             "fleet-sync.holder-release" => {
                 let requested: ReleaseRequest = decode(request)?;
-                let status = fleet_sync_receiver::copy_status(&mut scope)
+                let status = fleet_project_copy::copy_status(&mut scope)
                     .await
                     .map_err(lost)?;
                 transaction.commit().await.map_err(lost)?;

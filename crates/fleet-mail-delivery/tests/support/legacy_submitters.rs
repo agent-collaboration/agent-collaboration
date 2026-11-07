@@ -77,7 +77,7 @@ pub async fn startup(store: &TestStore) -> Result<usize, DeliveryError> {
             Box::pin(async move {
                 backfill_submitters::<TestTypes, _, _>(
                     scope,
-                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    fleet_mail_delivery::DeliveryHostRole::Machine,
                     &FixtureBindings,
                     startup_time(),
                 )

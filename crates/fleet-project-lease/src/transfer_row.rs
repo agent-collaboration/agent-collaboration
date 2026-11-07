@@ -1,5 +1,5 @@
 use crate::{checked_queries::*, registry_records::CleanupFailure, registry_row::*, *};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 pub(crate) struct TransferFacts {
     pub attempt: TransferId,
     pub database: DatabaseId,

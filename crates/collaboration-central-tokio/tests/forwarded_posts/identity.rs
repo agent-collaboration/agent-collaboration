@@ -8,11 +8,11 @@ use collaboration_central_tokio::SocketCommand;
 use durable_steps::{
     AtomicStore, CallId, OperationId, StepName, StoreError, Uuid, storage::TransactionScope,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientAnswer, ClientFrame, ConnectionId, FrameId, OperationAnswer, PeerId, ServerFrame,
     SessionId,
 };
-use fleet_sync_session::{ConnectionBinding, VerifiedPeer};
+use fleet_session::{ConnectionBinding, VerifiedPeer};
 use runtime_primitives::Clock;
 use serde_json::json;
 use sqlx_core::{query::query, row::Row};

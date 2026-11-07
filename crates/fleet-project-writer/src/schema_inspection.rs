@@ -1,5 +1,5 @@
 use crate::{OpenError, SchemaForm, TableLayout, checked_queries, writer_scope::WriterScope};
-use fleet_sync_protocol::{SchemaEntry, SchemaObjectKind, TableName, reserved_namespace};
+use fleet_protocol::{SchemaEntry, SchemaObjectKind, TableName, reserved_namespace};
 use sqlx_turso::TursoConnection;
 use std::collections::BTreeMap;
 
@@ -174,11 +174,11 @@ pub(crate) async fn inspect_replicated_tables(
 }
 
 pub(crate) fn reject_invalid_key_schemas(
-    entries: &[(fleet_sync_protocol::SchemaEntry, String)],
+    entries: &[(fleet_protocol::SchemaEntry, String)],
     tables: &[TableName],
 ) -> Result<(), OpenError> {
     for (entry, _) in entries.iter().filter(|(entry, _)| {
-        entry.kind == fleet_sync_protocol::SchemaObjectKind::Table
+        entry.kind == fleet_protocol::SchemaObjectKind::Table
             && tables
                 .iter()
                 .any(|table| table.as_str().eq_ignore_ascii_case(&entry.name))
@@ -187,7 +187,7 @@ pub(crate) fn reject_invalid_key_schemas(
             .next_cmd()
             .map_err(|_| OpenError::corrupt("schema.sql"))?
             .ok_or_else(|| OpenError::corrupt("schema.sql"))?;
-        if let Err(error) = fleet_sync_protocol::replicated_key_columns(&command) {
+        if let Err(error) = fleet_protocol::replicated_key_columns(&command) {
             return Err(OpenError::SchemaUnsupported {
                 form: SchemaForm::KeyNotUuidV7 {
                     table: TableName::new(entry.name.clone())

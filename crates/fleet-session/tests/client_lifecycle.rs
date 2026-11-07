@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
-use fleet_sync_protocol::*;
-use fleet_sync_session::*;
+use fleet_protocol::*;
+use fleet_session::*;
 use runtime_primitives::{Backoff, Clock, IdSource, WakeFailure, WakeScheduler};
 use std::{
     collections::VecDeque,

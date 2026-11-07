@@ -11,7 +11,7 @@ use collaboration_central_conformance::{
     DispatchCallSelector, DispatchFaultObservation, RuntimeControl,
 };
 use collaboration_central_core::ObjectAddress;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, DeliveryEnvelope, FrameId, OperationAnswer, OperationRequest, ServerFrame,
     SubmitResult,
 };

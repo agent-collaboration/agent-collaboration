@@ -2,7 +2,7 @@
 use super::mail_push_inbox::PushInbox;
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use collaboration_central_conformance::ConformanceResult;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientAnswer, ClientFrame, DeliveryItemRef, FrameId, PushResult, ServerCall, ServerCallAnswer,
     ServerFrame, ServerRequest, Submitter,
 };
@@ -39,7 +39,7 @@ pub(super) async fn next_push(
 pub(super) async fn pushed(
     socket: &mut WebSocket,
     frame: FrameId,
-    answer: PushResult<<BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Acceptance>,
+    answer: PushResult<<BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Acceptance>,
 ) -> ConformanceResult<()> {
     socket
         .send(Message::Binary(

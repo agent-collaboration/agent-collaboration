@@ -1,9 +1,9 @@
 //! A registry snapshot holds its project's shared gate until the native read finishes.
 use crate::ProjectRegistryError;
 use crate::project_store_registry::ProjectRuntime;
-use fleet_sync_lease::{HolderError, WriterState};
-use fleet_sync_protocol::GateReason;
-use fleet_sync_writer::OpenError;
+use fleet_project_lease::{HolderError, WriterState};
+use fleet_project_writer::OpenError;
+use fleet_protocol::GateReason;
 use message_board::{Identity, PostId, ProjectId, ThreadId};
 use message_board_storage::{ProjectSnapshot, ProjectStorageError, StoreSchemaState};
 use std::{
@@ -106,7 +106,7 @@ impl ProjectReadHandle {
 
     pub async fn registration_outcome(
         &self,
-    ) -> Result<Option<fleet_sync_writer::WriterRegistrationOutcome>, ProjectRegistryError> {
+    ) -> Result<Option<fleet_project_writer::WriterRegistrationOutcome>, ProjectRegistryError> {
         let owner = self.acquire().await;
         self.check_available().await?;
         match &owner {
@@ -144,8 +144,7 @@ impl ProjectReadHandle {
                         error: HolderError::RegistrationRejected { reason },
                     })) => ProjectReadStatus::RegistrationRejected { reason },
                     Err(ProjectStorageError::Writer(OpenError::Holder {
-                        error:
-                            HolderError::Refused(fleet_sync_protocol::LeaseRefusal::NotRegistered),
+                        error: HolderError::Refused(fleet_protocol::LeaseRefusal::NotRegistered),
                     })) => ProjectReadStatus::NotInCentral,
                     Err(error) => return Err(error.into()),
                 },

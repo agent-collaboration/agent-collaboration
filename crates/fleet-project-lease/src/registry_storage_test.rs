@@ -140,7 +140,7 @@ async fn legacy_registry_core_rows_migrate_to_scalars_without_losing_full_u64() 
                 registry
                     .save_database(
                         &expected_record,
-                        fleet_sync_protocol::SyncTime::from_unix_millis(1000),
+                        fleet_protocol::SyncTime::from_unix_millis(1000),
                     )
                     .await
                     .map_err(storage)?;

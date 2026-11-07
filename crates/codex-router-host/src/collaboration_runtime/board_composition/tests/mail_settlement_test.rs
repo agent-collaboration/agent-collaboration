@@ -1,7 +1,7 @@
 //! Negative resolution keeps the validated owner from local custody on the actual wire.
 use super::*;
-use fleet_sync_delivery::DispatchOutcome;
-use fleet_sync_protocol::{DeliveryFailureKind, DeliveryItemRef, ItemId};
+use fleet_mail_delivery::DispatchOutcome;
+use fleet_protocol::{DeliveryFailureKind, DeliveryItemRef, ItemId};
 use transport::WireEvent;
 
 #[tokio::test]

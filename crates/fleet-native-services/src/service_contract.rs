@@ -1,14 +1,14 @@
-use fleet_sync_lease::RegistryConfig;
-use fleet_sync_lease::{HolderChangeGate, LifecycleGate};
-use fleet_sync_protocol::{ConsumerProtocol, PeerId, ReceiverId};
-use fleet_sync_receiver::{FollowUpHandler, ReceiverRules};
+use fleet_project_copy::{FollowUpHandler, ReceiverRules};
+use fleet_project_lease::RegistryConfig;
+use fleet_project_lease::{HolderChangeGate, LifecycleGate};
+use fleet_protocol::{ConsumerProtocol, PeerId, ReceiverId};
 use serde::{Serialize, de::DeserializeOwned};
 use std::{future::Future, path::PathBuf, time::Duration};
 
 #[derive(Clone, Debug)]
 pub struct RelayDeliveryConfig {
     pub relay: PeerId,
-    pub limits: fleet_sync_delivery::DeliveryLimits,
+    pub limits: fleet_mail_delivery::DeliveryLimits,
 }
 
 #[derive(Clone)]
@@ -45,7 +45,7 @@ pub trait ConsumerHandler<P: ConsumerProtocol>: Send + Sync + 'static {
 /// scope. Consumer code stays outside every shared rules crate.
 pub trait ServiceConsumer<P: ConsumerProtocol>:
     ConsumerHandler<P>
-    + for<'transaction> fleet_sync_delivery::SenderBinding<
+    + for<'transaction> fleet_mail_delivery::SenderBinding<
         crate::ServiceScope<'transaction>,
         P::Delivery,
     > + LifecycleGate

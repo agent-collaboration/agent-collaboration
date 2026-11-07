@@ -4,7 +4,7 @@ use super::{
     MailDeliveryRuntime, MailSender, OperationState, RecipientOutcome, RemoveMailRecord,
     RouterDeliveryTypes, StoreError, SyncTime, WakeScheduler,
 };
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliveryTransactionFailure, LocalItemAdmission, classify_delivery_store_error,
     delivery_request_key, delivery_rollback,
 };

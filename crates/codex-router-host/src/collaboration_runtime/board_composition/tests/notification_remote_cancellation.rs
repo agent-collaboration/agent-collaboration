@@ -6,9 +6,9 @@ use board_fleet_sync::{BoardCaptureBookkeeping, BoardPieceAnnotation};
 use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use collaboration_mail_protocol::{MailSender, NotificationBody, NotificationSource, RecordPointer, RootRange};
 use collaboration_contracts::ProjectReplicationPosition;
-use fleet_sync_delivery::OutboxStatusState;
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, ItemId, PeerId, Recipient};
-use fleet_sync_writer::{ReplicationEvents, ReplicationSender, SenderOptions};
+use fleet_mail_delivery::OutboxStatusState;
+use fleet_protocol::{DeliveryEnvelope, DeliveryItem, ItemId, PeerId, Recipient};
+use fleet_project_writer::{ReplicationEvents, ReplicationSender, SenderOptions};
 use message_board::*;
 use message_board_storage::MailHandoffItem;
 use std::num::NonZeroUsize;
@@ -324,7 +324,7 @@ async fn remote_children_wait_for_their_own_final_ack_and_reopen_reuses_every_fr
     assert_eq!(actual.len(), 3);
     assert!(
         actual.iter().all(|(wire, saved, same)| *wire
-            == Some(fleet_sync_protocol::Epoch::new(epoch.get()).unwrap())
+            == Some(fleet_protocol::Epoch::new(epoch.get()).unwrap())
             && *saved == epoch
             && *same),
         "own final ACK/reopen changed a child identity, epoch or frozen envelope: {actual:?}"

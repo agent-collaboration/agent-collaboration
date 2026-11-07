@@ -12,7 +12,7 @@ use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{ConformanceResult, RuntimeControl};
 use collaboration_central_core::ObjectAddress;
 use creation_scenarios as creation;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde_json::json;
 use std::time::Duration;
 

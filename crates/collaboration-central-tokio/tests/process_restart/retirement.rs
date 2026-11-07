@@ -1,7 +1,7 @@
 //! Process death between Registry's retirement admission and Copy wipe.
 use super::*;
 use collaboration_central_conformance::DispatchKey;
-use fleet_sync_protocol::DatabaseId;
+use fleet_protocol::DatabaseId;
 
 #[expect(
     clippy::panic_in_result_fn,

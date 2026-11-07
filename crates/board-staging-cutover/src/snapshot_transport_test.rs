@@ -1,5 +1,5 @@
 use super::{SnapshotTransportError, reframe_import_manifest, reframe_import_page};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CommitSequence, DatabaseId, Epoch, PageDigest, ReplicationPosition, SchemaIdentity,
     SnapshotCursor, SnapshotManifest, SnapshotPage, SqlValue, TableDigestBuilder, TableManifest,
     TableName,

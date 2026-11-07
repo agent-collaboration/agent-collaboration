@@ -1,5 +1,5 @@
 use durable_steps::storage::CallReach;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -127,7 +127,7 @@ pub struct Waiting {
     pub since: SyncTime,
     pub last_seen: Option<SyncTime>,
     pub reach: CallReach,
-    pub copy_unavailable: Option<fleet_sync_protocol::CopyUnavailableReason>,
+    pub copy_unavailable: Option<fleet_protocol::CopyUnavailableReason>,
     pub attempt: u32,
     pub next_attempt_at: SyncTime,
 }

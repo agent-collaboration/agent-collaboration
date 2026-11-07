@@ -2,16 +2,16 @@ use crate::{
     ServiceConsumer, ServiceError, call_router::ServiceObject, service_state::ServiceState,
 };
 use durable_steps::{AtomicStore, StoreError};
-use fleet_sync_protocol::*;
-use fleet_sync_receiver::SnapshotInstallRules;
-use fleet_sync_session::PeerAuthenticator;
+use fleet_project_copy::SnapshotInstallRules;
+use fleet_protocol::*;
+use fleet_session::PeerAuthenticator;
 
 impl<
     P: ConsumerProtocol,
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > ServiceState<P, C, A>
 {

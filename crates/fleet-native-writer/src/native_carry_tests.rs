@@ -227,10 +227,10 @@ async fn local_name_conflicts_refuse_before_changing_the_verified_snapshot() -> 
 }
 
 struct NoCalls;
-impl crate::CallRouter for NoCalls {
+impl fleet_tokio_objects::CallRouter for NoCalls {
     async fn dispatch(
         &self,
-        _: crate::CallEnvelope,
+        _: fleet_tokio_objects::CallEnvelope,
     ) -> Result<serde_json::Value, durable_steps::CallFailure> {
         Err(durable_steps::CallFailure::NotSent {
             reason: durable_steps::NotSentReason::Overloaded,
@@ -241,7 +241,7 @@ struct PendingTask;
 impl durable_steps::Task for PendingTask {
     const KIND: &'static str = "carry-pending-task";
     const VERSION: u32 = 1;
-    type Store = crate::TokioObject<crate::TokioHost<NoCalls>>;
+    type Store = fleet_tokio_objects::TokioObject<fleet_tokio_objects::TokioHost<NoCalls>>;
     type Input = String;
     type Output = String;
     async fn run<C: durable_steps::OperationContext<Store = Self::Store>>(
@@ -263,7 +263,7 @@ async fn carry_keeps_real_durable_journal_operations_and_unanswered_call_identit
     use runtime_primitives::{Clock, SystemClock};
     use std::sync::Arc;
     let directory = tempfile::tempdir()?;
-    let host = crate::TokioHost::new(Arc::new(NoCalls), SystemClock);
+    let host = fleet_tokio_objects::TokioHost::new(Arc::new(NoCalls), SystemClock);
     let mut source = TursoConnectOptions::new()
         .filename(directory.path().join("source.db"))
         .create_if_missing(true)

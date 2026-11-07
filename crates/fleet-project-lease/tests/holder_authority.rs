@@ -1,8 +1,8 @@
 #![allow(clippy::panic_in_result_fn)] // Assertions decide behavior; Result propagates setup failures.
 
 use durable_steps::Uuid;
-use fleet_sync_lease::{HolderError, LeaseHolder, LeasePolicy, WriterState};
-use fleet_sync_protocol::{
+use fleet_project_lease::{HolderError, LeaseHolder, LeasePolicy, WriterState};
+use fleet_protocol::{
     CommitSequence, DatabaseId, Epoch, GateReason, GateReasonCode, LeaseRefusal, LeaseState,
     LeaseStatus, PeerId, RenewAnswer, RenewResult, ReplicationPosition, SyncTime, TransferId,
 };

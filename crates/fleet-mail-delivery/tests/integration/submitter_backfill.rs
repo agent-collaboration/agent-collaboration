@@ -1,6 +1,6 @@
 use super::support::{legacy_submitters::*, *};
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
 use std::sync::Arc;
@@ -72,7 +72,7 @@ async fn undecodable_source_names_its_row_and_writes_nothing_even_if_the_caller_
             Box::pin(async move {
                 Ok(backfill_submitters::<TestTypes, _, _>(
                     scope,
-                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    fleet_mail_delivery::DeliveryHostRole::Machine,
                     &FixtureBindings,
                     startup_time(),
                 )
@@ -104,7 +104,7 @@ async fn handed_off_and_terminal_legacy_rows_keep_status_release_capacity_and_ke
         assert!(matches!(outbox.status(item_id(100)).await.map_err(storage_error)?.state,OutboxStatusState::Known {status:DeliveryStatus::Delivered {..},version,..} if version.value()==1));
         assert!(matches!(outbox.relay_query(Submitter::Machine(peer(1)),item_id(101)).await,Err(DeliveryError::Refused {..})));
         assert!(matches!(outbox.relay_settle::<RecordRemoval>(Submitter::Machine(peer(1)),item_id(101),ItemDigest::try_from("a".repeat(64)).unwrap(),startup_time()).await,Err(DeliveryError::Refused {..})));
-        assert!(matches!(outbox.resolve_push(&DeliveryItemRef {item:item_id(101),digest:ItemDigest::try_from("a".repeat(64)).unwrap()}, fleet_sync_protocol::SyncTime::from_unix_millis(0)).await,Err(DeliveryError::Refused {..})));
+        assert!(matches!(outbox.resolve_push(&DeliveryItemRef {item:item_id(101),digest:ItemDigest::try_from("a".repeat(64)).unwrap()}, fleet_protocol::SyncTime::from_unix_millis(0)).await,Err(DeliveryError::Refused {..})));
         let DeliveryEnvelope::Item(item)=item(2000,"new traffic") else {return Err(StoreError::backend("fixture item"));};
         assert!(matches!(outbox.enqueue(item,peer(3),Submitter::Machine(peer(1)),startup_time()).await.map_err(storage_error)?,OutboxAdmission::Queued {..}));
         Ok(())
@@ -120,7 +120,7 @@ async fn handed_off_and_terminal_legacy_rows_keep_status_release_capacity_and_ke
                 assert_eq!(
                     admit_existing_record_removals::<_, RecordRemoval>(
                         scope,
-                        fleet_sync_delivery::DeliveryHostRole::Machine,
+                        fleet_mail_delivery::DeliveryHostRole::Machine,
                         startup_time()
                     )
                     .await
@@ -135,7 +135,7 @@ async fn handed_off_and_terminal_legacy_rows_keep_status_release_capacity_and_ke
     let mut engine = durable_steps::Engine::new(fixture.store.clone(), fixture.host.clone());
     engine
         .register(RecordRemoval::new(
-            fleet_sync_delivery::DeliveryHostRole::Machine,
+            fleet_mail_delivery::DeliveryHostRole::Machine,
         ))
         .unwrap();
     fixture.host.clock.store(
@@ -176,7 +176,7 @@ async fn backfill_child_checkpoint() -> Result<(), Box<dyn std::error::Error>> {
     let mut scope = BackfillCheckpointScope { inner: &mut real };
     backfill_submitters::<TestTypes, _, _>(
         &mut scope,
-        fleet_sync_delivery::DeliveryHostRole::Machine,
+        fleet_mail_delivery::DeliveryHostRole::Machine,
         &FixtureBindings,
         startup_time(),
     )

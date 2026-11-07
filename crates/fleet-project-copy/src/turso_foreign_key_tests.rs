@@ -4,7 +4,7 @@ use crate::turso_rule_fixture::uuid_key;
 use crate::turso_seed_tests::{TursoScope, database, position, setup};
 use crate::*;
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::connection::{ConnectOptions, Connection};
 use sqlx_turso::Turso;
 

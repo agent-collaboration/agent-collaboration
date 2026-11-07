@@ -28,7 +28,7 @@ where
             "new header requires valid Reserved state",
         ));
     }
-    fleet_sync_protocol::SchemaIdentity::new(
+    fleet_protocol::SchemaIdentity::new(
         header.manifest.schema.version,
         header.manifest.schema.fingerprint.clone(),
     )

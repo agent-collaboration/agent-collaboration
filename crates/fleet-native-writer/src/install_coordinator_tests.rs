@@ -3,8 +3,11 @@ use crate::*;
 use durable_steps::{
     AtomicStore, CallFailure, NotSentReason, StoreError, Uuid, storage::TransactionScope,
 };
-use fleet_sync_protocol::*;
-use fleet_sync_receiver::{SnapshotInstall, SnapshotInstallRules};
+use fleet_project_copy::{SnapshotInstall, SnapshotInstallRules};
+use fleet_protocol::*;
+use fleet_tokio_objects::{
+    CallEnvelope, CallRouter, ObjectKey, ObjectOptions, ObjectStore, TokioHost, TokioObject,
+};
 use runtime_primitives::SystemClock;
 use std::sync::Arc;
 
@@ -76,7 +79,7 @@ impl Fixture {
         target
             .transaction(|scope| {
                 Box::pin(async move {
-                    let mut migrations = sqlx::migrate!("../fleet-sync-receiver/migrations");
+                    let mut migrations = sqlx::migrate!("../fleet-project-copy/migrations");
                     migrations.dangerous_set_table_name("_fleet_sync_copy_migrations");
                     migrations
                         .run_direct(None, scope.executor(), false)
@@ -106,7 +109,7 @@ impl Fixture {
         page.position = position;
         manifest.position = position;
         let request = InstallRequest {
-            attempt: fleet_sync_protocol::InstallAttemptId::new(install.install_id.as_uuid())?,
+            attempt: fleet_protocol::InstallAttemptId::new(install.install_id.as_uuid())?,
             target: self.target.key().clone(),
             database: install.database,
             source: ReceiverId::new(Uuid::from_u128(0x019eef0000007000800000000000000a))?,

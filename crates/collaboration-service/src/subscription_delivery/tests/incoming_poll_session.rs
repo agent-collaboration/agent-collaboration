@@ -2,9 +2,9 @@
 use board_fleet_sync::{AccessServiceToken, MachineSessionStore, ReqwestSessionTransport};
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use collaboration_mail_protocol::CarrierAcceptance;
-use fleet_sync_protocol::*;
-use fleet_sync_session::{Endpoint, PeerCredential, SessionClient};
-use fleet_sync_tokio_runner::SessionPump;
+use fleet_protocol::*;
+use fleet_session::{Endpoint, PeerCredential, SessionClient};
+use fleet_session_client::SessionPump;
 use futures_util::{SinkExt, StreamExt};
 use runtime_primitives::{Backoff, UuidV7Ids};
 use std::{
@@ -125,7 +125,7 @@ impl IncomingPollSession {
         let (welcomed, mut readiness) = watch::channel(false);
         tasks.spawn(async move {
             while let Some(event) = events.recv().await {
-                if matches!(event, fleet_sync_session::ClientEvent::Welcome { .. }) {
+                if matches!(event, fleet_session::ClientEvent::Welcome { .. }) {
                     welcomed.send_replace(true);
                 }
             }

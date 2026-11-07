@@ -4,10 +4,10 @@ use crate::{
     sender_test_fixture::{SenderFixture, TestResult},
     writer_scope::WriterScope,
 };
-use fleet_sync_protocol::{
+use fleet_project_copy::SeedAuthority;
+use fleet_protocol::{
     CopyOrigin, CreateCopy, PageDigest, SeedAttemptId, SeedPage, SeedPageAnswer, SqlValue,
 };
-use fleet_sync_receiver::SeedAuthority;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     query::query,
@@ -54,10 +54,10 @@ async fn a_misestimated_writer_page_cannot_be_staged_by_the_receiver() -> TestRe
     ));
     let mut connection = TursoConnectOptions::new().connect().await?;
     let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
-    fleet_sync_receiver::RECEIVER_MIGRATOR
+    fleet_project_copy::RECEIVER_MIGRATOR
         .run_direct(None, &mut *transaction, false)
         .await?;
-    fleet_sync_receiver::create_copy(
+    fleet_project_copy::create_copy(
         &mut WriterScope(&mut transaction),
         &CreateCopy {
             database: contents.database,
@@ -69,7 +69,7 @@ async fn a_misestimated_writer_page_cannot_be_staged_by_the_receiver() -> TestRe
         },
     )
     .await?;
-    let seed = fleet_sync_receiver::seed_begin(
+    let seed = fleet_project_copy::seed_begin(
         &mut WriterScope(&mut transaction),
         contents.database,
         SeedAttemptId::new("019eef00-0000-7000-8000-000000000732".parse()?)?,
@@ -82,7 +82,7 @@ async fn a_misestimated_writer_page_cannot_be_staged_by_the_receiver() -> TestRe
         digest: PageDigest::of(&contents)?,
         contents,
     };
-    let result = fleet_sync_receiver::seed_page(
+    let result = fleet_project_copy::seed_page(
         &mut WriterScope(&mut transaction),
         &page,
         &SeedAuthority::Admin,

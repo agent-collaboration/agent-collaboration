@@ -1,7 +1,7 @@
 use crate::{OpenError, schema_inspection::text, writer_scope::WriterScope};
 use durable_steps::CallId;
-use fleet_sync_lease::LeaseHolder;
-use fleet_sync_protocol::{DatabaseId, ReleaseAnswer, ReleaseRequest, WithdrawAnswer};
+use fleet_project_lease::LeaseHolder;
+use fleet_protocol::{DatabaseId, ReleaseAnswer, ReleaseRequest, WithdrawAnswer};
 use serde::{Deserialize, Serialize};
 use sqlx_turso::TursoConnection;
 
@@ -50,7 +50,7 @@ impl WriterReleaseRecord {
                 }
             )
     }
-    fn order(&self) -> (fleet_sync_protocol::Epoch, bool) {
+    fn order(&self) -> (fleet_protocol::Epoch, bool) {
         (
             self.request.epoch,
             matches!(

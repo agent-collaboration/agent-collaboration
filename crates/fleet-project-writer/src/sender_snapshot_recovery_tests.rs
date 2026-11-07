@@ -4,8 +4,8 @@ use crate::{
     writer_scope::WriterScope,
     *,
 };
-use fleet_sync_protocol::*;
-use fleet_sync_receiver::{SnapshotInstall, SnapshotInstallRules};
+use fleet_project_copy::{SnapshotInstall, SnapshotInstallRules};
+use fleet_protocol::*;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     executor::Executor,
@@ -21,7 +21,7 @@ async fn status(fixture: &SenderFixture, copy: ReceiverId) -> TestResult<CopySta
     let file = fixture.transport.files.get(&copy).ok_or("copy missing")?;
     let mut connection = file.connection.lock().await;
     let connection = connection.as_mut().ok_or("copy closed")?;
-    match fleet_sync_receiver::copy_status(&mut WriterScope(connection)).await? {
+    match fleet_project_copy::copy_status(&mut WriterScope(connection)).await? {
         CopyStatusAnswer::Status(status) => Ok(status),
         _ => Err("copy is not following".into()),
     }
@@ -39,7 +39,7 @@ async fn install_follower(
     let manifest = snapshot.manifest().await?;
     assert_eq!(source.acked, manifest.position);
     let install = SnapshotInstall {
-        install_id: fleet_sync_protocol::InstallId::new(durable_steps::Uuid::now_v7())?,
+        install_id: fleet_protocol::InstallId::new(durable_steps::Uuid::now_v7())?,
         database: manifest.database,
         position: manifest.position,
         schema: manifest.schema.clone(),
@@ -68,11 +68,11 @@ async fn install_follower(
         .connect()
         .await?;
     let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
-    let mut migrator = sqlx::migrate!("../fleet-sync-receiver/migrations");
+    let mut migrator = sqlx::migrate!("../fleet-project-copy/migrations");
     migrator.dangerous_set_table_name("_fleet_sync_receiver_history");
     migrator.run_direct(None, &mut *transaction, false).await?;
     let mut scope = WriterScope(&mut transaction);
-    fleet_sync_receiver::initialize_hook(&mut scope, &file.hook).await?;
+    fleet_project_copy::initialize_hook(&mut scope, &file.hook).await?;
     SnapshotInstallRules(&mut scope)
         .prepare(&install, &source)
         .await?;
@@ -189,14 +189,14 @@ async fn assert_equal(fixture: &SenderFixture) -> TestResult {
     let mut connection = file.connection.lock().await;
     let mut scope = WriterScope(connection.as_mut().ok_or("closed follower")?);
     assert_eq!(
-        fleet_sync_receiver::snapshot_manifest(&mut scope, expected_manifest.position).await?,
+        fleet_project_copy::snapshot_manifest(&mut scope, expected_manifest.position).await?,
         SnapshotManifestAnswer::Manifest(expected_manifest)
     );
     let mut actual = BTreeMap::<String, Vec<Vec<SqlValue>>>::new();
     let mut cursor = None;
     loop {
         let SnapshotRead::Page(page) =
-            fleet_sync_receiver::snapshot_page(&mut scope, cursor).await?
+            fleet_project_copy::snapshot_page(&mut scope, cursor).await?
         else {
             return Err("follower snapshot moved".into());
         };

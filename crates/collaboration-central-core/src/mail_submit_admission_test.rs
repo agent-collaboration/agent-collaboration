@@ -1,15 +1,15 @@
 //! The admission transaction checks current enrollment without losing historical binding.
 use super::*;
 use crate::fleet_storage_fixture::{FixtureIo, FleetStorageFixture, NOW, TestError};
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, ItemId, PeerId, SessionId};
-use fleet_sync_session::SessionKey;
+use fleet_protocol::{DeliveryEnvelope, DeliveryItem, ItemId, PeerId, SessionId};
+use fleet_session::SessionKey;
 use sqlx_core::{query::query, row::Row};
 
 const SENDER: &str = "019f0000-0000-7000-8000-000000008f21";
 const RECIPIENT: &str = "019f0000-0000-7000-8000-000000008f22";
 const SERVICE: &str = "019f0000-0000-7000-8000-000000008f23";
 const RECIPIENT_SERVICE: &str = "019f0000-0000-7000-8000-000000008f24";
-type FixtureStore = fleet_sync_tokio_runner::TokioObject<crate::CoreHost<FixtureIo>>;
+type FixtureStore = fleet_tokio_objects::TokioObject<crate::CoreHost<FixtureIo>>;
 
 #[tokio::test]
 async fn enrollment_expiry_refuses_at_its_exact_boundary_and_preserves_historical_binding()
@@ -25,7 +25,7 @@ async fn enrollment_expiry_refuses_at_its_exact_boundary_and_preserves_historica
         .object
         .transaction(|scope| {
             Box::pin(async move {
-                fleet_sync_delivery::DELIVERY_MIGRATOR
+                fleet_mail_delivery::DELIVERY_MIGRATOR
                     .run_direct(None, scope.executor(), false)
                     .await
                     .map_err(StoreError::backend)?;

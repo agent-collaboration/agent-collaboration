@@ -14,15 +14,15 @@ pub(crate) enum ObjectWork<Host: ObjectHost, Io: PlatformIo> {
         engine: Arc<dyn crate::fleet_task_engine::FleetTaskEngine>,
         shared_host: Arc<CoreHost<Io>>,
         replies: Arc<crate::holder_reply_hub::HolderReplyHub>,
-        config: fleet_sync_lease::RegistryConfig,
+        config: fleet_project_lease::RegistryConfig,
         delivery: crate::DeliveryConfig,
         holder_answer_timeout: std::time::Duration,
     },
     Copy {
         host: Arc<Host>,
-        database: fleet_sync_protocol::DatabaseId,
+        database: fleet_protocol::DatabaseId,
         io: Arc<Io>,
-        receiver: fleet_sync_protocol::ReceiverId,
+        receiver: fleet_protocol::ReceiverId,
         changes: Arc<crate::copy_change_notifier::CopyChangeNotifier>,
         copy_ack_wait: std::time::Duration,
         #[cfg(feature = "conformance")]

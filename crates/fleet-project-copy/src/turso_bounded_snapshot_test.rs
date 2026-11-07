@@ -1,7 +1,7 @@
 //! Complete native copy-page units, deterministic continuation and row digests.
 #![allow(clippy::panic_in_result_fn)]
 use crate::{turso_rule_fixture::*, *};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::connection::Connection;
 
 fn assert_complete_units_fit(page: &SnapshotPage, limit: usize) -> TestResult {

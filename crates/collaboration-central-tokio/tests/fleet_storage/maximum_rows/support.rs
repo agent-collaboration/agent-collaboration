@@ -6,7 +6,7 @@ use super::super::{
 use board_sync_protocol::{BoardReadPage, FleetFeedRead};
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
 use fleet_admission::{FleetOperation, FleetRequest, FleetRequestResult};
-use fleet_sync_protocol::SqlValue;
+use fleet_protocol::SqlValue;
 use message_board::*;
 use runtime_primitives::SyncTime;
 use serde::Serialize;
@@ -139,13 +139,13 @@ pub(super) async fn maximum_directory_summary(
 ) -> TestResult {
     let time = maximum_router_time()?;
     let summary = collaboration_central_core::CopyDirectorySummary {
-        database: fleet_sync_protocol::DatabaseId::try_from(project.as_str().to_owned())?,
+        database: fleet_protocol::DatabaseId::try_from(project.as_str().to_owned())?,
         summary: board_sync_protocol::BoardAnnotation::ProjectSummary {
             latest_record_at: time,
         },
-        position: fleet_sync_protocol::ReplicationPosition::new(
-            fleet_sync_protocol::Epoch::new(u64::MAX)?,
-            fleet_sync_protocol::CommitSequence::new(u64::MAX),
+        position: fleet_protocol::ReplicationPosition::new(
+            fleet_protocol::Epoch::new(u64::MAX)?,
+            fleet_protocol::CommitSequence::new(u64::MAX),
         ),
         acked_at: SyncTime::from_unix_millis(
             time.as_router_time()

@@ -3,7 +3,7 @@ use super::{fixture::identity, messaging_fixture::MessagingCase, messaging_stopp
 use board_central_test_support::{MailWireEvent, MailWireObservation};
 use board_sync_protocol::BoardDeliveryTypes;
 use codex_router_test_support::FixtureResult;
-use fleet_sync_protocol::{DeliveryRefusal, DeliveryTypes, PushResult};
+use fleet_protocol::{DeliveryRefusal, DeliveryTypes, PushResult};
 use serde_json::json;
 use std::os::unix::fs::OpenOptionsExt;
 

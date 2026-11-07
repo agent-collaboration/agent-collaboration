@@ -12,8 +12,8 @@ use collaboration_protocol::{
     OperationId, WakeMutationRequest, WakeSendRequest, WakeWaitOutcome, WakeWaitRequest,
 };
 use collaboration_runtime::SessionDeliveryRouter;
-use fleet_sync_delivery::LocalOutcome;
-use fleet_sync_protocol::{DeliveryItem, ItemId, PeerId, Recipient};
+use fleet_mail_delivery::LocalOutcome;
+use fleet_protocol::{DeliveryItem, ItemId, PeerId, Recipient};
 use serde_json::json;
 use std::sync::Arc;
 

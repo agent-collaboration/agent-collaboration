@@ -1,7 +1,7 @@
 //! Fence refusal, durable receipt identity, and immutable historical cutoffs.
 #![allow(clippy::panic_in_result_fn)]
 use crate::{turso_rule_fixture::*, *};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::connection::{ConnectOptions, Connection};
 use sqlx_core::row::Row;
 use sqlx_turso::{Turso, TursoConnectOptions, TursoConnection};
@@ -17,7 +17,7 @@ fn request(id: u128, epoch: u64, expected: u64, holder: PeerId) -> TestResult<Fe
             epoch: Epoch::new(expected)?,
             acked: position(0)?,
         },
-        target_schema: Some(fleet_sync_protocol::SchemaSupport { max_version: 1 }),
+        target_schema: Some(fleet_protocol::SchemaSupport { max_version: 1 }),
         holder,
     })
 }
@@ -41,7 +41,7 @@ async fn fence_checks_forward_motion_exact_preview_and_schema_before_mutation() 
         },
     ));
     let mut changed = request(503, 2, 1, target)?;
-    changed.target_schema = Some(fleet_sync_protocol::SchemaSupport { max_version: 0 });
+    changed.target_schema = Some(fleet_protocol::SchemaSupport { max_version: 0 });
     let status = ready_status(copy_status(&mut TursoScope(&mut connection)).await?)?;
     cases.push((
         changed,

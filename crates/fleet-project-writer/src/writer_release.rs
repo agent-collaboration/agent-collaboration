@@ -5,8 +5,8 @@ use crate::{
     writer_release_record::{ReleaseState, WriterReleaseRecord, read_releases, save_release},
 };
 use durable_steps::CallId;
-use fleet_sync_lease::WriterState;
-use fleet_sync_protocol::{MigrationState, ReleaseAnswer, ReleaseRefusal, ReleaseRequest};
+use fleet_project_lease::WriterState;
+use fleet_protocol::{MigrationState, ReleaseAnswer, ReleaseRefusal, ReleaseRequest};
 use sqlx_core::connection::Connection;
 
 impl<S: ReplicatedSchema> ReplicatedDatabase<S> {

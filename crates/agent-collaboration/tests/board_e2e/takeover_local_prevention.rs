@@ -14,7 +14,7 @@ use board_central_test_support::{DispatchCallSelector, ObjectAddress};
 use board_sync_protocol::BoardDeliveryTypes;
 use codex_router_test_support::FixtureResult;
 use collaboration_protocol::PushDeliveryState;
-use fleet_sync_protocol::{DeliveryItem, ItemId, ReportSeq};
+use fleet_protocol::{DeliveryItem, ItemId, ReportSeq};
 use serde_json::json;
 
 struct LocalPrevention {
@@ -173,7 +173,7 @@ async fn assert_local_prevention(
     wire: &mut board_central_test_support::MailWireObservation,
     status_wire: &mut board_central_test_support::MailWireObservation,
     prevention: LocalPrevention,
-) -> FixtureResult<fleet_sync_protocol::ItemId> {
+) -> FixtureResult<fleet_protocol::ItemId> {
     let LocalPrevention {
         held_sequence,
         cancel: expected_cancel,
@@ -217,7 +217,7 @@ async fn assert_local_prevention(
 
 async fn held_local_follow(
     fixture: &mut BoardFixture,
-) -> FixtureResult<(HeldFollow, fleet_sync_protocol::ReportSeq)> {
+) -> FixtureResult<(HeldFollow, fleet_protocol::ReportSeq)> {
     fixture.create().await?;
     let follow =
         FollowMembership::arrange(fixture, recipients::session(fixture.host()?).await?).await?;

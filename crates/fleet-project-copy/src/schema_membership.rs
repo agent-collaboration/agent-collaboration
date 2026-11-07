@@ -1,5 +1,6 @@
 //! Keep schema ownership in the same transaction as each replicated migration.
-use crate::{ReceiverError, StoreError, checked_queries};
+use crate::checked_queries;
+use crate::{ReceiverError, StoreError};
 use durable_steps::storage::TransactionScope;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -19,7 +20,7 @@ pub(crate) fn statements(sql: &str) -> Result<Vec<(String, Cmd)>, ReceiverError>
     let mut start = 0;
     let mut result = Vec::new();
     while let Some(command) = parser.next_cmd().map_err(invalid_schema)? {
-        fleet_sync_protocol::admit_schema_command(&command).map_err(invalid_schema)?;
+        fleet_protocol::admit_schema_command(&command).map_err(invalid_schema)?;
         let end = parser.offset();
         let statement = sql
             .get(start..end)
@@ -61,8 +62,8 @@ where
                     row.name_class,
                     "replicated schema member",
                 )?;
-                if fleet_sync_protocol::TableName::new(&name).is_err()
-                    || fleet_sync_protocol::reserved_namespace(&name)
+                if fleet_protocol::TableName::new(&name).is_err()
+                    || fleet_protocol::reserved_namespace(&name)
                 {
                     return Err(StoreError::Corrupt {
                         field: "replicated schema membership".into(),
@@ -103,7 +104,7 @@ where
             let (_, command) = parsed
                 .pop()
                 .ok_or_else(|| invalid_schema("missing schema statement"))?;
-            fleet_sync_protocol::admit_replicated_schema_command(&command)
+            fleet_protocol::admit_replicated_schema_command(&command)
                 .map_err(|error| ReceiverError::SchemaUnsupported { form: error.form })?;
             let Cmd::Stmt(statement) = command else {
                 return Err(invalid_schema("expected schema statement"));
@@ -112,11 +113,11 @@ where
             let mut remove = None;
             let assignment_target = match &statement {
                 Stmt::Insert { tbl_name, .. } => {
-                    Some((tbl_name, fleet_sync_protocol::SchemaStatementForm::Insert))
+                    Some((tbl_name, fleet_protocol::SchemaStatementForm::Insert))
                 }
                 Stmt::Update(update) => Some((
                     &update.tbl_name,
-                    fleet_sync_protocol::SchemaStatementForm::Update,
+                    fleet_protocol::SchemaStatementForm::Update,
                 )),
                 _ => None,
             };
@@ -129,7 +130,7 @@ where
                     .iter()
                     .filter(|column| column.key_order > 0)
                     .any(|column| {
-                        fleet_sync_protocol::assigns_replicated_key(
+                        fleet_protocol::assigns_replicated_key(
                             &Cmd::Stmt(statement.clone()),
                             &column.name,
                         )
@@ -207,16 +208,16 @@ where
             }
             if matches!(statement, Stmt::AlterTable(_)) {
                 for entry in crate::schema_reads::SchemaReads(self.0).entries().await? {
-                    if entry.kind != fleet_sync_protocol::SchemaObjectKind::Table {
+                    if entry.kind != fleet_protocol::SchemaObjectKind::Table {
                         continue;
                     }
                     let command = turso_parser::parser::Parser::new(entry.sql.as_bytes())
                         .next_cmd()
                         .map_err(invalid_schema)?
                         .ok_or_else(|| invalid_schema("missing table definition"))?;
-                    if fleet_sync_protocol::replicated_key_columns(&command).is_err() {
+                    if fleet_protocol::replicated_key_columns(&command).is_err() {
                         return Err(ReceiverError::SchemaUnsupported {
-                            form: fleet_sync_protocol::SchemaStatementForm::AlterTable,
+                            form: fleet_protocol::SchemaStatementForm::AlterTable,
                         });
                     }
                 }

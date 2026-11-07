@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use crate::rule_test_support::*;
 use crate::*;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -28,7 +28,7 @@ async fn every_connection_close_preserves_the_session_and_notice_history() {
                 database: DatabaseId::new(Uuid::from_u128(0x019eef00000070008000000000000004))
                     .unwrap(),
             },
-            fleet_sync_protocol::SyncTime::from_unix_millis(0),
+            fleet_protocol::SyncTime::from_unix_millis(0),
         )
         .await
         .unwrap();
@@ -322,7 +322,7 @@ async fn rollback_discards_session_notices_and_staged_registrations_before_effec
         Notice::LeaseChanged {
             database: DatabaseId::new(Uuid::from_u128(0x019eef00000070008000000000000004)).unwrap(),
         },
-        fleet_sync_protocol::SyncTime::from_unix_millis(0),
+        fleet_protocol::SyncTime::from_unix_millis(0),
     )
     .await
     .unwrap();
@@ -368,7 +368,7 @@ async fn notice_positions_keep_the_full_u64_range_and_refuse_overflow() {
     crate::session_storage::save_session(
         &mut scope,
         &record,
-        fleet_sync_protocol::SyncTime::from_unix_millis(0),
+        fleet_protocol::SyncTime::from_unix_millis(0),
     )
     .await
     .unwrap();
@@ -379,7 +379,7 @@ async fn notice_positions_keep_the_full_u64_range_and_refuse_overflow() {
         &mut scope,
         &key,
         notice(),
-        fleet_sync_protocol::SyncTime::from_unix_millis(0),
+        fleet_protocol::SyncTime::from_unix_millis(0),
     )
     .await
     .unwrap();
@@ -393,7 +393,7 @@ async fn notice_positions_keep_the_full_u64_range_and_refuse_overflow() {
             &mut scope,
             &key,
             notice(),
-            fleet_sync_protocol::SyncTime::from_unix_millis(0)
+            fleet_protocol::SyncTime::from_unix_millis(0)
         )
         .await,
         Err(SessionError::NoticePositionExhausted)

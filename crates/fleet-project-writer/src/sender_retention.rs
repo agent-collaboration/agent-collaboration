@@ -27,7 +27,7 @@ where
             .ok_or_else(|| OpenError::corrupt("writer.record"))?;
         if matches!(
             control.holder.writer_state(self.database.clock.now()),
-            Ok(fleet_sync_lease::WriterState::Superseded { .. })
+            Ok(fleet_project_lease::WriterState::Superseded { .. })
         ) && record.epoch_ended_at.is_none()
             && sender_storage::rejected_tails(&mut transaction)
                 .await?
@@ -47,7 +47,7 @@ where
         let head = crate::capture_stream::capture_head(&mut transaction, &record).await?;
         let mut events = Vec::new();
         for copy in &mut copies {
-            if copy.role == fleet_sync_protocol::CopyRole::Authoritative {
+            if copy.role == fleet_protocol::CopyRole::Authoritative {
                 if copy.needs_snapshot || copy.acked < record.retained_after {
                     return Err(SenderError::Invalid {
                         field: "authoritative.capture_floor",

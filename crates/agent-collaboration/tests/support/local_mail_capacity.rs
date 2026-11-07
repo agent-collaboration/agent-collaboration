@@ -11,7 +11,7 @@ const LOCAL_INBOX_BYTES: u64 = 256 * 1024 * 1024;
 
 fn wire_charge(
     draft: &PushRecordDraft,
-    peer: fleet_sync_protocol::PeerId,
+    peer: fleet_protocol::PeerId,
     ordinary_reserve_bytes: u32,
 ) -> TestResult<u64> {
     let item = collaboration_runtime::outgoing_mail_message(
@@ -19,9 +19,8 @@ fn wire_charge(
         &super::local_mail_surfaces::SERVICE.to_owned().try_into()?,
         peer,
     )?;
-    let payload = u64::try_from(
-        serde_json::to_vec(&fleet_sync_protocol::DeliveryEnvelope::Item(item))?.len(),
-    )?;
+    let payload =
+        u64::try_from(serde_json::to_vec(&fleet_protocol::DeliveryEnvelope::Item(item))?.len())?;
     payload
         .checked_add(u64::from(ordinary_reserve_bytes))
         .ok_or_else(|| "fixture charge overflow".into())
@@ -45,13 +44,13 @@ async fn observe_ordinary_reserve(surfaces: &Surfaces, item: &PushId) -> TestRes
     )
     .transaction(move |scope| {
         Box::pin(async move {
-            let row = fleet_sync_delivery::test_support::snapshot::<
+            let row = fleet_mail_delivery::test_support::snapshot::<
                 _,
                 collaboration_contracts::RouterDeliveryTypes,
                 _,
             >(
                 scope,
-                fleet_sync_delivery::DeliveryHostRole::Machine,
+                fleet_mail_delivery::DeliveryHostRole::Machine,
                 &binding,
             )
             .await

@@ -5,7 +5,7 @@ use crate::{
     turso_registry_snapshot_fixture::*, turso_workflow_tests::attempt, *,
 };
 use durable_steps::{AtomicStore, StoreError};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_turso::Turso;
 use std::{
     sync::{Arc, atomic::Ordering},
@@ -142,7 +142,7 @@ async fn registry_snapshot_lifecycle_and_holder_mutators_rollback_then_commit_on
         if mutation == "move" || mutation == "claim" {
             let request = if mutation == "move" {
                 HolderChangeRequest::Move {
-                    reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+                    reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
                     attempt: change_id,
                     database: database()?,
                     from_epoch: Epoch::new(1)?,

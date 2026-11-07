@@ -1,7 +1,8 @@
-use crate::{ReceiverError, StoreError, checked_queries, row_apply::TableColumn};
+use crate::checked_queries;
+use crate::{ReceiverError, StoreError, row_apply::TableColumn};
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::schema_catalog::{current_replicated_catalog, snapshot_schema_statements};
-use fleet_sync_protocol::{SchemaEntry, SchemaObjectKind, TableName, reserved_namespace};
+use fleet_protocol::schema_catalog::{current_replicated_catalog, snapshot_schema_statements};
+use fleet_protocol::{SchemaEntry, SchemaObjectKind, TableName, reserved_namespace};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -143,7 +144,7 @@ where
     }
 
     pub(crate) async fn fingerprint(&mut self) -> Result<String, ReceiverError> {
-        fleet_sync_protocol::schema_fingerprint(&self.entries().await?).map_err(|_| {
+        fleet_protocol::schema_fingerprint(&self.entries().await?).map_err(|_| {
             ReceiverError::InvalidInput {
                 field: "schema fingerprint".into(),
             }

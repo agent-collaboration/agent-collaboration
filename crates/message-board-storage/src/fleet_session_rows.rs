@@ -24,7 +24,7 @@ pub(super) async fn read_session(
             validate_times(&row.created_at, &row.updated_at)?;
             Ok(StoredSession {
                 state: ClientSessionState {
-                    session_id: fleet_sync_protocol::SessionId::new(
+                    session_id: fleet_protocol::SessionId::new(
                         uuid::Uuid::parse_str(&row.session_id)
                             .map_err(|_| invalid("fleetSession.sessionId"))?,
                     )

@@ -3,8 +3,8 @@ use board_sync_protocol::BoardDeliveryBody;
 use collaboration_contracts::RouterDeliveryTypes;
 use collaboration_mail_protocol::{MailSender, MessageBody};
 use collaboration_protocol::{PushHeaderFacts, PushKind, PushOrigin, PushRecordDraft};
-use fleet_sync_delivery::DeliveryError;
-use fleet_sync_protocol::{DeliveryItem, ItemId, PeerId, Recipient};
+use fleet_mail_delivery::DeliveryError;
+use fleet_protocol::{DeliveryItem, ItemId, PeerId, Recipient};
 
 pub fn outgoing_mail_message(
     draft: &PushRecordDraft,

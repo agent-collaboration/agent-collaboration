@@ -4,7 +4,7 @@ use crate::{
     composed_client::control,
     composed_copy_fixture::{CopyFixture, equal, parts, piece, position, row, row_key, rows},
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CommitSequence, CopyUnavailableReason, DatabaseId, Epoch, FenceExpectation, FenceRequest,
     FenceResult, PeerId, PieceDigest, PieceRefusal, ReplicatedTransaction, ReplicationAnswer,
     RowChange, SchemaStatementForm, SchemaSupport, SnapshotCursor, SnapshotRead, SqlValue,

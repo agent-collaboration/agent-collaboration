@@ -1,5 +1,5 @@
 use board_sync_protocol::{BoardConsumerProtocol, BoardConsumerRequest, BoardDeliveryTypes};
-use fleet_sync_protocol as wire;
+use fleet_protocol as wire;
 use serde_json::{Value, json};
 
 const ITEM: &str = "019a1234-5678-7000-8000-000000000001";

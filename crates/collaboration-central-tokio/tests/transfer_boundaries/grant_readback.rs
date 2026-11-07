@@ -1,7 +1,7 @@
 //! Public historical-grant reads on the stopped owning Registry, with no SQL knowledge.
 use super::*;
 use durable_steps::storage::TransactionScope;
-use fleet_sync_lease::EpochGrant;
+use fleet_project_lease::EpochGrant;
 use sqlx_core::connection::{ConnectOptions, Connection};
 
 struct HistoryRead<'connection>(&'connection mut sqlx_turso::TursoConnection);
@@ -34,13 +34,13 @@ pub(super) async fn original_only(
             granted_at: SyncTime::from_unix_millis(at.timestamp_millis()),
             ended_at: None,
         };
-        if fleet_sync_lease::epoch_holder(&mut scope, database, Epoch::new(1)?).await?
+        if fleet_project_lease::epoch_holder(&mut scope, database, Epoch::new(1)?).await?
             != Some(expected)
         {
             return Err("transfer refusal changed its actual original grant".into());
         }
         for epoch in 2..=6 {
-            if fleet_sync_lease::epoch_holder(&mut scope, database, Epoch::new(epoch)?)
+            if fleet_project_lease::epoch_holder(&mut scope, database, Epoch::new(epoch)?)
                 .await?
                 .is_some()
             {

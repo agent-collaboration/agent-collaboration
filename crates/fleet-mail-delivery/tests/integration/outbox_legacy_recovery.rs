@@ -1,6 +1,6 @@
 use super::support::{legacy_submitters::*, outbox_projection::*, *};
 use durable_steps::{AtomicStore, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
 

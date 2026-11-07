@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 use crate::{rule_test_support::*, *};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde::{Deserialize, Serialize};
 use sqlx_core::row::Row;
 use sqlx_turso::Turso;
@@ -70,7 +70,7 @@ async fn committed_peer_notice_has_the_attached_frame_without_clone_bounds() {
             database: "opaque consumer database field".into(),
             message: "a rejected tail is available".into(),
         }),
-        fleet_sync_protocol::SyncTime::from_unix_millis(0),
+        fleet_protocol::SyncTime::from_unix_millis(0),
     )
     .await
     .unwrap();
@@ -108,7 +108,7 @@ async fn committed_peer_notice_has_the_attached_frame_without_clone_bounds() {
                 database: "opaque consumer database field".into(),
                 message: "retained while detached".into()
             }),
-            fleet_sync_protocol::SyncTime::from_unix_millis(0)
+            fleet_protocol::SyncTime::from_unix_millis(0)
         )
         .await
         .unwrap()
@@ -137,7 +137,7 @@ async fn peer_notice_skips_ended_sessions_and_other_peers() {
         &mut scope,
         &old,
         notice(),
-        fleet_sync_protocol::SyncTime::from_unix_millis(0),
+        fleet_protocol::SyncTime::from_unix_millis(0),
     )
     .await
     .unwrap();
@@ -163,7 +163,7 @@ async fn peer_notice_skips_ended_sessions_and_other_peers() {
         &mut scope,
         &first.peer,
         notice(),
-        fleet_sync_protocol::SyncTime::from_unix_millis(0),
+        fleet_protocol::SyncTime::from_unix_millis(0),
     )
     .await
     .unwrap();
@@ -203,7 +203,7 @@ async fn peer_without_an_open_session_has_no_effects_or_writes() {
             &mut scope,
             &absent,
             notice(),
-            fleet_sync_protocol::SyncTime::from_unix_millis(0)
+            fleet_protocol::SyncTime::from_unix_millis(0)
         )
         .await
         .unwrap()
@@ -222,7 +222,7 @@ async fn peer_without_an_open_session_has_no_effects_or_writes() {
             &mut scope,
             &connection.peer,
             notice(),
-            fleet_sync_protocol::SyncTime::from_unix_millis(0)
+            fleet_protocol::SyncTime::from_unix_millis(0)
         )
         .await
         .unwrap()
@@ -248,7 +248,7 @@ async fn rolled_back_peer_notice_leaves_no_history_or_position_change() {
         &mut scope,
         &connection.peer,
         notice(),
-        fleet_sync_protocol::SyncTime::from_unix_millis(0),
+        fleet_protocol::SyncTime::from_unix_millis(0),
     )
     .await
     .unwrap();
@@ -293,7 +293,7 @@ async fn peer_notice_uses_the_session_position_and_refuses_exhaustion() {
     crate::session_storage::save_session(
         &mut scope,
         &record,
-        fleet_sync_protocol::SyncTime::from_unix_millis(0),
+        fleet_protocol::SyncTime::from_unix_millis(0),
     )
     .await
     .unwrap();
@@ -301,7 +301,7 @@ async fn peer_notice_uses_the_session_position_and_refuses_exhaustion() {
         &mut scope,
         &connection.peer,
         notice(),
-        fleet_sync_protocol::SyncTime::from_unix_millis(0),
+        fleet_protocol::SyncTime::from_unix_millis(0),
     )
     .await
     .unwrap();
@@ -316,7 +316,7 @@ async fn peer_notice_uses_the_session_position_and_refuses_exhaustion() {
             &mut scope,
             &connection.peer,
             notice(),
-            fleet_sync_protocol::SyncTime::from_unix_millis(0)
+            fleet_protocol::SyncTime::from_unix_millis(0)
         )
         .await,
         Err(SessionError::NoticePositionExhausted)

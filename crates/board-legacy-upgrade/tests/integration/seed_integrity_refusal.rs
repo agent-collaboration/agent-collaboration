@@ -4,7 +4,7 @@ use board_legacy_upgrade::{UpgradePublisher, UpgradeUploadError};
 use collaboration_central_core::{
     AdminImportRefusal, AdminProjectImportAnswer, AdminProjectImportRequest,
 };
-use fleet_sync_protocol::{RequestId, SeedAnswer, SeedId, TableName};
+use fleet_protocol::{RequestId, SeedAnswer, SeedId, TableName};
 use support::*;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 

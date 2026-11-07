@@ -35,7 +35,7 @@ async fn claim_lost_granted_frame_replays_the_same_public_attempt_and_exact_gran
         protocol_version: ProtocolVersion::CURRENT,
         project_id: project.clone(),
     };
-    let attempt = fleet_sync_protocol::RequestId::try_from(request.request_id.as_str().to_owned())?;
+    let attempt = fleet_protocol::RequestId::try_from(request.request_id.as_str().to_owned())?;
     let mut fault = fixture.central.drop_claim_grant_once(attempt)?;
     let proof = async {
         // Initial Pending is allowed, but cannot satisfy the lost-Granted proof.
@@ -51,7 +51,7 @@ async fn claim_lost_granted_frame_replays_the_same_public_attempt_and_exact_gran
         first?;
         let dropped = timeout(BOUND, fault.wait_dropped()).await??;
         assert_eq!(dropped.attempt, attempt);
-        assert_eq!(dropped.epoch, fleet_sync_protocol::Epoch::new(2)?);
+        assert_eq!(dropped.epoch, fleet_protocol::Epoch::new(2)?);
         assert_eq!(dropped.start, prefix.position);
         assert!(fixture.registry.existing_project(&project).await?.is_none());
         println!("CLAIM_LOST_GRANTED actual-frame={} attempt={} epoch={} start={:?}", dropped.frame.as_uuid(), dropped.attempt.as_uuid(), dropped.epoch.value(), dropped.start);
@@ -72,7 +72,7 @@ async fn claim_lost_granted_frame_replays_the_same_public_attempt_and_exact_gran
         let mut snapshot = store.snapshot().await?;
         assert_eq!(snapshot.record(&project.clone().into()).await?, Some(expected));
         snapshot.finish().await?;
-        assert!(matches!(store.writer_state().await?, fleet_sync_lease::WriterState::Writing {epoch} if epoch == dropped.epoch));
+        assert!(matches!(store.writer_state().await?, fleet_project_lease::WriterState::Writing {epoch} if epoch == dropped.epoch));
         println!("CLAIM_LOST_GRANTED same-attempt exact-grant same-epoch verified-prefix published");
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }.await;

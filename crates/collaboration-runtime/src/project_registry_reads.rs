@@ -44,8 +44,8 @@ impl ProjectStoreRegistry {
             let local = match &*owner {
                 ProjectRuntime::Writable { store, .. } => !matches!(
                     store.writer_state().await,
-                    Ok(fleet_sync_lease::WriterState::Superseded { .. }
-                        | fleet_sync_lease::WriterState::Released { .. })
+                    Ok(fleet_project_lease::WriterState::Superseded { .. }
+                        | fleet_project_lease::WriterState::Released { .. })
                 ),
                 _ => false,
             };

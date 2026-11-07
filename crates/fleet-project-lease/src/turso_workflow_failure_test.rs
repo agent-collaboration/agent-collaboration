@@ -6,7 +6,7 @@ use crate::{
     *,
 };
 use durable_steps::{AtomicStore, RequestKey, storage::TransactionScope};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_turso::Turso;
 use std::sync::atomic::Ordering;
 
@@ -134,7 +134,7 @@ async fn version_failed_withdrawal_stays_cancelling_records_failure_and_can_be_s
         )
         .await?;
         let request = HolderChangeRequest::Takeover {
-            reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+            reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
             attempt: new,
             database: database()?,
             preview,

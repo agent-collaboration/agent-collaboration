@@ -1,8 +1,8 @@
 //! One movable reaction owner serializes its durable cursor outside the transport loop.
 use super::{MachineNoticeReactions, MachineSessionEventOwners, SessionCompletion};
 use board_sync_protocol::BoardConsumerProtocol;
-use fleet_sync_protocol::{Notice, NoticePosition, SessionId};
-use fleet_sync_tokio_runner::SessionRequests;
+use fleet_protocol::{Notice, NoticePosition, SessionId};
+use fleet_session_client::SessionRequests;
 use std::{collections::VecDeque, io};
 use tokio::task::JoinSet;
 

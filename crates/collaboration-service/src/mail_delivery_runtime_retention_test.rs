@@ -1,7 +1,7 @@
 //! The real machine engine keeps custody records until their UUIDv7 creation deadline.
 use super::*;
 use crate::MailDeliveryRuntime;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DeliveryEnvelope, DeliveryStatus, ItemId, PeerId, StatusPublication, StatusVersion,
 };
 use std::sync::atomic::Ordering;

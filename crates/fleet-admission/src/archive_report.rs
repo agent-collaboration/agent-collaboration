@@ -1,6 +1,6 @@
 use crate::FleetSnapshot;
 use chrono::{DateTime, Utc};
-use fleet_sync_protocol::ReplicationPosition;
+use fleet_protocol::ReplicationPosition;
 use message_board::{BoardId, BoardState, ProjectId, Record, RecordRef, ServiceId, WorkspaceState};
 use serde::{Deserialize, Serialize};
 

@@ -1,8 +1,8 @@
 use crate::fleet_link_owner::FleetLinkPublisher;
 use crate::{AccessServiceToken, session_credentials::sensitive_header};
 use board_sync_protocol::FleetLinkDropReason;
-use fleet_sync_protocol::{AuthRefusal, CloseReason};
-use fleet_sync_session::{
+use fleet_protocol::{AuthRefusal, CloseReason};
+use fleet_session::{
     Bytes, ConnectFailure, ConnectionClosed, Endpoint, PeerCredential, SessionTransport,
     TransportConnection,
 };

@@ -325,7 +325,7 @@ async fn a_real_membership_end_prevents_its_held_follow_through_a_frozen_child()
                 .await
                 .unwrap();
             if let Some(outcome) = outcome
-                && !matches!(outcome, fleet_sync_protocol::RecipientOutcome::Held)
+                && !matches!(outcome, fleet_protocol::RecipientOutcome::Held)
             {
                 break outcome;
             }
@@ -380,10 +380,10 @@ async fn a_real_membership_end_prevents_its_held_follow_through_a_frozen_child()
     assert_eq!(child.expansion.target_item.as_str(), push_id.as_str());
     assert!(
         matches!(outcome.expect("membership end never reached SDK settlement"),
-        fleet_sync_protocol::RecipientOutcome::Prevented { cancel } if cancel == child.expansion.envelope.id())
+        fleet_protocol::RecipientOutcome::Prevented { cancel } if cancel == child.expansion.envelope.id())
     );
     assert!(matches!(child_outcomes.as_slice(),
-        [Some(fleet_sync_protocol::RecipientOutcome::Prevented { cancel })] if *cancel == child.expansion.envelope.id()));
+        [Some(fleet_protocol::RecipientOutcome::Prevented { cancel })] if *cancel == child.expansion.envelope.id()));
     assert_eq!(
         after.record.delivery_state,
         PushDeliveryState::Rejected,

@@ -2,8 +2,8 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::*;
 use durable_steps::{CallId, OperationId, StepName, Uuid};
-use fleet_sync_lease::{LeasePolicy, WriterState};
-use fleet_sync_protocol::{
+use fleet_project_lease::{LeasePolicy, WriterState};
+use fleet_protocol::{
     Epoch, MigrationState, PeerId, ReleaseAnswer, ReleaseRefusal, ReleaseRequest, TableName,
     TransferId,
 };
@@ -30,7 +30,7 @@ static OFFERED: LazyLock<Vec<Migration>> = LazyLock::new(|| {
         "UPDATE text_records SET label='must roll back'; INSERT INTO text_records VALUES('019eef00-0000-7000-8000-000000000001',42,'duplicate')".into_sql_str(), false));
     migrations
 });
-static TABLES: LazyLock<Result<Vec<TableName>, fleet_sync_protocol::TextValueError>> =
+static TABLES: LazyLock<Result<Vec<TableName>, fleet_protocol::TextValueError>> =
     LazyLock::new(|| {
         ["text_records", "composite_records", "real_records"]
             .into_iter()

@@ -7,7 +7,7 @@ use crate::intent_recovery_rows::{
 use crate::{NativeProjectSnapshot, PreparedProjectBundle};
 use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::{MailSender, NotificationSource};
-use fleet_sync_protocol::{DeliveryEnvelope, PeerId};
+use fleet_protocol::{DeliveryEnvelope, PeerId};
 use message_board::{
     ChangeOutcome, FeedContent, Identity, IntentState, Record, RecordId, RecordKind,
     RecordPlacement, RecordedActor, RouterComponent, ServiceId, StoredDecision,

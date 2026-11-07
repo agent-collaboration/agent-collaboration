@@ -2,7 +2,7 @@
 use super::support;
 
 use durable_steps::{AtomicStore, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use serde_json::{Value, json};
 use sqlx_core::query::query;
 use sqlx_turso::Turso;
@@ -38,7 +38,7 @@ async fn enqueue_cancel_at(fixture: &Fixture, id: u64) -> OutboxAdmission<Accept
                     .enqueue_cancel(
                         cancel_body(id),
                         peer(3),
-                        fleet_sync_delivery::Submitter::Machine(peer(1)),
+                        fleet_mail_delivery::Submitter::Machine(peer(1)),
                         SyncTime::from_unix_millis(0),
                         &TestConsumer,
                     )
@@ -113,7 +113,7 @@ async fn another_outbox_cancel_names_the_first_and_does_not_take_new_custody() {
                             .enqueue(
                                 original,
                                 peer(3),
-                                fleet_sync_delivery::Submitter::Machine(peer(1)),
+                                fleet_mail_delivery::Submitter::Machine(peer(1)),
                                 SyncTime::from_unix_millis(0),
                             )
                             .await

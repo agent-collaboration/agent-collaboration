@@ -1,7 +1,7 @@
 //! Select the immutable mail quota at the Host's lifetime boundary.
 use collaboration_runtime::MailDeliverySession;
 use collaboration_service::{MailDeliveryRuntime, MailPushDeliveryProps};
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use std::{io, path::Path};
 
 pub(super) fn construct(

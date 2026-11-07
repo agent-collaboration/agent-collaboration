@@ -147,7 +147,7 @@ impl<S: ReplicatedSchema> ReplicatedDatabase<S> {
 
     pub(crate) async fn with_drained_snapshot<T, F>(
         &self,
-        expected: Option<fleet_sync_receiver::SnapshotInstall>,
+        expected: Option<fleet_project_copy::SnapshotInstall>,
         publish: F,
     ) -> Result<T, PublishError>
     where
@@ -179,7 +179,7 @@ impl<S: ReplicatedSchema> ReplicatedDatabase<S> {
         };
         if !matches!(
             control.holder.writer_state(self.clock.now()),
-            Ok(fleet_sync_lease::WriterState::Seeding { .. })
+            Ok(fleet_project_lease::WriterState::Seeding { .. })
         ) {
             return Err(PublishError::NotSeeding);
         }

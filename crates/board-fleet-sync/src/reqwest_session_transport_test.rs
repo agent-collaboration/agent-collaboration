@@ -1,9 +1,9 @@
 use super::*;
-use fleet_sync_protocol::{ClientFrame, NoConsumer, SchemaSupport, ServerFrame};
-use fleet_sync_session::{
+use fleet_protocol::{ClientFrame, NoConsumer, SchemaSupport, ServerFrame};
+use fleet_session::{
     ClientEvent, ClientSessionState, SessionClient, SessionClientStore, StoreError,
 };
-use fleet_sync_tokio_runner::SessionPump;
+use fleet_session_client::SessionPump;
 use runtime_primitives::{Backoff, UuidV7Ids};
 use std::{
     pin::Pin,
@@ -264,7 +264,7 @@ impl runtime_primitives::Clock for PausedClock {
 
 #[tokio::test(start_paused = true)]
 async fn native_welcome_timeout_closes_a_socket_despite_regular_pongs() {
-    use fleet_sync_tokio_runner::{SessionLinkEventKind, SessionRecoveryPolicy};
+    use fleet_session_client::{SessionLinkEventKind, SessionRecoveryPolicy};
     let (connected, mut connections) = mpsc::unbounded_channel();
     let client = SessionClient::<_, _, NoConsumer>::load(
         ControlledTransport {

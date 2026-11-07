@@ -21,8 +21,8 @@ use durable_steps::{
     AtomicStore, BoxFuture, CallFailure, CallTarget, JournalScope, NotSentReason, StoreError,
     storage::{JournalStorage, TransactionScope},
 };
-use fleet_sync_delivery::{DeliveryLimits, Outbox};
-use fleet_sync_protocol::{DeliveryItemRef, ServerCall};
+use fleet_mail_delivery::{DeliveryLimits, Outbox};
+use fleet_protocol::{DeliveryItemRef, ServerCall};
 use message_board::RequestEffectsRequest;
 use runtime_primitives::WakeScheduler;
 use serde::{Deserialize, Serialize};
@@ -70,7 +70,7 @@ where
     pub fn fleet(
         host: Arc<Host>,
         io: Io,
-        config: fleet_sync_lease::RegistryConfig,
+        config: fleet_project_lease::RegistryConfig,
         delivery: crate::DeliveryConfig,
         holder_answer_timeout: std::time::Duration,
     ) -> Result<Self, StoreError> {
@@ -121,7 +121,7 @@ where
         >(PhantomData))?;
         engine
             .register(crate::machine_notice_delivery::MachineNoticeTask::<Host, Io>(PhantomData))?;
-        engine.register(fleet_sync_session::PublishSchemaSupport::<
+        engine.register(fleet_session::PublishSchemaSupport::<
             crate::session_store::CoreSessionStore<Host, Io>,
             Host::Database,
         >::default())?;
@@ -143,7 +143,7 @@ where
         engine.register(crate::fleet_mail_tasks::FleetMailRemoval::<
             crate::session_store::CoreSessionStore<Host, Io>,
             Host::Database,
-        >::new(fleet_sync_delivery::DeliveryHostRole::Relay))?;
+        >::new(fleet_mail_delivery::DeliveryHostRole::Relay))?;
         let engine =
             crate::fleet_task_engine::own_engine::<_, _, Host::Database, LeaseHook<Host, Io>>(
                 engine,
@@ -280,7 +280,7 @@ where
     #[cfg(feature = "conformance")]
     pub async fn conformance_mail_custody(
         &self,
-        item: fleet_sync_protocol::ItemId,
+        item: fleet_protocol::ItemId,
     ) -> Result<crate::FleetMailCustodyObservation, StoreError> {
         let ObjectWork::Fleet { host, .. } = &self.work else {
             return Err(wrong_face());
@@ -432,14 +432,14 @@ where
         if call.kind == crate::fleet_creation_calls::ReadProjectCreationDecision::KIND {
             return self.creation_decision_call(call).await;
         }
-        if call.kind == fleet_sync_lease::RetirementAdmission::KIND {
+        if call.kind == fleet_project_lease::RetirementAdmission::KIND {
             return self.retirement_gate_call(call).await;
         }
         if call.kind == crate::fleet_archive_calls::FleetArchiveReport::KIND {
             return self.archive_report_call(call).await;
         }
-        if call.kind == fleet_sync_lease::ClaimReservation::KIND
-            || call.kind == fleet_sync_lease::ClaimSettlement::KIND
+        if call.kind == fleet_project_lease::ClaimReservation::KIND
+            || call.kind == fleet_project_lease::ClaimSettlement::KIND
         {
             return self.claim_gate_call(call).await;
         }
@@ -598,7 +598,7 @@ where
     for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'row> &'row str: ColumnIndex<Driver::Row>,
 {
-    type Output = Option<fleet_sync_delivery::ResolvedPush<BoardDeliveryTypes>>;
+    type Output = Option<fleet_mail_delivery::ResolvedPush<BoardDeliveryTypes>>;
     type Effect = Infallible;
     fn run<'scope, 'transaction>(
         self,
@@ -613,7 +613,7 @@ where
             )
             .resolve_push(&self.reference, now)
             .await
-            .map_err(fleet_sync_delivery::delivery_rollback)?;
+            .map_err(fleet_mail_delivery::delivery_rollback)?;
             if let Some(item) = &item {
                 let recipient = item.item.recipient().peer;
                 if crate::machine_enrollment::admission::read_current_enrolled_machine(

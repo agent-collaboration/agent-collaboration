@@ -1,6 +1,6 @@
 use crate::{ReceiverError, StoreError};
-use fleet_sync_protocol::InstallId;
-use fleet_sync_protocol::{
+use fleet_protocol::InstallId;
+use fleet_protocol::{
     DatabaseId, HookRefusal, PageDigest, ReplicationPosition, SchemaIdentity, SnapshotCursor,
 };
 use serde::{Deserialize, Serialize};

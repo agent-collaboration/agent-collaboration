@@ -3,7 +3,7 @@ use super::tests::{TestResult, clock, renewal};
 use super::*;
 use crate::{WriteRefusal, writer_journal_tests::LocalHost, writer_release_tests::create};
 use durable_steps::{AtomicStore, StoreError};
-use fleet_sync_lease::{HolderError, WriterState};
+use fleet_project_lease::{HolderError, WriterState};
 use runtime_primitives::Clock;
 use std::sync::Arc;
 
@@ -296,7 +296,7 @@ async fn copy_refusal_uses_the_pre_send_start_and_cannot_replace_a_later_renewal
     clock.0.store(300, Ordering::SeqCst);
     resume.send(()).map_err(|_| "copy receiver closed")?;
     assert!(
-        matches!(sending.await?,Err(crate::SenderError::Refused {reason:fleet_sync_protocol::PieceRefusal::NotWriter {current:Some(epoch)},..}) if epoch==Epoch::new(1)?)
+        matches!(sending.await?,Err(crate::SenderError::Refused {reason:fleet_protocol::PieceRefusal::NotWriter {current:Some(epoch)},..}) if epoch==Epoch::new(1)?)
     );
     assert_eq!(
         fixture.database.writer_state().await?,

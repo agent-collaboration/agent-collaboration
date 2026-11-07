@@ -83,9 +83,9 @@ async fn directory_keeps_epoch_first_registry_version_across_late_repeated_and_r
     };
     assert_eq!(
         copy.as_of.position,
-        fleet_sync_protocol::ReplicationPosition::new(
-            fleet_sync_protocol::Epoch::new(9)?,
-            fleet_sync_protocol::CommitSequence::new(50)
+        fleet_protocol::ReplicationPosition::new(
+            fleet_protocol::Epoch::new(9)?,
+            fleet_protocol::CommitSequence::new(50)
         )
     );
     assert_eq!(copy.as_of.acked_at.unix_millis(), NOW - 1);

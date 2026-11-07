@@ -17,7 +17,7 @@ pub struct DirectoryPair {
     enrollment: Option<EnrolledTestMachine>,
     first_session: Option<PathBuf>,
     second_origin: ActorOrigin,
-    second_peer: fleet_sync_protocol::PeerId,
+    second_peer: fleet_protocol::PeerId,
 }
 
 impl DirectoryPair {

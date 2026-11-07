@@ -1,6 +1,6 @@
 use crate::{ApplyFollowUp, FollowUpInput, InstalledSnapshot};
 use durable_steps::{Admitted, AtomicStore, JournalScope, RequestKey, StartRefusal};
-use fleet_sync_protocol::{DatabaseId, ReplicationPosition};
+use fleet_protocol::{DatabaseId, ReplicationPosition};
 use serde::{Serialize, de::DeserializeOwned};
 
 /// Snapshot and piece producers may owe work at the same position in the retained journal.

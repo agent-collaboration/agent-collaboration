@@ -3,11 +3,11 @@ use super::super::native_sql::SqlHost;
 use super::{LOCAL_INBOX_BYTES, wire_charge};
 use collaboration_protocol::{DeliveryOutcome, DeliveryReceipt, PushId, PushRecordDraft};
 use durable_steps::{AtomicStore, StoreError, turso_store::TursoScope};
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliveryConsumer, DeliveryError, DeliveryLimits, GateDecision, Inbox, LocalDelivery,
     LocalItemAdmission, LocalOutcome, minimum_settlement_allowance,
 };
-use fleet_sync_protocol::{DeliveryItem, DeliveryItemRef, PeerId};
+use fleet_protocol::{DeliveryItem, DeliveryItemRef, PeerId};
 use interaction_storage::{InteractionAtomicStore, InteractionStore};
 use runtime_primitives::{CallId, SyncTime};
 use std::sync::Arc;
@@ -55,8 +55,8 @@ impl DeliveryConsumer<TursoScope<'_, SqlHost>> for PendingSeedConsumer {
 
     fn may_cancel(
         &self,
-        sender: &<RouterTypes as fleet_sync_protocol::DeliveryTypes>::Sender,
-        item: &fleet_sync_protocol::DeliveryHeader<RouterTypes>,
+        sender: &<RouterTypes as fleet_protocol::DeliveryTypes>::Sender,
+        item: &fleet_protocol::DeliveryHeader<RouterTypes>,
     ) -> bool {
         sender == item.sender()
     }

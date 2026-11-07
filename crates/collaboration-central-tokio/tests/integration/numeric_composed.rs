@@ -17,7 +17,7 @@ async fn exact_scalar_cells_and_receipts_survive_whole_native_server_reopen()
     let settings = || {
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(TokioSettings {
             delivery: collaboration_central_tokio::DeliveryConfig {
-                relay_peer: fleet_sync_protocol::PeerId::try_from(
+                relay_peer: fleet_protocol::PeerId::try_from(
                     "019f0000-0000-7000-8000-000000005240".to_owned(),
                 )?,
             },

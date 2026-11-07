@@ -1,7 +1,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use super::*;
 use crate::sender_test_fixture::{SenderFixture, TestResult};
-use fleet_sync_protocol::SqlValue;
+use fleet_protocol::SqlValue;
 use sqlx_core::{executor::Executor, query::query};
 
 async fn compare_page(
@@ -32,8 +32,8 @@ async fn compare_page(
             );
             assert_eq!(serde_json::to_vec(&actual)?, serde_json::to_vec(&expected)?);
             assert_eq!(
-                fleet_sync_protocol::PageDigest::of(&actual)?,
-                fleet_sync_protocol::PageDigest::of(&expected)?
+                fleet_protocol::PageDigest::of(&actual)?,
+                fleet_protocol::PageDigest::of(&expected)?
             );
             Ok(actual.next)
         }

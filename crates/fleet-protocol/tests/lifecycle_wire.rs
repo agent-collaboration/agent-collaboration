@@ -1,5 +1,5 @@
 #![allow(clippy::unwrap_used)]
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 
 #[test]
 fn lifecycle_refusals_keep_gate_details_and_validate_codes() {

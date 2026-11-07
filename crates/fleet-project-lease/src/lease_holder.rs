@@ -1,5 +1,5 @@
 use crate::{LeasePolicy, WriterState};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DatabaseId, Epoch, GateReason, LeaseRefusal, LeaseState, LeaseStatus, PeerId, RenewAnswer,
     ReplicationPosition, SyncTime, TransferId, WithdrawAnswer,
 };

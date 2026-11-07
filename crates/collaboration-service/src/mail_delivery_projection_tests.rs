@@ -13,8 +13,8 @@ use collaboration_protocol::{
     DeliveryOutcome, DeliveryReceipt, MessageSendResult, PushMessageSendResult,
 };
 use fixture::*;
-use fleet_sync_delivery::LocalOutcome;
-use fleet_sync_protocol::RecipientOutcome;
+use fleet_mail_delivery::LocalOutcome;
+use fleet_protocol::RecipientOutcome;
 use std::sync::atomic::Ordering;
 
 fn rejection(detail: String) -> DeliveryReceipt {
@@ -62,7 +62,7 @@ async fn outcome_and_recorded_answer_roll_back_together_and_replay_without_anoth
     let receipt = rejection("all original native detail and action retained".to_owned());
     fixture.push_answer(
         LocalOutcome::Refused {
-            reason: fleet_sync_protocol::DeliveryRefusal::RecipientUnknown,
+            reason: fleet_protocol::DeliveryRefusal::RecipientUnknown,
         },
         receipt.clone(),
     );
@@ -134,7 +134,7 @@ async fn oversized_real_task_answer_projects_uncertain_without_an_observation_or
     fixture.admit_local(draft).await.unwrap();
     fixture.push_answer(
         LocalOutcome::Refused {
-            reason: fleet_sync_protocol::DeliveryRefusal::RecipientUnknown,
+            reason: fleet_protocol::DeliveryRefusal::RecipientUnknown,
         },
         // Decision 939's declared bound, independent of the production constant.
         rejection("x".repeat(1024 * 1024 + 32 * 1024 + 1)),
@@ -353,7 +353,7 @@ async fn too_late_cancel_marks_target_without_rewriting_receipt_answer_or_first_
     assert!(matches!(
         fixture.report(cancel).await,
         Some(RecipientOutcome::TooLate {
-            at: fleet_sync_protocol::TooLateAt::Delivered,
+            at: fleet_protocol::TooLateAt::Delivered,
             ..
         })
     ));
@@ -447,9 +447,9 @@ async fn a_remote_reply_link_survives_shared_wire_native_receipt_and_owning_reop
     )
     .unwrap();
     let reply_digest = item.digest().clone();
-    let shared: fleet_sync_protocol::DeliveryItem<board_sync_protocol::BoardDeliveryTypes> =
+    let shared: fleet_protocol::DeliveryItem<board_sync_protocol::BoardDeliveryTypes> =
         serde_json::from_slice(&serde_json::to_vec(&item).unwrap()).unwrap();
-    let received: fleet_sync_protocol::DeliveryItem<collaboration_contracts::RouterDeliveryTypes> =
+    let received: fleet_protocol::DeliveryItem<collaboration_contracts::RouterDeliveryTypes> =
         serde_json::from_slice(&serde_json::to_vec(&shared).unwrap()).unwrap();
 
     // Act: the actual Inbox receipt invokes the real native receive hook in

@@ -1,12 +1,12 @@
 //! Holder-local mappings commit with the sender's capture assignment.
 use crate::{CapturedProjectChanges, ProjectStorageError, ProjectStore};
 use durable_steps::{Host, storage::TransactionScope};
-use fleet_sync_protocol::ReplicationPosition;
-use fleet_sync_receiver::{SnapshotInstall, SnapshotInstallState};
-use fleet_sync_writer::{
+use fleet_project_copy::{SnapshotInstall, SnapshotInstallState};
+use fleet_project_writer::{
     CapturedTransaction, MaintenanceTransaction, ReplicatedSchema, WriteTransaction,
     WriterJournalScope,
 };
+use fleet_protocol::ReplicationPosition;
 use message_board::{EpochNumber, FeedCursor, FeedPosition, HandoffSeq};
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]

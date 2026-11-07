@@ -1,7 +1,7 @@
 //! Public stopped Registry reads and exact owned-file removal/restoration.
 use super::*;
 use durable_steps::storage::TransactionScope;
-use fleet_sync_lease::EpochGrant;
+use fleet_project_lease::EpochGrant;
 use sqlx_core::connection::{ConnectOptions, Connection};
 use std::path::Path;
 
@@ -39,7 +39,7 @@ pub(super) async fn read_registry(
         let mut transaction = connection.begin().await?;
         let mut scope = HistoryRead(&mut transaction);
         let at: chrono::DateTime<chrono::Utc> = "2030-03-17T17:46:40Z".parse()?;
-        let lease = fleet_sync_lease::lease_status(
+        let lease = fleet_project_lease::lease_status(
             &mut scope,
             database,
             SyncTime::from_unix_millis(at.timestamp_millis()),
@@ -48,10 +48,10 @@ pub(super) async fn read_registry(
         let mut grants = Vec::new();
         for epoch in 1..=6 {
             grants.push(
-                fleet_sync_lease::epoch_holder(&mut scope, database, Epoch::new(epoch)?).await?,
+                fleet_project_lease::epoch_holder(&mut scope, database, Epoch::new(epoch)?).await?,
             );
         }
-        let outcome = fleet_sync_lease::holder_change_answer(&mut scope, request).await?;
+        let outcome = fleet_project_lease::holder_change_answer(&mut scope, request).await?;
         transaction.rollback().await?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(RegistryRead {
             lease,
@@ -77,7 +77,7 @@ pub(super) async fn read_absent_copy(
         .await?;
     let proof = async {
         let mut transaction = connection.begin().await?;
-        let status = fleet_sync_receiver::copy_status(&mut HistoryRead(&mut transaction)).await?;
+        let status = fleet_project_copy::copy_status(&mut HistoryRead(&mut transaction)).await?;
         transaction.rollback().await?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(status)
     }

@@ -1,6 +1,6 @@
 use super::session_fixture_contract::*;
-use fleet_sync_protocol::*;
-use fleet_sync_session::*;
+use fleet_protocol::*;
+use fleet_session::*;
 use sqlx_turso::{
     Turso, TursoConnectOptions, TursoConnection,
     sqlx::{ConnectOptions, Connection},
@@ -25,7 +25,7 @@ pub async fn open_and_migrate(path: &Path) -> TestResult<TursoConnection> {
             publications: Vec::new(),
             effects: Vec::new(),
         };
-        fleet_sync_session::validate_legacy_rows(&mut scope).await?;
+        fleet_session::validate_legacy_rows(&mut scope).await?;
     }
     let migrations = FIXTURE_MIGRATOR
         .iter()

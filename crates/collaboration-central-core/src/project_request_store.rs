@@ -4,8 +4,8 @@ use crate::{
     generated_project_requests as queries,
 };
 use durable_steps::{StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{ConnectionId, FrameId, PeerId};
-use fleet_sync_session::SessionKey;
+use fleet_protocol::{ConnectionId, FrameId, PeerId};
+use fleet_session::SessionKey;
 use message_board::ProjectId;
 use runtime_primitives::SyncTime;
 use serde::{Deserialize, Serialize};

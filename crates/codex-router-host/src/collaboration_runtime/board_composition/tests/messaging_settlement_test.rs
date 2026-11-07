@@ -2,8 +2,8 @@
 use super::*;
 use board_central_test_support::MailWireEvent;
 use collaboration_contracts::RouterDeliveryTypes;
-use fleet_sync_delivery::{DispatchOutcome, OutboxAdmission};
-use fleet_sync_protocol::{DeliveryItemRef, DeliveryRefusal, SubmitResult, Submitter};
+use fleet_mail_delivery::{DispatchOutcome, OutboxAdmission};
+use fleet_protocol::{DeliveryItemRef, DeliveryRefusal, SubmitResult, Submitter};
 
 #[tokio::test]
 #[expect(
@@ -27,7 +27,7 @@ async fn project_settle_uses_the_retained_local_project_owner_after_resolution_f
         )?;
         let wrong_digest = other.digest().clone();
         assert_ne!(original.digest(), &wrong_digest);
-        let local: fleet_sync_protocol::DeliveryItem<RouterDeliveryTypes> =
+        let local: fleet_protocol::DeliveryItem<RouterDeliveryTypes> =
             serde_json::from_value(serde_json::to_value(original)?)?;
         let runtime = fixture.successor.notifications.mail_runtime();
         let admitted = runtime

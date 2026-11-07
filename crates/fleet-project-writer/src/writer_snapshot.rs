@@ -6,10 +6,10 @@ use crate::{
     snapshot_schema::snapshot_schema,
     writer_file_record::read_file_record,
 };
-use fleet_sync_protocol::unit_budget::{
+use fleet_protocol::unit_budget::{
     MAX_UNIT_BYTES, TARGET_UNIT_BYTES, UnitTooLarge, measure_snapshot_unit,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DatabaseId, ReplicationPosition, SchemaIdentity, SnapshotCursor, SnapshotManifest,
     SnapshotPage, TableDigestBuilder, TableManifest, TableName,
 };
@@ -186,7 +186,7 @@ impl WriterSnapshot {
                 let key = key
                     .into_iter()
                     .map(|value| match value {
-                        fleet_sync_protocol::SqlValue::Text(value) => Ok(value),
+                        fleet_protocol::SqlValue::Text(value) => Ok(value),
                         _ => Err(OpenError::corrupt("snapshot.row_key")),
                     })
                     .collect::<Result<Vec<_>, _>>()?;
@@ -262,8 +262,8 @@ impl WriterSnapshot {
 fn measure_page(
     page: SnapshotPage,
 ) -> Result<
-    fleet_sync_protocol::unit_budget::MeasuredUnit<SnapshotPage>,
-    fleet_sync_protocol::unit_budget::UnitEncodingError,
+    fleet_protocol::unit_budget::MeasuredUnit<SnapshotPage>,
+    fleet_protocol::unit_budget::UnitEncodingError,
 > {
     #[cfg(test)]
     FULL_MEASURES.with(|count| count.set(count.get() + 1));
@@ -300,8 +300,8 @@ mod sizing_tests;
 async fn read_snapshot_batch(
     connection: &mut sqlx_turso::TursoConnection,
     table: &TableLayout,
-    after: &[fleet_sync_protocol::SqlValue],
-) -> Result<Vec<Vec<fleet_sync_protocol::SqlValue>>, OpenError> {
+    after: &[fleet_protocol::SqlValue],
+) -> Result<Vec<Vec<fleet_protocol::SqlValue>>, OpenError> {
     #[cfg(test)]
     READ_QUERIES.with(|count| count.set(count.get() + 1));
     read_rows(connection, table, after, SNAPSHOT_READ_BATCH_ROWS + 1).await

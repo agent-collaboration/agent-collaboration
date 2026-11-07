@@ -1,13 +1,13 @@
 //! Native snapshot publication and persisted stale authority, with registry policy as typed input.
 use super::*;
 use board_fleet_sync::{BOARD_LEASE_POLICY, BoardProjectSchema};
-use fleet_sync_protocol::{
+use fleet_native_writer::StagingStore;
+use fleet_project_copy::SnapshotInstall;
+use fleet_project_writer::{BootstrapGrant, ReplicatedDatabase};
+use fleet_protocol::{
     CopyRole, CopyStatus, Epoch, InstallId, LeaseRefusal, LeaseState, LeaseStatus, ReceiverId,
     RenewAnswer,
 };
-use fleet_sync_receiver::SnapshotInstall;
-use fleet_sync_tokio_runner::StagingStore;
-use fleet_sync_writer::{BootstrapGrant, ReplicatedDatabase};
 use message_board::MailItemRef;
 use runtime_primitives::{Clock, SystemClock};
 
@@ -41,9 +41,9 @@ impl KeptProjectPrefix {
                     holder: Some(PeerId::try_from(
                         "0192a1b2-c3d4-7000-8000-000000000001".to_owned(),
                     )?),
-                    start: fleet_sync_protocol::ReplicationPosition::new(
+                    start: fleet_protocol::ReplicationPosition::new(
                         install.position.epoch,
-                        fleet_sync_protocol::CommitSequence::new(0),
+                        fleet_protocol::CommitSequence::new(0),
                     ),
                     acked: install.position,
                     schema: install.schema.clone(),
@@ -129,7 +129,7 @@ impl KeptProjectPrefix {
             .ok_or("successor seed receipt")?;
         assert!(receipt.verified);
         assert_eq!(receipt.install, self.install);
-        let host = Arc::new(fleet_sync_tokio_runner::TokioHost::new(
+        let host = Arc::new(fleet_tokio_objects::TokioHost::new(
             Arc::new(NoSeedCalls),
             SystemClock,
         ));
@@ -233,7 +233,7 @@ impl KeptProjectPrefix {
         )
         .await?;
         assert!(
-            matches!(old.writer_state().await?, fleet_sync_lease::WriterState::Superseded { current } if current == epoch)
+            matches!(old.writer_state().await?, fleet_project_lease::WriterState::Superseded { current } if current == epoch)
         );
         fixture.registry.supersede_project(&fixture.project).await?;
         assert_eq!(
@@ -247,10 +247,10 @@ impl KeptProjectPrefix {
 }
 
 struct NoSeedCalls;
-impl fleet_sync_tokio_runner::CallRouter for NoSeedCalls {
+impl fleet_tokio_objects::CallRouter for NoSeedCalls {
     async fn dispatch(
         &self,
-        _: fleet_sync_tokio_runner::CallEnvelope,
+        _: fleet_tokio_objects::CallEnvelope,
     ) -> Result<serde_json::Value, durable_steps::CallFailure> {
         Err(durable_steps::CallFailure::AnswerLost)
     }

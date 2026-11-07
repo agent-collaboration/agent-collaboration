@@ -5,7 +5,7 @@ use crate::{
     step_driver::{StepCallback, StepResult},
 };
 use durable_steps::{AtomicStore, BoxFuture, storage::TransactionScope};
-use fleet_sync_protocol::{DatabaseId, TransferId};
+use fleet_protocol::{DatabaseId, TransferId};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,

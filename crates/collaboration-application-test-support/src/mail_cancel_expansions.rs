@@ -4,7 +4,7 @@ use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use collaboration_mail_protocol::{
     MailSender, NotificationBody, NotificationSource, RecordPointer, RootRange,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CancelBody, DeliveryCancel, DeliveryEnvelope, DeliveryItem, ItemId, PeerId, Recipient, SyncTime,
 };
 use message_board::{

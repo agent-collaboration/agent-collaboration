@@ -3,7 +3,7 @@ use crate::{FixtureResult, enrollment_edge::EnrollmentAccessEdge};
 use collaboration_central_conformance::{JwksFixtureServer, fixture_policy};
 use collaboration_central_core::{EnrollMachine, EnrollmentDecision};
 use collaboration_central_tokio::{TokioServer, TokioSettings};
-use fleet_sync_lease::{LeasePolicy, RegistryConfig};
+use fleet_project_lease::{LeasePolicy, RegistryConfig};
 use std::{path::Path, time::Duration};
 
 pub struct EnrollmentTestCentral {

@@ -1,4 +1,4 @@
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde_json::json;
 
 const ITEM: &str = "01900000-0000-7000-8000-000000000001";

@@ -1,5 +1,5 @@
 #![allow(clippy::unwrap_used)]
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 
 #[test]
 fn host_migration_version_round_trips_through_wire_and_the_single_retry_codec() {

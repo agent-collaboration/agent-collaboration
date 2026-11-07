@@ -1,7 +1,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::*;
-use fleet_sync_lease::{LeaseHolder, LeasePolicy, WriterState};
-use fleet_sync_protocol::*;
+use fleet_project_lease::{LeaseHolder, LeasePolicy, WriterState};
+use fleet_protocol::*;
 use sqlx_core::{executor::Executor, migrate::Migrator};
 use std::{sync::LazyLock, time::Duration};
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -232,7 +232,7 @@ async fn seed_grant_survives_reopen_and_late_gate_refusal_cannot_replace_it() ->
     assert!(matches!(
         writer.observe_registration(offered.clone(), started).await,
         Err(OpenError::Holder {
-            error: fleet_sync_lease::HolderError::LeaseMismatch
+            error: fleet_project_lease::HolderError::LeaseMismatch
         })
     ));
     assert_eq!(writer.snapshot().await?.position(), position);
@@ -260,7 +260,7 @@ async fn seed_grant_survives_reopen_and_late_gate_refusal_cannot_replace_it() ->
     assert!(matches!(
         reopened.reject_registration(reason).await,
         Err(OpenError::Holder {
-            error: fleet_sync_lease::HolderError::AlreadyGranted
+            error: fleet_project_lease::HolderError::AlreadyGranted
         })
     ));
     assert_eq!(reopened.snapshot().await?.position(), position);

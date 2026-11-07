@@ -1,7 +1,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::*;
-use fleet_sync_lease::LeasePolicy;
-use fleet_sync_protocol::{PeerId, SchemaIdentity, TableName};
+use fleet_project_lease::LeasePolicy;
+use fleet_protocol::{PeerId, SchemaIdentity, TableName};
 use sqlx_core::{
     migrate::{MigrationType, Migrator},
     sql_str::SqlSafeStr,
@@ -9,14 +9,14 @@ use sqlx_core::{
 use std::{sync::LazyLock, time::Duration};
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 static REGULAR: Migrator = sqlx::migrate!("./tests/fixtures/regular");
-static BASE_TABLES: LazyLock<Result<Vec<TableName>, fleet_sync_protocol::TextValueError>> =
+static BASE_TABLES: LazyLock<Result<Vec<TableName>, fleet_protocol::TextValueError>> =
     LazyLock::new(|| {
         ["text_records", "composite_records", "real_records"]
             .into_iter()
             .map(TableName::new)
             .collect()
     });
-static EXTENDED_TABLES: LazyLock<Result<Vec<TableName>, fleet_sync_protocol::TextValueError>> =
+static EXTENDED_TABLES: LazyLock<Result<Vec<TableName>, fleet_protocol::TextValueError>> =
     LazyLock::new(|| {
         [
             "text_records",
@@ -103,7 +103,7 @@ async fn bootstrap_checks_exact_prefix_including_schema_before_later_declared_ta
     let target = writer(&root.path().join("target.db"), schema(&LATER, true)?).await?;
     let before = images(target.path()).await?;
     target.validate_bootstrap_schema(&expected).await?;
-    let empty = SchemaIdentity::new(0, fleet_sync_protocol::schema_fingerprint(&[])?)?;
+    let empty = SchemaIdentity::new(0, fleet_protocol::schema_fingerprint(&[])?)?;
     target.validate_bootstrap_schema(&empty).await?;
     assert_eq!(images(target.path()).await?, before);
     assert_eq!(

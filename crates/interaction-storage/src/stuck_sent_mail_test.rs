@@ -57,8 +57,8 @@ async fn sent_age_counts_only_custody_older_than_five_minutes_and_uses_oldest_ha
 
 #[tokio::test]
 async fn valid_sdk_recovered_sent_without_handoff_is_outstanding_with_unknown_age() {
-    use fleet_sync_delivery::{OutboxStatusState, SubmitInput};
-    use fleet_sync_protocol::{DeliveryStatus, StatusVersion, SubmitResult};
+    use fleet_mail_delivery::{OutboxStatusState, SubmitInput};
+    use fleet_protocol::{DeliveryStatus, StatusVersion, SubmitResult};
     let directory = tempfile::tempdir().unwrap();
     let owner = Arc::new(
         InteractionStore::open(directory.path().join("interaction.sqlite"))

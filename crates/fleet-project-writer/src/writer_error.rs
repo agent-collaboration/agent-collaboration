@@ -1,4 +1,4 @@
-use fleet_sync_protocol::{Epoch, GateReason, SyncTime, TableName, TransferId};
+use fleet_protocol::{Epoch, GateReason, SyncTime, TableName, TransferId};
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum SchemaForm {
@@ -53,7 +53,7 @@ pub enum AdoptionHistory {
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum OpenError {
     #[error(transparent)]
-    UnitTooLarge(#[from] fleet_sync_protocol::unit_budget::UnitTooLarge),
+    UnitTooLarge(#[from] fleet_protocol::unit_budget::UnitTooLarge),
     #[error("the physical file is live in an incompatible access mode")]
     FileInUse,
     #[error("native library file paths must be lossless UTF-8")]
@@ -64,8 +64,8 @@ pub enum OpenError {
     RetainedFormatUnsupported,
     #[error("bootstrap schema differs: expected {expected:?}, found {found:?}")]
     BootstrapSchemaMismatch {
-        expected: fleet_sync_protocol::SchemaIdentity,
-        found: fleet_sync_protocol::SchemaIdentity,
+        expected: fleet_protocol::SchemaIdentity,
+        found: fleet_protocol::SchemaIdentity,
     },
     #[error("consumer has no migration prefix ending at bootstrap version {version}")]
     BootstrapVersionUnsupported { version: u64 },
@@ -73,7 +73,7 @@ pub enum OpenError {
     AdoptionHistory { reason: AdoptionHistory },
     #[error("writer authority refused: {error}")]
     Holder {
-        error: fleet_sync_lease::HolderError,
+        error: fleet_project_lease::HolderError,
     },
     #[error("captured transaction is invalid: {error}")]
     Capture { error: crate::CaptureError },

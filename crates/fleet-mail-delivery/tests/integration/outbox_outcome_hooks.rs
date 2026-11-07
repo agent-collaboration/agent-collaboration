@@ -1,7 +1,7 @@
 //! Every terminal writer must project once, including body-less recovery.
 use super::support::{network::PublishTask, outbox_projection::*, *};
 use durable_steps::{AtomicStore, Engine, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
 use std::sync::{Arc, atomic::Ordering};

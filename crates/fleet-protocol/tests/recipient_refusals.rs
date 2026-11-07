@@ -1,5 +1,5 @@
 #![allow(clippy::unwrap_used)]
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DeliveryRefusal, DeliveryStatus, MAX_RECIPIENT_REFUSAL_CODE_BYTES, RecipientRefusalCode,
 };
 use serde_json::json;
@@ -84,7 +84,7 @@ fn recipient_refusal_constructor_and_decode_enforce_the_same_byte_boundary() {
         code: RecipientRefusalCode::new("R".repeat(64)).unwrap(),
     };
     let conflict = DeliveryRefusal::ItemConflict {
-        existing: fleet_sync_protocol::ItemDigest::try_from("f".repeat(64)).unwrap(),
+        existing: fleet_protocol::ItemDigest::try_from("f".repeat(64)).unwrap(),
     };
     assert_eq!(serde_json::to_vec(&coded).unwrap().len(), 111);
     assert_eq!(serde_json::to_vec(&conflict).unwrap().len(), 111);

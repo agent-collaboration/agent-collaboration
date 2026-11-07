@@ -4,10 +4,11 @@ use board_fleet_sync::{BoardCaptureBookkeeping, BoardPieceAnnotation, BoardProje
 use board_sync_protocol::BoardConsumerProtocol;
 use collaboration_runtime::NativeProjectStore;
 use collaboration_runtime::ProjectStoreRegistry;
-use fleet_sync_lease::{HolderError, WriterState};
-use fleet_sync_protocol::{PieceRefusal, ReceiverId};
-use fleet_sync_tokio_runner::{NativeWriterRuntime, SessionRequests, WriterSessionCalls};
-use fleet_sync_writer::{ReplicationEvents, ReplicationSender, SenderError, SenderOptions};
+use fleet_native_writer::{NativeWriterRuntime, WriterSessionCalls};
+use fleet_project_lease::{HolderError, WriterState};
+use fleet_project_writer::{ReplicationEvents, ReplicationSender, SenderError, SenderOptions};
+use fleet_protocol::{PieceRefusal, ReceiverId};
+use fleet_session_client::SessionRequests;
 use message_board::ProjectId;
 use message_board_storage::ProjectStorageError;
 use std::{io, sync::Arc, time::Duration};
@@ -45,7 +46,7 @@ pub(super) struct ProjectWriter {
     lifecycle_signals: mpsc::UnboundedSender<ProjectLifecycleSignal>,
     #[cfg(any(test, feature = "runtime-test-support"))]
     replication_events: watch::Sender<
-        Option<mpsc::Sender<Result<ReplicationEvents, fleet_sync_writer::CopyFailure>>>,
+        Option<mpsc::Sender<Result<ReplicationEvents, fleet_project_writer::CopyFailure>>>,
     >,
 }
 
@@ -153,7 +154,7 @@ impl ProjectWriter {
         let sender = self.sender.clone();
         let sender_stopped = self.stop.subscribe();
         let (events, mut received) =
-            mpsc::channel::<Result<ReplicationEvents, fleet_sync_writer::CopyFailure>>(128);
+            mpsc::channel::<Result<ReplicationEvents, fleet_project_writer::CopyFailure>>(128);
         #[cfg(any(test, feature = "runtime-test-support"))]
         self.replication_events.send_replace(Some(events.clone()));
         let project = project.clone();
@@ -186,12 +187,11 @@ impl ProjectWriter {
                             .map_err(io::Error::other)?;
                         return Ok(());
                     }
-                    Err(ProjectStorageError::Writer(fleet_sync_writer::OpenError::Holder {
+                    Err(ProjectStorageError::Writer(fleet_project_writer::OpenError::Holder {
                         error: HolderError::RegistrationRejected { .. },
                     })) => return Ok(()), // The registration watcher owns orphaning.
-                    Err(ProjectStorageError::Writer(fleet_sync_writer::OpenError::Holder {
-                        error:
-                            HolderError::Refused(fleet_sync_protocol::LeaseRefusal::NotRegistered),
+                    Err(ProjectStorageError::Writer(fleet_project_writer::OpenError::Holder {
+                        error: HolderError::Refused(fleet_protocol::LeaseRefusal::NotRegistered),
                     })) => was_writable = false, // This project waits for the cutover import.
                     Err(error) => return Err(io::Error::other(error)),
                     Ok(_) => was_writable = false,

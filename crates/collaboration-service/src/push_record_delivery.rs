@@ -73,7 +73,7 @@ mod tests {
 
     async fn identity_without_native_work(
         owner: Arc<interaction_storage::InteractionStore>,
-        peer: fleet_sync_protocol::PeerId,
+        peer: fleet_protocol::PeerId,
         automation: Arc<Mutex<AutomationStore>>,
     ) -> ApplicationFixture {
         let router = Arc::new(SessionDeliveryRouter::new(Vec::new()));
@@ -129,7 +129,7 @@ mod tests {
             .await
             .unwrap(),
         );
-        let peer = fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).unwrap();
+        let peer = fleet_protocol::PeerId::new(uuid::Uuid::now_v7()).unwrap();
         // Native work is unavailable. The real SDK's missing registration is the
         // post-commit error; no synthetic MessageFailure or fake receipt is supplied.
         let identity = identity_without_native_work(owner.clone(), peer, automation.clone()).await;
@@ -225,7 +225,7 @@ mod tests {
             .await
             .expect("real SDK admission");
         fixture.push_answer(
-            fleet_sync_delivery::LocalOutcome::Delivered {
+            fleet_mail_delivery::LocalOutcome::Delivered {
                 acceptance: collaboration_mail_protocol::CarrierAcceptance::PeerMessageWritten,
             },
             DeliveryReceipt {

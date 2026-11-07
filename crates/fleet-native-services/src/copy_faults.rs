@@ -1,8 +1,8 @@
 //! Test-only controls on the actual copy owner; no substituted transaction or host.
 use crate::{ServiceConsumer, ServiceError, ServiceHandle};
 use durable_steps::{AtomicStore, storage::TransactionScope};
-use fleet_sync_protocol::{ConsumerProtocol, DatabaseId};
-use fleet_sync_session::PeerAuthenticator;
+use fleet_protocol::{ConsumerProtocol, DatabaseId};
+use fleet_session::PeerAuthenticator;
 use runtime_primitives::{Clock, WakeScheduler};
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
@@ -12,7 +12,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > ServiceHandle<P, C, A>
 {
@@ -88,18 +88,16 @@ impl<
     }
     pub async fn wait_holder_change_copy_for_test(
         &self,
-        attempt: fleet_sync_protocol::TransferId,
-    ) -> Result<fleet_sync_lease::HolderChangeView, ServiceError> {
+        attempt: fleet_protocol::TransferId,
+    ) -> Result<fleet_project_lease::HolderChangeView, ServiceError> {
         let mut changed = self.state.registry.subscribe_commits();
         loop {
             if let Some(view) = self.holder_change_view(attempt).await? {
                 if let Some(waiting) = &view.waiting {
                     let database = match &view.request {
-                        fleet_sync_protocol::HolderChangeRequest::Move { database, .. }
-                        | fleet_sync_protocol::HolderChangeRequest::Takeover { database, .. }
-                        | fleet_sync_protocol::HolderChangeRequest::Claim { database, .. } => {
-                            *database
-                        }
+                        fleet_protocol::HolderChangeRequest::Move { database, .. }
+                        | fleet_protocol::HolderChangeRequest::Takeover { database, .. }
+                        | fleet_protocol::HolderChangeRequest::Claim { database, .. } => *database,
                     };
                     let copy = self
                         .state
@@ -127,7 +125,7 @@ impl<
     pub async fn lose_copy_transaction_reply_for_test(
         &self,
         database: DatabaseId,
-        fault: fleet_sync_tokio_runner::TransactionReplyFault,
+        fault: fleet_tokio_objects::TransactionReplyFault,
     ) -> Result<(), ServiceError> {
         self.state
             .copy(database)

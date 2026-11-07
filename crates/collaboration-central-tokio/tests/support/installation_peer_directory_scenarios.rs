@@ -7,7 +7,7 @@ use board_sync_protocol::{
 use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, access_client_id, enroll_admitted_peer, owner_assertion,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, DeliveryEnvelope, DeliveryItem, DeliveryRefusal, FrameId, ItemId, OperationAnswer,
     OperationRequest, PeerId, ServerFrame, SubmitResult,
 };

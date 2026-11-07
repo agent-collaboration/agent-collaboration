@@ -4,7 +4,7 @@
 mod fixture;
 
 use fixture::{MeasurementResult, TursoScope};
-use fleet_sync_protocol::{SnapshotCursor, SnapshotPage, SnapshotRead, TableDigestBuilder};
+use fleet_protocol::{SnapshotCursor, SnapshotPage, SnapshotRead, TableDigestBuilder};
 use sqlx_core::connection::Connection;
 use std::{
     path::Path,
@@ -89,7 +89,7 @@ async fn main() -> MeasurementResult {
             loop {
                 let started = Instant::now();
                 let SnapshotRead::Page(page) =
-                    fleet_sync_receiver::snapshot_page(&mut TursoScope(&mut transaction), cursor)
+                    fleet_project_copy::snapshot_page(&mut TursoScope(&mut transaction), cursor)
                         .await?
                 else {
                     return Err("prepared copy moved".into());

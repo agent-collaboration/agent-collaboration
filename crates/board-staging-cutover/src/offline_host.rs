@@ -1,7 +1,7 @@
 //! One declared Host's existing singleton lock spans every offline cutover effect.
 use codex_router_host::{HostCoordinationPaths, HostInstanceLock, InstanceAcquireError};
 use collaboration_protocol::UuidIdentity;
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 

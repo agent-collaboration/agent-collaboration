@@ -4,7 +4,7 @@
 use crate::{turso_rule_fixture::*, *};
 use durable_steps::storage::TransactionScope;
 use either::Either;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use futures_util::{
     future::BoxFuture,
     stream::{self, BoxStream},

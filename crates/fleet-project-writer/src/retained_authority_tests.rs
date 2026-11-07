@@ -7,7 +7,7 @@ use crate::{
     *,
 };
 use durable_steps::Uuid;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     executor::Executor,
@@ -21,10 +21,10 @@ async fn grant_sender(fixture: &SenderFixture) -> TestResult {
     let holder = fixture.database.control.lock().await.holder.peer();
     // The sender fixture grants only its in-memory holder. Restore its initial
     // provisional state before exercising the public, persisted grant path.
-    fixture.database.control.lock().await.holder = fleet_sync_lease::LeaseHolder::provisional(
+    fixture.database.control.lock().await.holder = fleet_project_lease::LeaseHolder::provisional(
         fixture.database.database(),
         holder,
-        fleet_sync_lease::LeasePolicy {
+        fleet_project_lease::LeasePolicy {
             lease_duration: Duration::from_secs(600),
             renew_interval: Duration::from_secs(10),
         },
@@ -58,11 +58,11 @@ async fn fence_authority(fixture: &SenderFixture) -> TestResult<ReplicationPosit
     let connection = owner.as_mut().ok_or("closed copy")?;
     let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
     let CopyStatusAnswer::Status(status) =
-        fleet_sync_receiver::copy_status(&mut WriterScope(&mut transaction)).await?
+        fleet_project_copy::copy_status(&mut WriterScope(&mut transaction)).await?
     else {
         return Err("missing copy status".into());
     };
-    let result = fleet_sync_receiver::fence(
+    let result = fleet_project_copy::fence(
         &mut WriterScope(&mut transaction),
         &FenceRequest {
             database: fixture.database.database(),

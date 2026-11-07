@@ -11,7 +11,7 @@ use crate::{
 use durable_steps::{
     AtomicStore, CallFailure, CallTarget, NotSentReason, storage::TransactionScope,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CopyStatusAnswer, DatabaseId, PageDigest, ReplicationAnswer, ReplicationPosition, RequestId,
     SeedAnswer, SeedAttemptId, SeedComplete, SeedPage, SnapshotPage,
 };

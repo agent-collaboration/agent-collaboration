@@ -4,7 +4,7 @@ use crate::{
     delivery_storage_rows::*,
     stored_outcome::*,
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde::de::DeserializeOwned;
 
 pub(crate) trait PublicationRow {

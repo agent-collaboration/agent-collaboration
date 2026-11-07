@@ -1,5 +1,5 @@
 use durable_steps::{CallId, OperationFailure};
-use fleet_sync_protocol::{DatabaseId, GateAnswer, HolderChangeRequest, PeerId, SettleOutcome};
+use fleet_protocol::{DatabaseId, GateAnswer, HolderChangeRequest, PeerId, SettleOutcome};
 use std::future::Future;
 
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
@@ -13,7 +13,7 @@ pub enum LeaseError {
     #[error("registry revision exhausted for {database:?} at {epoch:?}")]
     RevisionExhausted {
         database: DatabaseId,
-        epoch: fleet_sync_protocol::Epoch,
+        epoch: fleet_protocol::Epoch,
     },
     #[error("database is retired")]
     Retired,

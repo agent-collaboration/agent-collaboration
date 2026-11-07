@@ -1,33 +1,35 @@
 use crate::{
-    LocalStateSelection, StagingError, StagingStore, TokioObject, carry_local_state,
-    native_carry_schema::FileScope, native_publish::checkpoint_for_publish,
-    staging_store::open_stage,
+    LocalStateSelection, StagingError, StagingStore, carry_local_state,
+    native_carry_schema::FileScope, staging_store::open_stage,
 };
 use durable_steps::Host;
-use fleet_sync_receiver::{
+use fleet_project_copy::{
     SNAPSHOT_REPLACED_TABLES, SnapshotInstall, SnapshotInstallError, SnapshotInstallRules,
 };
+use fleet_tokio_objects::{TokioObject, native_publish::checkpoint_for_publish};
 use sqlx_core::connection::Connection;
 use std::path::Path;
 
 impl StagingStore {
-    pub async fn publish_writer<S: fleet_sync_writer::ReplicatedSchema>(
+    pub async fn publish_writer<S: fleet_project_writer::ReplicatedSchema>(
         &self,
         install: &SnapshotInstall,
-        target: &fleet_sync_writer::ReplicatedDatabase<S>,
+        target: &fleet_project_writer::ReplicatedDatabase<S>,
     ) -> Result<(), StagingError> {
         let _owner = self.lock(install).await?;
         let before = target
             .replicated_objects()
             .await
-            .map_err(fleet_sync_writer::BootstrapError::from)?;
+            .map_err(fleet_project_writer::BootstrapError::from)?;
         target
             .publish_bootstrap(&self.path(install), install, move |live, staged| {
                 Box::pin(async move {
                     carry_writer_local(live, staged, before)
                         .await
                         .map_err(|error| {
-                            crate::PublishError::Storage(durable_steps::StoreError::backend(error))
+                            fleet_tokio_objects::PublishError::Storage(
+                                durable_steps::StoreError::backend(error),
+                            )
                         })
                 })
             })

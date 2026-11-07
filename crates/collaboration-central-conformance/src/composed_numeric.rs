@@ -2,7 +2,7 @@
 
 use crate::{AdmittedPeerSocket, ConformanceClient, ConformanceResult, enroll_admitted_peer};
 use board_sync_protocol::{BoardAnnotation, BoardConsumerProtocol};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, CommitSequence, DatabaseId, Epoch, FrameId, OperationAnswer, OperationRequest,
     PeerId, Piece, PieceContents, ReplicatedTransaction, ReplicationAnswer, ReplicationPosition,
     ReplicationRequest, RowChange, ServerFrame, SnapshotCursor, SnapshotRead, SqlValue,
@@ -39,7 +39,7 @@ impl ComposedNumericScenario {
                     "database":database,"epoch":1,"holder":peer,"origin":{"kind":"empty"}
                 }}
             })).send().await?.error_for_status()?.json().await?;
-            if created != json!({"kind":"completed","value":{"kind":"created","value":fleet_sync_protocol::CreateCopyAnswer::CopyCreated}}) {
+            if created != json!({"kind":"completed","value":{"kind":"created","value":fleet_protocol::CreateCopyAnswer::CopyCreated}}) {
                 return Err(format!("numeric copy was not created: {created}").into());
             }
             let schema = piece(database, 0, 1, vec![ReplicatedTransaction::SchemaStep {

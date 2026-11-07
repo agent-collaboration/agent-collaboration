@@ -1,5 +1,5 @@
 #![allow(clippy::unwrap_used)]
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 
 #[test]
 fn release_refusal_and_fence_results_keep_their_typed_details() {

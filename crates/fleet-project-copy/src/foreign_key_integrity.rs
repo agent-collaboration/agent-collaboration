@@ -1,13 +1,13 @@
 //! Final relational integrity across replay order, on both SQL backends.
+use crate::checked_queries;
 use crate::{
     BoundStatement, ReceiverError, StoreError,
     bound_sql::quoted_identifier,
-    checked_queries,
     row_apply::primary_columns,
     schema_reads::{SchemaReads, required_text},
 };
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::TableName;
+use fleet_protocol::TableName;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,

@@ -3,7 +3,7 @@ use crate::{
     custody_record::*, delivery_storage_rows as queries, inbox_record::*,
 };
 use durable_steps::{JournalScope, Task, storage::TransactionScope};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,

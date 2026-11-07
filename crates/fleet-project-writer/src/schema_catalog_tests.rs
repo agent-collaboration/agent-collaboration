@@ -1,8 +1,8 @@
 #![allow(clippy::panic_in_result_fn)]
 
 use crate::*;
-use fleet_sync_lease::LeasePolicy;
-use fleet_sync_protocol::{PeerId, TableName};
+use fleet_project_lease::LeasePolicy;
+use fleet_protocol::{PeerId, TableName};
 use sqlx_core::{
     migrate::MigrationType,
     row::Row,
@@ -18,7 +18,7 @@ use std::{
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
-pub(crate) static TABLES: LazyLock<Result<Vec<TableName>, fleet_sync_protocol::TextValueError>> =
+pub(crate) static TABLES: LazyLock<Result<Vec<TableName>, fleet_protocol::TextValueError>> =
     LazyLock::new(|| Ok(vec![TableName::new("records")?]));
 static INITIAL: LazyLock<Vec<Migration>> = LazyLock::new(|| {
     vec![Migration::new(

@@ -1,9 +1,9 @@
 //! Observe actual consumer submissions and pause an actual receiver commit.
 use board_sync_protocol::BoardDeliveryTypes;
-use fleet_sync_protocol::{
+use fleet_project_copy::{AppliedPiece, HookError};
+use fleet_protocol::{
     DeliveryEnvelope, DeliveryItem, Epoch, ItemId, ReplicatedTransaction, RowChange,
 };
-use fleet_sync_receiver::{AppliedPiece, HookError};
 use std::io;
 use tokio::sync::{Mutex, Notify, oneshot};
 
@@ -14,7 +14,7 @@ struct PieceGate {
 impl PieceGate {
     async fn wait_for_release(self) -> Result<(), HookError> {
         let failed = || {
-            HookError::Storage(fleet_sync_receiver::StoreError::Unavailable {
+            HookError::Storage(fleet_project_copy::StoreError::Unavailable {
                 message: "native receiver piece gate closed".to_owned(),
             })
         };
@@ -91,7 +91,7 @@ impl NotificationProbe {
 
     pub async fn record_submission(
         &self,
-        item: &fleet_sync_protocol::DeliveryEnvelope<board_sync_protocol::BoardDeliveryTypes>,
+        item: &fleet_protocol::DeliveryEnvelope<board_sync_protocol::BoardDeliveryTypes>,
         epoch: Option<Epoch>,
     ) -> Result<(), serde_json::Error> {
         let encoded = serde_json::to_vec(item)?;

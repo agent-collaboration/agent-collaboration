@@ -6,7 +6,7 @@ use collaboration_central_conformance::{
 };
 use durable_steps::Uuid;
 use fleet_admission::FleetOperation;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientAnswer, ClientFrame, CommitSequence, DatabaseId, Epoch, FrameId, LeaseAnswer,
     LeaseRequest, OperationAnswer, OperationRequest, PeerId, PieceRefusal, ReleaseAnswer,
     ReleaseRequest, RenewAnswer, RenewRequest, ReplicationAnswer, ReplicationPosition,

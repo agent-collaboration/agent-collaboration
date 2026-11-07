@@ -7,7 +7,7 @@ use crate::{
 };
 use board_sync_protocol::BoardAnnotation;
 use durable_steps::StoreError;
-use fleet_sync_protocol::{CommitSequence, DatabaseId, Epoch, ReplicationPosition, SyncTime};
+use fleet_protocol::{CommitSequence, DatabaseId, Epoch, ReplicationPosition, SyncTime};
 use message_board::RecordTime;
 
 pub(crate) fn decode(

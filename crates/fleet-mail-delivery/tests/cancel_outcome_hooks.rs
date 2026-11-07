@@ -6,7 +6,7 @@ mod projection;
 mod support;
 
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use local_cancellation::{enqueue_original, outcome, snapshot};
 use projection::{
     ProjectionConsumer, enqueue_projection_attempt, prepare_projection_table, projection_engine,

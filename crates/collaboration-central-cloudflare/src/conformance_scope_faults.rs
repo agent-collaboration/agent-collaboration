@@ -6,7 +6,7 @@ use durable_steps::{
     AtomicStore, BoxFuture, Host, ReborrowScope, StoreError,
     durable_object_store::DurableObjectStore, storage::TransactionScope,
 };
-use fleet_sync_protocol::CopyUnavailableReason;
+use fleet_protocol::CopyUnavailableReason;
 use sqlx_durable_object::{Do, DoExecutor};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -128,7 +128,7 @@ async fn total_changes<'executor>(executor: impl DoExecutor<'executor>) -> Resul
 pub(crate) async fn session_barrier<H: Host>(
     host: &crate::CloudflareStorageHost<H>,
     faults: &RuntimeFaults,
-    connection: fleet_sync_protocol::ConnectionId,
+    connection: fleet_protocol::ConnectionId,
 ) -> worker::Result<()> {
     use collaboration_central_core::ObjectHost;
     faults

@@ -3,8 +3,8 @@ use crate::{
     writer_file_record::{read_file_record, write_file_record},
     writer_release_record::restore_releases,
 };
-use fleet_sync_lease::{CurrentLeaseRelation, LeaseHolder, current_lease_relation};
-use fleet_sync_protocol::{
+use fleet_project_lease::{CurrentLeaseRelation, LeaseHolder, current_lease_relation};
+use fleet_protocol::{
     DatabaseId, Epoch, GateReason, LeaseRefusal, PeerId, RenewAnswer, RenewResult, SyncTime,
 };
 use serde::{Deserialize, Serialize};
@@ -213,7 +213,7 @@ impl AuthorityObservation {
             && current.database != database
         {
             return Err(OpenError::Holder {
-                error: fleet_sync_lease::HolderError::LeaseMismatch,
+                error: fleet_project_lease::HolderError::LeaseMismatch,
             });
         }
         Ok(())
@@ -323,9 +323,7 @@ pub(crate) async fn restore_authority(
 }
 
 impl<S: ReplicatedSchema> ReplicatedDatabase<S> {
-    pub async fn begin_seeding(
-        &self,
-    ) -> Result<fleet_sync_protocol::ReplicationPosition, OpenError> {
+    pub async fn begin_seeding(&self) -> Result<fleet_protocol::ReplicationPosition, OpenError> {
         let mut control = self.control.lock().await;
         let mut connection = self.maintenance.acquire().await?;
         let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
@@ -340,7 +338,7 @@ impl<S: ReplicatedSchema> ReplicatedDatabase<S> {
     }
     pub async fn observe_registration(
         &self,
-        lease: fleet_sync_protocol::LeaseStatus,
+        lease: fleet_protocol::LeaseStatus,
         started: SyncTime,
     ) -> Result<(), OpenError> {
         let mut control = self.control.lock().await;

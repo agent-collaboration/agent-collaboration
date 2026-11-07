@@ -1,7 +1,7 @@
 use super::*;
 use collaboration_central_tokio::SocketCommand;
 use durable_steps::{AtomicStore, storage::TransactionScope};
-use fleet_sync_session::{ConnectionBinding, VerifiedPeer};
+use fleet_session::{ConnectionBinding, VerifiedPeer};
 use runtime_primitives::{Clock, SyncTime};
 use sqlx_core::{query::query, row::Row};
 use std::time::Duration;
@@ -65,7 +65,7 @@ pub fn notice(position: u64) -> Result<BoardNotice, TestError> {
         project: "019f0000-0000-7000-8000-000000000003"
             .to_owned()
             .try_into()?,
-        epoch: fleet_sync_protocol::Epoch::new(position)?,
+        epoch: fleet_protocol::Epoch::new(position)?,
     })
 }
 pub fn invocation(kind: &BoardNotice) -> Result<Vec<u8>, TestError> {

@@ -1,5 +1,5 @@
 use crate::{OpenError, SchemaForm};
-use fleet_sync_protocol::TableName;
+use fleet_protocol::TableName;
 use sqlx_core::migrate::Migration;
 use std::collections::{BTreeMap, BTreeSet};
 use turso_parser::{

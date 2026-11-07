@@ -379,7 +379,7 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
             SelectedWriterFile {
                 project: source.selected.project.clone(),
                 peer: fixture.peer,
-                file_epoch: fleet_sync_protocol::Epoch::new(2)?,
+                file_epoch: fleet_protocol::Epoch::new(2)?,
             },
         )
         .await?;
@@ -408,7 +408,7 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
                     .tables
                     .first_mut()
                     .ok_or("source tables absent")?
-                    .digest = fleet_sync_protocol::TableDigest::new("0".repeat(64))?;
+                    .digest = fleet_protocol::TableDigest::new("0".repeat(64))?;
                 assert!(matches!(
                     installed.verify_replicated_tables(&altered),
                     Err(NativeSourceError::ReplicatedTablesMismatch)
@@ -448,7 +448,7 @@ async fn cold_claim_case(contents: SourceContents) -> TestResult {
                 SelectedWriterFile {
                     project: source.selected.project.clone(),
                     peer: fixture.peer,
-                    file_epoch: fleet_sync_protocol::Epoch::new(2)?,
+                    file_epoch: fleet_protocol::Epoch::new(2)?,
                 },
             )
             .await?;

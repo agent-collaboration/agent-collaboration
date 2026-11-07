@@ -64,7 +64,7 @@ impl RuleMachine {
         directory_name: &str,
         peer: &str,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let peer = fleet_sync_protocol::PeerId::try_from(peer.to_owned())?;
+        let peer = fleet_protocol::PeerId::try_from(peer.to_owned())?;
         let machine = holder.central.additional_machine(origin, peer).await?;
         let root = holder.directory.path().join(directory_name);
         let identity = MachineIdentity::new(

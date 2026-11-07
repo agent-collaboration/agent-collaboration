@@ -1,8 +1,8 @@
 //! Test-only holds and observations at the native session-to-registry boundary.
 use crate::{ServiceConsumer, ServiceError, ServiceHandle};
 use durable_steps::{StoreError, storage::TransactionScope};
-use fleet_sync_protocol::*;
-use fleet_sync_session::PeerAuthenticator;
+use fleet_protocol::*;
+use fleet_session::PeerAuthenticator;
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
 use std::sync::Arc;
@@ -75,7 +75,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > ServiceHandle<P, C, A>
 {
@@ -100,7 +100,7 @@ impl<
             .registry
             .rule_transaction(move |scope| {
                 Box::pin(async move {
-                    fleet_sync_lease::accepted_schema_support(scope, peer)
+                    fleet_project_lease::accepted_schema_support(scope, peer)
                         .await
                         .map_err(StoreError::backend)
                 })
@@ -128,7 +128,7 @@ impl<
     pub async fn schema_publication_snapshot(
         &self,
         report: &ReportSchemaSupport,
-    ) -> Result<fleet_sync_tokio_runner::SchemaPublicationSnapshot, ServiceError> {
+    ) -> Result<fleet_native_session::SchemaPublicationSnapshot, ServiceError> {
         self.sessions
             .schema_publication_snapshot(report)
             .await

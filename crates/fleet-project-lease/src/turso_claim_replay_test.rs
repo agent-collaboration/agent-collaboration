@@ -2,7 +2,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::{turso_copy_fixture::*, turso_registry_fixture::*, *};
 use durable_steps::{OperationState, Uuid};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_turso::Turso;
 use std::sync::{Arc, atomic::Ordering};
 
@@ -309,11 +309,11 @@ async fn claim_repairs_above_a_restored_imported_copys_fence_before_granting() -
                 epoch: Epoch::new(1)?,
                 acked: position,
             },
-            target_schema: Some(fleet_sync_protocol::SchemaSupport { max_version: 10 }),
+            target_schema: Some(fleet_protocol::SchemaSupport { max_version: 10 }),
             holder: peer(9)?,
         };
         assert!(matches!(
-            fleet_sync_receiver::fence(&mut CopyScope(&mut transaction), &request).await?,
+            fleet_project_copy::fence(&mut CopyScope(&mut transaction), &request).await?,
             FenceResult::Fenced { .. }
         ));
         transaction.commit().await?;

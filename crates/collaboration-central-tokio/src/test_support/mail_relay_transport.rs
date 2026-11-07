@@ -2,7 +2,7 @@
 use board_sync_protocol::BoardConsumerProtocol;
 use collaboration_central_conformance::ConformanceResult;
 use durable_steps::Uuid;
-use fleet_sync_protocol::{FrameId, ServerCall, ServerFrame, ServerRequest};
+use fleet_protocol::{FrameId, ServerCall, ServerFrame, ServerRequest};
 use futures_util::{SinkExt, StreamExt};
 use reqwest_websocket::{Message, WebSocket};
 use serde_json::{Value, json};

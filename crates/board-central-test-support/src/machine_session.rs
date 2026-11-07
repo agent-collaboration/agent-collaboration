@@ -2,9 +2,9 @@
 use crate::{BOUND, FixtureResult, TestCentral};
 use board_fleet_sync::{BoardProjectSchema, MachineSessionStore, ReqwestSessionTransport};
 use board_sync_protocol::BoardConsumerProtocol;
-use fleet_sync_protocol::SchemaSupport;
-use fleet_sync_session::{ClientEvent, SessionClient};
-use fleet_sync_tokio_runner::{SessionPump, SessionRequests};
+use fleet_protocol::SchemaSupport;
+use fleet_session::{ClientEvent, SessionClient};
+use fleet_session_client::{SessionPump, SessionRequests};
 use runtime_primitives::{Backoff, UuidV7Ids};
 use std::{path::Path, time::Duration};
 use tokio::{

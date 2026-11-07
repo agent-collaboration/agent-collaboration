@@ -8,7 +8,7 @@ use collaboration_central_conformance::{ConformanceClient, JwksFixtureServer};
 use collaboration_central_core::{
     AdminImportRefusal, AdminProjectImportAnswer, AdminProjectImportRequest,
 };
-use fleet_sync_protocol::{DatabaseId, PageDigest, RequestId, SeedPageAnswer, SnapshotPage};
+use fleet_protocol::{DatabaseId, PageDigest, RequestId, SeedPageAnswer, SnapshotPage};
 use support::*;
 
 async fn request(

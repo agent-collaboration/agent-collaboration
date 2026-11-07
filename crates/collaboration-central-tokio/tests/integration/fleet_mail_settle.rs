@@ -1,7 +1,7 @@
 //! Sender settlement runs through admitted sessions and the actual Fleet outbox.
 use super::{composed_fleet_fixture::*, fleet_mail_dispatch::*};
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, DeliveryAnswer, DeliveryRequest, DeliveryStatus, FrameId, ItemDigest, ItemId,
     OperationAnswer, OperationRequest, ServerFrame, SettleResult, StatusVersion, Submitter,
 };
@@ -12,8 +12,7 @@ pub(super) async fn settle(
     socket: &mut Socket,
     item: ItemId,
     digest: ItemDigest,
-) -> TestResult<SettleResult<<BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Acceptance>>
-{
+) -> TestResult<SettleResult<<BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Acceptance>> {
     let claim = Submitter::Machine(socket.binding.peer);
     match settle_answer(fixture, socket, claim, item, digest).await? {
         DeliveryAnswer::Settle(answer) => Ok(answer),
@@ -78,7 +77,7 @@ async fn first_settlement_binds_its_sender_and_digest_and_reopens_as_one_termina
     let mut attacker = Socket::open(&fixture, C, SERVICE_C).await?;
     let item = envelope(B, SERVICE_B)?;
     assert!(
-        matches!(settle(&fixture,&mut sender,item.id(),item.digest().clone()).await?,SettleResult::Settled {reason:fleet_sync_protocol::DeliveryFailureKind::CustodyUnresolvable,version} if version==StatusVersion::new(1))
+        matches!(settle(&fixture,&mut sender,item.id(),item.digest().clone()).await?,SettleResult::Settled {reason:fleet_protocol::DeliveryFailureKind::CustodyUnresolvable,version} if version==StatusVersion::new(1))
     );
     assert_eq!(
         custody(&fixture, item.id()).await?,
@@ -98,7 +97,7 @@ async fn first_settlement_binds_its_sender_and_digest_and_reopens_as_one_termina
     fixture.io.advance(1_000);
     let replay = settle(&fixture, &mut sender, item.id(), item.digest().clone()).await?;
     assert!(
-        matches!(&replay,SettleResult::Replayed {status:DeliveryStatus::Refused {reason:fleet_sync_protocol::DeliveryRefusal::ProcessingFailed {kind:fleet_sync_protocol::DeliveryFailureKind::CustodyUnresolvable}},version,..} if *version==StatusVersion::new(1))
+        matches!(&replay,SettleResult::Replayed {status:DeliveryStatus::Refused {reason:fleet_protocol::DeliveryRefusal::ProcessingFailed {kind:fleet_protocol::DeliveryFailureKind::CustodyUnresolvable}},version,..} if *version==StatusVersion::new(1))
     );
     drop((sender, attacker));
     fixture.close().await?;

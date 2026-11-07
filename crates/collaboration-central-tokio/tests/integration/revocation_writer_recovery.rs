@@ -16,15 +16,15 @@ use durable_steps::{
     AtomicStore, CallFailure, CallId, Engine, OperationState, StoreError,
     storage::{JournalStorage, StepState},
 };
-use fleet_sync_protocol::{PeerId, ReceiverId, SchemaSupport};
-use fleet_sync_session::{ClientEvent, Endpoint, PeerCredential, SessionClient};
-use fleet_sync_tokio_runner::{
-    CallEnvelope, CallRouter, SessionPump, TokioHost, TokioRunner, WriterSessionCalls,
-};
-use fleet_sync_writer::{
+use fleet_native_writer::WriterSessionCalls;
+use fleet_project_writer::{
     RegisterDatabase, RenewLease, ReplicatedDatabase, SeedCopy, WriterOptions,
     WriterRegistrationOutcome,
 };
+use fleet_protocol::{PeerId, ReceiverId, SchemaSupport};
+use fleet_session::{ClientEvent, Endpoint, PeerCredential, SessionClient};
+use fleet_session_client::SessionPump;
+use fleet_tokio_objects::{CallEnvelope, CallRouter, TokioHost, TokioRunner};
 use runtime_primitives::{Backoff, Clock, SyncTime, UuidV7Ids};
 use std::{
     sync::{
@@ -61,8 +61,10 @@ impl CallRouter for ObservedCalls {
         if let Some(hold) = &self.hold
             && call.kind == "fleet.writer-seed-file"
             && matches!(
-                serde_json::from_value::<fleet_sync_writer::SeedFileRequest>(call.request.clone()),
-                Ok(fleet_sync_writer::SeedFileRequest::Open { .. })
+                serde_json::from_value::<fleet_project_writer::SeedFileRequest>(
+                    call.request.clone()
+                ),
+                Ok(fleet_project_writer::SeedFileRequest::Open { .. })
             )
             && hold.armed.swap(false, Ordering::SeqCst)
         {
@@ -78,7 +80,7 @@ impl CallRouter for ObservedCalls {
     }
 }
 type WriterHost = TokioHost<ObservedCalls, WriterClock>;
-type WriterStore = fleet_sync_writer::WriterJournalStore<BoardProjectSchema, WriterHost>;
+type WriterStore = fleet_project_writer::WriterJournalStore<BoardProjectSchema, WriterHost>;
 async fn control(
     base: &str,
     command: RevocationControl,
@@ -124,7 +126,7 @@ async fn revoked(base: &str, completed: bool) -> ConformanceResult<()> {
 async fn owner(
     database: Arc<ReplicatedDatabase<BoardProjectSchema>>,
     receiver: ReceiverId,
-    requests: fleet_sync_tokio_runner::SessionRequests<BoardConsumerProtocol>,
+    requests: fleet_session_client::SessionRequests<BoardConsumerProtocol>,
     clock: WriterClock,
     observed: mpsc::UnboundedSender<(CallId, bool, serde_json::Value)>,
     hold: Option<Arc<SeedHold>>,
@@ -201,7 +203,7 @@ async fn run_recovery(case: RecoveryCase) -> ConformanceResult<()> {
             &root.path().join("writer.db"),
             BoardProjectSchema::new()?,
             peer,
-            fleet_sync_lease::LeasePolicy {
+            fleet_project_lease::LeasePolicy {
                 lease_duration: Duration::from_secs(14400),
                 renew_interval: Duration::from_secs(900),
             },
@@ -363,7 +365,7 @@ async fn run_recovery(case: RecoveryCase) -> ConformanceResult<()> {
     control(base, RevocationControl::ReleaseDelivery).await?;
     tokio::time::timeout(BOUND, revoke).await???;
     let terminal = tokio::time::timeout(BOUND, pump_task).await??;
-    if !matches!(terminal, Err(fleet_sync_session::ClientError::Revoked)) {
+    if !matches!(terminal, Err(fleet_session::ClientError::Revoked)) {
         return Err(format!("pump did not return terminal Revoked: {terminal:?}").into());
     }
     stop.send_replace(true);

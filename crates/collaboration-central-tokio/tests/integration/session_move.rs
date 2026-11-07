@@ -15,7 +15,7 @@ use collaboration_central_conformance::{
 use collaboration_central_core::ObjectAddress;
 use durable_steps::Uuid;
 use fixture::{Fixture, OLD_PEER, position};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde_json::{Value, json};
 use std::time::Duration;
 

@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use super::support;
 use durable_steps::{AtomicStore, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::row::Row;
 use support::*;
 
@@ -22,7 +22,7 @@ async fn failure_status_can_be_written_after_the_custody_body_is_corrupted() {
                     .enqueue(
                         original,
                         peer(9),
-                        fleet_sync_delivery::Submitter::Machine(peer(1)),
+                        fleet_mail_delivery::Submitter::Machine(peer(1)),
                         SyncTime::from_unix_millis(0),
                     )
                     .await

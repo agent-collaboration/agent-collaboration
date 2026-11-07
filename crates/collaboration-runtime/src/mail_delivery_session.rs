@@ -1,9 +1,9 @@
 //! Mail borrows the Host's one prepared machine session.
 use board_sync_protocol::BoardConsumerProtocol;
 use durable_steps::StoreError;
-use fleet_sync_delivery::{DeliveryTaskConfig, LocalDeliveryConfig};
-use fleet_sync_protocol::PeerId;
-use fleet_sync_tokio_runner::SessionRequests;
+use fleet_mail_delivery::{DeliveryTaskConfig, LocalDeliveryConfig};
+use fleet_protocol::PeerId;
+use fleet_session_client::SessionRequests;
 use tokio::sync::watch;
 
 #[derive(Clone)]

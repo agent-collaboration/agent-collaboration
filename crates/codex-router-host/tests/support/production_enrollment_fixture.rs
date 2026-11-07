@@ -9,7 +9,7 @@ pub(super) enum EnrollmentLocation {
 pub(super) struct ProductionEnrollmentFixture {
     pub root: tempfile::TempDir,
     pub directory: PathBuf,
-    pub peer: fleet_sync_protocol::PeerId,
+    pub peer: fleet_protocol::PeerId,
     pub central: TestCentral,
     pub host: OwnedHost,
     router: PersistentRouterHealthFixture,

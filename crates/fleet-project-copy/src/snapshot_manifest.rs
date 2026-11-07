@@ -1,7 +1,7 @@
 //! Position-pinned row counts and digests over the same pages used for snapshots.
 use crate::{ReceiverError, StoreError, snapshot_reads::snapshot_page_at};
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ReplicationPosition, SnapshotManifest, SnapshotManifestAnswer, SnapshotRead,
     TableDigestBuilder, TableManifest, TableName,
 };

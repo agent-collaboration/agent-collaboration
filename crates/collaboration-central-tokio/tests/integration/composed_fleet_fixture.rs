@@ -7,8 +7,8 @@ use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{
     AtomicStore, BoxFuture, CallFailure, NotSentReason, StoreError, storage::TransactionScope,
 };
-use fleet_sync_protocol::{DatabaseId, PeerId, ReceiverId};
-use fleet_sync_tokio_runner::{ObjectKey, ObjectOptions, ObjectStore, TokioObject};
+use fleet_protocol::{DatabaseId, PeerId, ReceiverId};
+use fleet_tokio_objects::{ObjectKey, ObjectOptions, ObjectStore, TokioObject};
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use serde_json::{Value, json};
 use sqlx_core::{executor::Executor, query::query, row::Row};
@@ -218,9 +218,9 @@ impl Fixture {
         let runtime = Arc::new(ObjectRuntime::fleet(
             fault_host,
             io.clone(),
-            fleet_sync_lease::RegistryConfig {
+            fleet_project_lease::RegistryConfig {
                 authoritative_receiver: receiver,
-                lease: fleet_sync_lease::LeasePolicy {
+                lease: fleet_project_lease::LeasePolicy {
                     lease_duration: Duration::from_secs(60),
                     renew_interval: Duration::from_secs(20),
                 },
@@ -356,8 +356,8 @@ impl Fixture {
         Ok(())
     }
     async fn announce_schema(&self) -> TestResult {
-        use fleet_sync_protocol::{ClientFrame, ConnectionId, SchemaSupport, SessionId};
-        use fleet_sync_session::{ConnectionBinding, VerifiedPeer};
+        use fleet_protocol::{ClientFrame, ConnectionId, SchemaSupport, SessionId};
+        use fleet_session::{ConnectionBinding, VerifiedPeer};
         let binding = ConnectionBinding::new(
             ConnectionId::new(durable_steps::Uuid::now_v7())?,
             VerifiedPeer {
@@ -424,7 +424,7 @@ impl Fixture {
         &self,
     ) -> TestResult<(Value, Option<String>, i64, Vec<(String, String, String)>)> {
         Ok(self.store.transaction(|scope|Box::pin(async move {
-            let snapshot=fleet_sync_lease::registry_snapshot(scope,PROJECT.to_owned().try_into().map_err(StoreError::backend)?).await.map_err(StoreError::backend)?;
+            let snapshot=fleet_project_lease::registry_snapshot(scope,PROJECT.to_owned().try_into().map_err(StoreError::backend)?).await.map_err(StoreError::backend)?;
             let projection = collaboration_central_core::read_fleet_lease_projection_in_scope(scope,PROJECT.parse().map_err(StoreError::backend)?).await?;
         let row=query::<sqlx_turso::Turso>("SELECT project_id,(SELECT incarnation FROM lease_incarnation WHERE name='fleet') AS incarnation FROM fleet_project_directory WHERE project_id=?").bind(PROJECT).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
             let notices=query::<sqlx_turso::Turso>("SELECT machine_id,kind,CAST(epoch AS TEXT) AS epoch FROM machine_control_project_notices WHERE project_id=? ORDER BY machine_id,position").bind(PROJECT).fetch_all(scope.executor()).await.map_err(StoreError::backend)?;

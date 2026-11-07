@@ -1,5 +1,5 @@
 use durable_steps::Uuid;
-use fleet_sync_protocol::{PageDigest, SeedId};
+use fleet_protocol::{PageDigest, SeedId};
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Notify, watch};
 

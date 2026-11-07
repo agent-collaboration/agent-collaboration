@@ -39,7 +39,7 @@ async fn seed_prefix(last_version: i64) -> tempfile::TempDir {
         .await
         .unwrap();
     let mut delivery = Migrator::with_migrations(
-        fleet_sync_delivery::DELIVERY_MIGRATOR
+        fleet_mail_delivery::DELIVERY_MIGRATOR
             .iter()
             .cloned()
             .collect(),

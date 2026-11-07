@@ -3,10 +3,10 @@ use crate::{
     row_apply::primary_columns, schema_reads::SchemaReads,
 };
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::unit_budget::{
+use fleet_protocol::unit_budget::{
     MAX_UNIT_BYTES, TARGET_UNIT_BYTES, UnitTooLarge, measure_snapshot_unit, snapshot_size_after_row,
 };
-use fleet_sync_protocol::{SnapshotCursor, SnapshotPage, SnapshotRead};
+use fleet_protocol::{SnapshotCursor, SnapshotPage, SnapshotRead};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -48,7 +48,7 @@ where
 pub(crate) async fn snapshot_page_at<'scope, S>(
     scope: &'scope mut S,
     cursor: Option<SnapshotCursor>,
-    status: fleet_sync_protocol::CopyStatus,
+    status: fleet_protocol::CopyStatus,
 ) -> Result<SnapshotRead, ReceiverError>
 where
     S: TransactionScope + 'scope,
@@ -134,13 +134,13 @@ where
         && (after.len() != keys.len()
             || after
                 .iter()
-                .any(|value| matches!(value, fleet_sync_protocol::SqlValue::Null)))
+                .any(|value| matches!(value, fleet_protocol::SqlValue::Null)))
     {
         return Err(ReceiverError::InvalidInput {
             field: "snapshot cursor key shape mismatch".into(),
         });
     }
-    let read_next = |after: &[fleet_sync_protocol::SqlValue]| {
+    let read_next = |after: &[fleet_protocol::SqlValue]| {
         let predicate = if after.is_empty() {
             String::new()
         } else {
@@ -218,7 +218,7 @@ where
             let key = key
                 .into_iter()
                 .map(|value| match value {
-                    fleet_sync_protocol::SqlValue::Text(value) => Ok(value),
+                    fleet_protocol::SqlValue::Text(value) => Ok(value),
                     _ => Err(StoreError::Corrupt {
                         field: "snapshot row key".into(),
                     }),
@@ -257,8 +257,8 @@ fn checked_page(page: SnapshotPage, expected: usize) -> Result<SnapshotRead, Rec
 fn measure_page(
     page: SnapshotPage,
 ) -> Result<
-    fleet_sync_protocol::unit_budget::MeasuredUnit<SnapshotPage>,
-    fleet_sync_protocol::unit_budget::UnitEncodingError,
+    fleet_protocol::unit_budget::MeasuredUnit<SnapshotPage>,
+    fleet_protocol::unit_budget::UnitEncodingError,
 > {
     #[cfg(test)]
     FULL_MEASURES.with(|count| count.set(count.get() + 1));

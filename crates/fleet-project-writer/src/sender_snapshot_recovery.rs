@@ -5,7 +5,7 @@ use crate::{
     sender_storage,
     writer_file_record::read_file_record,
 };
-use fleet_sync_protocol::{CopyRole, ReceiverId, ReplicationPosition};
+use fleet_protocol::{CopyRole, ReceiverId, ReplicationPosition};
 use sqlx_core::connection::Connection;
 impl<S, A, B, T> ReplicationSender<S, A, B, T>
 where

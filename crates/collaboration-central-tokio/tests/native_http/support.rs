@@ -1,5 +1,5 @@
-use fleet_sync_lease::{LeasePolicy, RegistryConfig};
-use fleet_sync_protocol::ReceiverId;
+use fleet_project_lease::{LeasePolicy, RegistryConfig};
+use fleet_protocol::ReceiverId;
 use std::time::Duration;
 
 pub type TestError = Box<dyn std::error::Error + Send + Sync>;

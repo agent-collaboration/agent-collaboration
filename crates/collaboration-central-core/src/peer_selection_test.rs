@@ -5,15 +5,15 @@ use crate::{
     SocketFailure,
 };
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{ConnectionId, PeerId, ReleaseRequest, ServerCall, SessionId};
-use fleet_sync_session::{Bytes, ConnectionBinding, ConnectionRegistration, VerifiedPeer};
+use fleet_protocol::{ConnectionId, PeerId, ReleaseRequest, ServerCall, SessionId};
+use fleet_session::{Bytes, ConnectionBinding, ConnectionRegistration, VerifiedPeer};
 
 use sqlx_core::executor::Executor;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
 };
-type Store = fleet_sync_tokio_runner::TokioObject<crate::CoreHost<FixtureIo>>;
+type Store = fleet_tokio_objects::TokioObject<crate::CoreHost<FixtureIo>>;
 const PEER: &str = "019f0000-0000-7000-8000-00000000a201";
 const SERVICE: &str = "019f0000-0000-7000-8000-00000000a202";
 struct SelectionHost {
@@ -48,7 +48,7 @@ impl ObjectHost for SelectionHost {
     async fn close_connection(
         &self,
         _: ConnectionId,
-        _: fleet_sync_protocol::CloseReason,
+        _: fleet_protocol::CloseReason,
     ) -> Result<(), SocketFailure> {
         Ok(())
     }
@@ -57,7 +57,7 @@ impl ObjectHost for SelectionHost {
             self.connection,
             ConnectionRegistration::Attached {
                 session_id: self.session,
-                schema_support: fleet_sync_protocol::SchemaSupport { max_version: 7 },
+                schema_support: fleet_protocol::SchemaSupport { max_version: 7 },
             },
         )]
         .into_iter()
@@ -137,7 +137,7 @@ async fn run(revoked: bool) -> Result<(), TestError> {
     };
     let withdrawal = ServerCall::WithdrawRelease {
         call: identity.clone(),
-        request: fleet_sync_protocol::WithdrawRelease {
+        request: fleet_protocol::WithdrawRelease {
             database: release_request.database,
             epoch: release_request.epoch,
             transfer: release_request.transfer,

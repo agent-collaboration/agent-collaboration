@@ -4,7 +4,7 @@ use crate::{HostInspection, OfflineHost, OfflineHostError};
 use crate::{PreparedProjectBundle, ProjectBundleError, ProjectPreparation, SelectedWriterFile};
 use collaboration_protocol::UuidIdentity;
 use fleet_admission::FleetImportBundle;
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use message_board::RequestId;
 use serde::{Deserialize, Serialize};
 use std::os::unix::fs::MetadataExt;
@@ -63,7 +63,7 @@ impl CutoverPlanPreview {
 #[serde(rename_all = "camelCase")]
 struct ProjectPlanPreview {
     project: message_board::ProjectId,
-    epoch: fleet_sync_protocol::Epoch,
+    epoch: fleet_protocol::Epoch,
     bundle: PathBuf,
     backup: PathBuf,
 }

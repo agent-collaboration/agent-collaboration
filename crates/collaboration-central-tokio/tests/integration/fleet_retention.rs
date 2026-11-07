@@ -5,8 +5,8 @@ use collaboration_central_core::{CoreHost, FleetKind, ObjectAddress, ObjectRunti
 use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{CallFailure, NotSentReason, Uuid};
 use fleet_admission::{FleetOperation, FleetRequest, FleetRequestResult};
-use fleet_sync_protocol::ReceiverId;
-use fleet_sync_tokio_runner::{ObjectKey, ObjectStore};
+use fleet_protocol::ReceiverId;
+use fleet_tokio_objects::{ObjectKey, ObjectStore};
 use message_board::{ChangeOutcome, RequestDecision};
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use serde_json::json;
@@ -70,9 +70,9 @@ impl Fixture {
         let runtime = ObjectRuntime::fleet(
             Arc::new(TokioStorageHost::new(object)),
             io.clone(),
-            fleet_sync_lease::RegistryConfig {
+            fleet_project_lease::RegistryConfig {
                 authoritative_receiver: receiver,
-                lease: fleet_sync_lease::LeasePolicy {
+                lease: fleet_project_lease::LeasePolicy {
                     lease_duration: std::time::Duration::from_secs(60),
                     renew_interval: std::time::Duration::from_secs(20),
                 },

@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use fleet_sync_delivery::DELIVERY_MIGRATOR;
+use fleet_mail_delivery::DELIVERY_MIGRATOR;
 use sqlx_core::migrate::Migrator;
 use sqlx_turso::{
     Turso, TursoConnectOptions, TursoConnection,

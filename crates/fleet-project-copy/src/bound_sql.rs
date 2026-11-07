@@ -99,7 +99,7 @@ mod tests {
     #![allow(clippy::expect_used)]
     use super::*;
     use crate::{BoundStatement, sql_transport::SqlRow};
-    use fleet_sync_protocol::SqlValue;
+    use fleet_protocol::SqlValue;
     #[test]
     fn typed_casts_preserve_placeholders_and_do_not_touch_question_marks_in_literals() {
         let statement = BoundStatement::new(

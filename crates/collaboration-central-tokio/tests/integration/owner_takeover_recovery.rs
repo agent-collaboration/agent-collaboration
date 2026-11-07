@@ -20,7 +20,7 @@ use collaboration_central_tokio::{TokioServer, TokioSettings};
 use creation_scenarios as creation;
 use durable_steps::{CallId, CallTarget, Uuid};
 use fleet_admission::FleetOperation;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use futures_util::{SinkExt, StreamExt};
 use message_board::{BoardId, Description, ResourceName, WorkspaceId};
 use reqwest_websocket::{Message, RequestBuilderExt, WebSocket};
@@ -149,7 +149,7 @@ fn validate_fence(
             .cloned()
             .ok_or("held Fence omitted CallId")?,
     )?;
-    let target: fleet_sync_lease::CopyFence = serde_json::from_value(
+    let target: fleet_project_lease::CopyFence = serde_json::from_value(
         envelope
             .get("target")
             .cloned()
@@ -157,7 +157,8 @@ fn validate_fence(
     )?;
     if envelope.get("source") != Some(&json!(ObjectAddress::Fleet))
         || envelope.get("destination") != Some(&json!(ObjectAddress::Copy(database)))
-        || envelope.get("kind") != Some(&json!(<fleet_sync_lease::CopyFence as CallTarget>::KIND))
+        || envelope.get("kind")
+            != Some(&json!(<fleet_project_lease::CopyFence as CallTarget>::KIND))
         || target.copy != configuration::registry_config()?.authoritative_receiver
         || request.database != database
         || confirmation.get("transferId") != Some(&json!(request.transfer_id))

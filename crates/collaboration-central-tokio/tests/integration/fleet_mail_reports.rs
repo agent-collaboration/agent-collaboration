@@ -2,8 +2,8 @@
 use super::{composed_fleet_fixture::*, fleet_mail_dispatch::*};
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use durable_steps::{AtomicStore, StoreError};
-use fleet_sync_delivery::StatusStream;
-use fleet_sync_protocol::{
+use fleet_mail_delivery::StatusStream;
+use fleet_protocol::{
     ClientFrame, DeliveryAnswer, DeliveryRequest, DeliveryStatus, DeliveryTypes, FrameId, ItemId,
     OperationAnswer, OperationRequest, PushResult, RecipientOutcome, RecipientReport, ReportResult,
     ReportSeq, ServerFrame, StatusCursor,
@@ -69,7 +69,7 @@ async fn sender_statuses(fixture: &Fixture) -> TestResult<Vec<DeliveryStatus<Acc
         .store
         .transaction(|scope| {
             Box::pin(async move {
-                let owner = fleet_sync_protocol::Submitter::Machine(
+                let owner = fleet_protocol::Submitter::Machine(
                     A.to_owned().try_into().map_err(StoreError::backend)?,
                 );
                 let route = SERVICE_A
@@ -134,7 +134,7 @@ async fn only_the_recipient_can_report_and_replay_never_advances_status_or_owes_
         )
         .await?,
         ReportResult::Refused {
-            reason: fleet_sync_protocol::DeliveryRefusal::NotRecipient
+            reason: fleet_protocol::DeliveryRefusal::NotRecipient
         }
     );
     assert_eq!(

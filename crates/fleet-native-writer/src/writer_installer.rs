@@ -1,15 +1,17 @@
 use crate::{
-    CallEnvelope, InstallCoordinator, InstallFile, InstallFileRequest, InstallFileResult,
-    InstallHandle, InstallRecord, InstallRefusal, InstallRequest, InstallSnapshot, InstallSource,
-    ObjectKey, ObjectOptions, ObjectStore, PublishError, SessionRequests, SnapshotTarget,
-    StagingError, StagingStore, TokioHost, TokioObject, WriterHost, WriterInstallTarget,
-    WriterSessionCalls,
+    InstallCoordinator, InstallFile, InstallFileRequest, InstallFileResult, InstallHandle,
+    InstallRecord, InstallRefusal, InstallRequest, InstallSnapshot, InstallSource, SnapshotTarget,
+    StagingError, StagingStore, WriterHost, WriterInstallTarget, WriterSessionCalls,
     writer_session_calls::{decode, encode, unavailable},
 };
 use durable_steps::{CallFailure, CallTarget, Engine, NotSentReason, StoreError};
-use fleet_sync_protocol::*;
-use fleet_sync_receiver::SnapshotInstallError;
-use fleet_sync_writer::{BootstrapError, OpenError, ReplicatedDatabase, ReplicatedSchema};
+use fleet_project_copy::SnapshotInstallError;
+use fleet_project_writer::{BootstrapError, OpenError, ReplicatedDatabase, ReplicatedSchema};
+use fleet_protocol::*;
+use fleet_session_client::SessionRequests;
+use fleet_tokio_objects::{
+    CallEnvelope, ObjectKey, ObjectOptions, ObjectStore, PublishError, TokioHost, TokioObject,
+};
 use runtime_primitives::SystemClock;
 use std::{path::Path, sync::Arc};
 
@@ -95,7 +97,7 @@ impl<S: ReplicatedSchema, P: ConsumerProtocol> WriterInstaller<S, P> {
             .await?
         {
             OperationAnswer::Replication(ReplicationAnswer::CopyUnavailable { reason }) => {
-                Err(fleet_sync_receiver::retryable_copy(reason))
+                Err(fleet_project_copy::retryable_copy(reason))
             }
             OperationAnswer::Replication(ReplicationAnswer::OutcomeUnknown { .. }) => {
                 Err(CallFailure::AnswerLost)

@@ -1,6 +1,6 @@
 //! Observe automatic convergence before replaying the original Claim or archive.
 use super::*;
-use fleet_sync_protocol::{LeaseAnswer, LeaseRequest};
+use fleet_protocol::{LeaseAnswer, LeaseRequest};
 
 pub(super) async fn verify_cleanup(
     base: &str,
@@ -36,8 +36,8 @@ pub(super) async fn verify_cleanup(
         let mut claimant=registration::reconnect_peer(base,CREDENTIAL,0).await?;
         let claim_proof=async {
             let HolderChangeRequest::Claim {attempt,database,..}=input.original.change else {return Err("saved cleanup changed request kind".into());};
-            let answer=creation_scenarios::operation_answer(&mut claimant,OperationRequest::Lease(LeaseRequest::Claim {attempt:fleet_sync_protocol::RequestId::new(attempt.as_uuid())?,database})).await?;
-            let fleet_sync_protocol::SettleOutcome::Refused {reason}=&input.original.outcome else {return Err("saved cleanup lost its refusal".into());};
+            let answer=creation_scenarios::operation_answer(&mut claimant,OperationRequest::Lease(LeaseRequest::Claim {attempt:fleet_protocol::RequestId::new(attempt.as_uuid())?,database})).await?;
+            let fleet_protocol::SettleOutcome::Refused {reason}=&input.original.outcome else {return Err("saved cleanup lost its refusal".into());};
             if !matches!(answer,OperationAnswer::Lease(LeaseAnswer::Claim(HolderChangeAnswer::Refused(actual))) if actual==*reason) {return Err("normal Claim replay lost its original terminal schema refusal".into());}
             Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
         }.await;
@@ -89,7 +89,7 @@ async fn observe_exact_recovered_call(base: &str, input: &CleanupInput) -> Confo
         || call != input.call
         || call.get("kind")
             != Some(&json!(
-                <fleet_sync_lease::ClaimSettlement as durable_steps::CallTarget>::KIND
+                <fleet_project_lease::ClaimSettlement as durable_steps::CallTarget>::KIND
             ))
     {
         return Err(format!(

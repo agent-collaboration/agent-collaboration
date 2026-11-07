@@ -6,7 +6,7 @@ use collaboration_central_conformance::{
     enroll_admitted_peer, owner_assertion,
 };
 use collaboration_central_core::ObjectAddress;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DeliveryEnvelope, DeliveryItem, DeliveryStatus, FrameId, ItemId, PeerId, ServerCall,
     ServerFrame, ServerRequest, StatusPublication, StatusVersion, Submitter,
 };
@@ -21,7 +21,7 @@ const SENDER_SERVICE: &str = "019f0000-0000-7000-8000-000000001071";
 pub(super) const RECIPIENT_SERVICE: &str = "019f0000-0000-7000-8000-000000001072";
 const SENDER_PEER: &str = "019f0000-0000-7000-8000-000000002071";
 const RECIPIENT_PEER: &str = "019f0000-0000-7000-8000-000000002072";
-type Acceptance = <BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Acceptance;
+type Acceptance = <BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Acceptance;
 
 async fn set_time(base: &str, millis: i64) -> ConformanceResult<()> {
     reqwest::Client::new()

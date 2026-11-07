@@ -39,14 +39,14 @@ use native_registry::PendingRegistration;
 // Shared fixture exports are consumed by different test binaries.
 // Shared fixture exports are consumed by different test binaries.
 
-pub fn fixture_peer() -> Result<fleet_sync_protocol::PeerId, TestError> {
+pub fn fixture_peer() -> Result<fleet_protocol::PeerId, TestError> {
     native_registry::fixture_peer()
 }
 // The shared claim fixtures supply a trusted enrollment, not a directory implementation.
 pub fn intent_handoff_input() -> Result<Option<collaboration_service::IntentHandoffInput>, TestError>
 {
     Ok(Some(collaboration_service::IntentHandoffInput {
-        item: fleet_sync_protocol::ItemId::new(uuid::Uuid::now_v7())?,
+        item: fleet_protocol::ItemId::new(uuid::Uuid::now_v7())?,
         enrollment: collaboration_service::IntentRecipientEnrollment {
             service: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
             peer: fixture_peer()?,

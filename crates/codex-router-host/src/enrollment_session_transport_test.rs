@@ -1,7 +1,7 @@
 use super::*;
 use board_central_test_support::TestCentral;
-use fleet_sync_protocol::CloseReason;
-use fleet_sync_session::TransportConnection;
+use fleet_protocol::CloseReason;
+use fleet_session::TransportConnection;
 use std::time::Duration;
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;

@@ -2,7 +2,7 @@ use crate::{
     LeaseError, checked_queries::StoredRenewalRow, registry_records::RenewalAttempt,
     registry_row::*,
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 impl StoredRenewalRow {
     pub(crate) fn renewal_record(&self) -> Result<RenewalAttempt, LeaseError> {
         let key = format!(

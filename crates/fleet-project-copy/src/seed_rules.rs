@@ -6,8 +6,8 @@ use crate::{
     seed_storage::{SeedPageWrite, SeedRecord, SeedStorage},
 };
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::SeedAttemptId;
-use fleet_sync_protocol::{
+use fleet_protocol::SeedAttemptId;
+use fleet_protocol::{
     DatabaseId, PageDigest, SeedAnswer, SeedComplete, SeedId, SeedPage, SeedPageAnswer,
 };
 use sqlx_core::{
@@ -271,7 +271,7 @@ where
         | CopyRecord::Following(status) => status,
         CopyRecord::Retired { .. } => return Err(ReceiverError::Retired),
     };
-    if status.role != fleet_sync_protocol::CopyRole::Authoritative {
+    if status.role != fleet_protocol::CopyRole::Authoritative {
         return Err(ReceiverError::NotWriter {
             current: Some(status.fence),
         });
@@ -294,7 +294,7 @@ where
             original.holder.is_none()
                 && matches!(
                     original.origin,
-                    fleet_sync_protocol::CopyOrigin::AwaitingSeed { .. }
+                    fleet_protocol::CopyOrigin::AwaitingSeed { .. }
                 )
         }
     };

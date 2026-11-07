@@ -1,11 +1,11 @@
 #![allow(clippy::panic_in_result_fn)]
 
 use durable_steps::Uuid;
-use fleet_sync_lease::{LeaseHolder, LeasePolicy};
-use fleet_sync_protocol::{PeerId, TableName};
-use fleet_sync_writer::{
+use fleet_project_lease::{LeaseHolder, LeasePolicy};
+use fleet_project_writer::{
     Migration, OpenError, ReplicatedDatabase, ReplicatedSchema, SchemaForm, WriterOptions,
 };
+use fleet_protocol::{PeerId, TableName};
 use runtime_primitives::SystemClock;
 use sqlx_core::{
     migrate::MigrationType,
@@ -25,7 +25,7 @@ use std::{
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 const PARENT_KEY: &str = "'019eef00-0000-7000-8000-000000000001'";
 const MISSING_KEY: &str = "'019eef00-0000-7000-8000-000000000009'";
-static TABLES: LazyLock<Result<Vec<TableName>, fleet_sync_protocol::TextValueError>> =
+static TABLES: LazyLock<Result<Vec<TableName>, fleet_protocol::TextValueError>> =
     LazyLock::new(|| {
         ["parents", "children"]
             .into_iter()

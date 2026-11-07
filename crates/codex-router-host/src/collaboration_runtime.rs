@@ -140,7 +140,7 @@ pub struct CollaborationRuntime {
     native_digest: Option<SchemaDigest>,
     payload_cache: crate::native_schema_cache::NativeSchemaCache,
     service_id: UuidIdentity,
-    installation_peer: fleet_sync_protocol::PeerId,
+    installation_peer: fleet_protocol::PeerId,
     service_epoch: UuidIdentity,
     publication: BackendPublication,
     shutdown: CancellationToken,
@@ -204,7 +204,7 @@ impl CollaborationRuntime {
     #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
     pub async fn runtime_test_has_local_cancel_delivery(
         &self,
-        cancel: fleet_sync_protocol::ItemId,
+        cancel: fleet_protocol::ItemId,
     ) -> io::Result<bool> {
         self.runtime_test_mail
             .as_ref()
@@ -253,7 +253,7 @@ impl CollaborationRuntime {
         &self.service_id
     }
     #[must_use]
-    pub fn installation_peer(&self) -> fleet_sync_protocol::PeerId {
+    pub fn installation_peer(&self) -> fleet_protocol::PeerId {
         self.installation_peer
     }
     #[must_use]

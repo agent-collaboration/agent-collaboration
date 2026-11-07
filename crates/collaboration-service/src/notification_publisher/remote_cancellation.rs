@@ -1,8 +1,8 @@
 //! Remote controls wait for both the group and each frozen association's actual ACK mark.
 use super::{BoardError, ProjectId, PublisherInner};
 use board_sync_protocol::BoardDeliveryBody;
-use fleet_sync_delivery::DeliveryTransactionFailure;
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryRefusal};
+use fleet_mail_delivery::DeliveryTransactionFailure;
+use fleet_protocol::{DeliveryEnvelope, DeliveryRefusal};
 use message_board::HandoffSeq;
 use message_board_storage::{MailCancelGroup, MailHandoffItem};
 

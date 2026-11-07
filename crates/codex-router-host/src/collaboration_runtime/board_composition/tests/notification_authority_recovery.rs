@@ -1,8 +1,8 @@
 //! A real renewal restores quiet publication; typed NotWriter keeps SDK custody.
 use super::*;
 use collaboration_contracts::ProjectReplicationPosition;
-use fleet_sync_delivery::OutboxStatusState;
-use fleet_sync_protocol::{
+use fleet_mail_delivery::OutboxStatusState;
+use fleet_protocol::{
     CommitSequence, DeliveryStatus, Epoch, LeaseRefusal, LeaseState, LeaseStatus, RenewAnswer,
     RenewResult, ReplicationPosition,
 };
@@ -147,7 +147,7 @@ async fn assert_recovery() -> Result<(), TestError> {
     let message_board_storage::MailHandoffItem::Delivery(envelope) = handoffs.remove(0).item else {
         return Err("seeded handoff is not delivery".into());
     };
-    let fleet_sync_protocol::DeliveryEnvelope::Item(frozen) = *envelope else {
+    let fleet_protocol::DeliveryEnvelope::Item(frozen) = *envelope else {
         return Err("seeded handoff is not a notification item".into());
     };
     assert_eq!(frozen.id(), fixture.seed_item);
@@ -159,7 +159,7 @@ async fn assert_recovery() -> Result<(), TestError> {
         .await?;
     assert!(acknowledgement.iter().any(|event| matches!(
         event,
-        fleet_sync_writer::ReplicationEvents::Acknowledged { .. }
+        fleet_project_writer::ReplicationEvents::Acknowledged { .. }
     )));
     assert_eq!(
         fixture
@@ -196,7 +196,7 @@ async fn assert_recovery() -> Result<(), TestError> {
         .await?;
     assert!(matches!(
         writer.store.writer_state().await?,
-        fleet_sync_lease::WriterState::Paused { .. }
+        fleet_project_lease::WriterState::Paused { .. }
     ));
     let (renewal_entered, release_renewal) = fixture.harness.transport.observer.hold_next_renewal();
     fixture
@@ -300,7 +300,7 @@ async fn assert_recovery() -> Result<(), TestError> {
         .into_iter()
         .filter(|row| row.category == "outbox")
     {
-        let item = fleet_sync_protocol::ItemId::new(row.identity.parse()?)?;
+        let item = fleet_protocol::ItemId::new(row.identity.parse()?)?;
         tokio::time::timeout(
             BOUND,
             fixture.harness.central.notifications.wait_submission(item),
@@ -346,7 +346,7 @@ async fn assert_recovery() -> Result<(), TestError> {
     );
     assert!(matches!(
         writer.store.writer_state().await?,
-        fleet_sync_lease::WriterState::Writing { .. }
+        fleet_project_lease::WriterState::Writing { .. }
     ));
     // Deliberately cross the retry boundary, rather than racing it in the count.
     // The fixture rejects project authority before it ever calls Delivery::Submit.

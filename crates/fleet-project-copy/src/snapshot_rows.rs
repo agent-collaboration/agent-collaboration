@@ -3,7 +3,7 @@ use crate::{
     schema_reads::SchemaReads,
 };
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::{SnapshotPage, SqlValue};
+use fleet_protocol::{SnapshotPage, SqlValue};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -67,7 +67,7 @@ where
                     .iter()
                     .position(|column| column.name == key.name)
                     .and_then(|index| row.get(index))
-                    .is_none_or(|value| !matches!(value, SqlValue::Text(key) if fleet_sync_protocol::canonical_uuid_v7(key)))
+                    .is_none_or(|value| !matches!(value, SqlValue::Text(key) if fleet_protocol::canonical_uuid_v7(key)))
             })
         {
             return Err(crate::StoreError::Corrupt {field:"snapshot UUIDv7 row key or row shape".into()}.into());

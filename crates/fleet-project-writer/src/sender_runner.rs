@@ -2,7 +2,7 @@ use crate::{
     CaptureBookkeeping, PieceAnnotation, ReplicatedSchema, ReplicationEvents, ReplicationSender,
     ReplicationTransport, SenderError, replication_sender::ReplicationPass,
 };
-use fleet_sync_protocol::ReceiverId;
+use fleet_protocol::ReceiverId;
 use std::{collections::BTreeSet, sync::Arc};
 use tokio::{
     sync::{mpsc, watch},

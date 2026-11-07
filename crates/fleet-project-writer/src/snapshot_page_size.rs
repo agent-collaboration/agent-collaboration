@@ -1,5 +1,5 @@
 use crate::OpenError;
-use fleet_sync_protocol::{SnapshotCursor, SnapshotPage, SqlValue, unit_budget::encoded_json_size};
+use fleet_protocol::{SnapshotCursor, SnapshotPage, SqlValue, unit_budget::encoded_json_size};
 
 /// Retain each candidate's byte count for a final check without encoding its
 /// body again. The initial size comes from the actual empty-page carriers.

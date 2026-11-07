@@ -1,6 +1,7 @@
 //! Initialize consumer-local tables without admitting them to replication.
+use crate::checked_queries;
 use crate::{
-    ReceiverError, ReceiverRules, StoreError, checked_queries,
+    ReceiverError, ReceiverRules, StoreError,
     schema_membership::{SchemaMembership, invalid_schema, statements},
 };
 use durable_steps::storage::TransactionScope;

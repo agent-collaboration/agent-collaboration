@@ -2,7 +2,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::{turso_rule_fixture::*, *};
 use durable_steps::CallId;
-use fleet_sync_protocol::NoConsumer;
+use fleet_protocol::NoConsumer;
 use sqlx_core::{
     connection::Connection,
     migrate::{Migration, MigrationType},

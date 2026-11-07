@@ -2,7 +2,7 @@
 use super::*;
 use crate::collaboration_runtime::board_composition::project_writers::ProjectWriters;
 use board_sync_protocol::ProjectClaimReply;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use std::os::unix::fs::PermissionsExt;
 
 struct UnreadableOldFile {
@@ -37,7 +37,7 @@ pub(super) async fn wait_published_project(
     timeout(BOUND, async {
         loop {
             if let Ok(Some(store)) = registry.existing_project(project).await
-                && matches!(store.writer_state().await?, fleet_sync_lease::WriterState::Writing { epoch: actual } if actual.value() == epoch)
+                && matches!(store.writer_state().await?, fleet_project_lease::WriterState::Writing { epoch: actual } if actual.value() == epoch)
             { return Ok(store); }
             tokio::task::yield_now().await;
         }
@@ -130,7 +130,7 @@ async fn received_move_then_takeover_round_trip_seeds_each_new_epoch_from_copy()
         second_projects.receive_grant(&project, Epoch::new(2)?).await?;
         assert_eq!(attempt_count(&second_root).await?, 0);
         assert!(second_registry.existing_project(&project).await?.is_none());
-        let moved = fixture.central.move_project(database, &second_origin.installation, fleet_sync_protocol::TransferId::new(durable_steps::Uuid::now_v7())?).await?;
+        let moved = fixture.central.move_project(database, &second_origin.installation, fleet_protocol::TransferId::new(durable_steps::Uuid::now_v7())?).await?;
         assert_eq!(moved.get("kind"), Some(&serde_json::json!("moved")), "{moved}");
         assert_eq!(moved.pointer("/value/newEpoch"), Some(&serde_json::json!(3)));
         println!("RECEIVED_GRANT_CASE real_move_granted_epoch3");
@@ -163,7 +163,7 @@ async fn received_move_then_takeover_round_trip_seeds_each_new_epoch_from_copy()
         let old_path = fixture.projects.directory.join("projects").join(project.as_str()).join("e2.sqlite");
         let old_hashes = durable_file_hashes(&old_path)?;
         let unreadable = UnreadableOldFile::hold(old_path.clone())?;
-        let granted = fixture.central.take_over_project(database, &origin()?.installation, fleet_sync_protocol::TransferId::new(durable_steps::Uuid::now_v7())?).await?;
+        let granted = fixture.central.take_over_project(database, &origin()?.installation, fleet_protocol::TransferId::new(durable_steps::Uuid::now_v7())?).await?;
         assert_eq!(granted.get("kind"), Some(&serde_json::json!("granted")), "{granted}");
         assert_eq!(granted.pointer("/value/newEpoch"), Some(&serde_json::json!(4)));
         println!("RECEIVED_GRANT_CASE real_takeover_granted_epoch4");
@@ -220,8 +220,8 @@ async fn received_move_then_takeover_round_trip_seeds_each_new_epoch_from_copy()
 )]
 async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> TestResult {
     use collaboration_contracts::ProjectClaim;
-    use fleet_sync_session::SessionClientStore;
-    use fleet_sync_tokio_runner::{InstallStatus, NativeWriterRuntime};
+    use fleet_native_writer::{InstallStatus, NativeWriterRuntime};
+    use fleet_session::SessionClientStore;
     let fixture = Box::pin(claim_fixture::ClaimFixture::start()).await?;
     let project = ProjectId::generate();
     let (prefix, expected) = project_claim::imported_snapshot(
@@ -246,7 +246,7 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
                 .projects
                 .requests
                 .request(OperationRequest::Lease(LeaseRequest::Claim {
-                    attempt: fleet_sync_protocol::RequestId::try_from(
+                    attempt: fleet_protocol::RequestId::try_from(
                         request.request_id.as_str().to_owned(),
                     )?,
                     database: database_id,
@@ -276,7 +276,7 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
         .registry
         .prepare_claim_seed(
             &project,
-            fleet_sync_writer::BootstrapGrant {
+            fleet_project_writer::BootstrapGrant {
                 lease: LeaseStatus {
                     database: database_id,
                     epoch,
@@ -358,13 +358,13 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
         let session_store = board_fleet_sync::MachineSessionStore::open(&fixture.projects.directory).await?;
         timeout(BOUND, async {
             loop {
-                if session_store.load().await?.is_some_and(|state| state.notice_cursor >= grant_position) { return Ok::<_, fleet_sync_session::StoreError>(()); }
+                if session_store.load().await?.is_some_and(|state| state.notice_cursor >= grant_position) { return Ok::<_, fleet_session::StoreError>(()); }
                 tokio::task::yield_now().await;
             }
         }).await??;
-        let away = fixture.central.take_over_project(database_id, &second_origin.installation, fleet_sync_protocol::TransferId::new(durable_steps::Uuid::now_v7())?).await?;
+        let away = fixture.central.take_over_project(database_id, &second_origin.installation, fleet_protocol::TransferId::new(durable_steps::Uuid::now_v7())?).await?;
         assert_eq!(away.pointer("/value/newEpoch"), Some(&serde_json::json!(3)), "{away}");
-        let back = fixture.central.take_over_project(database_id, &origin()?.installation, fleet_sync_protocol::TransferId::new(durable_steps::Uuid::now_v7())?).await?;
+        let back = fixture.central.take_over_project(database_id, &origin()?.installation, fleet_protocol::TransferId::new(durable_steps::Uuid::now_v7())?).await?;
         assert_eq!(back.pointer("/value/newEpoch"), Some(&serde_json::json!(4)), "{back}");
         assert!(matches!(observer.install_record(old.install_id).await?.status, InstallStatus::Running { .. }));
         assert_eq!(attempt_bytes(&root_record).await?, root_bytes);
@@ -383,8 +383,8 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
         assert!(matches!(old_after.status, InstallStatus::Ready { .. }), "old record after e4: {old_after:?}");
         let old_reply = timeout(BOUND, fixture.projects.claim(&original_request)).await?;
         assert!(old_reply.is_err(), "the obsolete e2 claimant was admitted");
-        let retained = fleet_sync_writer::inspect_native_file(database.path()).await?;
-        assert!(matches!(retained.authority, Some(fleet_sync_writer::RetainedAuthority::Superseded { current: Some(current), .. }) if current.value() == 4), "e2 authority did not retain actual supersession: {:?}", retained.authority);
+        let retained = fleet_project_writer::inspect_native_file(database.path()).await?;
+        assert!(matches!(retained.authority, Some(fleet_project_writer::RetainedAuthority::Superseded { current: Some(current), .. }) if current.value() == 4), "e2 authority did not retain actual supersession: {:?}", retained.authority);
         timeout(BOUND, fixture.projects.settle_operations()).await??;
         let new = observer.install_record(ready.install.install_id).await?;
         assert!(matches!(new.status, InstallStatus::Ready { .. }));
@@ -446,14 +446,14 @@ async fn same_epoch_unavailable_writer_is_not_stopped_as_an_older_snapshot_owner
         let database = fixture.registry.database(&project).await?;
         let grant = fixture.projects.confirmed_snapshot_grant(&project, Epoch::new(2)?).await?.ok_or("current grant")?;
         let answer = fixture.projects.requests.request(OperationRequest::Lease(LeaseRequest::Renew(RenewRequest {
-            attempt: fleet_sync_protocol::RequestId::new(durable_steps::Uuid::now_v7())?, database: database.database(), epoch: Epoch::new(2)?,
+            attempt: fleet_protocol::RequestId::new(durable_steps::Uuid::now_v7())?, database: database.database(), epoch: Epoch::new(2)?,
         }))).await.map_err(|error| io::Error::other(format!("setup renewal: {error:?}")))?;
         let OperationAnswer::Lease(LeaseAnswer::Renew(mut renewal)) = answer else { return Err("setup renewal answer".into()); };
         // Arrange only a conservative local deadline through the public API.
         // Current identity/epoch and the actual recorded server answer stay real.
         if let RenewAnswer::Renewed { current, .. } = &mut renewal { current.remaining_ms = 0; }
         database.observe_renewal(renewal, runtime_primitives::Clock::now(&SystemClock)).await?;
-        assert!(matches!(database.writer_state().await?, fleet_sync_lease::WriterState::Paused { epoch, .. } if epoch.value() == 2));
+        assert!(matches!(database.writer_state().await?, fleet_project_lease::WriterState::Paused { epoch, .. } if epoch.value() == 2));
         // Either declining or joining preparation is allowed; neither may
         // terminate the same-epoch live owner or seed another snapshot.
         let _preparation = fixture.projects.prepare_snapshot_install(&project, grant).await;
@@ -462,7 +462,7 @@ async fn same_epoch_unavailable_writer_is_not_stopped_as_an_older_snapshot_owner
         writer.runtime.prompt_renewal().await?;
         timeout(BOUND, async {
             loop {
-                if matches!(database.writer_state().await?, fleet_sync_lease::WriterState::Writing { epoch } if epoch.value() == 2) { return Ok::<_, fleet_sync_writer::OpenError>(()); }
+                if matches!(database.writer_state().await?, fleet_project_lease::WriterState::Writing { epoch } if epoch.value() == 2) { return Ok::<_, fleet_project_writer::OpenError>(()); }
                 tokio::task::yield_now().await;
             }
         }).await??;
@@ -539,7 +539,7 @@ async fn received_idle_holder_move_preserves_claimed_prefix_without_an_interveni
             fixture.central.move_project(
                 DatabaseId::try_from(project.as_str().to_owned())?,
                 &target_origin.installation,
-                fleet_sync_protocol::TransferId::new(durable_steps::Uuid::now_v7())?,
+                fleet_protocol::TransferId::new(durable_steps::Uuid::now_v7())?,
             ),
         )
         .await;

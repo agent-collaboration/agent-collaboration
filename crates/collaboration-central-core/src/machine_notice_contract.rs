@@ -1,6 +1,6 @@
 //! Durable control work distinguishes a new append from a hint for an existing row.
 use board_sync_protocol::{BoardNotice, PositionedBoardNotice};
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]

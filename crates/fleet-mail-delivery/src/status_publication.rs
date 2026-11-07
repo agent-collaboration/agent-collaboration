@@ -2,7 +2,7 @@ use crate::status_row::PublicationRow;
 use crate::{DeliveryError, PublicationRef, custody_record::*, delivery_storage_rows as queries};
 use crate::{PublicationTarget, status_stream::canonical_encode};
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,

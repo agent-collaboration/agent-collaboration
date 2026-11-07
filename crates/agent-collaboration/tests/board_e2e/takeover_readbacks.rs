@@ -2,7 +2,7 @@
 use super::{owned_host::StoppedHost, records_reopen::stopped_database_values};
 use board_sync_protocol::BoardDeliveryTypes;
 use codex_router_test_support::FixtureResult;
-use fleet_sync_protocol::{DeliveryEnvelope, ItemId, ReplicationPosition};
+use fleet_protocol::{DeliveryEnvelope, ItemId, ReplicationPosition};
 use message_board_storage::MailHandoffItem;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -239,7 +239,7 @@ pub async fn local_cancel_deliveries(
 pub async fn held_local_sequence_stopped(
     stopped: &StoppedHost,
     item: ItemId,
-) -> FixtureResult<fleet_sync_protocol::ReportSeq> {
+) -> FixtureResult<fleet_protocol::ReportSeq> {
     let observations = super::messaging_stopped_owner::delivery_rows(stopped).await?;
     let header = super::messaging_stopped_owner::header(
         &observations,
@@ -262,7 +262,7 @@ pub async fn held_local_sequence_stopped(
 pub async fn prevented_cancel_stopped(
     stopped: &StoppedHost,
     item: ItemId,
-    held_sequence: fleet_sync_protocol::ReportSeq,
+    held_sequence: fleet_protocol::ReportSeq,
 ) -> FixtureResult<ItemId> {
     let observations = super::messaging_stopped_owner::delivery_rows(stopped).await?;
     let originals = observations
@@ -356,8 +356,8 @@ async fn assert_refused_promotion_evidence(
     stopped: &StoppedHost,
     item: ItemId,
     cancel: ItemId,
-    report_seq: fleet_sync_protocol::ReportSeq,
-    observations: &[fleet_sync_delivery::test_support::DeliveryObservation],
+    report_seq: fleet_protocol::ReportSeq,
+    observations: &[fleet_mail_delivery::test_support::DeliveryObservation],
 ) -> FixtureResult {
     let reports = observations
         .iter()
@@ -381,7 +381,7 @@ async fn assert_refused_promotion_evidence(
     let operations=stopped_database_values(stopped,Path::new("interaction.sqlite"),
         "SELECT request_key AS value FROM _fleet_sync_operations WHERE kind='fleet-sync.delivery.report-outcome'").await?;
     for request in operations {
-        let (actual, _sequence): (ItemId, fleet_sync_protocol::ReportSeq) =
+        let (actual, _sequence): (ItemId, fleet_protocol::ReportSeq) =
             serde_json::from_str(&request)?;
         assert_ne!(
             actual, item,

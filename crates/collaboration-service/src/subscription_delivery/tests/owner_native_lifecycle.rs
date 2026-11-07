@@ -6,13 +6,13 @@ impl OwnerRuntime {
     pub async fn await_mail_outcome(
         &self,
         push: &collaboration_protocol::PushId,
-    ) -> fleet_sync_protocol::RecipientOutcome<collaboration_mail_protocol::CarrierAcceptance> {
-        let item = fleet_sync_protocol::ItemId::new(uuid::Uuid::parse_str(push.as_str()).unwrap())
-            .unwrap();
+    ) -> fleet_protocol::RecipientOutcome<collaboration_mail_protocol::CarrierAcceptance> {
+        let item =
+            fleet_protocol::ItemId::new(uuid::Uuid::parse_str(push.as_str()).unwrap()).unwrap();
         tokio::time::timeout(std::time::Duration::from_secs(10), async {
             loop {
                 if let Some(outcome) = self.local_mail_outcome(item).await
-                    && !matches!(outcome, fleet_sync_protocol::RecipientOutcome::Held)
+                    && !matches!(outcome, fleet_protocol::RecipientOutcome::Held)
                 {
                     break outcome;
                 }
@@ -25,8 +25,8 @@ impl OwnerRuntime {
 
     pub async fn local_mail_outcome(
         &self,
-        item: fleet_sync_protocol::ItemId,
-    ) -> Option<fleet_sync_protocol::RecipientOutcome<collaboration_mail_protocol::CarrierAcceptance>>
+        item: fleet_protocol::ItemId,
+    ) -> Option<fleet_protocol::RecipientOutcome<collaboration_mail_protocol::CarrierAcceptance>>
     {
         self.native
             .as_ref()

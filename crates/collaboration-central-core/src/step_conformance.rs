@@ -198,8 +198,8 @@ pub enum StepControl {
         request_id: RequestId,
     },
     ReadClaimReservation {
-        database: fleet_sync_protocol::DatabaseId,
-        attempt: fleet_sync_protocol::TransferId,
+        database: fleet_protocol::DatabaseId,
+        attempt: fleet_protocol::TransferId,
     },
     Record {
         entry: Box<RequestLedgerEntry>,

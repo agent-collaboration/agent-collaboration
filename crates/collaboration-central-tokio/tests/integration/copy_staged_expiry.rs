@@ -5,7 +5,7 @@ use crate::copy_receiver_fixture as support;
 
 use board_sync_protocol::BoardAnnotation;
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     Piece, PieceContents, PieceDigest, ReplicatedTransaction, ReplicationAnswer, TransactionKey,
     TransactionPart,
 };

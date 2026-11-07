@@ -1,5 +1,5 @@
 use crate::DeliveryError;
-use fleet_sync_protocol::{DatabaseId, FleetId, PeerId, Submitter};
+use fleet_protocol::{DatabaseId, FleetId, PeerId, Submitter};
 
 pub(crate) enum SourceRetention {
     Item,
@@ -7,7 +7,7 @@ pub(crate) enum SourceRetention {
     Legacy,
 }
 
-pub(crate) struct CheckedSender<D: fleet_sync_protocol::DeliveryTypes> {
+pub(crate) struct CheckedSender<D: fleet_protocol::DeliveryTypes> {
     pub submitter: Option<Submitter>,
     pub consumer: Option<D::Sender>,
 }
@@ -27,7 +27,7 @@ pub(crate) fn checked_sender<'a, S, D, B>(
 ) -> impl std::future::Future<Output = Result<CheckedSender<D>, DeliveryError>> + Send + 'a
 where
     S: durable_steps::storage::TransactionScope,
-    D: fleet_sync_protocol::DeliveryTypes,
+    D: fleet_protocol::DeliveryTypes,
     B: crate::SenderBinding<S, D>,
 {
     async move {

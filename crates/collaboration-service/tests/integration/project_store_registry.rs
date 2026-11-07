@@ -28,8 +28,8 @@ async fn empty_registration_refusals_reopen_for_metadata_and_cannot_be_opened_fo
     read.finish().await?;
     let database = registry.database(&project).await?;
     database
-        .reject_registration(fleet_sync_protocol::GateReason {
-            code: fleet_sync_protocol::GateReasonCode::new("board.projectRejected")?,
+        .reject_registration(fleet_protocol::GateReason {
+            code: fleet_protocol::GateReasonCode::new("board.projectRejected")?,
             detail: "native orphan fixture".to_owned(),
         })
         .await?;
@@ -100,13 +100,13 @@ async fn grant(
         .database(project)
         .await?
         .observe_registration(
-            fleet_sync_protocol::LeaseStatus {
-                database: fleet_sync_protocol::DatabaseId::new(uuid::Uuid::parse_str(
+            fleet_protocol::LeaseStatus {
+                database: fleet_protocol::DatabaseId::new(uuid::Uuid::parse_str(
                     project.as_str(),
                 )?)?,
-                epoch: fleet_sync_protocol::Epoch::new(1)?,
+                epoch: fleet_protocol::Epoch::new(1)?,
                 holder: fixture_peer()?,
-                state: fleet_sync_protocol::LeaseState::Held,
+                state: fleet_protocol::LeaseState::Held,
                 expires_at: now.after(board_fleet_sync::BOARD_LEASE_POLICY.lease_duration),
                 remaining_ms: u64::try_from(
                     board_fleet_sync::BOARD_LEASE_POLICY

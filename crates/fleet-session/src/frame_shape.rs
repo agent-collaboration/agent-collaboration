@@ -1,5 +1,5 @@
 //! Retain Serde's reported field without interpreting its Display diagnostic.
-use fleet_sync_protocol::{ClientFrame, ConsumerProtocol};
+use fleet_protocol::{ClientFrame, ConsumerProtocol};
 use serde::{
     Deserialize,
     de::{

@@ -3,7 +3,7 @@
 mod local_observation;
 use super::support;
 use durable_steps::{AtomicStore, Engine, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use local_observation::*;
 use sqlx_core::row::Row;
 use sqlx_turso::Turso;

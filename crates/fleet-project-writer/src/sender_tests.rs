@@ -207,7 +207,7 @@ async fn a_pending_network_call_holds_neither_the_writer_nor_another_copy() -> T
 #[tokio::test]
 async fn bounded_retention_marks_a_lagging_copy_before_releasing_its_history() -> TestResult {
     use crate::{ReplicationSender, Retention, SenderOptions};
-    use fleet_sync_protocol::{CopyRole, ReceiverId};
+    use fleet_protocol::{CopyRole, ReceiverId};
     use std::{sync::Arc, time::Duration};
     let fixture = SenderFixture::open().await?;
     fixture.migrate_copies().await?;
@@ -287,7 +287,7 @@ async fn fencing_records_the_rejected_tail_and_preserves_it_until_consumer_ackno
     use crate::{
         ReplicationSender, Retention, SenderOptions, WriteRefusal, writer_scope::WriterScope,
     };
-    use fleet_sync_protocol::{
+    use fleet_protocol::{
         CopyStatusAnswer, Epoch, FenceExpectation, FenceRequest, FenceResult, PeerId, TransferId,
     };
     use sqlx_core::connection::Connection;
@@ -307,12 +307,12 @@ async fn fencing_records_the_rejected_tail_and_preserves_it_until_consumer_ackno
         let connection = connection.as_mut().ok_or("closed copy")?;
         let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
         let CopyStatusAnswer::Status(status) =
-            fleet_sync_receiver::copy_status(&mut WriterScope(&mut transaction)).await?
+            fleet_project_copy::copy_status(&mut WriterScope(&mut transaction)).await?
         else {
             return Err("no copy status".into());
         };
         ended_at = status.acked;
-        let result = fleet_sync_receiver::fence(
+        let result = fleet_project_copy::fence(
             &mut WriterScope(&mut transaction),
             &FenceRequest {
                 database: fixture.database.database(),
@@ -324,7 +324,7 @@ async fn fencing_records_the_rejected_tail_and_preserves_it_until_consumer_ackno
                     epoch: Epoch::new(1)?,
                     acked: status.acked,
                 },
-                target_schema: Some(fleet_sync_protocol::SchemaSupport { max_version: 2 }),
+                target_schema: Some(fleet_protocol::SchemaSupport { max_version: 2 }),
                 holder: PeerId::new(durable_steps::Uuid::from_u128(
                     0x019eef0000007000800000000000000d,
                 ))?,
@@ -428,7 +428,7 @@ async fn a_refusing_copy_changes_nothing_and_does_not_stop_another_copy_or_write
     assert!(matches!(
         fixture.sender.replicate_once(fixture.first).await,
         Err(SenderError::Refused {
-            reason: fleet_sync_protocol::PieceRefusal::Hook(_),
+            reason: fleet_protocol::PieceRefusal::Hook(_),
             ..
         })
     ));

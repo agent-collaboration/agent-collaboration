@@ -7,8 +7,8 @@ use crate::{
     sender_storage,
     writer_file_record::read_file_record,
 };
-use fleet_sync_lease::WriterState;
-use fleet_sync_protocol::{
+use fleet_project_lease::WriterState;
+use fleet_protocol::{
     ConsumerProtocol, CopyRole, LeaseRefusal, Piece, PieceDigest, PieceRefusal, ReceiverId,
     RenewAnswer, ReplicationAnswer, ReplicationPosition, TransactionPart,
 };
@@ -149,7 +149,7 @@ where
 
     pub async fn acknowledge_rejected_tail(
         &self,
-        epoch: fleet_sync_protocol::Epoch,
+        epoch: fleet_protocol::Epoch,
     ) -> Result<(), SenderError> {
         let _control = self.database.control.lock().await;
         let mut connection = self.database.maintenance.acquire().await?;
@@ -321,7 +321,7 @@ where
         copy: ReceiverId,
         sent: &SentPiece,
         answer: ReplicationAnswer,
-        request_started: fleet_sync_protocol::SyncTime,
+        request_started: fleet_protocol::SyncTime,
     ) -> Result<(Vec<ReplicationEvents>, PieceContinuation), SenderError> {
         let mut control = self.database.control.lock().await;
         let mut connection = self.database.maintenance.acquire().await?;

@@ -127,7 +127,7 @@ where
     let admitted = scope
         .admit::<SettleReservationTask<S>>(
             &key,
-            &fleet_sync_protocol::ClaimSettlement {
+            &fleet_protocol::ClaimSettlement {
                 change: admission.request.clone(),
                 outcome,
             },

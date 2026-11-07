@@ -8,11 +8,11 @@ use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{
     AtomicStore, CallFailure, CallId, CallTarget, Engine, Host, OperationState, Uuid,
 };
-use fleet_sync_lease::{
+use fleet_project_lease::{
     HolderChangeTask, RegistrationTask, RegistryConfig, admit_holder_change, lifecycle_request_key,
 };
-use fleet_sync_protocol::*;
-use fleet_sync_tokio_runner::{ObjectKey, ObjectOptions, ObjectStore, TokioObject};
+use fleet_protocol::*;
+use fleet_tokio_objects::{ObjectKey, ObjectOptions, ObjectStore, TokioObject};
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use serde_json::json;
 use std::{path::Path, sync::Arc, time::Duration};
@@ -145,24 +145,24 @@ pub(super) async fn register_grant_history(
     engine.register(RegistrationTask::<
         Store,
         sqlx_turso::Turso,
-        fleet_sync_lease::NoLeaseChangeHook,
+        fleet_project_lease::NoLeaseChangeHook,
     >::new(
         config,
         host.clone(),
-        Arc::new(fleet_sync_lease::NoLeaseChangeHook),
+        Arc::new(fleet_project_lease::NoLeaseChangeHook),
     ))?;
     engine.register(HolderChangeTask::<
         Store,
         sqlx_turso::Turso,
-        fleet_sync_lease::NoLeaseChangeHook,
+        fleet_project_lease::NoLeaseChangeHook,
     >::new(
         config,
         host.clone(),
-        Arc::new(fleet_sync_lease::NoLeaseChangeHook),
+        Arc::new(fleet_project_lease::NoLeaseChangeHook),
     ))?;
     let proof = async {
         let registration = Registration { attempt: RequestId::new(Uuid::now_v7())?, database, writer: first, origin: Origin::Empty };
-        let id = engine.start::<RegistrationTask<Store, sqlx_turso::Turso, fleet_sync_lease::NoLeaseChangeHook>>(
+        let id = engine.start::<RegistrationTask<Store, sqlx_turso::Turso, fleet_project_lease::NoLeaseChangeHook>>(
             &lifecycle_request_key(registration.attempt)?, registration).await?;
         let OperationState::Completed { result } = engine.status(&id).await?.state else {
             return Err("real registration task did not complete".into());
@@ -177,14 +177,14 @@ pub(super) async fn register_grant_history(
             };
             let expected_epoch = *expected_epoch;
             let CopyStatusAnswer::Status(status) = host.dispatch(
-                fleet_sync_lease::CopyRead {copy:config.authoritative_receiver,database}, (),
+                fleet_project_lease::CopyRead {copy:config.authoritative_receiver,database}, (),
                 CallId {operation:durable_steps::OperationId::new(Uuid::now_v7())?,step:durable_steps::StepName::new("grant_setup_status")?},
             ).await? else {return Err("real copy status unavailable in grant-history setup".into())};
             let target = *target;
             registry.transaction(move |scope|Box::pin(async move {
                 // Normal Hello already owns its attach sequence. Reuse that
                 // public report rather than inventing another session at it.
-                let report = match fleet_sync_lease::accepted_schema_support(scope,target)
+                let report = match fleet_project_lease::accepted_schema_support(scope,target)
                     .await.map_err(durable_steps::StoreError::backend)? {
                     Some(report) if report.support.max_version >= status.schema.version => report,
                     Some(_) => return Err(durable_steps::StoreError::backend("grant setup peer does not support the real Copy schema")),
@@ -193,7 +193,7 @@ pub(super) async fn register_grant_history(
                         attach_seq:AttachSequence::new(1).map_err(durable_steps::StoreError::backend)?,support:SchemaSupport {max_version:status.schema.version},
                     },
                 };
-                fleet_sync_lease::report_schema_support(scope,&report,SetupIo.now()).await.map_err(durable_steps::StoreError::backend)?;
+                fleet_project_lease::report_schema_support(scope,&report,SetupIo.now()).await.map_err(durable_steps::StoreError::backend)?;
                 Ok(())
             })).await?;
             let request = HolderChangeRequest::Move { attempt: TransferId::new(Uuid::now_v7())?, database, from_epoch: *from_epoch, to: target, reason: HolderChangeReason::new("grant-history setup")? };
@@ -213,7 +213,7 @@ pub(super) async fn register_grant_history(
         let final_epoch = holders.last().ok_or("grant history has no final holder")?.0;
         registry.transaction(move |scope| Box::pin(async move {
             for (epoch, expected) in holders {
-                let actual = fleet_sync_lease::epoch_holder(scope, database, epoch).await.map_err(durable_steps::StoreError::backend)?;
+                let actual = fleet_project_lease::epoch_holder(scope, database, epoch).await.map_err(durable_steps::StoreError::backend)?;
                 if !actual.is_some_and(|grant| grant.holder == expected && (epoch == final_epoch || grant.ended_at.is_some())) {
                     return Err(durable_steps::StoreError::backend("genuine epoch history mismatch"));
                 }
@@ -250,7 +250,7 @@ impl GrantFixture {
             SetupIo,
             config,
             collaboration_central_tokio::DeliveryConfig {
-                relay_peer: fleet_sync_protocol::PeerId::try_from(
+                relay_peer: fleet_protocol::PeerId::try_from(
                     "019f0000-0000-7000-8000-000000005240".to_owned(),
                 )?,
             },
@@ -314,10 +314,10 @@ pub(super) async fn import_unheld(
             Box::pin(async move {
                 // Only kind/version/input are supplied here. No NoHook engine runs.
                 scope
-                    .admit::<fleet_sync_lease::ImportTask<
+                    .admit::<fleet_project_lease::ImportTask<
                         Store,
                         sqlx_turso::Turso,
-                        fleet_sync_lease::NoLeaseChangeHook,
+                        fleet_project_lease::NoLeaseChangeHook,
                     >>(&key, &request)
                     .await
                     .map(|admitted| admitted.id())

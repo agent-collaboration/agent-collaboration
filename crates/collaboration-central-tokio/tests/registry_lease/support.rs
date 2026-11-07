@@ -6,8 +6,8 @@ pub(super) use fleet_fixture::Fixture as FleetFixture;
 use collaboration_central_core::{CoreHost, ObjectAddress, ObjectRuntime, PlatformIo};
 use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{BoxFuture, CallFailure};
-use fleet_sync_lease::{LeasePolicy, RegistryConfig};
-use fleet_sync_tokio_runner::{ObjectKey, ObjectStore};
+use fleet_project_lease::{LeasePolicy, RegistryConfig};
+use fleet_tokio_objects::{ObjectKey, ObjectStore};
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use serde_json::Value;
 use std::{
@@ -19,7 +19,7 @@ use std::{
 };
 
 pub(super) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
-pub(super) type RegistryStore = fleet_sync_tokio_runner::TokioObject<CoreHost<RoutingIo>>;
+pub(super) type RegistryStore = fleet_tokio_objects::TokioObject<CoreHost<RoutingIo>>;
 pub(super) type RegistryRuntime = ObjectRuntime<
     collaboration_central_core::FleetKind,
     TokioStorageHost<CoreHost<RoutingIo>>,
@@ -80,7 +80,7 @@ impl RegistryFixture {
             io.clone(),
             config,
             collaboration_central_tokio::DeliveryConfig {
-                relay_peer: fleet_sync_protocol::PeerId::try_from(
+                relay_peer: fleet_protocol::PeerId::try_from(
                     "019f0000-0000-7000-8000-000000005240".to_owned(),
                 )?,
             },

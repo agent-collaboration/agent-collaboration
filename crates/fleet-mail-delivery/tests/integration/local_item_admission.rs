@@ -4,7 +4,7 @@ use super::support;
 use super::cancellation_support::{enqueue_cancel, local_item};
 use super::projection::{ProjectionConsumer, prepare_projection_table, read_committed_state};
 use durable_steps::{AtomicStore, storage::JournalStorage};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use support::{network::DeliverTask, *};
 
 #[derive(Clone, Copy)]

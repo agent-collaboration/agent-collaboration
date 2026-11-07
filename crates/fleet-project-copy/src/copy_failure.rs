@@ -1,7 +1,7 @@
 //! Certainty is assigned only after the store has returned from its boundary.
 use crate::{ApplyFailure, ReceiverError, StoreError as ReceiverStoreError};
 use durable_steps::{CallFailure, CallRetryReason, OperationFailure, StoreError};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CopyUnavailableReason, DiagnosticText, OutcomeUnknownReason, PieceRefusal, ReplicationAnswer,
     SeedAnswer, TransactionKey,
 };
@@ -97,10 +97,10 @@ pub fn receiver_rollback(error: ReceiverError) -> StoreError {
 /// cleanup in a new transaction before answering the terminal refusal.
 pub fn apply_rollback(error: ApplyFailure) -> StoreError {
     match error {
-        ApplyFailure::Refused(fleet_sync_protocol::PieceRefusal::NotInitialized) => {
+        ApplyFailure::Refused(fleet_protocol::PieceRefusal::NotInitialized) => {
             copy_rollback(CopyUnavailableReason::Uninitialized)
         }
-        ApplyFailure::Refused(fleet_sync_protocol::PieceRefusal::CopyFull) => {
+        ApplyFailure::Refused(fleet_protocol::PieceRefusal::CopyFull) => {
             copy_rollback(CopyUnavailableReason::StorageFull)
         }
         ApplyFailure::Storage(error) => receiver_rollback(ReceiverError::Storage(error)),

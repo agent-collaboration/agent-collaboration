@@ -7,12 +7,12 @@ use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use collaboration_central_core::AdmissionOrigin;
 use collaboration_central_tokio::SocketCommand;
 use durable_steps::{AtomicStore, CallId, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientAnswer, ClientFrame, ConnectionId, DeliveryEnvelope, DeliveryItem, DeliveryRefusal,
     FrameId, ItemId, PushResult, Recipient, SchemaSupport, ServerCall, ServerCallAnswer,
     ServerFrame, ServerRequest, SessionId, Submitter,
 };
-use fleet_sync_session::{ConnectionBinding, VerifiedPeer};
+use fleet_session::{ConnectionBinding, VerifiedPeer};
 use runtime_primitives::{Clock, SyncTime};
 use serde_json::{Value, json};
 use sqlx_core::{query::query, row::Row};
@@ -137,7 +137,7 @@ impl Socket {
         &self,
         fixture: &Fixture,
         frame: FrameId,
-        answer: PushResult<<BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Acceptance>,
+        answer: PushResult<<BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Acceptance>,
     ) -> TestResult {
         fixture
             .runtime
@@ -307,7 +307,7 @@ async fn no_capacity_keeps_content_and_retries_the_same_item_after_capacity_retu
     )
     .await?;
     let full_limits = collaboration_central_core::fleet_outbox_limits()?;
-    let no_room = fleet_sync_delivery::DeliveryLimits::new::<BoardDeliveryTypes>(
+    let no_room = fleet_mail_delivery::DeliveryLimits::new::<BoardDeliveryTypes>(
         full_limits.outbox_bytes(),
         full_limits.outbox_items(),
         0,

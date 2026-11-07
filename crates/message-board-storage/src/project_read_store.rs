@@ -1,6 +1,6 @@
 //! Shared read capability over either a writable owner's or a retained file's guarded pool.
 use crate::{ProjectSnapshot, ProjectStorageError, StoreSchemaState};
-use fleet_sync_writer::ReadPool;
+use fleet_project_writer::ReadPool;
 use message_board::ProjectId;
 
 pub(crate) async fn check_project_read_schema(
@@ -38,7 +38,7 @@ impl<'store> ProjectReadStore<'store> {
 
     pub async fn acknowledged_capture(
         &self,
-        through: fleet_sync_protocol::ReplicationPosition,
+        through: fleet_protocol::ReplicationPosition,
     ) -> Result<crate::AcknowledgedProjectChanges, ProjectStorageError> {
         let mut read = self.pool.begin_read().await?;
         let result = crate::project_capture_marks::acknowledged_capture(&mut read, through).await?;

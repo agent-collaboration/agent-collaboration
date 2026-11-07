@@ -1,6 +1,6 @@
 //! Owner holder changes preserve native preview and refusal contracts.
 use board_sync_protocol::BoardHolderChangeRefusal;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ActorRef, CopyUnavailableReason, Epoch, FailureCode, HolderChangeReason, ReplicationPosition,
     RequestId, RetirementRefusal, SyncTime, TakeoverPreview, TransferId,
 };

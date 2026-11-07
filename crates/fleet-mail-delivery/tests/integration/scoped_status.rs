@@ -1,6 +1,6 @@
 use super::support::*;
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::{query::query, row::Row};
 
 fn publication(
@@ -24,20 +24,20 @@ async fn two_submitters_keep_independent_events_acknowledgements_and_publication
         directory,
     } = Fixture::new().await;
     let (first_reference, second_reference) = store.transaction(|scope| Box::pin(async move {
-        let (first, _) = StatusStream::<_, TestTypes>::new(scope, fleet_sync_delivery::Submitter::Machine(peer(1)), "route-a".into())
-            .append(&publication(1,1,DeliveryStatus::AtRecipient), fleet_sync_protocol::SyncTime::from_unix_millis(0)).await.map_err(storage_error)?;
-        let (second, _) = StatusStream::<_, TestTypes>::new(scope, fleet_sync_delivery::Submitter::Machine(peer(3)), "route-c".into())
-            .append(&publication(2,1,DeliveryStatus::AtRecipient), fleet_sync_protocol::SyncTime::from_unix_millis(0)).await.map_err(storage_error)?;
+        let (first, _) = StatusStream::<_, TestTypes>::new(scope, fleet_mail_delivery::Submitter::Machine(peer(1)), "route-a".into())
+            .append(&publication(1,1,DeliveryStatus::AtRecipient), fleet_protocol::SyncTime::from_unix_millis(0)).await.map_err(storage_error)?;
+        let (second, _) = StatusStream::<_, TestTypes>::new(scope, fleet_mail_delivery::Submitter::Machine(peer(3)), "route-c".into())
+            .append(&publication(2,1,DeliveryStatus::AtRecipient), fleet_protocol::SyncTime::from_unix_millis(0)).await.map_err(storage_error)?;
         assert_eq!(first.cursor.value(),1);
         assert_eq!(second.cursor.value(),1);
-        let (first, first_reference) = StatusStream::<_, TestTypes>::new(scope, fleet_sync_delivery::Submitter::Machine(peer(1)), "route-a".into())
-            .append(&publication(1,2,DeliveryStatus::Held), fleet_sync_protocol::SyncTime::from_unix_millis(0)).await.map_err(storage_error)?;
-        let (second, second_reference) = StatusStream::<_, TestTypes>::new(scope, fleet_sync_delivery::Submitter::Machine(peer(3)), "route-c".into())
-            .append(&publication(2,2,DeliveryStatus::Uncertain), fleet_sync_protocol::SyncTime::from_unix_millis(0)).await.map_err(storage_error)?;
+        let (first, first_reference) = StatusStream::<_, TestTypes>::new(scope, fleet_mail_delivery::Submitter::Machine(peer(1)), "route-a".into())
+            .append(&publication(1,2,DeliveryStatus::Held), fleet_protocol::SyncTime::from_unix_millis(0)).await.map_err(storage_error)?;
+        let (second, second_reference) = StatusStream::<_, TestTypes>::new(scope, fleet_mail_delivery::Submitter::Machine(peer(3)), "route-c".into())
+            .append(&publication(2,2,DeliveryStatus::Uncertain), fleet_protocol::SyncTime::from_unix_millis(0)).await.map_err(storage_error)?;
         assert_eq!(first.cursor.value(),2);
         assert_eq!(second.cursor.value(),2);
-        assert!(matches!(StatusStream::<_, TestTypes>::new(scope, fleet_sync_delivery::Submitter::Machine(peer(1)), "route-a".into())
-            .acknowledge(StatusCursor::new(1), fleet_sync_protocol::SyncTime::from_unix_millis(0)).await.map_err(storage_error)?, StatusAckResult::Acknowledged { floor } if floor.value()==1));
+        assert!(matches!(StatusStream::<_, TestTypes>::new(scope, fleet_mail_delivery::Submitter::Machine(peer(1)), "route-a".into())
+            .acknowledge(StatusCursor::new(1), fleet_protocol::SyncTime::from_unix_millis(0)).await.map_err(storage_error)?, StatusAckResult::Acknowledged { floor } if floor.value()==1));
         Ok((first_reference.unwrap(),second_reference.unwrap()))
     })).await.unwrap();
 
@@ -53,7 +53,7 @@ async fn two_submitters_keep_independent_events_acknowledgements_and_publication
                     .enqueue(
                         original,
                         peer(9),
-                        fleet_sync_delivery::Submitter::Machine(peer(1)),
+                        fleet_mail_delivery::Submitter::Machine(peer(1)),
                         SyncTime::from_unix_millis(10),
                     )
                     .await
@@ -91,12 +91,12 @@ async fn two_submitters_keep_independent_events_acknowledgements_and_publication
                     .map_err(storage_error)?;
                 StatusStream::<_, TestTypes>::new(
                     scope,
-                    fleet_sync_delivery::Submitter::Machine(peer(1)),
+                    fleet_mail_delivery::Submitter::Machine(peer(1)),
                     "route-a".into(),
                 )
                 .acknowledge(
                     StatusCursor::new(2),
-                    fleet_sync_protocol::SyncTime::from_unix_millis(0),
+                    fleet_protocol::SyncTime::from_unix_millis(0),
                 )
                 .await
                 .map_err(storage_error)?;
@@ -110,9 +110,9 @@ async fn two_submitters_keep_independent_events_acknowledgements_and_publication
         .await
         .unwrap();
     reopened.transaction(move |scope| Box::pin(async move {
-        let first = StatusStream::<_,TestTypes>::new(scope,fleet_sync_delivery::Submitter::Machine(peer(1)),"route-a".into()).fetch(fleet_sync_delivery::Submitter::Machine(peer(1)),StatusCursor::new(0),10).await.map_err(storage_error)?;
+        let first = StatusStream::<_,TestTypes>::new(scope,fleet_mail_delivery::Submitter::Machine(peer(1)),"route-a".into()).fetch(fleet_mail_delivery::Submitter::Machine(peer(1)),StatusCursor::new(0),10).await.map_err(storage_error)?;
         assert!(first.events.is_empty());
-        let second = StatusStream::<_,TestTypes>::new(scope,fleet_sync_delivery::Submitter::Machine(peer(3)),"route-c".into()).fetch(fleet_sync_delivery::Submitter::Machine(peer(3)),StatusCursor::new(0),10).await.map_err(storage_error)?;
+        let second = StatusStream::<_,TestTypes>::new(scope,fleet_mail_delivery::Submitter::Machine(peer(3)),"route-c".into()).fetch(fleet_mail_delivery::Submitter::Machine(peer(3)),StatusCursor::new(0),10).await.map_err(storage_error)?;
         assert_eq!(second.events.len(),2);
         assert_eq!(second.through.value(),2);
         assert_eq!(second.events.first().unwrap().item,item_id(2));
@@ -177,18 +177,18 @@ async fn scoped_upgrade_preserves_an_existing_floor_events_and_both_publication_
     .await
     .unwrap();
     reopened.transaction(|scope| Box::pin(async move {
-        let mut stream = StatusStream::<_,TestTypes>::new(scope,fleet_sync_delivery::Submitter::Machine(peer(1)),"route-a".into());
-        let batch = stream.fetch(fleet_sync_delivery::Submitter::Machine(peer(1)),StatusCursor::new(0),10).await.map_err(storage_error)?;
+        let mut stream = StatusStream::<_,TestTypes>::new(scope,fleet_mail_delivery::Submitter::Machine(peer(1)),"route-a".into());
+        let batch = stream.fetch(fleet_mail_delivery::Submitter::Machine(peer(1)),StatusCursor::new(0),10).await.map_err(storage_error)?;
         assert_eq!(batch.through.value(),7);
         assert_eq!(batch.events.iter().map(|event|(event.cursor.value(),event.item,event.version.value())).collect::<Vec<_>>(),
             vec![(6,item_id(30),1),(7,item_id(31),2)]);
-        assert!(matches!(stream.acknowledge(StatusCursor::new(4), fleet_sync_protocol::SyncTime::from_unix_millis(0)).await.map_err(storage_error)?,StatusAckResult::Acknowledged {floor} if floor.value()==5));
-        for target in [PublicationTarget::Peer {peer:peer(1),route:"route-a".to_owned()},PublicationTarget::StatusStream {sender:fleet_sync_delivery::Submitter::Machine(peer(1)),route:"route-a".to_owned()}] {
+        assert!(matches!(stream.acknowledge(StatusCursor::new(4), fleet_protocol::SyncTime::from_unix_millis(0)).await.map_err(storage_error)?,StatusAckResult::Acknowledged {floor} if floor.value()==5));
+        for target in [PublicationTarget::Peer {peer:peer(1),route:"route-a".to_owned()},PublicationTarget::StatusStream {sender:fleet_mail_delivery::Submitter::Machine(peer(1)),route:"route-a".to_owned()}] {
             let publication = resolve_publication::<_,TestTypes>(scope,PublicationRef {item:item_id(31),version:StatusVersion::new(2),target}).await.map_err(storage_error)?.unwrap();
             assert!(matches!(publication.status,DeliveryStatus::Held));
         }
-        let (new_event,_) = StatusStream::<_,TestTypes>::new(scope,fleet_sync_delivery::Submitter::Machine(peer(3)),"route-c".into())
-            .append(&publication(32,1,DeliveryStatus::Uncertain), fleet_sync_protocol::SyncTime::from_unix_millis(0)).await.map_err(storage_error)?;
+        let (new_event,_) = StatusStream::<_,TestTypes>::new(scope,fleet_mail_delivery::Submitter::Machine(peer(3)),"route-c".into())
+            .append(&publication(32,1,DeliveryStatus::Uncertain), fleet_protocol::SyncTime::from_unix_millis(0)).await.map_err(storage_error)?;
         assert_eq!(new_event.cursor.value(),1);
         Ok(())
     })).await.unwrap();

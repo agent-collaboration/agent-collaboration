@@ -9,9 +9,9 @@ use crate::{
 };
 use board_fleet_sync::BoardProjectSchema;
 use fleet_admission::{FleetImportBundle, FleetImportRecord, ImportProvenance};
-use fleet_sync_lease::{LeaseHolder, LeasePolicy};
-use fleet_sync_protocol::{DatabaseId, PeerId};
-use fleet_sync_writer::{ReplicatedDatabase, WriterOptions};
+use fleet_project_lease::{LeaseHolder, LeasePolicy};
+use fleet_project_writer::{ReplicatedDatabase, WriterOptions};
+use fleet_protocol::{DatabaseId, PeerId};
 use message_board::{HumanId, RecordId, RecordTime, RepositoryRef, ResourceName};
 use message_board_storage::{ProjectStore, apply_project_import};
 use std::{

@@ -3,7 +3,7 @@ use super::support;
 use durable_steps::{
     AtomicStore, CallId, Engine, storage::TransactionScope, turso_store::TursoScope,
 };
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::row::Row;
 use std::{sync::Arc, sync::atomic::Ordering};
 use support::{network::*, *};
@@ -172,7 +172,7 @@ async fn cancelling_an_original_held_before_the_first_submit_withdraws_it_withou
                     .enqueue_cancel_and_admit::<GatedSubmit, RecordRemoval, _>(
                         cancel,
                         peer(3),
-                        fleet_sync_delivery::Submitter::Machine(peer(1)),
+                        fleet_mail_delivery::Submitter::Machine(peer(1)),
                         SyncTime::from_unix_millis(0),
                         &GatedConsumer,
                     )

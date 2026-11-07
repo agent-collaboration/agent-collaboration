@@ -5,9 +5,9 @@ use durable_steps::{
     AtomicStore, Engine, OperationState, RequestKey, SettleError, StoreError, Task,
     storage::TransactionScope,
 };
-use fleet_sync_lease::*;
-use fleet_sync_protocol::*;
-use fleet_sync_session::PeerAuthenticator;
+use fleet_project_lease::*;
+use fleet_protocol::*;
+use fleet_session::PeerAuthenticator;
 use runtime_primitives::{Clock, WakeScheduler};
 use sqlx_turso::Turso;
 use std::sync::Arc;
@@ -32,39 +32,39 @@ pub(crate) async fn registry_engine(
     engine.register(RegistrationTask::<
         ServiceObject,
         Turso,
-        fleet_sync_lease::NoLeaseChangeHook,
+        fleet_project_lease::NoLeaseChangeHook,
     >::new(
         config,
         clock.clone(),
-        std::sync::Arc::new(fleet_sync_lease::NoLeaseChangeHook),
+        std::sync::Arc::new(fleet_project_lease::NoLeaseChangeHook),
     ))?;
     engine.register(ImportTask::<
         ServiceObject,
         Turso,
-        fleet_sync_lease::NoLeaseChangeHook,
+        fleet_project_lease::NoLeaseChangeHook,
     >::new(
         config,
         clock.clone(),
-        std::sync::Arc::new(fleet_sync_lease::NoLeaseChangeHook),
+        std::sync::Arc::new(fleet_project_lease::NoLeaseChangeHook),
     ))?;
     engine.register(RetirementTask::<
         ServiceObject,
         Turso,
-        fleet_sync_lease::NoLeaseChangeHook,
+        fleet_project_lease::NoLeaseChangeHook,
     >::new(
         config,
         clock.clone(),
-        std::sync::Arc::new(fleet_sync_lease::NoLeaseChangeHook),
+        std::sync::Arc::new(fleet_project_lease::NoLeaseChangeHook),
     ))?;
     engine.register(PreviewTakeoverTask::<ServiceObject, Turso>::new(config))?;
     engine.register(HolderChangeTask::<
         ServiceObject,
         Turso,
-        fleet_sync_lease::NoLeaseChangeHook,
+        fleet_project_lease::NoLeaseChangeHook,
     >::new(
         config,
         clock.clone(),
-        std::sync::Arc::new(fleet_sync_lease::NoLeaseChangeHook),
+        std::sync::Arc::new(fleet_project_lease::NoLeaseChangeHook),
     ))?;
     engine.register(HolderChangeCancelTask::<ServiceObject, Turso>::new(
         config, clock,
@@ -78,7 +78,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > ServiceState<P, C, A>
 {
@@ -127,7 +127,7 @@ impl<
             return Ok(RegistrationAnswer::Refused(RegistrationRefusal::Retired));
         }
         let key = lifecycle_request_key(request.attempt).map_err(ServiceError::rule)?;
-        self.execute_registry::<RegistrationTask<ServiceObject, Turso, fleet_sync_lease::NoLeaseChangeHook>>(key, request)
+        self.execute_registry::<RegistrationTask<ServiceObject, Turso, fleet_project_lease::NoLeaseChangeHook>>(key, request)
             .await
     }
     pub(crate) async fn renew(
@@ -145,13 +145,13 @@ impl<
         self.registry
             .transaction(move |scope| {
                 Box::pin(async move {
-                    fleet_sync_lease::renew(
+                    fleet_project_lease::renew(
                         scope,
                         &request,
                         &peer,
                         now,
                         &policy,
-                        &fleet_sync_lease::NoLeaseChangeHook,
+                        &fleet_project_lease::NoLeaseChangeHook,
                     )
                     .await
                     .map_err(StoreError::backend)

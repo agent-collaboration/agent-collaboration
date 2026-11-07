@@ -1,5 +1,5 @@
 #![allow(clippy::unwrap_used)]
-use fleet_sync_protocol::{OperationAnswer, OperationRequest, ServerFrame};
+use fleet_protocol::{OperationAnswer, OperationRequest, ServerFrame};
 use serde_json::{Value, json};
 
 const ITEM: &str = "01900000-0000-7000-8000-000000000001";
@@ -105,8 +105,7 @@ fn typed_refusals_cross_report_and_publication_answers() {
         json!({"kind":"refused","value":{"reason":{"kind":"tooLarge","value":{"field":"acceptance"}}}}),
     ] {
         let wire = json!({"kind":"crate","value":{"kind":"published","value":value}});
-        let decoded: fleet_sync_protocol::ClientAnswer =
-            serde_json::from_value(wire.clone()).unwrap();
+        let decoded: fleet_protocol::ClientAnswer = serde_json::from_value(wire.clone()).unwrap();
         assert_eq!(serde_json::to_value(decoded).unwrap(), wire);
     }
 }
@@ -124,12 +123,12 @@ fn processing_failure_kinds_are_closed_on_the_wire() {
         "executionFailed",
     ] {
         let wire = json!({"kind":"processingFailed","value":{"kind":kind}});
-        let decoded: fleet_sync_protocol::DeliveryRefusal =
+        let decoded: fleet_protocol::DeliveryRefusal =
             serde_json::from_value(wire.clone()).unwrap();
         assert_eq!(serde_json::to_value(decoded).unwrap(), wire);
     }
     assert!(
-        serde_json::from_value::<fleet_sync_protocol::DeliveryRefusal>(
+        serde_json::from_value::<fleet_protocol::DeliveryRefusal>(
             json!({"kind":"processingFailed","value":{"kind":"unknown"}})
         )
         .is_err()
@@ -139,15 +138,15 @@ fn processing_failure_kinds_are_closed_on_the_wire() {
 #[test]
 fn delivery_header_preserves_identity_and_rejects_a_body() {
     let header = json!({"id":ITEM,"sender":{"kind":"machine","value":"019eef00-0000-7000-8000-000000000001"},"recipient":{"peer":PEER,"address":null},"validUntil":null,"digest":"0b7f9c7c2a2a8e71b3220266466dd262a878ca97fae28786dbbe6686b8964da0"});
-    let decoded: fleet_sync_protocol::DeliveryHeader<fleet_sync_protocol::NoDelivery> =
+    let decoded: fleet_protocol::DeliveryHeader<fleet_protocol::NoDelivery> =
         serde_json::from_value(header.clone()).unwrap();
     assert_eq!(serde_json::to_value(decoded).unwrap(), header);
     let mut with_body = header;
     with_body["body"] = json!("forbidden");
     assert!(
-        serde_json::from_value::<
-            fleet_sync_protocol::DeliveryHeader<fleet_sync_protocol::NoDelivery>,
-        >(with_body)
+        serde_json::from_value::<fleet_protocol::DeliveryHeader<fleet_protocol::NoDelivery>>(
+            with_body
+        )
         .is_err()
     );
 }

@@ -56,7 +56,7 @@ pub use apply_follow_up::{ApplyFollowUp, FollowUpCall, FollowUpInput, admit_foll
 pub use apply_rules::{apply_piece, discard_staged_parts};
 pub use copy_lifecycle::{copy_status, create_copy, retire_copy};
 pub use fence_rules::fence;
-pub use fleet_sync_protocol::{CopyRole, CopyStatus};
+pub use fleet_protocol::{CopyRole, CopyStatus};
 pub use hook_migrations::initialize_hook;
 pub use receiver_contract::{
     AppliedPiece, ApplyDecision, ApplyFailure, FollowUpAnswer, FollowUpDone, FollowUpFailure,

@@ -5,7 +5,7 @@ use crate::{
     *,
 };
 use durable_steps::{AtomicStore, storage::TransactionScope};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
 use std::sync::atomic::Ordering;

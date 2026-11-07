@@ -5,7 +5,7 @@ use durable_steps::{
     AtomicStore, Engine, StoreError as JournalError, storage::TransactionScope,
     turso_store::TursoStore,
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::row::Row;
 use sqlx_turso::Turso;
 use std::sync::{Arc, atomic::Ordering};

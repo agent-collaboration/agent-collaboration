@@ -2,7 +2,7 @@
 use super::{CoreHost, PlatformIo, SharedTaskCaller, no_route};
 use crate::fleet_creation_calls::ReadProjectCreationDecision;
 use durable_steps::{CallFailure, CallId};
-use fleet_sync_protocol::{GateAnswer, GateReason, GateReasonCode, RegistrationAdmission};
+use fleet_protocol::{GateAnswer, GateReason, GateReasonCode, RegistrationAdmission};
 use message_board::{ProjectId, StoredDecision};
 
 impl<Io: PlatformIo> CoreHost<Io> {

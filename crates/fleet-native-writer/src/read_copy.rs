@@ -1,8 +1,9 @@
 //! Transfer a completed follower generation into its immutable guarded owner.
-use crate::{InstallCoordinator, InstallFileAnswer, InstallStatus, StagingError, TokioObject};
+use crate::{InstallCoordinator, InstallFileAnswer, InstallStatus, StagingError};
 use durable_steps::{Host, storage::TransactionScope};
-use fleet_sync_protocol::{InstallId, NoConsumer};
-use fleet_sync_receiver::{AppliedPiece, HookError, ReceiverRules, SnapshotInstallRules};
+use fleet_project_copy::{AppliedPiece, HookError, ReceiverRules, SnapshotInstallRules};
+use fleet_protocol::{InstallId, NoConsumer};
+use fleet_tokio_objects::TokioObject;
 
 struct ReadCopyRules;
 impl<S: TransactionScope> ReceiverRules<S> for ReadCopyRules {
@@ -40,7 +41,7 @@ impl<H: Host> InstallCoordinator<H> {
         &self,
         id: InstallId,
         target: &TokioObject<H>,
-    ) -> Result<fleet_sync_writer::ReadCopy, StagingError> {
+    ) -> Result<fleet_project_writer::ReadCopy, StagingError> {
         let record = self.record(id).await?;
         if record.request.target != *target.key() {
             return Err(
@@ -48,9 +49,9 @@ impl<H: Host> InstallCoordinator<H> {
             );
         }
         let InstallStatus::Ready { snapshot } = record.status else {
-            return Err(fleet_sync_receiver::SnapshotInstallError::NotVerified.into());
+            return Err(fleet_project_copy::SnapshotInstallError::NotVerified.into());
         };
         target.close_for_read_copy().await?;
-        Ok(fleet_sync_writer::ReadCopy::open_verified(target.path(), &snapshot).await?)
+        Ok(fleet_project_writer::ReadCopy::open_verified(target.path(), &snapshot).await?)
     }
 }

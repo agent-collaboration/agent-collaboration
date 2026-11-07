@@ -6,8 +6,8 @@ use crate::{
     writer_scope::WriterScope,
 };
 use durable_steps::Uuid;
-use fleet_sync_lease::WriterState;
-use fleet_sync_protocol::*;
+use fleet_project_lease::WriterState;
+use fleet_protocol::*;
 use sqlx_core::{connection::Connection, query::query, row::Row};
 use sqlx_turso::Turso;
 use std::time::Duration;
@@ -51,11 +51,11 @@ async fn fence_copy(fixture: &SenderFixture, copy: ReceiverId) -> TestResult<Rep
     let connection = owner.as_mut().ok_or("copy closed")?;
     let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
     let CopyStatusAnswer::Status(status) =
-        fleet_sync_receiver::copy_status(&mut WriterScope(&mut transaction)).await?
+        fleet_project_copy::copy_status(&mut WriterScope(&mut transaction)).await?
     else {
         return Err("copy status missing".into());
     };
-    let answer = fleet_sync_receiver::fence(
+    let answer = fleet_project_copy::fence(
         &mut WriterScope(&mut transaction),
         &FenceRequest {
             database: fixture.database.database(),
@@ -65,7 +65,7 @@ async fn fence_copy(fixture: &SenderFixture, copy: ReceiverId) -> TestResult<Rep
                 epoch: Epoch::new(1)?,
                 acked: status.acked,
             },
-            target_schema: Some(fleet_sync_protocol::SchemaSupport { max_version: 2 }),
+            target_schema: Some(fleet_protocol::SchemaSupport { max_version: 2 }),
             holder: PeerId::new(Uuid::from_u128(0x019eef00000070008000000000000008))?,
         },
     )

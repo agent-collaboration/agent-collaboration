@@ -1,12 +1,13 @@
 //! Read-only operations facts. This projection does not decide whether a copy is readable.
+use crate::checked_queries;
 use crate::{
-    ReceiverError, StoreError, checked_queries,
+    ReceiverError, StoreError,
     copy_contract::CopyRecord,
     copy_storage::{CopyStorage, decode_record},
     schema_reads::{SchemaReads, required_text},
 };
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::{CopyStatus, SyncTime, TransactionKey};
+use fleet_protocol::{CopyStatus, SyncTime, TransactionKey};
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,

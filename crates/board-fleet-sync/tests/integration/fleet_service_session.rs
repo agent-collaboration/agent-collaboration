@@ -2,16 +2,16 @@
 mod support;
 
 use board_fleet_sync::{AccessServiceToken, ReqwestSessionTransport};
-use fleet_sync_lease::{LeasePolicy, RegistryConfig};
-use fleet_sync_protocol::{
+use fleet_native_services::{FleetService, ServiceOptions};
+use fleet_project_lease::{LeasePolicy, RegistryConfig};
+use fleet_protocol::{
     AuthRefusal, NoConsumer, OperationAnswer, OperationRequest, PeerId, ReceiverId, SchemaSupport,
 };
-use fleet_sync_service::{FleetService, ServiceOptions};
-use fleet_sync_session::{
+use fleet_session::{
     ClientEvent, ConnectFailure, Endpoint, PeerCredential, SessionClient, SessionClientStore,
     SessionTransport,
 };
-use fleet_sync_tokio_runner::SessionPump;
+use fleet_session_client::SessionPump;
 use runtime_primitives::{Backoff, SystemClock, UuidV7Ids};
 use std::{
     sync::{Arc, atomic::Ordering},

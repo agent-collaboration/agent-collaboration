@@ -1,8 +1,8 @@
 //! Query derives recorded ownership; Settle authorizes the caller's independent claim.
 use board_sync_protocol::BoardDeliveryTypes;
 use durable_steps::{StoreError, storage::TransactionScope};
-use fleet_sync_delivery::{DeliveryLimits, Outbox};
-use fleet_sync_protocol::{ItemId, PeerId, Submitter};
+use fleet_mail_delivery::{DeliveryLimits, Outbox};
+use fleet_protocol::{ItemId, PeerId, Submitter};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -30,7 +30,7 @@ where
     )
     .relay_submitter(item)
     .await
-    .map_err(fleet_sync_delivery::delivery_rollback)?;
+    .map_err(fleet_mail_delivery::delivery_rollback)?;
     match owner {
         Some(submitter) => Ok(claim_is_authorized(scope, peer, submitter, now)
             .await?
@@ -57,13 +57,13 @@ where
 {
     match claim {
         Submitter::Project(database) => {
-            let lease = match fleet_sync_lease::lease_status(scope, database, now).await {
+            let lease = match fleet_project_lease::lease_status(scope, database, now).await {
                 Ok(lease) => lease,
-                Err(fleet_sync_lease::LeaseError::Retired) => None,
+                Err(fleet_project_lease::LeaseError::Retired) => None,
                 Err(error) => return Err(StoreError::backend(error)),
             };
             Ok(lease.is_some_and(|lease| {
-                lease.state == fleet_sync_protocol::LeaseState::Held && lease.holder == peer
+                lease.state == fleet_protocol::LeaseState::Held && lease.holder == peer
             }))
         }
         Submitter::Machine(owner) => Ok(owner == peer),

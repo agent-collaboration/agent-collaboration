@@ -1,6 +1,6 @@
 //! Disagreeing hints cross the real reaction owner; generic central remains the lease authority.
 use super::*;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DatabaseId, LeaseAnswer, LeaseRequest, LeaseState, LeaseStatus, OperationAnswer,
     OperationRequest, RenewAnswer, RenewRequest, RequestId,
 };
@@ -74,7 +74,7 @@ async fn check_hint_against_current_authority(
         "a hint cannot replace the writer"
     );
     assert!(matches!(current.store.writer_state().await?,
-        fleet_sync_lease::WriterState::Writing {epoch} if epoch==after_authority.epoch));
+        fleet_project_lease::WriterState::Writing {epoch} if epoch==after_authority.epoch));
     // activate is idempotent for Running and refuses Stopped. No test flag or
     // restarted worker can substitute for the original runtime staying active.
     current.activate(&runtime.project).await?;

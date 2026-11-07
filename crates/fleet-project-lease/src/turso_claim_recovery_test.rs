@@ -2,7 +2,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::{turso_copy_fixture::*, turso_registry_fixture::*, *};
 use durable_steps::{AtomicStore, OperationState, Uuid};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_turso::Turso;
 use std::sync::{Arc, atomic::Ordering};
 
@@ -238,7 +238,7 @@ async fn schema_refusal_after_reservation_is_settled_and_a_gate_refusal_has_no_s
                             attach_seq: AttachSequence::new(2).map_err(storage)?,
                             support: SchemaSupport { max_version: 0 },
                         },
-                        fleet_sync_protocol::SyncTime::from_unix_millis(1000),
+                        fleet_protocol::SyncTime::from_unix_millis(1000),
                     )
                     .await
                     .map_err(storage)?;

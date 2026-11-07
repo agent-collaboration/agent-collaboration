@@ -27,7 +27,8 @@ pub(super) async fn assert_no_granted_epoch_three(
     let proof = async {
         let mut transaction = connection.begin().await?;
         let mut scope = HistoryRead(&mut transaction);
-        let skipped = fleet_sync_lease::epoch_holder(&mut scope, database, Epoch::new(3)?).await?;
+        let skipped =
+            fleet_project_lease::epoch_holder(&mut scope, database, Epoch::new(3)?).await?;
         transaction.rollback().await?;
         if skipped.is_some() {
             return Err(format!("stale Preview nevertheless granted epoch3: {skipped:?}").into());

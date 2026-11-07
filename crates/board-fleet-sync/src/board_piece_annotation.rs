@@ -1,6 +1,6 @@
 //! Summaries describe the piece's highest feed position.
 use board_sync_protocol::{BoardAnnotation, BoardConsumerProtocol};
-use fleet_sync_writer::{CapturedTransaction, PieceAnnotation};
+use fleet_project_writer::{CapturedTransaction, PieceAnnotation};
 use message_board_storage::{CapturedFeedSummary, CapturedProjectChanges};
 
 pub struct BoardPieceAnnotation;

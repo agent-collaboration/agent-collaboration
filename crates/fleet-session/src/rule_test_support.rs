@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 use crate::*;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{
     pool::{Pool, PoolOptions},
     transaction::Transaction,

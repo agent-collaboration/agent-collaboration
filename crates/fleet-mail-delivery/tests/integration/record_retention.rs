@@ -3,7 +3,7 @@ use super::support::{
     *,
 };
 use durable_steps::{AtomicStore, Engine, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
 use std::sync::{Arc, atomic::Ordering};
@@ -23,9 +23,9 @@ async fn sixty_one_day_ids_are_refused_at_machine_outbox_relay_push_and_local_in
     let fixture = Fixture::new().await;
     fixture.store.transaction(|scope|Box::pin(async move {
         let DeliveryEnvelope::Item(original)=item(1,"old") else {return Err(StoreError::backend("original"));};
-        assert!(matches!(Outbox::<_,TestTypes, _>::new(scope,limits(), &FixtureBindings).enqueue(original,peer(9),fleet_sync_delivery::Submitter::Machine(peer(1)),day(61)).await.map_err(storage_error)?,OutboxAdmission::Refused {reason:DeliveryRefusal::TooOld}));
-        assert!(matches!(Outbox::<_,TestTypes, _>::new(scope,limits(), &FixtureBindings).submit_relay::<PushTask,RecordRemoval>(fleet_sync_delivery::Submitter::Machine(peer(1)),item(1,"old"),peer(9),"route".into(),day(61)).await.map_err(storage_error)?,SubmitResult::Refused {reason:DeliveryRefusal::TooOld}));
-        assert!(matches!(Inbox::<_,TestTypes, _>::new(scope,peer(2),limits(), &FixtureBindings).accept_push::<DeliverTask,ReportTask,RecordRemoval,_>(fleet_sync_delivery::Submitter::Machine(peer(1)), item(1,"old"),peer(9),&TestConsumer,day(61)).await.map_err(storage_error)?,PushResult::Refused {reason:DeliveryRefusal::TooOld}));
+        assert!(matches!(Outbox::<_,TestTypes, _>::new(scope,limits(), &FixtureBindings).enqueue(original,peer(9),fleet_mail_delivery::Submitter::Machine(peer(1)),day(61)).await.map_err(storage_error)?,OutboxAdmission::Refused {reason:DeliveryRefusal::TooOld}));
+        assert!(matches!(Outbox::<_,TestTypes, _>::new(scope,limits(), &FixtureBindings).submit_relay::<PushTask,RecordRemoval>(fleet_mail_delivery::Submitter::Machine(peer(1)),item(1,"old"),peer(9),"route".into(),day(61)).await.map_err(storage_error)?,SubmitResult::Refused {reason:DeliveryRefusal::TooOld}));
+        assert!(matches!(Inbox::<_,TestTypes, _>::new(scope,peer(2),limits(), &FixtureBindings).accept_push::<DeliverTask,ReportTask,RecordRemoval,_>(fleet_mail_delivery::Submitter::Machine(peer(1)), item(1,"old"),peer(9),&TestConsumer,day(61)).await.map_err(storage_error)?,PushResult::Refused {reason:DeliveryRefusal::TooOld}));
         let DeliveryEnvelope::Item(original)=item(1,"old") else {return Err(StoreError::backend("original"));};
         assert!(too_old_error(Inbox::<_,TestTypes, _>::new(scope,peer(2),limits(), &FixtureBindings).enqueue_local(original,&TestConsumer,day(61)).await));
         let row=query::<Turso>("SELECT (SELECT count(*) FROM _fleet_sync_outbox_items)+(SELECT count(*) FROM _fleet_sync_inbox_items)+(SELECT count(*) FROM _fleet_sync_operations) AS rows").fetch_one(scope.executor()).await?;
@@ -73,7 +73,7 @@ async fn public_sender_fleet_push_and_local_admission_schedule_removal_from_crea
                                     .enqueue_and_admit::<SubmitTask, RecordRemoval>(
                                         original,
                                         peer(3),
-                                        fleet_sync_delivery::Submitter::Machine(peer(1)),
+                                        fleet_mail_delivery::Submitter::Machine(peer(1)),
                                         day(admitted_day),
                                     )
                                     .await
@@ -87,7 +87,7 @@ async fn public_sender_fleet_push_and_local_admission_schedule_removal_from_crea
                                         &FixtureBindings,
                                     )
                                     .submit_relay::<PushTask, RecordRemoval>(
-                                        fleet_sync_delivery::Submitter::Machine(peer(1)),
+                                        fleet_mail_delivery::Submitter::Machine(peer(1)),
                                         envelope,
                                         peer(3),
                                         "route".into(),
@@ -105,7 +105,7 @@ async fn public_sender_fleet_push_and_local_admission_schedule_removal_from_crea
                                         &FixtureBindings,
                                     )
                                     .accept_push::<DeliverTask, ReportTask, RecordRemoval, _>(
-                                        fleet_sync_delivery::Submitter::Machine(peer(1)),
+                                        fleet_mail_delivery::Submitter::Machine(peer(1)),
                                         envelope,
                                         peer(3),
                                         &TestConsumer,

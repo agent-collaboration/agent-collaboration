@@ -9,7 +9,7 @@ use durable_steps::{
     AtomicStore,
     storage::{CallReach, TransactionScope},
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::query::query;
 use sqlx_turso::Turso;
 

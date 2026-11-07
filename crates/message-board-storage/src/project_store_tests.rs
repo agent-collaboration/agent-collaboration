@@ -415,8 +415,8 @@ async fn unsupported_schema_refuses_too_new_without_changes_and_keeps_mismatch_r
             assert!(matches!(
                 result,
                 Err(crate::ProjectStorageError::Writer(
-                    fleet_sync_writer::OpenError::SchemaUnsupported {
-                        form: fleet_sync_writer::SchemaForm::SchemaTooNew {
+                    fleet_project_writer::OpenError::SchemaUnsupported {
+                        form: fleet_project_writer::SchemaForm::SchemaTooNew {
                             store: 2,
                             supported: 1
                         }

@@ -7,10 +7,10 @@ use crate::{
 };
 use board_sync_protocol::{BoardConsumerAnswer, BoardConsumerProtocol, BoardDeliveryTypes};
 use durable_steps::Host as _;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ConnectionId, DeliveryEnvelope, Epoch, FrameId, OperationAnswer, ServerFrame,
 };
-use fleet_sync_session::SessionKey;
+use fleet_session::SessionKey;
 
 impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
     pub(super) async fn answer_mail_submit(

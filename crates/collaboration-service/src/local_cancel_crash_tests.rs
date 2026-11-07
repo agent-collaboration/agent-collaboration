@@ -1,8 +1,8 @@
 //! A real process dies with the actual Local producer transaction open.
 use super::*;
 use durable_steps::AtomicStore;
-use fleet_sync_delivery::{Inbox, delivery_rollback};
-use fleet_sync_protocol::PeerId;
+use fleet_mail_delivery::{Inbox, delivery_rollback};
+use fleet_protocol::PeerId;
 use interaction_storage::{InteractionAtomicStore, InteractionStore};
 use serde::{Deserialize, Serialize};
 use std::{os::unix::process::ExitStatusExt as _, path::PathBuf, process::Stdio, sync::Arc};

@@ -79,7 +79,7 @@ async fn child_capture_marks_wait_for_final_ack_and_survive_all_native_owners_re
             pieces.len() > 1,
             "the actual child transaction was not split"
         );
-        assert!(pieces.iter().any(|piece| piece.transactions.iter().any(|transaction| matches!(transaction, fleet_sync_protocol::ReplicatedTransaction::Rows { rows, .. } if rows.iter().any(|row| matches!(row, fleet_sync_protocol::RowChange::Upsert { table, .. } if table.as_str()=="mail_cancel_expansions"))))));
+        assert!(pieces.iter().any(|piece| piece.transactions.iter().any(|transaction| matches!(transaction, fleet_protocol::ReplicatedTransaction::Rows { rows, .. } if rows.iter().any(|row| matches!(row, fleet_protocol::RowChange::Upsert { table, .. } if table.as_str()=="mail_cancel_expansions"))))));
     }
     let staged = store.acknowledged_capture(partial_ack).await?;
     assert_eq!(staged.max_handoff_seq, Some(4));
@@ -228,7 +228,7 @@ async fn verified_seed_baseline_inherits_child_marks_and_later_expansions_cannot
 }
 
 struct DelayedOldAcknowledgement {
-    old: Mutex<Option<fleet_sync_protocol::ReplicationPosition>>,
+    old: Mutex<Option<fleet_protocol::ReplicationPosition>>,
 }
 impl ReplicationTransport<BoardConsumerProtocol> for DelayedOldAcknowledgement {
     async fn send_piece(

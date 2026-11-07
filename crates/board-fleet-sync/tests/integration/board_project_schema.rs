@@ -1,7 +1,7 @@
 use board_fleet_sync::BoardProjectSchema;
-use fleet_sync_lease::LeasePolicy;
-use fleet_sync_protocol::PeerId;
-use fleet_sync_writer::{ReplicatedDatabase, WriteRefusal, WriterOptions};
+use fleet_project_lease::LeasePolicy;
+use fleet_project_writer::{ReplicatedDatabase, WriteRefusal, WriterOptions};
+use fleet_protocol::PeerId;
 use std::{collections::BTreeSet, time::Duration};
 
 #[tokio::test]
@@ -78,7 +78,7 @@ async fn the_real_library_writer_admits_the_complete_project_schema() {
     .collect();
     let board_tables = tables
         .into_iter()
-        .filter(|name| !fleet_sync_protocol::reserved_namespace(name))
+        .filter(|name| !fleet_protocol::reserved_namespace(name))
         .collect::<BTreeSet<_>>();
     assert_eq!(board_tables, expected);
 }

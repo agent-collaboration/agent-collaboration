@@ -6,7 +6,7 @@ use super::{
 use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use codex_router_test_support::FixtureResult;
 use collaboration_protocol::{PushRecordShowResult, SessionRef};
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem};
+use fleet_protocol::{DeliveryEnvelope, DeliveryItem};
 use message_board::SubscriptionMembership;
 use serde_json::{Value, json};
 use std::time::Duration;

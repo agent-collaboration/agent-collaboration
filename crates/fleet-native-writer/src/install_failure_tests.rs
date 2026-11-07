@@ -4,7 +4,10 @@ use durable_steps::{
     AtomicStore, CallFailure, CallTarget, Engine, OperationState, StoreError, Uuid,
     storage::TransactionScope,
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
+use fleet_tokio_objects::{
+    CallEnvelope, CallRouter, ObjectKey, ObjectOptions, ObjectStore, TokioHost, TokioObject,
+};
 use runtime_primitives::SystemClock;
 use sqlx_core::{executor::Executor, query::query, row::Row};
 use std::sync::{
@@ -19,7 +22,7 @@ struct InstallHook {
     code: HookRefusalCode,
 }
 impl<H: durable_steps::Host>
-    fleet_sync_receiver::ReceiverRules<durable_steps::turso_store::TursoScope<'_, H>>
+    fleet_project_copy::ReceiverRules<durable_steps::turso_store::TursoScope<'_, H>>
     for InstallHook
 {
     type Protocol = NoConsumer;
@@ -27,15 +30,15 @@ impl<H: durable_steps::Host>
     async fn on_applied(
         &self,
         _: &mut durable_steps::turso_store::TursoScope<'_, H>,
-        _: &fleet_sync_receiver::AppliedPiece<'_, ()>,
-    ) -> Result<Vec<String>, fleet_sync_receiver::HookError> {
+        _: &fleet_project_copy::AppliedPiece<'_, ()>,
+    ) -> Result<Vec<String>, fleet_project_copy::HookError> {
         Ok(Vec::new())
     }
     async fn on_snapshot_installed(
         &self,
         scope: &mut durable_steps::turso_store::TursoScope<'_, H>,
-        installed: &fleet_sync_receiver::InstalledSnapshot,
-    ) -> Result<Vec<String>, fleet_sync_receiver::HookError> {
+        installed: &fleet_project_copy::InstalledSnapshot,
+    ) -> Result<Vec<String>, fleet_project_copy::HookError> {
         query::<sqlx_turso::Turso>("INSERT INTO hook_hits(position) VALUES(?)")
             .bind(installed.position.sequence.value().to_string())
             .execute(scope.executor())
@@ -47,14 +50,14 @@ impl<H: durable_steps::Host>
         Ok(Vec::new())
     }
 }
-impl fleet_sync_receiver::FollowUpHandler for InstallHook {
+impl fleet_project_copy::FollowUpHandler for InstallHook {
     type Item = String;
     async fn follow_up(
         &self,
         _: &String,
         _: durable_steps::CallId,
-    ) -> Result<fleet_sync_receiver::FollowUpDone, fleet_sync_receiver::FollowUpFailure> {
-        Ok(fleet_sync_receiver::FollowUpDone)
+    ) -> Result<fleet_project_copy::FollowUpDone, fleet_project_copy::FollowUpFailure> {
+        Ok(fleet_project_copy::FollowUpDone)
     }
 }
 
@@ -198,7 +201,7 @@ impl CallRouter for RaceRouter {
                         owner
                             .mark_ready_with(file.install_id, &target, move |scope, snapshot| {
                                 Box::pin(async move {
-                                    fleet_sync_receiver::SnapshotInstallRules(scope)
+                                    fleet_project_copy::SnapshotInstallRules(scope)
                                         .mark_ready(&snapshot, &hook)
                                         .await?;
                                     Ok(())
@@ -252,7 +255,7 @@ impl Fixture {
         target
             .transaction(|scope| {
                 Box::pin(async move {
-                    let mut migrations = sqlx::migrate!("../fleet-sync-receiver/migrations");
+                    let mut migrations = sqlx::migrate!("../fleet-project-copy/migrations");
                     migrations.dangerous_set_table_name("_fleet_sync_copy_migrations");
                     migrations
                         .run_direct(None, scope.executor(), false)
@@ -507,7 +510,7 @@ async fn assert_fresh_generation_after_source_moves(mode: u8) -> TestResult {
         .target
         .transaction(|scope| {
             Box::pin(async move {
-                fleet_sync_receiver::copy_status(scope)
+                fleet_project_copy::copy_status(scope)
                     .await
                     .map_err(StoreError::backend)
             })

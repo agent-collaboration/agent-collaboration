@@ -4,8 +4,8 @@ use crate::{
     *,
 };
 use durable_steps::{CallId, OperationId, StepName, Uuid};
-use fleet_sync_lease::{LeaseHolder, LeasePolicy, WriterState};
-use fleet_sync_protocol::{
+use fleet_project_lease::{LeaseHolder, LeasePolicy, WriterState};
+use fleet_protocol::{
     Epoch, LeaseRefusal, LeaseState, LeaseStatus, PeerId, ReleaseAnswer, ReleaseRequest,
     RenewAnswer, RenewResult, SyncTime, TableName, TransferId,
 };
@@ -24,7 +24,7 @@ use std::{
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 static MIGRATIONS: Migrator = sqlx::migrate!("./tests/fixtures/regular");
-static TABLES: LazyLock<Result<Vec<TableName>, fleet_sync_protocol::TextValueError>> =
+static TABLES: LazyLock<Result<Vec<TableName>, fleet_protocol::TextValueError>> =
     LazyLock::new(|| {
         ["text_records", "composite_records", "real_records"]
             .into_iter()
@@ -65,7 +65,7 @@ fn call() -> TestResult<CallId> {
         step: StepName::new("request_release")?,
     })
 }
-fn request(database: fleet_sync_protocol::DatabaseId) -> TestResult<ReleaseRequest> {
+fn request(database: fleet_protocol::DatabaseId) -> TestResult<ReleaseRequest> {
     Ok(ReleaseRequest {
         database,
         epoch: Epoch::new(1)?,
@@ -73,7 +73,7 @@ fn request(database: fleet_sync_protocol::DatabaseId) -> TestResult<ReleaseReque
     })
 }
 fn renewal(
-    database: fleet_sync_protocol::DatabaseId,
+    database: fleet_protocol::DatabaseId,
     epoch: u64,
     remaining_ms: u64,
 ) -> TestResult<RenewAnswer> {
@@ -98,8 +98,7 @@ pub(super) async fn create(
     path: &std::path::Path,
     clock: Arc<TestClock>,
 ) -> TestResult<Arc<ReplicatedDatabase<ReleaseSchema>>> {
-    let id =
-        fleet_sync_protocol::DatabaseId::new(Uuid::from_u128(0x019eef00000070008000000000000001))?;
+    let id = fleet_protocol::DatabaseId::new(Uuid::from_u128(0x019eef00000070008000000000000001))?;
     let database = Arc::new(
         ReplicatedDatabase::open_with(
             path,
@@ -275,8 +274,8 @@ async fn renewal_restore_keeps_original_deadline_and_does_not_erase_supersession
     Ok(())
 }
 
-fn withdrawal(request: &ReleaseRequest) -> fleet_sync_protocol::WithdrawRelease {
-    fleet_sync_protocol::WithdrawRelease {
+fn withdrawal(request: &ReleaseRequest) -> fleet_protocol::WithdrawRelease {
+    fleet_protocol::WithdrawRelease {
         database: request.database,
         epoch: request.epoch,
         transfer: request.transfer,
@@ -292,7 +291,7 @@ fn named_call(name: &str) -> TestResult<CallId> {
 #[tokio::test]
 async fn withdrawal_survives_reopen_refuses_late_release_and_keeps_original_deadline() -> TestResult
 {
-    use fleet_sync_protocol::{ReleaseRefusal, WithdrawAnswer};
+    use fleet_protocol::{ReleaseRefusal, WithdrawAnswer};
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("writer.db");
     let clock = Arc::new(TestClock(AtomicI64::new(100)));
@@ -358,7 +357,7 @@ async fn withdrawal_survives_reopen_refuses_late_release_and_keeps_original_dead
 #[tokio::test]
 async fn withdrawal_before_release_is_a_tombstone_and_does_not_erase_another_transfer() -> TestResult
 {
-    use fleet_sync_protocol::{ReleaseRefusal, WithdrawAnswer};
+    use fleet_protocol::{ReleaseRefusal, WithdrawAnswer};
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("writer.db");
     let clock = Arc::new(TestClock(AtomicI64::new(100)));
@@ -424,7 +423,7 @@ async fn withdrawal_before_release_is_a_tombstone_and_does_not_erase_another_tra
 #[tokio::test]
 async fn committed_withdrawal_tombstone_reopens_the_gate_before_the_cache_has_changed() -> TestResult
 {
-    use fleet_sync_protocol::WithdrawAnswer;
+    use fleet_protocol::WithdrawAnswer;
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("writer.db");
     let clock = Arc::new(TestClock(AtomicI64::new(100)));
@@ -466,7 +465,7 @@ async fn committed_withdrawal_tombstone_reopens_the_gate_before_the_cache_has_ch
 #[tokio::test]
 async fn withdrawal_after_committed_drain_never_resurrects_superseded_or_retired_authority()
 -> TestResult {
-    use fleet_sync_protocol::WithdrawAnswer;
+    use fleet_protocol::WithdrawAnswer;
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("writer.db");
     let clock = Arc::new(TestClock(AtomicI64::new(100)));
@@ -548,7 +547,7 @@ async fn withdrawal_after_committed_drain_never_resurrects_superseded_or_retired
     assert!(matches!(
         database.writer_state().await,
         Err(OpenError::Holder {
-            error: fleet_sync_lease::HolderError::Refused(LeaseRefusal::Retired)
+            error: fleet_project_lease::HolderError::Refused(LeaseRefusal::Retired)
         })
     ));
     database.close().await;

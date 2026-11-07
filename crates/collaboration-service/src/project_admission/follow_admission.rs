@@ -5,7 +5,7 @@ use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use collaboration_mail_protocol::{
     MailSender, NotificationBody, NotificationSource, RecordPointer, RootRange,
 };
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, ItemId, Recipient};
+use fleet_protocol::{DeliveryEnvelope, DeliveryItem, ItemId, Recipient};
 use message_board::{
     EndReason, FeedContent, FeedCursor, FeedRead, HandoffSeq, Identity,
     MAX_SUBSCRIPTION_NOTICE_ROOTS, MailItemRef, Placement, ProjectId, Record, RecordId, RecordKind,

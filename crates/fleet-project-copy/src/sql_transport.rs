@@ -1,6 +1,6 @@
 //! Exact storage classes at the SQLx boundary. Integer cells cross as validated decimal text.
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::SqlValue;
+use fleet_protocol::SqlValue;
 use sqlx_core::{
     arguments::IntoArguments,
     column::ColumnIndex,

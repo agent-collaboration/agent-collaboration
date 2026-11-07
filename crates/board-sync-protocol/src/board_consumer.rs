@@ -4,7 +4,7 @@ use crate::{
     VerifiedForwardedPost,
 };
 use collaboration_mail_protocol::{MailSender, MailValidationError};
-use fleet_sync_protocol::{ConsumerProtocol, DeliveryEnvelope, Epoch, PeerId};
+use fleet_protocol::{ConsumerProtocol, DeliveryEnvelope, Epoch, PeerId};
 use serde::{Deserialize, Serialize};
 
 pub struct BoardConsumerProtocol;
@@ -157,12 +157,12 @@ pub enum BoardConsumerAnswer {
 )]
 pub enum MailSubmitAnswer {
     Submitted(
-        fleet_sync_protocol::SubmitResult<
-            <BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Acceptance,
+        fleet_protocol::SubmitResult<
+            <BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Acceptance,
         >,
     ),
     MailboxUnavailable {
-        reason: fleet_sync_protocol::DeliveryRefusal,
+        reason: fleet_protocol::DeliveryRefusal,
     },
     NotWriter,
 }

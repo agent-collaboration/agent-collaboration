@@ -1,7 +1,7 @@
 //! Conformance-only commands address the same physical object as normal traffic.
 
 use collaboration_central_core::{ObjectAddress, RegistryTime};
-use fleet_sync_protocol::{ConnectionId, FrameId, ItemId, PeerId};
+use fleet_protocol::{ConnectionId, FrameId, ItemId, PeerId};
 use serde::{Deserialize, Serialize};
 use std::num::NonZeroU64;
 

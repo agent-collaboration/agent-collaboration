@@ -3,7 +3,7 @@ use durable_steps::{
     AtomicStore, CallFailure, CallTarget, Engine, Host, JournalScope, OperationContext,
     OperationFailure, OperationState, RequestKey, StepName, Task, volatile_store::VolatileStore,
 };
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use runtime_primitives::{Clock, IdSource, WakeFailure, WakeScheduler};
 use std::{
     future::{Future, poll_fn},

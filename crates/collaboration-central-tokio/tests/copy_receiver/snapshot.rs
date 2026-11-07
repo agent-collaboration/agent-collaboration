@@ -1,5 +1,5 @@
 use super::*;
-use fleet_sync_protocol::{CopyStatusAnswer, CopyUnavailableReason, SeedAnswer};
+use fleet_protocol::{CopyStatusAnswer, CopyUnavailableReason, SeedAnswer};
 
 #[expect(
     clippy::panic_in_result_fn,

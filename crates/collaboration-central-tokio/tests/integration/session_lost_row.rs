@@ -14,7 +14,7 @@ use collaboration_central_core::{ObjectAddress, RegistryTime};
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 use durable_steps::Uuid;
 use fleet_admission::FleetOperation;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use futures_util::{SinkExt, StreamExt};
 use message_board::{BoardId, Description, ResourceName, WorkspaceId};
 use reqwest_websocket::{Message, RequestBuilderExt, WebSocket};

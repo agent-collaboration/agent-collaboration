@@ -13,9 +13,9 @@ use durable_steps::{AtomicStore, StoreError};
 use fleet_admission::{
     DirectoryEntry, DirectoryQuery, FleetOperation, FleetRequest, FleetRequestResult,
 };
-use fleet_sync_lease::{RegistryConfig, RegistrySnapshot};
-use fleet_sync_protocol::*;
-use fleet_sync_tokio_runner::{ObjectKey, ObjectOptions, ObjectStore};
+use fleet_project_lease::{RegistryConfig, RegistrySnapshot};
+use fleet_protocol::*;
+use fleet_tokio_objects::{ObjectKey, ObjectOptions, ObjectStore};
 use futures_util::{SinkExt, StreamExt};
 use message_board::{BoardId, ProjectId, WorkspaceId};
 use reqwest_websocket::{Message, RequestBuilderExt, WebSocket};
@@ -25,7 +25,7 @@ use std::{path::Path, time::Duration};
 pub(super) async fn start(root: &Path, jwks: &str) -> ConformanceResult<TokioServer> {
     Ok(TokioServer::start(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },
@@ -230,7 +230,7 @@ pub(super) async fn read_committed_owners(
         let snapshot = registry
             .transaction(move |scope| {
                 Box::pin(async move {
-                    fleet_sync_lease::registry_snapshot(scope, database)
+                    fleet_project_lease::registry_snapshot(scope, database)
                         .await
                         .map_err(StoreError::backend)
                 })

@@ -2,7 +2,7 @@
 use crate::fleet_record_codec::{check_private_id, corrupt, required};
 use board_sync_protocol::BoardNotice;
 use durable_steps::StoreError;
-use fleet_sync_protocol::Epoch;
+use fleet_protocol::Epoch;
 
 pub(super) struct NoticeColumns {
     pub notice: BoardNotice,

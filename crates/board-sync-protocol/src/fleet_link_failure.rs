@@ -1,6 +1,6 @@
 //! Diagnostic outcomes retain native refusal/close payloads without credentials.
 use chrono::{DateTime, Utc};
-use fleet_sync_protocol::{AuthRefusal, CloseReason};
+use fleet_protocol::{AuthRefusal, CloseReason};
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Serialize};
 
@@ -66,9 +66,9 @@ pub enum FleetLinkFailureReason {
     ReplacedByNewerSession,
     StaleNoticeAcknowledgement {
         #[schemars(with = "message_board::RecordId")]
-        expected: fleet_sync_protocol::SessionId,
+        expected: fleet_protocol::SessionId,
         #[schemars(with = "message_board::RecordId")]
-        received: fleet_sync_protocol::SessionId,
+        received: fleet_protocol::SessionId,
     },
 }
 

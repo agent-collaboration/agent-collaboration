@@ -2,13 +2,13 @@
 use crate::writer_scope::WriterScope;
 use crate::*;
 use durable_steps::{CallId, Uuid};
-use fleet_sync_lease::{LeasePolicy, WriterState};
-use fleet_sync_protocol::{
+use fleet_project_copy::{
+    AppliedPiece, ApplyDecision, ApplyFailure, FollowUpDone, FollowUpFailure, ReceiverRules,
+};
+use fleet_project_lease::{LeasePolicy, WriterState};
+use fleet_protocol::{
     CopyOrigin, CopyRole, CreateCopy, Epoch, HookRefusalCode, LeaseState, LeaseStatus, NoConsumer,
     PeerId, Piece, ReceiverId, ReplicationAnswer, TableName,
-};
-use fleet_sync_receiver::{
-    AppliedPiece, ApplyDecision, ApplyFailure, FollowUpDone, FollowUpFailure, ReceiverRules,
 };
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
@@ -30,7 +30,7 @@ pub(super) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send 
 static MIGRATIONS: Migrator = sqlx::migrate!("./tests/fixtures/regular");
 static LOCAL: Migrator = sqlx::migrate!("./tests/fixtures/sender_local");
 static HOOK: Migrator = sqlx::migrate!("./tests/fixtures/copy_hook");
-static TABLES: LazyLock<Result<Vec<TableName>, fleet_sync_protocol::TextValueError>> =
+static TABLES: LazyLock<Result<Vec<TableName>, fleet_protocol::TextValueError>> =
     LazyLock::new(|| {
         ["text_records", "composite_records", "real_records"]
             .into_iter()
@@ -108,17 +108,17 @@ impl ReceiverRules<WriterScope<'_>> for CopyHook {
         &self,
         scope: &mut WriterScope<'_>,
         applied: &AppliedPiece<'_, ()>,
-    ) -> Result<Vec<()>, fleet_sync_receiver::HookError> {
+    ) -> Result<Vec<()>, fleet_project_copy::HookError> {
         query::<Turso>("INSERT INTO hook_calls(position) VALUES(?)")
             .bind(applied.through.sequence.value().to_string())
             .execute(&mut *scope.0)
             .await
-            .map_err(|error| fleet_sync_protocol::HookRefusal {
+            .map_err(|error| fleet_protocol::HookRefusal {
                 code: self.storage_code.clone(),
                 detail: error.to_string(),
             })?;
         if self.refuse.load(Ordering::SeqCst) {
-            return Err(fleet_sync_protocol::HookRefusal {
+            return Err(fleet_protocol::HookRefusal {
                 code: self.policy_code.clone(),
                 detail: "refused after hook write".into(),
             }
@@ -127,7 +127,7 @@ impl ReceiverRules<WriterScope<'_>> for CopyHook {
         Ok(Vec::new())
     }
 }
-impl fleet_sync_receiver::FollowUpHandler for CopyHook {
+impl fleet_project_copy::FollowUpHandler for CopyHook {
     type Item = ();
     async fn follow_up(&self, _: &(), _: CallId) -> Result<FollowUpDone, FollowUpFailure> {
         Ok(FollowUpDone)
@@ -201,7 +201,7 @@ impl ReplicationTransport<NoConsumer> for NativeTransport {
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(unavailable)?;
-        let result = fleet_sync_receiver::apply_piece(
+        let result = fleet_project_copy::apply_piece(
             &mut WriterScope(&mut transaction),
             &piece,
             &self.peer,
@@ -242,7 +242,7 @@ impl ReplicationTransport<NoConsumer> for NativeTransport {
                             .begin_with("BEGIN IMMEDIATE")
                             .await
                             .map_err(unavailable)?;
-                        fleet_sync_receiver::discard_staged_parts(
+                        fleet_project_copy::discard_staged_parts(
                             &mut WriterScope(&mut transaction),
                             &staged,
                         )
@@ -297,13 +297,13 @@ impl SenderFixture {
     pub async fn open_with_clock(clock: Arc<dyn runtime_primitives::Clock>) -> TestResult<Self> {
         let directory = tempfile::tempdir()?;
         let peer = PeerId::new(Uuid::from_u128(0x019eef00000070008000000000000002))?;
-        let id = fleet_sync_protocol::DatabaseId::new(Uuid::now_v7())?;
+        let id = fleet_protocol::DatabaseId::new(Uuid::now_v7())?;
         let database = Arc::new(
             ReplicatedDatabase::open_with(
                 &directory.path().join("writer.db"),
                 id,
                 Self::schema()?,
-                fleet_sync_lease::LeaseHolder::provisional(
+                fleet_project_lease::LeaseHolder::provisional(
                     id,
                     peer,
                     LeasePolicy {
@@ -343,7 +343,7 @@ impl SenderFixture {
                 .connect()
                 .await?;
             let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
-            let mut migrations = sqlx::migrate!("../fleet-sync-receiver/migrations");
+            let mut migrations = sqlx::migrate!("../fleet-project-copy/migrations");
             migrations.dangerous_set_table_name("_fleet_sync_receiver_history");
             migrations
                 .run_direct(None, &mut *transaction, false)
@@ -353,8 +353,8 @@ impl SenderFixture {
                 storage_code: HookRefusalCode::new("fixture_storage")?,
                 policy_code: HookRefusalCode::new("fixture_refused")?,
             };
-            fleet_sync_receiver::initialize_hook(&mut WriterScope(&mut transaction), &hook).await?;
-            fleet_sync_receiver::create_copy(
+            fleet_project_copy::initialize_hook(&mut WriterScope(&mut transaction), &hook).await?;
+            fleet_project_copy::create_copy(
                 &mut WriterScope(&mut transaction),
                 &CreateCopy {
                     database: database.database(),
@@ -464,7 +464,7 @@ impl SenderFixture {
                 &path,
                 id,
                 schema,
-                fleet_sync_lease::LeaseHolder::provisional(
+                fleet_project_lease::LeaseHolder::provisional(
                     id,
                     peer,
                     LeasePolicy {

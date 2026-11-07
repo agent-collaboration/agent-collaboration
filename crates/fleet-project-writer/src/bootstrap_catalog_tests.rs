@@ -1,7 +1,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use super::*;
 use crate::schema_catalog_tests::{CatalogSchema, TABLES, TOO_LARGE, catalog_state_on};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use std::{sync::atomic::AtomicBool, time::Duration};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;

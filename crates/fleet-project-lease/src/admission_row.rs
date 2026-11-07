@@ -2,7 +2,7 @@ use crate::{
     LeaseError, checked_queries::StoredTransferAdmissionRow, registry_records::TransferAdmission,
     registry_row::*,
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 impl StoredTransferAdmissionRow {
     pub(crate) fn admission_record(&self) -> Result<TransferAdmission, LeaseError> {
         let payload = [

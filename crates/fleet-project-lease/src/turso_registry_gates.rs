@@ -3,7 +3,7 @@ use crate::{
     GateAnswer, GateFailure, HolderChangeGate, LifecycleGate, SettleOutcome, change_checks,
 };
 use durable_steps::CallId;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{connection::Connection, row::Row};
 use sqlx_turso::Turso;
 use std::sync::atomic::Ordering;

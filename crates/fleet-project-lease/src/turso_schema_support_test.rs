@@ -4,7 +4,7 @@ use crate::{
     turso_change_tests::register_first, turso_copy_fixture::push_rows, turso_registry_fixture::*, *,
 };
 use durable_steps::{AtomicStore, RequestKey, Uuid};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_turso::Turso;
 
 fn report(identity: u128, sequence: u64, maximum: u64) -> TestResult<ReportSchemaSupport> {
@@ -26,7 +26,7 @@ async fn publish(store: &TestStore, report: ReportSchemaSupport) -> TestResult {
                 report_schema_support(
                     scope,
                     &report,
-                    fleet_sync_protocol::SyncTime::from_unix_millis(1000),
+                    fleet_protocol::SyncTime::from_unix_millis(1000),
                 )
                 .await
                 .map_err(storage)?;
@@ -78,7 +78,7 @@ async fn newer_attach_wins_even_when_an_older_report_arrives_late_and_after_reop
                 Ok(report_schema_support(
                     scope,
                     &conflict,
-                    fleet_sync_protocol::SyncTime::from_unix_millis(1000),
+                    fleet_protocol::SyncTime::from_unix_millis(1000),
                 )
                 .await)
             })
@@ -106,7 +106,7 @@ async fn admission_freezes_support_before_check_even_across_registry_reopen() ->
         publish(&store, report(2, 2, 1)?).await?;
         let attempt = TransferId::new(Uuid::from_u128(0x019eef00000070008000000000001101))?;
         let change = HolderChangeRequest::Move {
-            reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+            reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
             attempt,
             database: database()?,
             from_epoch: Epoch::new(1)?,
@@ -188,7 +188,7 @@ async fn missing_report_is_refused_even_for_schema_zero_then_a_known_zero_target
     .await?;
     let attempt = TransferId::new(Uuid::from_u128(0x019eef00000070008000000000001201))?;
     let change = HolderChangeRequest::Takeover {
-        reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+        reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
         attempt,
         database: database()?,
         preview,
@@ -214,7 +214,7 @@ async fn missing_report_is_refused_even_for_schema_zero_then_a_known_zero_target
     .await?;
     let attempt = TransferId::new(Uuid::from_u128(0x019eef00000070008000000000001202))?;
     let change = HolderChangeRequest::Takeover {
-        reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+        reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
         attempt,
         database: database()?,
         preview,
@@ -245,7 +245,7 @@ async fn admitted_absence_stays_absent_when_a_report_appears_before_check() -> T
         assert_eq!(projected(&store, peer(99)?).await?, None);
         let attempt = TransferId::new(Uuid::from_u128(0x019eef00000070008000000000001301))?;
         let change = HolderChangeRequest::Move {
-            reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+            reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
             attempt,
             database: database()?,
             from_epoch: Epoch::new(1)?,

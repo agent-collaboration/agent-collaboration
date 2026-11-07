@@ -3,7 +3,7 @@ use super::*;
 use collaboration_contracts::ProjectReplicationPosition;
 use collaboration_service::ApplicationFixture;
 use fleet_admission::{DirectoryEntry, DirectoryLease, DirectorySide, LeaseMetadata};
-use fleet_sync_protocol::{CommitSequence, LeaseRefusal, RenewAnswer, ReplicationPosition};
+use fleet_protocol::{CommitSequence, LeaseRefusal, RenewAnswer, ReplicationPosition};
 use runtime_primitives::{Clock, SystemClock};
 use std::{collections::BTreeSet, path::PathBuf};
 

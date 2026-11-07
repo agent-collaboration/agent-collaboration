@@ -7,7 +7,7 @@ use crate::{
     *,
 };
 use durable_steps::{AtomicStore, OperationState, RequestKey, Uuid};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use runtime_primitives::Clock;
 use sqlx_core::row::Row;
 use sqlx_turso::Turso;
@@ -20,7 +20,7 @@ fn transfer(value: u128) -> TestResult<TransferId> {
 }
 fn movement(id: u128, from: u64, to: u128) -> TestResult<HolderChangeRequest> {
     Ok(HolderChangeRequest::Move {
-        reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+        reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
         attempt: transfer(id)?,
         database: database()?,
         from_epoch: Epoch::new(from)?,
@@ -88,7 +88,7 @@ async fn grant_and_replay(
     let mut copies = host.copies.lock().await;
     let copy = copies.get_mut(&database()?).ok_or("copy missing")?;
     assert!(
-        matches!(fleet_sync_receiver::copy_status(&mut CopyScope(copy)).await?,CopyStatusAnswer::Status(CopyStatus { holder: Some(holder), fence, start: actual_start, acked, .. }) if holder==expected_holder && fence==Epoch::new(epoch)? && actual_start==start && acked==start)
+        matches!(fleet_project_copy::copy_status(&mut CopyScope(copy)).await?,CopyStatusAnswer::Status(CopyStatus { holder: Some(holder), fence, start: actual_start, acked, .. }) if holder==expected_holder && fence==Epoch::new(epoch)? && actual_start==start && acked==start)
     );
     Ok(())
 }
@@ -198,7 +198,7 @@ async fn takeover_then_clean_move_preserves_rows_and_replays_one_successor_grant
         &store,
         &host,
         HolderChangeRequest::Takeover {
-            reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+            reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
             attempt: transfer(2401)?,
             database: database()?,
             preview,

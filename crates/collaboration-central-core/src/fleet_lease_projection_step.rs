@@ -111,7 +111,7 @@ impl<Store, NoticeTask> FleetLeaseChangeHook<Store, NoticeTask> {
         }
     }
 }
-impl<Store, Driver, NoticeTask, Scope> fleet_sync_lease::LeaseChangeHook<Scope>
+impl<Store, Driver, NoticeTask, Scope> fleet_project_lease::LeaseChangeHook<Scope>
     for FleetLeaseChangeHook<Store, NoticeTask>
 where
     Store: AtomicStore,
@@ -126,8 +126,8 @@ where
     async fn on_lease_change(
         &self,
         scope: &mut Scope,
-        change: &fleet_sync_lease::LeaseChange,
-    ) -> Result<(), fleet_sync_lease::LeaseError> {
+        change: &fleet_project_lease::LeaseChange,
+    ) -> Result<(), fleet_project_lease::LeaseError> {
         use crate::machine_notice_contract::MachineNoticeAppend;
         let applied = async {
             let now = change.after.changed_at;
@@ -272,7 +272,7 @@ where
             Ok::<_, StoreError>(())
         }
         .await;
-        applied.map_err(|error| fleet_sync_lease::LeaseError::Storage {
+        applied.map_err(|error| fleet_project_lease::LeaseError::Storage {
             message: error.to_string(),
         })
     }

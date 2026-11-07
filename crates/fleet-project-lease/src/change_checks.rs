@@ -8,7 +8,7 @@ use durable_steps::{
     AtomicStore, OperationContext, OperationFailure, RequestKey, StepError,
     storage::{JournalStorage, TransactionScope},
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,

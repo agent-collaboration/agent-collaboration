@@ -1,8 +1,8 @@
 use crate::{ServiceConsumer, ServiceError, service_state::ServiceState};
 use durable_steps::{AtomicStore, StoreError};
-use fleet_sync_protocol::*;
-use fleet_sync_session::{PeerAuthenticator, SessionKey};
-use fleet_sync_tokio_runner::{SessionHandler, SessionHostError};
+use fleet_native_session::{SessionHandler, SessionHostError};
+use fleet_protocol::*;
+use fleet_session::{PeerAuthenticator, SessionKey};
 use runtime_primitives::Clock;
 use std::sync::Weak;
 
@@ -11,7 +11,7 @@ pub(crate) struct ServiceSessionHandler<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > {
     pub state: Weak<ServiceState<P, C, A>>,
@@ -21,7 +21,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > SessionHandler<P> for ServiceSessionHandler<P, C, A>
 {
@@ -121,7 +121,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > ServiceState<P, C, A>
 {
@@ -130,7 +130,7 @@ impl<
             .registry
             .transaction(|scope| {
                 Box::pin(async move {
-                    fleet_sync_lease::database_ids(scope)
+                    fleet_project_lease::database_ids(scope)
                         .await
                         .map_err(StoreError::backend)
                 })
@@ -143,9 +143,9 @@ impl<
                 .registry
                 .transaction(move |scope| {
                     Box::pin(async move {
-                        match fleet_sync_lease::lease_status(scope, database, now).await {
+                        match fleet_project_lease::lease_status(scope, database, now).await {
                             Ok(lease) => Ok(lease),
-                            Err(fleet_sync_lease::LeaseError::Retired) => Ok(None),
+                            Err(fleet_project_lease::LeaseError::Retired) => Ok(None),
                             Err(error) => Err(StoreError::backend(error)),
                         }
                     })

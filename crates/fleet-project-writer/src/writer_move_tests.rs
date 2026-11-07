@@ -3,7 +3,7 @@ use crate::{
     writer_release_tests::{TestClock, create},
     *,
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     executor::Executor,

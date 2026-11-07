@@ -9,7 +9,7 @@ use durable_steps::{
     AtomicStore, BoxFuture, CallId, OperationContext, OperationFailure, OperationId, RequestKey,
     Resume, StoreError, Task, Uuid,
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_turso::Turso;
 use std::sync::atomic::Ordering;
 
@@ -85,7 +85,7 @@ async fn takeover(
     )
     .await?;
     let request = HolderChangeRequest::Takeover {
-        reason: fleet_sync_protocol::HolderChangeReason::new("exercise holder change")?,
+        reason: fleet_protocol::HolderChangeReason::new("exercise holder change")?,
         attempt: id,
         database: database()?,
         preview,

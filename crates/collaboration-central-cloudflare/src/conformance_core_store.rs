@@ -2,7 +2,7 @@
 use crate::CloudflareStorageHost;
 use collaboration_central_core::{CoreHost, ObjectAddress, PlatformIo};
 use durable_steps::{CallFailure, NotSentReason};
-use fleet_sync_protocol::ReceiverId;
+use fleet_protocol::ReceiverId;
 use runtime_primitives::{AlarmOwner, Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use std::sync::Arc;
 

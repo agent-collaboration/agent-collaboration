@@ -7,8 +7,8 @@ use super::super::{
 use board_central_test_support::RuntimeControl;
 use board_sync_protocol::BoardAnnotation;
 use codex_router_test_support::FixtureResult;
-use fleet_sync_protocol::{ReplicationPosition, ReplicationRequest};
-use fleet_sync_writer::CapturedTransaction;
+use fleet_project_writer::CapturedTransaction;
+use fleet_protocol::{ReplicationPosition, ReplicationRequest};
 use message_board_storage::CapturedProjectChanges;
 
 #[derive(Clone, Copy, Debug)]

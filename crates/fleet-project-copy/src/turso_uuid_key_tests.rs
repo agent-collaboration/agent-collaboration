@@ -1,6 +1,6 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::{turso_rule_fixture::*, *};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{connection::Connection, query::query};
 use sqlx_turso::Turso;
 

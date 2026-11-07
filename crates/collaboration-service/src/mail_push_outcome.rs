@@ -5,8 +5,8 @@ use collaboration_contracts::RouterDeliveryTypes;
 use collaboration_contracts::UnsentCause;
 use collaboration_mail_protocol::CarrierAcceptance;
 use collaboration_protocol::DeliveryOutcome;
-use fleet_sync_delivery::{DeliveryError, LocalDelivery, LocalOutcome};
-use fleet_sync_protocol::{DeliveryFailureKind, DeliveryRefusal, RecipientRefusalCode};
+use fleet_mail_delivery::{DeliveryError, LocalDelivery, LocalOutcome};
+use fleet_protocol::{DeliveryFailureKind, DeliveryRefusal, RecipientRefusalCode};
 use runtime_primitives::SyncTime;
 
 pub(crate) fn local_message_outcome(

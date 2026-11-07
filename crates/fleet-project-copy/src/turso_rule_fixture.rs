@@ -3,7 +3,7 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::*;
 use durable_steps::{CallId, storage::TransactionScope};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     row::Row,

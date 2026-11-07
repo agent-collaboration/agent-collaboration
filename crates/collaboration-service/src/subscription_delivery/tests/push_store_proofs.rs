@@ -472,7 +472,7 @@ async fn failed_poll_attempt_mark_keeps_the_frozen_item_retryable_and_returns_ex
     assert!(fixture.interactions.pending_poll_item(item).await.unwrap().is_some());
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
-            if runtime.local_mail_outcome(item).await == Some(fleet_sync_protocol::RecipientOutcome::Held) { break; }
+            if runtime.local_mail_outcome(item).await == Some(fleet_protocol::RecipientOutcome::Held) { break; }
             tokio::task::yield_now().await;
         }
     }).await.expect("failed preparation leaves the exact SDK item Held");
@@ -489,7 +489,7 @@ async fn failed_poll_attempt_mark_keeps_the_frozen_item_retryable_and_returns_ex
     assert_eq!(batch.roots[0].from, position);
     assert_eq!(batch.roots[0].through, position);
     assert_eq!(batch.roots[0].post_count, 1);
-    assert_eq!(runtime.await_mail_outcome(&push_id).await, fleet_sync_protocol::RecipientOutcome::Delivered {
+    assert_eq!(runtime.await_mail_outcome(&push_id).await, fleet_protocol::RecipientOutcome::Delivered {
         acceptance: collaboration_mail_protocol::CarrierAcceptance::Started,
     });
     assert_eq!(super::local_mail_proofs::native_follow_mail_proofs::frozen_follow(&fixture).await.len(), 1);

@@ -1,6 +1,6 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::{native_file::PublishError, read_transaction_tests::writer, *};
-use fleet_sync_protocol::{GateReason, GateReasonCode};
+use fleet_protocol::{GateReason, GateReasonCode};
 use futures_util::{TryStreamExt, task::noop_waker_ref};
 use sqlx_core::{
     connection::{ConnectOptions, Connection},

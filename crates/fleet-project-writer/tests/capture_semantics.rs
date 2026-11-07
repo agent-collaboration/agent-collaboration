@@ -1,9 +1,9 @@
 #![allow(clippy::panic_in_result_fn)]
-use fleet_sync_protocol::{RowChange, SqlValue};
-use fleet_sync_writer::{
+use fleet_project_writer::{
     CaptureChange, CaptureError, StatementForm, StatementGuard, TableLayout,
     normalize_capture_change,
 };
+use fleet_protocol::{RowChange, SqlValue};
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 const FIRST: &str = "019eef00-0000-7000-8000-000000000001";
 const SECOND: &str = "019eef00-0000-7000-8000-000000000002";
@@ -125,7 +125,7 @@ fn statement_guard_refuses_every_key_assignment_including_cached_batches_and_eac
             assert!(
                 matches!(
                     guard.check(sql),
-                    Err(fleet_sync_writer::StatementRefusal {
+                    Err(fleet_project_writer::StatementRefusal {
                         form: StatementForm::KeyChange { .. }
                     })
                 ),
@@ -166,7 +166,7 @@ fn corrupt_images_missing_after_images_and_invalid_catalogs_fail_closed() -> Tes
     let mut guard = StatementGuard::new(vec![layout]);
     assert!(matches!(
         guard.check("INSERT INTO"),
-        Err(fleet_sync_writer::StatementRefusal {
+        Err(fleet_project_writer::StatementRefusal {
             form: StatementForm::InvalidSql { .. }
         })
     ));

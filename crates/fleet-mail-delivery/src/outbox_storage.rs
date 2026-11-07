@@ -2,7 +2,7 @@ use crate::{
     DeliveryError, custody_record::*, delivery_storage_rows::StoredOutboxRow, outbox_record::*,
     stored_outcome::*,
 };
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 
 #[cfg(test)]
 #[path = "outbox_storage_test.rs"]

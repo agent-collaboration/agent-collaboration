@@ -1,8 +1,8 @@
 #![allow(clippy::panic_in_result_fn)]
 use durable_steps::Uuid;
-use fleet_sync_lease::LeasePolicy;
-use fleet_sync_protocol::{PeerId, TableName};
-use fleet_sync_writer::{Migration, ReplicatedDatabase, ReplicatedSchema, WriterOptions};
+use fleet_project_lease::LeasePolicy;
+use fleet_project_writer::{Migration, ReplicatedDatabase, ReplicatedSchema, WriterOptions};
+use fleet_protocol::{PeerId, TableName};
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     migrate::{MigrationType, Migrator},
@@ -25,7 +25,7 @@ static MIGRATIONS: LazyLock<Vec<Migration>> = LazyLock::new(|| {
         Migration::new(version, "ordered history".into(), MigrationType::Simple, AssertSqlSafe(sql).into_sql_str(), false)
     }).collect()
 });
-static TABLES: LazyLock<Result<Vec<TableName>, fleet_sync_protocol::TextValueError>> =
+static TABLES: LazyLock<Result<Vec<TableName>, fleet_protocol::TextValueError>> =
     LazyLock::new(|| Ok(vec![TableName::new("records")?]));
 struct Schema {
     tables: &'static [TableName],

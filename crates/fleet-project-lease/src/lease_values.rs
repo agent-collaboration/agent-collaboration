@@ -1,4 +1,4 @@
-use fleet_sync_protocol::{Epoch, ReceiverId, ReplicationPosition, SyncTime, TransferId};
+use fleet_protocol::{Epoch, ReceiverId, ReplicationPosition, SyncTime, TransferId};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 

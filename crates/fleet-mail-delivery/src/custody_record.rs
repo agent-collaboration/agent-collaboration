@@ -1,5 +1,5 @@
 use crate::DeliveryError;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde::{Serialize, de::DeserializeOwned};
 
 pub(crate) fn encode<T: Serialize>(value: &T) -> Result<String, DeliveryError> {

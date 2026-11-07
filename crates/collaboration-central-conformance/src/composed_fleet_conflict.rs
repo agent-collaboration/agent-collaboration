@@ -7,7 +7,7 @@ use board_sync_protocol::{
     FleetRequestEnvelope,
 };
 use fleet_admission::{FleetOperation, FleetRequest, FleetRequestResult};
-use fleet_sync_protocol::{OperationAnswer, OperationRequest};
+use fleet_protocol::{OperationAnswer, OperationRequest};
 use message_board::{ChangeOutcome, Record, RequestDecision};
 use reqwest_websocket::WebSocket;
 

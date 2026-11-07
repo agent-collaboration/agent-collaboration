@@ -3,7 +3,7 @@ use super::support::*;
 use durable_steps::{
     AtomicStore, OperationFailure, StoreError, storage::TransactionScope, turso_store::TursoScope,
 };
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::{query::query, row::Row};
 use sqlx_turso::Turso;
 

@@ -1,6 +1,6 @@
 //! Board queries over a verified follower generation, without migration history.
 use crate::{ProjectReadStore, ProjectStorageError, StoreSchemaState};
-use fleet_sync_writer::ReadCopy;
+use fleet_project_writer::ReadCopy;
 use message_board::{ProjectId, SchemaFingerprint, SchemaRefusal};
 
 pub struct ProjectReadCopy {
@@ -56,11 +56,11 @@ impl ProjectReadCopy {
         ProjectReadStore::new(&self.project, self.copy.reader(), &self.schema)
     }
 
-    pub fn installed(&self) -> &fleet_sync_receiver::InstalledSnapshot {
+    pub fn installed(&self) -> &fleet_project_copy::InstalledSnapshot {
         self.copy.installed()
     }
 
-    pub async fn close(self) -> Result<(), fleet_sync_writer::ReadCopyError> {
+    pub async fn close(self) -> Result<(), fleet_project_writer::ReadCopyError> {
         self.copy.close().await
     }
 }

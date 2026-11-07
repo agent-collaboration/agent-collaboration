@@ -2,7 +2,7 @@ use crate::{
     OpenError, ReadPool, ReplicatedSchema, WriterRegistrationOutcome, native_pool::NativePool,
     writer_file_record::read_file_record,
 };
-use fleet_sync_protocol::{DatabaseId, Epoch, GateReason, ReplicationPosition};
+use fleet_protocol::{DatabaseId, Epoch, GateReason, ReplicationPosition};
 use sqlx_core::pool::PoolOptions;
 use sqlx_turso::{Turso, TursoConnectOptions};
 use std::path::Path;

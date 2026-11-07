@@ -3,15 +3,16 @@ use crate::{
     service_state::ServiceState,
 };
 use durable_steps::CallFailure;
-use fleet_sync_protocol::*;
-use fleet_sync_receiver::{
+use fleet_native_writer::{
+    InstallFile, InstallFileRequest, InstallFileResult, InstallHandle, InstallRecord,
+    InstallRefusal, InstallRequest, InstallSource, StagingError,
+};
+use fleet_project_copy::{
     SnapshotInstallError, SnapshotInstallRules, SnapshotReady, admit_snapshot_follow_ups,
 };
-use fleet_sync_session::PeerAuthenticator;
-use fleet_sync_tokio_runner::{
-    InstallFile, InstallFileRequest, InstallFileResult, InstallHandle, InstallRecord,
-    InstallRefusal, InstallRequest, InstallSource, PublishError, StagingError,
-};
+use fleet_protocol::*;
+use fleet_session::PeerAuthenticator;
+use fleet_tokio_objects::PublishError;
 use runtime_primitives::{Clock, WakeScheduler};
 
 impl<
@@ -19,7 +20,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > ServiceHandle<P, C, A>
 {
@@ -66,7 +67,7 @@ impl<
             .await
             .map_err(ServiceError::rule)?
         {
-            Ok(InstallFileResult::Outcome(fleet_sync_tokio_runner::InstallFileAnswer::Ready {
+            Ok(InstallFileResult::Outcome(fleet_native_writer::InstallFileAnswer::Ready {
                 ..
             })) => Ok(()),
             _ => Err(ServiceError::rule(
@@ -80,7 +81,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > ServiceState<P, C, A>
 {
@@ -217,7 +218,7 @@ impl<
             }
         };
         #[cfg(feature = "test-support")]
-        if let Ok(InstallFileResult::Page(fleet_sync_tokio_runner::StagedPage::Receipt(receipt))) =
+        if let Ok(InstallFileResult::Page(fleet_native_writer::StagedPage::Receipt(receipt))) =
             &result
         {
             self.install_page_probe.after_commit(receipt.clone()).await;

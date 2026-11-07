@@ -1,8 +1,8 @@
 //! Admission metadata stays usable while the real writer guard is held.
 #![allow(clippy::panic_in_result_fn)]
 use crate::*;
-use fleet_sync_lease::{LeaseHolder, LeasePolicy};
-use fleet_sync_protocol::*;
+use fleet_project_lease::{LeaseHolder, LeasePolicy};
+use fleet_protocol::*;
 use runtime_primitives::Clock;
 use sqlx_core::{executor::Executor, migrate::Migrator, query::query, row::Row};
 use sqlx_turso::Turso;

@@ -12,9 +12,10 @@ use collaboration_contracts::ProjectRegistrationState;
 use collaboration_contracts::ProjectReplicationPosition;
 use collaboration_contracts::ReplicatedPositionFuture;
 use collaboration_runtime::ProjectStoreRegistry;
-use fleet_sync_protocol::{CopyRole, ReceiverId, RegistrationRefusal};
-use fleet_sync_tokio_runner::{SessionRequests, WriterSessionCalls};
-use fleet_sync_writer::{ReplicationSender, SenderOptions, WriterRegistrationOutcome};
+use fleet_native_writer::WriterSessionCalls;
+use fleet_project_writer::{ReplicationSender, SenderOptions, WriterRegistrationOutcome};
+use fleet_protocol::{CopyRole, ReceiverId, RegistrationRefusal};
+use fleet_session_client::SessionRequests;
 use message_board::{BoardError, EpochNumber, FeedCursor, FeedPosition, ProjectId};
 use std::{
     collections::BTreeMap,
@@ -76,9 +77,9 @@ pub(super) struct ProjectWriters {
     pub(super) cache: Arc<message_board_storage::FleetCache>,
     #[cfg(test)]
     pub(super) notice_completions:
-        tokio::sync::broadcast::Sender<(fleet_sync_protocol::NoticePosition, NoticeHandling)>,
+        tokio::sync::broadcast::Sender<(fleet_protocol::NoticePosition, NoticeHandling)>,
     pub(super) directory: std::path::PathBuf,
-    pub(super) peer: fleet_sync_protocol::PeerId,
+    pub(super) peer: fleet_protocol::PeerId,
     registry: Weak<ProjectStoreRegistry>,
     pub(super) requests: SessionRequests<BoardConsumerProtocol>,
     pub(super) receiver: ReceiverId,
@@ -100,7 +101,7 @@ pub(super) struct ProjectWriters {
 pub(super) struct ProjectWriterInputs<'a> {
     pub cache: Arc<message_board_storage::FleetCache>,
     pub directory: &'a std::path::Path,
-    pub peer: fleet_sync_protocol::PeerId,
+    pub peer: fleet_protocol::PeerId,
     pub registry: &'a Arc<ProjectStoreRegistry>,
     pub requests: SessionRequests<BoardConsumerProtocol>,
     pub receiver: ReceiverId,
@@ -473,7 +474,7 @@ impl ProjectWriters {
     ) -> Result<
         (
             Arc<collaboration_runtime::NativeProjectStore>,
-            Option<fleet_sync_protocol::ReplicationPosition>,
+            Option<fleet_protocol::ReplicationPosition>,
         ),
         BoardError,
     > {
@@ -533,7 +534,7 @@ impl ProjectReplicationPosition for ProjectWriters {
         &'port self,
         project: &'port ProjectId,
     ) -> std::pin::Pin<
-        Box<dyn std::future::Future<Output = Option<fleet_sync_protocol::Epoch>> + Send + 'port>,
+        Box<dyn std::future::Future<Output = Option<fleet_protocol::Epoch>> + Send + 'port>,
     > {
         Box::pin(async move {
             let registry = self.registry().ok()?;
@@ -542,7 +543,7 @@ impl ProjectReplicationPosition for ProjectWriters {
             }
             let store = registry.existing_project(project).await.ok()??;
             match store.writer_state().await.ok()? {
-                fleet_sync_lease::WriterState::Writing { epoch } => Some(epoch),
+                fleet_project_lease::WriterState::Writing { epoch } => Some(epoch),
                 _ => None,
             }
         })

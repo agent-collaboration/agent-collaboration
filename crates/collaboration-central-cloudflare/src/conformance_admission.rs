@@ -26,14 +26,14 @@ enum Command {
         service: message_board::ServiceId,
     },
     SchemaReport {
-        peer: fleet_sync_protocol::PeerId,
+        peer: fleet_protocol::PeerId,
     },
     HolderObservation {
         service: message_board::ServiceId,
     },
     HolderSessionIdentity {
         service: message_board::ServiceId,
-        connection: fleet_sync_protocol::ConnectionId,
+        connection: fleet_protocol::ConnectionId,
     },
     ForwardState {
         service: message_board::ServiceId,
@@ -44,7 +44,7 @@ enum Command {
     #[cfg(feature = "conformance-faults")]
     SessionBarrier {
         service: message_board::ServiceId,
-        connection: fleet_sync_protocol::ConnectionId,
+        connection: fleet_protocol::ConnectionId,
     },
     #[cfg(feature = "conformance-faults")]
     SessionJournal {
@@ -56,17 +56,17 @@ enum Command {
     },
     AttachmentCodec {
         service: message_board::ServiceId,
-        connection: fleet_sync_protocol::ConnectionId,
+        connection: fleet_protocol::ConnectionId,
     },
     #[cfg(feature = "conformance-faults")]
     SessionAttachmentFault {
         service: message_board::ServiceId,
-        connection: fleet_sync_protocol::ConnectionId,
+        connection: fleet_protocol::ConnectionId,
         fault: AttachmentFault,
     },
     SessionAlarm {
         service: message_board::ServiceId,
-        connection: fleet_sync_protocol::ConnectionId,
+        connection: fleet_protocol::ConnectionId,
     },
     #[cfg(feature = "conformance-faults")]
     SeedSessionAlarm {
@@ -77,7 +77,7 @@ enum Command {
     #[cfg(feature = "conformance-faults")]
     SessionWake {
         service: message_board::ServiceId,
-        connection: fleet_sync_protocol::ConnectionId,
+        connection: fleet_protocol::ConnectionId,
         at: collaboration_central_core::RegistryTime,
     },
     SessionFault {

@@ -1,7 +1,7 @@
 //! Receiver outcomes through public APIs over the real Turso transaction boundary.
 #![allow(clippy::panic_in_result_fn)]
 use crate::{turso_rule_fixture::*, *};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use sqlx_core::{connection::Connection, row::Row};
 use sqlx_turso::Turso;
 
@@ -344,7 +344,7 @@ async fn fencing_preserves_old_holder_cutoff_and_retirement_dominates_replays() 
             epoch: Epoch::new(1)?,
             acked: position(1)?,
         },
-        target_schema: Some(fleet_sync_protocol::SchemaSupport { max_version: 1 }),
+        target_schema: Some(fleet_protocol::SchemaSupport { max_version: 1 }),
         holder: next_writer,
     };
     let expected = FenceResult::Fenced {

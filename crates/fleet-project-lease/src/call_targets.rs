@@ -1,6 +1,6 @@
 use durable_steps::CallTarget;
-use fleet_sync_protocol as wire;
-use fleet_sync_protocol::*;
+use fleet_protocol as wire;
+use fleet_protocol::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -4,11 +4,11 @@ use crate::{
     service_state::ServiceState,
 };
 use durable_steps::{AtomicStore, CallFailure, CallRetryReason, StoreError};
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliveryError, PublicationTarget, PublishCall, PublishStatus, StatusStream,
 };
-use fleet_sync_protocol::*;
-use fleet_sync_session::PeerAuthenticator;
+use fleet_protocol::*;
+use fleet_session::PeerAuthenticator;
 use runtime_primitives::{Clock, WakeScheduler};
 use serde_json::Value;
 use sqlx_turso::Turso;
@@ -18,7 +18,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > ServiceState<P, C, A>
 {
@@ -69,7 +69,7 @@ impl<
                     .registry
                     .transaction(move |scope| {
                         Box::pin(async move {
-                            Ok(fleet_sync_lease::lease_status(scope, project, now)
+                            Ok(fleet_project_lease::lease_status(scope, project, now)
                                 .await
                                 .map_err(StoreError::backend)?
                                 .filter(|lease| lease.state == LeaseState::Held)

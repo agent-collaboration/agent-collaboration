@@ -1,4 +1,4 @@
-use fleet_sync_protocol::TableName;
+use fleet_protocol::TableName;
 pub use sqlx_core::migrate::Migration;
 
 pub trait ReplicatedSchema: Send + Sync + 'static {

@@ -4,8 +4,8 @@ use collaboration_contracts::ProjectRegistration;
 use collaboration_contracts::ProjectRegistrationFuture;
 use collaboration_contracts::ProjectRegistrationState;
 use collaboration_runtime::ProjectStoreRegistry;
-use fleet_sync_protocol::{PeerId, ReceiverId};
-use fleet_sync_session::{Endpoint, PeerCredential};
+use fleet_protocol::{PeerId, ReceiverId};
+use fleet_session::{Endpoint, PeerCredential};
 use runtime_primitives::SystemClock;
 use std::{io, net::SocketAddr, path::Path, sync::Arc};
 

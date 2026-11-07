@@ -214,7 +214,7 @@ pub(super) async fn setup() -> (
         .with_subscription_delivery_service(actors.clone(), presence.clone());
     let (identity, mail) = native_mail_owner::start(
         identity,
-        fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).expect("installation peer"),
+        fleet_protocol::PeerId::new(uuid::Uuid::now_v7()).expect("installation peer"),
         collaboration_service::MailPushDeliveryProps {
             interactions: store.clone(),
             actors: actors.clone(),

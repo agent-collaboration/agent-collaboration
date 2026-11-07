@@ -414,7 +414,7 @@ impl NetworkFixture {
             .unwrap();
         engine
             .register(RecordRemoval::new(
-                fleet_sync_delivery::DeliveryHostRole::Machine,
+                fleet_mail_delivery::DeliveryHostRole::Machine,
             ))
             .unwrap();
         engine

@@ -4,10 +4,10 @@ use crate::{
     service_state::ServiceState,
 };
 use durable_steps::{AtomicStore, CallFailure, CallTarget, StoreError};
-use fleet_sync_lease::*;
-use fleet_sync_protocol::*;
-use fleet_sync_session::PeerAuthenticator;
-use fleet_sync_tokio_runner::CallEnvelope;
+use fleet_project_lease::*;
+use fleet_protocol::*;
+use fleet_session::PeerAuthenticator;
+use fleet_tokio_objects::CallEnvelope;
 use runtime_primitives::Clock;
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
@@ -23,7 +23,7 @@ impl<
     C: ServiceConsumer<P>,
     A: PeerAuthenticator<
             Material = String,
-            Route = <P::Delivery as fleet_sync_protocol::DeliveryTypes>::StatusRoute,
+            Route = <P::Delivery as fleet_protocol::DeliveryTypes>::StatusRoute,
         >,
 > ServiceState<P, C, A>
 {
@@ -34,11 +34,11 @@ impl<
             request,
             call,
         } = envelope;
-        if kind == fleet_sync_delivery::PublishCall::<P::Delivery>::KIND {
+        if kind == fleet_mail_delivery::PublishCall::<P::Delivery>::KIND {
             return self.delivery_publication(target, request, call).await;
         }
-        if kind == fleet_sync_delivery::PushCall::<P::Delivery>::KIND {
-            let target: fleet_sync_delivery::PushCall<P::Delivery> = decode(target)?;
+        if kind == fleet_mail_delivery::PushCall::<P::Delivery>::KIND {
+            let target: fleet_mail_delivery::PushCall<P::Delivery> = decode(target)?;
             let reference: DeliveryItemRef = decode(request)?;
             let config = self.options.delivery.as_ref().ok_or_else(unreachable)?;
             let limits = config.limits;
@@ -48,14 +48,14 @@ impl<
                 .registry
                 .transaction(move |scope| {
                     Box::pin(async move {
-                        fleet_sync_delivery::Outbox::<_, P::Delivery, _>::new(
+                        fleet_mail_delivery::Outbox::<_, P::Delivery, _>::new(
                             scope,
                             limits,
                             binding.as_ref(),
                         )
                         .resolve_push(&reference, now)
                         .await
-                        .map_err(fleet_sync_delivery::delivery_rollback)
+                        .map_err(fleet_mail_delivery::delivery_rollback)
                     })
                 })
                 .await
@@ -81,14 +81,14 @@ impl<
                 .await?;
             return match answer {
                 ClientAnswer::Crate(ServerCallAnswer::Pushed(result)) => {
-                    encode(fleet_sync_delivery::PushCall::<P::Delivery>::validated_answer(result)?)
+                    encode(fleet_mail_delivery::PushCall::<P::Delivery>::validated_answer(result)?)
                 }
                 _ => Err(CallFailure::AnswerLost),
             };
         }
         match kind {
-            fleet_sync_session::SchemaSupportRegistry::KIND => {
-                let _: fleet_sync_session::SchemaSupportRegistry = decode(target)?;
+            fleet_session::SchemaSupportRegistry::KIND => {
+                let _: fleet_session::SchemaSupportRegistry = decode(target)?;
                 let request: ReportSchemaSupport = decode(request)?;
                 #[cfg(feature = "test-support")]
                 self.schema_support_probe.before_report(&request).await;
@@ -106,33 +106,31 @@ impl<
                         .map_err(lost)?,
                 )
             }
-            fleet_sync_tokio_runner::InstallSource::KIND => {
+            fleet_native_writer::InstallSource::KIND => {
                 encode(self.install_source(decode(target)?).await?)
             }
-            fleet_sync_tokio_runner::InstallFile::KIND => {
+            fleet_native_writer::InstallFile::KIND => {
                 encode(self.install_file(decode(target)?, decode(request)?).await?)
             }
             "fleet-sync.apply-follow-up" => {
-                let _: fleet_sync_receiver::FollowUpCall<C::HookItem> = decode(target)?;
+                let _: fleet_project_copy::FollowUpCall<C::HookItem> = decode(target)?;
                 let item: C::HookItem = decode(request)?;
-                let answer = <C as fleet_sync_receiver::FollowUpHandler>::follow_up(
+                let answer = <C as fleet_project_copy::FollowUpHandler>::follow_up(
                     self.consumer.as_ref(),
                     &item,
                     call,
                 )
                 .await;
                 match answer {
-                    Ok(_) => encode(fleet_sync_receiver::FollowUpAnswer::Done),
-                    Err(fleet_sync_receiver::FollowUpFailure::Failed { reason }) => {
-                        encode(fleet_sync_receiver::FollowUpAnswer::Failed { reason })
+                    Ok(_) => encode(fleet_project_copy::FollowUpAnswer::Done),
+                    Err(fleet_project_copy::FollowUpFailure::Failed { reason }) => {
+                        encode(fleet_project_copy::FollowUpAnswer::Failed { reason })
                     }
-                    Err(fleet_sync_receiver::FollowUpFailure::Retry) => {
-                        Err(CallFailure::AnswerLost)
-                    }
+                    Err(fleet_project_copy::FollowUpFailure::Retry) => Err(CallFailure::AnswerLost),
                 }
             }
-            fleet_sync_lease::RegistrationAdmission::KIND => {
-                let request: fleet_sync_protocol::RegistrationAdmission = decode(request)?;
+            fleet_project_lease::RegistrationAdmission::KIND => {
+                let request: fleet_protocol::RegistrationAdmission = decode(request)?;
                 encode(
                     self.consumer
                         .admit_registration(&request.database, &request.writer, call)
@@ -140,8 +138,8 @@ impl<
                         .map_err(lost)?,
                 )
             }
-            fleet_sync_lease::RetirementAdmission::KIND => {
-                let request: fleet_sync_protocol::RetirementAdmission = decode(request)?;
+            fleet_project_lease::RetirementAdmission::KIND => {
+                let request: fleet_protocol::RetirementAdmission = decode(request)?;
                 encode(
                     self.consumer
                         .admit_retirement(&request.database, call)
@@ -149,8 +147,8 @@ impl<
                         .map_err(lost)?,
                 )
             }
-            fleet_sync_lease::ClaimReservation::KIND => {
-                let request: fleet_sync_protocol::ClaimReservation = decode(request)?;
+            fleet_project_lease::ClaimReservation::KIND => {
+                let request: fleet_protocol::ClaimReservation = decode(request)?;
                 encode(
                     self.consumer
                         .reserve(&request.change, call)
@@ -158,8 +156,8 @@ impl<
                         .map_err(lost)?,
                 )
             }
-            fleet_sync_lease::ClaimSettlement::KIND => {
-                let request: fleet_sync_protocol::ClaimSettlement = decode(request)?;
+            fleet_project_lease::ClaimSettlement::KIND => {
+                let request: fleet_protocol::ClaimSettlement = decode(request)?;
                 self.consumer
                     .settle(&request.change, request.outcome, call)
                     .await
@@ -218,14 +216,14 @@ impl<
                     .object
                     .transaction(move |scope| {
                         Box::pin(async move {
-                            fleet_sync_receiver::create_copy(scope, &request)
+                            fleet_project_copy::create_copy(scope, &request)
                                 .await
-                                .map_err(fleet_sync_receiver::receiver_rollback)
+                                .map_err(fleet_project_copy::receiver_rollback)
                         })
                     })
                     .await
                     .map_err(|error| {
-                        fleet_sync_receiver::classify_copy_store_error(error).call_failure()
+                        fleet_project_copy::classify_copy_store_error(error).call_failure()
                     })?;
                 copy.changed.send_replace(());
                 encode(answer)
@@ -243,18 +241,18 @@ impl<
                     .object
                     .transaction(move |scope| {
                         Box::pin(async move {
-                            fleet_sync_receiver::fence(scope, &request)
+                            fleet_project_copy::fence(scope, &request)
                                 .await
-                                .map_err(fleet_sync_receiver::receiver_rollback)
+                                .map_err(fleet_project_copy::receiver_rollback)
                         })
                     })
                     .await
                     .map_err(|error| {
-                        fleet_sync_receiver::classify_copy_store_error(error).call_failure()
+                        fleet_project_copy::classify_copy_store_error(error).call_failure()
                     })?;
                 copy.changed.send_replace(());
                 if answer == FenceResult::NotInitialized {
-                    return Err(fleet_sync_receiver::retryable_copy(
+                    return Err(fleet_project_copy::retryable_copy(
                         CopyUnavailableReason::Uninitialized,
                     ));
                 }
@@ -270,7 +268,7 @@ impl<
                     .object
                     .transaction(move |scope| {
                         Box::pin(async move {
-                            fleet_sync_receiver::retire_copy(scope, &request, now)
+                            fleet_project_copy::retire_copy(scope, &request, now)
                                 .await
                                 .map_err(StoreError::backend)
                         })
@@ -289,7 +287,7 @@ impl<
                     .await
                     .map_err(copy_call_failure)?;
                 if answer == CopyStatusAnswer::NotInitialized {
-                    return Err(fleet_sync_receiver::retryable_copy(
+                    return Err(fleet_project_copy::retryable_copy(
                         CopyUnavailableReason::Uninitialized,
                     ));
                 }
@@ -311,7 +309,7 @@ impl<
                     .await
                     .map_err(copy_call_failure)?;
                 if answer == AwaitAckedAnswer::NotInitialized {
-                    return Err(fleet_sync_receiver::retryable_copy(
+                    return Err(fleet_project_copy::retryable_copy(
                         CopyUnavailableReason::Uninitialized,
                     ));
                 }
@@ -332,7 +330,7 @@ impl<
 fn copy_call_failure(error: crate::ServiceError) -> CallFailure {
     match error {
         crate::ServiceError::Storage(error) => {
-            fleet_sync_receiver::classify_copy_store_error(error).call_failure()
+            fleet_project_copy::classify_copy_store_error(error).call_failure()
         }
         _ => CallFailure::AnswerLost,
     }

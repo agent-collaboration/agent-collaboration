@@ -3,7 +3,7 @@ use durable_steps::{
     Admitted, AtomicStore, CallTarget, JournalScope, OperationContext, OperationFailure,
     RequestKey, StartRefusal, StepName, Task,
 };
-use fleet_sync_protocol::{DatabaseId, Epoch, ReplicationPosition};
+use fleet_protocol::{DatabaseId, Epoch, ReplicationPosition};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::marker::PhantomData;
 

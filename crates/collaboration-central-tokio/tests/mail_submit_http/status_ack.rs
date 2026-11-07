@@ -7,7 +7,7 @@ use super::{
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use collaboration_central_conformance::{ConformanceClient, enroll_admitted_peer};
 use durable_steps::Uuid;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DeliveryEnvelope, DeliveryItem, ItemId, PeerId, PushResult, ServerCall, ServerFrame,
     ServerRequest, Submitter,
 };

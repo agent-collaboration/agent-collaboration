@@ -1,14 +1,13 @@
+use crate::checked_queries;
 use crate::{
-    SnapshotInstall, SnapshotInstallError, SnapshotInstallRules, StoreError, checked_queries,
+    SnapshotInstall, SnapshotInstallError, SnapshotInstallRules, StoreError,
     copy_contract::CopyRecord,
     copy_storage::{CopyStorage, decode_record, encode_record},
     snapshot_install::{check_identity, starting_status},
     snapshot_install_storage::InstallStorage,
 };
 use durable_steps::storage::TransactionScope;
-use fleet_sync_protocol::{
-    CopyRole, CopyStatus, CreateCopy, Epoch, FenceRequest, FenceResult, PeerId,
-};
+use fleet_protocol::{CopyRole, CopyStatus, CreateCopy, Epoch, FenceRequest, FenceResult, PeerId};
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,

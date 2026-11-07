@@ -8,8 +8,8 @@ use crate::{
 };
 use board_sync_protocol::{BoardConsumerAnswer, BoardConsumerProtocol, BoardReadPage};
 use durable_steps::{CallFailure, Host as _};
-use fleet_sync_protocol::{ConnectionId, FrameId, OperationAnswer, ServerFrame};
-use fleet_sync_session::SessionKey;
+use fleet_protocol::{ConnectionId, FrameId, OperationAnswer, ServerFrame};
+use fleet_session::SessionKey;
 use message_board::RequestEffectsRequest;
 
 impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {

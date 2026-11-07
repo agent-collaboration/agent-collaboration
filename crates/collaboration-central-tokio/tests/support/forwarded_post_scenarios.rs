@@ -8,7 +8,7 @@ use collaboration_central_conformance::{
 };
 use durable_steps::Uuid;
 use fleet_admission::FleetOperation;
-use fleet_sync_protocol::{DatabaseId, PeerId, RequestId};
+use fleet_protocol::{DatabaseId, PeerId, RequestId};
 use message_board::{ActorOrigin, BoardId, Description, ResourceName, ServiceId, WorkspaceId};
 
 pub(super) const SENDER_SERVICE: &str = "550e8400-e29b-41d4-a716-446655440476";

@@ -4,7 +4,7 @@ mod copy_operations;
 mod registry_operations;
 pub use copy_health::*;
 pub use copy_operations::*;
-pub use fleet_sync_protocol::{
+pub use fleet_protocol::{
     DatabaseId, Epoch, HolderChangeReason, ReplicationPosition, RequestId, TakeoverPreview,
     TransferId,
 };

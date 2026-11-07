@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use uuid::Uuid;
 
 fn snapshot_frame(real_bits: &[u64]) -> ServerFrame {

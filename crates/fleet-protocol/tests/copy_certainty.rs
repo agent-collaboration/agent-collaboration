@@ -1,5 +1,5 @@
 #![allow(clippy::panic_in_result_fn)]
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 
 #[test]
 fn closed_retry_codec_keeps_the_entire_reason_and_rejects_unrelated_or_unknown_codes()

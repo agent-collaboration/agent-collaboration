@@ -10,16 +10,16 @@ use durable_steps::{
     AtomicStore, CallTarget, Engine, Host, NotSentReason, OperationId, Task,
     storage::{CallReach, JournalStorage, StepState, TransactionScope},
 };
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliverCall, DeliverLocally, DeliveryConsumer, DeliveryLimits, DeliveryTaskConfig,
     GateDecision, Inbox, LocalDelivery, LocalDeliveryConfig, LocalOutcome, Outbox, PublishCall,
     ReportCall, ReportOutcome,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DeliveryEnvelope, DeliveryHeader, DeliveryItem, PeerId, PushResult, Recipient, RecipientReport,
     ReportResult, SubmitResult, Submitter,
 };
-use fleet_sync_tokio_runner::TokioObject;
+use fleet_tokio_objects::TokioObject;
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::json;
@@ -51,7 +51,7 @@ impl<S: TransactionScope> DeliveryConsumer<S> for HeldSession {
         &self,
         _: &mut S,
         _: &DeliveryItem<BoardDeliveryTypes>,
-    ) -> Result<GateDecision, fleet_sync_delivery::DeliveryError> {
+    ) -> Result<GateDecision, fleet_mail_delivery::DeliveryError> {
         Ok(GateDecision::Hold { until: None })
     }
     async fn deliver_locally(
@@ -121,7 +121,7 @@ impl Host for DeliveryHost {
         let limits = self.limits;
         let owner = self.owner;
         match C::KIND {
-            <fleet_sync_delivery::PushCall<BoardDeliveryTypes>>::KIND => {
+            <fleet_mail_delivery::PushCall<BoardDeliveryTypes>>::KIND => {
                 let reference: DeliveryItemRef = cast(&request)?;
                 let resolved = self
                     .fleet
@@ -134,7 +134,7 @@ impl Host for DeliveryHost {
                             )
                             .resolve_push(&reference, now)
                             .await
-                            .map_err(fleet_sync_delivery::delivery_rollback)
+                            .map_err(fleet_mail_delivery::delivery_rollback)
                         })
                     })
                     .await
@@ -160,7 +160,7 @@ impl Host for DeliveryHost {
                                 now,
                             )
                             .await
-                            .map_err(fleet_sync_delivery::delivery_rollback)
+                            .map_err(fleet_mail_delivery::delivery_rollback)
                         })
                     })
                     .await
@@ -200,7 +200,7 @@ impl Host for DeliveryHost {
                             )
                             .resolve_local_delivery(&reference)
                             .await
-                            .map_err(fleet_sync_delivery::delivery_rollback)
+                            .map_err(fleet_mail_delivery::delivery_rollback)
                         })
                     })
                     .await
@@ -234,7 +234,7 @@ impl Host for DeliveryHost {
                             )
                             .recipient_report::<Publication>(owner, report, now)
                             .await
-                            .map_err(fleet_sync_delivery::delivery_rollback)
+                            .map_err(fleet_mail_delivery::delivery_rollback)
                         })
                     })
                     .await
@@ -278,7 +278,7 @@ impl Fixture {
                 .object
                 .transaction(|scope| {
                     Box::pin(async move {
-                        fleet_sync_delivery::DELIVERY_MIGRATOR
+                        fleet_mail_delivery::DELIVERY_MIGRATOR
                             .run_direct(None, scope.executor(), false)
                             .await
                             .map_err(StoreError::backend)
@@ -316,7 +316,7 @@ impl Fixture {
         let mut fleet_engine = Engine::new(fleet.object.clone(), host.clone());
         fleet_engine.register(Push::new(limits, host.clone(), binding.clone()))?;
         fleet_engine.register(Publication::new())?;
-        fleet_engine.register(Removal::new(fleet_sync_delivery::DeliveryHostRole::Relay))?;
+        fleet_engine.register(Removal::new(fleet_mail_delivery::DeliveryHostRole::Relay))?;
         let local = LocalDeliveryConfig { owner, limits };
         let mut recipient_engine = Engine::new(recipient.object.clone(), host.clone());
         recipient_engine.register(Attempt::new(
@@ -330,9 +330,9 @@ impl Fixture {
             host.clone(),
             binding,
         ))?;
-        recipient_engine.register(Removal::new(fleet_sync_delivery::DeliveryHostRole::Machine))?;
+        recipient_engine.register(Removal::new(fleet_mail_delivery::DeliveryHostRole::Machine))?;
         let item = DeliveryEnvelope::Item(DeliveryItem::new(
-            fleet_sync_protocol::ItemId::new(durable_steps::Uuid::now_v7())?,
+            fleet_protocol::ItemId::new(durable_steps::Uuid::now_v7())?,
             serde_json::from_value(json!({"kind":"humanUser","installation":SERVICE_A}))?,
             Recipient {
                 peer: owner,
@@ -369,7 +369,7 @@ impl Fixture {
                                 NOW,
                             )
                             .await
-                            .map_err(fleet_sync_delivery::delivery_rollback)?;
+                            .map_err(fleet_mail_delivery::delivery_rollback)?;
                     if !matches!(answer, SubmitResult::Accepted { .. }) {
                         return Err(StoreError::backend("real relay admission failed"));
                     }

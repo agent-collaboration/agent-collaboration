@@ -55,7 +55,7 @@ pub async fn startup(store: &TestStore) -> usize {
             Box::pin(async move {
                 admit_existing_record_removals::<_, RecordRemoval>(
                     scope,
-                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    fleet_mail_delivery::DeliveryHostRole::Machine,
                     SyncTime::from_unix_millis(START),
                 )
                 .await
@@ -77,7 +77,7 @@ pub fn engine(fixture: &Fixture) -> Engine<TestStore, TestHost> {
     let mut engine = Engine::new(fixture.store.clone(), fixture.host.clone());
     engine
         .register(RecordRemoval::new(
-            fleet_sync_delivery::DeliveryHostRole::Machine,
+            fleet_mail_delivery::DeliveryHostRole::Machine,
         ))
         .unwrap();
     engine

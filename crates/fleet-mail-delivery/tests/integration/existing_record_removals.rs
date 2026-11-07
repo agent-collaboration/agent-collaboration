@@ -8,7 +8,7 @@ use durable_steps::{
     storage::{JournalStorage, OperationExecution, TransactionScope},
     turso_store::TursoScope,
 };
-use fleet_sync_delivery::*;
+use fleet_mail_delivery::*;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     query::query,
@@ -160,7 +160,7 @@ async fn startup_validates_all_keys_before_admitting_any_removal() {
             Box::pin(async move {
                 Ok(admit_existing_record_removals::<_, RecordRemoval>(
                     scope,
-                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    fleet_mail_delivery::DeliveryHostRole::Machine,
                     SyncTime::from_unix_millis(START),
                 )
                 .await)
@@ -213,7 +213,7 @@ async fn startup_backfill_child_checkpoint() -> Result<(), Box<dyn std::error::E
     let mut scope = StartupCheckpointScope { inner: &mut real };
     admit_existing_record_removals::<_, RecordRemoval>(
         &mut scope,
-        fleet_sync_delivery::DeliveryHostRole::Machine,
+        fleet_mail_delivery::DeliveryHostRole::Machine,
         SyncTime::from_unix_millis(START),
     )
     .await?;

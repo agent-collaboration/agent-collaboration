@@ -7,12 +7,10 @@ use crate::{
     lease_projection::LeaseProjection,
 };
 use durable_steps::StoreError;
-use fleet_sync_lease::{
+use fleet_project_lease::{
     DatabaseLifecycle, ImportOrigin, RegistryGrant, RegistryRevision, RegistrySnapshot,
 };
-use fleet_sync_protocol::{
-    CommitSequence, DatabaseId, Epoch, Origin, ReplicationPosition, SyncTime,
-};
+use fleet_protocol::{CommitSequence, DatabaseId, Epoch, Origin, ReplicationPosition, SyncTime};
 use std::num::NonZeroU64;
 
 pub(crate) struct LeaseColumns {
@@ -212,7 +210,7 @@ pub(crate) fn decode(row: StoredDirectoryLease) -> Result<Option<LeaseProjection
                 origin,
                 imported_from: imported
                     .map(|digest| {
-                        fleet_sync_protocol::ImportDigest::new(digest)
+                        fleet_protocol::ImportDigest::new(digest)
                             .map_err(|error| corrupt("lease.import_digest", error))
                             .map(|digest| ImportOrigin { digest })
                     })
@@ -220,7 +218,7 @@ pub(crate) fn decode(row: StoredDirectoryLease) -> Result<Option<LeaseProjection
             }
         }
         ("unheld", None, None, None, Some(digest), None, None) => DatabaseLifecycle::Unheld {
-            import_digest: fleet_sync_protocol::ImportDigest::new(digest)
+            import_digest: fleet_protocol::ImportDigest::new(digest)
                 .map_err(|error| corrupt("lease.import_digest", error))?,
         },
         ("retiring", None, None, None, None, Some(attempt), None) => DatabaseLifecycle::Retiring {
