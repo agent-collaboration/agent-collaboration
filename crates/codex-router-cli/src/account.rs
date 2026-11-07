@@ -108,6 +108,20 @@ pub enum AccountCommand {
     },
 }
 
+impl AccountCommand {
+    /// The Router root the command works on; help has none.
+    fn router_root(&self) -> Option<&Path> {
+        match self {
+            Self::Help(_) => None,
+            Self::Remove { router_root, .. }
+            | Self::Login { router_root, .. }
+            | Self::List { router_root }
+            | Self::SetStatus { router_root, .. }
+            | Self::SetWeeklyFloor { router_root, .. } => Some(router_root),
+        }
+    }
+}
+
 /// Provider-specific OAuth flow selected by `account login --provider`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProviderLoginFlow {
@@ -428,7 +442,9 @@ fn run_account_command_with_input_and_provider_flows_and_store_overrides(
     claude_flow_override: Option<&dyn AccountLoginFlow<PendingLogin = PendingClaudeOAuthLogin>>,
     claude_secret_store_override: Option<RuntimeCredentialStore>,
 ) -> Result<(), AccountCommandError> {
-    crate::router_update_guard::refuse_account_command_needing_update(&command)?;
+    if let Some(router_root) = command.router_root() {
+        crate::router_update_guard::refuse_root_needing_update_blocking(router_root)?;
+    }
     match command {
         AccountCommand::Remove {
             router_root,
