@@ -87,7 +87,7 @@ codex-router-host = { workspace = true, features = ["runtime-test-support"] }
 lifecycle-observation = { path = "../lifecycle-observation", version = "0.1.14" }
 collaboration-service = { path = "../collaboration-service", version = "0.1.14", features = ["test-support"] }
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.14" }
-message-board-storage = { path = "../message-board-storage", version = "0.1.20" }
+message-board-storage = { path = "../message-board-storage", version = "0.1.20", features = ["test-support"] }
 tokio-util.workspace = true
 futures-util.workspace = true
 tracing-subscriber.workspace = true
