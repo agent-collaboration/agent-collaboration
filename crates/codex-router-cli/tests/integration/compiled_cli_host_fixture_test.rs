@@ -1,4 +1,4 @@
-use super::{TestDirectory, check, reserve_loopback_port, sign_debug_binary};
+use super::{TestDirectory, binary_version, check, reserve_loopback_port, sign_debug_binary};
 use std::process::Stdio;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -48,6 +48,7 @@ async fn signed_serve(directory: &TestDirectory) -> Result<Child, Box<dyn std::e
     let binary = directory.path().join("codex-router");
     std::fs::copy(env!("CARGO_BIN_EXE_codex-router"), &binary)?;
     sign_debug_binary(&binary).await?;
+    let _version = binary_version(&binary).await?;
     let root = directory.path().join("private-router");
     std::fs::create_dir(&root)?;
     let port = reserve_loopback_port()?;
@@ -79,6 +80,13 @@ async fn signed_serve(directory: &TestDirectory) -> Result<Child, Box<dyn std::e
         )
         .into())
     })
-    .await??;
+    .await
+    .map_err(|_| {
+        std::io::Error::other(format!(
+            "signed fixture Serve did not announce readiness in ten seconds; child={:?}; stderr={}",
+            child.try_wait(),
+            std::fs::read_to_string(&stderr).unwrap_or_default()
+        ))
+    })??;
     Ok(child)
 }
