@@ -144,8 +144,12 @@ fn prepare_fixture(mode: ProviderFixtureMode) -> ProofResult<()> {
         }})
     };
     write_private_file(
-        &root.join("providers.json"),
-        format!("{}\n", serde_json::to_string_pretty(&config)?).as_bytes(),
+        &root.join("settings.jsonc"),
+        format!(
+            "{}\n",
+            serde_json::to_string_pretty(&json!({"providers": config}))?
+        )
+        .as_bytes(),
     )?;
     Ok(())
 }

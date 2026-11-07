@@ -79,11 +79,13 @@ mod operator_messages;
 mod owned_router;
 mod owner_identity_resolution;
 mod process_group_child;
-mod provider_configuration_file;
+mod provider_settings_section;
 mod router_credential_migration;
-pub use provider_configuration_file::{
-    ProviderConfigurationEntries, ProviderConfigurationEntry, ProviderConfigurationError,
-    ProviderConfigurationFile,
+pub use provider_settings_section::{ProviderConfigurationEntries, ProviderConfigurationEntry};
+mod router_settings;
+pub use router_settings::{
+    ROUTER_SETTINGS_FILE_NAME, RouterSettingsError, RouterSettingsSection,
+    load_or_create_provider_settings, router_settings_path,
 };
 mod provider_startup_composition;
 pub use provider_startup_composition::ExternalProviderStartup;

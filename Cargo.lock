@@ -1529,6 +1529,7 @@ dependencies = [
  "futures-util",
  "httparse",
  "interaction-storage",
+ "jsonc-parser",
  "lifecycle-observation",
  "message-board",
  "message-board-storage",
