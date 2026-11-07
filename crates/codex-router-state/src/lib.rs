@@ -16,8 +16,8 @@ pub mod session_account_affinity;
 pub mod sqlite;
 pub use provider_proxy_store::{
     FORMER_PROVIDER_PROXY_DATABASE_FILE_NAME, PROVIDER_PROXY_DATABASE_FILE_NAME,
-    checkpoint_provider_proxy_database, former_provider_proxy_database_path,
-    provider_proxy_database_path,
+    ProviderProxyCheckpointError, checkpoint_provider_proxy_database,
+    former_provider_proxy_database_path, provider_proxy_database_path,
 };
 pub mod window_observation;
 

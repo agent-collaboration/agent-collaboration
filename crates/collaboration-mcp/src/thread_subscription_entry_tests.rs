@@ -82,6 +82,7 @@ async fn subscription_tools_roundtrip_through_mcp_api_native_projects_and_local_
         .expect("private service permissions");
 
     let registry = crate::native_board_test_fixture::new_registry(temporary.path())
+        .await
         .expect("native project registry");
     let origin = message_board::ActorOrigin {
         installation: message_board::ServiceId::try_from(SERVICE_ID.to_owned())

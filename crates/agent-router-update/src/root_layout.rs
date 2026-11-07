@@ -58,7 +58,7 @@ pub enum RouterUpdateError {
     ProviderProxyStore {
         store: PathBuf,
         #[source]
-        source: codex_router_state::sqlite::StateStoreError,
+        source: codex_router_state::ProviderProxyCheckpointError,
     },
     #[error("{store}: {source}")]
     Store {
