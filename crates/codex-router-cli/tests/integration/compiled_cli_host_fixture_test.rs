@@ -11,6 +11,8 @@ async fn failed_fixture_drop_kills_its_serve_and_preserves_the_neighbor() -> Tes
     // Arrange two real signed Serve processes with distinct owned roots.
     let failed = TestDirectory::new()?;
     let neighbor = TestDirectory::new()?;
+    let failed_root = failed.path().to_owned();
+    let neighbor_root = neighbor.path().to_owned();
     let mut failed_serve = signed_serve(&failed).await?;
     let mut neighbor_serve = signed_serve(&neighbor).await?;
 
@@ -41,6 +43,17 @@ async fn failed_fixture_drop_kills_its_serve_and_preserves_the_neighbor() -> Tes
     }
     failed_serve.wait().await?;
     neighbor_serve.wait().await?;
+    if result.is_ok() {
+        // Drop only signaled termination. These actual Child joins authorize
+        // removing our exact roots without a process-table polling loop.
+        for fixture_root in [failed_root, neighbor_root] {
+            match std::fs::remove_dir_all(fixture_root) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
     result
 }
 
