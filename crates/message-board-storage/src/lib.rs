@@ -8,7 +8,7 @@ mod legacy_fleet_sources;
 #[cfg(feature = "test-support")]
 pub mod router_store_contents;
 pub use fleet_store::FleetStore;
-pub use legacy_fleet_sources::{LegacyFleetSource, check_legacy_source};
+pub use legacy_fleet_sources::LegacyFleetSource;
 mod fleet_outbox;
 mod fleet_record_codec;
 mod fleet_storage_error;

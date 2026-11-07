@@ -7,8 +7,8 @@ use crate::{
     update_barrier::{UpdateBarrier, wait_at},
 };
 use message_board_storage::{
-    LegacyFleetSource, RouterUpdateStep, UpdateLedger, UpdateSourceProgress, UpdateStepProgress,
-    check_legacy_source,
+    LegacyFleetSource, RouterLocalStorageError, RouterUpdateStep, UpdateLedger,
+    UpdateSourceProgress, UpdateStepProgress,
 };
 use std::{
     ffi::OsString,
@@ -29,9 +29,10 @@ pub(crate) async fn merge_fleet_stores(root: &Path) -> Result<(), RouterUpdateEr
         for source in LegacyFleetSource::ALL {
             let path = legacy_source_path(root, source);
             if layout.source_progress(source).is_none() && exists(&path)? {
-                check_legacy_source(source, &path)
+                ledger
+                    .check_legacy_source(source, &path)
                     .await
-                    .map_err(|error| source_error(&path, error))?;
+                    .map_err(|error| carry_error(&path, &layout.store, error))?;
             }
         }
         for source in LegacyFleetSource::ALL {
@@ -42,7 +43,7 @@ pub(crate) async fn merge_fleet_stores(root: &Path) -> Result<(), RouterUpdateEr
                     ledger
                         .carry_legacy_source(source, &path)
                         .await
-                        .map_err(|error| source_error(&path, error))?;
+                        .map_err(|error| carry_error(&path, &layout.store, error))?;
                     barrier(UpdateBarrier::SourceWritten(source)).await?;
                     remove_carried_source(&ledger, source, &path).await?;
                 }
@@ -148,10 +149,19 @@ async fn remove_if_present(path: &Path) -> Result<(), RouterUpdateError> {
     }
 }
 
-fn source_error(
-    path: &Path,
-    source: message_board_storage::RouterLocalStorageError,
-) -> RouterUpdateError {
+/// A carry refused because both stores hold a cursor key names both; any other failure
+/// names the legacy store.
+fn carry_error(legacy: &Path, fleet: &Path, error: RouterLocalStorageError) -> RouterUpdateError {
+    match error {
+        RouterLocalStorageError::LegacyCursorKeyDiffers => RouterUpdateError::CursorKeysDiffer {
+            legacy: legacy.to_owned(),
+            fleet: fleet.to_owned(),
+        },
+        other => source_error(legacy, other),
+    }
+}
+
+fn source_error(path: &Path, source: RouterLocalStorageError) -> RouterUpdateError {
     RouterUpdateError::Store {
         store: path.to_owned(),
         source,

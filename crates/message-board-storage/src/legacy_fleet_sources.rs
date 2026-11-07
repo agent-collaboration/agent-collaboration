@@ -97,15 +97,6 @@ pub(crate) async fn read_legacy_rows(
     Ok(rows)
 }
 
-/// Reads a legacy store and checks every row, changing nothing, so step 0005 can refuse
-/// before it carries or removes any store.
-pub async fn check_legacy_source(
-    source: LegacyFleetSource,
-    path: &Path,
-) -> Result<(), RouterLocalStorageError> {
-    read_legacy_rows(source, path).await.map(drop)
-}
-
 /// Each value must be one the current Fleet code would read back: outbox requests through
 /// the outbox decoder, creation inputs against their own request in the same store, and
 /// the cursor key as the single key the cursor store accepts.
@@ -285,6 +276,7 @@ pub(crate) async fn carry_legacy_rows(
             }
         }
         LegacyRows::CursorKey { keys } => {
+            refuse_a_second_cursor_key(transaction, rows).await?;
             for row in keys {
                 match fleet_cursor_key(transaction, &row.key_id).await? {
                     Some(existing) if existing == *row => {}
@@ -300,6 +292,35 @@ pub(crate) async fn carry_legacy_rows(
                     }
                 }
             }
+        }
+    }
+    Ok(())
+}
+
+/// The Fleet database keeps exactly one cursor key. A legacy key beside a different one
+/// already there would make two, so it is refused before anything moves.
+pub(crate) async fn refuse_a_second_cursor_key(
+    connection: &mut sqlx_turso::TursoConnection,
+    rows: &LegacyRows,
+) -> Result<(), RouterLocalStorageError> {
+    let LegacyRows::CursorKey { keys } = rows else {
+        return Ok(());
+    };
+    let Some(legacy) = keys.first() else {
+        return Ok(());
+    };
+    let held = sqlx::query::<Turso>(
+        "SELECT key_id, key_bytes FROM fleet_cursor_signing_key ORDER BY key_id",
+    )
+    .fetch_all(&mut *connection)
+    .await?;
+    for row in held {
+        let held = CursorKeyRow {
+            key_id: row.try_get("key_id")?,
+            key_bytes: row.try_get("key_bytes")?,
+        };
+        if held != *legacy {
+            return Err(RouterLocalStorageError::LegacyCursorKeyDiffers);
         }
     }
     Ok(())

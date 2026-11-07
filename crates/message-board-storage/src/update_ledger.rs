@@ -7,7 +7,9 @@
 use crate::{
     LegacyFleetSource, RouterLocalStorageError,
     fleet_cache_schema::CACHE_MIGRATOR,
-    legacy_fleet_sources::{carry_legacy_rows, read_legacy_rows, verify_legacy_rows_carried},
+    legacy_fleet_sources::{
+        carry_legacy_rows, read_legacy_rows, refuse_a_second_cursor_key, verify_legacy_rows_carried,
+    },
     router_local_database::RouterLocalDatabase,
 };
 use sqlx::{ConnectOptions, Connection, Row};
@@ -165,6 +167,18 @@ impl UpdateLedger {
 
     pub async fn entries(&self) -> Result<Vec<UpdateLedgerEntry>, RouterLocalStorageError> {
         read_entries(&self.database.pool).await
+    }
+
+    /// Step 0005, before any source moves: reads a legacy store, checks every row through
+    /// its owning decoder and against this Fleet database's cursor key, and changes nothing.
+    pub async fn check_legacy_source(
+        &self,
+        source: LegacyFleetSource,
+        path: &Path,
+    ) -> Result<(), RouterLocalStorageError> {
+        let rows = read_legacy_rows(source, path).await?;
+        let mut connection = self.database.pool.acquire().await?;
+        refuse_a_second_cursor_key(&mut connection, &rows).await
     }
 
     /// Step 0005, one source: carries every row of the legacy store into this Fleet

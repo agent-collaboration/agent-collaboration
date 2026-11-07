@@ -2,14 +2,15 @@
 //! its values, and never reads a store again once its rows have moved.
 //!
 //! A well-formed store holding one value its owner refuses stops the update before any
-//! store is carried or removed, naming the store, table and row. A store that reappears
-//! after its rows moved is removed without being opened, and the Fleet database is left
-//! byte for byte as it was.
+//! store is carried or removed, naming the store, table and row. So does a cursor key
+//! other than the one the Fleet database already holds, naming both stores. A store that
+//! reappears after its rows moved is removed without being opened, and the Fleet database
+//! is left byte for byte as it was.
 use crate::update_ledger_journey::root_argument;
 use crate::update_moves_journey::{assert_update_finished, fixture_values};
 use crate::update_support::{
     CREATION_REQUEST, FleetValues, PENDING_REQUEST, UpdateResult, populated_root, run_update,
-    run_update_killed_at, snapshot, write_legacy_value,
+    run_update_killed_at, snapshot, write_store_value,
 };
 use codex_router_host::{
     router_collaboration_directory, router_fleet_cache_database, router_fleet_database,
@@ -38,7 +39,7 @@ async fn assert_invalid_value_refused(
     let (_directory, root) = populated_root()?;
     let directory = router_collaboration_directory(&root);
     let key = key(&fixture_values(&root).await?);
-    write_legacy_value(&directory.join(store), &statement(&key)).await?;
+    write_store_value(&directory.join(store), &statement(&key)).await?;
     let stores_before = snapshot(&directory)?;
 
     // Act
@@ -231,4 +232,69 @@ async fn a_store_that_reappears_after_its_own_removal_is_removed_unread_mid_merg
     );
     assert!(!outbox.exists(), "the stale outbox store must be removed");
     assert_update_finished(&root, &expected, "stale store mid-merge").await
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
+#[tokio::test]
+async fn a_fleet_database_holding_another_cursor_key_stops_the_update_naming_both_stores()
+-> UpdateResult {
+    // Arrange: step 0001 is done, then the Fleet database gains a cursor key of its own,
+    // different from the one board-cursors.sqlite holds.
+    let (_directory, root) = populated_root()?;
+    run_update_killed_at(&root, "step-0001:done").await?;
+    let former = router_fleet_cache_database(&root);
+    let held_key = (
+        "019f0000-0000-7000-8000-00000000d399".to_owned(),
+        vec![0xe7_u8; 32],
+    );
+    write_store_value(
+        &former,
+        &format!(
+            "INSERT INTO fleet_cursor_signing_key(key_id, key_bytes) VALUES ('{}', x'{}')",
+            held_key.0,
+            "e7".repeat(32)
+        ),
+    )
+    .await?;
+    let directory = router_collaboration_directory(&root);
+    let cursors = directory.join("board-cursors.sqlite");
+    let stores_before = snapshot(&directory)?;
+
+    // Act
+    let refused = run_update(&root_argument(&root)).await?;
+
+    // Assert: both stores are named, and neither changed: the Fleet database still holds
+    // only its own key and nothing was carried, and every older store is untouched.
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert_eq!(refused.status.code(), Some(2), "{stderr}");
+    assert!(
+        stderr.contains(&format!(
+            "{} and {} hold different board cursor signing keys",
+            cursors.display(),
+            former.display()
+        )),
+        "the refusal must name both stores: {stderr}"
+    );
+    let merged = FleetValues::read_merged(&former).await?;
+    assert_eq!(merged.cursor_keys, vec![held_key]);
+    assert!(
+        merged.requests.is_empty() && merged.creation_inputs.is_empty(),
+        "nothing may be carried: {merged:?}"
+    );
+    let stores_after = snapshot(&directory)?;
+    for file in LEGACY_STORE_FILES {
+        assert_eq!(
+            stores_after.get(Path::new(file)),
+            stores_before.get(Path::new(file)),
+            "{file} must be untouched"
+        );
+    }
+    assert!(
+        !router_fleet_database(&root).exists(),
+        "nothing was renamed"
+    );
+    Ok(())
 }

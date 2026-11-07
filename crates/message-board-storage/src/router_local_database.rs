@@ -42,6 +42,10 @@ pub enum RouterLocalStorageError {
         #[source]
         reason: Box<RouterLocalStorageError>,
     },
+    /// The Fleet database already holds a cursor key other than the legacy store's; the
+    /// Fleet database keeps exactly one, so carrying it would leave two.
+    #[error("board-cursors.sqlite holds a different cursor signing key than the Fleet database")]
+    LegacyCursorKeyDiffers,
 }
 
 pub(crate) struct RouterLocalDatabase {

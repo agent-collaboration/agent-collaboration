@@ -29,6 +29,10 @@ pub enum RouterUpdateError {
     )]
     RemovedSourceReappeared { path: PathBuf },
     #[error(
+        "{legacy} and {fleet} hold different board cursor signing keys; the Fleet database keeps one, so move aside the store whose key this Router does not use, then run agent-router-update again"
+    )]
+    CursorKeysDiffer { legacy: PathBuf, fleet: PathBuf },
+    #[error(
         "{path} still has a write-ahead log or shared-memory file after the checkpoint; the rename stopped so no committed row is lost"
     )]
     LogRemainsAfterCheckpoint { path: PathBuf },
