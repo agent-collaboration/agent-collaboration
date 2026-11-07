@@ -374,21 +374,22 @@ async fn dirty_or_unknown_native_history_is_rejected_without_changes() {
 
 #[tokio::test]
 async fn concurrent_open_registers_one_baseline_and_preserves_one_identity() {
-    let path = std::env::temp_dir().join(format!(
-        "journal-native-concurrent-{}.sqlite",
-        std::process::id()
-    ));
+    let directory = tempfile::tempdir().expect("fresh concurrent journal directory");
+    let path = directory.path().join("journal.sqlite");
+    let proposed = identity().unwrap();
     let other: UuidIdentity = "00000000-0000-4000-8000-000000000002"
         .to_owned()
         .try_into()
         .unwrap_or_else(|error| panic!("journal migration proof: {error}"));
     let (first, second) = tokio::join!(
-        ObservationJournal::open(&path, identity().unwrap()),
-        ObservationJournal::open(&path, other)
+        ObservationJournal::open(&path, proposed.clone()),
+        ObservationJournal::open(&path, other.clone())
     );
-    let first = first.unwrap_or_else(|error| panic!("journal migration proof: {error}"));
-    let second = second.unwrap_or_else(|error| panic!("journal migration proof: {error}"));
+    let first = first.unwrap_or_else(|error| panic!("journal migration proof: {error:?}"));
+    let second = second.unwrap_or_else(|error| panic!("journal migration proof: {error:?}"));
     assert_eq!(first.journal_id(), second.journal_id());
+    let winner = first.journal_id().clone();
+    assert!(winner == proposed || winner == other);
     first.close().await;
     second.close().await;
     let mut connection = connect(&path).await.unwrap();
@@ -401,5 +402,10 @@ async fn concurrent_open_registers_one_baseline_and_preserves_one_identity() {
         .close()
         .await
         .unwrap_or_else(|error| panic!("journal migration proof: {error}"));
-    std::fs::remove_file(path).unwrap_or_else(|error| panic!("journal migration proof: {error}"));
+    let loser = if winner == proposed { other } else { proposed };
+    let reopened = ObservationJournal::open(&path, loser)
+        .await
+        .unwrap_or_else(|error| panic!("journal migration proof: {error:?}"));
+    assert_eq!(reopened.journal_id(), &winner);
+    reopened.close().await;
 }
