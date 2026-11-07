@@ -9,6 +9,10 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Lets other crates' tests hold a scratch creator just after it takes its lock.
+test-support = []
+
 [dependencies]
 message-board = { path = "../message-board", version = "0.1.20" }
 toml = "1.1.2"

@@ -5,8 +5,9 @@
 use crate::{
     dead_files_step::{self, DeadFileRemoval},
     ledger_step::{self, LedgerStoreOpen},
-    merge_step, rename_step, reset_step,
+    merge_step, proxy_store_step, rename_step, reset_step,
     root_layout::{RootLayout, RouterUpdateError, exists, legacy_source_path},
+    settings_step,
 };
 use codex_router_host::{
     HostCoordinationPaths, HostInstanceLock, InstanceAcquireError,
@@ -84,6 +85,10 @@ pub enum PlannedChange {
     },
     /// Step 0005 with no older store left: it only records itself done.
     NothingToMerge,
+    /// Step 0007 carries the settings files and renames the picker's machine list.
+    CarrySettingsFiles(settings_step::SettingsChange),
+    /// Step 0008 checkpoints and renames the provider proxy store and its lock folder.
+    RenameProviderProxyStore(proxy_store_step::ProxyStoreChange),
     /// Step 0009 imports these approval routes, if any, then removes these paths.
     RemoveDeadFiles {
         import_routes: Option<PathBuf>,
@@ -151,6 +156,8 @@ impl std::fmt::Display for PlannedChange {
                 )
             }
             Self::NothingToMerge => write!(formatter, "no older Fleet store to move"),
+            Self::CarrySettingsFiles(change) => write!(formatter, "{change}"),
+            Self::RenameProviderProxyStore(change) => write!(formatter, "{change}"),
             Self::RenameFleetDatabase { from, to } => {
                 write!(formatter, "rename {} to {}", from.display(), to.display())
             }
@@ -248,6 +255,12 @@ pub async fn run_router_update(root: &Path) -> Result<RouterUpdatePlan, RouterUp
             PlannedChange::MergeLegacyStores { .. } | PlannedChange::NothingToMerge => {
                 merge_step::merge_fleet_stores(root).await?;
             }
+            PlannedChange::CarrySettingsFiles(_) => {
+                settings_step::carry_settings_files(root).await?;
+            }
+            PlannedChange::RenameProviderProxyStore(_) => {
+                proxy_store_step::rename_provider_proxy_store(root).await?;
+            }
             PlannedChange::RenameFleetDatabase { .. } | PlannedChange::RenameAlreadyDone { .. } => {
                 rename_step::rename_fleet_database(root).await?;
             }
@@ -316,6 +329,12 @@ fn planned_change(
                     sources,
                 }
             }
+        }
+        RouterUpdateStep::CarrySettingsFiles => PlannedChange::CarrySettingsFiles(
+            settings_step::plan_settings_step(root, &layout.ledger)?,
+        ),
+        RouterUpdateStep::RenameProviderProxyStore => {
+            PlannedChange::RenameProviderProxyStore(proxy_store_step::plan_proxy_store_step(root)?)
         }
         RouterUpdateStep::RenameFleetDatabase => {
             if layout.store_is_current {

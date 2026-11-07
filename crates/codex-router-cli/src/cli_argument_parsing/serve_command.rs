@@ -76,7 +76,7 @@ impl ServeCommand {
         let router_root = default_router_root()?;
         let state_db = options
             .state_db
-            .unwrap_or_else(|| router_root.join("state.sqlite"));
+            .unwrap_or_else(|| codex_router_state::provider_proxy_database_path(&router_root));
         let secret_root = options
             .secret_root
             .unwrap_or_else(|| router_root.join("secrets"));

@@ -302,7 +302,7 @@ async fn aggregate_long_turn_settles_through_real_adapter_after_many_native_upda
         serve_acp_connection(
             stream,
             AcpConnectionInputs {
-                backend_path: adapter_root.join("native.sock"),
+            scratch_scopes: std::sync::Arc::new(collaboration_runtime::OpenScratchScopes::new()),                backend_path: adapter_root.join("native.sock"),
                 generation: serde_json::from_value(json!({
                     "serviceEpoch":adapter_service_epoch,
                     "generation":1

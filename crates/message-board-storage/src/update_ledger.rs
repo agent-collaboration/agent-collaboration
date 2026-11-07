@@ -27,6 +27,12 @@ pub enum RouterUpdateStep {
     FinishEnrollmentReset,
     /// 0005: the Fleet outbox and the board cursor key move into the Fleet database.
     MergeFleetStores,
+    /// 0007: `providers.json` and `ports.json` become `settings.jsonc`, and
+    /// `routers.jsonc` is renamed to `agent-sessions.jsonc`.
+    CarrySettingsFiles,
+    /// 0008: the provider proxy store `state.sqlite` and its lock folder are renamed to
+    /// `provider-proxy.sqlite` after a full checkpoint.
+    RenameProviderProxyStore,
     /// 0009: files nothing reads any more are removed; approval routes are imported first.
     RemoveDeadFiles,
     /// 0010: `fleet-cache.sqlite` is renamed to `fleet.sqlite`.
@@ -34,10 +40,12 @@ pub enum RouterUpdateStep {
 }
 
 impl RouterUpdateStep {
-    pub const KNOWN: [Self; 5] = [
+    pub const KNOWN: [Self; 7] = [
         Self::CreateLedger,
         Self::FinishEnrollmentReset,
         Self::MergeFleetStores,
+        Self::CarrySettingsFiles,
+        Self::RenameProviderProxyStore,
         Self::RemoveDeadFiles,
         Self::RenameFleetDatabase,
     ];
@@ -48,6 +56,8 @@ impl RouterUpdateStep {
             Self::CreateLedger => UpdateStepNumber::new(1),
             Self::FinishEnrollmentReset => UpdateStepNumber::new(2),
             Self::MergeFleetStores => UpdateStepNumber::new(5),
+            Self::CarrySettingsFiles => UpdateStepNumber::new(7),
+            Self::RenameProviderProxyStore => UpdateStepNumber::new(8),
             Self::RemoveDeadFiles => UpdateStepNumber::new(9),
             Self::RenameFleetDatabase => UpdateStepNumber::new(10),
         }
@@ -131,6 +141,26 @@ pub enum StoredUpdateLedger {
 }
 
 impl StoredUpdateLedger {
+    /// The progress the ledger records for `source` within `step`, if any.
+    #[must_use]
+    pub fn source_progress(
+        &self,
+        step: UpdateStepNumber,
+        source: &str,
+    ) -> Option<UpdateSourceProgress> {
+        let Self::Present(entries) = self else {
+            return None;
+        };
+        entries.iter().find_map(|entry| match entry {
+            UpdateLedgerEntry::Source {
+                step: entry_step,
+                source: name,
+                progress,
+            } if *entry_step == step && name == source => Some(*progress),
+            _ => None,
+        })
+    }
+
     #[must_use]
     pub fn step_done(&self, step: UpdateStepNumber) -> bool {
         match self {
@@ -230,6 +260,21 @@ impl UpdateLedger {
     ) -> Result<(), RouterLocalStorageError> {
         let rows = read_legacy_rows(source, path).await?;
         verify_legacy_rows_carried(&self.database, &rows).await
+    }
+
+    /// Records one file's progress within `step`, such as `settings.jsonc` written.
+    pub async fn record_step_source(
+        &self,
+        step: RouterUpdateStep,
+        source: &str,
+        progress: UpdateSourceProgress,
+    ) -> Result<(), RouterLocalStorageError> {
+        let _writer = self.database.writer.lock().await;
+        let mut connection = self.database.pool.acquire().await?;
+        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        write_ledger_row(&mut transaction, step.number(), source, progress.as_str()).await?;
+        transaction.commit().await?;
+        Ok(())
     }
 
     pub async fn record_source(

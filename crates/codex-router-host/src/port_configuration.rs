@@ -6,6 +6,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::router_settings::{
+    RouterSettingsError, RouterSettingsSection, read_router_settings_section,
+};
 use crate::{HostPortSelection, HostPortSource, SelectedHostPort};
 use serde::Deserialize;
 
@@ -25,51 +28,56 @@ pub struct ResolvedHostPorts {
 
 #[derive(Debug, thiserror::Error)]
 pub enum PortConfigurationError {
-    #[error("cannot read Host port configuration {path}: {source}")]
-    FileIo {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
+    /// The settings file or its `ports` section cannot be used.
+    #[error(transparent)]
+    Settings(#[from] RouterSettingsError),
     #[error("invalid Host port configuration {path}: {message}")]
     Invalid { path: PathBuf, message: String },
 }
 
+/// The `ports` section of `settings.jsonc`; every field is optional.
 #[derive(Default, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-struct PortConfigurationFile {
-    router: Option<NonZeroU16>,
-    mcp: Option<NonZeroU16>,
-    tailscale_https: Option<NonZeroU16>,
+pub(crate) struct PortSettingsSection {
+    pub(crate) router: Option<NonZeroU16>,
+    pub(crate) mcp: Option<NonZeroU16>,
+    pub(crate) tailscale_https: Option<NonZeroU16>,
 }
 
-impl PortConfigurationFile {
-    fn load(path: &Path) -> Result<Self, PortConfigurationError> {
-        let bytes = match std::fs::read(path) {
-            Ok(bytes) => bytes,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Ok(Self::default());
-            }
-            Err(source) => {
-                return Err(PortConfigurationError::FileIo {
-                    path: path.to_owned(),
-                    source,
-                });
-            }
+/// The `ports` section as read, with the settings path its errors name.
+struct LoadedPortSettings {
+    path: PathBuf,
+    section: PortSettingsSection,
+}
+
+impl LoadedPortSettings {
+    fn load(router_root: &Path) -> Result<Self, PortConfigurationError> {
+        let read = read_router_settings_section::<PortSettingsSection>(
+            router_root,
+            RouterSettingsSection::Ports,
+        )?;
+        let loaded = Self {
+            path: read.path,
+            section: read.value.unwrap_or_default(),
         };
-        let configuration: Self =
-            serde_json::from_slice(&bytes).map_err(|error| PortConfigurationError::Invalid {
-                path: path.to_owned(),
-                message: error.to_string(),
-            })?;
-        if configuration.router.is_some() && configuration.router == configuration.mcp {
-            return Err(PortConfigurationError::Invalid {
-                path: path.to_owned(),
-                message: "router and MCP ports must differ".to_owned(),
-            });
+        if loaded.section.router.is_some() && loaded.section.router == loaded.section.mcp {
+            return Err(loaded.invalid("router and MCP ports must differ"));
         }
-        Ok(configuration)
+        Ok(loaded)
     }
+
+    fn invalid(&self, message: impl Into<String>) -> PortConfigurationError {
+        invalid_ports(&self.path, message)
+    }
+}
+
+fn invalid_ports(path: &Path, message: impl Into<String>) -> PortConfigurationError {
+    RouterSettingsError::InvalidSection {
+        path: path.to_owned(),
+        section: RouterSettingsSection::Ports,
+        message: message.into(),
+    }
+    .into()
 }
 
 pub fn resolve_host_ports(
@@ -77,9 +85,8 @@ pub fn resolve_host_ports(
     isolated_debug: bool,
     overrides: HostPortOverrides,
 ) -> Result<ResolvedHostPorts, PortConfigurationError> {
-    let path = router_root.join("ports.json");
-    let file = PortConfigurationFile::load(&path)?;
-    ResolvedHostPorts::new(&path, isolated_debug, overrides, file)
+    let settings = LoadedPortSettings::load(router_root)?;
+    ResolvedHostPorts::new(&settings, isolated_debug, overrides)
 }
 
 /// Resolves the Router endpoint through the same file loader and Router selector.
@@ -89,11 +96,10 @@ pub fn resolve_router_port(
     isolated_debug: bool,
     flag: Option<u16>,
 ) -> Result<SelectedHostPort, PortConfigurationError> {
-    let path = router_root.join("ports.json");
-    let file = PortConfigurationFile::load(&path)?;
-    let router = select_router_port(flag, file.router, isolated_debug);
+    let settings = LoadedPortSettings::load(router_root)?;
+    let router = select_router_port(flag, settings.section.router, isolated_debug);
     if isolated_debug {
-        validate_debug_port(&path, "Router", router.port)?;
+        validate_debug_port(&settings.path, "Router", router.port)?;
     }
     Ok(router)
 }
@@ -112,11 +118,11 @@ impl ResolvedHostPorts {
     }
 
     fn new(
-        path: &Path,
+        settings: &LoadedPortSettings,
         isolated_debug: bool,
         overrides: HostPortOverrides,
-        file: PortConfigurationFile,
     ) -> Result<Self, PortConfigurationError> {
+        let file = &settings.section;
         let router = select_router_port(overrides.router, file.router, isolated_debug);
         let mcp = select_port(
             overrides.mcp_bind.map(|bind| bind.port()),
@@ -126,19 +132,12 @@ impl ResolvedHostPorts {
         let mcp_bind = overrides
             .mcp_bind
             .unwrap_or_else(|| SocketAddr::from(([127, 0, 0, 1], mcp.port)));
-        parse_loopback_mcp_bind(&mcp_bind.to_string()).map_err(|message| {
-            PortConfigurationError::Invalid {
-                path: path.to_owned(),
-                message,
-            }
-        })?;
+        parse_loopback_mcp_bind(&mcp_bind.to_string())
+            .map_err(|message| settings.invalid(message))?;
         // Explicit port zero retains the CLI's ephemeral-listener behavior. File ports
         // are NonZeroU16, so two stored ports can never bypass the conflict check.
         if router.port != 0 && router.port == mcp.port {
-            return Err(PortConfigurationError::Invalid {
-                path: path.to_owned(),
-                message: "router and MCP ports must differ".to_owned(),
-            });
+            return Err(settings.invalid("router and MCP ports must differ"));
         }
         let https_default = if isolated_debug {
             DEBUG_TAILSCALE_HTTPS_PORT
@@ -160,7 +159,7 @@ impl ResolvedHostPorts {
                 ("MCP", mcp),
                 ("Tailscale HTTPS", tailscale_https),
             ] {
-                validate_debug_port(path, endpoint, selected.port)?;
+                validate_debug_port(&settings.path, endpoint, selected.port)?;
             }
         }
         Ok(Self {
@@ -197,10 +196,10 @@ fn validate_debug_port(
     port: u16,
 ) -> Result<(), PortConfigurationError> {
     if [8787, 8788, 19741, 19742, 19743, 43127].contains(&port) {
-        return Err(PortConfigurationError::Invalid {
-            path: path.to_owned(),
-            message: format!("isolated debug {endpoint} cannot use protected port {port}"),
-        });
+        return Err(invalid_ports(
+            path,
+            format!("isolated debug {endpoint} cannot use protected port {port}"),
+        ));
     }
     Ok(())
 }
@@ -213,7 +212,7 @@ fn select_port(flag: Option<u16>, file: Option<NonZeroU16>, default_port: u16) -
         },
         (None, Some(port)) => SelectedHostPort {
             port: port.get(),
-            source: HostPortSource::PortsFile,
+            source: HostPortSource::SettingsPorts,
         },
         (None, None) => SelectedHostPort {
             port: default_port,

@@ -23,7 +23,7 @@ pub async fn load_quota_status_report_with_availability_async(
     unicode_bars: bool,
     credential_store_availability: CredentialStoreAvailability,
 ) -> Result<QuotaStatusReport, QuotaServiceError> {
-    let state_database_path = router_root.join("state.sqlite");
+    let state_database_path = codex_router_state::provider_proxy_database_path(router_root);
     let quota_history_state =
         match AsyncSqliteStateStore::open_read_only(&state_database_path).await {
             Ok(state) => state,

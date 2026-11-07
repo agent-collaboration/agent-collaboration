@@ -95,6 +95,20 @@ async fn missing_executable_isolated_from_other_provider_and_codex() {
         endpoint(&inventory.endpoints, "cursor-local").availability,
         EndpointAvailability::Available { .. }
     ));
+    let [collaboration_protocol::ChannelDescription::ExternalProvider { binding_id, .. }] =
+        endpoint(&inventory.endpoints, "cursor-local")
+            .channels
+            .as_slice()
+    else {
+        panic!("a launched provider publishes one binding channel")
+    };
+    assert_eq!(
+        uuid::Uuid::parse_str(&String::from(binding_id.clone()))
+            .expect("provider binding id")
+            .get_version_num(),
+        7,
+        "the Host mints provider binding ids as UUIDv7"
+    );
     let claude = endpoint(&inventory.endpoints, "claude-local");
     assert!(claude.channels.is_empty());
     assert!(

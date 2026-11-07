@@ -20,6 +20,7 @@ pub(crate) struct SetupTaskInputs {
     pub recorder: Arc<dyn ConversationOperationRecorder>,
     pub cancellation_barrier: Option<crate::CancellationBarrier>,
     pub approval_broker: Arc<dyn crate::ApprovalBroker>,
+    pub scratch_scopes: Arc<dyn crate::ScratchScopeRegister>,
 }
 pub(crate) struct SetupTaskOutput {
     pub binding: Option<AcpSessionBinding>,
@@ -127,6 +128,7 @@ pub(crate) async fn run_session_setup(inputs: SetupTaskInputs) -> SetupTaskOutpu
             approval_broker: inputs.approval_broker,
             operation_id: operation_id.clone(),
             recorder: Arc::clone(&inputs.recorder),
+            scratch_scopes: inputs.scratch_scopes,
         };
         if inputs.create_new {
             let session = AcpSessionBinding::create(&mut catalog, setup).await?;
@@ -194,6 +196,13 @@ pub(crate) async fn run_session_setup(inputs: SetupTaskInputs) -> SetupTaskOutpu
 #[cfg(test)]
 mod tests {
     use super::{SetupTaskInputs, run_session_setup};
+
+    /// These setup cases don't observe scratch scopes.
+    struct IgnoredScratchScopes;
+    impl crate::ScratchScopeRegister for IgnoredScratchScopes {
+        fn opened(&self, _: &std::path::Path) {}
+        fn closed(&self, _: &std::path::Path) {}
+    }
     use crate::{
         AcpSchemaCatalog, AcpSessionBinding, ConversationOperationRecorder,
         ConversationRecordFuture, RejectingApprovalBroker, SessionSetupInputs,
@@ -324,6 +333,7 @@ mod tests {
         let (mut binding, initial_history) = AcpSessionBinding::load_existing(
             &mut catalog,
             SessionSetupInputs {
+                scratch_scopes: Arc::new(IgnoredScratchScopes),
                 operation_id: None,
                 recorder: Arc::new(AcceptingRecorder),
                 connection,
@@ -348,6 +358,7 @@ mod tests {
         });
 
         let resumed = run_session_setup(SetupTaskInputs {
+            scratch_scopes: Arc::new(IgnoredScratchScopes),
             known_session: Some(binding),
             adopt_unmaterialized: false,
             backend_path: PathBuf::new(),
@@ -372,6 +383,7 @@ mod tests {
         let mut binding = resumed.binding.unwrap();
         binding.materialized = false;
         let adopted = run_session_setup(SetupTaskInputs {
+            scratch_scopes: Arc::new(IgnoredScratchScopes),
             known_session: Some(binding),
             adopt_unmaterialized: true,
             backend_path: PathBuf::new(),

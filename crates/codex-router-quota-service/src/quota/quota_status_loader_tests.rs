@@ -21,9 +21,11 @@ async fn quota_status_report_uses_provider_refresh_status_and_preserves_claude_w
     let test_root = TempDir::new().expect("quota status root");
     let router_root = test_root.path().join("router");
     std::fs::create_dir_all(&router_root).expect("router root");
-    let state = AsyncSqliteStateStore::open(&router_root.join("state.sqlite"))
-        .await
-        .expect("state store should open");
+    let state = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+        &router_root,
+    ))
+    .await
+    .expect("state store should open");
     let claude_account_id = AccountId::new("claude_refresh_status").expect("Claude account id");
     let openai_account_id = AccountId::new("openai_refresh_status").expect("OpenAI account id");
     for (provider, account_id, label) in [
@@ -196,9 +198,11 @@ async fn quota_status_report_reloads_saved_claude_credit_policy_from_sqlite() {
     std::fs::create_dir_all(&router_root).expect("router root");
     let account_id = codex_router_core::ids::AccountId::new("saved_claude_credit_policy")
         .expect("Claude account id should parse");
-    let state = AsyncSqliteStateStore::open(&router_root.join("state.sqlite"))
-        .await
-        .expect("state store should open");
+    let state = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+        &router_root,
+    ))
+    .await
+    .expect("state store should open");
     state
         .upsert_account(
             &codex_router_state::account::AccountRecord::new(

@@ -42,6 +42,24 @@ pub enum RouterUpdateError {
         #[source]
         source: Box<dyn std::error::Error + Send + Sync>,
     },
+    #[error(
+        "both {settings} and {older} exist, and {settings} was not written from it by an update; keep the settings you want in {settings}, move {older} aside, then run agent-router-update again"
+    )]
+    SettingsConflict { settings: PathBuf, older: PathBuf },
+    #[error(
+        "{path} is not valid settings JSON ({message}); fix or move it aside, then run agent-router-update again"
+    )]
+    MalformedSettingsFile { path: PathBuf, message: String },
+    #[error(
+        "both {current} and {former} exist; keep the one that holds this Router's accounts, move the other aside, then run agent-router-update again"
+    )]
+    BothProviderProxyNames { current: PathBuf, former: PathBuf },
+    #[error("{store}: {source}")]
+    ProviderProxyStore {
+        store: PathBuf,
+        #[source]
+        source: codex_router_state::sqlite::StateStoreError,
+    },
     #[error("{store}: {source}")]
     Store {
         store: PathBuf,

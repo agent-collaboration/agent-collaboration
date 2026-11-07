@@ -164,7 +164,7 @@ pub(super) fn ensure_async_state_schema(router_root: &Path) {
             .build(),
     );
     let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(router_root),
     )));
     must_ok(runtime.block_on(state.close()));
 }

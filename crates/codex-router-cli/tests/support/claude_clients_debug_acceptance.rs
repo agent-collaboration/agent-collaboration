@@ -113,7 +113,10 @@ impl IsolatedAcceptanceRoot {
         &self,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let secret_root = self.root.join("secrets");
-        let state = AsyncSqliteStateStore::open(&self.root.join("state.sqlite")).await?;
+        let state = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &self.root,
+        ))
+        .await?;
         let secret_store = open_encrypted_credential_store(&secret_root)?;
         let expires_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)?

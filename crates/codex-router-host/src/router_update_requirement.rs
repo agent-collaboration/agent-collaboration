@@ -20,6 +20,9 @@ pub fn router_fleet_database(root: &Path) -> PathBuf {
     crate::router_collaboration_directory(root).join(FleetStore::FILE_NAME)
 }
 
+/// Settings files step 0007 carries into `settings.jsonc` and then removes.
+const LEGACY_SETTINGS_FILES: [&str; 2] = ["providers.json", "ports.json"];
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RouterUpdateRequirement {
     NotRequired,
@@ -39,6 +42,10 @@ pub enum RequiredRouterUpdate {
     BothFleetDatabaseNames { current: PathBuf, former: PathBuf },
     /// A store the update merges or renames away is still here after its step.
     LegacyStoreRemains { path: PathBuf },
+    /// A settings file the update carries into `settings.jsonc` is still here.
+    LegacySettingsFile { path: PathBuf },
+    /// The provider proxy store, or its lock folder, is still under its former name.
+    LegacyProviderProxyStore { path: PathBuf },
     /// A file nothing reads any more, which the update removes, is still here.
     DeadFileRemains { path: PathBuf },
 }
@@ -74,6 +81,16 @@ impl std::fmt::Display for RequiredRouterUpdate {
                 "{} is left from an older layout; run agent-router-update with the Host stopped",
                 path.display()
             ),
+            Self::LegacyProviderProxyStore { path } => write!(
+                formatter,
+                "{} is the provider proxy store's former name; run agent-router-update with the Host stopped to rename it",
+                path.display()
+            ),
+            Self::LegacySettingsFile { path } => write!(
+                formatter,
+                "{} is an older settings file the Host no longer reads; run agent-router-update with the Host stopped to carry it into settings.jsonc",
+                path.display()
+            ),
             Self::DeadFileRemains { path } => write!(
                 formatter,
                 "{} is no longer read by the Router; run agent-router-update with the Host stopped, which removes it",
@@ -100,6 +117,27 @@ pub async fn inspect_router_update_requirement(
     let former = router_fleet_cache_database(root);
     // An unreadable existence check counts as present, so the guard fails closed.
     let exists = |path: &Path| path.try_exists().unwrap_or(true);
+    // The Host reads settings.jsonc only, so an older settings file means step 0007
+    // hasn't carried it yet, even on a root whose Fleet database was never opened.
+    if let Some(path) = LEGACY_SETTINGS_FILES
+        .iter()
+        .map(|file| root.join(file))
+        .find(|path| exists(path))
+    {
+        return Ok(RouterUpdateRequirement::Required(
+            RequiredRouterUpdate::LegacySettingsFile { path },
+        ));
+    }
+    // The proxy store is opened by its new name only; step 0008 renames it and its
+    // lock folder, so either left under the former name means the step hasn't run.
+    if let Some(path) = former_provider_proxy_files(root)
+        .into_iter()
+        .find(|path| exists(path))
+    {
+        return Ok(RouterUpdateRequirement::Required(
+            RequiredRouterUpdate::LegacyProviderProxyStore { path },
+        ));
+    }
     let (current_exists, former_exists) = (exists(&current), exists(&former));
     if current_exists && former_exists {
         return Ok(RouterUpdateRequirement::Required(
@@ -193,3 +231,23 @@ fn requirement_for_ledger(store: PathBuf, ledger: &StoredUpdateLedger) -> Router
 #[cfg(test)]
 #[path = "router_update_requirement_test.rs"]
 mod tests;
+
+/// The provider proxy store's files under the name step 0008 renames away from: the
+/// database, its write-ahead log and shared-memory file, and its account lock folder.
+fn former_provider_proxy_files(root: &Path) -> Vec<PathBuf> {
+    let database = codex_router_state::former_provider_proxy_database_path(root);
+    let mut files: Vec<PathBuf> = ["", "-wal", "-shm"]
+        .iter()
+        .map(|suffix| {
+            let mut name = database.clone().into_os_string();
+            name.push(suffix);
+            PathBuf::from(name)
+        })
+        .collect();
+    files.extend(
+        codex_router_secret_store::account_credential_lock::account_credential_lock_directory(
+            &database,
+        ),
+    );
+    files
+}

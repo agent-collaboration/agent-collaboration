@@ -1,8 +1,8 @@
 //! ACP session selection and its setup evidence.
 use super::{
     AcpConversation, ClientError, ConversationCreateRequest, ConversationCreateResult,
-    ConversationEvent, SessionRef, SetupUpdateDelivery, Value, create_private_scratch, json,
-    prepare_project_write_areas, router_metadata_effort, session_scratch_scope,
+    ConversationEvent, SessionRef, SetupUpdateDelivery, Value, json, prepare_project_write_areas,
+    prepare_session_scratch, router_metadata_effort, session_scratch_scope,
     validate_conversation_create_request, validate_conversation_endpoint,
 };
 
@@ -147,9 +147,11 @@ impl AcpConversation {
                 .map_err(|source| {
                     crate::OperationError::before_dispatch("preparation", None, source)
                 })?;
-            create_private_scratch(&scratch_path).map_err(|source| {
-                crate::OperationError::before_dispatch("preparation", None, source)
-            })?;
+            prepare_session_scratch(&scratch_path)
+                .await
+                .map_err(|source| {
+                    crate::OperationError::before_dispatch("preparation", None, source)
+                })?;
             router_metadata.insert("rootMessageId".into(), json!(request.root_message_id));
             router_metadata.insert("scratchScope".into(), json!(scratch_scope));
             router_metadata.insert("scratchPath".into(), json!(scratch_path));

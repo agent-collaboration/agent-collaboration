@@ -6,7 +6,9 @@ fn quota_refresh_http_provider_projects_weekly_window_when_primary_is_null() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let account_id = account_id("acct_quota_http_null_primary");
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,

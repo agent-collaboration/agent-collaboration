@@ -59,6 +59,8 @@ pub fn full_update_report(root: &Path, verb: &str) -> String {
         "{verb} 0001: add the update ledger to {former}\n\
          {verb} 0002: no unfinished enrollment reset\n\
          {verb} 0005: move {outbox} and {cursors} into {former}, then remove them\n\
+         {verb} 0007: no older settings file to carry\n\
+         {verb} 0008: no provider proxy store under its former name\n\
          {verb} 0009: no dead file to remove\n\
          {verb} 0010: rename {former} to {current}\n",
         former = former.display(),
@@ -171,7 +173,7 @@ async fn a_kill_inside_step_0001_reruns_to_a_complete_update_keeping_every_value
     assert_eq!(after_kill, StoredUpdateLedger::Present(vec![]));
     assert_eq!(
         guard_after_kill,
-        unfinished(&former, &[1, 2, 5, 9, 10]),
+        unfinished(&former, &[1, 2, 5, 7, 8, 9, 10]),
         "a Host must not start on the interrupted update"
     );
     assert_eq!(
@@ -261,6 +263,8 @@ async fn a_root_that_never_connected_ends_with_its_fleet_database() -> UpdateRes
             "done 0001: create {former} with the update ledger\n\
              done 0002: no unfinished enrollment reset\n\
              done 0005: no older Fleet store to move\n\
+             done 0007: no older settings file to carry\n\
+             done 0008: no provider proxy store under its former name\n\
              done 0009: no dead file to remove\n\
              done 0010: rename {former} to {current}\n",
             former = former.display(),
@@ -347,7 +351,7 @@ async fn a_host_stopped_before_recording_its_new_store_is_refused_until_the_upda
     let after = inspect_router_update_requirement(&root).await?;
 
     // Assert: refused, then the tool records each step as a no-op, then the Host may start.
-    assert_eq!(before, unfinished(&store, &[1, 2, 5, 9, 10]));
+    assert_eq!(before, unfinished(&store, &[1, 2, 5, 7, 8, 9, 10]));
     assert_eq!(
         update.status.code(),
         Some(0),
@@ -360,6 +364,8 @@ async fn a_host_stopped_before_recording_its_new_store_is_refused_until_the_upda
             "done 0001: add the update ledger to {store}\n\
              done 0002: no unfinished enrollment reset\n\
              done 0005: no older Fleet store to move\n\
+             done 0007: no older settings file to carry\n\
+             done 0008: no provider proxy store under its former name\n\
              done 0009: no dead file to remove\n\
              done 0010: {store} already has its current name\n",
             store = store.display(),

@@ -22,6 +22,24 @@ pub(crate) enum UpdateBarrier {
     SourceRemoved(LegacyFleetSource),
     /// Step 0005 recorded itself done.
     MergeDone,
+    /// Step 0007 renamed the complete `settings.jsonc` into place, before the ledger row.
+    SettingsFileWritten,
+    /// Step 0007 recorded `settings.jsonc` written.
+    SettingsRecordedWritten,
+    /// Step 0007 removed this carried old settings file.
+    SettingsOldFileRemoved(&'static str),
+    /// Step 0007 renamed `routers.jsonc` to `agent-sessions.jsonc`.
+    MachineListRenamed,
+    /// Step 0007 recorded itself done.
+    SettingsDone,
+    /// Step 0008 checkpointed and closed the proxy store, before its rename.
+    ProxyStoreCheckpointed,
+    /// Step 0008 renamed the proxy store, before its lock folder.
+    ProxyStoreRenamed,
+    /// Step 0008 renamed the proxy store's lock folder.
+    ProxyLockFolderRenamed,
+    /// Step 0008 recorded itself done.
+    ProxyStoreDone,
     /// Step 0009 removed the dead files and recorded itself done.
     DeadFilesDone,
     /// Step 0010 recorded itself in progress, before the checkpoint.
@@ -52,6 +70,15 @@ impl UpdateBarrier {
             Self::SourceDatabaseRemoved(source) => source_marker(source, "database-removed"),
             Self::SourceRemoved(source) => source_marker(source, "removed"),
             Self::MergeDone => "step-0005:done".to_owned(),
+            Self::SettingsFileWritten => "step-0007:settings-written".to_owned(),
+            Self::SettingsRecordedWritten => "step-0007:recorded-written".to_owned(),
+            Self::SettingsOldFileRemoved(file) => format!("step-0007:old-file-removed:{file}"),
+            Self::MachineListRenamed => "step-0007:machine-list-renamed".to_owned(),
+            Self::SettingsDone => "step-0007:done".to_owned(),
+            Self::ProxyStoreCheckpointed => "step-0008:checkpointed".to_owned(),
+            Self::ProxyStoreRenamed => "step-0008:store-renamed".to_owned(),
+            Self::ProxyLockFolderRenamed => "step-0008:lock-folder-renamed".to_owned(),
+            Self::ProxyStoreDone => "step-0008:done".to_owned(),
             Self::DeadFilesDone => "step-0009:done".to_owned(),
             Self::RenameBeforeCheckpoint => "step-0010:before-checkpoint".to_owned(),
             Self::RenameCheckpointed => "step-0010:checkpointed".to_owned(),

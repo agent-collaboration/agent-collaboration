@@ -52,10 +52,7 @@ test("local publisher restores the formula when installed importer validation fa
       { env: fixture.environment, encoding: "utf8" },
     );
     assert.equal(result.status, 1);
-    assert.match(
-      result.stderr,
-      /publish failed: Homebrew installed 'codex-router-board-upgrade 0.1.101'/,
-    );
+    assert.match(result.stderr, /publish failed: Homebrew installed 'agent-router-update 0.1.101'/);
     assert.ok(
       readFileSync(fixture.log, "utf8").includes(
         '"args":["checkout","HEAD","--","Formula/codex-router.rb"]',

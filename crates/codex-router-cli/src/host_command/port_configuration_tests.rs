@@ -7,7 +7,12 @@ use super::{HostCommand, run_host_command};
 use crate::CliContext;
 use codex_router_host::{ChildCommandSpec, HostPortSource, RemoteAccess};
 use codex_router_host::{HostPortOverrides, resolve_host_ports};
-use std::{ffi::OsString, net::SocketAddr, num::NonZeroU16, path::PathBuf};
+use std::{
+    ffi::OsString,
+    net::SocketAddr,
+    num::NonZeroU16,
+    path::{Path, PathBuf},
+};
 
 fn parse_host(flags: &[&str]) -> HostCommand {
     HostCommand::parse(flags.iter().map(OsString::from).collect()).expect("Host command")
@@ -44,11 +49,7 @@ fn assert_protected_ports_refused(from_file: bool) {
                 tailscale_https: NonZeroU16::new(28743),
             };
             if from_file {
-                std::fs::write(
-                    root.path().join("ports.json"),
-                    format!("{{\"{file_key}\":{port}}}"),
-                )
-                .expect("file");
+                write_ports_section(root.path(), &format!("{{\"{file_key}\":{port}}}"));
                 match field {
                     PortField::Router => overrides.router = None,
                     PortField::Mcp => overrides.mcp_bind = None,
@@ -65,7 +66,8 @@ fn assert_protected_ports_refused(from_file: bool) {
                 .expect_err("isolated resolution must reject the production port before bind");
             let message = error.to_string();
             assert!(message.contains(&port.to_string()), "{file_key}: {message}");
-            assert!(message.contains("ports.json"), "{file_key}: {message}");
+            assert!(message.contains("settings.jsonc"), "{file_key}: {message}");
+            assert!(message.contains("\"ports\""), "{file_key}: {message}");
         }
     }
 }
@@ -79,7 +81,7 @@ fn replacement_command_omits_resolved_ports_without_launch_flags() {
         Some(r#"{"router":28741,"mcp":28742,"tailscaleHttps":28743}"#),
     ] {
         if let Some(bytes) = file {
-            std::fs::write(root.path().join("ports.json"), bytes).expect("file");
+            write_ports_section(root.path(), bytes);
         }
         let ports =
             resolve_host_ports(root.path(), true, HostPortOverrides::default()).expect("ports");
@@ -114,11 +116,10 @@ fn replacement_command_omits_resolved_ports_without_launch_flags() {
 #[test]
 fn replacement_command_keeps_only_operator_explicit_ports() {
     let root = tempfile::tempdir().expect("root");
-    std::fs::write(
-        root.path().join("ports.json"),
+    write_ports_section(
+        root.path(),
         r#"{"router":28741,"mcp":28742,"tailscaleHttps":28743}"#,
-    )
-    .expect("file");
+    );
     for flags in [
         vec!["--port", "29741"],
         vec!["--mcp-bind", "[::1]:29742"],
@@ -178,13 +179,17 @@ fn replacement_command_keeps_only_operator_explicit_ports() {
     }
 }
 
-async fn assert_invalid_startup(bytes: &str) {
+async fn assert_invalid_startup(ports_section: &str) {
     let root = tempfile::tempdir().expect("root");
-    let path = root.path().join("ports.json");
-    std::fs::write(&path, bytes).expect("configuration");
-    let command = HostCommand::parse(vec![OsString::from("--router-root"), root.path().into()])
+    let path = write_ports_section(root.path(), ports_section);
+    assert_startup_refused_naming(root.path(), &path, "\"ports\"").await;
+}
+
+async fn assert_startup_refused_naming(root: &Path, path: &Path, section_or_file: &str) {
+    let bytes = std::fs::read_to_string(path).expect("settings fixture");
+    let command = HostCommand::parse(vec![OsString::from("--router-root"), root.into()])
         .expect("Host command");
-    let context = CliContext::new(vec![("HOME".to_owned(), root.path().display().to_string())]);
+    let context = CliContext::new(vec![("HOME".to_owned(), root.display().to_string())]);
     let error = run_host_command(&mut Vec::new(), command, &context, None)
         .await
         .expect_err("invalid configuration must refuse startup")
@@ -193,6 +198,7 @@ async fn assert_invalid_startup(bytes: &str) {
         error.contains(&path.display().to_string()),
         "{bytes}: {error}"
     );
+    assert!(error.contains(section_or_file), "{bytes}: {error}");
 }
 
 #[tokio::test]
@@ -210,18 +216,29 @@ async fn zero_file_ports_refuse_startup_with_path() {
     }
 }
 #[tokio::test]
+async fn duplicate_member_inside_ports_refuses_startup_naming_ports() {
+    assert_invalid_startup(r#"{"router":28741,"router":28742}"#).await;
+}
+#[tokio::test]
 async fn equal_file_ports_refuse_startup_with_path() {
     assert_invalid_startup(r#"{"router":28741,"mcp":28741}"#).await;
 }
 #[tokio::test]
-async fn malformed_ports_file_refuses_startup_with_path() {
-    assert_invalid_startup("{not-json").await;
+async fn malformed_ports_section_refuses_startup_with_path() {
+    assert_invalid_startup("[1, 2]").await;
+}
+#[tokio::test]
+async fn malformed_settings_file_refuses_startup_with_path() {
+    let root = tempfile::tempdir().expect("root");
+    let path = root.path().join("settings.jsonc");
+    std::fs::write(&path, "{not-json").expect("malformed settings");
+    assert_startup_refused_naming(root.path(), &path, "settings.jsonc").await;
 }
 
 #[test]
-fn unreadable_ports_file_refuses_with_path() {
+fn unreadable_settings_file_refuses_with_path() {
     let root = tempfile::tempdir().expect("root");
-    let path = root.path().join("ports.json");
+    let path = root.path().join("settings.jsonc");
     std::fs::create_dir(&path).expect("unreadable directory");
     let error = resolve_host_ports(root.path(), true, HostPortOverrides::default())
         .expect_err("cannot read a directory")
@@ -231,7 +248,7 @@ fn unreadable_ports_file_refuses_with_path() {
 
 #[test]
 fn port_resolution_table_for_normal_and_debug_host() {
-    use codex_router_host::HostPortSource::{Default, Flag, PortsFile};
+    use codex_router_host::HostPortSource::{Default, Flag, SettingsPorts};
     for isolated in [false, true] {
         let root = tempfile::tempdir().expect("root");
         let expected_defaults = if isolated {
@@ -255,18 +272,18 @@ fn port_resolution_table_for_normal_and_debug_host() {
             ),
             (Default, Default)
         );
-        std::fs::write(
-            root.path().join("ports.json"),
-            r#"{"router":28741,"mcp":28742}"#,
-        )
-        .expect("file");
+        write_ports_section(root.path(), r#"{"router":28741,"mcp":28742}"#);
         for (flags, expected_ports, expected_sources) in [
-            (vec![], (28741, 28742), (PortsFile, PortsFile)),
-            (vec!["--port", "28751"], (28751, 28742), (Flag, PortsFile)),
+            (vec![], (28741, 28742), (SettingsPorts, SettingsPorts)),
+            (
+                vec!["--port", "28751"],
+                (28751, 28742),
+                (Flag, SettingsPorts),
+            ),
             (
                 vec!["--mcp-bind", "[::1]:28752"],
                 (28741, 28752),
-                (PortsFile, Flag),
+                (SettingsPorts, Flag),
             ),
             (
                 vec!["--port", "28751", "--mcp-bind", "[::1]:28752"],
@@ -304,12 +321,11 @@ fn port_resolution_table_for_normal_and_debug_host() {
 #[test]
 fn partial_file_defaults_and_resolved_conflicts_are_validated() {
     let root = tempfile::tempdir().expect("root");
-    let path = root.path().join("ports.json");
     for (bytes, expected) in [
         (r#"{"router":28741}"#, (28741, 18788)),
         (r#"{"mcp":28742}"#, (18787, 28742)),
     ] {
-        std::fs::write(&path, bytes).expect("file");
+        write_ports_section(root.path(), bytes);
         let ports = resolve_host_ports(root.path(), true, HostPortOverrides::default())
             .expect("partial configuration");
         assert_eq!(
@@ -317,7 +333,7 @@ fn partial_file_defaults_and_resolved_conflicts_are_validated() {
             expected
         );
     }
-    std::fs::write(&path, r#"{"mcp":18787}"#).expect("conflicting default");
+    let path = write_ports_section(root.path(), r#"{"mcp":18787}"#);
     let error = resolve_host_ports(root.path(), true, HostPortOverrides::default())
         .expect_err("resolved ports conflict")
         .to_string();
@@ -335,17 +351,13 @@ fn tailscale_resolution_uses_the_named_normal_and_debug_defaults_and_file_overri
             defaults.selection().tailscale_https.source,
             HostPortSource::Default
         );
-        std::fs::write(
-            root.path().join("ports.json"),
-            r#"{"tailscaleHttps":29743}"#,
-        )
-        .expect("file");
+        write_ports_section(root.path(), r#"{"tailscaleHttps":29743}"#);
         let file =
             resolve_host_ports(root.path(), isolated, HostPortOverrides::default()).expect("file");
         assert_eq!(file.tailscale_https_port().get(), 29743);
         assert_eq!(
             file.selection().tailscale_https.source,
-            HostPortSource::PortsFile
+            HostPortSource::SettingsPorts
         );
         let overrides = parse_host(&[
             "--remote-access",
@@ -364,4 +376,44 @@ fn tailscale_resolution_uses_the_named_normal_and_debug_defaults_and_file_overri
             HostPortSource::Flag
         );
     }
+}
+
+/// Writes `settings.jsonc` with only a `ports` section holding `ports_section` verbatim.
+fn write_ports_section(root: &Path, ports_section: &str) -> PathBuf {
+    let path = root.join("settings.jsonc");
+    std::fs::write(
+        &path,
+        format!("{{\n  // owner-edited Host ports\n  \"ports\": {ports_section},\n}}\n"),
+    )
+    .expect("settings fixture");
+    path
+}
+
+#[test]
+fn broken_providers_section_leaves_ports_resolvable() {
+    let root = tempfile::tempdir().expect("root");
+    std::fs::write(
+        root.path().join("settings.jsonc"),
+        r#"{"providers": {"version": 9}, "ports": {"router": 28741, "mcp": 28742}}"#,
+    )
+    .expect("settings fixture");
+
+    let ports = resolve_host_ports(root.path(), true, HostPortOverrides::default())
+        .expect("a broken providers section must not stop port resolution");
+
+    assert_eq!(
+        (ports.selection().router.port, ports.selection().mcp.port),
+        (28741, 28742)
+    );
+}
+
+#[test]
+fn legacy_ports_file_is_not_read() {
+    let root = tempfile::tempdir().expect("root");
+    std::fs::write(root.path().join("ports.json"), r#"{"router":28741}"#).expect("legacy file");
+
+    let ports =
+        resolve_host_ports(root.path(), true, HostPortOverrides::default()).expect("defaults");
+
+    assert_eq!(ports.selection().router.port, 18787);
 }

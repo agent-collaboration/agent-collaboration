@@ -86,11 +86,13 @@ mod operator_messages;
 mod owned_router;
 mod owner_identity_resolution;
 mod process_group_child;
-mod provider_configuration_file;
+mod provider_settings_section;
 mod router_credential_migration;
-pub use provider_configuration_file::{
-    ProviderConfigurationEntries, ProviderConfigurationEntry, ProviderConfigurationError,
-    ProviderConfigurationFile,
+pub use provider_settings_section::{ProviderConfigurationEntries, ProviderConfigurationEntry};
+mod router_settings;
+pub use router_settings::{
+    ROUTER_SETTINGS_FILE_NAME, RouterSettingsError, RouterSettingsSection,
+    load_or_create_provider_settings, router_settings_path,
 };
 mod provider_startup_composition;
 pub use provider_startup_composition::ExternalProviderStartup;
@@ -191,6 +193,10 @@ mod backend_publication;
 pub use backend_publication::BackendPublication;
 mod collaboration_runtime;
 pub(crate) use collaboration_runtime::HostCollaborationInputs;
+pub use collaboration_runtime::scratch_sweep::{
+    LoggedScratchSweepEvents, SCRATCH_RETRY_DELAY, SCRATCH_UNUSED_RETENTION, ScratchSweepClock,
+    ScratchSweepEvents, ScratchSweepFailure, ScratchSweepReport, SystemScratchSweepClock,
+};
 pub use collaboration_runtime::{
     BackendSchemaEvidence, CollaborationFailure, CollaborationRuntime, CollaborationRuntimeInputs,
     ExternalProviderLaunchBinding,

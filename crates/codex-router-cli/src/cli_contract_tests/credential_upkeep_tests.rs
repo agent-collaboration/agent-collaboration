@@ -46,7 +46,7 @@ impl CredentialRefreshClient for RecordingUpkeepRefreshClient {
 fn enabled_exhausted_idle_account_renews_across_simulated_days_without_quota_probe() {
     let test_root = TestRoot::new("credential-upkeep-idle");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let secrets = must_ok(
@@ -189,7 +189,7 @@ fn credential_upkeep_refreshes_exhausted_and_idle_claude_accounts() {
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir(&router_root));
     ensure_async_state_schema(&router_root);
-    let state_path = router_root.join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let secret_root = router_root.join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let secrets = must_ok(
@@ -325,7 +325,7 @@ impl CredentialRefreshClient for HeldUpkeepRefreshClient {
 fn upkeep_shutdown_drains_in_flight_rotation_before_returning() {
     let test_root = TestRoot::new("credential-upkeep-shutdown");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let secrets = must_ok(
@@ -423,7 +423,7 @@ impl CredentialRefreshClient for HeldQueuedUpkeepRefreshClient {
 fn upkeep_shutdown_does_not_admit_a_queued_account_after_stop() {
     let test_root = TestRoot::new("credential-upkeep-queued-stop");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let secrets = must_ok(

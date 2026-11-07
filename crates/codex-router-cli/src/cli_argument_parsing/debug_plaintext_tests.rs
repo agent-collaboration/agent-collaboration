@@ -9,7 +9,7 @@ fn debug_plaintext_serve_accepts_explicit_isolated_storage_opt_in() {
         OsString::from("serve"),
         OsString::from("--require-debug-isolation"),
         OsString::from("--state-db"),
-        root.path().join("state.sqlite").into_os_string(),
+        codex_router_state::provider_proxy_database_path(root.path()).into_os_string(),
         OsString::from("--secret-root"),
         root.path().join("secrets").into_os_string(),
         OsString::from("--allow-plaintext-file-secrets"),

@@ -6,7 +6,9 @@ fn quota_status_reads_sqlite_rows_without_provider_io() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let primary_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_primary"),
@@ -78,7 +80,7 @@ fn quota_status_mixed_provider_view_shows_openai_and_claude_accounts() {
     must_ok(fs::create_dir_all(&router_root));
     let runtime = test_async_runtime();
     let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
     )));
     for (provider, id, label) in [
         (
@@ -135,7 +137,9 @@ fn quota_status_snapshot_rows_show_unknown_pace_until_window_metadata_exists() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let primary_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_snapshot_pace"),
@@ -204,7 +208,9 @@ fn quota_status_shows_two_user_quota_windows_per_account() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let primary_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_primary"),
@@ -331,7 +337,9 @@ fn quota_status_renders_mixed_providers_and_fresh_stale_unknown_claude_windows()
     let fresh_claude_id = account_id("acct_claude_fresh");
     let stale_claude_id = account_id("acct_claude_stale");
     let unknown_claude_id = account_id("acct_claude_unknown");
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let openai_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         openai_account_id.clone(),
@@ -371,7 +379,7 @@ fn quota_status_renders_mixed_providers_and_fresh_stale_unknown_claude_windows()
 
     let runtime = test_async_runtime();
     let async_state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
     )));
     for (id, kind, remaining, reset, observed_at) in [
         (
@@ -453,7 +461,9 @@ fn quota_status_table_format_renders_account_rows_without_legacy_tables() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let primary_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_primary"),
@@ -556,7 +566,9 @@ fn quota_status_default_keeps_single_human_status_block_without_refresh() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let primary_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_primary"),
@@ -614,7 +626,9 @@ fn quota_status_redacts_unsafe_account_labels() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_unsafe_status_label"),

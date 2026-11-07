@@ -20,6 +20,7 @@ pub struct AcpChannelListener {
     approval_broker: Arc<dyn codex_acp_adapter::ApprovalBroker>,
     holder: Arc<crate::UnmaterializedThreadHolder>,
     recorder: Arc<dyn codex_acp_adapter::ConversationOperationRecorder>,
+    scratch_scopes: Arc<dyn codex_acp_adapter::ScratchScopeRegister>,
     providers: Vec<ProviderRouteBackend>,
     interaction_broker: Option<Arc<crate::ServiceInteractionBroker>>,
     permits: Arc<Semaphore>,
@@ -34,6 +35,7 @@ impl AcpChannelListener {
         approval_broker: Arc<dyn codex_acp_adapter::ApprovalBroker>,
         holder: Arc<crate::UnmaterializedThreadHolder>,
         recorder: Arc<dyn codex_acp_adapter::ConversationOperationRecorder>,
+        scratch_scopes: Arc<dyn codex_acp_adapter::ScratchScopeRegister>,
     ) -> io::Result<Self> {
         let _schema = AcpSchemaCatalog::load().map_err(io::Error::other)?;
         Ok(Self {
@@ -43,6 +45,7 @@ impl AcpChannelListener {
             approval_broker,
             holder,
             recorder,
+            scratch_scopes,
             providers: Vec::new(),
             interaction_broker: None,
             permits: Arc::new(Semaphore::new(32)),
@@ -95,6 +98,7 @@ impl AcpChannelListener {
                         approval_broker: Arc::clone(&self.approval_broker),
                         holder: Arc::clone(&self.holder),
                         recorder: Arc::clone(&self.recorder),
+                        scratch_scopes: Arc::clone(&self.scratch_scopes),
                     };
                     let mut routes: Vec<Box<dyn AcpSessionRoute>> = vec![
                         lazy_codex_session_route(Arc::new(admission)),
@@ -136,6 +140,7 @@ struct GateCodexAdmissionSource {
     approval_broker: Arc<dyn codex_acp_adapter::ApprovalBroker>,
     holder: Arc<crate::UnmaterializedThreadHolder>,
     recorder: Arc<dyn codex_acp_adapter::ConversationOperationRecorder>,
+    scratch_scopes: Arc<dyn codex_acp_adapter::ScratchScopeRegister>,
 }
 
 impl CodexAdmissionSource for GateCodexAdmissionSource {
@@ -155,6 +160,7 @@ impl CodexAdmissionSource for GateCodexAdmissionSource {
                 as Arc<dyn codex_acp_adapter::UnmaterializedBindingStore>,
             recorder: Arc::clone(&self.recorder),
             retired: admission.retirement(),
+            scratch_scopes: Arc::clone(&self.scratch_scopes),
         })
     }
 }
@@ -195,6 +201,7 @@ mod tests {
             Arc::new(codex_acp_adapter::RejectingApprovalBroker),
             holder,
             Arc::new(crate::UnavailableConversationOperationRecorder),
+            Arc::new(crate::OpenScratchScopes::new()),
         )
         .unwrap();
         listener.fail_accept = true;

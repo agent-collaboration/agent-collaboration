@@ -4,7 +4,7 @@ async fn compiled_credit_options_refresh_and_save_use_only_the_sealed_loopback_p
     let fixture = QuotaResetFixture::create().await?;
     let focused_account_id = AccountId::new("acct_pty_alpha")?;
     let initial_state =
-        AsyncSqliteStateStore::open_read_only(&fixture.root().join("state.sqlite")).await?;
+        AsyncSqliteStateStore::open_read_only(&codex_router_state::provider_proxy_database_path(fixture.root())).await?;
     ensure(
         !initial_state
             .load_account_credit_usage_policy(&focused_account_id)
@@ -96,7 +96,7 @@ async fn compiled_credit_options_refresh_and_save_use_only_the_sealed_loopback_p
         "cancelled credit policy draft returns to saved Credits view",
     )?;
     let cancelled_state =
-        AsyncSqliteStateStore::open_read_only(&fixture.root().join("state.sqlite")).await?;
+        AsyncSqliteStateStore::open_read_only(&codex_router_state::provider_proxy_database_path(fixture.root())).await?;
     ensure(
         !cancelled_state
             .load_account_credit_usage_policy(&focused_account_id)
@@ -138,7 +138,7 @@ async fn compiled_credit_options_refresh_and_save_use_only_the_sealed_loopback_p
         .into());
     }
     let saved_state =
-        AsyncSqliteStateStore::open_read_only(&fixture.root().join("state.sqlite")).await?;
+        AsyncSqliteStateStore::open_read_only(&codex_router_state::provider_proxy_database_path(fixture.root())).await?;
     ensure(
         saved_state
             .load_account_credit_usage_policy(&focused_account_id)
@@ -210,7 +210,7 @@ async fn compiled_credit_options_refresh_and_save_use_only_the_sealed_loopback_p
         "credit refresh and inspection reopen must use twelve loopback GETs and no consume POST",
     )?;
     fixture.assert_secrets_unchanged()?;
-    let state = AsyncSqliteStateStore::open_read_only(&fixture.root().join("state.sqlite")).await?;
+    let state = AsyncSqliteStateStore::open_read_only(&codex_router_state::provider_proxy_database_path(fixture.root())).await?;
     let account_ids = [
         AccountId::new("acct_pty_alpha")?,
         AccountId::new("acct_pty_beta")?,

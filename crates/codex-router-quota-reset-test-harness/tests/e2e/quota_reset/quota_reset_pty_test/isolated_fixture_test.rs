@@ -71,7 +71,10 @@ impl QuotaResetFixture {
         scenario: ProviderFilterFixtureScenario,
     ) -> TestResult<Self> {
         let mut fixture = Self::create().await?;
-        let state = AsyncSqliteStateStore::open(&fixture.root.join("state.sqlite")).await?;
+        let state = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &fixture.root,
+        ))
+        .await?;
         let claude_enabled = matches!(scenario, ProviderFilterFixtureScenario::MixedAccounts);
         for (provider, account_name, label, status, generation) in [
             (
@@ -118,7 +121,9 @@ impl QuotaResetFixture {
         }
         state.close().await?;
         // Arrange must complete before the byte-level no-mutation baseline.
-        fixture.state_bytes_before = fs::read(fixture.root.join("state.sqlite"))?;
+        fixture.state_bytes_before = fs::read(codex_router_state::provider_proxy_database_path(
+            &fixture.root,
+        ))?;
         fixture.assert_secrets_unchanged()?;
         Ok(fixture)
     }
@@ -127,7 +132,10 @@ impl QuotaResetFixture {
     pub(super) async fn create_visual_hard_cases() -> TestResult<Self> {
         let mut fixture =
             Self::create_provider_filters(ProviderFilterFixtureScenario::MixedAccounts).await?;
-        let state = AsyncSqliteStateStore::open(&fixture.root.join("state.sqlite")).await?;
+        let state = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &fixture.root,
+        ))
+        .await?;
         let now = current_unix_seconds();
         for (name, generation, weekly, short, stale) in [
             ("acct_pty_alpha", 7, 92, Some(83), false),
@@ -228,7 +236,9 @@ impl QuotaResetFixture {
             )?;
         }
         state.close().await?;
-        fixture.state_bytes_before = fs::read(fixture.root.join("state.sqlite"))?;
+        fixture.state_bytes_before = fs::read(codex_router_state::provider_proxy_database_path(
+            &fixture.root,
+        ))?;
         fixture.assert_secrets_unchanged()?;
         Ok(fixture)
     }
@@ -246,7 +256,7 @@ impl QuotaResetFixture {
             root.join(FIXTURE_ROOT_MARKER_NAME),
             format!("{FIXTURE_ROOT_MARKER_PREFIX}{capability}\n"),
         )?;
-        let state_path = root.join("state.sqlite");
+        let state_path = codex_router_state::provider_proxy_database_path(&root);
         let state = AsyncSqliteStateStore::open(&state_path).await?;
         let now = current_unix_seconds();
         for (account_id, label, generation, routing_id) in [
@@ -300,7 +310,8 @@ impl QuotaResetFixture {
     }
 
     pub(super) fn assert_read_only(&self) -> TestResult<()> {
-        let state_bytes_after = fs::read(self.root.join("state.sqlite"))?;
+        let state_bytes_after =
+            fs::read(codex_router_state::provider_proxy_database_path(&self.root))?;
         ensure(
             self.state_bytes_before == state_bytes_after,
             "reset workflow changed fixture state bytes",
@@ -320,7 +331,10 @@ impl QuotaResetFixture {
         account_id: &AccountId,
         credential_generation: u64,
     ) -> TestResult<()> {
-        let state = AsyncSqliteStateStore::open(&self.root.join("state.sqlite")).await?;
+        let state = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &self.root,
+        ))
+        .await?;
         let observed_unix_seconds = current_unix_seconds().saturating_sub(30);
         let stale_after_unix_seconds = observed_unix_seconds.saturating_add(3_600);
         let attempt = state
@@ -478,7 +492,10 @@ fn collect_manifest(
 async fn visual_hard_cases_survive_canonical_store_readback_without_changing_normal_fixture()
 -> TestResult<()> {
     let fixture = QuotaResetFixture::create_visual_hard_cases().await?;
-    let state = AsyncSqliteStateStore::open_read_only(&fixture.root.join("state.sqlite")).await?;
+    let state = AsyncSqliteStateStore::open_read_only(
+        &codex_router_state::provider_proxy_database_path(&fixture.root),
+    )
+    .await?;
     let inputs = state
         .selector_inputs_for_route_band("responses", current_unix_seconds())
         .await?;

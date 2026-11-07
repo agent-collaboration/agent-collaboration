@@ -105,7 +105,7 @@ After reducing cycles or their edges, update `architecture/module-cycle-baseline
   through `scripts/cargo_debug_signing_runner.sh`, which signs every
   executable it runs with the same certificate, without a secure timestamp so
   it works offline: `codex-router`, `agent-collaboration`, `agent-sessions`,
-  `codex-router-board-upgrade` and `board-debug-runtime` under
+  `agent-router-update` and `board-debug-runtime` under
   `dev.shravansunder.<executable>.debug`, and test, example and helper
   binaries under `dev.shravansunder.test.<name>`. Never execute a freshly
   built binary unsigned: macOS verifies each new ad-hoc-signed executable,

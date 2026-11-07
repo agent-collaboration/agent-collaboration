@@ -158,3 +158,23 @@ fn configured_service_identity_cannot_replace_its_installation_peer() {
     );
     assert_eq!(identity.installation_peer(), Some(first));
 }
+
+#[test]
+fn fresh_root_mints_a_uuidv7_service_identity_file() {
+    let directory = private_identity_root();
+
+    let minted = load_service_identity(directory.path()).expect("fresh service identity");
+
+    let stored: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(directory.path().join("service-identity.json")).expect("identity file"),
+    )
+    .expect("identity JSON");
+    let stored_id = stored["serviceId"].as_str().expect("serviceId");
+    assert_eq!(stored_id, String::from(minted));
+    assert_eq!(
+        uuid::Uuid::parse_str(stored_id)
+            .expect("stored service id")
+            .get_version_num(),
+        7
+    );
+}

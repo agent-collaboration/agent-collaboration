@@ -120,7 +120,10 @@ async fn compiled_credit_refresh_reports_focused_responses_failure_despite_parti
         "partial refresh must not report a new focused balance",
     )?;
 
-    let state = AsyncSqliteStateStore::open_read_only(&fixture.root().join("state.sqlite")).await?;
+    let state = AsyncSqliteStateStore::open_read_only(
+        &codex_router_state::provider_proxy_database_path(fixture.root()),
+    )
+    .await?;
     let after_observation = state
         .load_account_credit_observation(&focused_account_id)
         .await?
@@ -239,7 +242,10 @@ async fn compiled_disabled_account_refresh_reports_unavailable_without_provider_
         .seed_cached_credit_observation(&focused_account_id, 11)
         .await?;
     let before_observation = load_credit_observation(&fixture, &focused_account_id).await?;
-    let state = AsyncSqliteStateStore::open(&fixture.root().join("state.sqlite")).await?;
+    let state = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+        fixture.root(),
+    ))
+    .await?;
     ensure(
         state
             .disable_account_if_credential_generation_current(&focused_account_id, 11)
@@ -247,7 +253,10 @@ async fn compiled_disabled_account_refresh_reports_unavailable_without_provider_
         "focused account should be disabled in the isolated fixture",
     )?;
     state.close().await?;
-    let state = AsyncSqliteStateStore::open_read_only(&fixture.root().join("state.sqlite")).await?;
+    let state = AsyncSqliteStateStore::open_read_only(
+        &codex_router_state::provider_proxy_database_path(fixture.root()),
+    )
+    .await?;
     let accounts = state.list_accounts().await?;
     ensure(
         accounts.iter().any(|account| {
@@ -316,7 +325,10 @@ async fn compiled_disabled_account_refresh_reports_unavailable_without_provider_
         "an unavailable refresh must not be reported as a failed provideEdit",
     )?;
 
-    let state = AsyncSqliteStateStore::open_read_only(&fixture.root().join("state.sqlite")).await?;
+    let state = AsyncSqliteStateStore::open_read_only(
+        &codex_router_state::provider_proxy_database_path(fixture.root()),
+    )
+    .await?;
     let after_observation = state
         .load_account_credit_observation(&focused_account_id)
         .await?
@@ -345,7 +357,10 @@ async fn load_credit_observation(
     fixture: &QuotaResetFixture,
     account_id: &AccountId,
 ) -> TestResult<codex_router_state::credit_store::CreditUsageObservation> {
-    let state = AsyncSqliteStateStore::open_read_only(&fixture.root().join("state.sqlite")).await?;
+    let state = AsyncSqliteStateStore::open_read_only(
+        &codex_router_state::provider_proxy_database_path(fixture.root()),
+    )
+    .await?;
     let observation = state
         .load_account_credit_observation(account_id)
         .await?

@@ -140,11 +140,10 @@ impl CollaborationRuntime {
             ));
         }
         // Publication precedes the directory announcement; readers never receive a missing bundle.
-        evidence
-            .export
-            .bundle()
-            .publish(&self.directory)
-            .map_err(io::Error::other)?;
+        super::schema_bundle_retention::publish_in_use_schema_bundle(
+            &self.directory,
+            evidence.export.bundle(),
+        )?;
         let mut encoded = String::from("sha256:");
         for byte in evidence.export.bundle().digest() {
             use std::fmt::Write as _;

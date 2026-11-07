@@ -648,7 +648,7 @@ mod tests {
         let selected = HostPortSelection {
             router: SelectedHostPort {
                 port: 28741,
-                source: HostPortSource::PortsFile,
+                source: HostPortSource::SettingsPorts,
             },
             mcp: SelectedHostPort {
                 port: 28743,
@@ -664,7 +664,7 @@ mod tests {
         render_snapshot(&mut output, &snapshot).expect("rendered status");
         let rendered = String::from_utf8(output).expect("UTF-8 status");
         for line in [
-            "router_port: 28741 (ports.json)",
+            "router_port: 28741 (settings.jsonc ports)",
             "mcp_port: 28743 (flag)",
             "tailscale_https_port: 18789 (default)",
         ] {

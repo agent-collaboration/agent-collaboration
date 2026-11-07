@@ -25,6 +25,8 @@ pub struct AcpConnectionInputs {
     pub approval_broker: Arc<dyn crate::ApprovalBroker>,
     pub holder: Arc<dyn UnmaterializedBindingStore>,
     pub recorder: Arc<dyn ConversationOperationRecorder>,
+    /// The Host's record of scratch scopes with an open session.
+    pub scratch_scopes: Arc<dyn crate::ScratchScopeRegister>,
 }
 pub async fn serve_acp_connection<TStream: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     stream: TStream,
@@ -170,7 +172,7 @@ pub(crate) async fn route_codex_sessions(
                         }
                     }
                     let cancellation_barrier=requested_session.as_ref().and_then(|session| sessions.cancellation_barrier(session));
-                    let setup=SetupTaskInputs { cancellation_barrier, known_session, adopt_unmaterialized:adopted_held, backend_path:inputs.backend_path.clone(), schemas:Arc::clone(&inputs.schemas), generation:inputs.generation.clone(), params, create_new, operation_id, recorder:Arc::clone(&inputs.recorder), approval_broker:Arc::clone(&inputs.approval_broker) };
+                    let setup=SetupTaskInputs { cancellation_barrier, known_session, adopt_unmaterialized:adopted_held, backend_path:inputs.backend_path.clone(), schemas:Arc::clone(&inputs.schemas), generation:inputs.generation.clone(), params, create_new, operation_id, recorder:Arc::clone(&inputs.recorder), approval_broker:Arc::clone(&inputs.approval_broker), scratch_scopes:Arc::clone(&inputs.scratch_scopes) };
                     let holder=Arc::clone(&inputs.holder);
                     if create_new {
                         let (result_sender,result_receiver)=tokio::sync::oneshot::channel();

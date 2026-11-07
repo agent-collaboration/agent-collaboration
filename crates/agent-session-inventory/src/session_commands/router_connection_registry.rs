@@ -10,6 +10,10 @@ pub use connection_profile::{
 };
 
 const MAX_REGISTRY_BYTES: u64 = 65536;
+/// The session picker's machine list at the Router root.
+pub const MACHINE_LIST_FILE_NAME: &str = "agent-sessions.jsonc";
+/// The machine list's earlier name; `agent-router-update` renames it.
+const LEGACY_MACHINE_LIST_FILE_NAME: &str = "routers.jsonc";
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct RouterConnectionRegistry {
@@ -60,7 +64,24 @@ impl RouterConnectionRegistry {
 }
 
 pub fn read_router_registry(root: &Path) -> RouterRegistryRead {
-    let mut file = match File::open(root.join("routers.jsonc")) {
+    // The old name is never read: alone it means the update has not run, and
+    // beside the new name it is a conflict the owner resolves.
+    match std::fs::symlink_metadata(root.join(LEGACY_MACHINE_LIST_FILE_NAME)) {
+        Ok(_) => {
+            return RouterRegistryRead::Rejected(
+                match std::fs::symlink_metadata(root.join(MACHINE_LIST_FILE_NAME)) {
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        RouterRegistryError::LegacyMachineListOnly
+                    }
+                    Ok(_) => RouterRegistryError::BothMachineListsPresent,
+                    Err(_) => RouterRegistryError::Unreadable,
+                },
+            );
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return RouterRegistryRead::Rejected(RouterRegistryError::Unreadable),
+    }
+    let mut file = match File::open(root.join(MACHINE_LIST_FILE_NAME)) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             return RouterRegistryRead::Missing;
