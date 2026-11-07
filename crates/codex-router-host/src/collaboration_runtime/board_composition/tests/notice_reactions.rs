@@ -125,9 +125,29 @@ impl Runtime {
         self.directory.path().join("component-notice-progress")
     }
     async fn reactions(&self) -> Result<MachineNoticeReactions, io::Error> {
+        self.ensure_progress_session().await?;
         MachineNoticeReactions::open(&self.progress_directory()).await
     }
+    async fn ensure_progress_session(&self) -> io::Result<()> {
+        let component = board_fleet_sync::MachineSessionStore::open(&self.progress_directory())
+            .await
+            .map_err(io::Error::other)?;
+        if component.load().await.map_err(io::Error::other)?.is_none() {
+            let native =
+                board_fleet_sync::MachineSessionStore::open(&self.directory.path().join("router"))
+                    .await
+                    .map_err(io::Error::other)?;
+            let state = native
+                .load()
+                .await
+                .map_err(io::Error::other)?
+                .ok_or_else(|| io::Error::other("actual SDK session missing from fixture"))?;
+            component.save(&state).await.map_err(io::Error::other)?;
+        }
+        Ok(())
+    }
     async fn set_progress(&self, position: u64) -> TestResult {
+        self.ensure_progress_session().await?;
         MachineNoticeProgressStore::open(&self.progress_directory())
             .await?
             .save(NoticePosition::new(position))
@@ -540,3 +560,6 @@ async fn progress_write_failure_rehandles_the_hint_without_changing_lease_author
     drop(writer);
     runtime.close().await
 }
+
+#[path = "orphan_notice_replay_test.rs"]
+mod orphan_notice_replay_test;

@@ -42,6 +42,11 @@ async fn legacy_progress_is_imported_once_and_never_overwrites_a_committed_curso
     let directory = tempfile::tempdir()?;
     let home = directory.path().join("machine-session");
     tokio::fs::create_dir(&home).await?;
+    let native = ClientSessionState {
+        session_id: SessionId::new(uuid::Uuid::now_v7())?,
+        notice_cursor: NoticePosition::new(31),
+    };
+    tokio::fs::write(home.join("state.json"), serde_json::to_vec(&native)?).await?;
     let path = home.join("machine-notice-progress.json");
     tokio::fs::write(&path, br#"{"handledThrough":31}"#).await?;
     let store = MachineNoticeProgressStore::open(directory.path()).await?;
@@ -50,6 +55,7 @@ async fn legacy_progress_is_imported_once_and_never_overwrites_a_committed_curso
     store.save(NoticePosition::new(73)).await?;
     drop(store);
     // A crash after commit and before deletion may leave the original file.
+    tokio::fs::write(home.join("state.json"), serde_json::to_vec(&native)?).await?;
     tokio::fs::write(&path, br#"{"handledThrough":31}"#).await?;
     let store = MachineNoticeProgressStore::open(directory.path()).await?;
     assert_eq!(store.load().await?, NoticePosition::new(73));
@@ -75,6 +81,11 @@ async fn corrupt_progress_refuses_startup_without_rewriting_or_resetting_the_fil
         let directory = tempfile::tempdir()?;
         let home = directory.path().join("machine-session");
         tokio::fs::create_dir(&home).await?;
+        let session = ClientSessionState {
+            session_id: SessionId::new(uuid::Uuid::now_v7())?,
+            notice_cursor: NoticePosition::new(0),
+        };
+        tokio::fs::write(home.join("state.json"), serde_json::to_vec(&session)?).await?;
         let path = home.join("machine-notice-progress.json");
         tokio::fs::write(&path, invalid).await?;
         assert!(

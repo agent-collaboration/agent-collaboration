@@ -9,6 +9,8 @@ use message_board::*;
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, path::Path, sync::atomic::Ordering};
 use tokio::{sync::watch, time::timeout};
+#[path = "tests/install_attempt_completion_test.rs"]
+mod install_attempt_completion_test;
 #[path = "tests/install_attempt_observer.rs"]
 mod install_attempt_observer;
 pub(super) use install_attempt_observer::{

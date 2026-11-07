@@ -480,6 +480,11 @@ async fn cooccurring_persistence_failure_is_not_hidden_by_an_expected_refusal_in
         let observed = board_sync_protocol::FleetLinkRecord {
             peer: PeerId::new(uuid::Uuid::now_v7()).unwrap(),
             endpoint: "wss://fixture/session".to_owned(),
+
+            instance: 0,
+            connection: 0,
+            revision: 0,
+            last_frame_at: None,
             state: board_sync_protocol::FleetLinkState::Refused {
                 reason: board_sync_protocol::FleetLinkRefusal::CredentialRejected {
                     reason: AuthRefusal::Revoked,

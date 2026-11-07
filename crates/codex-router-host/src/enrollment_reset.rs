@@ -172,6 +172,9 @@ async fn clear_router_state(directory: &Path) -> io::Result<()> {
         .await
         .map_err(io::Error::other)?;
     let cleared = async {
+        // Resume/progress files were deliberately discarded above. Commit any
+        // unfinished legacy attempts before removing their old directory.
+        cache.import_legacy_runtime(directory).await?;
         cache.clear_central_derived_cache().await?;
         cache.clear_machine_runtime().await
     }

@@ -648,8 +648,10 @@ fn spawn_project_lifecycle(
 ) {
     if let ProjectLifecycleSignal::WritingConfirmed(project) = &signal {
         let project = project.clone();
+        let projects = owners.projects.clone();
         let mail = owners.mail.clone();
         spawn_operation(handlers, async move {
+            projects.observe_completed_install(&project).await?;
             if let Some(mail) = mail.upgrade() {
                 mail.subscription_delivery()
                     .start_inherited_project_readers(&project)

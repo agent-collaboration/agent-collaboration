@@ -131,6 +131,14 @@ async fn cold_welcome_and_notice_recovery_skip_superseded_project_and_initialize
     // hint, must save machine progress without reopening the terminal writer.
     central.wait_notice_reads(2).await?;
     let progress_root = directory.path().join("cold-component-progress");
+    let native =
+        board_fleet_sync::MachineSessionStore::open(&directory.path().join("router")).await?;
+    let state = native
+        .load()
+        .await?
+        .ok_or("actual cold native session missing")?;
+    let component = board_fleet_sync::MachineSessionStore::open(&progress_root).await?;
+    component.save(&state).await?;
     let mut reactions = MachineNoticeReactions::open(&progress_root).await?;
     central
         .script_notice_answers(vec![

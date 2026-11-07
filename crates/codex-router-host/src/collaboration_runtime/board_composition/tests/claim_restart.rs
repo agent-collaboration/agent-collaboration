@@ -300,7 +300,13 @@ async fn run_restart_journey(journey: RestartJourney) -> TestResult {
             );
         }
         if let Some(root_record) = root_record {
-            assert_eq!(attempt_bytes(&attempt_path).await?, root_record);
+            let selected: message_board_storage::SnapshotInstallAttempt =
+                serde_json::from_slice(&root_record)?;
+            assert_eq!(selected.attempt, completed.request.attempt);
+            assert!(
+                attempt_record(&attempt_path).await?.is_none(),
+                "completed attempt retained after restart"
+            );
         }
         if graceful {
             let posted = marker(&mut output, "RECEIVING_RESTART_POST ").await?;

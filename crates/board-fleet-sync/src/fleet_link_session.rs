@@ -19,6 +19,12 @@ pub(super) fn project_record(
     native: &SessionLinkState,
 ) -> Result<FleetLinkRecord, StoreError> {
     let since = timestamp(native.since, "sessionLink.since")?;
+    record.instance = native.instance;
+    record.connection = native.connection;
+    record.revision = native.revision;
+    if let Some(last_frame_at) = native.last_frame_at {
+        record.last_frame_at = Some(timestamp(last_frame_at, "sessionLink.lastFrameAt")?);
+    }
     record.state = match &native.status {
         SessionLinkStatus::Connecting { attempt } => FleetLinkState::Connecting {
             since,
@@ -61,6 +67,7 @@ pub(super) fn project_record(
         record.last_drop = Some(FleetLinkDrop {
             reason: drop_reason(&dropped.reason),
             at,
+            connection: dropped.connection,
         });
         record.last_failure = Some(FleetLinkFailure {
             reason: failure_reason(&dropped.reason),

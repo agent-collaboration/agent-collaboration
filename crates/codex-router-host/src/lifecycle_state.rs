@@ -203,7 +203,7 @@ pub enum FleetHostObservation {
     #[default]
     NotObserved,
     Available {
-        central: Option<board_sync_protocol::FleetLinkRecord>,
+        central: Option<Box<board_sync_protocol::FleetLinkRecord>>,
         stuck_mail: collaboration_protocol::StuckMailSummary,
     },
     Unavailable {

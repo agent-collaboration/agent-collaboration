@@ -31,7 +31,8 @@ pub use runtime::SnapshotInstallAttempt;
 static CACHE_MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./fleet_cache_migrations");
 
 // Projection replacement preserves machine-owned state. Enrollment reset calls
-// clear_machine_runtime separately to discard the old session and grant attempts.
+// clear_machine_runtime separately to discard the old session and link observation;
+// unfinished install attempts survive re-enrollment.
 const CENTRAL_CACHE_DELETIONS: [&str; 3] = [
     "DELETE FROM cached_fleet_records",
     "DELETE FROM fleet_cache_rebuild_records",

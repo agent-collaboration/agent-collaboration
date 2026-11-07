@@ -23,7 +23,7 @@ pub(in crate::collaboration_runtime::board_composition) async fn attempt_record(
             .read_only(true),
     )
     .await?;
-    let row = sqlx::query_as::<_, StoredAttempt>("SELECT id, project, epoch FROM fleet_snapshot_install_attempts WHERE project=? AND epoch=?")
+    let row = sqlx::query_as::<_, StoredAttempt>("SELECT id, project_id AS project, epoch FROM fleet_install_attempts WHERE project_id=? AND epoch=?")
         .bind(key.1.as_str()).bind(key.2.value().to_string()).fetch_optional(&mut connection).await?;
     connection.close().await?;
     row.map(|row| -> ObservationResult<_> {
@@ -62,7 +62,7 @@ pub(in crate::collaboration_runtime::board_composition) async fn attempt_count(
             .read_only(true),
     )
     .await?;
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM fleet_snapshot_install_attempts")
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM fleet_install_attempts")
         .fetch_one(&mut connection)
         .await?;
     connection.close().await?;

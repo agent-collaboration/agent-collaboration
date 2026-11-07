@@ -1,22 +1,83 @@
 //! Commit validated legacy state before deleting any source file; never overwrite a committed row.
 use super::{
     ClientSessionState, DeserializeOwned, FleetCache, MachineNoticeProgress,
-    RouterLocalStorageError, RuntimeStateKind, SnapshotInstallAttempt, insert_attempt,
-    read_runtime, write_runtime,
+    RouterLocalStorageError, SnapshotInstallAttempt, insert_attempt,
+    sessions::{insert_session, read_session},
 };
 use std::path::{Path, PathBuf};
+
+#[cfg(test)]
+#[path = "fleet_runtime_import_test.rs"]
+mod tests;
+
+enum LegacyNoticeProgress {
+    Missing,
+    Bound(fleet_sync_protocol::NoticePosition),
+    Orphan {
+        handled_through: Option<fleet_sync_protocol::NoticePosition>,
+    },
+}
+
+// An orphan is never imported. Inspect only this optional numeric field for
+// the warning; unknown payload fields and raw bytes must not enter the log.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReadableOrphanProgress {
+    handled_through: Option<fleet_sync_protocol::NoticePosition>,
+}
+
+async fn read_notice_progress(
+    path: &Path,
+    session: Option<&ClientSessionState>,
+) -> Result<LegacyNoticeProgress, RouterLocalStorageError> {
+    if session.is_some() {
+        return Ok(
+            match read_legacy::<MachineNoticeProgress>(path, "machineNoticeProgress").await? {
+                Some(progress) => LegacyNoticeProgress::Bound(progress.handled_through),
+                None => LegacyNoticeProgress::Missing,
+            },
+        );
+    }
+    let metadata = match tokio::fs::symlink_metadata(path).await {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(LegacyNoticeProgress::Missing);
+        }
+        Err(error) => return Err(error.into()),
+    };
+    if !metadata.is_file() {
+        return Err(RouterLocalStorageError::InvalidRecordKey {
+            field: "machineNoticeProgress",
+        });
+    }
+    let handled_through = read_legacy::<ReadableOrphanProgress>(path, "machineNoticeProgress")
+        .await
+        .ok()
+        .flatten()
+        .and_then(|progress| progress.handled_through);
+    Ok(LegacyNoticeProgress::Orphan { handled_through })
+}
 
 impl FleetCache {
     pub async fn import_legacy_runtime(
         &self,
         directory: &Path,
     ) -> Result<(), RouterLocalStorageError> {
+        for path in self.commit_legacy_runtime(directory).await? {
+            remove_imported(&path).await?;
+        }
+        Ok(())
+    }
+
+    async fn commit_legacy_runtime(
+        &self,
+        directory: &Path,
+    ) -> Result<Vec<PathBuf>, RouterLocalStorageError> {
         let session_path = directory.join("machine-session/state.json");
         let progress_path = directory.join("machine-session/machine-notice-progress.json");
         let session: Option<ClientSessionState> =
             read_legacy(&session_path, "machineSessionState").await?;
-        let progress: Option<MachineNoticeProgress> =
-            read_legacy(&progress_path, "machineNoticeProgress").await?;
+        let progress = read_notice_progress(&progress_path, session.as_ref()).await?;
         let mut attempts = Vec::new();
         match tokio::fs::read_dir(directory.join("snapshot-install-attempts")).await {
             Ok(mut entries) => {
@@ -49,31 +110,37 @@ impl FleetCache {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(error.into()),
         }
-        if session.is_none() && progress.is_none() && attempts.is_empty() {
-            return Ok(());
+        if session.is_none()
+            && matches!(&progress, LegacyNoticeProgress::Missing)
+            && attempts.is_empty()
+        {
+            return Ok(Vec::new());
         }
         let _writer = self.database.writer.lock().await;
         let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
         let mut imported = Vec::new();
+        let existing = if session.is_some() {
+            read_session(&mut transaction).await?
+        } else {
+            None
+        };
         if let Some(state) = session {
-            if read_runtime::<ClientSessionState>(&mut transaction, RuntimeStateKind::Session)
-                .await?
-                .is_none()
-            {
-                write_runtime(&mut transaction, RuntimeStateKind::Session, &state).await?;
+            if existing.is_none() {
+                insert_session(
+                    &mut transaction,
+                    &state,
+                    match &progress {
+                        LegacyNoticeProgress::Bound(position) => *position,
+                        LegacyNoticeProgress::Missing | LegacyNoticeProgress::Orphan { .. } => {
+                            fleet_sync_protocol::NoticePosition::new(0)
+                        }
+                    },
+                )
+                .await?;
             }
             imported.push(session_path);
         }
-        if let Some(state) = progress {
-            if read_runtime::<MachineNoticeProgress>(
-                &mut transaction,
-                RuntimeStateKind::NoticeProgress,
-            )
-            .await?
-            .is_none()
-            {
-                write_runtime(&mut transaction, RuntimeStateKind::NoticeProgress, &state).await?;
-            }
+        if !matches!(&progress, LegacyNoticeProgress::Missing) {
             imported.push(progress_path);
         }
         for (path, record) in attempts {
@@ -81,10 +148,24 @@ impl FleetCache {
             imported.push(path);
         }
         transaction.commit().await?;
-        for path in imported {
-            remove_imported(&path).await?;
+        match progress {
+            LegacyNoticeProgress::Orphan {
+                handled_through: Some(position),
+            } => tracing::warn!(
+                event = "fleet.runtime.orphanNoticeProgressDiscarded",
+                handled_through = position.value(),
+                "discarding orphan notice progress without its native session; notices will be re-handled"
+            ),
+            LegacyNoticeProgress::Orphan {
+                handled_through: None,
+            } => tracing::warn!(
+                event = "fleet.runtime.orphanNoticeProgressDiscarded",
+                handled_through = "unavailable",
+                "discarding orphan notice progress without its native session; notices will be re-handled"
+            ),
+            LegacyNoticeProgress::Missing | LegacyNoticeProgress::Bound(_) => {}
         }
-        Ok(())
+        Ok(imported)
     }
 }
 

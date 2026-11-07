@@ -39,7 +39,7 @@ pub(super) async fn observe_fleet_sources(
     let (central, stuck_mail) = tokio::join!(link_read, mail_read);
     match central {
         Ok(Ok(central)) => crate::FleetHostObservation::Available {
-            central,
+            central: central.map(Box::new),
             stuck_mail,
         },
         Ok(Err(error)) => crate::FleetHostObservation::Unavailable {

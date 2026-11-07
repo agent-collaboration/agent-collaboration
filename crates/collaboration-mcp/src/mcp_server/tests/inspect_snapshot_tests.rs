@@ -10,6 +10,11 @@ async fn installation_show_transmits_the_observed_central_record_over_mcp() {
     let record = FleetLinkRecord {
         peer,
         endpoint: "wss://central.example.test/session".to_owned(),
+
+        instance: 0,
+        connection: 0,
+        revision: 0,
+        last_frame_at: None,
         state: FleetLinkState::Refused {
             reason: FleetLinkRefusal::IdentityInUseElsewhere,
             at: "2026-11-06T12:00:00Z".parse().expect("refusal timestamp"),

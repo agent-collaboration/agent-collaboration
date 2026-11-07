@@ -25,6 +25,7 @@ async fn installation_link_requires_the_identity_peer_and_a_nonempty_endpoint() 
             "central": { "kind": "available", "record": {
                 "peer": link_peer,
                 "endpoint": endpoint,
+                "instance": 0, "connection": 0, "revision": 0, "lastFrameAt": null,
                 "state": { "kind": "disconnected", "since": "2026-11-06T12:00:00Z" },
                 "lastDrop": null,
                 "lastFailure": null

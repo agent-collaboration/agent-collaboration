@@ -90,6 +90,20 @@ async fn native_final_drop_is_flushed_and_readable_after_owner_shutdown_and_reop
     drop(publisher);
     task.await??;
     let record = cache.fleet_link().await?.ok_or("committed final link")?;
+    let public = serde_json::to_value(&record)?;
+    assert_eq!(public.get("instance"), Some(&serde_json::json!(1)));
+    assert_eq!(public.get("connection"), Some(&serde_json::json!(1)));
+    assert_eq!(public.get("revision"), Some(&serde_json::json!(2)));
+    assert_eq!(
+        public.get("lastFrameAt"),
+        Some(&serde_json::to_value(
+            chrono::DateTime::from_timestamp_millis(time(20).unix_millis())
+        )?)
+    );
+    assert_eq!(
+        public.pointer("/lastDrop/connection"),
+        Some(&serde_json::json!(1))
+    );
     assert_eq!(reader.read().await?, record);
     assert!(matches!(record.state, FleetLinkState::Disconnected { .. }));
     assert_eq!(

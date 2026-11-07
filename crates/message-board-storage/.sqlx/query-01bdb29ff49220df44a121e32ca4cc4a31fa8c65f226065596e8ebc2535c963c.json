@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO fleet_install_attempts(id, project_id, epoch, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(project_id, epoch) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "01bdb29ff49220df44a121e32ca4cc4a31fa8c65f226065596e8ebc2535c963c"
+}

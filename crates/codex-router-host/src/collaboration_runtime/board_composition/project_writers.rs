@@ -179,7 +179,11 @@ impl ProjectWriters {
         let slot = self.writer_slot(project).await;
         let mut owner = slot.lock().await;
         match &*owner {
-            ProjectWriterSlot::Ready(writer) => return Ok(writer.clone()),
+            ProjectWriterSlot::Ready(writer) => {
+                self.retire_completed_install_attempt(project, writer)
+                    .await?;
+                return Ok(writer.clone());
+            }
             ProjectWriterSlot::Terminal { .. } => {
                 return Err(io::Error::other("project writer is terminal"));
             }
@@ -207,6 +211,8 @@ impl ProjectWriters {
             writer.stop().await?;
             return Err(io::Error::other("machine session has stopped"));
         }
+        self.retire_completed_install_attempt(project, &writer)
+            .await?;
         *owner = ProjectWriterSlot::Ready(writer.clone());
         Ok(writer)
     }

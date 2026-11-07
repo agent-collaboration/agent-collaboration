@@ -72,6 +72,10 @@ impl FleetLinkOwner {
         let preparation = FleetLinkRecord {
             peer,
             endpoint: endpoint.to_owned(),
+            instance: 0,
+            connection: 0,
+            revision: 0,
+            last_frame_at: previous.as_ref().and_then(|record| record.last_frame_at),
             state: FleetLinkState::Disconnected { since: Utc::now() },
             last_drop: previous
                 .as_ref()
@@ -184,6 +188,7 @@ impl FleetLinkOwner {
         if let Some(previous) = self.committed.borrow().as_ref() {
             preparation.last_drop = previous.last_drop.clone();
             preparation.last_failure = previous.last_failure.clone();
+            preparation.last_frame_at = previous.last_frame_at;
         }
         let mut record = session::project_record(preparation, accepted)?;
         if let Some(returned) = input.returned

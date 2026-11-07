@@ -129,7 +129,7 @@ async fn failed_session_preparation_keeps_its_typed_failure_on_both_status_surfa
         let frames = operator_client::send_operator_request(&fixture.host.operator, OperatorRequest::Status, BOUND).await?;
         let central = frames.iter().find_map(|frame| match frame {
             OperatorFrame::Terminal(response) => match response.snapshot().fleet() {
-                codex_router_host::FleetHostObservation::Available { central, .. } => central.as_ref(),
+                codex_router_host::FleetHostObservation::Available { central, .. } => central.as_deref(),
                 _ => None,
             },
             OperatorFrame::Progress(_) => None,
@@ -577,6 +577,19 @@ async fn require_shared_link_status(
             && last_contact <= after_contact
             && link.last_drop == after.last_drop,
         "Host and MCP status do not read the same link record",
+    )?;
+    require(
+        link.instance != 0
+            && link.connection != 0
+            && link.revision != 0
+            && before.instance == link.instance
+            && after.instance == link.instance
+            && before.connection == link.connection
+            && after.connection == link.connection
+            && before.revision <= link.revision
+            && link.revision <= after.revision
+            && link.last_frame_at == Some(*last_contact),
+        "Host and MCP lost native link identity, revision or last-frame metadata",
     )?;
     require(
         *stuck_mail == collaboration_protocol::StuckMailSummary::Empty,

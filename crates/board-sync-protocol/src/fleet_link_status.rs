@@ -10,6 +10,10 @@ pub struct FleetLinkRecord {
     #[schemars(schema_with = "peer_schema")]
     pub peer: PeerId,
     pub endpoint: String,
+    pub instance: u64,
+    pub connection: u64,
+    pub revision: u64,
+    pub last_frame_at: Option<DateTime<Utc>>,
     pub state: FleetLinkState,
     pub last_drop: Option<FleetLinkDrop>,
     pub last_failure: Option<crate::FleetLinkFailure>,
@@ -58,6 +62,7 @@ pub enum FleetLinkRefusal {
 pub struct FleetLinkDrop {
     pub reason: FleetLinkDropReason,
     pub at: DateTime<Utc>,
+    pub connection: u64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -97,6 +102,12 @@ impl FleetLinkRecord {
         // Receipt precedes Welcome processing, so the native last-message time
         // may precede the instant when the link became ready.
         !self.endpoint.is_empty()
+            && match &self.state {
+                FleetLinkState::Connected { last_contact, .. } => {
+                    self.last_frame_at == Some(*last_contact)
+                }
+                _ => true,
+            }
     }
 }
 

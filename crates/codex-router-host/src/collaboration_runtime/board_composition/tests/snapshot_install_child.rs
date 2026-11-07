@@ -243,11 +243,11 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str, board: BoardCompositio
                 record.status,
                 fleet_sync_tokio_runner::InstallStatus::Ready { .. }
             ));
+            timeout(BOUND, projects.settle_operations()).await??;
             emit(
                 "CLAIM_RESTART_READY ",
                 serde_json::json!({"record":record,"start":receipt.install.position,"epoch":grant.epoch.value(),"verified":receipt.verified,"ready":receipt.ready,"receivingOnly":matches!(producer, InstallProducer::Notice)}),
             )?;
-            timeout(BOUND, projects.settle_operations()).await??;
             drop(observer);
             drop(store);
             drop(database);

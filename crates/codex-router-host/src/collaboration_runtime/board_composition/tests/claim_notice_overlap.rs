@@ -3,8 +3,8 @@ use super::*;
 use crate::collaboration_runtime::board_composition::{
     open_board_admission,
     tests::{
-        attempt_bytes, attempt_key, identity, origin, project_claim::imported_snapshot,
-        wait_welcome,
+        attempt_bytes, attempt_key, attempt_record, identity, origin,
+        project_claim::imported_snapshot, wait_welcome,
     },
 };
 use board_central_test_support::TestCentral;
@@ -271,7 +271,7 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
         assert!(receipt.verified && receipt.ready);
         assert_eq!(receipt.install.install_id, original.install_id);
         assert_eq!(std::fs::metadata(database.path())?.ino(), inode, "another publication replaced the held file");
-        assert_eq!(attempt_bytes(&record_path).await?, record_bytes);
+        assert!(attempt_record(&record_path).await?.is_none(), "completed attempt was retained");
         println!("CLAIM_NOTICE_JOIN ready generation=1 same-file-publication same-durable-root-record");
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }.await;

@@ -18,11 +18,12 @@ use super::*;
 fn central_status_shows_contact_drop_and_stuck_mail_age() {
     let central: collaboration_protocol::FleetLinkRecord = serde_json::from_value(serde_json::json!({
         "peer":"019f0000-0000-7000-8000-000000008131", "endpoint":"wss://central.example/session",
+        "instance":0,"connection":0,"revision":0,"lastFrameAt":"2026-11-06T12:00:20Z",
         "state":{"kind":"connected","since":"2026-11-06T12:00:00Z","lastContact":"2026-11-06T12:00:20Z"},
-        "lastDrop":{"reason":"idleTimeout","at":"2026-11-06T11:59:00Z"}
+        "lastDrop":{"reason":"idleTimeout","at":"2026-11-06T11:59:00Z","connection":0}
     })).unwrap();
     let observation = codex_router_host::FleetHostObservation::Available {
-        central: Some(central),
+        central: Some(Box::new(central)),
         stuck_mail: collaboration_protocol::StuckMailSummary::Stuck {
             count: std::num::NonZeroU64::new(2).unwrap(),
             oldest_age_seconds: 601,
@@ -33,12 +34,17 @@ fn central_status_shows_contact_drop_and_stuck_mail_age() {
     let output = String::from_utf8(output).unwrap();
     assert!(output.contains("central: connected since 2026-11-06 12:00:00 UTC; last message from central 2026-11-06 12:00:20 UTC; last drop idleTimeout at 2026-11-06 11:59:00 UTC"));
     assert!(output.contains("outbox: 2 items sent longer than 5 minutes; oldest age 601s"));
+    assert!(
+        output.contains("instance 0; connection 0; revision 0"),
+        "{output}"
+    );
 }
 
 #[test]
 fn recovered_sent_age_and_mail_read_errors_preserve_the_central_line() {
     let central: collaboration_protocol::FleetLinkRecord = serde_json::from_value(serde_json::json!({
         "peer":"019f0000-0000-7000-8000-000000008131", "endpoint":"wss://central.example/session",
+        "instance":0,"connection":0,"revision":0,"lastFrameAt":"2026-11-06T12:00:20Z",
         "state":{"kind":"connected","since":"2026-11-06T12:00:00Z","lastContact":"2026-11-06T12:00:20Z"},
         "lastDrop":null
     })).unwrap();
@@ -51,7 +57,7 @@ fn recovered_sent_age_and_mail_read_errors_preserve_the_central_line() {
     ] {
         let has_known_age = known_stuck.is_some();
         let observation = codex_router_host::FleetHostObservation::Available {
-            central: Some(central.clone()),
+            central: Some(Box::new(central.clone())),
             stuck_mail: collaboration_protocol::StuckMailSummary::AgeUnknown {
                 recovered_count: std::num::NonZeroU64::MIN,
                 known_stuck,
@@ -73,7 +79,7 @@ fn recovered_sent_age_and_mail_read_errors_preserve_the_central_line() {
     render_fleet_status(
         &mut output,
         &codex_router_host::FleetHostObservation::Available {
-            central: Some(central),
+            central: Some(Box::new(central)),
             stuck_mail: collaboration_protocol::StuckMailSummary::Unavailable {
                 message: "mail reader unavailable".to_owned(),
             },

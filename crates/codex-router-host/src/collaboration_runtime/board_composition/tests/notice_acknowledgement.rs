@@ -263,8 +263,9 @@ async fn recovered_prefix(
                 tokio::task::yield_now().await;
             }
         }).await??;
-        let bytes = attempt_bytes(&attempt_key(root, project, Epoch::new(3)?)).await?;
-        assert_eq!(attempt_count(root).await?, 1);
+        timeout(BOUND, projects.settle_operations()).await??;
+        assert!(attempt_record(&attempt_key(root, project, Epoch::new(3)?)).await?.is_none());
+        assert_eq!(attempt_count(root).await?, 0);
         let database = registry.database(project).await?;
         let installed = database.installed_snapshot().await?.ok_or("recovered native receipt")?;
         let mut observer = fleet_sync_tokio_runner::NativeWriterRuntime::<_, board_sync_protocol::BoardConsumerProtocol>::new(
@@ -272,6 +273,7 @@ async fn recovered_prefix(
         ).await?;
         observer.enable_snapshot_installs(&root.join("claim-installs").join(project.as_str())).await?;
         let install_record = observer.install_record(installed.install.install_id).await?;
+        let bytes = serde_json::to_vec(&install_record.request.attempt)?;
         assert_eq!(install_record.generation, 1);
         assert!(matches!(install_record.status, fleet_sync_tokio_runner::InstallStatus::Ready { .. }));
         let mut snapshot = store.snapshot().await?;

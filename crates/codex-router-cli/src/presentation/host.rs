@@ -360,6 +360,16 @@ fn render_fleet_status<W: Write>(
                             .map_err(std::io::Error::other)?;
                         write!(stdout, "; last failure {reason} at {}", failure.at)?;
                     }
+                    write!(
+                        stdout,
+                        "; instance {}; connection {}; revision {}",
+                        link.instance, link.connection, link.revision
+                    )?;
+                    if !matches!(link.state, FleetLinkState::Connected { .. })
+                        && let Some(last_frame_at) = link.last_frame_at
+                    {
+                        write!(stdout, "; last message from central {last_frame_at}")?;
+                    }
                     writeln!(stdout)?;
                     writeln!(
                         stdout,

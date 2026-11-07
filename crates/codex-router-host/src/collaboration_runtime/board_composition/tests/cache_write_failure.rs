@@ -21,10 +21,10 @@ impl CacheWriteFailure {
         .await?;
         let trigger = match target {
             CacheWriteTarget::InstallAttempt => {
-                "CREATE TRIGGER fixture_refuse_cache_write BEFORE INSERT ON fleet_snapshot_install_attempts BEGIN SELECT RAISE(ABORT,'fixture install attempt write failure'); END"
+                "CREATE TRIGGER fixture_refuse_cache_write BEFORE INSERT ON fleet_install_attempts BEGIN SELECT RAISE(ABORT,'fixture install attempt write failure'); END"
             }
             CacheWriteTarget::NoticeProgress => {
-                "CREATE TRIGGER fixture_refuse_cache_write BEFORE INSERT ON fleet_runtime_state WHEN NEW.kind = 'machineNoticeProgress' BEGIN SELECT RAISE(ABORT,'fixture notice progress write failure'); END"
+                "CREATE TRIGGER fixture_refuse_cache_write BEFORE UPDATE OF handled_through ON fleet_session BEGIN SELECT RAISE(ABORT,'fixture notice progress write failure'); END"
             }
         };
         sqlx::raw_sql(trigger).execute(&mut connection).await?;

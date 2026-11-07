@@ -6,7 +6,7 @@ use board_sync_protocol::{
 };
 use fleet_sync_protocol::{ClientFrame, CloseReason, SchemaSupport, ServerFrame, SessionId};
 use fleet_sync_session::{SessionTransport, TransportConnection};
-use sqlx::Connection;
+use sqlx::{Connection, Row};
 
 #[tokio::test]
 async fn newer_live_session_is_retained_as_refused_by_host_and_installation_status() -> TestResult {
@@ -73,7 +73,7 @@ async fn newer_live_session_is_retained_as_refused_by_host_and_installation_stat
                         codex_router_host::FleetHostObservation::Available {
                             central: Some(record),
                             ..
-                        } => Some(record),
+                        } => Some(record.as_ref()),
                         _ => None,
                     },
                     OperatorFrame::Progress(_) => None,
@@ -83,10 +83,7 @@ async fn newer_live_session_is_retained_as_refused_by_host_and_installation_stat
                 host_link == &refused,
                 "Host and installation status differ after replacement",
             )?;
-            require(
-                persisted_link(&fixture.directory).await? == refused,
-                "replacement refusal was not committed to FleetCache",
-            )?;
+            require_persisted_duplicate_refusal(&fixture.directory, &refused).await?;
             require(
                 refused.peer == fixture.peer,
                 "replacement changed the installation peer",
@@ -118,17 +115,101 @@ async fn await_state(
     .await?
 }
 
-async fn persisted_link(directory: &Path) -> TestResult<FleetLinkRecord> {
+async fn require_persisted_duplicate_refusal(
+    directory: &Path,
+    expected: &FleetLinkRecord,
+) -> TestResult {
+    // The live Host owns Turso's writer. Inspect the committed file through the
+    // same independent read-only SQLite boundary this process fixture used before.
     let mut database = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new()
             .filename(directory.join("fleet-cache.sqlite"))
             .read_only(true),
     )
     .await?;
-    let stored: String =
-        sqlx::query_scalar("SELECT record FROM fleet_runtime_state WHERE kind = 'centralLink'")
-            .fetch_one(&mut database)
-            .await?;
+    let row = sqlx::query("SELECT peer_id, endpoint, instance, connection, revision, state_kind, state_since, connecting_attempt, last_frame_at, refusal_kind, refusal_detail, last_drop_kind, last_drop_at, last_drop_connection, last_failure_kind, last_failure_detail, last_failure_at FROM fleet_link_state")
+        .fetch_one(&mut database).await?;
     database.close().await?;
-    Ok(serde_json::from_str(&stored)?)
+    let FleetLinkState::Refused {
+        at,
+        reason: FleetLinkRefusal::IdentityInUseElsewhere,
+    } = &expected.state
+    else {
+        return Err("expected duplicate-refusal record missing".into());
+    };
+    require(
+        row.try_get::<String, _>("peer_id")? == expected.peer.to_string()
+            && row.try_get::<String, _>("endpoint")? == expected.endpoint
+            && row.try_get::<String, _>("instance")? == expected.instance.to_string()
+            && row.try_get::<String, _>("connection")? == expected.connection.to_string()
+            && row.try_get::<String, _>("revision")? == expected.revision.to_string(),
+        "committed native link identity or counters differ from public observation",
+    )?;
+    require(
+        row.try_get::<String, _>("state_kind")? == "refused"
+            && stored_time(&row, "state_since")? == *at
+            && row
+                .try_get::<Option<i64>, _>("connecting_attempt")?
+                .is_none()
+            && stored_optional_time(&row, "last_frame_at")? == expected.last_frame_at
+            && row.try_get::<Option<String>, _>("refusal_kind")?.as_deref()
+                == Some("identityInUseElsewhere")
+            && row
+                .try_get::<Option<String>, _>("refusal_detail")?
+                .is_none(),
+        "duplicate refusal or last frame was not committed",
+    )?;
+    let dropped = expected
+        .last_drop
+        .as_ref()
+        .ok_or("replacement drop missing")?;
+    require(
+        row.try_get::<Option<String>, _>("last_drop_kind")?
+            .as_deref()
+            == Some(dropped.reason.as_str())
+            && stored_optional_time(&row, "last_drop_at")? == Some(dropped.at)
+            && row
+                .try_get::<Option<String>, _>("last_drop_connection")?
+                .as_deref()
+                == Some(dropped.connection.to_string().as_str()),
+        "replacement drop metadata was not committed",
+    )?;
+    let failure = expected
+        .last_failure
+        .as_ref()
+        .ok_or("replacement failure missing")?;
+    let detail = match &failure.reason {
+        board_sync_protocol::FleetLinkFailureReason::ReplacedByNewerSession => None,
+        board_sync_protocol::FleetLinkFailureReason::SessionClosed {
+            reason: CloseReason::ConnectionReplaced,
+        } => Some("connectionReplaced"),
+        other => return Err(format!("unexpected duplicate diagnostic: {other:?}").into()),
+    };
+    require(
+        row.try_get::<Option<String>, _>("last_failure_kind")?
+            .as_deref()
+            == Some(failure.reason.as_str())
+            && row
+                .try_get::<Option<String>, _>("last_failure_detail")?
+                .as_deref()
+                == detail
+            && stored_optional_time(&row, "last_failure_at")? == Some(failure.at),
+        "typed replacement diagnostic was not committed",
+    )
+}
+
+fn stored_time(
+    row: &sqlx::sqlite::SqliteRow,
+    name: &'static str,
+) -> TestResult<chrono::DateTime<chrono::Utc>> {
+    Ok(row.try_get::<String, _>(name)?.parse()?)
+}
+fn stored_optional_time(
+    row: &sqlx::sqlite::SqliteRow,
+    name: &'static str,
+) -> TestResult<Option<chrono::DateTime<chrono::Utc>>> {
+    Ok(row
+        .try_get::<Option<String>, _>(name)?
+        .map(|value| value.parse())
+        .transpose()?)
 }

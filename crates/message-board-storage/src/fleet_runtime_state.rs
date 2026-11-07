@@ -1,7 +1,6 @@
-//! FleetCache owns local machine state as well as its central-derived projection.
+//! Router-owned session, link observation and unfinished installs in FleetCache.
 use super::{FleetCache, RouterLocalStorageError};
-use board_sync_protocol::FleetLinkRecord;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use fleet_sync_protocol::{Epoch, InstallAttemptId, NoticePosition};
 use fleet_sync_session::ClientSessionState;
 use message_board::ProjectId;
@@ -9,6 +8,10 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 #[path = "fleet_runtime_import.rs"]
 mod legacy;
+#[path = "fleet_link_rows.rs"]
+mod links;
+#[path = "fleet_session_rows.rs"]
+mod sessions;
 #[cfg(test)]
 #[path = "fleet_runtime_state_test.rs"]
 mod tests;
@@ -27,79 +30,19 @@ struct MachineNoticeProgress {
     handled_through: NoticePosition,
 }
 
-#[derive(Clone, Copy)]
-enum RuntimeStateKind {
-    Session,
-    NoticeProgress,
-    Link,
-}
-impl RuntimeStateKind {
-    const fn as_str(self) -> &'static str {
-        match self {
-            Self::Session => "machineSessionState",
-            Self::NoticeProgress => "machineNoticeProgress",
-            Self::Link => "centralLink",
-        }
-    }
-}
-
 impl FleetCache {
     pub async fn clear_machine_runtime(&self) -> Result<(), RouterLocalStorageError> {
         let _writer = self.database.writer.lock().await;
         let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
-        sqlx::query("DELETE FROM fleet_runtime_state")
+        sqlx::query("DELETE FROM fleet_session")
             .execute(&mut *transaction)
             .await?;
-        sqlx::query("DELETE FROM fleet_snapshot_install_attempts")
+        sqlx::query("DELETE FROM fleet_link_state")
             .execute(&mut *transaction)
             .await?;
+        // The attempt belongs to an unfinished project install, not enrollment.
         transaction.commit().await?;
         Ok(())
-    }
-
-    pub async fn machine_session_state(
-        &self,
-    ) -> Result<Option<ClientSessionState>, RouterLocalStorageError> {
-        read_runtime(
-            &mut *self.database.pool.acquire().await?,
-            RuntimeStateKind::Session,
-        )
-        .await
-    }
-
-    pub async fn save_machine_session_state(
-        &self,
-        state: &ClientSessionState,
-    ) -> Result<(), RouterLocalStorageError> {
-        let _writer = self.database.writer.lock().await;
-        write_runtime(
-            &mut *self.database.pool.acquire().await?,
-            RuntimeStateKind::Session,
-            state,
-        )
-        .await
-    }
-
-    pub async fn machine_notice_progress(&self) -> Result<NoticePosition, RouterLocalStorageError> {
-        Ok(read_runtime::<MachineNoticeProgress>(
-            &mut *self.database.pool.acquire().await?,
-            RuntimeStateKind::NoticeProgress,
-        )
-        .await?
-        .map_or(NoticePosition::new(0), |progress| progress.handled_through))
-    }
-
-    pub async fn save_machine_notice_progress(
-        &self,
-        handled_through: NoticePosition,
-    ) -> Result<(), RouterLocalStorageError> {
-        let _writer = self.database.writer.lock().await;
-        write_runtime(
-            &mut *self.database.pool.acquire().await?,
-            RuntimeStateKind::NoticeProgress,
-            &MachineNoticeProgress { handled_through },
-        )
-        .await
     }
 
     pub async fn snapshot_install_attempt(
@@ -109,86 +52,71 @@ impl FleetCache {
     ) -> Result<InstallAttemptId, RouterLocalStorageError> {
         let _writer = self.database.writer.lock().await;
         let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let attempt = SnapshotInstallAttempt {
-            project: project.clone(),
-            epoch,
-            attempt: InstallAttemptId::new(uuid::Uuid::now_v7())
-                .map_err(|_| RouterLocalStorageError::InvalidRecord)?,
+        let existing = read_attempt(&mut transaction, project, epoch).await?;
+        let attempt = match existing {
+            Some(attempt) => attempt,
+            None => {
+                let record = SnapshotInstallAttempt {
+                    project: project.clone(),
+                    epoch,
+                    attempt: InstallAttemptId::new(uuid::Uuid::now_v7())
+                        .map_err(|_| invalid("installAttempt.id"))?,
+                };
+                insert_attempt(&mut transaction, &record).await?;
+                record.attempt
+            }
         };
-        insert_attempt(&mut transaction, &attempt).await?;
-        let project = project.as_str();
-        let epoch = epoch.value().to_string();
-        let id = sqlx_turso::query_scalar!(r#"SELECT id AS "id!: String" FROM fleet_snapshot_install_attempts WHERE project = ? AND epoch = ?"#, project, epoch).fetch_one(&mut *transaction).await?;
-        let attempt = uuid::Uuid::parse_str(&id)
-            .ok()
-            .and_then(|id| InstallAttemptId::new(id).ok())
-            .filter(|attempt| attempt.to_string() == id)
-            .ok_or(RouterLocalStorageError::InvalidRecordKey {
-                field: "snapshotInstallAttempt",
-            })?;
         transaction.commit().await?;
         Ok(attempt)
     }
 
-    pub async fn fleet_link(&self) -> Result<Option<FleetLinkRecord>, RouterLocalStorageError> {
-        let record: Option<FleetLinkRecord> = read_runtime(
-            &mut *self.database.pool.acquire().await?,
-            RuntimeStateKind::Link,
-        )
-        .await?;
-        if record.as_ref().is_some_and(|record| !record.is_valid()) {
-            return Err(RouterLocalStorageError::InvalidRecordKey {
-                field: "centralLink",
-            });
-        }
-        Ok(record)
-    }
-
-    pub async fn save_fleet_link(
+    pub async fn complete_snapshot_install(
         &self,
-        record: &FleetLinkRecord,
+        project: &ProjectId,
+        epoch: Epoch,
     ) -> Result<(), RouterLocalStorageError> {
-        if !record.is_valid() {
-            return Err(RouterLocalStorageError::InvalidRecordKey {
-                field: "centralLink",
-            });
-        }
         let _writer = self.database.writer.lock().await;
-        write_runtime(
-            &mut *self.database.pool.acquire().await?,
-            RuntimeStateKind::Link,
-            record,
+        let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
+        // Validate the row even on deletion; corrupted identities are not silently retired.
+        let _current = read_attempt(&mut transaction, project, epoch).await?;
+        let project = project.as_str();
+        let epoch = epoch.value().to_string();
+        sqlx_turso::query!(
+            "DELETE FROM fleet_install_attempts WHERE project_id = ? AND epoch = ?",
+            project,
+            epoch
         )
-        .await
+        .execute(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(())
     }
 }
 
-async fn read_runtime<T: DeserializeOwned>(
+async fn read_attempt(
     connection: &mut sqlx_turso::TursoConnection,
-    kind: RuntimeStateKind,
-) -> Result<Option<T>, RouterLocalStorageError> {
-    let name = kind.as_str();
-    let row = sqlx_turso::query!(r#"SELECT id AS "id!: String", record AS "record!: String" FROM fleet_runtime_state WHERE kind = ?"#, name).fetch_optional(connection).await?;
-    row.map(|row| {
-        message_board::RecordId::try_from(row.id)
-            .map_err(|_| RouterLocalStorageError::InvalidRecordKey { field: name })?;
-        serde_json::from_str(&row.record)
-            .map_err(|_| RouterLocalStorageError::InvalidRecordKey { field: name })
-    })
-    .transpose()
-}
-
-async fn write_runtime<T: Serialize>(
-    connection: &mut sqlx_turso::TursoConnection,
-    kind: RuntimeStateKind,
-    record: &T,
-) -> Result<(), RouterLocalStorageError> {
-    let id = uuid::Uuid::now_v7().to_string();
-    let kind = kind.as_str();
-    let record = serde_json::to_string(record)?;
-    let now = Utc::now().to_rfc3339();
-    sqlx_turso::query!("INSERT INTO fleet_runtime_state(id, kind, record, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(kind) DO UPDATE SET record = excluded.record, updated_at = excluded.updated_at", id, kind, record, now, now).execute(connection).await?;
-    Ok(())
+    project: &ProjectId,
+    epoch: Epoch,
+) -> Result<Option<InstallAttemptId>, RouterLocalStorageError> {
+    let project = project.as_str();
+    let rows = sqlx_turso::query!(r#"SELECT id AS "id!: String", project_id AS "project_id!: String", epoch AS "epoch!: String", created_at AS "created_at!: String", updated_at AS "updated_at!: String" FROM fleet_install_attempts WHERE project_id = ?"#, project)
+        .fetch_all(connection).await?;
+    let mut selected = None;
+    for row in rows {
+        validate_id(&row.id, "installAttempt.id")?;
+        ProjectId::try_from(row.project_id).map_err(|_| invalid("installAttempt.projectId"))?;
+        let stored_epoch = Epoch::new(parse_u64(&row.epoch, "installAttempt.epoch")?)
+            .map_err(|_| invalid("installAttempt.epoch"))?;
+        validate_times(&row.created_at, &row.updated_at)?;
+        let attempt = InstallAttemptId::new(
+            uuid::Uuid::parse_str(&row.id).map_err(|_| invalid("installAttempt.id"))?,
+        )
+        .map_err(|_| invalid("installAttempt.id"))?;
+        if stored_epoch == epoch {
+            selected = Some(attempt);
+        }
+    }
+    Ok(selected)
 }
 
 async fn insert_attempt(
@@ -199,6 +127,34 @@ async fn insert_attempt(
     let project = record.project.as_str();
     let epoch = record.epoch.value().to_string();
     let now = Utc::now().to_rfc3339();
-    sqlx_turso::query!("INSERT INTO fleet_snapshot_install_attempts(id, project, epoch, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(project, epoch) DO NOTHING", id, project, epoch, now, now).execute(connection).await?;
+    sqlx_turso::query!("INSERT INTO fleet_install_attempts(id, project_id, epoch, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(project_id, epoch) DO NOTHING", id, project, epoch, now, now).execute(connection).await?;
+    Ok(())
+}
+
+fn invalid(field: &'static str) -> RouterLocalStorageError {
+    RouterLocalStorageError::InvalidRecordKey { field }
+}
+fn parse_u64(value: &str, field: &'static str) -> Result<u64, RouterLocalStorageError> {
+    value
+        .parse::<u64>()
+        .ok()
+        .filter(|number| number.to_string() == value)
+        .ok_or_else(|| invalid(field))
+}
+fn validate_id(value: &str, field: &'static str) -> Result<(), RouterLocalStorageError> {
+    message_board::RecordId::try_from(value.to_owned())
+        .map(|_| ())
+        .map_err(|_| invalid(field))
+}
+fn parse_time(value: &str, field: &'static str) -> Result<DateTime<Utc>, RouterLocalStorageError> {
+    let parsed = DateTime::parse_from_rfc3339(value).map_err(|_| invalid(field))?;
+    if parsed.offset().local_minus_utc() != 0 {
+        return Err(invalid(field));
+    }
+    Ok(parsed.with_timezone(&Utc))
+}
+fn validate_times(created: &str, updated: &str) -> Result<(), RouterLocalStorageError> {
+    parse_time(created, "createdAt")?;
+    parse_time(updated, "updatedAt")?;
     Ok(())
 }

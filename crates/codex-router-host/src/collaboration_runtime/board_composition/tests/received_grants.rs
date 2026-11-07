@@ -123,7 +123,8 @@ async fn received_move_then_takeover_round_trip_seeds_each_new_epoch_from_copy()
         let old_store = fixture.registry.existing_project(&project).await?.ok_or("old owner")?;
         let old_subject = Arc::downgrade(&old_store);
         let old_attempt_path = attempt_key(&fixture.projects.directory, &project, Epoch::new(2)?);
-        let old_attempt_bytes = attempt_bytes(&old_attempt_path).await?;
+        assert!(attempt_record(&old_attempt_path).await?.is_none());
+        let original_install = fixture.registry.database(&project).await?.installed_snapshot().await?.ok_or("original completed SDK receipt")?;
         let database = DatabaseId::try_from(project.as_str().to_owned())?;
         // A hint naming the actual fence but another holder is still no grant.
         second_projects.receive_grant(&project, Epoch::new(2)?).await?;
@@ -139,16 +140,17 @@ async fn received_move_then_takeover_round_trip_seeds_each_new_epoch_from_copy()
         read.finish().await?;
         assert!(matches!(&record, Record::Project(record) if record.description.as_str() == "written by live epoch 2"));
         let installed = second_registry.database(&project).await?.installed_snapshot().await?.ok_or("moved native receipt")?;
+        timeout(BOUND, second_projects.settle_operations()).await??;
         let selected_path = attempt_key(&second_root, &project, Epoch::new(3)?);
-        let selected_bytes = attempt_bytes(&selected_path).await?;
+        assert!(attempt_record(&selected_path).await?.is_none());
         second_projects.receive_grant(&project, Epoch::new(3)?).await?;
         second_projects.receive_grant(&project, Epoch::new(2)?).await?;
         second_projects.receive_grant(&project, Epoch::new(4)?).await?;
         let unknown = ProjectId::generate();
         assert!(second_projects.receive_grant(&unknown, Epoch::new(2)?).await.is_err(), "unknown uninitialized Copy must stay fail-closed");
         fixture.projects.receive_grant(&project, Epoch::new(3)?).await?;
-        assert_eq!(attempt_bytes(&selected_path).await?, selected_bytes);
-        assert_eq!(attempt_count(&second_root).await?, 1);
+        assert!(attempt_record(&selected_path).await?.is_none());
+        assert_eq!(attempt_count(&second_root).await?, 0);
         assert!(Arc::ptr_eq(&second_registry.existing_project(&project).await?.ok_or("current moved owner")?, &store));
         assert_eq!(second_registry.database(&project).await?.installed_snapshot().await?.ok_or("duplicate moved receipt")?, installed);
         assert!(attempt_record(&attempt_key(&fixture.projects.directory, &project, Epoch::new(3)?)).await?.is_none());
@@ -172,14 +174,12 @@ async fn received_move_then_takeover_round_trip_seeds_each_new_epoch_from_copy()
         assert!(matches!(&returned, Record::Project(record) if record.description.as_str() == "written by live epoch 3"));
         let new_database = fixture.registry.database(&project).await?;
         assert_eq!(new_database.path().file_name().and_then(|name| name.to_str()), Some("e4.sqlite"));
+        timeout(BOUND, fixture.projects.settle_operations()).await??;
         let new_attempt_path = attempt_key(&fixture.projects.directory, &project, Epoch::new(4)?);
-        let old_record: serde_json::Value = serde_json::from_slice(&old_attempt_bytes)?;
-        let new_record: serde_json::Value = serde_json::from_slice(&attempt_bytes(&new_attempt_path).await?)?;
-        let new_attempt: InstallAttemptId = serde_json::from_value(new_record.get("attempt").cloned().ok_or("new attempt")?)?;
-        assert_ne!(old_record.get("attempt"), new_record.get("attempt"));
         let installed = new_database.installed_snapshot().await?.ok_or("e4 installed receipt")?;
-        assert_eq!(installed.install.install_id, InstallId::new(new_attempt.as_uuid())?);
-        assert_eq!(attempt_bytes(&old_attempt_path).await?, old_attempt_bytes);
+        assert_ne!(original_install.install.install_id, installed.install.install_id);
+        assert!(attempt_record(&new_attempt_path).await?.is_none());
+        assert!(attempt_record(&old_attempt_path).await?.is_none());
         // Replay the e2 subject after e4 is live. A project-only close would
         // stop the replacement even though this old source still upgrades.
         fixture.projects.supersede_project(&project, old_subject).await?;
@@ -385,14 +385,14 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
         assert!(old_reply.is_err(), "the obsolete e2 claimant was admitted");
         let retained = fleet_sync_writer::inspect_native_file(database.path()).await?;
         assert!(matches!(retained.authority, Some(fleet_sync_writer::RetainedAuthority::Superseded { current: Some(current), .. }) if current.value() == 4), "e2 authority did not retain actual supersession: {:?}", retained.authority);
+        timeout(BOUND, fixture.projects.settle_operations()).await??;
         let new = observer.install_record(ready.install.install_id).await?;
         assert!(matches!(new.status, InstallStatus::Ready { .. }));
         assert_ne!(new.request.attempt, old.request.attempt);
         assert_ne!(new.install_id, old.install_id);
         assert_eq!(new.generation, old.generation + 1);
         assert_eq!(attempt_bytes(&root_record).await?, root_bytes);
-        let new_root: serde_json::Value = serde_json::from_slice(&attempt_bytes(&attempt_key(&fixture.projects.directory, &project, Epoch::new(4)?)).await?)?;
-        assert_eq!(serde_json::from_value::<InstallAttemptId>(new_root.get("attempt").cloned().ok_or("e4 attempt")?)?, new.request.attempt);
+        assert!(attempt_record(&attempt_key(&fixture.projects.directory, &project, Epoch::new(4)?)).await?.is_none());
         drop(current);
         write_and_replicate(&fixture.projects, &fixture.registry, &project, 4, &expected, origin()?).await?;
         println!("RECEIVED_GRANT_CASE e4_fresh_ready_old_sdk_ready_root_record_immutable_e2_never_admitted");
