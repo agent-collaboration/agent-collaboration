@@ -1,4 +1,4 @@
-use crate::checked_queries;
+use crate::checked_copy_queries;
 use crate::{
     BoundStatement, ReceiverError, StoreError, bound_sql::quoted_identifier,
     copy_storage::encode_record, row_apply::primary_columns, row_transactions::SchemaStepRecord,
@@ -152,7 +152,7 @@ where
         version: done.schema.version,
         statements: first.contents.schema_steps.clone(),
     };
-    checked_queries::write_schema_step(
+    checked_copy_queries::write_schema_step(
         scope,
         done.schema.version.to_string(),
         encode_record(&record)?,

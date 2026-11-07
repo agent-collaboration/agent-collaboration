@@ -1,4 +1,4 @@
-use crate::checked_queries;
+use crate::checked_copy_queries;
 use crate::{ReceiverError, StoreError, row_apply::TableColumn};
 use durable_steps::storage::TransactionScope;
 use fleet_protocol::schema_catalog::{current_replicated_catalog, snapshot_schema_statements};
@@ -60,7 +60,7 @@ where
                 field: "table is outside the replicated schema".into(),
             });
         }
-        let rows = checked_queries::read_table_columns(self.0, table.to_owned())
+        let rows = checked_copy_queries::read_table_columns(self.0, table.to_owned())
             .await
             .map_err(crate::sql_transport::sql_error)?;
         let columns = rows
@@ -102,7 +102,7 @@ where
     }
 
     pub(crate) async fn entries(&mut self) -> Result<Vec<SchemaEntry>, ReceiverError> {
-        let rows = checked_queries::read_schema_entries(self.0)
+        let rows = checked_copy_queries::read_schema_entries(self.0)
             .await
             .map_err(crate::sql_transport::sql_error)?;
         let catalog = rows

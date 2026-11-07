@@ -1,5 +1,5 @@
 //! Final relational integrity across replay order, on both SQL backends.
-use crate::checked_queries;
+use crate::checked_copy_queries;
 use crate::{
     BoundStatement, ReceiverError, StoreError,
     bound_sql::quoted_identifier,
@@ -79,7 +79,7 @@ where
         let tables = SchemaReads(self.0).table_names().await?;
         for table in &tables {
             let child_columns = SchemaReads(self.0).table_columns(table).await?;
-            let rows = checked_queries::read_foreign_keys(self.0, table.clone())
+            let rows = checked_copy_queries::read_foreign_keys(self.0, table.clone())
                 .await
                 .map_err(crate::sql_transport::sql_error)?;
             let mut groups = BTreeMap::<usize, ForeignKeyGroup>::new();

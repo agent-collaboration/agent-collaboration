@@ -1,0 +1,214 @@
+{
+  "migrations": [
+    "migrations"
+  ],
+  "output": "src/checked_snapshot_queries.rs",
+  "metadata": "checked-snapshot-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_seed",
+      "sql": "sql/read_seed.sql",
+      "row": "StoredSeedRow",
+      "result": "optional",
+      "parameters": []
+    },
+    {
+      "name": "write_seed",
+      "sql": "sql/write_seed.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "record",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_seed_attempt",
+      "sql": "sql/read_seed_attempt.sql",
+      "row": "StoredSeedAttemptRow",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "attempt",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "write_seed_attempt",
+      "sql": "sql/write_seed_attempt.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "attempt",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "record",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_seed_page",
+      "sql": "sql/read_seed_page.sql",
+      "row": "StoredSeedPageRow",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "seed",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "page",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_seed_pages",
+      "sql": "sql/read_seed_pages.sql",
+      "row": "StoredSeedPagesRow",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "seed",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "write_seed_page",
+      "sql": "sql/write_seed_page.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "seed",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "page",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "digest",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "payload",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "drop_seed_pages",
+      "sql": "sql/drop_seed_pages.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "erase_seed",
+      "sql": "sql/erase_seed.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "erase_seed_pages",
+      "sql": "sql/erase_seed_pages.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "erase_seed_attempts",
+      "sql": "sql/erase_seed_attempts.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "read_install",
+      "sql": "sql/read_install.sql",
+      "row": "InstallRow",
+      "result": "optional",
+      "parameters": []
+    },
+    {
+      "name": "write_install",
+      "sql": "sql/write_install.sql",
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "record",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_install_pages",
+      "sql": "sql/read_install_pages.sql",
+      "row": "InstallPageRow",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "write_install_page",
+      "sql": "sql/write_install_page.sql",
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "install_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "page",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "record",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_all_fences",
+      "sql": "sql/read_all_fences.sql",
+      "row": "StoredFenceCarryRow",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "erase_install",
+      "sql": "sql/erase_install.sql",
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "erase_install_pages",
+      "sql": "sql/erase_install_pages.sql",
+      "result": "execute",
+      "parameters": []
+    }
+  ]
+}

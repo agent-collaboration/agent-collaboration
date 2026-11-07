@@ -6,7 +6,8 @@ pub static RECEIVER_MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrat
 mod apply_follow_up;
 mod apply_rules;
 mod bound_sql;
-mod checked_queries;
+mod checked_copy_queries;
+mod checked_snapshot_queries;
 mod copy_contract;
 mod copy_failure;
 pub use copy_failure::{

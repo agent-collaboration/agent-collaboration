@@ -1,4 +1,5 @@
-use crate::checked_queries;
+use crate::checked_copy_queries;
+use crate::checked_snapshot_queries;
 use crate::{StoreError, copy_contract::CopyRecord};
 use durable_steps::storage::TransactionScope;
 use fleet_protocol::{Piece, PieceDigest, TransactionKey};
@@ -77,7 +78,7 @@ where
     for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
 {
     pub(crate) async fn load(&mut self) -> Result<Option<CopyRecord>, StoreError> {
-        let Some(row) = checked_queries::read_copy(self.0)
+        let Some(row) = checked_copy_queries::read_copy(self.0)
             .await
             .map_err(crate::sql_transport::sql_error)?
         else {
@@ -90,44 +91,44 @@ where
 
     pub(crate) async fn save(&mut self, copy: &CopyRecord) -> Result<(), StoreError> {
         copy.validate()?;
-        checked_queries::write_copy(self.0, encode_record(copy)?)
+        checked_copy_queries::write_copy(self.0, encode_record(copy)?)
             .await
             .map_err(crate::sql_transport::sql_error)?;
         Ok(())
     }
 
     pub(crate) async fn erase_records(&mut self) -> Result<(), StoreError> {
-        checked_queries::erase_receipts(self.0)
+        checked_copy_queries::erase_receipts(self.0)
             .await
             .map_err(crate::sql_transport::sql_error)?;
-        checked_queries::erase_staged_parts(self.0)
+        checked_copy_queries::erase_staged_parts(self.0)
             .await
             .map_err(crate::sql_transport::sql_error)?;
-        checked_queries::erase_fence_receipts(self.0)
+        checked_copy_queries::erase_fence_receipts(self.0)
             .await
             .map_err(crate::sql_transport::sql_error)?;
-        checked_queries::erase_schema_steps(self.0)
+        checked_copy_queries::erase_schema_steps(self.0)
             .await
             .map_err(crate::sql_transport::sql_error)?;
-        checked_queries::erase_seed(self.0)
+        checked_snapshot_queries::erase_seed(self.0)
             .await
             .map_err(crate::sql_transport::sql_error)?;
-        checked_queries::erase_seed_pages(self.0)
+        checked_snapshot_queries::erase_seed_pages(self.0)
             .await
             .map_err(crate::sql_transport::sql_error)?;
-        checked_queries::erase_seed_attempts(self.0)
+        checked_snapshot_queries::erase_seed_attempts(self.0)
             .await
             .map_err(crate::sql_transport::sql_error)?;
-        checked_queries::erase_creation(self.0)
+        checked_copy_queries::erase_creation(self.0)
             .await
             .map_err(crate::sql_transport::sql_error)?;
-        checked_queries::erase_copy_tables(self.0)
+        checked_copy_queries::erase_copy_tables(self.0)
             .await
             .map_err(crate::sql_transport::sql_error)?;
-        checked_queries::erase_install(self.0)
+        checked_snapshot_queries::erase_install(self.0)
             .await
             .map_err(crate::sql_transport::sql_error)?;
-        checked_queries::erase_install_pages(self.0)
+        checked_snapshot_queries::erase_install_pages(self.0)
             .await
             .map_err(crate::sql_transport::sql_error)?;
         Ok(())
@@ -136,7 +137,7 @@ where
     pub(crate) async fn creation(
         &mut self,
     ) -> Result<Option<fleet_protocol::CreateCopy>, StoreError> {
-        checked_queries::read_creation(self.0)
+        checked_copy_queries::read_creation(self.0)
             .await
             .map_err(crate::sql_transport::sql_error)?
             .map(|row| decode_record(row.request, "original copy creation"))
@@ -146,7 +147,7 @@ where
         &mut self,
         request: &fleet_protocol::CreateCopy,
     ) -> Result<(), StoreError> {
-        checked_queries::write_creation(self.0, encode_record(request)?)
+        checked_copy_queries::write_creation(self.0, encode_record(request)?)
             .await
             .map_err(crate::sql_transport::sql_error)
     }
@@ -155,7 +156,7 @@ where
         &mut self,
         piece: &Piece<A>,
     ) -> Result<Option<PieceDigest>, StoreError> {
-        let Some(row) = checked_queries::read_receipt(self.0, piece_identity(piece)?)
+        let Some(row) = checked_copy_queries::read_receipt(self.0, piece_identity(piece)?)
             .await
             .map_err(crate::sql_transport::sql_error)?
         else {
@@ -172,7 +173,7 @@ where
     }
 
     pub(crate) async fn save_receipt<A>(&mut self, piece: &Piece<A>) -> Result<(), StoreError> {
-        checked_queries::write_receipt(
+        checked_copy_queries::write_receipt(
             self.0,
             piece_identity(piece)?,
             piece.digest.as_str().to_owned(),
@@ -186,7 +187,7 @@ where
         &mut self,
         transaction: TransactionKey,
     ) -> Result<Vec<Piece<A>>, StoreError> {
-        let rows = checked_queries::read_parts(self.0, encode_record(&transaction)?)
+        let rows = checked_copy_queries::read_parts(self.0, encode_record(&transaction)?)
             .await
             .map_err(crate::sql_transport::sql_error)?;
         rows.into_iter()
@@ -225,7 +226,7 @@ where
         let part = piece.part.as_ref().ok_or_else(|| StoreError::Corrupt {
             field: "staged part".into(),
         })?;
-        checked_queries::write_part(
+        checked_copy_queries::write_part(
             self.0,
             encode_record(&part.transaction)?,
             part.index.to_string(),
@@ -241,7 +242,7 @@ where
         &mut self,
         transaction: TransactionKey,
     ) -> Result<(), StoreError> {
-        checked_queries::drop_parts(self.0, encode_record(&transaction)?)
+        checked_copy_queries::drop_parts(self.0, encode_record(&transaction)?)
             .await
             .map_err(crate::sql_transport::sql_error)?;
         Ok(())
@@ -252,7 +253,7 @@ where
         request: &fleet_protocol::FenceRequest,
     ) -> Result<Option<fleet_protocol::FenceResult>, crate::ReceiverError> {
         let Some(row) =
-            checked_queries::read_fence_receipt(self.0, encode_record(&request.transfer_id)?)
+            checked_copy_queries::read_fence_receipt(self.0, encode_record(&request.transfer_id)?)
                 .await
                 .map_err(crate::sql_transport::sql_error)?
         else {
@@ -280,7 +281,7 @@ where
             });
         };
         let saved_request = encode_record(request)?;
-        checked_queries::write_fence_receipt(
+        checked_copy_queries::write_fence_receipt(
             self.0,
             encode_record(&request.transfer_id)?,
             saved_request,
@@ -303,7 +304,7 @@ where
         )>,
         StoreError,
     > {
-        let Some(row) = checked_queries::read_epoch_fence(self.0, epoch.value().to_string())
+        let Some(row) = checked_copy_queries::read_epoch_fence(self.0, epoch.value().to_string())
             .await
             .map_err(crate::sql_transport::sql_error)?
         else {

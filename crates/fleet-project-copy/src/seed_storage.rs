@@ -1,4 +1,4 @@
-use crate::checked_queries;
+use crate::checked_snapshot_queries;
 use crate::{
     StoreError,
     copy_storage::{decode_record, encode_record},
@@ -40,7 +40,7 @@ where
         &mut self,
         database: DatabaseId,
     ) -> Result<Option<SeedRecord>, StoreError> {
-        let Some(row) = checked_queries::read_seed(self.0)
+        let Some(row) = checked_snapshot_queries::read_seed(self.0)
             .await
             .map_err(crate::sql_transport::sql_error)?
         else {
@@ -65,7 +65,7 @@ where
         Ok(Some(record))
     }
     pub(crate) async fn save(&mut self, record: &SeedRecord) -> Result<(), StoreError> {
-        checked_queries::write_seed(self.0, encode_record(record)?)
+        checked_snapshot_queries::write_seed(self.0, encode_record(record)?)
             .await
             .map_err(crate::sql_transport::sql_error)
     }
@@ -73,7 +73,7 @@ where
         &mut self,
         attempt: SeedAttemptId,
     ) -> Result<Option<SeedId>, StoreError> {
-        checked_queries::read_seed_attempt(self.0, attempt.to_string())
+        checked_snapshot_queries::read_seed_attempt(self.0, attempt.to_string())
             .await
             .map_err(crate::sql_transport::sql_error)?
             .map(|row| decode_record(row.record, "seed attempt"))
@@ -84,7 +84,7 @@ where
         attempt: SeedAttemptId,
         seed: SeedId,
     ) -> Result<(), StoreError> {
-        checked_queries::write_seed_attempt(
+        checked_snapshot_queries::write_seed_attempt(
             self.0,
             attempt.to_string(),
             encode_record(&seed)?,
@@ -93,7 +93,7 @@ where
         .map_err(crate::sql_transport::sql_error)
     }
     pub(crate) async fn page(&mut self, page: &SeedPage) -> Result<Option<SeedPage>, StoreError> {
-        let Some(row) = checked_queries::read_seed_page(
+        let Some(row) = checked_snapshot_queries::read_seed_page(
             self.0,
             page.seed.generation.to_string(),
             page.page.to_string(),
@@ -124,7 +124,7 @@ where
         Ok(page)
     }
     pub(crate) async fn pages(&mut self, seed: SeedId) -> Result<Vec<SeedPage>, StoreError> {
-        checked_queries::read_seed_pages(self.0, seed.generation.to_string())
+        checked_snapshot_queries::read_seed_pages(self.0, seed.generation.to_string())
             .await
             .map_err(crate::sql_transport::sql_error)?
             .into_iter()
@@ -149,7 +149,7 @@ where
         if !fleet_protocol::unit_budget::encoded_seed_page_fits_unit_limit(page, &payload) {
             return Ok(SeedPageWrite::UnitTooLarge);
         }
-        checked_queries::write_seed_page(
+        checked_snapshot_queries::write_seed_page(
             self.0,
             page.seed.generation.to_string(),
             page.page.to_string(),
@@ -161,7 +161,7 @@ where
         Ok(SeedPageWrite::Staged)
     }
     pub(crate) async fn drop_pages(&mut self) -> Result<(), StoreError> {
-        checked_queries::drop_seed_pages(self.0)
+        checked_snapshot_queries::drop_seed_pages(self.0)
             .await
             .map_err(crate::sql_transport::sql_error)
     }

@@ -1,4 +1,4 @@
-use crate::checked_queries;
+use crate::checked_copy_queries;
 use crate::{
     ApplyFailure, ReceiverError, StoreError, copy_storage::encode_record,
     row_apply::plan_row_change, schema_reads::SchemaReads,
@@ -73,7 +73,7 @@ where
                         version: *migration_version,
                         statements: statements.clone(),
                     };
-                    checked_queries::write_schema_step(
+                    checked_copy_queries::write_schema_step(
                         self.0,
                         migration_version.to_string(),
                         encode_record(&record)?,

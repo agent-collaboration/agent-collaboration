@@ -1,5 +1,5 @@
 //! Compare receiver bookkeeping with its own migration corpus, without migrating.
-use crate::checked_queries;
+use crate::checked_copy_queries;
 use crate::{StoreError, schema_reads::required_text};
 use durable_steps::storage::TransactionScope;
 use sqlx_core::{
@@ -69,7 +69,7 @@ where
 {
     let expected = declared_tables()?;
     let mut present = BTreeSet::new();
-    for row in checked_queries::read_inspection_corpus(scope)
+    for row in checked_copy_queries::read_inspection_corpus(scope)
         .await
         .map_err(crate::sql_transport::sql_error)?
     {

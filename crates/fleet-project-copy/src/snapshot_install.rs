@@ -1,4 +1,4 @@
-use crate::checked_queries;
+use crate::checked_copy_queries;
 use crate::{
     CopyStatus, InstallPageReceipt, ReceiverError, ReceiverRules, SnapshotInstall,
     SnapshotInstallError, SnapshotInstallState, SnapshotReady, StoreError,
@@ -168,7 +168,7 @@ where
                     version: install.schema.version,
                     statements: page.schema_steps.clone(),
                 };
-                checked_queries::write_schema_step(
+                checked_copy_queries::write_schema_step(
                     self.0,
                     install.schema.version.to_string(),
                     encode_record(&record)?,

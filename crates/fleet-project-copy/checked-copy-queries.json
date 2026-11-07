@@ -2,8 +2,8 @@
   "migrations": [
     "migrations"
   ],
-  "output": "src/checked_queries.rs",
-  "metadata": "checked-query-metadata.json",
+  "output": "src/checked_copy_queries.rs",
+  "metadata": "checked-copy-query-metadata.json",
   "queries": [
     {
       "name": "read_copy",
@@ -202,123 +202,6 @@
       "parameters": []
     },
     {
-      "name": "read_seed",
-      "sql": "sql/read_seed.sql",
-      "row": "StoredSeedRow",
-      "result": "optional",
-      "parameters": []
-    },
-    {
-      "name": "write_seed",
-      "sql": "sql/write_seed.sql",
-      "row": null,
-      "result": "execute",
-      "parameters": [
-        {
-          "name": "record",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "read_seed_attempt",
-      "sql": "sql/read_seed_attempt.sql",
-      "row": "StoredSeedAttemptRow",
-      "result": "optional",
-      "parameters": [
-        {
-          "name": "attempt",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "write_seed_attempt",
-      "sql": "sql/write_seed_attempt.sql",
-      "row": null,
-      "result": "execute",
-      "parameters": [
-        {
-          "name": "attempt",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "record",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "read_seed_page",
-      "sql": "sql/read_seed_page.sql",
-      "row": "StoredSeedPageRow",
-      "result": "optional",
-      "parameters": [
-        {
-          "name": "seed",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "page",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "read_seed_pages",
-      "sql": "sql/read_seed_pages.sql",
-      "row": "StoredSeedPagesRow",
-      "result": "many",
-      "parameters": [
-        {
-          "name": "seed",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "write_seed_page",
-      "sql": "sql/write_seed_page.sql",
-      "row": null,
-      "result": "execute",
-      "parameters": [
-        {
-          "name": "seed",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "page",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "digest",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "payload",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "drop_seed_pages",
-      "sql": "sql/drop_seed_pages.sql",
-      "row": null,
-      "result": "execute",
-      "parameters": []
-    },
-    {
       "name": "read_creation",
       "sql": "sql/read_creation.sql",
       "row": "StoredCreationRow",
@@ -341,15 +224,15 @@
     {
       "name": "read_copy_tables",
       "sql": "sql/read_copy_tables.sql",
-      "result": "many",
       "row": "StoredCopyTableRow",
+      "result": "many",
       "parameters": []
     },
     {
       "name": "write_copy_table",
       "sql": "sql/write_copy_table.sql",
-      "result": "execute",
       "row": null,
+      "result": "execute",
       "parameters": [
         {
           "name": "name",
@@ -361,8 +244,8 @@
     {
       "name": "drop_copy_table",
       "sql": "sql/drop_copy_table.sql",
-      "result": "execute",
       "row": null,
+      "result": "execute",
       "parameters": [
         {
           "name": "name",
@@ -374,15 +257,15 @@
     {
       "name": "read_hook_migrations",
       "sql": "sql/read_hook_migrations.sql",
-      "result": "many",
       "row": "StoredHookMigrationRow",
+      "result": "many",
       "parameters": []
     },
     {
       "name": "write_hook_migration",
       "sql": "sql/write_hook_migration.sql",
-      "result": "execute",
       "row": null,
+      "result": "execute",
       "parameters": [
         {
           "name": "version",
@@ -399,8 +282,8 @@
     {
       "name": "schema_object_exists",
       "sql": "sql/schema_object_exists.sql",
-      "result": "exists",
       "row": null,
+      "result": "exists",
       "parameters": [
         {
           "name": "name",
@@ -412,71 +295,50 @@
     {
       "name": "erase_receipts",
       "sql": "sql/erase_receipts.sql",
-      "result": "execute",
       "row": null,
+      "result": "execute",
       "parameters": []
     },
     {
       "name": "erase_staged_parts",
       "sql": "sql/erase_staged_parts.sql",
-      "result": "execute",
       "row": null,
+      "result": "execute",
       "parameters": []
     },
     {
       "name": "erase_fence_receipts",
       "sql": "sql/erase_fence_receipts.sql",
-      "result": "execute",
       "row": null,
+      "result": "execute",
       "parameters": []
     },
     {
       "name": "erase_schema_steps",
       "sql": "sql/erase_schema_steps.sql",
-      "result": "execute",
       "row": null,
-      "parameters": []
-    },
-    {
-      "name": "erase_seed",
-      "sql": "sql/erase_seed.sql",
       "result": "execute",
-      "row": null,
-      "parameters": []
-    },
-    {
-      "name": "erase_seed_pages",
-      "sql": "sql/erase_seed_pages.sql",
-      "result": "execute",
-      "row": null,
-      "parameters": []
-    },
-    {
-      "name": "erase_seed_attempts",
-      "sql": "sql/erase_seed_attempts.sql",
-      "result": "execute",
-      "row": null,
       "parameters": []
     },
     {
       "name": "erase_creation",
       "sql": "sql/erase_creation.sql",
-      "result": "execute",
       "row": null,
+      "result": "execute",
       "parameters": []
     },
     {
       "name": "erase_copy_tables",
       "sql": "sql/erase_copy_tables.sql",
-      "result": "execute",
       "row": null,
+      "result": "execute",
       "parameters": []
     },
     {
       "name": "read_schema_owner",
       "sql": "sql/read_schema_owner.sql",
-      "result": "optional",
       "row": "StoredSchemaOwnerRow",
+      "result": "optional",
       "parameters": [
         {
           "name": "name",
@@ -484,73 +346,6 @@
           "nullable": false
         }
       ]
-    },
-    {
-      "name": "read_install",
-      "sql": "sql/read_install.sql",
-      "row": "InstallRow",
-      "result": "optional",
-      "parameters": []
-    },
-    {
-      "name": "write_install",
-      "sql": "sql/write_install.sql",
-      "result": "execute",
-      "parameters": [
-        {
-          "name": "record",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "read_install_pages",
-      "sql": "sql/read_install_pages.sql",
-      "row": "InstallPageRow",
-      "result": "many",
-      "parameters": []
-    },
-    {
-      "name": "write_install_page",
-      "sql": "sql/write_install_page.sql",
-      "result": "execute",
-      "parameters": [
-        {
-          "name": "install_id",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "page",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "record",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "read_all_fences",
-      "sql": "sql/read_all_fences.sql",
-      "row": "StoredFenceCarryRow",
-      "result": "many",
-      "parameters": []
-    },
-    {
-      "name": "erase_install",
-      "sql": "sql/erase_install.sql",
-      "result": "execute",
-      "parameters": []
-    },
-    {
-      "name": "erase_install_pages",
-      "sql": "sql/erase_install_pages.sql",
-      "result": "execute",
-      "parameters": []
     },
     {
       "name": "read_inspection_corpus",

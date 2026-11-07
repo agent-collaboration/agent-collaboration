@@ -1,4 +1,5 @@
-use crate::checked_queries;
+use crate::checked_copy_queries;
+use crate::checked_snapshot_queries;
 use crate::{
     SnapshotInstall, SnapshotInstallError, SnapshotInstallRules, StoreError,
     copy_contract::CopyRecord,
@@ -57,7 +58,7 @@ where
         }
         let creation = CopyStorage(self.0).creation().await?;
         let mut receipts = Vec::new();
-        for row in checked_queries::read_all_fences(self.0).await? {
+        for row in checked_snapshot_queries::read_all_fences(self.0).await? {
             let request: FenceRequest = decode_record(row.request, "carried fence request")?;
             let old_epoch = row
                 .old_epoch
@@ -142,13 +143,13 @@ where
                 status.holder = old.status.holder;
                 status.start = old.status.start;
             }
-            checked_queries::erase_fence_receipts(self.0).await?;
+            checked_copy_queries::erase_fence_receipts(self.0).await?;
             for receipt in &old.receipts {
                 CopyStorage(self.0)
                     .save_fence(&receipt.request, receipt.old_holder, &receipt.result)
                     .await?;
             }
-            checked_queries::erase_creation(self.0).await?;
+            checked_copy_queries::erase_creation(self.0).await?;
             if let Some(creation) = &old.creation {
                 if creation.database != install.database {
                     return Err(SnapshotInstallError::IdentityConflict);

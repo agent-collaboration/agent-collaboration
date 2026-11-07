@@ -1,5 +1,5 @@
 //! Initialize consumer-local tables without admitting them to replication.
-use crate::checked_queries;
+use crate::checked_copy_queries;
 use crate::{
     ReceiverError, ReceiverRules, StoreError,
     schema_membership::{SchemaMembership, invalid_schema, statements},
@@ -28,7 +28,7 @@ where
 {
     async move {
         let migrations = hook.local_migrations();
-        let applied = checked_queries::read_hook_migrations(scope)
+        let applied = checked_copy_queries::read_hook_migrations(scope)
             .await
             .map_err(crate::sql_transport::sql_error)?
             .into_iter()
@@ -168,7 +168,7 @@ where
                     .await
                     .map_err(crate::sql_transport::sql_error)?;
             }
-            checked_queries::write_hook_migration(
+            checked_copy_queries::write_hook_migration(
                 scope,
                 migration.version.to_string(),
                 checksum(migration)?,

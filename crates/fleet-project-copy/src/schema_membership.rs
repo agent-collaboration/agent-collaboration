@@ -1,5 +1,5 @@
 //! Keep schema ownership in the same transaction as each replicated migration.
-use crate::checked_queries;
+use crate::checked_copy_queries;
 use crate::{ReceiverError, StoreError};
 use durable_steps::storage::TransactionScope;
 use sqlx_core::{
@@ -52,7 +52,7 @@ where
     for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
 {
     pub(crate) async fn names(&mut self) -> Result<BTreeSet<String>, ReceiverError> {
-        checked_queries::read_copy_tables(self.0)
+        checked_copy_queries::read_copy_tables(self.0)
             .await
             .map_err(crate::sql_transport::sql_error)?
             .into_iter()
@@ -79,7 +79,7 @@ where
         &mut self,
         name: &str,
     ) -> Result<Option<String>, ReceiverError> {
-        checked_queries::read_schema_owner(self.0, name.to_owned())
+        checked_copy_queries::read_schema_owner(self.0, name.to_owned())
             .await
             .map_err(crate::sql_transport::sql_error)?
             .map(|row| {
@@ -195,13 +195,13 @@ where
                 .await
                 .map_err(crate::sql_transport::sql_error)?;
             if let Some(target) = remove {
-                checked_queries::drop_copy_table(self.0, target.clone())
+                checked_copy_queries::drop_copy_table(self.0, target.clone())
                     .await
                     .map_err(crate::sql_transport::sql_error)?;
                 members.remove(&target);
             }
             if let Some(target) = add {
-                checked_queries::write_copy_table(self.0, target.clone())
+                checked_copy_queries::write_copy_table(self.0, target.clone())
                     .await
                     .map_err(crate::sql_transport::sql_error)?;
                 members.insert(target);
@@ -232,7 +232,7 @@ where
         target: &str,
     ) -> Result<(), ReceiverError> {
         if !members.contains(target)
-            && checked_queries::schema_object_exists(self.0, target.to_owned())
+            && checked_copy_queries::schema_object_exists(self.0, target.to_owned())
                 .await
                 .map_err(crate::sql_transport::sql_error)?
         {

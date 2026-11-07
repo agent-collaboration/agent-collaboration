@@ -1,4 +1,4 @@
-use crate::checked_queries;
+use crate::checked_snapshot_queries;
 use crate::{
     InstallPageReceipt, SnapshotInstall, SnapshotInstallError, StoreError,
     copy_storage::{decode_record, encode_record},
@@ -35,7 +35,7 @@ where
             .ok_or(SnapshotInstallError::NotPrepared)
     }
     pub async fn optional(&mut self) -> Result<Option<InstallMarker>, SnapshotInstallError> {
-        let Some(row) = checked_queries::read_install(self.0).await? else {
+        let Some(row) = checked_snapshot_queries::read_install(self.0).await? else {
             return Ok(None);
         };
         let marker: InstallMarker = decode_record(row.record, "snapshot install marker")?;
@@ -58,7 +58,7 @@ where
         Ok(Some(marker))
     }
     pub async fn save(&mut self, marker: &InstallMarker) -> Result<(), SnapshotInstallError> {
-        checked_queries::write_install(self.0, encode_record(marker)?).await?;
+        checked_snapshot_queries::write_install(self.0, encode_record(marker)?).await?;
         Ok(())
     }
     pub async fn pages(
@@ -66,7 +66,7 @@ where
         id: fleet_protocol::InstallId,
     ) -> Result<Vec<InstallPageReceipt>, SnapshotInstallError> {
         let mut receipts = Vec::new();
-        for row in checked_queries::read_install_pages(self.0).await? {
+        for row in checked_snapshot_queries::read_install_pages(self.0).await? {
             let receipt: InstallPageReceipt = decode_record(row.record, "snapshot page receipt")?;
             if row.install_id.as_deref() != Some(id.to_string().as_str())
                 || receipt.install_id != id
@@ -85,7 +85,7 @@ where
         &mut self,
         receipt: &InstallPageReceipt,
     ) -> Result<(), SnapshotInstallError> {
-        checked_queries::write_install_page(
+        checked_snapshot_queries::write_install_page(
             self.0,
             receipt.install_id.to_string(),
             receipt.page.to_string(),

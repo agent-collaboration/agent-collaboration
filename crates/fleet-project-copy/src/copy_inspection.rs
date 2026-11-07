@@ -1,5 +1,5 @@
 //! Read-only operations facts. This projection does not decide whether a copy is readable.
-use crate::checked_queries;
+use crate::checked_copy_queries;
 use crate::{
     ReceiverError, StoreError,
     copy_contract::CopyRecord,
@@ -60,7 +60,7 @@ pub enum CopyInspection {
 }
 
 fn staged_transactions(
-    rows: Vec<checked_queries::InspectionPartRow>,
+    rows: Vec<checked_copy_queries::InspectionPartRow>,
 ) -> Result<Vec<StagedTransaction>, StoreError> {
     let mut transactions: BTreeMap<TransactionKey, BTreeMap<u32, SyncTime>> = BTreeMap::new();
     for row in rows {
@@ -137,7 +137,7 @@ where
                 CopyRecord::Following(status) => (CopyStage::Following, status),
             };
             let fingerprint = SchemaReads(scope).fingerprint().await?;
-            let rows = checked_queries::read_inspection_parts(scope)
+            let rows = checked_copy_queries::read_inspection_parts(scope)
                 .await
                 .map_err(crate::sql_transport::sql_error)?;
             Ok(CopyInspection::Live {
