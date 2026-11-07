@@ -3,7 +3,7 @@
 //! one transaction; every value is compared; the database file is removed, then its side
 //! files; then the source is recorded `removed`. A rerun continues from the ledger.
 use crate::{
-    router_update::{RootLayout, RouterUpdateError, exists, legacy_source_path},
+    root_layout::{RootLayout, RouterUpdateError, exists, legacy_source_path},
     update_barrier::{UpdateBarrier, wait_at},
 };
 use message_board_storage::{

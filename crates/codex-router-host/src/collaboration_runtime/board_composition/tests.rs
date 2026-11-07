@@ -604,7 +604,7 @@ async fn assert_native_registration_refusal(cleanup_first: bool) -> TestResult {
     // refresh cannot make this error assertion pass through coalescing.
     let refresh = FleetClient::new(
         message_board_storage::FleetStore::open(
-            &(&root).join(message_board_storage::FleetStore::FILE_NAME),
+            &root.join(message_board_storage::FleetStore::FILE_NAME),
         )
         .await?,
         projects.clone(),

@@ -52,7 +52,9 @@ impl ProjectNotificationFixture {
             MailHarness::open_configured(base, None, false, true, None, Some(central)).await?;
         let fleet = Arc::new(FleetClient::new(
             message_board_storage::FleetStore::open(
-                &(&harness.root).join(message_board_storage::FleetStore::FILE_NAME),
+                &harness
+                    .root
+                    .join(message_board_storage::FleetStore::FILE_NAME),
             )
             .await?,
             harness.projects.clone(),

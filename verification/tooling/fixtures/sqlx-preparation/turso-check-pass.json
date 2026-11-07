@@ -22,12 +22,7 @@
         }
       },
       {
-        "command": [
-          "cargo",
-          "clean",
-          "--package",
-          "path+file://<root>/crates/agent-router-update"
-        ],
+        "command": ["cargo", "clean", "--package", "path+file://<root>/crates/agent-router-update"],
         "environment": {
           "SQLX_OFFLINE": "true"
         }

@@ -16,8 +16,7 @@ pub(crate) fn registry(root: &Path) -> Result<Arc<ProjectStoreRegistry>, Fixture
         root,
         Some(peer),
         Arc::new(runtime_primitives::SystemClock),
-        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
-            .expect("32-byte fixture cursor key"),
+        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])?,
     )))
 }
 

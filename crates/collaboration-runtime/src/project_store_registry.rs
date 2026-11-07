@@ -210,6 +210,10 @@ impl ProjectStoreRegistry {
         self.activity.subscribe()
     }
 
+    #[expect(
+        clippy::unused_async,
+        reason = "The key is installed at start-up now, but board paging awaits this across a dozen async readers; keeping it async avoids rewriting their signatures in this change."
+    )]
     pub async fn cursor_key(
         &self,
     ) -> Result<&message_board_storage::CursorSigningKey, ProjectRegistryError> {

@@ -20,10 +20,10 @@ mod ledger_step;
 mod merge_step;
 mod project_transform;
 mod rename_step;
+mod root_layout;
 mod router_update;
-pub use router_update::{
-    PendingUpdateStep, PlannedChange, RouterUpdateError, plan_router_update, run_router_update,
-};
+pub use root_layout::RouterUpdateError;
+pub use router_update::{PendingUpdateStep, PlannedChange, plan_router_update, run_router_update};
 mod update_barrier;
 mod upgrade_prepare;
 mod upgrade_report;

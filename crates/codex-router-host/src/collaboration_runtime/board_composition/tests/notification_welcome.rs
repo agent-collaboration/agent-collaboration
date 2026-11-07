@@ -28,7 +28,9 @@ async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_
             .await?;
     let fleet = Arc::new(FleetClient::new(
         message_board_storage::FleetStore::open(
-            &(&harness.root).join(message_board_storage::FleetStore::FILE_NAME),
+            &harness
+                .root
+                .join(message_board_storage::FleetStore::FILE_NAME),
         )
         .await?,
         harness.projects.clone(),

@@ -28,10 +28,6 @@ const OLDER_STORE_FILES: [&str; 6] = [
 ];
 
 /// The fixture's values, checked against the builder's literals before any update.
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Fixture literal checks fail the test; read errors propagate through Result."
-)]
 async fn fixture_values(root: &Path) -> UpdateResult<FleetValues> {
     let values = FleetValues::read_legacy(root).await?;
     let request_ids: Vec<&str> = values.requests.iter().map(|row| row.0.as_str()).collect();
@@ -46,9 +42,15 @@ async fn fixture_values(root: &Path) -> UpdateResult<FleetValues> {
         .ok_or("decided request")?;
     assert_eq!(decided.4, Some(DECIDED_AT_MS));
     assert_eq!(values.creation_inputs.len(), 1);
-    assert_eq!(values.creation_inputs[0].0, CREATION_REQUEST);
+    assert_eq!(
+        values.creation_inputs.first().map(|row| row.0.as_str()),
+        Some(CREATION_REQUEST)
+    );
     assert_eq!(values.cursor_keys.len(), 1);
-    assert_eq!(values.cursor_keys[0].1, CURSOR_KEY_BYTES);
+    assert_eq!(
+        values.cursor_keys.first().map(|row| row.1.as_slice()),
+        Some(CURSOR_KEY_BYTES.as_slice())
+    );
     let workspaces: Vec<&str> = values
         .cached_records
         .iter()
@@ -60,10 +62,6 @@ async fn fixture_values(root: &Path) -> UpdateResult<FleetValues> {
 }
 
 /// After a finished update: the values, the ledger, the guard and the root listing.
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions fail the test; read errors propagate through Result."
-)]
 async fn assert_update_finished(
     root: &Path,
     expected: &FleetValues,

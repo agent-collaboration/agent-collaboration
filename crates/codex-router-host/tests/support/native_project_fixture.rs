@@ -32,7 +32,7 @@ pub fn registry(directory: &Path) -> io::Result<Arc<ProjectStoreRegistry>> {
         Some(collaboration_runtime::load_installation_peer(directory)?),
         Arc::new(SystemClock),
         message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
-            .expect("32-byte fixture cursor key"),
+            .map_err(std::io::Error::other)?,
     )))
 }
 

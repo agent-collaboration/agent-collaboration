@@ -158,7 +158,7 @@ pub(crate) async fn carry_legacy_rows(
             creation_inputs,
         } => {
             for row in requests {
-                match fleet_outbox_request(&mut **transaction, &row.request_id).await? {
+                match fleet_outbox_request(transaction, &row.request_id).await? {
                     Some(existing) if existing == *row => {}
                     Some(_) => return Err(conflict("fleet_outbox_requests")),
                     None => {
@@ -174,7 +174,7 @@ pub(crate) async fn carry_legacy_rows(
                 }
             }
             for row in creation_inputs {
-                match fleet_creation_input(&mut **transaction, &row.request_id).await? {
+                match fleet_creation_input(transaction, &row.request_id).await? {
                     Some(existing) if existing == *row => {}
                     Some(_) => return Err(conflict("fleet_project_creation_inputs")),
                     None => {
@@ -190,7 +190,7 @@ pub(crate) async fn carry_legacy_rows(
         }
         LegacyRows::CursorKey { keys } => {
             for row in keys {
-                match fleet_cursor_key(&mut **transaction, &row.key_id).await? {
+                match fleet_cursor_key(transaction, &row.key_id).await? {
                     Some(existing) if existing == *row => {}
                     Some(_) => return Err(conflict("fleet_cursor_signing_key")),
                     None => {
@@ -221,7 +221,7 @@ pub(crate) async fn verify_legacy_rows_carried(
             creation_inputs,
         } => {
             for row in requests {
-                if fleet_outbox_request(&mut *connection, &row.request_id)
+                if fleet_outbox_request(&mut connection, &row.request_id)
                     .await?
                     .as_ref()
                     != Some(row)
@@ -230,7 +230,7 @@ pub(crate) async fn verify_legacy_rows_carried(
                 }
             }
             for row in creation_inputs {
-                if fleet_creation_input(&mut *connection, &row.request_id)
+                if fleet_creation_input(&mut connection, &row.request_id)
                     .await?
                     .as_ref()
                     != Some(row)
@@ -241,7 +241,7 @@ pub(crate) async fn verify_legacy_rows_carried(
         }
         LegacyRows::CursorKey { keys } => {
             for row in keys {
-                if fleet_cursor_key(&mut *connection, &row.key_id)
+                if fleet_cursor_key(&mut connection, &row.key_id)
                     .await?
                     .as_ref()
                     != Some(row)

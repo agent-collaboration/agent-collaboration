@@ -4,7 +4,7 @@
 //! new name doesn't own. A rerun that finds the new name only records the step done.
 use crate::{
     merge_step::side_file,
-    router_update::{RootLayout, RouterUpdateError, exists},
+    root_layout::{RootLayout, RouterUpdateError, exists},
     update_barrier::{UpdateBarrier, wait_at},
 };
 use codex_router_host::router_fleet_database;

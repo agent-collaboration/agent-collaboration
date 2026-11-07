@@ -29,10 +29,6 @@ async fn large_snapshot(live: &mut Live) -> TestResult {
     Ok(())
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions must fail this test while fixture errors propagate through Result."
-)]
 #[tokio::test]
 async fn router_rebuild_keeps_the_old_view_until_older_then_newer_catchup_finishes() -> TestResult {
     // Wrong behavior: publishing snapshot or older replay pages before catch-up.

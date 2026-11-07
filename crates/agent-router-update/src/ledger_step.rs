@@ -1,7 +1,7 @@
 //! Step 0001: the Fleet database gains the update ledger before anything moves. Every
 //! later step reads and writes this ledger, which stays in the file it describes.
 use crate::{
-    router_update::RouterUpdateError,
+    root_layout::RouterUpdateError,
     update_barrier::{UpdateBarrier, wait_at},
 };
 use message_board_storage::{RouterUpdateStep, UpdateLedger, UpdateStepProgress};
