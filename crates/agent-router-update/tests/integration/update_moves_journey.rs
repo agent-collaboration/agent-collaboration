@@ -28,7 +28,7 @@ const OLDER_STORE_FILES: [&str; 6] = [
 ];
 
 /// The fixture's values, checked against the builder's literals before any update.
-async fn fixture_values(root: &Path) -> UpdateResult<FleetValues> {
+pub async fn fixture_values(root: &Path) -> UpdateResult<FleetValues> {
     let values = FleetValues::read_legacy(root).await?;
     let request_ids: Vec<&str> = values.requests.iter().map(|row| row.0.as_str()).collect();
     assert_eq!(
@@ -62,7 +62,7 @@ async fn fixture_values(root: &Path) -> UpdateResult<FleetValues> {
 }
 
 /// After a finished update: the values, the ledger, the guard and the root listing.
-async fn assert_update_finished(
+pub async fn assert_update_finished(
     root: &Path,
     expected: &FleetValues,
     context: &str,

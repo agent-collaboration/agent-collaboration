@@ -28,7 +28,7 @@ impl CursorSigningKey {
     }
 }
 
-struct CursorSigningKeyId(String);
+pub(crate) struct CursorSigningKeyId(String);
 
 impl CursorSigningKeyId {
     fn generate() -> Self {

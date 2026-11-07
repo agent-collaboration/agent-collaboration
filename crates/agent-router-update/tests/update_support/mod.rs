@@ -342,3 +342,22 @@ where
         tokio::io::AsyncWriteExt::write_all(reader.get_mut(), &[1]).await?;
     }
 }
+
+/// Runs one statement against an older store in place, through a writable connection,
+/// to give a well-formed store a value its owning decoder must refuse.
+pub async fn write_legacy_value(path: &Path, statement: &str) -> UpdateResult {
+    use sqlx::ConnectOptions;
+    let mut connection = sqlx_turso::TursoConnectOptions::new()
+        .filename(path)
+        .connect()
+        .await?;
+    let changed = sqlx::query::<sqlx_turso::Turso>(sqlx::AssertSqlSafe(statement.to_owned()))
+        .execute(&mut connection)
+        .await?
+        .rows_affected();
+    sqlx::Connection::close(connection).await?;
+    if changed != 1 {
+        return Err(format!("{statement} changed {changed} rows, not one").into());
+    }
+    Ok(())
+}

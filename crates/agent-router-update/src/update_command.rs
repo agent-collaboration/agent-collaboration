@@ -1,7 +1,7 @@
 //! `agent-router-update`: run a Router root's pending one-time steps, list them with
 //! `--dry-run`, or import a legacy board with `board-import`.
 use crate::import_command::ImportCommand;
-use agent_router_update::{PendingUpdateStep, plan_router_update, run_router_update};
+use agent_router_update::{RouterUpdatePlan, plan_router_update, run_router_update};
 use clap::{Parser, Subcommand};
 use std::{io::Write, path::PathBuf};
 
@@ -46,8 +46,8 @@ impl RouterUpdateCommand {
             run_router_update(&root).await
         };
         match result {
-            Ok(steps) => {
-                write_steps(&mut stdout, &root, &steps, self.dry_run)?;
+            Ok(plan) => {
+                write_plan(&mut stdout, &root, &plan, self.dry_run)?;
                 Ok(true)
             }
             Err(error) => {
@@ -58,17 +58,24 @@ impl RouterUpdateCommand {
     }
 }
 
-fn write_steps(
+fn write_plan(
     output: &mut impl Write,
     root: &std::path::Path,
-    steps: &[PendingUpdateStep],
+    plan: &RouterUpdatePlan,
     dry_run: bool,
 ) -> std::io::Result<()> {
-    if steps.is_empty() {
+    if plan.is_empty() {
         return writeln!(output, "{} needs no update", root.display());
     }
     let verb = if dry_run { "pending" } else { "done" };
-    for step in steps {
+    for stale in &plan.stale_sources {
+        writeln!(
+            output,
+            "{verb} stale store: remove {} unread; its rows were already moved",
+            stale.display()
+        )?;
+    }
+    for step in &plan.steps {
         writeln!(output, "{verb} {}: {}", step.step.label(), step.change)?;
     }
     if dry_run {

@@ -7,6 +7,7 @@ use sqlx::Row;
 use std::sync::Arc;
 
 mod creation_input;
+pub(crate) use creation_input::decode_input;
 #[cfg(test)]
 mod creation_tests;
 
@@ -294,7 +295,7 @@ fn decode_outbox_row(
     )
 }
 
-fn decode_entry(
+pub(crate) fn decode_entry(
     id: &str,
     hash: &str,
     request: &str,

@@ -10,8 +10,28 @@ use crate::{
 use codex_router_host::{
     HostCoordinationPaths, HostInstanceLock, InstanceAcquireError, router_fleet_database,
 };
-use message_board_storage::{LegacyFleetSource, RouterUpdateStep, StoredUpdateLedger};
+use message_board_storage::{
+    LegacyFleetSource, RouterUpdateStep, StoredUpdateLedger, UpdateSourceProgress,
+};
 use std::path::{Path, PathBuf};
+
+/// What an update would do to a root: its pending steps, in order, and the older stores
+/// that reappeared after step 0005 had already moved them.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct RouterUpdatePlan {
+    pub steps: Vec<PendingUpdateStep>,
+    /// Database files, with any log or shared-memory file beside them, removed unread:
+    /// their rows were carried and checked once already, so these copies hold nothing
+    /// the Fleet database lacks and are never merged a second time.
+    pub stale_sources: Vec<PathBuf>,
+}
+
+impl RouterUpdatePlan {
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.steps.is_empty() && self.stale_sources.is_empty()
+    }
+}
 
 /// One step the root still needs, and what running it would change.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -79,10 +99,10 @@ impl std::fmt::Display for PlannedChange {
     }
 }
 
-/// Lists the steps `root` still needs without taking its lock or changing anything.
-pub async fn plan_router_update(root: &Path) -> Result<Vec<PendingUpdateStep>, RouterUpdateError> {
+/// Lists what `root` still needs without taking its lock or changing anything.
+pub async fn plan_router_update(root: &Path) -> Result<RouterUpdatePlan, RouterUpdateError> {
     let layout = RootLayout::read(root).await?;
-    RouterUpdateStep::KNOWN
+    let steps = RouterUpdateStep::KNOWN
         .into_iter()
         .filter(|step| !layout.ledger.step_done(step.number()))
         .map(|step| {
@@ -91,12 +111,33 @@ pub async fn plan_router_update(root: &Path) -> Result<Vec<PendingUpdateStep>, R
                 step,
             })
         })
-        .collect()
+        .collect::<Result<_, RouterUpdateError>>()?;
+    Ok(RouterUpdatePlan {
+        steps,
+        stale_sources: stale_sources(root, &layout)?,
+    })
+}
+
+/// An older store is stale once step 0005 is done, or once the ledger records that
+/// store itself removed: either way its rows already moved and were checked.
+fn stale_sources(root: &Path, layout: &RootLayout) -> Result<Vec<PathBuf>, RouterUpdateError> {
+    let merge_done = layout
+        .ledger
+        .step_done(RouterUpdateStep::MergeFleetStores.number());
+    let mut stale = Vec::new();
+    for source in LegacyFleetSource::ALL {
+        let removed = layout.source_progress(source) == Some(UpdateSourceProgress::Removed);
+        let path = legacy_source_path(root, source);
+        if (merge_done || removed) && merge_step::any_store_file_present(&path)? {
+            stale.push(path);
+        }
+    }
+    Ok(stale)
 }
 
 /// Runs every pending step under the Host's own singleton lock, so no Host can start
 /// on the root while it changes.
-pub async fn run_router_update(root: &Path) -> Result<Vec<PendingUpdateStep>, RouterUpdateError> {
+pub async fn run_router_update(root: &Path) -> Result<RouterUpdatePlan, RouterUpdateError> {
     // A root the update refuses is left exactly as found, without even a lock file.
     plan_router_update(root).await?;
     let _host_lock = HostInstanceLock::acquire(&HostCoordinationPaths::for_router_root(root))
@@ -105,8 +146,11 @@ pub async fn run_router_update(root: &Path) -> Result<Vec<PendingUpdateStep>, Ro
             other => RouterUpdateError::HostLock(other),
         })?;
     // Planned again under the lock: no Host can change the root after this.
-    let pending = plan_router_update(root).await?;
-    for step in &pending {
+    let plan = plan_router_update(root).await?;
+    for stale in &plan.stale_sources {
+        merge_step::remove_stale_source(stale).await?;
+    }
+    for step in &plan.steps {
         match &step.change {
             PlannedChange::AddLedgerToStore { store } => {
                 ledger_step::create_ledger(root, store, LedgerStoreOpen::Existing).await?;
@@ -122,7 +166,7 @@ pub async fn run_router_update(root: &Path) -> Result<Vec<PendingUpdateStep>, Ro
             }
         }
     }
-    Ok(pending)
+    Ok(plan)
 }
 
 fn planned_change(

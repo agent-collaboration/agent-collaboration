@@ -115,7 +115,7 @@ impl FleetOutbox {
     }
 }
 
-fn decode_input(
+pub(crate) fn decode_input(
     encoded: &str,
     hash: &str,
     queued: &FleetOutboxEntry,

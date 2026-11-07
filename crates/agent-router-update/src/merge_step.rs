@@ -8,6 +8,7 @@ use crate::{
 };
 use message_board_storage::{
     LegacyFleetSource, RouterUpdateStep, UpdateLedger, UpdateSourceProgress, UpdateStepProgress,
+    check_legacy_source,
 };
 use std::{
     ffi::OsString,
@@ -23,6 +24,16 @@ pub(crate) async fn merge_fleet_stores(root: &Path) -> Result<(), RouterUpdateEr
             source,
         })?;
     let merged = async {
+        // Every store still to be carried is checked first, so an invalid row in either
+        // stops the step before any store is carried or removed.
+        for source in LegacyFleetSource::ALL {
+            let path = legacy_source_path(root, source);
+            if layout.source_progress(source).is_none() && exists(&path)? {
+                check_legacy_source(source, &path)
+                    .await
+                    .map_err(|error| source_error(&path, error))?;
+            }
+        }
         for source in LegacyFleetSource::ALL {
             let path = legacy_source_path(root, source);
             match (layout.source_progress(source), exists(&path)?) {
@@ -90,6 +101,33 @@ async fn finish_source_removal(
         .await
         .map_err(|error| source_error(path, error))?;
     barrier(UpdateBarrier::SourceRemoved(source)).await
+}
+
+/// Removes a stale older store and its side files without opening it, so nothing in it
+/// is read and the Fleet database is not touched.
+pub(crate) async fn remove_stale_source(path: &Path) -> Result<(), RouterUpdateError> {
+    for file in store_files(path) {
+        remove_if_present(&file).await?;
+    }
+    Ok(())
+}
+
+/// Whether the store's database file or either of its side files exists.
+pub(crate) fn any_store_file_present(path: &Path) -> Result<bool, RouterUpdateError> {
+    for file in store_files(path) {
+        if exists(&file)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn store_files(path: &Path) -> [PathBuf; 3] {
+    [
+        path.to_owned(),
+        side_file(path, "-wal"),
+        side_file(path, "-shm"),
+    ]
 }
 
 /// A store's write-ahead log or shared-memory file, named as SQLite and Turso name them.

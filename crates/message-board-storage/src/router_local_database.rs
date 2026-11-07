@@ -32,6 +32,16 @@ pub enum RouterLocalStorageError {
     /// After a merge, a legacy row is missing from the Fleet database or differs there.
     #[error("a legacy row in {table} is missing or different in the Fleet database")]
     LegacyRowNotCarried { table: &'static str },
+    /// A legacy store holds a row its owning decoder refuses; the update stops before
+    /// copying or removing anything. The row is named by its key, never its value.
+    #[error("{store} has an invalid row in {table} under key {key}: {reason}")]
+    InvalidLegacyRow {
+        store: &'static str,
+        table: &'static str,
+        key: String,
+        #[source]
+        reason: Box<RouterLocalStorageError>,
+    },
 }
 
 pub(crate) struct RouterLocalDatabase {
