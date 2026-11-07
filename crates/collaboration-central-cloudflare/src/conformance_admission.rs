@@ -5,6 +5,14 @@ use collaboration_central_core::{AccessCaller, ObjectAddress};
 use serde::Deserialize;
 use worker::{Env, Headers, Method, Request, RequestInit, Response, Result};
 
+#[cfg(feature = "conformance-faults")]
+#[derive(serde::Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum AttachmentFault {
+    Missing,
+    Invalid,
+}
+
 #[derive(Deserialize)]
 #[serde(
     tag = "kind",
@@ -50,9 +58,27 @@ enum Command {
         service: message_board::ServiceId,
         connection: fleet_sync_protocol::ConnectionId,
     },
+    #[cfg(feature = "conformance-faults")]
+    SessionAttachmentFault {
+        service: message_board::ServiceId,
+        connection: fleet_sync_protocol::ConnectionId,
+        fault: AttachmentFault,
+    },
     SessionAlarm {
         service: message_board::ServiceId,
         connection: fleet_sync_protocol::ConnectionId,
+    },
+    #[cfg(feature = "conformance-faults")]
+    SeedSessionAlarm {
+        service: message_board::ServiceId,
+        now: collaboration_central_core::RegistryTime,
+        at: collaboration_central_core::RegistryTime,
+    },
+    #[cfg(feature = "conformance-faults")]
+    SessionWake {
+        service: message_board::ServiceId,
+        connection: fleet_sync_protocol::ConnectionId,
+        at: collaboration_central_core::RegistryTime,
     },
     SessionFault {
         service: message_board::ServiceId,
@@ -70,6 +96,26 @@ pub(crate) async fn fetch(mut request: Request, env: Env) -> Result<Response> {
 
 async fn forward_command(command: Command, env: Env) -> Result<Response> {
     let (address, path, body) = match command {
+        #[cfg(feature = "conformance-faults")]
+        Command::SeedSessionAlarm {
+            service: _service,
+            now,
+            at,
+        } => (
+            ObjectAddress::Fleet,
+            "/test/seed-session-alarm",
+            Some(serde_json::to_string(&(now, at))?),
+        ),
+        #[cfg(feature = "conformance-faults")]
+        Command::SessionWake {
+            service: _service,
+            connection,
+            at,
+        } => (
+            ObjectAddress::Fleet,
+            "/test/request-session-wake",
+            Some(serde_json::to_string(&(connection, at))?),
+        ),
         Command::FleetSchema => (ObjectAddress::Fleet, "/test/fleet-schema", None),
         #[cfg(feature = "conformance-faults")]
         Command::SessionBarrier {
@@ -120,6 +166,16 @@ async fn forward_command(command: Command, env: Env) -> Result<Response> {
             ObjectAddress::Fleet,
             "/test/session-attachment-codec",
             Some(serde_json::to_string(&connection)?),
+        ),
+        #[cfg(feature = "conformance-faults")]
+        Command::SessionAttachmentFault {
+            service: _service,
+            connection,
+            fault,
+        } => (
+            ObjectAddress::Fleet,
+            "/test/session-attachment-fault",
+            Some(serde_json::to_string(&(connection, fault))?),
         ),
         Command::SessionAlarm {
             service: _service,

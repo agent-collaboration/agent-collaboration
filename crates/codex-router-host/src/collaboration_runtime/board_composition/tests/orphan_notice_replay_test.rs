@@ -24,9 +24,7 @@ async fn orphan_progress_replays_cache_and_lifecycle_notices_idempotently() -> T
     // realized effect; distinct positions force the real handlers to run twice.
     for position in 1..=4 {
         let kind = if position % 2 == 1 {
-            BoardNotice::FleetFeedAdvanced {
-                through: FleetPosition::ZERO,
-            }
+            BoardNotice::ProjectListChanged {}
         } else {
             runtime.notice(position).kind
         };

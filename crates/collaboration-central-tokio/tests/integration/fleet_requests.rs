@@ -251,7 +251,7 @@ async fn operation(
             ServerFrame::Notice {
                 body:
                     fleet_sync_protocol::Notice::Consumer(board_sync_protocol::PositionedBoardNotice {
-                        kind: board_sync_protocol::BoardNotice::FleetFeedAdvanced { .. },
+                        kind: board_sync_protocol::BoardNotice::ProjectListChanged {},
                         ..
                     }),
                 ..

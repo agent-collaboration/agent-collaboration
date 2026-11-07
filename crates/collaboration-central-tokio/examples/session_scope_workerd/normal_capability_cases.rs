@@ -13,6 +13,51 @@ pub(super) async fn run(base: &str) -> ConformanceResult<()> {
     alarm_owner(base).await
 }
 
+pub(super) async fn stale_alarm(base: &str) -> ConformanceResult<()> {
+    let client = ConformanceClient::new(base)?;
+    let service = "550e8400-e29b-41d4-a716-446655446013";
+    let peer = enroll_admitted_peer_with_label(
+        &client,
+        service,
+        "019f0000-0000-7000-8000-000000006014",
+        "stale-session-alarm",
+        "stale alarm fixture",
+        "019f0000-0000-7000-8000-000000006013",
+    )
+    .await?;
+    let result = async {
+        let connections = observe(base, json!({"kind":"sessionConnections","value":{"service":service}})).await?;
+        let [connection] = connections.as_array().ok_or("missing connection snapshot")?.as_slice() else {
+            return Err("stale alarm fixture must own one normal socket".into());
+        };
+        let connection = connection.get("connection").and_then(Value::as_str).ok_or("connection missing")?;
+        // Both instants are in the platform's future: no wall-clock timer or
+        // wait can repair the deliberately stale logical deadline for us.
+        let now = chrono::DateTime::from_timestamp_millis(1_900_000_015_000).ok_or("invalid fixed time")?;
+        let stale = chrono::DateTime::from_timestamp_millis(1_900_000_010_000).ok_or("invalid stale time")?;
+        let future = chrono::DateTime::from_timestamp_millis(1_900_000_025_000).ok_or("invalid future alarm")?;
+        let later = chrono::DateTime::from_timestamp_millis(1_900_000_030_000).ok_or("invalid later request")?;
+        observe(base, json!({"kind":"seedSessionAlarm","value":{"service":service,"now":now,"at":future}})).await?;
+        let kept = observe(base, json!({"kind":"sessionWake","value":{"service":service,"connection":connection,"at":later}})).await?;
+        if kept.get("alarmAtMillis") != Some(&json!("1900000025000")) { return Err(format!("later wake replaced the valid earlier Fleet alarm: {kept}").into()); }
+        observe(base, json!({"kind":"seedSessionAlarm","value":{"service":service,"now":now,"at":stale}})).await?;
+        let requested = chrono::DateTime::from_timestamp_millis(1_900_000_020_000).ok_or("invalid requested wake")?;
+        let actual = observe(base, json!({"kind":"sessionWake","value":{"service":service,"connection":connection,"at":requested}})).await?;
+        if actual.get("alarmAtMillis") != Some(&json!("1900000015000")) {
+            return Err(format!("wake request retained the stale platform alarm: {actual}").into());
+        }
+        println!("SESSION_CAPABILITY_CASE stale_platform_alarm_is_replaced_on_the_next_ordinary_event passed");
+        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
+    }.await;
+    let closed = peer
+        .socket
+        .close(reqwest_websocket::CloseCode::Normal, None)
+        .await;
+    result?;
+    closed?;
+    Ok(())
+}
+
 pub(super) async fn observe(base: &str, command: Value) -> ConformanceResult<Value> {
     Ok(super::normal_session_support::bounded_http_client()?
         .post(format!("{base}/__conformance/admission"))

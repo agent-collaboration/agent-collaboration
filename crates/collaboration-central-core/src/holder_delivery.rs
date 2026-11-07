@@ -174,7 +174,7 @@ where
             ObjectCallEnvelope::decode(&bytes, ObjectAddress::Fleet, CallerKind::Delivery)?;
         if matches!(
             invocation.kind.as_str(),
-            crate::forward_calls::DeliverForward::KIND | crate::forward_calls::AnswerForward::KIND
+            crate::forward_calls::DeliverForward::KIND
         ) {
             return self.receive_forward_call(invocation).await;
         }

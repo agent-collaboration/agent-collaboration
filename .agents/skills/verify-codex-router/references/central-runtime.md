@@ -143,9 +143,9 @@ For Fleet notice recovery after process loss (legacy row 28; decisions
 
 Each case waits on actual dispatch hold or successful-reply loss, SIGKILLs and
 waits its owner, then reads the stopped sender's original Running task, exact
-input and digest before replacement starts. After normal reconnect, require one
-BoardArchiving and one FleetFeedAdvanced(6) at positions 2/3, the original
-operation/step's receiver receipt, unchanged snapshot/feed and business replay,
+input and digest before replacement starts. After normal reconnect, require two
+ProjectListChanged notices at positions 2/3, each source job with exactly one
+receiver receipt tied to its notice row, unchanged snapshot/feed and business replay,
 two terminal jobs, no pending debt, and no later duplicate. Repeated runs and
 child lifetimes add no groups. A no-op drop must fail the loss-readiness timeout;
 fresh receiver keys per Fleet attempt must fail on duplicate notice positions.

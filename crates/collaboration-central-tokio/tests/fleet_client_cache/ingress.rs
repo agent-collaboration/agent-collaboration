@@ -29,6 +29,9 @@ struct WaitingRead {
 pub struct Controls {
     reads: Arc<Mutex<VecDeque<WaitingRead>>>,
     malformed_archive: Arc<std::sync::atomic::AtomicBool>,
+    refused_feeds: Arc<std::sync::atomic::AtomicUsize>,
+    refuse_feed: Arc<std::sync::atomic::AtomicBool>,
+    fleet_writes: Arc<std::sync::atomic::AtomicUsize>,
 }
 pub struct HeldRead {
     entered: oneshot::Receiver<()>,
@@ -47,6 +50,16 @@ impl HeldRead {
     }
 }
 impl Controls {
+    pub fn refuse_feed_reads(&self) {
+        self.refuse_feed
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+    pub fn refused_feed_count(&self) -> usize {
+        self.refused_feeds.load(std::sync::atomic::Ordering::SeqCst)
+    }
+    pub fn fleet_write_count(&self) -> usize {
+        self.fleet_writes.load(std::sync::atomic::Ordering::SeqCst)
+    }
     pub fn corrupt_next_archive_outcome(&self) {
         self.malformed_archive
             .store(true, std::sync::atomic::Ordering::SeqCst);
@@ -55,6 +68,28 @@ impl Controls {
         use board_sync_protocol::{BoardConsumerAnswer, BoardPayload};
         use fleet_sync_protocol::{OperationAnswer, ServerFrame};
         let answer: ServerFrame<BoardConsumerProtocol> = serde_json::from_slice(bytes)?;
+        if let ServerFrame::Answer {
+            frame,
+            body:
+                OperationAnswer::Consumer(BoardConsumerAnswer::Read(
+                    board_sync_protocol::BoardReadPage::FleetFeed(_),
+                )),
+        } = &answer
+            && self.refuse_feed.load(std::sync::atomic::Ordering::SeqCst)
+        {
+            self.refused_feeds
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            return Ok(Some(serde_json::to_vec(&ServerFrame::<
+                BoardConsumerProtocol,
+            >::Answer {
+                frame: *frame,
+                body: OperationAnswer::Consumer(BoardConsumerAnswer::Read(
+                    board_sync_protocol::BoardReadPage::FleetFeed(
+                        board_sync_protocol::FleetFeedRead::CursorInvalid,
+                    ),
+                )),
+            })?));
+        }
         if let ServerFrame::Answer {
             body:
                 OperationAnswer::Consumer(BoardConsumerAnswer::Read(
@@ -110,6 +145,14 @@ impl Controls {
     }
     async fn before_forward(&self, bytes: &[u8]) -> TestResult {
         let point = match serde_json::from_slice::<ClientFrame<BoardConsumerProtocol>>(bytes)? {
+            ClientFrame::Request {
+                body: OperationRequest::Consumer(BoardConsumerRequest::Fleet(_)),
+                ..
+            } => {
+                self.fleet_writes
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                None
+            }
             ClientFrame::Request {
                 body:
                     OperationRequest::Consumer(BoardConsumerRequest::Read {
@@ -170,6 +213,9 @@ impl Ingress {
         let controls = Controls {
             reads: Arc::new(Mutex::new(VecDeque::new())),
             malformed_archive: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            refuse_feed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            refused_feeds: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            fleet_writes: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         };
         let state = EdgeState {
             upstream: format!("{upstream}/v1/session"),

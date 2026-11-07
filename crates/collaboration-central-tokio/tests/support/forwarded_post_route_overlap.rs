@@ -114,12 +114,8 @@ where
         original,
         json!({"kind":"routing"}),
     )?;
-    let old_frame: FrameId = serde_json::from_value(
-        pending
-            .get("forwardFrameId")
-            .ok_or("forward identity absent")?
-            .clone(),
-    )?;
+    let old_frame: FrameId =
+        serde_json::from_value(pending.get("id").ok_or("forward identity absent")?.clone())?;
     control(RuntimeControl::SetTime {
         now: RegistryTime((started + Duration::from_secs(30)).into()),
     })

@@ -155,9 +155,7 @@ async fn cold_welcome_and_notice_recovery_skip_superseded_project_and_initialize
                 },
                 PositionedBoardNotice {
                     position: NoticePosition::new(6),
-                    kind: BoardNotice::FleetFeedAdvanced {
-                        through: FleetPosition::ZERO,
-                    },
+                    kind: BoardNotice::ProjectListChanged {},
                 },
             ]),
             page(Vec::new()),
@@ -192,9 +190,7 @@ async fn cold_welcome_and_notice_recovery_skip_superseded_project_and_initialize
                 },
                 PositionedBoardNotice {
                     position: NoticePosition::new(2),
-                    kind: BoardNotice::FleetFeedAdvanced {
-                        through: FleetPosition::ZERO,
-                    },
+                    kind: BoardNotice::ProjectListChanged {},
                 },
             ]),
             page(Vec::new()),

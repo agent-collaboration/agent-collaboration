@@ -168,7 +168,7 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
     assert_eq!(
         read_count(
             &fleet_path,
-            "SELECT COUNT(*) AS count FROM machine_control_notices"
+            "SELECT COUNT(*) AS count FROM machine_control_project_notices"
         )
         .await?,
         0
@@ -208,12 +208,7 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
             } = frame
             {
                 assert_eq!(notice.position.value(), 1);
-                assert_eq!(
-                    notice.kind,
-                    BoardNotice::FleetFeedAdvanced {
-                        through: FleetPosition::try_from(2)?
-                    }
-                );
+                assert_eq!(notice.kind, BoardNotice::ProjectListChanged {});
                 return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
             }
         }
@@ -267,7 +262,7 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
     assert_eq!(
         read_count(
             &fleet_path,
-            "SELECT COUNT(*) AS count FROM machine_control_notices"
+            "SELECT COUNT(*) AS count FROM machine_control_project_notices"
         )
         .await?,
         1

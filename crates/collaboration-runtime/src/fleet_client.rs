@@ -253,7 +253,9 @@ impl FleetClient {
         if matches!(reply.result, RequestResult::PendingUnreachable) {
             return Ok(reply);
         }
-        self.refresh_cache().await?;
+        if let Err(error) = self.refresh_cache().await {
+            tracing::warn!(%error, "Fleet projection refresh failed; submission reply retained");
+        }
         Ok(reply)
     }
 
@@ -295,7 +297,9 @@ impl FleetClient {
         if matches!(reply.result, RequestResult::PendingUnreachable) {
             return Ok(reply);
         }
-        self.refresh_cache().await?;
+        if let Err(error) = self.refresh_cache().await {
+            tracing::warn!(%error, "Fleet projection refresh failed; creation reply retained");
+        }
         Ok(reply)
     }
 

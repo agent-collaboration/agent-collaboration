@@ -54,7 +54,7 @@ async fn the_second_holder_notice_failure_rolls_back_lease_directory_counter_and
         vec![(A.into(), "lease_granted".into(), "1".into())]
     );
     let request = takeover_input(&fixture).await?;
-    fixture.sql("CREATE TRIGGER reject_new_holder_notice BEFORE INSERT ON machine_control_notices WHEN NEW.kind='lease_granted' AND NEW.epoch=2 BEGIN SELECT RAISE(ABORT,'injected second holder notice failure'); END").await?;
+    fixture.sql("CREATE TRIGGER reject_new_holder_notice BEFORE INSERT ON machine_control_project_notices WHEN NEW.kind='lease_granted' AND NEW.epoch=2 BEGIN SELECT RAISE(ABORT,'injected second holder notice failure'); END").await?;
     let pending = fixture.owner(request.clone()).await?;
     assert_eq!(
         pending.pointer("/value/kind"),
@@ -111,7 +111,7 @@ async fn one_fleet_dispatcher_recovers_holder_change_feed_notice_and_schema_supp
     let fixture = Fixture::open(root.path(), NOW).await?;
     fixture.arrange_registered().await?;
     let request = takeover_input(&fixture).await?;
-    fixture.sql("CREATE TRIGGER reject_new_holder_notice BEFORE INSERT ON machine_control_notices WHEN NEW.kind='lease_granted' AND NEW.epoch=2 BEGIN SELECT RAISE(ABORT,'injected mixed restart boundary'); END").await?;
+    fixture.sql("CREATE TRIGGER reject_new_holder_notice BEFORE INSERT ON machine_control_project_notices WHEN NEW.kind='lease_granted' AND NEW.epoch=2 BEGIN SELECT RAISE(ABORT,'injected mixed restart boundary'); END").await?;
     fixture.owner(request.clone()).await?;
     fixture.sql("DROP TRIGGER reject_new_holder_notice").await?;
     // Register an actual Fleet reader, then a metadata write owes it a feed notice.
