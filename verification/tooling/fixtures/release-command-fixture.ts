@@ -49,15 +49,10 @@ function main(): number {
       `Identifier=dev.shravansunder.${basename(z.string().parse(args.at(-1)))}\nTeamIdentifier=974QD84WVC`,
     );
   else if (
-    [
-      "codex-router",
-      "agent-collaboration",
-      "agent-sessions",
-      "codex-router-board-upgrade",
-    ].includes(tool)
+    ["codex-router", "agent-collaboration", "agent-sessions", "agent-router-update"].includes(tool)
   )
     console.log(
-      `${tool} ${tool === "codex-router-board-upgrade" ? (fixture.importerVersion ?? fixture.version) : fixture.version}`,
+      `${tool} ${tool === "agent-router-update" ? (fixture.importerVersion ?? fixture.version) : fixture.version}`,
     );
   else if (tool !== "ruby" && tool !== "codesign")
     throw new Error(`unexpected release fixture command ${tool}`);

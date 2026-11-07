@@ -95,6 +95,38 @@ for (const [index, entry] of baselines.installCases.entries()) {
   });
 }
 
+test("the formula installs agent-router-update exactly once, whichever importer line it had", (): void => {
+  // Arrange
+  const current = readFileSync(new URL("./fixtures/current-formula.rb", import.meta.url), "utf8");
+  const formerLine = '    bin.install "codex-router-board-upgrade"\n';
+  const updateLine = '    bin.install "agent-router-update"\n';
+  const release = { version: "0.1.103", sha256: "b".repeat(64), sourceCommit: "c".repeat(40) };
+  const formulas = {
+    "former importer only": current,
+    "no importer line": current.replace(formerLine, ""),
+    "both importer lines": current.replace(formerLine, `${formerLine}${updateLine}`),
+    "current importer only": current.replace(formerLine, updateLine),
+  };
+
+  for (const [name, formula] of Object.entries(formulas)) {
+    // Act
+    const updated = updateCodexRouterFormula(formula, release);
+
+    // Assert
+    const installs = updated.match(/^ {4}bin\.install "[^"]+"$/gm);
+    assert.deepEqual(
+      installs,
+      [
+        '    bin.install "codex-router"',
+        '    bin.install "agent-collaboration"',
+        '    bin.install "agent-sessions"',
+        '    bin.install "agent-router-update"',
+      ],
+      name,
+    );
+  }
+});
+
 test("formula writes preserve permissions and a repeated release is idempotent", (): void => {
   const directory = mkdtempSync(join(tmpdir(), "formula-write-"));
   try {
@@ -157,11 +189,11 @@ test("installation validation checks the importer version as well as the other t
         stderr = `Identifier=dev.shravansunder.${executable}\nTeamIdentifier=974QD84WVC\n`;
       else if (command.at(-1) === "--version") {
         const name = command[0]?.split("/").at(-1);
-        stdout = `${name} ${name === "codex-router-board-upgrade" ? importerVersion : "0.1.102"}`;
+        stdout = `${name} ${name === "agent-router-update" ? importerVersion : "0.1.102"}`;
       }
       return { status: 0, stdout, stderr };
     };
     if (importerVersion === "0.1.102") validateInstallation("0.1.102", runner);
-    else assert.throws(() => validateInstallation("0.1.102", runner), /codex-router-board-upgrade/);
+    else assert.throws(() => validateInstallation("0.1.102", runner), /agent-router-update/);
   }
 });
