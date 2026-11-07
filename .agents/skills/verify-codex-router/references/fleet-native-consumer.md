@@ -27,6 +27,13 @@ env -u GITHUB_ACTIONS CARGO_BUILD_JOBS=2 cargo nextest list --locked -p fleet-na
 env -u GITHUB_ACTIONS CARGO_BUILD_JOBS=2 cargo nextest run --locked -p fleet-native-services --features test-support,test-fault --test integration --test e2e --test-threads 1 --status-level all --final-status-level all
 ```
 
+The declared write scope must include the checkout root `tmp/` as well as the
+chosen evidence directory and normal build output. The `native_move_aside` and
+`native_move_link` fixtures create their own temporary directories there. A
+sandbox refusal before fixture creation is a setup failure: keep the receipt,
+obtain the exact host path grant and rerun the unchanged unobserved selection.
+Do not classify that refusal as a product regression or a passing case.
+
 Stop before a build below 30 GiB available. The features are non-default and
 required for these fixture targets; their omission cannot establish coverage.
 Use `.cargo/config.toml` → `scripts/cargo_debug_signing_runner.sh` on macOS.
