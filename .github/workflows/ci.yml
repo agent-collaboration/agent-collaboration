@@ -332,8 +332,9 @@ jobs:
           # Exercise private fixture setup under the ordinary Unix mask.
           umask 022
           cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E "$WORKSPACE_TEST_FILTER" --partition count:1/2
-      # Shard 2 builds and runs the quota-reset harness while shard 1 is still
-      # building, so it finishes before the archive's binaries land in target/.
+      # Shard 2 builds and runs the quota-reset harness and the default-port
+      # cutover while shard 1 is still building. Each keeps its own package and
+      # feature selection, and both finish before the archive lands in target/.
       - name: Build quota-reset test binaries
         if: matrix.shard == 2 && (github.event_name != 'pull_request' || steps.quota_scope.outputs.changed == 'true')
         run: cargo nextest run --profile ci --status-level all --final-status-level all -p codex-router-quota-reset-test-harness --no-run
@@ -341,31 +342,40 @@ jobs:
         id: quota_reset_terminal_integration
         if: matrix.shard == 2 && (github.event_name != 'pull_request' || steps.quota_scope.outputs.changed == 'true')
         run: cargo nextest run --profile ci --status-level all --final-status-level all -p codex-router-quota-reset-test-harness
-      # Shard 2 waits on a causal signal: the archive appearing, or shard 1
-      # finishing without one. The sleep only spaces the API polls.
+      - name: Test isolated default Router port cutover
+        if: matrix.shard == 2
+        # Keep the same opt-in case, with a per-test elapsed status as well as
+        # its uncaptured CLI proof. The default profile adds no CI deadline.
+        run: cargo nextest run --locked --profile default --status-level all --final-status-level all -p codex-router-cli --features keychain-test-support --test e2e --run-ignored only --no-capture
+      # Shard 2 waits on a causal signal: an archive in this run, or shard 1
+      # not building one in this attempt. Any attempt's archive was built from
+      # this run's commit, so a rerun of shard 2 alone reuses the newest one.
+      # The sleep only spaces the API polls.
       - name: Wait for shard 1's test binaries
+        id: test_archive
         if: matrix.shard == 2
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           while :; do
-            archives="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=$TEST_ARCHIVE_NAME" --jq '.total_count')"
-            if [ "$archives" -ge 1 ]; then
+            archive="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" --jq '[.artifacts[] | select((.name | startswith("workspace-test-archive-")) and (.expired | not))] | max_by(.name | ltrimstr("workspace-test-archive-") | tonumber) | .name // empty')"
+            if [ -n "$archive" ]; then
+              echo "name=$archive" >> "$GITHUB_OUTPUT"
               break
             fi
             builder_status="$(gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --attempt "$GITHUB_RUN_ATTEMPT" --json jobs --jq '.jobs[] | select(.name == "Test Rust workspace (1/2)") | .status')"
-            if [ "$builder_status" = completed ]; then
-              echo 'Shard 1 finished without publishing test binaries.' >&2
+            if [ "$builder_status" != queued ] && [ "$builder_status" != in_progress ] && [ "$builder_status" != waiting ] && [ "$builder_status" != pending ] && [ "$builder_status" != requested ]; then
+              echo "No test archive in this run, and shard 1 is not building one in this attempt (status: ${builder_status:-not part of this attempt}). Re-run all jobs." >&2
               exit 1
             fi
             sleep 20
           done
       - name: Download shard 1's test binaries
         if: matrix.shard == 2
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ env.TEST_ARCHIVE_NAME }}
-          path: ${{ runner.temp }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCHIVE_NAME: ${{ steps.test_archive.outputs.name }}
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$ARCHIVE_NAME" --dir "$RUNNER_TEMP"
       # Tests start compiled binaries through compile-time CARGO_BIN_EXE paths
       # under target/. The checkout path is the same on both runners, so unpack
       # the archive (whose entries start with target/) in place and run from its
@@ -379,13 +389,6 @@ jobs:
           # Exercise private fixture setup under the ordinary Unix mask.
           umask 022
           cargo nextest run --profile ci --status-level all --final-status-level all --binaries-metadata target/nextest/binaries-metadata.json --cargo-metadata target/nextest/cargo-metadata.json -E "$WORKSPACE_TEST_FILTER" --partition count:2/2
-      - name: Test isolated default Router port cutover
-        if: matrix.shard == 2
-        # Keep the same opt-in case, with a per-test elapsed status as well as
-        # its uncaptured CLI proof. The default profile adds no CI deadline.
-        run: cargo nextest run --profile default --status-level all --final-status-level all --binaries-metadata target/nextest/binaries-metadata.json --cargo-metadata target/nextest/cargo-metadata.json -E 'package(=codex-router-cli) & binary(=e2e)' --run-ignored only --no-capture
-      - name: Wait for tests
-        wait-all:
       - name: Save pinned Rust tools
         if: matrix.shard == 1 && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.rust_tools.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
