@@ -117,6 +117,31 @@ where
         replies.frames()
     }
 
+    /// Observe the actual logical clock and the earliest registered holder wait.
+    #[cfg(feature = "conformance")]
+    pub fn conformance_holder_deadline(
+        &self,
+    ) -> Result<
+        (
+            runtime_primitives::SyncTime,
+            Option<runtime_primitives::SyncTime>,
+        ),
+        StoreError,
+    > {
+        use runtime_primitives::Clock as _;
+        let ObjectWork::Fleet {
+            shared_host,
+            replies,
+            ..
+        } = &self.work
+        else {
+            return Err(StoreError::Aborted {
+                reason: "holder deadline observation requires Fleet".into(),
+            });
+        };
+        Ok((shared_host.now(), replies.next_deadline()))
+    }
+
     #[cfg(feature = "conformance")]
     pub fn conformance_holder_session_identity(&self) -> Result<(), StoreError> {
         let ObjectWork::Fleet { shared_host, .. } = &self.work else {

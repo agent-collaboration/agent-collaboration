@@ -147,10 +147,46 @@ pub(super) async fn codec(base: &str) -> ConformanceResult<()> {
     Ok(())
 }
 
+fn alarm_millis(observation: &Value, field: &str) -> ConformanceResult<i64> {
+    observation
+        .get(field)
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("missing {field}: {observation}"))?
+        .parse()
+        .map_err(Into::into)
+}
+
+async fn wait_for_holder_alarm(
+    base: &str,
+    command: &Value,
+    connection: &str,
+    peer: &str,
+    session: &str,
+    deadline: i64,
+) -> ConformanceResult<()> {
+    let mut last_alarm = Value::Null;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let actual = observe(base, command.clone()).await?;
+            last_alarm = actual.clone();
+            if actual.get("connection") != Some(&json!(connection))
+                || actual.get("peer") != Some(&json!(peer))
+                || actual.get("sessionId") != Some(&json!(session))
+                || alarm_millis(&actual, "holderReplyDeadlineMillis")? != deadline
+            {
+                return Err(format!("alarm lost its exact normal session/holder deadline: {actual}").into());
+            }
+            if alarm_millis(&actual, "alarmAtMillis")? == deadline {
+                println!("SESSION_ALARM_OBSERVATION {actual}");
+                return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
+            }
+            tokio::task::yield_now().await;
+        }
+    }).await.map_err(|_| format!("normal holder call did not arm its Connection object's exact alarm; last observation: {last_alarm}"))?
+}
+
 async fn alarm_owner(base: &str) -> ConformanceResult<()> {
     use super::holder_writer_retry::{read_status, received, send, start};
-    use collaboration_central_conformance::{RuntimeControl, RuntimeControlRequest};
-    use collaboration_central_core::{ObjectAddress, RegistryTime};
     use fleet_sync_protocol::{ReleaseAnswer, ReplicationPosition, ServerCall, ServerCallAnswer};
     use tokio::task::JoinSet;
 
@@ -180,13 +216,10 @@ async fn alarm_owner(base: &str) -> ConformanceResult<()> {
         };
         let connection = connection.get("connection").and_then(Value::as_str)
             .ok_or("normal alarm connection ID missing")?;
-        let time = chrono::DateTime::from_timestamp_millis(1_900_000_000_000)
-            .ok_or("invalid fixed alarm time")?;
-        let pin = RuntimeControlRequest {
-            address: ObjectAddress::Fleet,
-            command: RuntimeControl::SetTime { now: RegistryTime(time) },
-        };
-        http.post(format!("{base}/admin/v1/conformance/runtime")).header("Cf-Access-Jwt-Assertion", owner_assertion()?).json(&pin).send().await?.error_for_status()?.bytes().await?;
+        // Keep the platform clock: admission also schedules an immediate engine
+        // wake. Pinning logical time years ahead prevents workerd from delivering
+        // that valid earlier alarm, so it cannot settle to the holder deadline.
+        let started_at = chrono::Utc::now().timestamp_millis();
         start(&http, base, &mut calls, json!({
             "attempt":"019f0000-0000-7000-8000-000000006005","holder":peer.peer,
             "request":{"kind":"release","value":{
@@ -198,32 +231,29 @@ async fn alarm_owner(base: &str) -> ConformanceResult<()> {
         let ServerCall::Release { call, request } = request else {
             return Err("normal alarm case did not receive its actual Release".into());
         };
+        let received_at = chrono::Utc::now().timestamp_millis();
         let command = json!({"kind":"sessionAlarm","value":{
             "service":service,"connection":connection
         }});
-        // The configured 20-second wait is armed by the real holder call.
-        // A normal alarm event may still be settling its previous deadline;
-        // wait for this call's own exact deadline, never a readiness sleep.
+        let actual = observe(base, command.clone()).await?;
+        let deadline = alarm_millis(&actual, "holderReplyDeadlineMillis")?;
+        // Independently bracket the configured 20-second wait. The holder hub
+        // supplies its exact registered instant; storage must match that instant.
+        if !(started_at + 20_000..=received_at + 20_000).contains(&deadline) {
+            return Err(format!("holder deadline is outside its configured 20-second wait: {actual}").into());
+        }
+        wait_for_holder_alarm(base, &command, connection, &peer.peer.to_string(), session, deadline).await?;
+        // Establish that the second request must have a strictly later deadline.
+        // Observe a causal clock advance rather than inserting a readiness sleep.
         tokio::time::timeout(Duration::from_secs(10), async {
             loop {
                 let actual = observe(base, command.clone()).await?;
-                if actual.get("connection") != Some(&json!(connection))
-                    || actual.get("peer") != Some(&json!(peer.peer))
-                    || actual.get("sessionId") != Some(&json!(session))
-                {
-                    return Err(format!("alarm was read from another normal session: {actual}").into());
-                }
-                if actual.get("alarmAtMillis") == Some(&json!("1900000020000")) {
+                if alarm_millis(&actual, "logicalNowMillis")? > deadline - 20_000 {
                     return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
                 }
                 tokio::task::yield_now().await;
             }
-        }).await.map_err(|_| "normal holder call did not arm its Connection object's exact alarm")??;
-        let later = RuntimeControlRequest {
-            address: pin.address.clone(),
-            command: RuntimeControl::SetTime { now: RegistryTime(chrono::DateTime::from_timestamp_millis(1_900_000_005_000).ok_or("invalid later alarm time")?) },
-        };
-        http.post(format!("{base}/admin/v1/conformance/runtime")).header("Cf-Access-Jwt-Assertion", owner_assertion()?).json(&later).send().await?.error_for_status()?.bytes().await?;
+        }).await??;
         start(&http, base, &mut calls, json!({
             "attempt":"019f0000-0000-7000-8000-000000006008","holder":peer.peer,
             "request":{"kind":"release","value":{
@@ -233,8 +263,7 @@ async fn alarm_owner(base: &str) -> ConformanceResult<()> {
         }));
         let (later_frame, later_request) = received(&mut peer.socket).await?;
         let ServerCall::Release { call: later_call, request: later_request } = later_request else { return Err("competing alarm did not receive its second real holder call".into()); };
-        let actual = observe(base, command.clone()).await?;
-        if actual.get("alarmAtMillis") != Some(&json!("1900000020000")) { return Err(format!("later pending deadline replaced the earliest same-object alarm: {actual}").into()); }
+        wait_for_holder_alarm(base, &command, connection, &peer.peer.to_string(), session, deadline).await?;
         let later_answer = ReleaseAnswer::Released { final_position: ReplicationPosition::new(later_request.epoch, fleet_sync_protocol::CommitSequence::new(0)) };
         send(&mut peer.socket, later_frame, ServerCallAnswer::Release(later_answer.clone())).await?;
         tokio::time::timeout(Duration::from_secs(10), async { loop {
