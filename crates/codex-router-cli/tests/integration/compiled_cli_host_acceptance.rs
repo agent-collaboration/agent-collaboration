@@ -23,7 +23,7 @@ use host_replacement_observation::{binary_version, observe_continuous_lock, veri
 
 #[path = "../support/compiled_cli_host_fixture.rs"]
 mod compiled_cli_host_fixture;
-use compiled_cli_host_fixture::{sign_debug_binary, stop_fixture_processes};
+use compiled_cli_host_fixture::{kill_fixture_processes, sign_debug_binary};
 #[path = "compiled_cli_host_fixture_test.rs"]
 mod fixture_tests;
 
@@ -824,10 +824,17 @@ impl TestDirectory {
 
 impl Drop for TestDirectory {
     fn drop(&mut self) {
-        if let Err(error) = stop_fixture_processes(&self.path) {
-            eprintln!("retaining fixture directory after child cleanup failed: {error}");
-            return;
+        match kill_fixture_processes(&self.path) {
+            Ok(false) => {
+                let _cleanup = std::fs::remove_dir_all(&self.path);
+            }
+            Ok(true) => eprintln!(
+                "retaining fixture directory {} until owned Child handles join emergency termination",
+                self.path.display()
+            ),
+            Err(error) => {
+                eprintln!("retaining fixture directory after child cleanup failed: {error}")
+            }
         }
-        let _cleanup = std::fs::remove_dir_all(&self.path);
     }
 }
