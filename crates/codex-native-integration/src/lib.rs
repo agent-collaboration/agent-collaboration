@@ -90,6 +90,8 @@ pub use native_schema_bundle::{NativeSchemaBundle, NativeSchemaError};
 pub use native_schema_digest::{NativeSchemaDigest, NativeSchemaDigestError};
 pub use schema_bundle_storage::{SchemaBundleRetirement, retire_unused_schema_bundles};
 mod router_scratch_scopes;
+#[cfg(feature = "test-support")]
+pub mod scratch_scope_test_support;
 pub use router_scratch_scopes::{
     SCRATCH_DIRECTORY_NAME, SCRATCH_LAST_USED_FILE_NAME, ScratchScopeExclusiveLock,
     prepare_scratch_scope, router_scratch_root, scratch_scope_last_change,

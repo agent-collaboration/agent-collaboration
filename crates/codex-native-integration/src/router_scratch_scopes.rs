@@ -38,6 +38,8 @@ pub fn prepare_scratch_scope(scope_folder: &Path) -> io::Result<()> {
     let (scratch_root, scope) = scope_parts(scope_folder)?;
     let lock = open_scope_lock(scratch_root, scope)?;
     lock.lock_shared()?;
+    #[cfg(feature = "test-support")]
+    crate::scratch_scope_test_support::creator_holds_scope_lock(scope_folder);
     create_private_folder(scope_folder)?;
     record_scope_use(scope_folder)
 }

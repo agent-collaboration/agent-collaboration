@@ -10,18 +10,41 @@ use tokio::sync::{Notify, mpsc};
 
 const DAY: Duration = Duration::from_secs(24 * 60 * 60);
 
-/// A clock the test moves by hand; waiters wake when it moves.
+/// One look a sleeping sweep took at the clock: the deadline it waits for, the
+/// clock time it saw, and whether that look ended the wait.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TimerCheck {
+    deadline: SystemTime,
+    seen_at: SystemTime,
+    fired: bool,
+}
+
+/// A clock the test moves by hand; waiters wake when it moves, and every look
+/// a waiter takes is reported, so the test knows what the timer decided.
 struct ManualClock {
     now: Mutex<SystemTime>,
     moved: Notify,
+    checks: mpsc::UnboundedSender<TimerCheck>,
+    checks_seen: Mutex<Option<mpsc::UnboundedReceiver<TimerCheck>>>,
 }
 
 impl ManualClock {
     fn starting_now() -> Arc<Self> {
+        let (checks, checks_seen) = mpsc::unbounded_channel();
         Arc::new(Self {
             now: Mutex::new(SystemTime::now()),
             moved: Notify::new(),
+            checks,
+            checks_seen: Mutex::new(Some(checks_seen)),
         })
+    }
+
+    fn timer_checks(&self) -> mpsc::UnboundedReceiver<TimerCheck> {
+        self.checks_seen
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+            .unwrap_or_else(|| panic!("timer checks already taken"))
     }
 
     fn advance(&self, by: Duration) {
@@ -47,7 +70,14 @@ impl ScratchSweepClock for ManualClock {
                 let moved = self.moved.notified();
                 tokio::pin!(moved);
                 moved.as_mut().enable();
-                if self.now() >= at {
+                let seen_at = self.now();
+                let fired = seen_at >= at;
+                let _ = self.checks.send(TimerCheck {
+                    deadline: at,
+                    seen_at,
+                    fired,
+                });
+                if fired {
                     return;
                 }
                 moved.await;
@@ -187,6 +217,13 @@ impl Fixture {
     }
 }
 
+async fn next_check(checks: &mut mpsc::UnboundedReceiver<TimerCheck>) -> TimerCheck {
+    tokio::time::timeout(Duration::from_secs(10), checks.recv())
+        .await
+        .unwrap_or_else(|_| panic!("the sweep timer took no look at the clock"))
+        .unwrap_or_else(|| panic!("clock dropped"))
+}
+
 /// A scope folder whose every entry was last changed `age` before `now`.
 fn seed_scope(scratch: &Path, scope: &str, now: SystemTime, age: Duration) {
     let folder = scratch.join(scope);
@@ -282,6 +319,7 @@ async fn no_pass_runs_between_due_moments() {
         seed_scope(scratch, "due-in-two-days", now, 28 * DAY);
     })
     .await;
+    let mut checks = fixture.clock.timer_checks();
     fixture.start_sweep();
     let first = fixture.next_pass().await;
     let due = first.next_pass_at.unwrap_or_else(|| panic!("next pass"));
@@ -289,10 +327,27 @@ async fn no_pass_runs_between_due_moments() {
     let until_due = due.duration_since(started).unwrap_or_default();
     assert!(until_due > DAY && until_due <= 2 * DAY + Duration::from_secs(1));
 
-    // Move to just before the due moment, then to it: only one pass follows,
-    // and it runs at the due moment.
+    // The one timer the sweep arms is for the due moment, not a fixed tick.
+    let armed = next_check(&mut checks).await;
+    assert_eq!(
+        armed,
+        TimerCheck {
+            deadline: due,
+            seen_at: started,
+            fired: false
+        }
+    );
+    // Just before the due moment the timer looks again and keeps waiting.
     fixture.clock.advance(until_due - Duration::from_secs(60));
+    let early = next_check(&mut checks).await;
+    assert_eq!((early.deadline, early.fired), (due, false));
+    // At the due moment it fires, and exactly one pass runs then.
     fixture.clock.advance(Duration::from_secs(60));
+    let at_due = next_check(&mut checks).await;
+    assert_eq!(
+        (at_due.deadline, at_due.seen_at, at_due.fired),
+        (due, due, true)
+    );
     let second = fixture.next_pass().await;
 
     assert_eq!(
@@ -479,5 +534,39 @@ async fn a_folder_last_written_31_days_ago_whose_quiet_session_closed_today_stay
 
     assert!(folder.is_dir());
     assert_eq!(pass.kept_recent, vec!["quiet".to_owned()]);
+    fixture.stop().await;
+}
+
+#[tokio::test]
+async fn a_folder_whose_use_cannot_be_read_is_kept_reported_and_retried_the_next_day() {
+    let mut fixture = Fixture::start(|scratch, now| {
+        seed_scope(scratch, "unreadable", now, 40 * DAY);
+        let hidden = scratch.join("unreadable/private");
+        private(&hidden);
+        std::fs::write(hidden.join("inside.txt"), b"x").unwrap_or_else(|error| panic!("{error}"));
+        set_changed(&hidden.join("inside.txt"), now - 40 * DAY);
+        set_changed(&hidden, now - 40 * DAY);
+        set_changed(&scratch.join("unreadable"), now - 40 * DAY);
+    })
+    .await;
+    let hidden = fixture.folder("unreadable/private");
+    std::fs::set_permissions(&hidden, std::fs::Permissions::from_mode(0o000))
+        .unwrap_or_else(|error| panic!("hide contents: {error}"));
+    fixture.start_sweep();
+
+    let pass = fixture.next_pass().await;
+
+    std::fs::set_permissions(&hidden, std::fs::Permissions::from_mode(0o700))
+        .unwrap_or_else(|error| panic!("restore for cleanup: {error}"));
+    assert!(
+        fixture.folder("unreadable").is_dir(),
+        "unknown use keeps the folder"
+    );
+    assert!(hidden.join("inside.txt").is_file());
+    assert!(pass.removed.is_empty(), "{:?}", pass.removed);
+    assert_eq!(pass.failures.len(), 1, "{:?}", pass.failures);
+    assert_eq!(pass.failures[0].scope, "unreadable");
+    let ran = pass.ran_at.unwrap_or_else(|| panic!("ran at"));
+    assert_eq!(pass.next_pass_at, Some(ran + DAY), "retried the next day");
     fixture.stop().await;
 }
