@@ -78,7 +78,7 @@ impl Visit for Fields {
 }
 impl Subscriber for Capture {
     fn enabled(&self, metadata: &Metadata<'_>) -> bool {
-        metadata.target().starts_with("fleet_sync_service")
+        metadata.target().starts_with("fleet_native_services")
     }
     fn new_span(&self, _: &span::Attributes<'_>) -> span::Id {
         span::Id::from_u64(self.spans.fetch_add(1, Ordering::Relaxed))
