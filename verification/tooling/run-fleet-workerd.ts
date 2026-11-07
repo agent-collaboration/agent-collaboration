@@ -19,6 +19,17 @@ import {
 } from "../fixtures/fleet-copy-workerd/case-contracts.ts";
 
 const repository = fileURLToPath(new URL("../../", import.meta.url));
+const usage =
+  "Usage: node verification/tooling/run-fleet-workerd.ts <fresh-evidence-directory>\nSet WASM_BINDGEN to wasm-bindgen CLI 0.2.129. Runs all 31 adapter and 7 raw-SQL cases.\n";
+const arguments_ = process.argv.slice(2);
+if (arguments_.length === 1 && ["--help", "-h"].includes(arguments_[0] ?? "")) {
+  process.stdout.write(usage);
+  process.exit(0);
+}
+if (arguments_.length !== 1 || arguments_[0]?.startsWith("-")) {
+  process.stderr.write(usage);
+  process.exit(2);
+}
 const evidence = resolve(z.string().min(1).parse(process.argv[2]));
 const worker = resolve(repository, "crates/fleet-project-copy/tests/workerd");
 const manifest = resolve(worker, "Cargo.toml");
