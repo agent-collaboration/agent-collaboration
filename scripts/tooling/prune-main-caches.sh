@@ -21,9 +21,8 @@ if [[ "$prune_mode" == --apply ]]; then
   cache_jobs="$(gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
     --attempt "$GITHUB_RUN_ATTEMPT" --json jobs)"
   writers_started_at="$(printf '%s\n' "$cache_jobs" | jq -er '
-    [.jobs[] | select(.name == "Static validation" or .name == "Test Rust workspace"
-      or .name == "Rust local end-to-end" or .name == "Central Worker build and local workerd conformance"
-      or .name == "Warm Apple Silicon release dependencies")
+    [.jobs[] | select(.name == "Static validation" or (.name | startswith("Test Rust workspace ("))
+      or .name == "Rust local end-to-end" or .name == "Central Worker build and local workerd conformance")
       | select(.conclusion != "skipped" and .startedAt != null and .startedAt != "0001-01-01T00:00:00Z")
       | .startedAt] | min // error("No cache writer start time")')"
   cache_inventory="$(gh cache list --repo "$GITHUB_REPOSITORY" \
