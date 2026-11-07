@@ -74,7 +74,7 @@ async fn router_rebuild_keeps_the_old_view_until_older_then_newer_catchup_finish
     catchup.release()?;
     tokio::time::timeout(BOUND, refresh).await???;
     assert_visible(&reader.fleet, &router_root, "catch-up state 129", 772).await?;
-    assert_no_local_fleet_authority(&router_root).await?;
+    fixture::assert_no_local_fleet_authority(&router_root).await?;
     reader.shutdown().await?;
     live.shutdown().await?;
     jwks.shutdown().await?;
