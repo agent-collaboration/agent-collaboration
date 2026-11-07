@@ -128,6 +128,11 @@ impl CollaborationRuntime {
         {
             failure.get_or_insert(io::Error::other("provider retention maintenance failed"));
         }
+        if let Some(task) = self.scratch_sweep.take()
+            && task.await.is_err()
+        {
+            failure.get_or_insert(io::Error::other("scratch sweep shutdown failed"));
+        }
         if let Some(store) = self.automation_store.take() {
             match std::sync::Arc::try_unwrap(store) {
                 Ok(store) => {

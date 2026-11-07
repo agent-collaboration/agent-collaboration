@@ -297,6 +297,8 @@ impl CollaborationRuntime {
         .map_err(io::Error::other)?;
         let unmaterialized_threads =
             std::sync::Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new());
+        let open_scratch_scopes =
+            std::sync::Arc::new(collaboration_runtime::OpenScratchScopes::new());
         let peer_registry_directory = inputs.peer_registry_directory.clone().map_or_else(
             crate::session_message_route_composition::default_peer_registry_directory,
             Ok,
@@ -612,6 +614,8 @@ impl CollaborationRuntime {
             approval_broker.clone(),
             unmaterialized_threads,
             crate::codex_conversation_recording_composition::adapter_recorder(codex_recorder),
+            std::sync::Arc::clone(&open_scratch_scopes)
+                as std::sync::Arc<dyn codex_acp_adapter::ScratchScopeRegister>,
         )?
         .with_connection_budget(permits);
         let mut provider_app_servers = Vec::new();
@@ -845,6 +849,8 @@ impl CollaborationRuntime {
             external_provider_supervisor,
             provider_delivery_route,
             provider_retention: None,
+            open_scratch_scopes,
+            scratch_sweep: None,
             directory: inputs.directory,
             native_digest,
             payload_cache: crate::native_schema_cache::NativeSchemaCache::default(),

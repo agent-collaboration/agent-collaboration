@@ -181,6 +181,10 @@ mod backend_publication;
 pub use backend_publication::BackendPublication;
 mod collaboration_runtime;
 pub(crate) use collaboration_runtime::HostCollaborationInputs;
+pub use collaboration_runtime::scratch_sweep::{
+    LoggedScratchSweepEvents, SCRATCH_RETRY_DELAY, SCRATCH_UNUSED_RETENTION, ScratchSweepClock,
+    ScratchSweepEvents, ScratchSweepFailure, ScratchSweepReport, SystemScratchSweepClock,
+};
 pub use collaboration_runtime::{
     BackendSchemaEvidence, CollaborationFailure, CollaborationRuntime, CollaborationRuntimeInputs,
     ExternalProviderLaunchBinding,

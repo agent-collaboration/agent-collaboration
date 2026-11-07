@@ -130,6 +130,9 @@ pub struct CollaborationRuntime {
     external_provider_supervisor: Option<std::sync::Arc<crate::ExternalProviderSupervisor>>,
     provider_delivery_route: Option<std::sync::Arc<crate::ProviderAcpDeliveryRoute>>,
     provider_retention: Option<tokio::task::JoinHandle<()>>,
+    /// Scratch scopes with a Codex session open in this Host.
+    open_scratch_scopes: std::sync::Arc<collaboration_runtime::OpenScratchScopes>,
+    scratch_sweep: Option<tokio::task::JoinHandle<()>>,
     directory: PathBuf,
     /// The native schema bundle the Host started with, published as the manifest's
     /// `nativeSchemaDigest`.
@@ -316,6 +319,8 @@ fn current_observation_timestamp() -> io::Result<ObservationTimestamp> {
 
 #[path = "collaboration_runtime/provider_retention.rs"]
 mod provider_retention;
+#[path = "collaboration_runtime/scratch_sweep.rs"]
+pub(crate) mod scratch_sweep;
 
 #[cfg(test)]
 #[path = "collaboration_runtime/startup_failure_tests.rs"]

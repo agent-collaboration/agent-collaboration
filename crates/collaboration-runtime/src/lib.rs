@@ -111,6 +111,8 @@ pub use interaction_broker::{
 };
 mod acp_channel_listener;
 pub use acp_channel_listener::AcpChannelListener;
+mod open_scratch_scopes;
+pub use open_scratch_scopes::OpenScratchScopes;
 mod unmaterialized_thread_holder;
 pub use unmaterialized_thread_holder::UnmaterializedThreadHolder;
 mod interaction_storage_failure;

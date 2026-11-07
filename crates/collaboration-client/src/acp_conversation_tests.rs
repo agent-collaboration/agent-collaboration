@@ -306,17 +306,22 @@ fn only_write_restricted_access_creates_project_write_areas() {
     assert!(!workspace.join("docs").exists());
 }
 
-#[test]
-fn session_scratch_scopes_are_unique_and_owner_private() {
+#[tokio::test]
+async fn session_scratch_scopes_are_unique_owner_private_and_stamped_as_used() {
     let first = session_scratch_scope();
     let second = session_scratch_scope();
     assert_ne!(first, second);
-    let path = std::env::temp_dir()
-        .join("router-client-scratch")
-        .join(first);
-    assert!(create_private_scratch(&path).is_ok());
-    let metadata = std::fs::metadata(path).unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("scratch").join(first);
+    assert!(prepare_session_scratch(&path).await.is_ok());
+    let metadata = std::fs::metadata(&path).unwrap();
     assert_eq!(metadata.permissions().mode() & 0o077, 0);
+    assert!(
+        path.join(codex_native_integration::SCRATCH_LAST_USED_FILE_NAME)
+            .is_file(),
+        "creating a scope records its use for the scratch sweep"
+    );
+    assert!(root.path().join("scratch/.locks").is_dir());
 }
 use crate::PublicPromptContent;
 use collaboration_protocol::{SessionId, UuidIdentity};
