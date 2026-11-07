@@ -505,7 +505,7 @@ jobs:
       CARGO_PROFILE_TEST_DEBUG: "0"
       CARGO_INCREMENTAL: "0"
     steps:
-      - name: Start combined Worker job clock
+      - name: Start combined Worker proof clock
         run: echo "CENTRAL_WORKER_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -613,13 +613,13 @@ jobs:
           path: ${{ runner.temp }}/central-worker-tools
           key: ${{ steps.worker_tools.outputs.cache-primary-key }}
 
-      - name: Record whole combined Worker job duration
+      - name: Record combined Worker proof duration
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/fleet-workerd-evidence"
           worker_job_elapsed=$(( $(date +%s) - CENTRAL_WORKER_JOB_STARTED_AT ))
-          printf '{"elapsedSeconds":%s,"toolCacheHit":"%s"}\n' "$worker_job_elapsed" '${{ steps.worker_tools.outputs.cache-hit }}' > "$RUNNER_TEMP/fleet-workerd-evidence/combined-job-timing.json"
-          printf 'Combined Central and fleet workerd job: %s seconds; tool cache hit: %s\n' "$worker_job_elapsed" '${{ steps.worker_tools.outputs.cache-hit }}' >> "$GITHUB_STEP_SUMMARY"
+          printf '{"proofPhaseElapsedSeconds":%s,"toolCacheHit":"%s","scope":"Use completed GitHub job start/end timestamps for whole-job cold/warm timing"}\n' "$worker_job_elapsed" '${{ steps.worker_tools.outputs.cache-hit }}' > "$RUNNER_TEMP/fleet-workerd-evidence/combined-job-timing.json"
+          printf 'Central and fleet workerd proof phase: %s seconds; tool cache hit: %s. Whole-job timing uses completed GitHub job timestamps.\n' "$worker_job_elapsed" '${{ steps.worker_tools.outputs.cache-hit }}' >> "$GITHUB_STEP_SUMMARY"
           test "$worker_job_elapsed" -le 1800
       - name: Retain fleet cases and combined Worker timing
         if: always()

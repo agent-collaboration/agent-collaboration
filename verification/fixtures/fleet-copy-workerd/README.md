@@ -38,3 +38,8 @@ Copy-certainty reply loss is injected after a real commit/rollback. It proves
 the classifier and durable effects, not physical I/O failure. Rename streams
 reopen the native writer where named; they do not claim a workerd process
 restart. The optional snapshot path remains separately parameterized.
+
+The existing combined Central CI job keeps its 30-minute cap. Its timing receipt
+measures the proof phase; the authoritative whole-job cold/warm measurements use
+GitHub job started_at/completed_at, including artifact upload and post-job work.
+Local launcher elapsed time is not a substitute for those measurements.
