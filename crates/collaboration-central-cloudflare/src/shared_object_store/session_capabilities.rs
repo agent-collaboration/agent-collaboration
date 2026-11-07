@@ -52,21 +52,41 @@ pub(crate) struct SessionAlarmObservation {
 }
 
 impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
+    #[cfg(feature = "conformance-faults")]
+    pub(crate) async fn conformance_attachment_fault(
+        &self,
+        connection: ConnectionId,
+        fault: crate::conformance_admission::AttachmentFault,
+    ) -> Result<crate::shared_object_store::RegistrationSnapshot, SocketFailure> {
+        use collaboration_central_core::ObjectHost as _;
+        let socket = self.socket(connection)?;
+        match fault {
+            crate::conformance_admission::AttachmentFault::Missing => {
+                socket.serialize_attachment(Option::<BindingAttachment>::None)
+            }
+            crate::conformance_admission::AttachmentFault::Invalid => {
+                socket.serialize_attachment(serde_json::json!({"invalid":"attachment"}))
+            }
+        }
+        .map_err(|_| SocketFailure::Closed)?;
+        self.registrations().await
+    }
     pub(crate) fn conformance_session_connections(
         &self,
     ) -> Result<Vec<SessionConnectionObservation>, SocketFailure> {
-        self.state
+        Ok(self
+            .state
             .get_websockets()
             .into_iter()
-            .map(|socket| {
-                let attachment = Self::attachment(&socket)?;
+            .filter_map(|socket| {
+                let attachment = Self::attachment(&socket).ok()?;
                 let registration =
                     if Self::is_open(&socket) && !self.is_quarantined(attachment.connection) {
                         attachment.registration
                     } else {
                         ConnectionRegistration::Closed
                     };
-                Ok(SessionConnectionObservation {
+                Some(SessionConnectionObservation {
                     connection: attachment.connection,
                     peer: attachment.peer,
                     expires_at_millis: attachment.expires_at.unix_millis().to_string(),
@@ -74,7 +94,7 @@ impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
                     admission_origin: attachment.admission_origin,
                 })
             })
-            .collect()
+            .collect())
     }
 
     pub(crate) fn conformance_attachment_codec(

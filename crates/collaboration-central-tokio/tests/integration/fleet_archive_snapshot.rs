@@ -46,7 +46,7 @@ pub(super) async fn inspect(
         let incarnations = query::<sqlx_turso::Turso>("SELECT incarnation FROM lease_incarnation ORDER BY name")
             .fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter()
             .map(|row|row.try_get("incarnation").map_err(StoreError::backend)).collect::<Result<Vec<_>,_>>()?;
-        let notices = query::<sqlx_turso::Turso>("SELECT notice_id FROM machine_control_notices ORDER BY notice_id")
+        let notices = query::<sqlx_turso::Turso>("SELECT notice_id FROM machine_control_project_notices ORDER BY notice_id")
             .fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter()
             .map(|row|row.try_get("notice_id").map_err(StoreError::backend)).collect::<Result<Vec<_>,_>>()?;
         Ok(ArchiveState { records, feed, ledgers, reports, projection,reservation,

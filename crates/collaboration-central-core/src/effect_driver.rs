@@ -137,10 +137,6 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
                     request,
                     last_seen,
                 } => self.deliver_forward(installation, request, last_seen).await,
-                SessionTransportEffect::ForwardReply {
-                    installation,
-                    request,
-                } => self.reply_forward(installation, request).await,
                 SessionTransportEffect::ForwardFrame {
                     connection,
                     session,

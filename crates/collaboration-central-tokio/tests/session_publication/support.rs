@@ -194,6 +194,7 @@ pub struct TestHost {
     pub native: Arc<TokioStorageHost<CoreHost<Transport>>>,
     pub store: Arc<TestStore>,
     pub probe: Arc<PublicationProbe>,
+    pub send_failure: Mutex<Option<ConnectionId>>,
     welcome: Arc<PublicationProbe>,
 }
 impl ObjectHost for TestHost {
@@ -216,6 +217,16 @@ impl ObjectHost for TestHost {
         self.native.quarantine_connections(connections).await;
     }
     async fn send_frame(&self, to: ConnectionId, frame: Bytes) -> Result<(), SocketFailure> {
+        {
+            let mut failure = self
+                .send_failure
+                .lock()
+                .map_err(|_| SocketFailure::Closed)?;
+            if failure.as_ref() == Some(&to) {
+                *failure = None;
+                return Err(SocketFailure::NotConnected);
+            }
+        }
         let is_welcome = serde_json::from_slice::<serde_json::Value>(&frame)
             .ok()
             .and_then(|value| {
@@ -346,6 +357,7 @@ impl Fixture {
                 after_rollback: Arc::default(),
             }),
             probe: Arc::default(),
+            send_failure: Mutex::default(),
             welcome: io.gather.clone(),
         });
         // This route address is a test fixture only; no provenance is derived from PeerId.
@@ -387,6 +399,13 @@ impl Fixture {
     }
     pub async fn enroll(&self, peer: PeerId) -> Result<(), TestError> {
         let installation = self.installation.clone();
+        self.enroll_as(peer, installation).await
+    }
+    async fn enroll_as(
+        &self,
+        peer: PeerId,
+        installation: message_board::ServiceId,
+    ) -> Result<(), TestError> {
         self.host.store.object.transaction(move |scope| Box::pin(async move {
             // This session component fixture supplies the enrollment that normal HTTP admission owns.
             query::<sqlx_turso::Turso>("INSERT INTO machine_enrollments(machine_id,service_id,machine_label,access_client_id,credential_hash,state,expires_at,created_at,updated_at) VALUES(?,?,'native fixture',?,?,'enrolled','2033-05-18T03:33:20+00:00','2026-10-18T00:00:00+00:00','2026-10-18T00:00:00+00:00') ON CONFLICT(machine_id) DO NOTHING")
@@ -400,7 +419,14 @@ impl Fixture {
         &self,
         peer: PeerId,
     ) -> Result<(ConnectionBinding, SessionId, mpsc::Receiver<SocketCommand>), TestError> {
-        self.enroll(peer).await?;
+        self.socket_as(peer, self.installation.clone()).await
+    }
+    pub async fn socket_as(
+        &self,
+        peer: PeerId,
+        installation: message_board::ServiceId,
+    ) -> Result<(ConnectionBinding, SessionId, mpsc::Receiver<SocketCommand>), TestError> {
+        self.enroll_as(peer, installation.clone()).await?;
         let connection = ConnectionId::new(durable_steps::Uuid::now_v7())?;
         let session = SessionId::new(durable_steps::Uuid::now_v7())?;
         let binding = ConnectionBinding::new(
@@ -411,7 +437,7 @@ impl Fixture {
             },
         );
         let origin = collaboration_central_core::AdmissionOrigin {
-            installation: self.installation.clone(),
+            installation,
             machine: message_board::MachineLabel::try_from("native fixture".to_owned())?,
         };
         let socket = self.host.native.attach_socket(binding, origin).await;

@@ -12,7 +12,7 @@ pub async fn insert_zero_position(fixture: &Fixture) -> Result<(), TestError> {
     let id = durable_steps::Uuid::now_v7().to_string();
     let created = fixture.io.now().unix_millis();
     fixture.host.store.object.transaction(move |scope|Box::pin(async move {
-        query::<sqlx_turso::Turso>("INSERT INTO machine_control_notices(notice_id,machine_id,position,kind,feed_through,created_at,expires_at,updated_at) SELECT ?,machine_id,0,'fleetFeedAdvanced',1,?,?,? FROM machine_enrollments LIMIT 1")
+        query::<sqlx_turso::Turso>("INSERT INTO machine_control_project_notices(notice_id,machine_id,position,kind,created_at,expires_at,updated_at) SELECT ?,machine_id,0,'project_list_changed',?,?,? FROM machine_enrollments LIMIT 1")
             .bind(id).bind(created).bind(created+RETENTION).bind(created).execute(scope.executor()).await.map_err(StoreError::backend)?;
         Ok(())
     })).await?;
@@ -26,7 +26,7 @@ pub async fn state_rows(fixture: &Fixture) -> Result<i64, TestError> {
         .transaction(|scope| {
             Box::pin(async move {
                 let row = query::<sqlx_turso::Turso>(
-                    "SELECT COUNT(*) AS count FROM machine_control_progress",
+                    "SELECT COUNT(*) AS count FROM machine_control_project_progress",
                 )
                 .fetch_one(scope.executor())
                 .await
@@ -60,9 +60,12 @@ pub fn snapshot_closed_owner(
     assert!(destination.join("fleet.db").is_file());
     Ok(())
 }
-pub fn notice(through: u64) -> Result<BoardNotice, TestError> {
-    Ok(BoardNotice::FleetFeedAdvanced {
-        through: message_board::FleetPosition::try_from(through)?,
+pub fn notice(position: u64) -> Result<BoardNotice, TestError> {
+    Ok(BoardNotice::LeaseGranted {
+        project: "019f0000-0000-7000-8000-000000000003"
+            .to_owned()
+            .try_into()?,
+        epoch: fleet_sync_protocol::Epoch::new(position)?,
     })
 }
 pub fn invocation(kind: &BoardNotice) -> Result<Vec<u8>, TestError> {
@@ -198,7 +201,7 @@ pub async fn rows(fixture: &Fixture) -> Result<i64, TestError> {
         .transaction(|scope| {
             Box::pin(async move {
                 let row = query::<sqlx_turso::Turso>(
-                    "SELECT COUNT(*) AS count FROM machine_control_notices",
+                    "SELECT COUNT(*) AS count FROM machine_control_project_notices",
                 )
                 .fetch_one(scope.executor())
                 .await

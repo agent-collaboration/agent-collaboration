@@ -139,13 +139,13 @@ where
     ) -> Result<(), StoreError> {
         match request {
             BoardConsumerRequest::ForwardedPost { project, post } => {
-                let pending = crate::forward_store::PendingForward {
+                let pending = crate::project_request_store::ProjectRequest {
                     forward_frame,
                     request_frame: frame,
                     connection,
                     session,
                     project,
-                    phase: crate::forward_store::ForwardPhase::Routing,
+                    phase: crate::project_request_store::ProjectRequestPhase::Routing,
                     deadline: now.after(std::time::Duration::from_secs(30)),
                     created_at: now,
                     updated_at: now,
