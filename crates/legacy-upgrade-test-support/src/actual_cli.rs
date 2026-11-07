@@ -1,6 +1,6 @@
 //! Actual CLI publication into a caller-owned, already-running central.
-use codex_router_test_support::{FixtureResult, owned_cli_process::run_cli_output};
 use message_board::ProjectId;
+use owned_process_test_support::{FixtureResult, owned_cli_process::run_cli_output};
 use serde_json::Value;
 use std::{
     fs::{self, OpenOptions},

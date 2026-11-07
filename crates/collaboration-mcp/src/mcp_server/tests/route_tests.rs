@@ -154,7 +154,7 @@ async fn message_server(
         .with_automation_store(store)
         .with_session_delivery(delivery)
         .with_subscription_delivery_service(owner.clone(), presence.clone());
-    let (identity, native) = crate::native_mail_owner::NativeMailOwner::start(
+    let (identity, native) = crate::native_mail_owner::start(
         identity,
         crate::native_board_test_fixture::fixture_peer().expect("fixture peer"),
         collaboration_service::MailPushDeliveryProps {

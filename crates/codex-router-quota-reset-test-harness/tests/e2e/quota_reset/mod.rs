@@ -22,12 +22,12 @@ mod quota_reset_pty_test {
     use codex_router_core::credit_usage::CreditAvailability;
     use codex_router_core::credit_usage::CreditBalance;
     use codex_router_core::ids::AccountId;
+    use codex_router_quota_reset_test_harness::loopback_provider::HeldLoopbackProvider;
     use codex_router_state::sqlite::AsyncSqliteStateStore;
     use isolated_fixture_test::FORBIDDEN_TERMINAL_CANARIES;
     use isolated_fixture_test::QuotaResetFixture;
     use isolated_fixture_test::TestResult;
     use isolated_fixture_test::ensure;
-    use loopback_provider_test::HeldLoopbackProvider;
     use terminal_interaction_test::TerminalDriver;
 
     const SEMANTIC_WAIT: Duration = Duration::from_secs(8);

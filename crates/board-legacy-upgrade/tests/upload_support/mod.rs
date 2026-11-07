@@ -1,4 +1,3 @@
-pub mod actual_cli;
 pub mod fleet_readback;
 use board_legacy_upgrade::PreparedUpgrade;
 use sqlx_turso::sqlx::{ConnectOptions, Connection, Executor, Row};

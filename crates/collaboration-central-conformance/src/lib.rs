@@ -140,3 +140,6 @@ pub use archive_runtime::run_archive_report_with_clock;
 mod mutation_revocation_scenario;
 #[cfg(feature = "client")]
 pub use mutation_revocation_scenario::run_mutation_revocation_conformance;
+
+#[cfg(feature = "client")]
+pub mod workerd_process;

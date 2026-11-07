@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "collaboration-runtime"
 version.workspace = true
 edition.workspace = true
@@ -6,13 +7,14 @@ license.workspace = true
 publish.workspace = true
 
 [features]
-test-support = []
+test-support = ["dep:sqlx-turso"]
 runtime-test-support = ["interaction-storage/runtime-test-support"]
 
 [lints]
 workspace = true
 
 [dependencies]
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090", optional = true }
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
 fleet-sync-tokio-runner.workspace = true

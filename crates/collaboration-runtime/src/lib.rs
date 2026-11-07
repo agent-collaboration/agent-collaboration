@@ -152,9 +152,11 @@ mod project_replication_cursor;
 pub use project_replication_cursor::project_replication_cursor;
 pub mod observation_timestamp;
 
-#[cfg(test)]
-#[path = "../tests/support/native_worker_faults.rs"]
+#[cfg(all(test, not(feature = "test-support")))]
+#[path = "test_support/native_worker_faults.rs"]
 mod native_worker_faults;
+#[cfg(all(test, feature = "test-support"))]
+use test_support::native_worker_faults;
 
 /// Test-only schedule execution fixtures shared with application inspection tests.
 #[cfg(any(test, feature = "test-support"))]

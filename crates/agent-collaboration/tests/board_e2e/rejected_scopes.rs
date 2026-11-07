@@ -7,8 +7,9 @@ use super::{
     repository_fixture::attach_repository,
     role_checks::Roles,
 };
-use codex_router_test_support::{FixtureResult, scenario_finalization::run_scenario};
+use codex_router_test_support::FixtureResult;
 use collaboration_client::protocol::{EndpointId, EndpointRef, SessionRef};
+use owned_process_test_support::scenario_finalization::run_scenario;
 use serde_json::{Value, json};
 
 const SENTINEL: &str = "BR01 independent healthy scope sentinel";

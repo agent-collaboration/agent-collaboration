@@ -1,7 +1,7 @@
 use crate::support;
-use crate::upload_support::actual_cli;
 use actual_cli::{ImporterCliInvocation, run_importer_cli};
-use codex_router_test_support::owned_cli_process::run_cli_output;
+use legacy_upgrade_test_support::actual_cli;
+use owned_process_test_support::owned_cli_process::run_cli_output;
 use std::{
     path::{Path, PathBuf},
     process::{Output, Stdio},
@@ -398,7 +398,7 @@ async fn another_process_holding_the_legacy_file_refuses_the_run() -> TestResult
         source: source.clone(),
     };
 
-    codex_router_test_support::scenario_finalization::run_scenario(
+    owned_process_test_support::scenario_finalization::run_scenario(
         holder,
         async |holder| {
             wait_until_lsof_reports(&holder.child, &holder.source).await?;

@@ -3,36 +3,38 @@ use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_runtime::FleetClient;
 use collaboration_runtime::ProjectStoreRegistry;
-use collaboration_service as mail_service;
 use collaboration_service::ApplicationFixture;
 
 use collaboration_service::ProjectAdmission;
 use collaboration_service::ProjectAdmissionProps;
 
-use message_board::*;
+use message_board::{
+    ActorOrigin, BoardId, MachineLabel, ProjectCreateRequest, ProjectId, Record, RecordEnvelope,
+    RecordKind, RepositoryRef, RequestId, ServiceId, SubjectRevision, TaskId, ThreadSubject,
+    WorkspaceId, Workstream, WorkstreamId, WorkstreamState,
+};
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, sync::Arc};
 #[path = "board_context_backend.rs"]
 mod board_context_backend;
 #[path = "board_poll_services.rs"]
-pub(crate) mod board_poll_services;
+pub mod board_poll_services;
 use board_poll_services::fixture_poll_services;
 // Only the membership cost proof names the composed-owner type.
 
-#[path = "native_mail_owner.rs"]
-pub mod native_mail_owner;
+pub use crate::native_mail_owner;
 use board_context_backend::BoardContextBackend;
 pub type TestError = Box<dyn std::error::Error + Send + Sync>;
 
 #[path = "controlled_clock.rs"]
-pub(crate) mod controlled_clock;
+pub mod controlled_clock;
 #[path = "registered_project.rs"]
-pub(crate) mod registered_project;
+pub mod registered_project;
 use registered_project::prepare_registered_creation;
 // Shared fixture exports are consumed by different test binaries.
 
 #[path = "native_registry.rs"]
-pub(crate) mod native_registry;
+pub mod native_registry;
 use native_registry::PendingRegistration;
 // Shared fixture exports are consumed by different test binaries.
 // Shared fixture exports are consumed by different test binaries.
@@ -56,7 +58,7 @@ pub struct BoardFixture {
     pub _registry: Arc<ProjectStoreRegistry>,
     pub _admission: Arc<ProjectAdmission>,
     pub _fleet: Arc<FleetClient>,
-    pub(crate) _fleet_runtime: board_central_test_support::FleetTestRuntime,
+    pub _fleet_runtime: board_central_test_support::FleetTestRuntime,
     pub workspace: WorkspaceId,
     pub board: BoardId,
     pub actor: Value,

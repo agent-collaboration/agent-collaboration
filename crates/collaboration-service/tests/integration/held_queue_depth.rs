@@ -209,7 +209,7 @@ async fn records_sequential_admission_costs_at_held_depths_and_the_real_capacity
     )?
     .with_automation_store(automation.clone())
     .with_subscription_delivery_service(service.clone(), route.clone());
-    let (identity, native) = native_mail_owner::NativeMailOwner::start(
+    let (identity, native) = native_mail_owner::start(
         identity,
         board_fixture::fixture_peer()?,
         collaboration_service::MailPushDeliveryProps {

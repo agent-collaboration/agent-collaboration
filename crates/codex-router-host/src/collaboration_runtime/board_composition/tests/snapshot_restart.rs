@@ -9,19 +9,9 @@ use std::{io, sync::Arc};
 
 // The shared harness also contains unrelated journey helpers.
 
-#[path = "../../../../../collaboration-service/tests/support/accepted_snapshot.rs"]
-#[expect(
-    dead_code,
-    reason = "Sibling snapshot tests use the other shared bootstrap helpers."
-)]
-mod accepted_snapshot;
+use collaboration_application_test_support::accepted_snapshot;
 
-#[path = "../../../../../collaboration-service/tests/support/board_fixture.rs"]
-#[expect(
-    dead_code,
-    reason = "Other integration targets use the remaining shared board fixture helpers."
-)]
-pub(super) mod board_fixture;
+pub(super) use collaboration_application_test_support::board_fixture;
 
 #[tokio::test]
 #[expect(

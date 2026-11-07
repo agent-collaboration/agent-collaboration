@@ -60,7 +60,7 @@ mod forwarded_post_wire;
 )]
 mod holder_writer_retry;
 #[cfg(feature = "conformance")]
-#[path = "../support/mail_relay_transport.rs"]
+#[path = "../../src/test_support/mail_relay_transport.rs"]
 mod mail_relay_transport;
 #[cfg(feature = "conformance")]
 #[path = "../mail_submit_http/registry_setup.rs"]
