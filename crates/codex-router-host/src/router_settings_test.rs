@@ -113,10 +113,6 @@ fn file_level_faults_fail_both_sections_and_leave_the_file_untouched() {
             r#"{"ports": {"router": 28741}, "ports": {"router": 28742}}"#.to_owned(),
         ),
         (
-            "duplicate nested member",
-            r#"{"ports": {"router": 28741, "router": 28742}}"#.to_owned(),
-        ),
-        (
             "unknown top-level member",
             format!(r#"{{"providers": {VALID_PROVIDERS}, "port": {{"router": 28741}}}}"#),
         ),
@@ -200,4 +196,64 @@ fn reading_ports_never_creates_the_file() {
 
     assert!(ports.value.is_none());
     assert!(!router_settings_path(root.path()).exists());
+}
+
+#[test]
+fn duplicate_member_inside_providers_fails_only_providers() {
+    let root = tempfile::tempdir().expect("root");
+    let path = write_settings(
+        root.path(),
+        r#"{"providers": {"version": 1, "version": 1, "providers": {}}, "ports": {"router": 28741}}"#,
+    );
+
+    let providers = load_or_create_provider_settings(root.path())
+        .expect_err("a repeated member inside providers is a providers error")
+        .to_string();
+    let ports = read_router_settings_section::<PortSettingsSection>(
+        root.path(),
+        RouterSettingsSection::Ports,
+    )
+    .expect("ports stay readable");
+
+    assert!(
+        providers.contains(&path.display().to_string()),
+        "{providers}"
+    );
+    assert!(providers.contains("\"providers\" section"), "{providers}");
+    assert!(
+        providers.contains("\"version\" appears more than once"),
+        "{providers}"
+    );
+    assert_eq!(
+        ports.value.and_then(|ports| ports.router).map(u16::from),
+        Some(28741)
+    );
+}
+
+#[test]
+fn duplicate_member_inside_ports_fails_only_ports() {
+    let root = tempfile::tempdir().expect("root");
+    let path = write_settings(
+        root.path(),
+        &format!(
+            r#"{{"providers": {VALID_PROVIDERS}, "ports": {{"router": 28741, "router": 28742}}}}"#
+        ),
+    );
+
+    let ports = read_router_settings_section::<PortSettingsSection>(
+        root.path(),
+        RouterSettingsSection::Ports,
+    )
+    .err()
+    .expect("a repeated member inside ports is a ports error")
+    .to_string();
+    let providers = load_or_create_provider_settings(root.path()).expect("providers stay usable");
+
+    assert!(ports.contains(&path.display().to_string()), "{ports}");
+    assert!(ports.contains("\"ports\" section"), "{ports}");
+    assert!(
+        ports.contains("\"router\" appears more than once"),
+        "{ports}"
+    );
+    assert!(!providers.claude().enabled);
 }

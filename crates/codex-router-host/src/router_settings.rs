@@ -192,29 +192,42 @@ fn parse_section<T: DeserializeOwned>(
     let value = parsed
         .value
         .ok_or_else(|| malformed("the file holds no JSON object".to_owned()))?;
-    reject_duplicate_members(&value)
-        .map_err(|member| malformed(format!("member \"{member}\" appears more than once")))?;
-    let serde_json::Value::Object(mut members) = serde_json::Value::from(value) else {
+    let jsonc_parser::ast::Value::Object(object) = value else {
         return Err(malformed("the top level must be an object".to_owned()));
     };
-    if let Some(unknown) = members
-        .keys()
-        .find(|member| !["providers", "ports"].contains(&member.as_str()))
-    {
-        return Err(malformed(format!(
-            "unknown member \"{unknown}\" (expected \"providers\" or \"ports\")"
-        )));
+    // Only top-level faults belong to the whole file; anything inside a section,
+    // including a repeated member, is that section's own error.
+    let mut names = BTreeSet::new();
+    for property in &object.properties {
+        let name = property.name.as_str();
+        if !names.insert(name) {
+            return Err(malformed(format!(
+                "member \"{name}\" appears more than once"
+            )));
+        }
+        if !["providers", "ports"].contains(&name) {
+            return Err(malformed(format!(
+                "unknown member \"{name}\" (expected \"providers\" or \"ports\")"
+            )));
+        }
     }
-    members
-        .remove(section.member_name())
-        .map(|value| {
-            serde_json::from_value(value).map_err(|error| RouterSettingsError::InvalidSection {
-                path: path.to_owned(),
-                section,
-                message: error.to_string(),
-            })
-        })
-        .transpose()
+    let invalid_section = |message: String| RouterSettingsError::InvalidSection {
+        path: path.to_owned(),
+        section,
+        message,
+    };
+    let Some(property) = object
+        .properties
+        .into_iter()
+        .find(|property| property.name.as_str() == section.member_name())
+    else {
+        return Ok(None);
+    };
+    reject_duplicate_members(&property.value)
+        .map_err(|member| invalid_section(format!("member \"{member}\" appears more than once")))?;
+    serde_json::from_value(serde_json::Value::from(property.value))
+        .map(Some)
+        .map_err(|error| invalid_section(error.to_string()))
 }
 
 fn reject_duplicate_members<'a>(value: &'a jsonc_parser::ast::Value<'a>) -> Result<(), String> {

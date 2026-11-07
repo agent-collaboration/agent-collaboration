@@ -181,6 +181,25 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_member_inside_providers_marks_both_unavailable_naming_the_section() {
+        let root = tempfile::tempdir().expect("router root");
+        let path = root.path().join("settings.jsonc");
+        let bytes = br#"{"providers": {"version":1,"version":1,"providers":{"claude":{"enabled":true,"executable":null,"arguments":[]},"cursor":{"enabled":true,"executable":null,"arguments":["acp"]}}}, "ports": {"router": 28741}}"#;
+        std::fs::write(&path, bytes).expect("settings");
+
+        let startups = configured_provider_startups(root.path(), &[]).expect("isolated failure");
+
+        for startup in startups {
+            let ExternalProviderStartup::Unavailable { reason, .. } = startup else {
+                panic!("a repeated member in providers cannot launch a provider")
+            };
+            let reason = String::from(reason);
+            assert!(reason.contains("\"providers\" section"), "{reason}");
+            assert!(reason.contains("appears more than once"), "{reason}");
+        }
+    }
+
+    #[test]
     fn broken_ports_section_keeps_configured_providers_launchable() {
         let root = tempfile::tempdir().expect("router root");
         let bytes = br#"{"ports": {"router": "not-a-port"}, "providers": {"version":1,"providers":{"claude":{"enabled":true,"executable":"/configured/claude-agent-acp","arguments":[]},"cursor":{"enabled":true,"executable":null,"arguments":["acp"]}}}}"#;

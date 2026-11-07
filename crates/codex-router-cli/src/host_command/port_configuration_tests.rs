@@ -216,6 +216,10 @@ async fn zero_file_ports_refuse_startup_with_path() {
     }
 }
 #[tokio::test]
+async fn duplicate_member_inside_ports_refuses_startup_naming_ports() {
+    assert_invalid_startup(r#"{"router":28741,"router":28742}"#).await;
+}
+#[tokio::test]
 async fn equal_file_ports_refuse_startup_with_path() {
     assert_invalid_startup(r#"{"router":28741,"mcp":28741}"#).await;
 }
