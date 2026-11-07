@@ -90,7 +90,11 @@ async fn assert_startup_refuses(source: SourceRow) -> Result<(), TestError> {
         ),
         "{error:?}"
     );
-    assert!(error.to_string().contains("codex-router-board-upgrade"));
+    assert!(
+        error
+            .to_string()
+            .contains("agent-router-update board-import")
+    );
     assert!(
         !root.path().join("service.json").exists(),
         "startup published a partial communication manifest"

@@ -323,6 +323,9 @@ pub enum AccountCommandError {
     /// Stdout write failed.
     #[error("failed to write stdout: {0}")]
     Stdout(std::io::Error),
+    /// The Router root needs agent-router-update before account commands may use it.
+    #[error(transparent)]
+    UpdateGuard(#[from] crate::router_update_guard::RouterUpdateGuardError),
 }
 
 /// Runs an account command.
@@ -425,6 +428,7 @@ fn run_account_command_with_input_and_provider_flows_and_store_overrides(
     claude_flow_override: Option<&dyn AccountLoginFlow<PendingLogin = PendingClaudeOAuthLogin>>,
     claude_secret_store_override: Option<RuntimeCredentialStore>,
 ) -> Result<(), AccountCommandError> {
+    crate::router_update_guard::refuse_account_command_needing_update(&command)?;
     match command {
         AccountCommand::Remove {
             router_root,

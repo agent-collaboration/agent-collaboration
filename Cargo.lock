@@ -293,6 +293,55 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent-router-update"
+version = "0.1.133"
+dependencies = [
+ "automation-storage",
+ "board-fleet-sync",
+ "board-sync-protocol",
+ "chrono",
+ "clap",
+ "codex-router-host",
+ "codex-router-secret-store",
+ "collaboration-central-admin-protocol",
+ "collaboration-central-conformance",
+ "collaboration-central-core",
+ "collaboration-central-tokio",
+ "collaboration-client",
+ "collaboration-contracts",
+ "collaboration-protocol",
+ "collaboration-runtime",
+ "collaboration-service",
+ "durable-steps",
+ "fleet-admission",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-writer",
+ "futures-util",
+ "interaction-storage",
+ "legacy-upgrade-test-support",
+ "message-board",
+ "message-board-storage",
+ "nix",
+ "owned-process-test-support",
+ "reqwest 0.12.28",
+ "reqwest-websocket",
+ "runtime-primitives",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "sqlx-turso",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "agent-session-inventory"
 version = "0.1.133"
 dependencies = [
@@ -961,55 +1010,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "board-legacy-upgrade"
-version = "0.1.133"
-dependencies = [
- "automation-storage",
- "board-fleet-sync",
- "board-sync-protocol",
- "chrono",
- "clap",
- "codex-router-host",
- "codex-router-secret-store",
- "collaboration-central-admin-protocol",
- "collaboration-central-conformance",
- "collaboration-central-core",
- "collaboration-central-tokio",
- "collaboration-client",
- "collaboration-contracts",
- "collaboration-protocol",
- "collaboration-runtime",
- "collaboration-service",
- "durable-steps",
- "fleet-admission",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-writer",
- "futures-util",
- "interaction-storage",
- "legacy-upgrade-test-support",
- "message-board",
- "message-board-storage",
- "nix",
- "owned-process-test-support",
- "reqwest 0.12.28",
- "reqwest-websocket",
- "runtime-primitives",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "sqlx-turso",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "board-staging-cutover"
 version = "0.1.133"
 dependencies = [
@@ -1445,6 +1445,7 @@ dependencies = [
  "indicatif",
  "iocraft",
  "message-board",
+ "message-board-storage",
  "nix",
  "opentelemetry",
  "opentelemetry-appender-tracing",
@@ -1492,11 +1493,11 @@ dependencies = [
  "acp-provider-adapters",
  "agent-automation",
  "agent-client-protocol",
+ "agent-router-update",
  "automation-storage",
  "axum",
  "board-central-test-support",
  "board-fleet-sync",
- "board-legacy-upgrade",
  "board-sync-protocol",
  "chrono",
  "claude-code-peer-messaging",

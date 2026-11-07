@@ -38,9 +38,25 @@ impl RouterLocalDatabase {
         path: &Path,
         migrator: &Migrator,
     ) -> Result<Self, RouterLocalStorageError> {
+        Self::open_with(path, migrator, true).await
+    }
+
+    /// Migrates a store that must already exist; a missing file is an error, never created.
+    pub(crate) async fn open_existing(
+        path: &Path,
+        migrator: &Migrator,
+    ) -> Result<Self, RouterLocalStorageError> {
+        Self::open_with(path, migrator, false).await
+    }
+
+    async fn open_with(
+        path: &Path,
+        migrator: &Migrator,
+        create_if_missing: bool,
+    ) -> Result<Self, RouterLocalStorageError> {
         let options = TursoConnectOptions::new()
             .filename(path)
-            .create_if_missing(true);
+            .create_if_missing(create_if_missing);
         let pool = PoolOptions::<Turso>::new()
             .max_connections(1)
             .min_connections(1)

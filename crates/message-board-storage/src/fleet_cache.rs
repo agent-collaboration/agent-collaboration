@@ -25,7 +25,8 @@ pub use discovery::FleetDiscoveryKey;
 mod rebuild;
 pub use rebuild::FleetCacheRebuild;
 
-static CACHE_MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./fleet_cache_migrations");
+pub(crate) static CACHE_MIGRATOR: sqlx::migrate::Migrator =
+    sqlx::migrate!("./fleet_cache_migrations");
 
 // Only these central-derived tables are cleared; login and session registrations
 // in this store survive enrollment. D1 removes file-based snapshot install attempts

@@ -140,7 +140,7 @@ jobs:
         background: true
         run: |
           set -euo pipefail
-          production_graph="$(cargo tree --locked --color never --target aarch64-apple-darwin -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade -e normal,build,features)"
+          production_graph="$(cargo tree --locked --color never --target aarch64-apple-darwin -p codex-router-cli -p agent-collaboration -p agent-router-update -e normal,build,features)"
           if grep -Eq -- '-test-support v[0-9]|feature "test-support"' <<< "$production_graph"; then
             echo 'production dependency graph includes a test-support crate or feature' >&2
             exit 1
@@ -302,7 +302,7 @@ jobs:
       # Keep the build/run exclusions and slower-job inventory identical.
       - name: Build test binaries
         run: |
-          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not((package(=agent-collaboration) & binary(=e2e)) | (package(=board-legacy-upgrade) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/)))' --no-run
+          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not((package(=agent-collaboration) & binary(=e2e)) | (package(=agent-router-update) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/)))' --no-run
           df -h /
       - name: Build quota-reset test binaries
         if: github.event_name != 'pull_request' || steps.quota_scope.outputs.changed == 'true'
@@ -317,7 +317,7 @@ jobs:
         run: |
           # Exercise private fixture setup under the ordinary Unix mask.
           umask 022
-          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not((package(=agent-collaboration) & binary(=e2e)) | (package(=board-legacy-upgrade) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/)))'
+          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not((package(=agent-collaboration) & binary(=e2e)) | (package(=agent-router-update) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/)))'
       - name: Wait for tests
         wait-all:
       - name: Test isolated default Router port cutover
@@ -387,18 +387,18 @@ jobs:
         run: |
           cargo build --locked -p agent-collaboration --all-features --bins
           cargo build --locked -p codex-router-host --features runtime-test-support --example board-debug-runtime
-          cargo build --locked -p board-legacy-upgrade --bin codex-router-board-upgrade
+          cargo build --locked -p agent-router-update --bin agent-router-update
       - name: Build E2E test binaries
         run: |
           cargo nextest run --locked --profile ci --success-output final -p agent-collaboration --all-features --test e2e --test-threads 1 --color never --status-level all --final-status-level all --no-run
-          cargo nextest run --locked --profile ci -p board-legacy-upgrade --test e2e --test-threads 1 --color never --status-level all --final-status-level all --no-run
+          cargo nextest run --locked --profile ci -p agent-router-update --test e2e --test-threads 1 --color never --status-level all --final-status-level all --no-run
           cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test e2e --test-threads 1 --color never --status-level all --final-status-level all --no-run
       - name: Run the deterministic local process journeys
         run: |
           set -o pipefail
           cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee "$CODEX_ROUTER_E2E_PARENT/nextest.log"
           cargo nextest run --locked --profile ci --success-output final -p agent-collaboration --all-features --test e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee -a "$CODEX_ROUTER_E2E_PARENT/nextest.log"
-          cargo nextest run --locked --profile ci -p board-legacy-upgrade --test e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee -a "$CODEX_ROUTER_E2E_PARENT/nextest.log"
+          cargo nextest run --locked --profile ci -p agent-router-update --test e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee -a "$CODEX_ROUTER_E2E_PARENT/nextest.log"
           if grep -Eq '^[[:space:]]*LEAK[[:space:]]' "$CODEX_ROUTER_E2E_PARENT/nextest.log"; then
             echo "End-to-end child lifecycle leak detected" >&2
             exit 1
@@ -551,14 +551,14 @@ jobs:
         working-directory: release-source
         run: |
           set -euo pipefail
-          production_graph="$(cargo tree --locked --color never -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade -e normal,build,features)"
+          production_graph="$(cargo tree --locked --color never -p codex-router-cli -p agent-collaboration -p agent-router-update -e normal,build,features)"
           if grep -Eq -- '-test-support v[0-9]|feature "test-support"' <<< "$production_graph"; then
             echo 'production dependency graph includes a test-support crate or feature' >&2
             exit 1
           fi
       - name: Build release binaries
         working-directory: release-source
-        run: cargo build --locked --release -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade --bins --timings
+        run: cargo build --locked --release -p codex-router-cli -p agent-collaboration -p agent-router-update --bins --timings
       - name: Measure release cache inputs
         run: du -sk release-source/target "$HOME/.cargo/registry" "$HOME/.cargo/git"
       - name: Retain release cache build timings

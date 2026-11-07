@@ -3,7 +3,7 @@ resolver = "3"
 members = [
     "crates/tailnet-verification-host",
     "crates/board-central-test-support",
-    "crates/board-legacy-upgrade",
+    "crates/agent-router-update",
     "crates/legacy-upgrade-test-support",
     "crates/board-staging-cutover",
     "crates/board-fleet-sync",

@@ -89,6 +89,11 @@ pub use project_import_keys::{ImportRowKeys, ImportRowKind};
 pub use project_ledger_reader::ProjectLedgerReader;
 mod router_local_database;
 pub mod schema_fingerprint;
+mod update_ledger;
+pub use update_ledger::{
+    StoredUpdateLedger, UpdateLedger, UpdateLedgerEntry, UpdateSourceProgress, UpdateStepNumber,
+    UpdateStepProgress, read_update_ledger,
+};
 
 pub use cursor_store::{CursorSigningKey, CursorStore};
 pub use fleet_cache::{
