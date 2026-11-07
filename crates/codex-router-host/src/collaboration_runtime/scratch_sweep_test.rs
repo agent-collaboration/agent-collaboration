@@ -639,3 +639,79 @@ async fn a_thread_folder_stays_for_31_quiet_days_while_one_of_two_sessions_remai
     assert_eq!(first.kept_open, vec!["thread-root".to_owned()]);
     fixture.stop().await;
 }
+
+/// One logged event: its level and its fields as text.
+type CapturedEvent = (tracing::Level, std::collections::BTreeMap<String, String>);
+
+/// Every event logged while the capture is the subscriber.
+#[derive(Clone, Default)]
+struct CapturedEvents(Arc<Mutex<Vec<CapturedEvent>>>);
+
+struct FieldText<'a>(&'a mut std::collections::BTreeMap<String, String>);
+
+impl tracing::field::Visit for FieldText<'_> {
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        self.0.insert(field.name().to_owned(), format!("{value:?}"));
+    }
+
+    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+        self.0.insert(field.name().to_owned(), value.to_owned());
+    }
+}
+
+impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for CapturedEvents {
+    fn on_event(
+        &self,
+        event: &tracing::Event<'_>,
+        _context: tracing_subscriber::layer::Context<'_, S>,
+    ) {
+        let mut fields = std::collections::BTreeMap::new();
+        event.record(&mut FieldText(&mut fields));
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push((*event.metadata().level(), fields));
+    }
+}
+
+#[test]
+fn a_failed_removal_is_logged_as_a_warning_naming_the_scope_and_error() {
+    use tracing_subscriber::prelude::*;
+    let captured = CapturedEvents::default();
+    let report = ScratchSweepReport {
+        ran_at: Some(SystemTime::UNIX_EPOCH),
+        failures: vec![ScratchSweepFailure {
+            scope: "stubborn".to_owned(),
+            error: io::Error::new(io::ErrorKind::PermissionDenied, "Permission denied"),
+        }],
+        next_pass_at: Some(SystemTime::UNIX_EPOCH + DAY),
+        ..ScratchSweepReport::default()
+    };
+
+    tracing::subscriber::with_default(
+        tracing_subscriber::registry().with(captured.clone()),
+        || {
+            LoggedScratchSweepEvents.pass_finished(&report);
+        },
+    );
+
+    let events = captured
+        .0
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    let warning = events
+        .iter()
+        .find(|(level, _)| *level == tracing::Level::WARN)
+        .map(|(_, fields)| fields.clone())
+        .unwrap_or_else(|| panic!("a failed removal must be logged as a warning: {events:?}"));
+    assert_eq!(warning.get("scope").map(String::as_str), Some("stubborn"));
+    assert_eq!(
+        warning.get("error").map(String::as_str),
+        Some("Permission denied")
+    );
+    assert_eq!(
+        warning.get("message").map(String::as_str),
+        Some("scratch folder kept; retried the next day")
+    );
+}
