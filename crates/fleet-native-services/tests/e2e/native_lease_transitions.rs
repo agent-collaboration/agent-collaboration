@@ -364,7 +364,7 @@ async fn stale_holder_move_refuses_then_a_recently_renewed_holder_moves_over_its
         .await?;
     let mut owner = writer.transport.0.lock().await;
     let socket = owner.as_mut().ok_or("writer socket missing")?;
-    let started = SystemClock.now();
+    let started = writer.clock.now();
     let renewal = match request(
         socket,
         OperationRequest::Lease(LeaseRequest::Renew(RenewRequest {
@@ -384,6 +384,10 @@ async fn stale_holder_move_refuses_then_a_recently_renewed_holder_moves_over_its
         }
         _ => return Err("fresh holder renewal refused".into()),
     };
+    assert_eq!(
+        started, fresh_at,
+        "the cached renewal deadline must use the same injected time as the registry"
+    );
     writer.database.observe_renewal(renewal, started).await?;
     let attempt = TransferId::new(durable_steps::Uuid::now_v7())?;
     let _capability_fresh = service
