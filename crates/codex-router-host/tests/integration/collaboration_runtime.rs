@@ -3,6 +3,14 @@ use collaboration_client::CollaborationClient;
 use collaboration_protocol::{EndpointAvailability, ObservationTimestamp};
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 
+/// Returns the UUID version of an id the Host minted.
+#[expect(clippy::panic, reason = "An id that is not a UUID fails the test.")]
+fn minted_version(id: &collaboration_protocol::UuidIdentity) -> usize {
+    uuid::Uuid::parse_str(&String::from(id.clone()))
+        .unwrap_or_else(|error| panic!("minted id {id:?}: {error}"))
+        .get_version_num()
+}
+
 #[tokio::test]
 async fn host_without_provider_faces_does_not_require_owner_lookup()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -181,6 +189,12 @@ async fn host_composes_discovery_and_retires_only_owned_communication_sockets() 
     );
     assert!(manifest.mcp.url.starts_with("http://127.0.0.1:"));
     assert!(manifest.mcp.url.ends_with("/mcp"));
+    assert_eq!(
+        minted_version(&manifest.service_id),
+        7,
+        "fresh-root service id"
+    );
+    assert_eq!(minted_version(&manifest.service_epoch), 7, "service epoch");
     let control_schema_files = std::fs::read_dir(&root)
         .unwrap_or_else(|error| panic!("service directory: {error}"))
         .filter_map(Result::ok)
@@ -322,6 +336,7 @@ async fn host_composes_discovery_and_retires_only_owned_communication_sockets() 
     let collaboration_client::JournalStatus::Available { bounds } = status else {
         panic!("journal unavailable");
     };
+    assert_eq!(minted_version(&bounds.journal_id), 7, "journal identity");
     let target = endpoints
         .endpoints
         .first()
@@ -359,6 +374,21 @@ async fn host_composes_discovery_and_retires_only_owned_communication_sockets() 
     .unwrap_or_else(|error| panic!("coverage deadline: {error}"));
     assert!(addresses.entries.is_empty());
     assert_eq!(addresses.coverage.endpoint, target);
+    assert_eq!(
+        minted_version(&addresses.snapshot_id),
+        7,
+        "address snapshot id"
+    );
+    let observer_id = addresses
+        .coverage
+        .observer_id
+        .as_ref()
+        .unwrap_or_else(|| panic!("observing coverage names its observer"));
+    assert_eq!(minted_version(observer_id), 7, "native observer id");
+    assert_ne!(
+        observer_id, &original_epoch,
+        "coverage comes from the native observer, not a Host lifecycle record"
+    );
     assert!(addresses.watermark.sequence >= page.next.sequence);
     assert!(page.records.iter().any(|record| matches!(
         record.observation.change,

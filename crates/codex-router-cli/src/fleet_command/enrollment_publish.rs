@@ -109,3 +109,7 @@ fn cleanup(
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "enrollment_publish_test.rs"]
+mod tests;

@@ -429,6 +429,10 @@ mod tests {
 }
 
 #[cfg(test)]
+#[path = "managed_app_server_schema_test.rs"]
+mod schema_tests;
+
+#[cfg(test)]
 mod remote_control_server_name_tests {
     use super::{AppServerReadiness, RemoteControlServerName, remote_control_server_name};
     use codex_native_integration::RemoteControlObservation;
