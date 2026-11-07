@@ -1,5 +1,6 @@
 [workspace]
 resolver = "3"
+exclude = ["crates/fleet-project-copy/tests/workerd"]
 members = [
     "crates/fleet-native-writer",
     "crates/fleet-session-client",
