@@ -1,6 +1,6 @@
 use super::*;
 use crate::FleetCache;
-use fleet_sync_session::ClientSessionState;
+use fleet_session::ClientSessionState;
 
 #[tokio::test]
 #[expect(
@@ -28,7 +28,7 @@ async fn observer_reads_known_handled_progress_without_creating_missing_state()
     // Arrange: distinct transport and handled cursors catch reading the wrong one.
     cache
         .save_machine_session_state(&ClientSessionState {
-            session_id: fleet_sync_protocol::SessionId::new(uuid::Uuid::now_v7())?,
+            session_id: fleet_protocol::SessionId::new(uuid::Uuid::now_v7())?,
             notice_cursor: NoticePosition::new(97),
         })
         .await?;
