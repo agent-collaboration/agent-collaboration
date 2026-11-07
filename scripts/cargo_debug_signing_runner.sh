@@ -141,9 +141,9 @@ profile_directory_for() {
 # new change time, which userland can't set back.
 file_identity() {
   if stat --version > /dev/null 2>&1; then
-    stat -c '%i:%z' "$1"
+    stat -L -c '%i:%z' "$1"
   else
-    stat -f '%i:%Fc' "$1"
+    stat -L -f '%i:%Fc' "$1"
   fi
 }
 
@@ -158,21 +158,31 @@ sign_profile_bins() {
   local requested="${2:-}"
   local verified="${profile_directory}/.debug-signing-verified"
   local candidate identity
-  # Globals, so the EXIT trap can still see them after a refusal exits.
-  if ! sweep_listing="$(mktemp "${verified}.listing.XXXXXX" 2>&1)" ||
-    ! sweep_verified="$(mktemp "${verified}.next.XXXXXX" 2>&1)"; then
+  # Globals, so the EXIT trap can still see them after a refusal exits. The
+  # trap is installed before either file exists, so no failure path leaks one.
+  sweep_listing=""
+  sweep_verified=""
+  trap 'rm -f ${sweep_listing:+"$sweep_listing"} ${sweep_verified:+"$sweep_verified"}' EXIT
+  if ! sweep_listing="$(mktemp "${verified}.listing.XXXXXX" 2>&1)"; then
+    sweep_listing=""
     warn_unsigned "${profile_directory}" "could not create sweep files"
     return 0
   fi
-  # A refusal exits the runner; don't leave sweep files behind.
-  trap 'rm -f "${sweep_listing}" "${sweep_verified}"' EXIT
+  if ! sweep_verified="$(mktemp "${verified}.next.XXXXXX" 2>&1)"; then
+    sweep_verified=""
+    warn_unsigned "${profile_directory}" "could not create sweep files"
+    return 0
+  fi
   # Enumerate into a file so a failed or partial scan is a refusal, not a
   # silently shorter list.
   if ! find "${profile_directory}" -maxdepth 1 -type f -perm -u+x ! -name '*.dylib' ! -name '*.signing.*' -print0 > "${sweep_listing}"; then
     warn_unsigned "${profile_directory}" "could not list its executables"
     return 0
   fi
-  if [[ -n "${requested}" && "$(dirname "${requested}")" != "${profile_directory}" ]]; then
+  # The executable about to run is always checked: find lists only regular
+  # files in the profile directory, so a symlink there would otherwise be
+  # skipped.
+  if [[ -n "${requested}" ]] && { [[ "$(dirname "${requested}")" != "${profile_directory}" ]] || [[ -L "${requested}" ]]; }; then
     printf '%s\0' "${requested}" >> "${sweep_listing}"
   fi
   while IFS= read -r -d '' candidate; do
