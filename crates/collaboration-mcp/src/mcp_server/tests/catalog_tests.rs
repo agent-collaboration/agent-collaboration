@@ -188,10 +188,10 @@ fn tool_schemas_match_known_runtime_defaults_and_conditional_requirements() {
         serde_json::from_value(provider_with_human).expect("typed Human MCP create input");
     let mut provider_with_model = provider_create.clone();
     provider_with_model["model"] = serde_json::json!("gpt-5.6-sol");
-    assert!(!create_validator.is_valid(&provider_with_model));
+    assert!(create_validator.is_valid(&provider_with_model));
     let mut provider_with_effort = provider_create.clone();
     provider_with_effort["effort"] = serde_json::json!("medium");
-    assert!(!create_validator.is_valid(&provider_with_effort));
+    assert!(create_validator.is_valid(&provider_with_effort));
     for (field, value) in [
         ("fork", serde_json::json!("source-thread")),
         (
@@ -222,7 +222,7 @@ fn tool_schemas_match_known_runtime_defaults_and_conditional_requirements() {
     assert!(create_and_prompt_validator.is_valid(&provider_create_and_prompt));
     let mut provider_create_and_prompt_with_effort = provider_create_and_prompt;
     provider_create_and_prompt_with_effort["create"]["effort"] = serde_json::json!("medium");
-    assert!(!create_and_prompt_validator.is_valid(&provider_create_and_prompt_with_effort));
+    assert!(create_and_prompt_validator.is_valid(&provider_create_and_prompt_with_effort));
     for (field, value) in [
         ("fork", serde_json::json!("source-thread")),
         (
@@ -305,6 +305,87 @@ fn tool_schemas_match_known_runtime_defaults_and_conditional_requirements() {
         );
         assert!(description.contains("rootMessageId"), "{description}");
         assert!(description.contains("fork"), "{description}");
+    }
+}
+
+#[test]
+fn provider_create_schemas_accept_settings_and_keep_endpoint_specific_refusals() {
+    let server = CollaborationMcpServer::catalog_only();
+    for tool_name in ["conversation_create", "conversation_create_and_prompt"] {
+        let tool = server
+            .resolved_tools()
+            .into_iter()
+            .find(|tool| tool.name == tool_name)
+            .expect("conversation tool");
+        let schema = Value::Object(tool.input_schema.as_ref().clone());
+        let validator = jsonschema::validator_for(&schema).expect("advertised input schema");
+        let request = |create: Value| {
+            if tool_name == "conversation_create" {
+                create
+            } else {
+                serde_json::json!({"create":create,"message":{"kind":"humanUser","text":"hello"}})
+            }
+        };
+        for (endpoint, model) in [("claude-local", "haiku"), ("cursor-local", "grok-4.7")] {
+            let create = serde_json::json!({
+                "operationId":"019f0000-0000-7000-8000-000000000401",
+                "endpoint":{"serviceId":FIXTURE_SERVICE_ID,"endpointId":endpoint},
+                "workingDirectory":"/tmp/project","access":"write-restricted",
+                "createdBy":{"kind":"human","humanId":"fixture-owner"},
+                "model":model,"effort":"low"
+            });
+            assert!(
+                validator.is_valid(&request(create.clone())),
+                "{tool_name}: {endpoint} must accept model and effort"
+            );
+            for omitted in ["model", "effort"] {
+                let mut optional = create.clone();
+                optional
+                    .as_object_mut()
+                    .expect("create object")
+                    .remove(omitted);
+                assert!(
+                    validator.is_valid(&request(optional)),
+                    "{tool_name}: {endpoint} may omit {omitted}"
+                );
+            }
+            for (field, value) in [
+                ("fork", serde_json::json!("source-thread")),
+                (
+                    "rootMessageId",
+                    serde_json::json!("019f0000-0000-7000-8000-000000000402"),
+                ),
+            ] {
+                let mut refused = create.clone();
+                refused[field] = value;
+                assert!(
+                    !validator.is_valid(&request(refused)),
+                    "{tool_name}: {endpoint} must reject {field}"
+                );
+            }
+        }
+        let codex = serde_json::json!({
+            "operationId":"019f0000-0000-7000-8000-000000000403",
+            "endpoint":{"serviceId":FIXTURE_SERVICE_ID,"endpointId":"codex-local"},
+            "workingDirectory":"/tmp/project","access":"write-restricted",
+            "createdBy":{"kind":"human","humanId":"fixture-owner"},
+            "model":"gpt-6-luna","effort":"low"
+        });
+        assert!(
+            validator.is_valid(&request(codex.clone())),
+            "{tool_name}: complete Codex declaration"
+        );
+        for omitted in ["model", "effort"] {
+            let mut missing = codex.clone();
+            missing
+                .as_object_mut()
+                .expect("create object")
+                .remove(omitted);
+            assert!(
+                !validator.is_valid(&request(missing)),
+                "{tool_name}: Codex must require {omitted}"
+            );
+        }
     }
 }
 
