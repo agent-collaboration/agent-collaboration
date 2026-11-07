@@ -1,6 +1,7 @@
 //! Per-project native Turso stores and the Router's fleet/local storage.
 mod cursor_store;
 mod fleet_cache;
+mod fleet_cache_schema;
 mod fleet_outbox;
 mod fleet_record_codec;
 mod fleet_storage_error;
@@ -91,8 +92,8 @@ mod router_local_database;
 pub mod schema_fingerprint;
 mod update_ledger;
 pub use update_ledger::{
-    StoredUpdateLedger, UpdateLedger, UpdateLedgerEntry, UpdateSourceProgress, UpdateStepNumber,
-    UpdateStepProgress, read_update_ledger,
+    RouterUpdateStep, StoredUpdateLedger, UpdateLedger, UpdateLedgerEntry, UpdateSourceProgress,
+    UpdateStepNumber, UpdateStepProgress, read_update_ledger,
 };
 
 pub use cursor_store::{CursorSigningKey, CursorStore};

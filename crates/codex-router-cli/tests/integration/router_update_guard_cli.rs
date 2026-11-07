@@ -4,7 +4,7 @@
 //! passes the guard and gives its own answer.
 #![cfg(debug_assertions)]
 
-use message_board_storage::{UpdateLedger, UpdateStepNumber, UpdateStepProgress};
+use message_board_storage::{FleetCache, UpdateLedger, UpdateStepNumber, UpdateStepProgress};
 use std::{
     collections::BTreeMap,
     os::unix::fs::DirBuilderExt,
@@ -169,4 +169,50 @@ async fn an_account_command_refuses_a_pending_update_and_runs_once_it_is_done() 
 fn file_digest(path: &Path) -> GuardResult<String> {
     use sha2::Digest;
     Ok(format!("{:x}", sha2::Sha256::digest(std::fs::read(path)?)))
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
+#[tokio::test]
+async fn a_store_the_host_created_passes_and_one_it_left_unrecorded_is_refused() -> GuardResult {
+    // Arrange: two roots with nothing old. On one the Host's own open created the Fleet
+    // store; on the other a Host died after migrating it, before recording any step.
+    let directory = tempfile::tempdir()?;
+    let created_root = directory.path().join("created");
+    let unrecorded_root = directory.path().join("unrecorded");
+    for root in [&created_root, &unrecorded_root] {
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(root.join("agent-communication"))?;
+    }
+    FleetCache::open(&created_root.join("agent-communication/fleet-cache.sqlite"))
+        .await?
+        .close()
+        .await;
+    UpdateLedger::create(&unrecorded_root.join("agent-communication/fleet-cache.sqlite"))
+        .await?
+        .close()
+        .await;
+    let disable_nobody = ["account", "disable", "--account", "nobody"];
+
+    // Act
+    let created = run_router(&created_root, &disable_nobody).await?;
+    let unrecorded = run_router(&unrecorded_root, &disable_nobody).await?;
+
+    // Assert
+    assert_eq!(
+        String::from_utf8_lossy(&created.stderr),
+        "account status update failed\n",
+        "a fresh root's full ledger must pass the guard"
+    );
+    let unrecorded_stderr = String::from_utf8_lossy(&unrecorded.stderr);
+    assert_eq!(unrecorded.status.code(), Some(2), "{unrecorded_stderr}");
+    assert!(
+        unrecorded_stderr.contains("unfinished (steps 0001"),
+        "{unrecorded_stderr}"
+    );
+    Ok(())
 }

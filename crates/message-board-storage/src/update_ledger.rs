@@ -1,12 +1,41 @@
-//! The update tool's ledger of one-time steps, kept inside the Fleet database file
-//! itself so it always travels with the data it describes.
+//! The ledger of one-time update steps, kept inside the Fleet database file itself so
+//! it always travels with the data it describes, and the catalog of those steps.
+//!
+//! The update tool writes a step's row when it runs it. A brand-new Fleet store
+//! records every catalog step done, since a root with nothing old needs none of them;
+//! so an empty or partial ledger always means an update was interrupted.
 use crate::{
-    RouterLocalStorageError, fleet_cache::CACHE_MIGRATOR,
+    RouterLocalStorageError, fleet_cache_schema::CACHE_MIGRATOR,
     router_local_database::RouterLocalDatabase,
 };
 use sqlx::{ConnectOptions, Connection, Row};
 use sqlx_turso::{Turso, TursoConnectOptions};
 use std::path::Path;
+
+/// One one-time step, in the order the update runs them. The update tool runs exactly
+/// these, and the Host refuses to start until each is done.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RouterUpdateStep {
+    /// 0001: the Fleet database gains the update ledger before anything moves.
+    CreateLedger,
+}
+
+impl RouterUpdateStep {
+    pub const KNOWN: [Self; 1] = [Self::CreateLedger];
+
+    #[must_use]
+    pub const fn number(self) -> UpdateStepNumber {
+        match self {
+            Self::CreateLedger => UpdateStepNumber::new(1),
+        }
+    }
+
+    /// The step's ledger number as the owner sees it, such as "0001".
+    #[must_use]
+    pub fn label(self) -> String {
+        format!("{:04}", self.number().get())
+    }
+}
 
 /// A one-time update step's number, such as 1 for step 0001.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -110,10 +139,36 @@ impl UpdateLedger {
         step: UpdateStepNumber,
         progress: UpdateStepProgress,
     ) -> Result<(), RouterLocalStorageError> {
-        let _writer = self.database.writer.lock().await;
-        let mut connection = self.database.pool.acquire().await?;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
-        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true);
+        record_steps(&self.database, &[step], progress).await
+    }
+
+    pub async fn entries(&self) -> Result<Vec<UpdateLedgerEntry>, RouterLocalStorageError> {
+        read_entries(&self.database.pool).await
+    }
+
+    pub async fn close(self) {
+        self.database.close().await;
+    }
+}
+
+/// A Fleet store this open just created has nothing old in it: every catalog step is done.
+pub(crate) async fn record_catalog_done_in_new_store(
+    database: &RouterLocalDatabase,
+) -> Result<(), RouterLocalStorageError> {
+    let catalog = RouterUpdateStep::KNOWN.map(RouterUpdateStep::number);
+    record_steps(database, &catalog, UpdateStepProgress::Done).await
+}
+
+async fn record_steps(
+    database: &RouterLocalDatabase,
+    steps: &[UpdateStepNumber],
+    progress: UpdateStepProgress,
+) -> Result<(), RouterLocalStorageError> {
+    let _writer = database.writer.lock().await;
+    let mut connection = database.pool.acquire().await?;
+    let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true);
+    for step in steps {
         sqlx::query::<Turso>(
             "INSERT INTO update_steps(id, step, source, state, created_at, updated_at) \
              VALUES (?, ?, '', ?, ?, ?) \
@@ -126,17 +181,9 @@ impl UpdateLedger {
         .bind(&now)
         .execute(&mut *transaction)
         .await?;
-        transaction.commit().await?;
-        Ok(())
     }
-
-    pub async fn entries(&self) -> Result<Vec<UpdateLedgerEntry>, RouterLocalStorageError> {
-        read_entries(&self.database.pool).await
-    }
-
-    pub async fn close(self) {
-        self.database.close().await;
-    }
+    transaction.commit().await?;
+    Ok(())
 }
 
 /// Reads the ledger through a read-only open, which takes no store lock, so a running Host

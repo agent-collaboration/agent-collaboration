@@ -1,37 +1,12 @@
-//! The one-time update steps this Router knows, and whether a Router root must run
-//! `agent-router-update` before the Host or an account command may use it.
-//!
-//! The update tool runs exactly these steps, and the guard refuses on exactly
-//! their markers, so a step the tool can't run never makes the Host refuse.
+//! Whether a Router root must run `agent-router-update` before the Host or an account
+//! command may use it. The step catalog lives with the ledger (`RouterUpdateStep`): the
+//! update tool runs exactly those steps, and a store the Host creates records them all
+//! done, so an empty or partial ledger always means an interrupted update.
 use message_board_storage::{
-    RouterLocalStorageError, StoredUpdateLedger, UpdateLedgerEntry, UpdateStepNumber,
-    UpdateStepProgress, read_update_ledger,
+    RouterLocalStorageError, RouterUpdateStep, StoredUpdateLedger, UpdateLedgerEntry,
+    UpdateStepNumber, UpdateStepProgress, read_update_ledger,
 };
 use std::path::{Path, PathBuf};
-
-/// One one-time step, in the order the update runs them.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RouterUpdateStep {
-    /// 0001: the Fleet database gains the update ledger before anything moves.
-    CreateLedger,
-}
-
-impl RouterUpdateStep {
-    pub const KNOWN: [Self; 1] = [Self::CreateLedger];
-
-    #[must_use]
-    pub const fn number(self) -> UpdateStepNumber {
-        match self {
-            Self::CreateLedger => UpdateStepNumber::new(1),
-        }
-    }
-
-    /// The step's ledger number as the owner sees it, such as "0001".
-    #[must_use]
-    pub fn label(self) -> String {
-        format!("{:04}", self.number().get())
-    }
-}
 
 /// The Fleet database under its name until the update renames it.
 #[must_use]
@@ -121,11 +96,6 @@ fn requirement_for_ledger(store: PathBuf, ledger: &StoredUpdateLedger) -> Router
         }
         StoredUpdateLedger::Present(entries) => entries,
     };
-    // An empty ledger is a store this Router's own Host made: the update never ran,
-    // and nothing old is left for it to do.
-    if entries.is_empty() {
-        return RouterUpdateRequirement::NotRequired;
-    }
     let mut unfinished: Vec<UpdateStepNumber> = RouterUpdateStep::KNOWN
         .iter()
         .map(|step| step.number())

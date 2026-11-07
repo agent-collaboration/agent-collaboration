@@ -24,14 +24,19 @@ fn unfinished(numbers: &[u16]) -> RouterUpdateRequirement {
 }
 
 #[test]
-fn roots_with_nothing_old_need_no_update() {
-    // A root whose Host never opened the Fleet database, and a store this Router's
-    // own Host made (migrated, never updated), both start normally.
+fn a_root_whose_host_never_opened_the_fleet_store_needs_no_update() {
     let never_opened = requirement_for_ledger(store(), &StoredUpdateLedger::MissingDatabase);
-    let made_by_this_host = requirement_for_ledger(store(), &StoredUpdateLedger::Present(vec![]));
 
     assert_eq!(never_opened, RouterUpdateRequirement::NotRequired);
-    assert_eq!(made_by_this_host, RouterUpdateRequirement::NotRequired);
+}
+
+#[test]
+fn an_empty_ledger_means_an_interrupted_update() {
+    // A store the Host creates records every step done, so an empty ledger is an
+    // update (or a Host's first open) that stopped before recording anything.
+    let empty = requirement_for_ledger(store(), &StoredUpdateLedger::Present(vec![]));
+
+    assert_eq!(empty, unfinished(&[1]));
 }
 
 #[test]

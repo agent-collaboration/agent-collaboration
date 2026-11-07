@@ -1,15 +1,15 @@
 //! Runs the one-time steps a Router root still needs, in order, with its Host stopped.
 //!
-//! The step catalog is the Host's own (`RouterUpdateStep`), so the steps run here are
-//! exactly the ones its start-up guard refuses on.
+//! The step catalog (`RouterUpdateStep`) is the one the Host's start-up guard reads,
+//! so the steps run here are exactly the ones it refuses on until they are done.
 use crate::update_barrier::{UpdateBarrier, wait_at};
 use codex_router_host::{
-    HostCoordinationPaths, HostInstanceLock, InstanceAcquireError, RouterUpdateStep,
-    router_fleet_cache_database, router_fleet_database,
+    HostCoordinationPaths, HostInstanceLock, InstanceAcquireError, router_fleet_cache_database,
+    router_fleet_database,
 };
 use message_board_storage::{
-    RouterLocalStorageError, StoredUpdateLedger, UpdateLedger, UpdateStepProgress,
-    read_update_ledger,
+    RouterLocalStorageError, RouterUpdateStep, StoredUpdateLedger, UpdateLedger,
+    UpdateStepProgress, read_update_ledger,
 };
 use std::path::{Path, PathBuf};
 

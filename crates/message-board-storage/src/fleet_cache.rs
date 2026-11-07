@@ -25,8 +25,7 @@ pub use discovery::FleetDiscoveryKey;
 mod rebuild;
 pub use rebuild::FleetCacheRebuild;
 
-pub(crate) static CACHE_MIGRATOR: sqlx::migrate::Migrator =
-    sqlx::migrate!("./fleet_cache_migrations");
+use crate::fleet_cache_schema::CACHE_MIGRATOR;
 
 // Only these central-derived tables are cleared; login and session registrations
 // in this store survive enrollment. D1 removes file-based snapshot install attempts
@@ -86,10 +85,15 @@ impl FleetCache {
     ) -> Result<message_board::FleetPosition, RouterLocalStorageError> {
         cache_checkpoint(&mut *self.database.pool.acquire().await?).await
     }
+    /// Opens the Router's Fleet store, creating it when missing; a store this call
+    /// creates records every update step done (see `update_ledger`).
     pub async fn open(path: &Path) -> Result<Self, RouterLocalStorageError> {
-        Ok(Self {
-            database: RouterLocalDatabase::open(path, &CACHE_MIGRATOR).await?,
-        })
+        let created = !tokio::fs::try_exists(path).await.map_err(sqlx::Error::Io)?;
+        let database = RouterLocalDatabase::open(path, &CACHE_MIGRATOR).await?;
+        if created {
+            crate::update_ledger::record_catalog_done_in_new_store(&database).await?;
+        }
+        Ok(Self { database })
     }
 
     /// Forget learned Fleet data while preserving every non-cache table.

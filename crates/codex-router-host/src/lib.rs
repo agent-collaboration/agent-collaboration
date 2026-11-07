@@ -95,7 +95,7 @@ mod router_compatibility;
 mod router_executable_observation;
 mod router_update_requirement;
 pub use router_update_requirement::{
-    RequiredRouterUpdate, RouterUpdateInspectionError, RouterUpdateRequirement, RouterUpdateStep,
+    RequiredRouterUpdate, RouterUpdateInspectionError, RouterUpdateRequirement,
     inspect_router_update_requirement, router_fleet_cache_database, router_fleet_database,
 };
 mod session_message_route_composition;
