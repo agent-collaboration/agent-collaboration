@@ -17,6 +17,12 @@ child selectors derive from `module_path!()`: the captured enrollment Host must
 report one passed test, and managed native children retain real readiness, PID,
 replacement and teardown checks that reject zero matches.
 
+Compiled Host installation fixtures sign and verify copied Router binaries before
+launch. Their directory owner kills only processes rooted in that fixture (and
+its recorded native children) on failure or drop. A real two-Serve regression
+checks that failed-proof cleanup stops its child and preserves the neighboring
+fixture's process.
+
 A former binary `<root>` and test `<case>` becomes binary `integration` or
 `e2e` and test `<root>::<case>`. Unit-test identities do not change. Nextest
 preserves one process per case, existing thread reservations and deadlines,
