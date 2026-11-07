@@ -20,18 +20,54 @@ function showsUpdateModal(lines: readonly string[]): boolean {
 	);
 }
 
-function composerReady(lines: readonly string[]): boolean {
+/** Cursor focus and the final input pane distinguish the composer from a dialog backdrop. */
+function composerReady(grid: TerminalGrid): boolean {
+	const lines = gridLines(grid);
+	const { cursor } = grid;
+	const row = lines[cursor.row];
+	if (!cursor.visible || cursor.col !== 2 || row === undefined || !gridShowsEmptyComposer([row]))
+		return false;
+	const below = lines
+		.slice(cursor.row + 1)
+		.map((line, index) => ({ line, offset: index + 1 }))
+		.filter(({ line }) => line.trim() !== '');
+	// The forced model status line may follow the active input; another input/view below it
+	// means this composer is retained history rather than the bottom pane.
 	return (
-		gridShowsEmptyComposer(lines) &&
-		![
-			'Update available',
-			CODEX_0_165_TEXT.resumingSession,
-			CODEX_0_165_TEXT.working,
-			CODEX_0_165_TEXT.errorPrefix,
-			CODEX_0_165_TEXT.modelPopupHeader,
-		].some((text) => lines.some((line) => line.includes(text)))
+		below.length <= 1 && below.every(({ line, offset }) => offset <= 3 && /^ {2}\S/u.test(line))
 	);
 }
+
+type StartupState = 'ready' | 'update' | 'resuming' | 'blocked';
+
+function startupState(grid: TerminalGrid): StartupState {
+	const lines = gridLines(grid);
+	if (showsUpdateModal(lines)) return 'update';
+	if (
+		[
+			CODEX_0_165_TEXT.errorPrefix,
+			CODEX_0_165_TEXT.working,
+			CODEX_0_165_TEXT.modelPopupHeader,
+			CODEX_0_165_TEXT.effortPopupTitle,
+		].some((text) => lines.some((line) => line.includes(text)))
+	)
+		return 'blocked';
+	if (lines.some((line) => line.includes(CODEX_0_165_TEXT.resumingSession))) {
+		// Exactly the mcf50 startup view, including its known cwd. Unknown added dialog/text
+		// cannot gain a wait by retaining an old Resuming label behind it.
+		const allowed = new Set([
+			'',
+			'>_ OpenAI Codex (v0.165.0)',
+			'~/code/projects/codex-router',
+			CODEX_0_165_TEXT.resumingSession,
+			CODEX_0_165_TEXT.composerPrompt + CODEX_0_165_TEXT.emptyComposerPlaceholder,
+		]);
+		return lines.every((line) => allowed.has(line.trim())) ? 'resuming' : 'blocked';
+	}
+	return composerReady(grid) ? 'ready' : 'blocked';
+}
+
+const STARTUP_COMPOSER_BOUND_MS = UI_CHECKPOINT_MS;
 
 export async function requireLaunchComposer(inputs: {
 	readonly driver: Pick<PtyGridDriver, 'frameGeneration' | 'send' | 'waitForGrid'>;
@@ -59,35 +95,57 @@ export async function requireLaunchComposer(inputs: {
 			grid,
 		);
 	};
-	// Wait for a completed, nonempty frame rather than treating the PTY READY handshake as a
-	// composer. Unknown frames are findings; they never trigger speculative keys.
-	const first = await driver.waitForGrid(
-		'startup-input-frame',
-		(grid) => gridLines(grid).some((line) => line.trim() !== ''),
-		-1,
-		UI_CHECKPOINT_MS,
-	);
-	const lines = gridLines(first);
-	if (showsUpdateModal(lines)) {
-		await capture('startup-update-modal', first);
-		const after = driver.frameGeneration();
-		await driver.send(encodeCodexAction({ kind: 'key', key: 'Escape' }, keys));
-		const dismissed = await driver.waitForGrid(
-			'startup-after-escape',
-			(grid) => gridLines(grid).some((line) => line.trim() !== ''),
+	const deadline = Date.now() + STARTUP_COMPOSER_BOUND_MS;
+	const observation: { lastFrame: TerminalGrid | null } = { lastFrame: null };
+	const remaining = (): number => {
+		const milliseconds = deadline - Date.now();
+		if (milliseconds <= 0) throw new Error('startup composer readiness bound reached');
+		return milliseconds;
+	};
+	const waitForInput = async (
+		dismissal: 'not-dismissed' | 'dismissed',
+		after: number,
+	): Promise<void> => {
+		const grid = await driver.waitForGrid(
+			'startup-composer-readiness',
+			(candidate) => {
+				observation.lastFrame = candidate;
+				// Before the first completed draw the decoder has only its blank initial grid.
+				if (
+					driver.frameGeneration() === 0 &&
+					gridLines(candidate).every((line) => line.trim() === '')
+				)
+					return false;
+				return startupState(candidate) !== 'resuming';
+			},
 			after,
-			UI_CHECKPOINT_MS,
+			remaining(),
 		);
-		if (!composerReady(gridLines(dismissed))) {
-			await capture('startup-composer-refused', dismissed);
-			throw new Error('composer is not ready after one Escape; no further keys');
+		remaining();
+		const state = startupState(grid);
+		if (state === 'update' && dismissal === 'not-dismissed') {
+			await capture('startup-update-modal', grid);
+			remaining();
+			const generation = driver.frameGeneration();
+			await driver.send(encodeCodexAction({ kind: 'key', key: 'Escape' }, keys));
+			return waitForInput('dismissed', generation);
 		}
-		await capture('startup-composer-ready', dismissed);
-		return;
+		if (state !== 'ready')
+			throw new Error(
+				dismissal === 'dismissed'
+					? 'composer is not ready after one Escape; no further keys'
+					: 'composer is not ready; no keys sent',
+			);
+		await capture('startup-composer-ready', grid);
+	};
+	try {
+		await waitForInput('not-dismissed', -1);
+	} catch (error) {
+		if (observation.lastFrame !== null)
+			await capture('startup-composer-refused', observation.lastFrame);
+		if (error instanceof Error && error.message.includes('composer is not ready')) throw error;
+		throw new Error('startup composer readiness did not reach a ready frame within its bound', {
+			cause: error,
+		});
 	}
-	if (!composerReady(lines)) {
-		await capture('startup-composer-refused', first);
-		throw new Error('composer is not ready; no keys sent');
-	}
-	await capture('startup-composer-ready', first);
 }
