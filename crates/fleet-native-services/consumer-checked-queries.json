@@ -1,0 +1,213 @@
+{
+  "migrations": [
+    "tests/support/consumer/migrations",
+    "tests/support/consumer/hook-migrations",
+    "tests/support/consumer/replicated-migrations"
+  ],
+  "output": "tests/support/consumer/checked_queries.rs",
+  "metadata": "consumer-query-metadata.json",
+  "queries": [
+    {
+      "name": "private_history_present",
+      "sql": "tests/support/consumer/sql/private_history_present.sql",
+      "row": null,
+      "result": "exists",
+      "parameters": []
+    },
+    {
+      "name": "read_claim_gate",
+      "sql": "tests/support/consumer/sql/read_claim_gate.sql",
+      "row": "ClaimGateRow",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "attempt",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_claim_gates",
+      "sql": "tests/support/consumer/sql/read_claim_gates.sql",
+      "row": "ClaimGateRow",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "write_claim_gate",
+      "sql": "tests/support/consumer/sql/write_claim_gate.sql",
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "attempt",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "record",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_effect",
+      "sql": "tests/support/consumer/sql/insert_effect.sql",
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "call_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "record",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_effects",
+      "sql": "tests/support/consumer/sql/read_effects.sql",
+      "row": "EffectRow",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "read_effect",
+      "sql": "tests/support/consumer/sql/read_effect.sql",
+      "row": "EffectRow",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "call_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_hook_event",
+      "sql": "tests/support/consumer/sql/insert_hook_event.sql",
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "event_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "annotation",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "count_hook_events",
+      "sql": "tests/support/consumer/sql/count_hook_events.sql",
+      "row": "HookCountRow",
+      "result": "one",
+      "parameters": []
+    },
+    {
+      "name": "read_client_session",
+      "sql": "tests/support/consumer/sql/read_client_session.sql",
+      "row": "SessionRow",
+      "result": "optional",
+      "parameters": []
+    },
+    {
+      "name": "save_client_session",
+      "sql": "tests/support/consumer/sql/save_client_session.sql",
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "record",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_sample",
+      "sql": "tests/support/consumer/sql/insert_sample.sql",
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "label",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "exact_value",
+          "kind": "integer",
+          "nullable": false
+        },
+        {
+          "name": "payload",
+          "kind": "blob",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_reading",
+      "sql": "tests/support/consumer/sql/insert_reading.sql",
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "measured",
+          "kind": "real",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_source",
+      "sql": "tests/support/consumer/sql/insert_source.sql",
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "source_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "event_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "sample_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "increment_effect_attempts",
+      "sql": "tests/support/consumer/sql/increment_effect_attempts.sql",
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "call_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}
