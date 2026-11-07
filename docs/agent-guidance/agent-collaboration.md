@@ -83,6 +83,20 @@ a policy decision, not proof of OS or filesystem confinement. Use supported
 typed operations and never read, tail, parse, copy, or store provider session
 files or transcripts.
 
+## Installation identity and central status
+
+The read-only `installation_show` MCP tool returns the stable `serviceId`,
+`machineLabel` and UUIDv7 `peerId`, plus a separate `central` observation. Comparing
+identity across enrollment or a Host restart means comparing those three fields.
+The link observation changes as the connection progresses.
+
+`central.kind` is `notConfigured`, `available`, or `unavailable`; `notObserved`
+means an older Host omitted the observation. An available observation includes
+`record` with the enrolled peer and endpoint, connection state, instance,
+connection and revision counters, last contact and failure details. An unavailable
+observation includes a diagnostic message while preserving the installation
+identity. Reading this tool does not enroll a machine or mint an identity.
+
 ## CLI discovery
 
 ```sh
