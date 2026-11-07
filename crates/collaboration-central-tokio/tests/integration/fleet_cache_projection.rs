@@ -19,6 +19,7 @@ struct Fixture {
     path: PathBuf,
     source: NativeFleetSource,
     observer: Pool<Turso>,
+    store: message_board_storage::FleetStore,
     cache: Arc<FleetCache>,
     request: FleetRequest,
     original: FleetRecordSnapshot,
@@ -28,7 +29,8 @@ impl Fixture {
         let directory = tempfile::tempdir()?;
         let source = NativeFleetSource::open(&directory.path().join("source")).await?;
         let path = directory.path().join("cache.sqlite");
-        let cache = Arc::new(FleetCache::open(&path).await?);
+        let store = message_board_storage::FleetStore::open(&path).await?;
+        let cache = Arc::new(store.cache());
         let observer = PoolOptions::<Turso>::new()
             .max_connections(1)
             .connect_with(TursoConnectOptions::new().filename(&path))
@@ -55,6 +57,7 @@ impl Fixture {
             path,
             source,
             observer,
+            store,
             cache,
             request,
             original,
@@ -82,10 +85,8 @@ impl Fixture {
         Ok(snapshot)
     }
     async fn close(self) -> TestResult {
-        Arc::try_unwrap(self.cache)
-            .map_err(|_| "cache still has a consumer")?
-            .close()
-            .await;
+        drop(Arc::try_unwrap(self.cache).map_err(|_| "cache still has a consumer")?);
+        self.store.close().await;
         self.observer.close().await;
         self.source.close().await?;
         Ok(())
@@ -205,11 +206,10 @@ async fn dropped_rebuild_survives_reopen_as_old_active_rows_and_the_next_build_d
         .await?
             > 0
     );
-    Arc::try_unwrap(fixture.cache)
-        .map_err(|_| "cache retained after drop")?
-        .close()
-        .await;
-    let reopened = FleetCache::open(&fixture.path).await?;
+    drop(Arc::try_unwrap(fixture.cache).map_err(|_| "cache retained after drop")?);
+    fixture.store.close().await;
+    let reopened_store = message_board_storage::FleetStore::open(&fixture.path).await?;
+    let reopened = reopened_store.cache();
     assert_eq!(reopened.snapshot().await?, fixture.original);
     let rebuild = reopened.begin_snapshot_rebuild(current.through).await?;
     assert_eq!(
@@ -222,7 +222,7 @@ async fn dropped_rebuild_survives_reopen_as_old_active_rows_and_the_next_build_d
     );
     drop(rebuild);
     assert_eq!(reopened.snapshot().await?, fixture.original);
-    reopened.close().await;
+    reopened_store.close().await;
     fixture.observer.close().await;
     fixture.source.close().await?;
     Ok(())

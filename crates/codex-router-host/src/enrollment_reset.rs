@@ -168,11 +168,13 @@ async fn clear_router_state(directory: &Path) -> io::Result<()> {
             Err(error) => return Err(error),
         }
     }
-    let cache = message_board_storage::FleetCache::open(&directory.join("fleet-cache.sqlite"))
-        .await
-        .map_err(io::Error::other)?;
-    let cleared = cache.clear_central_derived_cache().await;
-    cache.close().await;
+    let store = message_board_storage::FleetStore::open(
+        &directory.join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await
+    .map_err(io::Error::other)?;
+    let cleared = store.cache().clear_central_derived_cache().await;
+    store.close().await;
     cleared.map_err(io::Error::other)?;
     for child in [
         "board-read-cache",

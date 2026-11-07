@@ -1,7 +1,9 @@
 //! Resource-backed collaboration execution, provider adapters, durable owners and workers.
 mod project_store_paths;
 mod project_store_registry;
-pub use project_store_registry::{NativeProjectStore, ProjectRegistryError, ProjectStoreRegistry};
+pub use project_store_registry::{
+    NativeProjectStore, ProjectRegistryError, ProjectStoreRegistry, install_board_cursor_key,
+};
 mod central_project_reads;
 mod project_read_handle;
 pub use central_project_reads::{

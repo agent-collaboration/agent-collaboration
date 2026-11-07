@@ -8,11 +8,11 @@ use fleet_sync_protocol::{OperationAnswer, OperationRequest};
 use fleet_sync_tokio_runner::SessionRequests;
 use message_board::{Record, RecordRef, RequestDecision, RequestId, RequestResult};
 use message_board_storage::{
-    FleetCache, FleetOutbox, FleetOutboxEntry, FleetOutboxState, FleetStorageError,
+    FleetCache, FleetOutbox, FleetOutboxEntry, FleetOutboxState, FleetStorageError, FleetStore,
     RouterLocalStorageError,
 };
 use serde::{Deserialize, Serialize};
-use std::{path::Path, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
@@ -55,6 +55,8 @@ pub enum FleetClientError {
 
 pub struct FleetClient {
     session: Option<SessionRequests<BoardConsumerProtocol>>,
+    /// The Router's one Fleet database; the outbox and cache below are views over it.
+    store: FleetStore,
     outbox: FleetOutbox,
     cache: FleetCache,
     admission_mutex: Mutex<()>,
@@ -101,22 +103,22 @@ impl FleetClient {
         Ok(payload.decode::<fleet_admission::ArchiveReportOutcome>()?)
     }
 
-    pub async fn open(
-        directory: &Path,
+    /// Takes the Host's Fleet database; the client closes it when it closes.
+    #[must_use]
+    pub fn new(
+        store: FleetStore,
         registration: Arc<dyn collaboration_contracts::ProjectRegistration>,
         session: Option<SessionRequests<BoardConsumerProtocol>>,
-    ) -> Result<Self, FleetClientError> {
-        tokio::fs::create_dir_all(directory).await?;
-        let outbox = FleetOutbox::open(&directory.join("fleet-outbox.sqlite")).await?;
-        let cache = FleetCache::open(&directory.join("fleet-cache.sqlite")).await?;
-        Ok(Self {
+    ) -> Self {
+        Self {
             session,
-            outbox,
-            cache,
+            outbox: store.outbox(),
+            cache: store.cache(),
+            store,
             admission_mutex: Mutex::new(()),
             synchronization: SynchronizationRequests::default(),
             registration,
-        })
+        }
     }
 
     /// Settle the outbox before an Accepted central answer starts registration.
@@ -515,8 +517,7 @@ impl FleetClient {
         Ok(self.outbox.pending().await?)
     }
     pub async fn close(self) {
-        self.cache.close().await;
-        self.outbox.close().await;
+        self.store.close().await;
     }
 }
 

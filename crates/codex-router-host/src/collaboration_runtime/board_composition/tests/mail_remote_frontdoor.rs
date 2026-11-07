@@ -149,6 +149,8 @@ impl RecipientRuntime {
             root,
             Some(inputs.peer),
             Arc::new(SystemClock),
+            message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+                .expect("32-byte fixture cursor key"),
         ));
         let projects = Arc::new(ProjectWriters::new(
             root,

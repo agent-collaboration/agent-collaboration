@@ -149,8 +149,14 @@ impl Reader {
             PeerCredential::new("Bearer cache-reader")?,
             BOUND,
         );
-        let fleet =
-            Arc::new(FleetClient::open(root, Arc::new(NoRegistration), Some(requests)).await?);
+        let fleet = Arc::new(FleetClient::new(
+            message_board_storage::FleetStore::open(
+                &(root).join(message_board_storage::FleetStore::FILE_NAME),
+            )
+            .await?,
+            Arc::new(NoRegistration),
+            Some(requests),
+        ));
         let (stop, stopped) = watch::channel(false);
         let (ready, waiting) = tokio::sync::oneshot::channel();
         let task = tokio::spawn(async move {
@@ -236,7 +242,7 @@ pub async fn assert_visible(
         matches!(fleet.record(&reference).await?, Some(Record::Workspace(workspace)) if workspace.name.as_str() == name)
     );
     let mut reader = sqlx_turso::TursoConnectOptions::new()
-        .filename(root.join("fleet-cache.sqlite"))
+        .filename(root.join(message_board_storage::FleetStore::FILE_NAME))
         .read_only(true)
         .connect()
         .await?;
@@ -266,7 +272,7 @@ pub async fn assert_floor(root: &Path, expected: i64) -> TestResult {
 }
 pub async fn assert_staging_rows(root: &Path, expected: i64) -> TestResult {
     let mut reader = sqlx_turso::TursoConnectOptions::new()
-        .filename(root.join("fleet-cache.sqlite"))
+        .filename(root.join(message_board_storage::FleetStore::FILE_NAME))
         .read_only(true)
         .connect()
         .await?;

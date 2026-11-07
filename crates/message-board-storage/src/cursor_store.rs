@@ -2,10 +2,8 @@
 use crate::{RouterLocalStorageError, router_local_database::RouterLocalDatabase};
 use sqlx::Executor;
 use sqlx_turso::Turso;
-use std::path::Path;
+use std::sync::Arc;
 use uuid::{Uuid, Variant};
-
-static CURSOR_MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./cursor_migrations");
 
 #[derive(Clone, Eq, PartialEq)]
 pub struct CursorSigningKey(Vec<u8>);
@@ -47,7 +45,7 @@ impl TryFrom<String> for CursorSigningKeyId {
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         let invalid = || RouterLocalStorageError::InvalidRecordKey {
-            field: "cursor_signing_key.key_id",
+            field: "fleet_cursor_signing_key.key_id",
         };
         let parsed = Uuid::parse_str(&value).map_err(|_| invalid())?;
         if parsed.get_version_num() != 7
@@ -68,7 +66,7 @@ struct StoredCursorSigningKey {
 async fn load_stored_signing_key<'executor>(
     executor: impl Executor<'executor, Database = Turso>,
 ) -> Result<Option<CursorSigningKey>, RouterLocalStorageError> {
-    let mut rows = sqlx_turso::query_as!(StoredCursorSigningKey, r#"SELECT key_id AS "key_id?: String", key_bytes AS "key_bytes!: Vec<u8>" FROM cursor_signing_key LIMIT 2"#)
+    let mut rows = sqlx_turso::query_as!(StoredCursorSigningKey, r#"SELECT key_id AS "key_id?: String", key_bytes AS "key_bytes!: Vec<u8>" FROM fleet_cursor_signing_key LIMIT 2"#)
         .fetch_all(executor)
         .await?;
     if rows.len() > 1 {
@@ -80,21 +78,21 @@ async fn load_stored_signing_key<'executor>(
     let key_id = row
         .key_id
         .ok_or(RouterLocalStorageError::InvalidRecordKey {
-            field: "cursor_signing_key.key_id",
+            field: "fleet_cursor_signing_key.key_id",
         })?;
     CursorSigningKeyId::try_from(key_id)?;
     Ok(Some(CursorSigningKey::try_from(row.key_bytes)?))
 }
 
+/// The board cursor signing key: a view over the Router's one Fleet database (`FleetStore`).
+#[derive(Clone)]
 pub struct CursorStore {
-    database: RouterLocalDatabase,
+    database: Arc<RouterLocalDatabase>,
 }
 
 impl CursorStore {
-    pub async fn open(path: &Path) -> Result<Self, RouterLocalStorageError> {
-        Ok(Self {
-            database: RouterLocalDatabase::open(path, &CURSOR_MIGRATOR).await?,
-        })
+    pub(crate) const fn over(database: Arc<RouterLocalDatabase>) -> Self {
+        Self { database }
     }
     /// Reuses this format's key after restart without replacing it with the candidate.
     pub async fn get_or_install_key(
@@ -111,7 +109,7 @@ impl CursorStore {
                 let key_id = key_identity.as_str();
                 let key_bytes = candidate.as_bytes();
                 sqlx_turso::query!(
-                    "INSERT INTO cursor_signing_key(key_id, key_bytes) VALUES (?, ?)",
+                    "INSERT INTO fleet_cursor_signing_key(key_id, key_bytes) VALUES (?, ?)",
                     key_id,
                     key_bytes
                 )
@@ -125,8 +123,5 @@ impl CursorStore {
     }
     pub async fn key(&self) -> Result<Option<CursorSigningKey>, RouterLocalStorageError> {
         load_stored_signing_key(&self.database.pool).await
-    }
-    pub async fn close(self) {
-        self.database.close().await;
     }
 }

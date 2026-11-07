@@ -2,7 +2,7 @@
 //! without the store's lock, and one row per step however often it is recorded.
 
 use message_board_storage::{
-    FleetCache, RouterUpdateStep, StoredUpdateLedger, UpdateLedger, UpdateLedgerEntry,
+    FleetStore, RouterUpdateStep, StoredUpdateLedger, UpdateLedger, UpdateLedgerEntry,
     UpdateStepNumber, UpdateStepProgress, read_update_ledger,
 };
 use sqlx::{Connection, Executor};
@@ -187,8 +187,8 @@ async fn a_fleet_store_the_host_creates_records_every_step_and_an_existing_one_g
     connection.close().await?;
 
     // Act: the Host's own open, once creating and once migrating an existing store.
-    FleetCache::open(&created).await?.close().await;
-    FleetCache::open(&older).await?.close().await;
+    FleetStore::open(&created).await?.close().await;
+    FleetStore::open(&older).await?.close().await;
 
     // Assert: a store with nothing old needs no step; an existing store gets the empty
     // ledger table only, so the guard keeps treating it as unfinished.

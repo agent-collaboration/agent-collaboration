@@ -313,7 +313,12 @@ async fn context_cost(
     );
     let unrelated_workspace = unrelated_workspace.ok_or("unrelated workspace")?;
     let mut connection = sqlx_turso::TursoConnectOptions::new()
-        .filename(fixture._directory.path().join("fleet-cache.sqlite"))
+        .filename(
+            fixture
+                ._directory
+                .path()
+                .join(message_board_storage::FleetStore::FILE_NAME),
+        )
         .connect()
         .await?;
     let changed = sqlx::query("UPDATE cached_fleet_records SET payload = json_set(payload, '$.record.name', '') WHERE kind = 'workspace' AND id = ?")

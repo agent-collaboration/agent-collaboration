@@ -172,6 +172,8 @@ async fn a_seeded_file_cannot_be_opened_by_another_enrolled_peer() -> Result<(),
         target._directory.path(),
         Some(PeerId::new(uuid::Uuid::now_v7())?),
         Arc::new(SystemClock),
+        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+            .expect("32-byte fixture cursor key"),
     );
     match registry.existing_project(&project).await {
         Err(ProjectRegistryError::Storage(ProjectStorageError::Writer(OpenError::Corrupt {

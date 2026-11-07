@@ -51,8 +51,8 @@ async fn connection(path: &Path) -> Result<TursoConnection, sqlx::Error> {
 
 async fn seed_link_store(storage: &Path) -> TestResult {
     tokio::fs::create_dir_all(storage).await?;
-    let path = storage.join("fleet-cache.sqlite");
-    message_board_storage::FleetCache::open(&path)
+    let path = storage.join(message_board_storage::FleetStore::FILE_NAME);
+    message_board_storage::FleetStore::open(&path)
         .await?
         .close()
         .await;
@@ -80,14 +80,15 @@ async fn seed_link_store(storage: &Path) -> TestResult {
 }
 
 async fn assert_link_store(storage: &Path) -> TestResult {
-    let path = storage.join("fleet-cache.sqlite");
+    let path = storage.join(message_board_storage::FleetStore::FILE_NAME);
     assert!(path.exists(), "reset deleted the shared Router link store");
-    let cache = message_board_storage::FleetCache::open(&path).await?;
+    let cache_store = message_board_storage::FleetStore::open(&path).await?;
+    let cache = cache_store.cache();
     assert_eq!(
         cache.checkpoint().await?,
         message_board::FleetPosition::ZERO
     );
-    cache.close().await;
+    cache_store.close().await;
     let mut reader = connection(&path).await?;
     for (table, statement) in [
         (

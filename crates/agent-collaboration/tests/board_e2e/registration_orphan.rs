@@ -128,6 +128,8 @@ async fn reject_native(
         stopped.directory(),
         Some(peer.as_str().to_owned().try_into()?),
         Arc::new(runtime_primitives::SystemClock),
+        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+            .expect("32-byte fixture cursor key"),
     );
     run_scenario(
         registry,

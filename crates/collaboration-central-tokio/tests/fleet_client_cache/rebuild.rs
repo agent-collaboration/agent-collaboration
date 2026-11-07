@@ -179,7 +179,7 @@ async fn router_publication_failure_preserves_active_records_and_checkpoint_unti
     let jwks = JwksFixtureServer::start().await?;
     seed_old_view(&server_root, &router_root, &jwks.url).await?;
     let mut cache = sqlx_turso::TursoConnectOptions::new()
-        .filename(router_root.join("fleet-cache.sqlite"))
+        .filename(router_root.join(message_board_storage::FleetStore::FILE_NAME))
         .connect()
         .await?;
     cache.execute("CREATE TRIGGER reject_cache_publication BEFORE INSERT ON cached_fleet_records BEGIN SELECT RAISE(ABORT,'fixture publication failure'); END").await?;
@@ -191,7 +191,7 @@ async fn router_publication_failure_preserves_active_records_and_checkpoint_unti
     assert_visible(&reader.fleet, &router_root, "old visible workspace", 2).await?;
     reader.shutdown().await?;
     let mut cache = sqlx_turso::TursoConnectOptions::new()
-        .filename(router_root.join("fleet-cache.sqlite"))
+        .filename(router_root.join(message_board_storage::FleetStore::FILE_NAME))
         .connect()
         .await?;
     cache

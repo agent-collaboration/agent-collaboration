@@ -16,7 +16,14 @@ async fn pending_request_replays_through_the_session_and_keeps_central_provenanc
         installation: ServiceId::try_from(WRITER_SERVICE.to_owned())?,
         machine: MachineLabel::try_from("caller supplied label must be ignored".to_owned())?,
     };
-    let offline = FleetClient::open(&router_root, Arc::new(NoRegistration), None).await?;
+    let offline = FleetClient::new(
+        message_board_storage::FleetStore::open(
+            &(&router_root).join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?,
+        Arc::new(NoRegistration),
+        None,
+    );
     assert_eq!(
         offline.submit(&offered, &forged_origin).await?.result,
         RequestResult::PendingUnreachable

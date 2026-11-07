@@ -4,7 +4,7 @@
 //! passes the guard and gives its own answer.
 #![cfg(debug_assertions)]
 
-use message_board_storage::{FleetCache, UpdateLedger, UpdateStepNumber, UpdateStepProgress};
+use message_board_storage::{FleetStore, UpdateLedger};
 use std::{
     collections::BTreeMap,
     os::unix::fs::DirBuilderExt,
@@ -130,23 +130,13 @@ async fn host_start_on_an_older_routers_root_refuses_before_touching_it() -> Gua
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn an_account_command_refuses_a_pending_update_and_runs_once_it_is_done() -> GuardResult {
+async fn an_account_command_refuses_a_pending_update_before_opening_its_state() -> GuardResult {
     // Arrange
     let (_directory, root) = old_layout_root()?;
     let before = snapshot(&root)?;
-    let disable_nobody = ["account", "disable", "--account", "nobody"];
 
-    // Act: pending, then with the ledger recording the only known step done.
-    let refused = run_router(&root, &disable_nobody).await?;
-    let unchanged = snapshot(&root)?;
-    let ledger =
-        UpdateLedger::migrate_existing(&root.join("agent-communication/fleet-cache.sqlite"))
-            .await?;
-    ledger
-        .record_step(UpdateStepNumber::new(1), UpdateStepProgress::Done)
-        .await?;
-    ledger.close().await;
-    let allowed = run_router(&root, &disable_nobody).await?;
+    // Act
+    let refused = run_router(&root, &["account", "disable", "--account", "nobody"]).await?;
 
     // Assert
     let refused_stderr = String::from_utf8_lossy(&refused.stderr);
@@ -156,19 +146,29 @@ async fn an_account_command_refuses_a_pending_update_and_runs_once_it_is_done() 
         "{refused_stderr}"
     );
     assert_eq!(
-        unchanged, before,
+        snapshot(&root)?,
+        before,
         "the refused command must not create its state store"
     );
-    // Past the guard, the command reaches its own state store and gives its own
-    // answer for an account this root doesn't have.
-    let allowed_stderr = String::from_utf8_lossy(&allowed.stderr);
-    assert_eq!(allowed_stderr, "account status update failed\n");
     Ok(())
 }
 
 fn file_digest(path: &Path) -> GuardResult<String> {
     use sha2::Digest;
     Ok(format!("{:x}", sha2::Sha256::digest(std::fs::read(path)?)))
+}
+
+fn fresh_root(parent: &Path, name: &str) -> GuardResult<PathBuf> {
+    let root = parent.join(name);
+    std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(root.join("agent-communication"))?;
+    Ok(root)
+}
+
+fn fleet_database(root: &Path) -> PathBuf {
+    root.join("agent-communication").join(FleetStore::FILE_NAME)
 }
 
 #[expect(
@@ -178,21 +178,15 @@ fn file_digest(path: &Path) -> GuardResult<String> {
 #[tokio::test]
 async fn a_store_the_host_created_passes_and_one_it_left_unrecorded_is_refused() -> GuardResult {
     // Arrange: two roots with nothing old. On one the Host's own open created the Fleet
-    // store; on the other a Host died after migrating it, before recording any step.
+    // database; on the other a Host died after migrating it, before recording any step.
     let directory = tempfile::tempdir()?;
-    let created_root = directory.path().join("created");
-    let unrecorded_root = directory.path().join("unrecorded");
-    for root in [&created_root, &unrecorded_root] {
-        std::fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(root.join("agent-communication"))?;
-    }
-    FleetCache::open(&created_root.join("agent-communication/fleet-cache.sqlite"))
+    let created_root = fresh_root(directory.path(), "created")?;
+    let unrecorded_root = fresh_root(directory.path(), "unrecorded")?;
+    FleetStore::open(&fleet_database(&created_root))
         .await?
         .close()
         .await;
-    UpdateLedger::create(&unrecorded_root.join("agent-communication/fleet-cache.sqlite"))
+    UpdateLedger::create(&fleet_database(&unrecorded_root))
         .await?
         .close()
         .await;
@@ -202,7 +196,8 @@ async fn a_store_the_host_created_passes_and_one_it_left_unrecorded_is_refused()
     let created = run_router(&created_root, &disable_nobody).await?;
     let unrecorded = run_router(&unrecorded_root, &disable_nobody).await?;
 
-    // Assert
+    // Assert: past the guard, the command reaches its own state store and gives its
+    // own answer for an account this root doesn't have.
     assert_eq!(
         String::from_utf8_lossy(&created.stderr),
         "account status update failed\n",
@@ -211,8 +206,36 @@ async fn a_store_the_host_created_passes_and_one_it_left_unrecorded_is_refused()
     let unrecorded_stderr = String::from_utf8_lossy(&unrecorded.stderr);
     assert_eq!(unrecorded.status.code(), Some(2), "{unrecorded_stderr}");
     assert!(
-        unrecorded_stderr.contains("unfinished (steps 0001"),
+        unrecorded_stderr.contains("unfinished (steps 0001, 0005, 0010"),
         "{unrecorded_stderr}"
     );
+    Ok(())
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
+#[tokio::test]
+async fn a_finished_root_with_an_older_store_left_beside_it_is_refused() -> GuardResult {
+    // Arrange: every step done in the current Fleet database, yet an outbox store from
+    // the older layout is back beside it, holding data the Host would never read.
+    let directory = tempfile::tempdir()?;
+    let root = fresh_root(directory.path(), "router")?;
+    FleetStore::open(&fleet_database(&root))
+        .await?
+        .close()
+        .await;
+    let leftover = root.join("agent-communication/fleet-outbox.sqlite");
+    std::fs::write(&leftover, b"older layout")?;
+
+    // Act
+    let refused = run_router(&root, &["account", "disable", "--account", "nobody"]).await?;
+
+    // Assert
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert_eq!(refused.status.code(), Some(2), "{stderr}");
+    assert!(stderr.contains("left from an older layout"), "{stderr}");
+    assert!(stderr.contains(&leftover.display().to_string()), "{stderr}");
     Ok(())
 }

@@ -227,6 +227,8 @@ impl Runtime {
             directory,
             Some(fixture.host.config.local.owner),
             Arc::new(runtime_primitives::SystemClock),
+            message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+                .expect("32-byte fixture cursor key"),
         ));
         let origin = message_board::ActorOrigin {
             installation: message_board::ServiceId::try_from(
@@ -239,15 +241,15 @@ impl Runtime {
             board_central_test_support::machine_session(directory, &origin)
                 .await
                 .unwrap();
-        let fleet = Arc::new(
-            collaboration_runtime::FleetClient::open(
-                directory,
-                Arc::new(crate::test_project_runtime::PendingRegistration),
-                Some(requests),
+        let fleet = Arc::new(collaboration_runtime::FleetClient::new(
+            message_board_storage::FleetStore::open(
+                &(directory).join(message_board_storage::FleetStore::FILE_NAME),
             )
             .await
             .unwrap(),
-        );
+            Arc::new(crate::test_project_runtime::PendingRegistration),
+            Some(requests),
+        ));
         fleet.synchronize().await.unwrap();
         let admission = Arc::new(
             crate::ProjectAdmission::new(crate::ProjectAdmissionProps {

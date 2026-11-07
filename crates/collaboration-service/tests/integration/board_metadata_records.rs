@@ -14,7 +14,12 @@ async fn malformed_stored_primary_id_is_reported_without_echoing_the_raw_value()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let mut raw = sqlx_turso::TursoConnectOptions::new()
-        .filename(fixture._directory.path().join("fleet-cache.sqlite"))
+        .filename(
+            fixture
+                ._directory
+                .path()
+                .join(message_board_storage::FleetStore::FILE_NAME),
+        )
         .connect()
         .await?;
     sqlx::query("INSERT INTO cached_fleet_records(kind,id,payload) SELECT kind,'malformed',payload FROM cached_fleet_records WHERE kind='workspace' AND id=?").bind(fixture.workspace.as_str()).execute(&mut raw).await?;
@@ -51,7 +56,10 @@ async fn malformed_stored_primary_id_is_reported_without_echoing_the_raw_value()
 async fn corrupt_metadata_listing_names_the_resource_and_canonical_inspection_action()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
-    let path = fixture._directory.path().join("fleet-cache.sqlite");
+    let path = fixture
+        ._directory
+        .path()
+        .join(message_board_storage::FleetStore::FILE_NAME);
     let mut connection = sqlx_turso::TursoConnectOptions::new()
         .filename(&path)
         .connect()

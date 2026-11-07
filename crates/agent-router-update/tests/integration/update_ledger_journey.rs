@@ -1,38 +1,69 @@
-//! J0, first part: the update tool on a root the old release populated. It refuses
-//! while the Host holds the root, `--dry-run` changes nothing, a kill inside step 0001
-//! reruns to a complete ledger with every value kept, a never-connected root gets its
-//! store, a `fleet.sqlite` no update made stops it, and a store a Host left unrecorded
-//! is refused until the tool completes it.
+//! J0: the update tool on a root the old release populated. It refuses while the Host
+//! holds the root, `--dry-run` changes nothing, a kill inside step 0001 reruns to a
+//! complete update with every value kept, a never-connected root ends with its Fleet
+//! database, a `fleet.sqlite` no update made stops it, and a store a Host left
+//! unrecorded is refused until the tool completes it.
 use crate::update_support::{
-    UpdateResult, WORKSPACE_IN_DATABASE, WORKSPACE_ONLY_IN_LOG, cached_workspace_ids,
+    FleetValues, UpdateResult, WORKSPACE_IN_DATABASE, WORKSPACE_ONLY_IN_LOG, cached_workspace_ids,
     populated_root, run_update, run_update_killed_at, snapshot,
 };
 use codex_router_host::{
     HostCoordinationPaths, HostInstanceLock, RequiredRouterUpdate, RouterUpdateRequirement,
-    inspect_router_update_requirement, router_fleet_cache_database,
+    inspect_router_update_requirement, router_collaboration_directory, router_fleet_cache_database,
+    router_fleet_database,
 };
 use message_board_storage::{
-    StoredUpdateLedger, UpdateLedger, UpdateLedgerEntry, UpdateStepNumber, UpdateStepProgress,
-    read_update_ledger,
+    RouterUpdateStep, StoredUpdateLedger, UpdateLedger, UpdateLedgerEntry, UpdateSourceProgress,
+    UpdateStepNumber, UpdateStepProgress, read_update_ledger,
 };
 use std::path::Path;
 
-fn ledger_with_step_0001_done() -> StoredUpdateLedger {
-    StoredUpdateLedger::Present(vec![UpdateLedgerEntry::Step {
-        step: UpdateStepNumber::new(1),
-        progress: UpdateStepProgress::Done,
-    }])
+/// The ledger a completed update leaves: every step done, each merged source removed.
+pub fn completed_ledger(with_sources: bool) -> StoredUpdateLedger {
+    let mut entries = Vec::new();
+    for step in RouterUpdateStep::KNOWN {
+        entries.push(UpdateLedgerEntry::Step {
+            step: step.number(),
+            progress: UpdateStepProgress::Done,
+        });
+        if with_sources && step == RouterUpdateStep::MergeFleetStores {
+            // Ledger rows read back in (step, source) order.
+            for source in ["board-cursors.sqlite", "fleet-outbox.sqlite"] {
+                entries.push(UpdateLedgerEntry::Source {
+                    step: step.number(),
+                    source: source.to_owned(),
+                    progress: UpdateSourceProgress::Removed,
+                });
+            }
+        }
+    }
+    StoredUpdateLedger::Present(entries)
 }
 
-fn step_0001_unfinished(store: &Path) -> RouterUpdateRequirement {
+fn unfinished(store: &Path, steps: &[u16]) -> RouterUpdateRequirement {
     RouterUpdateRequirement::Required(RequiredRouterUpdate::UnfinishedSteps {
         store: store.to_owned(),
-        steps: vec![UpdateStepNumber::new(1)],
+        steps: steps.iter().copied().map(UpdateStepNumber::new).collect(),
     })
 }
 
-fn root_argument(root: &Path) -> [&std::ffi::OsStr; 2] {
+pub fn root_argument(root: &Path) -> [&std::ffi::OsStr; 2] {
     ["--router-root".as_ref(), root.as_os_str()]
+}
+
+/// What a full update of the populated fixture reports, step by step.
+pub fn full_update_report(root: &Path, verb: &str) -> String {
+    let directory = router_collaboration_directory(root);
+    let former = router_fleet_cache_database(root);
+    format!(
+        "{verb} 0001: add the update ledger to {former}\n\
+         {verb} 0005: move {outbox} and {cursors} into {former}, then remove them\n\
+         {verb} 0010: rename {former} to {current}\n",
+        former = former.display(),
+        outbox = directory.join("fleet-outbox.sqlite").display(),
+        cursors = directory.join("board-cursors.sqlite").display(),
+        current = router_fleet_database(root).display(),
+    )
 }
 
 #[expect(
@@ -89,7 +120,7 @@ async fn the_update_refuses_while_the_host_holds_the_root_and_changes_nothing() 
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn a_dry_run_lists_the_pending_step_and_changes_nothing() -> UpdateResult {
+async fn a_dry_run_lists_every_pending_step_and_changes_nothing() -> UpdateResult {
     // Arrange
     let (_directory, root) = populated_root()?;
     let before = snapshot(&root)?;
@@ -100,19 +131,17 @@ async fn a_dry_run_lists_the_pending_step_and_changes_nothing() -> UpdateResult 
     let output = run_update(&arguments).await?;
 
     // Assert
-    let stdout = String::from_utf8_lossy(&output.stdout);
     assert_eq!(
         output.status.code(),
         Some(0),
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let store = router_fleet_cache_database(&root);
     assert_eq!(
-        stdout,
+        String::from_utf8_lossy(&output.stdout),
         format!(
-            "pending 0001: add the update ledger to {}\ndry run: nothing was changed\n",
-            store.display()
+            "{}dry run: nothing was changed\n",
+            full_update_report(&root, "pending")
         )
     );
     assert_eq!(snapshot(&root)?, before, "a dry run must not touch a byte");
@@ -124,15 +153,15 @@ async fn a_dry_run_lists_the_pending_step_and_changes_nothing() -> UpdateResult 
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn a_kill_inside_step_0001_reruns_to_a_complete_ledger_keeping_every_value() -> UpdateResult {
+async fn a_kill_inside_step_0001_reruns_to_a_complete_update_keeping_every_value() -> UpdateResult {
     // Arrange
     let (_directory, root) = populated_root()?;
-    let store = router_fleet_cache_database(&root);
-    let files_before: Vec<_> = snapshot(&root)?.into_keys().collect();
+    let former = router_fleet_cache_database(&root);
+    let fixture_values = FleetValues::read_legacy(&root).await?;
 
     // Act: killed after the ledger migration committed, before 0001 recorded itself.
     run_update_killed_at(&root, "step-0001:migrated").await?;
-    let after_kill = read_update_ledger(&store).await?;
+    let after_kill = read_update_ledger(&former).await?;
     let guard_after_kill = inspect_router_update_requirement(&root).await?;
     let rerun = run_update(&root_argument(&root)).await?;
 
@@ -140,7 +169,7 @@ async fn a_kill_inside_step_0001_reruns_to_a_complete_ledger_keeping_every_value
     assert_eq!(after_kill, StoredUpdateLedger::Present(vec![]));
     assert_eq!(
         guard_after_kill,
-        step_0001_unfinished(&store),
+        unfinished(&former, &[1, 5, 10]),
         "a Host must not start on the interrupted update"
     );
     assert_eq!(
@@ -151,32 +180,18 @@ async fn a_kill_inside_step_0001_reruns_to_a_complete_ledger_keeping_every_value
     );
     assert_eq!(
         String::from_utf8_lossy(&rerun.stdout),
-        format!("done 0001: add the update ledger to {}\n", store.display())
+        full_update_report(&root, "done")
+    );
+    let current = router_fleet_database(&root);
+    assert_eq!(read_update_ledger(&current).await?, completed_ledger(true));
+    assert_eq!(
+        FleetValues::read_merged(&current).await?,
+        fixture_values,
+        "every value, including the row that was only in a log, must survive"
     );
     assert_eq!(
-        read_update_ledger(&store).await?,
-        ledger_with_step_0001_done()
-    );
-    assert_eq!(
-        cached_workspace_ids(&store).await?,
-        vec![WORKSPACE_IN_DATABASE, WORKSPACE_ONLY_IN_LOG],
-        "the row that was only in the log must survive the kill and the rerun"
-    );
-    let store_files = |files: &[std::path::PathBuf]| {
-        files
-            .iter()
-            .filter(|file| {
-                file.extension()
-                    .is_some_and(|extension| extension == "sqlite")
-            })
-            .cloned()
-            .collect::<Vec<_>>()
-    };
-    let files_after: Vec<_> = snapshot(&root)?.into_keys().collect();
-    assert_eq!(
-        store_files(&files_after),
-        store_files(&files_before),
-        "no store was created"
+        inspect_router_update_requirement(&root).await?,
+        RouterUpdateRequirement::NotRequired
     );
     Ok(())
 }
@@ -186,10 +201,9 @@ async fn a_kill_inside_step_0001_reruns_to_a_complete_ledger_keeping_every_value
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn a_kill_after_step_0001_is_done_leaves_nothing_for_a_rerun() -> UpdateResult {
+async fn a_kill_after_step_0001_is_done_reruns_only_the_later_steps() -> UpdateResult {
     // Arrange
     let (_directory, root) = populated_root()?;
-    let store = router_fleet_cache_database(&root);
 
     // Act
     run_update_killed_at(&root, "step-0001:done").await?;
@@ -202,13 +216,16 @@ async fn a_kill_after_step_0001_is_done_leaves_nothing_for_a_rerun() -> UpdateRe
         "{}",
         String::from_utf8_lossy(&rerun.stderr)
     );
+    let report = full_update_report(&root, "done");
+    let later_steps = report
+        .lines()
+        .skip(1)
+        .map(|line| format!("{line}\n"))
+        .collect::<String>();
+    assert_eq!(String::from_utf8_lossy(&rerun.stdout), later_steps);
     assert_eq!(
-        String::from_utf8_lossy(&rerun.stdout),
-        format!("{} needs no update\n", root.display())
-    );
-    assert_eq!(
-        read_update_ledger(&store).await?,
-        ledger_with_step_0001_done()
+        read_update_ledger(&router_fleet_database(&root)).await?,
+        completed_ledger(true)
     );
     Ok(())
 }
@@ -218,12 +235,13 @@ async fn a_kill_after_step_0001_is_done_leaves_nothing_for_a_rerun() -> UpdateRe
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn a_root_that_never_connected_gets_its_fleet_store_with_the_ledger() -> UpdateResult {
+async fn a_root_that_never_connected_ends_with_its_fleet_database() -> UpdateResult {
     // Arrange: a root with no Fleet database at all.
     let directory = tempfile::tempdir()?;
     let root = directory.path().join("router");
     std::fs::create_dir(&root)?;
-    let store = router_fleet_cache_database(&root);
+    let former = router_fleet_cache_database(&root);
+    let current = router_fleet_database(&root);
 
     // Act
     let output = run_update(&root_argument(&root)).await?;
@@ -238,14 +256,15 @@ async fn a_root_that_never_connected_gets_its_fleet_store_with_the_ledger() -> U
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
         format!(
-            "done 0001: create {} with the update ledger\n",
-            store.display()
+            "done 0001: create {former} with the update ledger\n\
+             done 0005: no older Fleet store to move\n\
+             done 0010: rename {former} to {current}\n",
+            former = former.display(),
+            current = current.display(),
         )
     );
-    assert_eq!(
-        read_update_ledger(&store).await?,
-        ledger_with_step_0001_done()
-    );
+    assert!(!former.exists());
+    assert_eq!(read_update_ledger(&current).await?, completed_ledger(false));
     Ok(())
 }
 
@@ -255,20 +274,51 @@ async fn a_root_that_never_connected_gets_its_fleet_store_with_the_ledger() -> U
 )]
 #[tokio::test]
 async fn a_fleet_database_no_update_made_stops_the_update_naming_it() -> UpdateResult {
-    // Arrange
-    let (_directory, root) = populated_root()?;
-    let foreign = codex_router_host::router_fleet_database(&root);
-    std::fs::write(&foreign, b"not made by agent-router-update")?;
-    let before = snapshot(&root)?;
+    // Arrange: one root with a foreign fleet.sqlite beside the old cache, one with a
+    // fleet.sqlite alone that carries no ledger.
+    let (_beside_directory, beside) = populated_root()?;
+    let foreign_beside = router_fleet_database(&beside);
+    std::fs::write(&foreign_beside, b"not made by agent-router-update")?;
+    let alone_directory = tempfile::tempdir()?;
+    let alone = alone_directory.path().join("router");
+    std::fs::create_dir_all(router_collaboration_directory(&alone))?;
+    let foreign_alone = router_fleet_database(&alone);
+    sqlx_turso_store_without_ledger(&foreign_alone).await?;
+    let before = (snapshot(&beside)?, snapshot(&alone)?);
 
     // Act
-    let output = run_update(&root_argument(&root)).await?;
+    let both_names = run_update(&root_argument(&beside)).await?;
+    let unexplained = run_update(&root_argument(&alone)).await?;
 
     // Assert
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(output.status.code(), Some(2), "{stderr}");
-    assert!(stderr.contains(&foreign.display().to_string()), "{stderr}");
-    assert_eq!(snapshot(&root)?, before);
+    let both_stderr = String::from_utf8_lossy(&both_names.stderr);
+    assert_eq!(both_names.status.code(), Some(2), "{both_stderr}");
+    assert!(
+        both_stderr.contains(&foreign_beside.display().to_string()),
+        "{both_stderr}"
+    );
+    assert!(
+        both_stderr.contains(&router_fleet_cache_database(&beside).display().to_string()),
+        "{both_stderr}"
+    );
+    let alone_stderr = String::from_utf8_lossy(&unexplained.stderr);
+    assert_eq!(unexplained.status.code(), Some(2), "{alone_stderr}");
+    assert!(alone_stderr.contains("no update made it"), "{alone_stderr}");
+    assert_eq!((snapshot(&beside)?, snapshot(&alone)?), before);
+    Ok(())
+}
+
+async fn sqlx_turso_store_without_ledger(path: &Path) -> UpdateResult {
+    use sqlx::{ConnectOptions, Connection, Executor};
+    let mut connection = sqlx_turso::TursoConnectOptions::new()
+        .filename(path)
+        .create_if_missing(true)
+        .connect()
+        .await?;
+    connection
+        .execute("CREATE TABLE unrelated(value TEXT)")
+        .await?;
+    connection.close().await?;
     Ok(())
 }
 
@@ -279,13 +329,12 @@ async fn a_fleet_database_no_update_made_stops_the_update_naming_it() -> UpdateR
 #[tokio::test]
 async fn a_host_stopped_before_recording_its_new_store_is_refused_until_the_update_completes()
 -> UpdateResult {
-    // Arrange: the state a Host leaves when it dies after creating and migrating a new
-    // Fleet store but before recording the catalog done: the ledger table, no rows.
+    // Arrange: the state a Host leaves when it dies after creating and migrating its new
+    // Fleet database but before recording the catalog done: the ledger table, no rows.
     let directory = tempfile::tempdir()?;
     let root = directory.path().join("router");
-    std::fs::create_dir(&root)?;
-    let store = router_fleet_cache_database(&root);
-    std::fs::create_dir_all(store.parent().ok_or("store has a directory")?)?;
+    std::fs::create_dir_all(router_collaboration_directory(&root))?;
+    let store = router_fleet_database(&root);
     UpdateLedger::create(&store).await?.close().await;
 
     // Act
@@ -293,8 +342,8 @@ async fn a_host_stopped_before_recording_its_new_store_is_refused_until_the_upda
     let update = run_update(&root_argument(&root)).await?;
     let after = inspect_router_update_requirement(&root).await?;
 
-    // Assert: refused, then the tool records the step as a no-op, then the Host may start.
-    assert_eq!(before, step_0001_unfinished(&store));
+    // Assert: refused, then the tool records each step as a no-op, then the Host may start.
+    assert_eq!(before, unfinished(&store, &[1, 5, 10]));
     assert_eq!(
         update.status.code(),
         Some(0),
@@ -303,12 +352,14 @@ async fn a_host_stopped_before_recording_its_new_store_is_refused_until_the_upda
     );
     assert_eq!(
         String::from_utf8_lossy(&update.stdout),
-        format!("done 0001: add the update ledger to {}\n", store.display())
+        format!(
+            "done 0001: add the update ledger to {store}\n\
+             done 0005: no older Fleet store to move\n\
+             done 0010: {store} already has its current name\n",
+            store = store.display(),
+        )
     );
-    assert_eq!(
-        read_update_ledger(&store).await?,
-        ledger_with_step_0001_done()
-    );
+    assert_eq!(read_update_ledger(&store).await?, completed_ledger(false));
     assert_eq!(after, RouterUpdateRequirement::NotRequired);
     Ok(())
 }

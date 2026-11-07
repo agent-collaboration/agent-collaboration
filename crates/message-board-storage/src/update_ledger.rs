@@ -5,7 +5,9 @@
 //! records every catalog step done, since a root with nothing old needs none of them;
 //! so an empty or partial ledger always means an update was interrupted.
 use crate::{
-    RouterLocalStorageError, fleet_cache_schema::CACHE_MIGRATOR,
+    LegacyFleetSource, RouterLocalStorageError,
+    fleet_cache_schema::CACHE_MIGRATOR,
+    legacy_fleet_sources::{carry_legacy_rows, read_legacy_rows, verify_legacy_rows_carried},
     router_local_database::RouterLocalDatabase,
 };
 use sqlx::{ConnectOptions, Connection, Row};
@@ -18,15 +20,25 @@ use std::path::Path;
 pub enum RouterUpdateStep {
     /// 0001: the Fleet database gains the update ledger before anything moves.
     CreateLedger,
+    /// 0005: the Fleet outbox and the board cursor key move into the Fleet database.
+    MergeFleetStores,
+    /// 0010: `fleet-cache.sqlite` is renamed to `fleet.sqlite`.
+    RenameFleetDatabase,
 }
 
 impl RouterUpdateStep {
-    pub const KNOWN: [Self; 1] = [Self::CreateLedger];
+    pub const KNOWN: [Self; 3] = [
+        Self::CreateLedger,
+        Self::MergeFleetStores,
+        Self::RenameFleetDatabase,
+    ];
 
     #[must_use]
     pub const fn number(self) -> UpdateStepNumber {
         match self {
             Self::CreateLedger => UpdateStepNumber::new(1),
+            Self::MergeFleetStores => UpdateStepNumber::new(5),
+            Self::RenameFleetDatabase => UpdateStepNumber::new(10),
         }
     }
 
@@ -84,6 +96,15 @@ impl UpdateStepProgress {
         match self {
             Self::InProgress => "in_progress",
             Self::Done => "done",
+        }
+    }
+}
+
+impl UpdateSourceProgress {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Written => "written",
+            Self::Removed => "removed",
         }
     }
 }
@@ -146,6 +167,78 @@ impl UpdateLedger {
         read_entries(&self.database.pool).await
     }
 
+    /// Step 0005, one source: carries every row of the legacy store into this Fleet
+    /// database and records the source `written` in the same transaction.
+    pub async fn carry_legacy_source(
+        &self,
+        source: LegacyFleetSource,
+        path: &Path,
+    ) -> Result<(), RouterLocalStorageError> {
+        let rows = read_legacy_rows(source, path).await?;
+        let _writer = self.database.writer.lock().await;
+        let mut connection = self.database.pool.acquire().await?;
+        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let carried = async {
+            carry_legacy_rows(&mut transaction, &rows).await?;
+            write_ledger_row(
+                &mut transaction,
+                RouterUpdateStep::MergeFleetStores.number(),
+                source.file_name(),
+                UpdateSourceProgress::Written.as_str(),
+            )
+            .await
+        }
+        .await;
+        match carried {
+            Ok(()) => transaction.commit().await?,
+            Err(error) => {
+                transaction.rollback().await?;
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
+    /// Step 0005, before a source is removed: every one of its rows is here, unchanged.
+    pub async fn verify_legacy_source_carried(
+        &self,
+        source: LegacyFleetSource,
+        path: &Path,
+    ) -> Result<(), RouterLocalStorageError> {
+        let rows = read_legacy_rows(source, path).await?;
+        verify_legacy_rows_carried(&self.database, &rows).await
+    }
+
+    pub async fn record_source(
+        &self,
+        source: LegacyFleetSource,
+        progress: UpdateSourceProgress,
+    ) -> Result<(), RouterLocalStorageError> {
+        let _writer = self.database.writer.lock().await;
+        let mut connection = self.database.pool.acquire().await?;
+        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        write_ledger_row(
+            &mut transaction,
+            RouterUpdateStep::MergeFleetStores.number(),
+            source.file_name(),
+            progress.as_str(),
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    /// Step 0010, before the rename: moves every page out of the write-ahead log into
+    /// the database file, then closes the one connection.
+    pub async fn checkpoint_and_close(self) -> Result<(), RouterLocalStorageError> {
+        let checkpointed = sqlx::query::<Turso>("PRAGMA wal_checkpoint(TRUNCATE)")
+            .execute(&self.database.pool)
+            .await;
+        self.database.close().await;
+        checkpointed?;
+        Ok(())
+    }
+
     pub async fn close(self) {
         self.database.close().await;
     }
@@ -167,20 +260,8 @@ async fn record_steps(
     let _writer = database.writer.lock().await;
     let mut connection = database.pool.acquire().await?;
     let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
-    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true);
     for step in steps {
-        sqlx::query::<Turso>(
-            "INSERT INTO update_steps(id, step, source, state, created_at, updated_at) \
-             VALUES (?, ?, '', ?, ?, ?) \
-             ON CONFLICT(step, source) DO UPDATE SET state = excluded.state, updated_at = excluded.updated_at",
-        )
-        .bind(uuid::Uuid::now_v7().to_string())
-        .bind(i64::from(step.get()))
-        .bind(progress.as_str())
-        .bind(&now)
-        .bind(&now)
-        .execute(&mut *transaction)
-        .await?;
+        write_ledger_row(&mut transaction, *step, "", progress.as_str()).await?;
     }
     transaction.commit().await?;
     Ok(())
@@ -272,3 +353,27 @@ fn decode_entry(row: StoredLedgerRow) -> Result<UpdateLedgerEntry, RouterLocalSt
 #[cfg(test)]
 #[path = "update_ledger_test.rs"]
 mod tests;
+
+/// Writes one ledger row (a step's when `source` is empty) inside the caller's transaction.
+async fn write_ledger_row(
+    transaction: &mut sqlx::Transaction<'_, Turso>,
+    step: UpdateStepNumber,
+    source: &str,
+    state: &str,
+) -> Result<(), RouterLocalStorageError> {
+    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, true);
+    sqlx::query::<Turso>(
+        "INSERT INTO update_steps(id, step, source, state, created_at, updated_at) \
+         VALUES (?, ?, ?, ?, ?, ?) \
+         ON CONFLICT(step, source) DO UPDATE SET state = excluded.state, updated_at = excluded.updated_at",
+    )
+    .bind(uuid::Uuid::now_v7().to_string())
+    .bind(i64::from(step.get()))
+    .bind(source)
+    .bind(state)
+    .bind(&now)
+    .bind(&now)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}

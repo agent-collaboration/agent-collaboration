@@ -14,6 +14,14 @@ const WORKSPACE_IN_DATABASE: &str = "019f0000-0000-7000-8000-00000000d301";
 const WORKSPACE_ONLY_IN_LOG: &str = "019f0000-0000-7000-8000-00000000d302";
 const OUTBOX_REQUEST: &str = "019f0000-0000-7000-8000-00000000d311";
 const OUTBOX_WORKSPACE: &str = "019f0000-0000-7000-8000-00000000d312";
+const DECIDED_REQUEST: &str = "019f0000-0000-7000-8000-00000000d313";
+const DECIDED_WORKSPACE: &str = "019f0000-0000-7000-8000-00000000d314";
+const CREATION_REQUEST: &str = "019f0000-0000-7000-8000-00000000d321";
+const CREATION_PROJECT: &str = "019f0000-0000-7000-8000-00000000d322";
+const CREATION_BOARD: &str = "019f0000-0000-7000-8000-00000000d323";
+const CREATION_WORKSPACE: &str = "019f0000-0000-7000-8000-00000000d324";
+/// The decided request's settle time, a literal so tests can compare it exactly.
+const DECIDED_AT_MS: i64 = 1_793_000_000_000;
 const ORIGIN_SERVICE: &str = "550e8400-e29b-41d4-a716-44665544d300";
 
 fn owner() -> BuilderResult<RecordedActor> {
@@ -75,6 +83,59 @@ async fn main() -> BuilderResult {
                 description: Description::try_from("waiting for central".to_owned())?,
             },
         })
+        .await?;
+    let decided = FleetRequest {
+        request_id: RequestId::try_from(DECIDED_REQUEST.to_owned())?,
+        workspace: WorkspaceId::try_from(DECIDED_WORKSPACE.to_owned())?,
+        actor: owner()?,
+        acting_for: None,
+        protocol_version: ProtocolVersion::CURRENT,
+        operation: FleetOperation::WorkspaceCreate {
+            name: ResourceName::try_from("Decided workspace".to_owned())?,
+            description: Description::try_from("central accepted it".to_owned())?,
+        },
+    };
+    outbox.enqueue(&decided).await?;
+    outbox
+        .mark_decided(
+            &decided.request_id,
+            &RequestDecision::Accepted {
+                effects: DecisionEffectsPage::from_full(
+                    Vec::new(),
+                    &DecisionEffectsHeader::from_full(&[]),
+                    None,
+                )?,
+                change: ChangeOutcome::Changed,
+            },
+            DECIDED_AT_MS,
+        )
+        .await?;
+    let creation_input = ProjectCreateRequest {
+        request_id: RequestId::try_from(CREATION_REQUEST.to_owned())?,
+        protocol_version: ProtocolVersion::CURRENT,
+        project_id: ProjectId::try_from(CREATION_PROJECT.to_owned())?,
+        board_id: BoardId::try_from(CREATION_BOARD.to_owned())?,
+        title: ResourceName::try_from("Queued project".to_owned())?,
+        description: Some(Description::try_from("created through the outbox".to_owned())?),
+        actor: Identity::Human {
+            human_id: HumanId::try_from("fixture owner".to_owned())?,
+        },
+        acting_for: None,
+    };
+    let creation_directory = FleetRequest {
+        request_id: creation_input.request_id.clone(),
+        workspace: WorkspaceId::try_from(CREATION_WORKSPACE.to_owned())?,
+        actor: RecordedActor::declared(creation_input.actor.clone()),
+        acting_for: None,
+        protocol_version: ProtocolVersion::CURRENT,
+        operation: FleetOperation::ProjectDirectoryCreate {
+            project: creation_input.project_id.clone(),
+            board: creation_input.board_id.clone(),
+            title: creation_input.title.clone(),
+        },
+    };
+    outbox
+        .enqueue_creation(&creation_directory, &creation_input)
         .await?;
     outbox.close().await;
 

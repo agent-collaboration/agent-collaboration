@@ -8,12 +8,14 @@ use collaboration_contracts::ProjectReplicationPosition;
 use collaboration_runtime::FleetClient;
 use collaboration_runtime::MailDeliverySession;
 use collaboration_runtime::ProjectStoreRegistry;
+use collaboration_runtime::install_board_cursor_key;
 use collaboration_service::MailDeliveryRuntime;
 use collaboration_service::NotificationPublisher;
 use collaboration_service::ProjectAdmission;
 use collaboration_service::ProjectAdmissionProps;
 use machine_session::PreparedMachineSession;
 use message_board::ProjectId;
+use message_board_storage::FleetStore;
 use runtime_primitives::SystemClock;
 use std::{
     io,
@@ -152,10 +154,19 @@ pub(super) async fn open_board_admission_with_enrollment(
     {
         return Err(io::Error::other(crate::ENROLLMENT_RESTART_INSTRUCTION));
     }
+    // The Host's one Fleet database: it keeps the board cursor key, and the Fleet
+    // client's cache and outbox are views over it; the Fleet client closes it.
+    let fleet_store = FleetStore::open(&directory.join(FleetStore::FILE_NAME))
+        .await
+        .map_err(io::Error::other)?;
+    let cursor_key = install_board_cursor_key(&fleet_store.cursors())
+        .await
+        .map_err(io::Error::other)?;
     let registry = Arc::new(ProjectStoreRegistry::new(
         directory,
         session_inputs.as_ref().map(|inputs| inputs.peer),
         Arc::new(SystemClock),
+        cursor_key,
     ));
     let session = match session_inputs {
         Some(inputs) => {
@@ -179,15 +190,11 @@ pub(super) async fn open_board_admission_with_enrollment(
     let replication = session
         .as_ref()
         .map(|session| -> Arc<dyn ProjectReplicationPosition> { session.projects.clone() });
-    let fleet = Arc::new(
-        FleetClient::open(
-            directory,
-            registration,
-            session.as_ref().map(|session| session.requests.clone()),
-        )
-        .await
-        .map_err(io::Error::other)?,
-    );
+    let fleet = Arc::new(FleetClient::new(
+        fleet_store,
+        registration,
+        session.as_ref().map(|session| session.requests.clone()),
+    ));
     let admission = ProjectAdmission::new(ProjectAdmissionProps {
         registry,
         fleet: fleet.clone(),

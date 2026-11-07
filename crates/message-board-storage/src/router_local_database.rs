@@ -26,6 +26,12 @@ pub enum RouterLocalStorageError {
     PositionGap,
     #[error("Router-local data cannot be encoded: {0}")]
     Encoding(#[from] serde_json::Error),
+    /// A legacy store's row and the Fleet database's row under the same key differ.
+    #[error("a legacy row in {table} conflicts with the Fleet database's row under the same key")]
+    LegacyRowConflict { table: &'static str },
+    /// After a merge, a legacy row is missing from the Fleet database or differs there.
+    #[error("a legacy row in {table} is missing or different in the Fleet database")]
+    LegacyRowNotCarried { table: &'static str },
 }
 
 pub(crate) struct RouterLocalDatabase {

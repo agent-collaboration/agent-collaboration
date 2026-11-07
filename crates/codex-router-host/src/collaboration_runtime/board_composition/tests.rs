@@ -602,7 +602,14 @@ async fn assert_native_registration_refusal(cleanup_first: bool) -> TestResult {
     assert_eq!(durable_file_hashes(&moved)?, before);
     // A separate caller owns its synchronization lease, so the background
     // refresh cannot make this error assertion pass through coalescing.
-    let refresh = FleetClient::open(&root, projects.clone(), Some(requests)).await?;
+    let refresh = FleetClient::new(
+        message_board_storage::FleetStore::open(
+            &(&root).join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?,
+        projects.clone(),
+        Some(requests),
+    );
     assert!(
         matches!(
             refresh.synchronize().await,

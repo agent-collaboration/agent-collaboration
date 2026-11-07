@@ -1,6 +1,6 @@
 {
   "db_name": "Turso",
-  "query": "SELECT key_id AS \"key_id?: String\", key_bytes AS \"key_bytes!: Vec<u8>\" FROM cursor_signing_key LIMIT 2",
+  "query": "SELECT key_id AS \"key_id?: String\", key_bytes AS \"key_bytes!: Vec<u8>\" FROM fleet_cursor_signing_key LIMIT 2",
   "describe": {
     "columns": [
       {
@@ -24,5 +24,5 @@
       null
     ]
   },
-  "hash": "0378397deddd4f4fda09407f14bece6e3df9a31b295a936b543244b17fd2d51c"
+  "hash": "d5afee4e5fe9f908660503d52be8a337a843f29ef1a9516049241a1c5942e963"
 }

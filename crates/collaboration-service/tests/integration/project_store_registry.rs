@@ -17,6 +17,8 @@ async fn empty_registration_refusals_reopen_for_metadata_and_cannot_be_opened_fo
         directory.path(),
         Some(fixture_peer()?),
         Arc::new(runtime_primitives::SystemClock),
+        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+            .expect("32-byte fixture cursor key"),
     );
     let store = registry.open_project(&project).await?;
     let mut read = store.snapshot().await?;
@@ -41,6 +43,8 @@ async fn empty_registration_refusals_reopen_for_metadata_and_cannot_be_opened_fo
         directory.path(),
         Some(fixture_peer()?),
         Arc::new(runtime_primitives::SystemClock),
+        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+            .expect("32-byte fixture cursor key"),
     );
     assert!(reopened.rejected_project(&project).await?.is_some());
     assert!(reopened.open_project(&project).await.is_err());
@@ -59,6 +63,8 @@ async fn registry_opens_one_native_handle_per_project_and_isolates_writer_locks(
         directory.path(),
         Some(fixture_peer()?),
         Arc::new(runtime_primitives::SystemClock),
+        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+            .expect("32-byte fixture cursor key"),
     ));
     let first_id = ProjectId::generate();
     let second_id = ProjectId::generate();

@@ -4,13 +4,12 @@ use fleet_admission::{FleetRequest, canonical_hash};
 use message_board::{RequestDecision, RequestId};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
-use std::path::Path;
+use std::sync::Arc;
 
 mod creation_input;
 #[cfg(test)]
 mod creation_tests;
 
-static OUTBOX_MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./fleet_outbox_migrations");
 const MAX_FLEET_OUTBOX_PRUNE_BATCH: u32 = 500;
 
 /// Retains completed fleet requests for two months; accepted creation inputs stay until local commit.
@@ -40,10 +39,15 @@ pub struct FleetOutboxEntry {
     pub state: FleetOutboxState,
 }
 
+/// The Fleet outbox: a view over the Router's one Fleet database (`FleetStore`).
+#[derive(Clone)]
 pub struct FleetOutbox {
-    database: RouterLocalDatabase,
+    database: Arc<RouterLocalDatabase>,
 }
 impl FleetOutbox {
+    pub(crate) const fn over(database: Arc<RouterLocalDatabase>) -> Self {
+        Self { database }
+    }
     pub async fn request(
         &self,
         request: &RequestId,
@@ -114,11 +118,6 @@ impl FleetOutbox {
             })
             .collect()
     }
-    pub async fn open(path: &Path) -> Result<Self, RouterLocalStorageError> {
-        Ok(Self {
-            database: RouterLocalDatabase::open(path, &OUTBOX_MIGRATOR).await?,
-        })
-    }
     pub async fn enqueue(
         &self,
         request: &FleetRequest,
@@ -173,7 +172,7 @@ impl FleetOutbox {
             FleetOutboxState::Decided { decision: existing } if existing == *decision => {
                 if matches!(decision, RequestDecision::Rejected { .. }) {
                     sqlx::query::<sqlx_turso::Turso>(
-                        "DELETE FROM project_creation_inputs WHERE request_id=?",
+                        "DELETE FROM fleet_project_creation_inputs WHERE request_id=?",
                     )
                     .bind(id)
                     .execute(&mut *transaction)
@@ -206,7 +205,7 @@ impl FleetOutbox {
                 }
                 if matches!(decision, RequestDecision::Rejected { .. }) {
                     sqlx::query::<sqlx_turso::Turso>(
-                        "DELETE FROM project_creation_inputs WHERE request_id=?",
+                        "DELETE FROM fleet_project_creation_inputs WHERE request_id=?",
                     )
                     .bind(id)
                     .execute(&mut *transaction)
@@ -244,7 +243,7 @@ impl FleetOutbox {
             return Err(error);
         }
         let candidates = sqlx::query::<sqlx_turso::Turso>(
-            "SELECT request_id,canonical_hash,request,state,settled_at_ms FROM fleet_outbox_requests AS outbox WHERE json_extract(state,'$.kind')='decided' AND (settled_at_ms IS NULL OR settled_at_ms<?) AND (json_extract(state,'$.decision.kind')='rejected' OR NOT EXISTS (SELECT 1 FROM project_creation_inputs AS creation WHERE creation.request_id=outbox.request_id)) ORDER BY COALESCE(settled_at_ms,0),request_id LIMIT ?",
+            "SELECT request_id,canonical_hash,request,state,settled_at_ms FROM fleet_outbox_requests AS outbox WHERE json_extract(state,'$.kind')='decided' AND (settled_at_ms IS NULL OR settled_at_ms<?) AND (json_extract(state,'$.decision.kind')='rejected' OR NOT EXISTS (SELECT 1 FROM fleet_project_creation_inputs AS creation WHERE creation.request_id=outbox.request_id)) ORDER BY COALESCE(settled_at_ms,0),request_id LIMIT ?",
         )
         .bind(cutoff_ms)
         .bind(i64::from(batch_size))
@@ -260,7 +259,7 @@ impl FleetOutbox {
             let request_id = entry.request.request_id.as_str();
             if matches!(decision, RequestDecision::Rejected { .. }) {
                 sqlx::query::<sqlx_turso::Turso>(
-                    "DELETE FROM project_creation_inputs WHERE request_id=?",
+                    "DELETE FROM fleet_project_creation_inputs WHERE request_id=?",
                 )
                 .bind(request_id)
                 .execute(&mut *transaction)
@@ -283,10 +282,6 @@ impl FleetOutbox {
         }
         transaction.commit().await?;
         Ok(removed)
-    }
-
-    pub async fn close(self) {
-        self.database.close().await;
     }
 }
 

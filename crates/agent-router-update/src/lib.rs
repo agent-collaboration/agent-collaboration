@@ -16,7 +16,10 @@ pub use message_copy::{
     MESSAGE_COPY_DIGEST_BASIS, MessageCopyCounts, MessageUpgrade, MessageUpgradeError,
     MessageUpgradeReport,
 };
+mod ledger_step;
+mod merge_step;
 mod project_transform;
+mod rename_step;
 mod router_update;
 pub use router_update::{
     PendingUpdateStep, PlannedChange, RouterUpdateError, plan_router_update, run_router_update,

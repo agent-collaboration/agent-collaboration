@@ -161,3 +161,184 @@ fn file_digest(path: &Path) -> UpdateResult<String> {
     use sha2::Digest;
     Ok(format!("{:x}", sha2::Sha256::digest(std::fs::read(path)?)))
 }
+
+/// The fixture builder's other literals: two outbox requests (one pending, one decided
+/// at a fixed time), a pending project creation with its input, and the cursor key.
+pub const PENDING_REQUEST: &str = "019f0000-0000-7000-8000-00000000d311";
+pub const DECIDED_REQUEST: &str = "019f0000-0000-7000-8000-00000000d313";
+pub const CREATION_REQUEST: &str = "019f0000-0000-7000-8000-00000000d321";
+pub const DECIDED_AT_MS: i64 = 1_793_000_000_000;
+pub const CURSOR_KEY_BYTES: [u8; 32] = [0xd3; 32];
+
+/// Every Fleet value a root holds, read raw, wherever the current layout keeps it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FleetValues {
+    /// request_id, canonical_hash, request, state, settled_at_ms
+    pub requests: Vec<(String, String, String, String, Option<i64>)>,
+    /// request_id, canonical_hash, input
+    pub creation_inputs: Vec<(String, String, String)>,
+    /// key_id, key_bytes
+    pub cursor_keys: Vec<(String, Vec<u8>)>,
+    /// kind, id, payload
+    pub cached_records: Vec<(String, String, String)>,
+    pub checkpoint: i64,
+}
+
+impl FleetValues {
+    /// Reads the older layout: three stores and their own table names.
+    pub async fn read_legacy(root: &Path) -> UpdateResult<Self> {
+        let directory = root.join("agent-communication");
+        let outbox = directory.join("fleet-outbox.sqlite");
+        let cursors = directory.join("board-cursors.sqlite");
+        let cache = directory.join("fleet-cache.sqlite");
+        Ok(Self {
+            requests: requests(&outbox).await?,
+            creation_inputs: creation_inputs(&outbox, TableNames::Legacy).await?,
+            cursor_keys: cursor_keys(&cursors, TableNames::Legacy).await?,
+            cached_records: cached_records(&cache).await?,
+            checkpoint: checkpoint(&cache).await?,
+        })
+    }
+
+    /// Reads one Fleet database after the merge, with its new table names.
+    pub async fn read_merged(store: &Path) -> UpdateResult<Self> {
+        Ok(Self {
+            requests: requests(store).await?,
+            creation_inputs: creation_inputs(store, TableNames::Merged).await?,
+            cursor_keys: cursor_keys(store, TableNames::Merged).await?,
+            cached_records: cached_records(store).await?,
+            checkpoint: checkpoint(store).await?,
+        })
+    }
+}
+
+/// The older stores' table names, or the Fleet database's after the merge.
+#[derive(Clone, Copy)]
+enum TableNames {
+    Legacy,
+    Merged,
+}
+
+async fn read_only(path: &Path) -> UpdateResult<sqlx_turso::TursoConnection> {
+    use sqlx::ConnectOptions;
+    Ok(sqlx_turso::TursoConnectOptions::new()
+        .filename(path)
+        .read_only(true)
+        .connect()
+        .await?)
+}
+
+async fn requests(path: &Path) -> UpdateResult<Vec<(String, String, String, String, Option<i64>)>> {
+    let mut connection = read_only(path).await?;
+    let rows = sqlx::query_as::<sqlx_turso::Turso, (String, String, String, String, Option<i64>)>(
+        "SELECT request_id, canonical_hash, request, state, settled_at_ms FROM fleet_outbox_requests ORDER BY request_id",
+    )
+    .fetch_all(&mut connection)
+    .await?;
+    sqlx::Connection::close(connection).await?;
+    Ok(rows)
+}
+
+async fn creation_inputs(
+    path: &Path,
+    names: TableNames,
+) -> UpdateResult<Vec<(String, String, String)>> {
+    let mut connection = read_only(path).await?;
+    let rows = sqlx::query_as::<sqlx_turso::Turso, (String, String, String)>(match names {
+        TableNames::Legacy => {
+            "SELECT request_id, canonical_hash, input FROM project_creation_inputs ORDER BY request_id"
+        }
+        TableNames::Merged => {
+            "SELECT request_id, canonical_hash, input FROM fleet_project_creation_inputs ORDER BY request_id"
+        }
+    })
+    .fetch_all(&mut connection)
+    .await?;
+    sqlx::Connection::close(connection).await?;
+    Ok(rows)
+}
+
+async fn cursor_keys(path: &Path, names: TableNames) -> UpdateResult<Vec<(String, Vec<u8>)>> {
+    let mut connection = read_only(path).await?;
+    let rows = sqlx::query_as::<sqlx_turso::Turso, (String, Vec<u8>)>(match names {
+        TableNames::Legacy => "SELECT key_id, key_bytes FROM cursor_signing_key ORDER BY key_id",
+        TableNames::Merged => {
+            "SELECT key_id, key_bytes FROM fleet_cursor_signing_key ORDER BY key_id"
+        }
+    })
+    .fetch_all(&mut connection)
+    .await?;
+    sqlx::Connection::close(connection).await?;
+    Ok(rows)
+}
+
+async fn cached_records(path: &Path) -> UpdateResult<Vec<(String, String, String)>> {
+    let mut connection = read_only(path).await?;
+    let rows = sqlx::query_as::<sqlx_turso::Turso, (String, String, String)>(
+        "SELECT kind, id, payload FROM cached_fleet_records ORDER BY kind, id",
+    )
+    .fetch_all(&mut connection)
+    .await?;
+    sqlx::Connection::close(connection).await?;
+    Ok(rows)
+}
+
+async fn checkpoint(path: &Path) -> UpdateResult<i64> {
+    let mut connection = read_only(path).await?;
+    let position = sqlx::query_scalar::<sqlx_turso::Turso, i64>(
+        "SELECT position FROM fleet_cache_checkpoint WHERE singleton = 1",
+    )
+    .fetch_one(&mut connection)
+    .await?;
+    sqlx::Connection::close(connection).await?;
+    Ok(position)
+}
+
+/// Runs the update on `root`, pausing at `marker` to run `inspect` before releasing it.
+pub async fn run_update_inspecting_at<Inspect, Future>(
+    root: &Path,
+    marker: &str,
+    inspect: Inspect,
+) -> UpdateResult<std::process::ExitStatus>
+where
+    Inspect: FnOnce() -> Future,
+    Future: std::future::Future<Output = UpdateResult>,
+{
+    let binary = signed_update_binary().await?;
+    let barrier_directory = tempfile::tempdir()?;
+    let barrier_root = barrier_directory.path().join("barrier");
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&barrier_root)?;
+    let socket = barrier_root.join("update.sock");
+    let listener = tokio::net::UnixListener::bind(&socket)?;
+    let mut child = tokio::process::Command::new(binary)
+        .arg("--router-root")
+        .arg(root)
+        .env(BARRIER_SOCKET_VARIABLE, &socket)
+        .kill_on_drop(true)
+        .spawn()?;
+    let mut inspect = Some(inspect);
+    loop {
+        let accepted = tokio::select! {
+            accepted = listener.accept() => accepted?,
+            status = child.wait() => {
+                return if inspect.is_some() {
+                    Err(format!("the update never reached {marker}").into())
+                } else {
+                    Ok(status?)
+                };
+            }
+        };
+        let (stream, _) = accepted;
+        let mut reported = String::new();
+        let mut reader = BufReader::new(stream);
+        reader.read_line(&mut reported).await?;
+        if reported.trim_end() == marker
+            && let Some(inspect) = inspect.take()
+        {
+            inspect().await?;
+        }
+        tokio::io::AsyncWriteExt::write_all(reader.get_mut(), &[1]).await?;
+    }
+}

@@ -84,7 +84,8 @@ pub enum ProjectRegistryError {
 
 pub struct ProjectStoreRegistry {
     pub(crate) projects_directory: PathBuf,
-    cursor_key: OnceCell<message_board_storage::CursorSigningKey>,
+    /// Signs board pagination cursors; installed in the Host's Fleet database at start-up.
+    cursor_key: message_board_storage::CursorSigningKey,
     pub(crate) projects: Mutex<BTreeMap<ProjectId, ProjectSlot>>,
     activity: tokio::sync::broadcast::Sender<ProjectId>,
     rejected: RwLock<BTreeMap<ProjectId, Arc<ProjectLedgerReader>>>,
@@ -183,10 +184,15 @@ impl ProjectStoreRegistry {
         }
     }
     #[must_use]
-    pub fn new(router_directory: &Path, peer: Option<PeerId>, clock: Arc<dyn Clock>) -> Self {
+    pub fn new(
+        router_directory: &Path,
+        peer: Option<PeerId>,
+        clock: Arc<dyn Clock>,
+        cursor_key: message_board_storage::CursorSigningKey,
+    ) -> Self {
         Self {
             projects_directory: router_directory.join("projects"),
-            cursor_key: OnceCell::new(),
+            cursor_key,
             projects: Mutex::new(BTreeMap::new()),
             activity: tokio::sync::broadcast::channel(256).0,
             rejected: RwLock::new(BTreeMap::new()),
@@ -207,31 +213,7 @@ impl ProjectStoreRegistry {
     pub async fn cursor_key(
         &self,
     ) -> Result<&message_board_storage::CursorSigningKey, ProjectRegistryError> {
-        self.cursor_key
-            .get_or_try_init(|| async {
-                let root = self
-                    .projects_directory
-                    .parent()
-                    .ok_or(ProjectRegistryError::InvalidTransition)?;
-                tokio::fs::create_dir_all(root).await?;
-                let store =
-                    message_board_storage::CursorStore::open(&root.join("board-cursors.sqlite"))
-                        .await
-                        .map_err(|error| std::io::Error::other(error.to_string()))?;
-                let mut candidate = vec![0_u8; 32];
-                getrandom::fill(&mut candidate)
-                    .map_err(|error| std::io::Error::other(error.to_string()))?;
-                let key = store
-                    .get_or_install_key(
-                        &message_board_storage::CursorSigningKey::try_from(candidate)
-                            .map_err(|error| std::io::Error::other(error.to_string()))?,
-                    )
-                    .await
-                    .map_err(|error| std::io::Error::other(error.to_string()))?;
-                store.close().await;
-                Ok(key)
-            })
-            .await
+        Ok(&self.cursor_key)
     }
     async fn project_runtime(
         &self,
@@ -574,4 +556,19 @@ fn superseded_write_refusal(current: Option<EpochNumber>) -> ProjectRegistryErro
         None => WriteRefusal::NotWriter,
     };
     ProjectRegistryError::Storage(ProjectStorageError::WriteRefused(refusal))
+}
+
+/// Returns the Router's board cursor signing key, installing a random one in the Fleet
+/// database the first time; later starts get the same key back.
+pub async fn install_board_cursor_key(
+    cursors: &message_board_storage::CursorStore,
+) -> Result<message_board_storage::CursorSigningKey, ProjectRegistryError> {
+    let mut candidate = vec![0_u8; 32];
+    getrandom::fill(&mut candidate).map_err(|error| std::io::Error::other(error.to_string()))?;
+    let candidate = message_board_storage::CursorSigningKey::try_from(candidate)
+        .map_err(|error| std::io::Error::other(error.to_string()))?;
+    Ok(cursors
+        .get_or_install_key(&candidate)
+        .await
+        .map_err(|error| std::io::Error::other(error.to_string()))?)
 }

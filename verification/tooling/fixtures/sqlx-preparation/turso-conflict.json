@@ -26,7 +26,7 @@
           "cargo",
           "clean",
           "--package",
-          "path+file://<root>/crates/board-legacy-upgrade"
+          "path+file://<root>/crates/agent-router-update"
         ],
         "environment": {
           "SQLX_OFFLINE": "true"
@@ -40,15 +40,15 @@
           "--jobs",
           "1",
           "--package",
-          "path+file://<root>/crates/board-legacy-upgrade",
+          "path+file://<root>/crates/agent-router-update",
           "--all-targets",
           "--all-features"
         ],
         "environment": {
           "SQLX_OFFLINE": "true",
           "RUSTC_WRAPPER": "<wrapper>",
-          "SQLX_PREPARE_PACKAGE": "board-legacy-upgrade",
-          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/board-legacy-upgrade",
+          "SQLX_PREPARE_PACKAGE": "agent-router-update",
+          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/agent-router-update",
           "SQLX_PREPARE_DATABASE_URL": "turso:<root>/tmp/<schema>/schema.db",
           "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/metadata"
         }
@@ -110,9 +110,7 @@
           "<root>/tmp/<schema>/schema.db",
           "crates/message-board-storage/project_migrations",
           "crates/message-board-storage/project_bookkeeping_migrations",
-          "crates/message-board-storage/fleet_cache_migrations",
-          "crates/message-board-storage/fleet_outbox_migrations",
-          "crates/message-board-storage/cursor_migrations"
+          "crates/message-board-storage/fleet_cache_migrations"
         ],
         "environment": {
           "SQLX_OFFLINE": "true"
@@ -202,8 +200,8 @@
       }
     ],
     "metadata": {
-      "crates/board-legacy-upgrade/.sqlx": {
-        "query-shared.json": "board-legacy-upgrade"
+      "crates/agent-router-update/.sqlx": {
+        "query-shared.json": "agent-router-update"
       },
       "crates/interaction-storage/.sqlx": {
         "query-shared.json": "interaction-storage"

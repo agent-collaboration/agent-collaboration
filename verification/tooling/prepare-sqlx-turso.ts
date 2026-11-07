@@ -30,8 +30,6 @@ export const tursoPreparationTargets: readonly TursoPreparationTarget[] = [
       "project_migrations",
       "project_bookkeeping_migrations",
       "fleet_cache_migrations",
-      "fleet_outbox_migrations",
-      "cursor_migrations",
     ].map((name) => `crates/message-board-storage/${name}`),
   },
   {

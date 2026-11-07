@@ -38,6 +38,8 @@ fn reader_registry(
         root,
         Some(runtime.central.peer),
         Arc::new(SystemClock),
+        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+            .expect("32-byte fixture cursor key"),
     ));
     registry.attach_central_reads(source)?;
     Ok(registry)
@@ -388,6 +390,8 @@ async fn a_fresh_nonholder_without_any_local_project_reads_unknown_authority_fro
         &root,
         Some(runtime.central.peer),
         Arc::new(SystemClock),
+        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+            .expect("32-byte fixture cursor key"),
     ));
     registry.attach_central_reads(Arc::new(CentralReadCopies::new(
         &root,

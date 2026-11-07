@@ -51,7 +51,8 @@ async fn identity(cache: &FleetCache) -> TestResult<String> {
 async fn staging_uuid_identity_is_immutable_while_natural_key_upserts_and_reopens() -> TestResult {
     let root = tempfile::tempdir()?;
     let path = root.path().join("fleet.db");
-    let cache = FleetCache::open(&path).await?;
+    let cache_store = crate::FleetStore::open(&path).await?;
+    let cache = cache_store.cache();
     let mut connection = cache.database.pool.acquire().await?;
     let columns = query::<sqlx_turso::Turso>(
         "SELECT name FROM pragma_table_info('fleet_cache_rebuild_records') WHERE pk>0 ORDER BY pk",
@@ -84,8 +85,9 @@ async fn staging_uuid_identity_is_immutable_while_natural_key_upserts_and_reopen
     transaction.rollback().await?;
     drop(connection);
     assert_eq!(identity(&cache).await?, first);
-    cache.close().await;
-    let cache = FleetCache::open(&path).await?;
+    cache_store.close().await;
+    let cache_store = crate::FleetStore::open(&path).await?;
+    let cache = cache_store.cache();
     assert_eq!(identity(&cache).await?, first);
     let mut connection = cache.database.pool.acquire().await?;
     query::<sqlx_turso::Turso>("UPDATE fleet_cache_rebuild_records SET row_id='not-a-uuid'")
@@ -96,6 +98,6 @@ async fn staging_uuid_identity_is_immutable_while_natural_key_upserts_and_reopen
         Err(RouterLocalStorageError::InvalidRecord)
     ));
     drop(connection);
-    cache.close().await;
+    cache_store.close().await;
     Ok(())
 }

@@ -420,11 +420,7 @@ async fn host_composes_discovery_and_retires_only_owned_communication_sockets() 
         .unwrap_or_else(|error| panic!("export cleanup: {error}"));
     std::fs::remove_dir(export_directory)
         .unwrap_or_else(|error| panic!("export directory cleanup: {error}"));
-    for filename in [
-        "fleet-cache.sqlite",
-        "fleet-outbox.sqlite",
-        "interaction.sqlite",
-    ] {
+    for filename in ["fleet.sqlite", "interaction.sqlite"] {
         std::fs::remove_file(root.join(filename))
             .unwrap_or_else(|error| panic!("{filename} cleanup: {error}"));
         let wal = root.join(format!("{filename}-wal"));

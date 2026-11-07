@@ -384,12 +384,14 @@ impl BoardFixture {
             )
             .await?;
             runtime.disconnect().await?;
-            let fleet = FleetClient::open(
-                _directory.path(),
+            let fleet = FleetClient::new(
+                message_board_storage::FleetStore::open(
+                    &(_directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
+                )
+                .await?,
                 Arc::new(PendingRegistration),
                 Some(requests),
-            )
-            .await?;
+            );
             (fleet, runtime)
         } else {
             board_central_test_support::fleet_client(

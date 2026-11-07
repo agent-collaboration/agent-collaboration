@@ -26,7 +26,7 @@
           "cargo",
           "clean",
           "--package",
-          "path+file://<root>/crates/board-legacy-upgrade"
+          "path+file://<root>/crates/agent-router-update"
         ],
         "environment": {
           "SQLX_OFFLINE": "true"
@@ -40,22 +40,22 @@
           "--jobs",
           "1",
           "--package",
-          "path+file://<root>/crates/board-legacy-upgrade",
+          "path+file://<root>/crates/agent-router-update",
           "--all-targets",
           "--all-features"
         ],
         "environment": {
           "SQLX_OFFLINE": "true",
           "RUSTC_WRAPPER": "<wrapper>",
-          "SQLX_PREPARE_PACKAGE": "board-legacy-upgrade",
-          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/board-legacy-upgrade",
+          "SQLX_PREPARE_PACKAGE": "agent-router-update",
+          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/agent-router-update",
           "SQLX_PREPARE_DATABASE_URL": "turso:<root>/tmp/<schema>/schema.db",
           "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/metadata"
         }
       }
     ],
     "metadata": {
-      "crates/board-legacy-upgrade/.sqlx": {
+      "crates/agent-router-update/.sqlx": {
         "query-original.json": "original"
       },
       "crates/interaction-storage/.sqlx": {
@@ -68,6 +68,6 @@
         "query-original.json": "original"
       }
     },
-    "stderr": "board-legacy-upgrade: Turso SQLx metadata is out of date; run node verification/tooling/prepare-sqlx-turso.ts\n  missing query-board-legacy-upgrade.json\n  stale query-original.json\n"
+    "stderr": "agent-router-update: Turso SQLx metadata is out of date; run node verification/tooling/prepare-sqlx-turso.ts\n  missing query-agent-router-update.json\n  stale query-original.json\n"
   }
 }

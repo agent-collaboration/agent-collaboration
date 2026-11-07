@@ -32,9 +32,12 @@ async fn interrupted_reset_resumes_before_activation_and_preserves_router_owned_
         b"old central copy",
     )
     .await?;
-    let cache =
-        message_board_storage::FleetCache::open(&storage.join("fleet-cache.sqlite")).await?;
-    cache.close().await;
+    message_board_storage::FleetStore::open(
+        &storage.join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?
+    .close()
+    .await;
     let owned_files = [
         "fleet-outbox.sqlite",
         "installation-peer.json",
@@ -92,22 +95,28 @@ async fn interrupted_reset_resumes_before_activation_and_preserves_router_owned_
         assert_eq!(tokio::fs::read(storage.join(name)).await?, name.as_bytes());
     }
     // Replaying completion cannot clear state learned after the reset.
-    let cache =
-        message_board_storage::FleetCache::open(&storage.join("fleet-cache.sqlite")).await?;
+    let cache_store = message_board_storage::FleetStore::open(
+        &storage.join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?;
+    let cache = cache_store.cache();
     cache
         .replace_snapshot(&message_board_storage::FleetRecordSnapshot {
             through: message_board::FleetPosition::try_from(7)?,
             records: Vec::new(),
         })
         .await?;
-    cache.close().await;
+    cache_store.close().await;
     resume_enrollment_reset(&journal, &storage).await?;
-    let cache =
-        message_board_storage::FleetCache::open(&storage.join("fleet-cache.sqlite")).await?;
+    let cache_store = message_board_storage::FleetStore::open(
+        &storage.join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?;
+    let cache = cache_store.cache();
     assert_eq!(
         cache.checkpoint().await?,
         message_board::FleetPosition::try_from(7)?
     );
-    cache.close().await;
+    cache_store.close().await;
     Ok(())
 }

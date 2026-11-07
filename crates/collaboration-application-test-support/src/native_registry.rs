@@ -17,6 +17,8 @@ pub fn new_registry_with_clock(
         root,
         Some(fixture_peer()?),
         clock,
+        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+            .expect("32-byte fixture cursor key"),
     )))
 }
 

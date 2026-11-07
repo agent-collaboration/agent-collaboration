@@ -3,8 +3,8 @@
 //! update tool runs exactly those steps, and a store the Host creates records them all
 //! done, so an empty or partial ledger always means an interrupted update.
 use message_board_storage::{
-    RouterLocalStorageError, RouterUpdateStep, StoredUpdateLedger, UpdateLedgerEntry,
-    UpdateStepNumber, UpdateStepProgress, read_update_ledger,
+    FleetStore, LegacyFleetSource, RouterLocalStorageError, RouterUpdateStep, StoredUpdateLedger,
+    UpdateLedgerEntry, UpdateStepNumber, UpdateStepProgress, read_update_ledger,
 };
 use std::path::{Path, PathBuf};
 
@@ -17,7 +17,7 @@ pub fn router_fleet_cache_database(root: &Path) -> PathBuf {
 /// The Fleet database under the name the update gives it.
 #[must_use]
 pub fn router_fleet_database(root: &Path) -> PathBuf {
-    crate::router_collaboration_directory(root).join("fleet.sqlite")
+    crate::router_collaboration_directory(root).join(FleetStore::FILE_NAME)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -35,6 +35,10 @@ pub enum RequiredRouterUpdate {
         store: PathBuf,
         steps: Vec<UpdateStepNumber>,
     },
+    /// The Fleet database exists under both its former and its current name.
+    BothFleetDatabaseNames { current: PathBuf, former: PathBuf },
+    /// A store the update merges or renames away is still here after its step.
+    LegacyStoreRemains { path: PathBuf },
 }
 
 impl std::fmt::Display for RequiredRouterUpdate {
@@ -57,6 +61,17 @@ impl std::fmt::Display for RequiredRouterUpdate {
                     store.display()
                 )
             }
+            Self::BothFleetDatabaseNames { current, former } => write!(
+                formatter,
+                "both {} and {} exist; run agent-router-update with the Host stopped, which names the conflict",
+                current.display(),
+                former.display()
+            ),
+            Self::LegacyStoreRemains { path } => write!(
+                formatter,
+                "{} is left from an older layout; run agent-router-update with the Host stopped",
+                path.display()
+            ),
         }
     }
 }
@@ -74,7 +89,21 @@ pub struct RouterUpdateInspectionError {
 pub async fn inspect_router_update_requirement(
     root: &Path,
 ) -> Result<RouterUpdateRequirement, RouterUpdateInspectionError> {
-    let store = router_fleet_cache_database(root);
+    let current = router_fleet_database(root);
+    let former = router_fleet_cache_database(root);
+    // An unreadable existence check counts as present, so the guard fails closed.
+    let exists = |path: &Path| path.try_exists().unwrap_or(true);
+    let (current_exists, former_exists) = (exists(&current), exists(&former));
+    if current_exists && former_exists {
+        return Ok(RouterUpdateRequirement::Required(
+            RequiredRouterUpdate::BothFleetDatabaseNames { current, former },
+        ));
+    }
+    let store = if current_exists {
+        current
+    } else {
+        former.clone()
+    };
     let ledger =
         read_update_ledger(&store)
             .await
@@ -82,7 +111,25 @@ pub async fn inspect_router_update_requirement(
                 store: store.clone(),
                 source,
             })?;
-    Ok(requirement_for_ledger(store, &ledger))
+    let requirement = requirement_for_ledger(store, &ledger);
+    if requirement != RouterUpdateRequirement::NotRequired {
+        return Ok(requirement);
+    }
+    // Every step is done, so nothing from the older layout may be left: not the Fleet
+    // database under its former name, and not a store step 0005 merged away.
+    let directory = crate::router_collaboration_directory(root);
+    let leftover = former_exists.then_some(former).or_else(|| {
+        LegacyFleetSource::ALL
+            .iter()
+            .map(|source| directory.join(source.file_name()))
+            .find(|path| exists(path))
+    });
+    Ok(match leftover {
+        Some(path) => {
+            RouterUpdateRequirement::Required(RequiredRouterUpdate::LegacyStoreRemains { path })
+        }
+        None => RouterUpdateRequirement::NotRequired,
+    })
 }
 
 fn requirement_for_ledger(store: PathBuf, ledger: &StoredUpdateLedger) -> RouterUpdateRequirement {

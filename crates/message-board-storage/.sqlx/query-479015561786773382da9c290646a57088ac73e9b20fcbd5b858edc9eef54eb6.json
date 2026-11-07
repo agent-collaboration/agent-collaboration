@@ -1,6 +1,6 @@
 {
   "db_name": "Turso",
-  "query": "SELECT canonical_hash AS \"canonical_hash!: String\", input AS \"input!: String\" FROM project_creation_inputs WHERE request_id = ?",
+  "query": "SELECT canonical_hash AS \"canonical_hash!: String\", input AS \"input!: String\" FROM fleet_project_creation_inputs WHERE request_id = ?",
   "describe": {
     "columns": [
       {
@@ -24,5 +24,5 @@
       null
     ]
   },
-  "hash": "1c50d61bf44f835f0a39818942a30816c22df3e21eecf05aa5f5e34aa46699a1"
+  "hash": "479015561786773382da9c290646a57088ac73e9b20fcbd5b858edc9eef54eb6"
 }

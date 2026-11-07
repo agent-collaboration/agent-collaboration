@@ -22,6 +22,8 @@ impl CleanupReadback {
             directory,
             Some(load_installation_peer(directory)?),
             Arc::new(runtime_primitives::SystemClock),
+            message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+                .expect("32-byte fixture cursor key"),
         ));
         for project in registry.project_ids().await? {
             registry.existing_project(&project).await?;

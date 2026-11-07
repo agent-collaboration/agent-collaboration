@@ -35,6 +35,7 @@ mod project_description;
 mod seed_integrity_refusal;
 mod source_schema_refusals;
 mod update_ledger_journey;
+mod update_moves_journey;
 mod upgrade_singleton;
 mod upload_publication;
 mod watch_row_fidelity;

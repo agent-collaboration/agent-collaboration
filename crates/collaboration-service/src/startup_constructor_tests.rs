@@ -189,16 +189,18 @@ async fn startup_follow_attachment_keeps_neither_admission_nor_publisher_alive()
         directory.path(),
         construction.installation_peer,
         Arc::new(runtime_primitives::SystemClock),
+        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+            .expect("32-byte fixture cursor key"),
     ));
-    let fleet = Arc::new(
-        collaboration_runtime::FleetClient::open(
-            directory.path(),
-            Arc::new(crate::test_project_runtime::PendingRegistration),
-            None,
+    let fleet = Arc::new(collaboration_runtime::FleetClient::new(
+        message_board_storage::FleetStore::open(
+            &(directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
         )
         .await
         .expect("fleet"),
-    );
+        Arc::new(crate::test_project_runtime::PendingRegistration),
+        None,
+    ));
     let admission = Arc::new(
         crate::ProjectAdmission::new(crate::ProjectAdmissionProps {
             registry,
