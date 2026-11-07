@@ -52,6 +52,9 @@ async fn persistent_read_lock_returns_the_original_busy_error() -> Result<(), Bo
     let options = SqliteConnectOptions::new()
         .filename(&path)
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal);
+    // Freeze the admission clock before even the first attempt. No Tokio
+    // timer is armed while that attempt awaits the real SQLite BUSY result.
+    tokio::time::pause();
     let attempts = Cell::new(0);
     let first_busy = tokio::sync::Notify::new();
     let connection = connect_journal(options, |options| {
@@ -70,15 +73,14 @@ async fn persistent_read_lock_returns_the_original_busy_error() -> Result<(), Bo
         }
     });
     tokio::pin!(connection);
+    tokio::select! {
+        biased;
+        () = first_busy.notified() => {}
+        _ = &mut connection => return Err("connect must await a retry after the observed BUSY".into()),
+    }
     let guarded = tokio::time::timeout(Duration::from_secs(3), async {
-        tokio::select! {
-            biased;
-            () = first_busy.notified() => {}
-            _ = &mut connection => return Err("connect must await a retry after the observed BUSY".into()),
-        }
         // The connection future stays in this task, so no retry can be polled
         // between observing the first real BUSY and advancing beyond expiry.
-        tokio::time::pause();
         tokio::time::advance(Duration::from_secs(1)).await;
         let result = (&mut connection).await;
         tokio::time::resume();
