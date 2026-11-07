@@ -28,6 +28,56 @@ struct Vector {
     expected: String,
 }
 struct FixedClock(i64);
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions fail the test while fixture errors propagate through Result."
+)]
+async fn issuer_usage_is_optional_and_conflicting_usage_is_refused()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Arrange: the committed fixture omits use, matching Better Auth's JWKS route.
+    let fixtures: Fixtures = serde_json::from_str(include_str!(
+        "../../../collaboration-central-core/tests/fixtures/person-dpop.json"
+    ))?;
+    let vector = fixtures
+        .vectors
+        .iter()
+        .find(|vector| vector.name == "valid")
+        .ok_or("missing valid vector")?;
+    let mut key_set: serde_json::Value = serde_json::from_str(&fixtures.trusted_jwks)?;
+    let key = key_set
+        .get_mut("keys")
+        .and_then(serde_json::Value::as_array_mut)
+        .and_then(|keys| keys.first_mut())
+        .and_then(serde_json::Value::as_object_mut)
+        .ok_or("missing issuer key")?;
+    assert!(
+        !key.contains_key("use"),
+        "fixture must preserve native JWKS shape"
+    );
+    key.insert(
+        "use".to_owned(),
+        serde_json::Value::String("enc".to_owned()),
+    );
+    // Act: a matching kid/public key with contradictory declared usage.
+    let result = verify_person_request(
+        &NativePersonDpopCrypto,
+        &FixedClock(vector.now_ms),
+        &fixtures.policy,
+        &serde_json::to_string(&key_set)?,
+        &vector.input,
+    )
+    .await;
+    // Assert: usage policy must fail before an otherwise valid signature grants a result.
+    assert_eq!(
+        result,
+        DpopVerification::Refused {
+            reason: DpopRefusal::IssuerKey
+        }
+    );
+    Ok(())
+}
 impl Clock for FixedClock {
     fn now(&self) -> SyncTime {
         SyncTime::from_unix_millis(self.0)
@@ -35,6 +85,10 @@ impl Clock for FixedClock {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions fail the test while fixture errors propagate through Result."
+)]
 async fn jose_vectors_cross_native_crypto_and_core() -> Result<(), Box<dyn std::error::Error>> {
     // Arrange: fixed TS JOSE signatures, RFC 7638 thumbprint and canonical intent.
     let fixtures: Fixtures = serde_json::from_str(include_str!(
@@ -116,6 +170,10 @@ impl Clock for ApplyingClock {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions fail the test while fixture errors propagate through Result."
+)]
 async fn expiry_is_sampled_after_host_crypto_finishes() -> Result<(), Box<dyn std::error::Error>> {
     // Arrange: valid at ingress, but host crypto finishes at the signed deadline.
     let fixtures: Fixtures = serde_json::from_str(include_str!(

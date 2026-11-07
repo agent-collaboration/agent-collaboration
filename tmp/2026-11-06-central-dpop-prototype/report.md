@@ -45,3 +45,36 @@ crypto and machine load are not deployed Cloudflare performance or billing proof
 
 Next: run focused native and workerd proof from a pushed head on sunclaw, preserve
 raw logs, report elapsed/available CPU metrics and exact unverified obligations.
+
+## Source correction while the first pinned run continues
+
+I had inferred `use: sig` was mandatory in issuer JWKS. Better Auth's actual JWKS
+route (`dist/plugins/jwt/index.mjs:133`) returns alg/crv/public key/kid without
+adding `use`; `utils.mjs:30` exports the bare public key. That extra requirement
+was my inference, not an owner requirement. The correction accepts absent `use`
+and still refuses a supplied incompatible usage. The fixture now models that
+real response. The existing remote run stays pinned until it settles; its
+receipts will not be described as validation of the corrected source.
+
+First remote run (76ea87649) stopped at native all-target clippy with two
+`panic_in_result_fn` diagnostics in the new Result-returning tests. The repository
+uses reasoned `#[expect(clippy::panic_in_result_fn)]` on assertion-bearing tests;
+the correction follows that existing convention and retains every assertion.
+No native behavioral test or Worker run happened at that head. Old logs stay in
+`sunclaw/`; each subsequent run has its own head-named evidence directory.
+
+## References and evidence boundary
+
+- [DPoP RFC 9449](https://www.rfc-editor.org/rfc/rfc9449.html), sections 4.3 and
+  7: signature/key/type, method/target, timestamp, token hash and key binding.
+  The application adds its own intent claim and UUIDv7 identity/time contract.
+- [Cloudflare performance and timers](https://developers.cloudflare.com/workers/runtime-apis/performance/):
+  local timers advance without I/O; elapsed timing is not a CPU counter.
+- [Cloudflare limits](https://developers.cloudflare.com/workers/platform/limits/):
+  runtime invocation CPU and elapsed wall time are distinct. Local evidence
+  does not establish production CPU limits or billing.
+- DeepWiki was used for workers-rs/JOSE/workerd API pointers, then primary
+  workers-rs and pinned JOSE source were inspected. No workerd C++ checkout
+  was available locally; native signature encoding is tested by the real hosts.
+- The first web tool open failed with HTTP 404. Tavily subsequently retrieved
+  the primary RFC and Cloudflare documentation above; no claim uses the failed read.

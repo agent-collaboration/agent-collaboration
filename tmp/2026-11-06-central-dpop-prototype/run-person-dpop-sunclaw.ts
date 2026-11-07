@@ -4,7 +4,9 @@ import { resolve } from "node:path";
 
 const expectedHead = process.argv[2];
 if (!expectedHead) throw new Error("expected pushed head required");
-const evidence = resolve("tmp/2026-11-06-central-dpop-prototype/sunclaw");
+const evidence = resolve(
+  `tmp/2026-11-06-central-dpop-prototype/sunclaw-${expectedHead.slice(0, 9)}`,
+);
 const tools = resolve("tmp/2026-11-06-central-dpop-prototype/tools");
 mkdirSync(evidence, { recursive: true });
 mkdirSync(tools, { recursive: true });

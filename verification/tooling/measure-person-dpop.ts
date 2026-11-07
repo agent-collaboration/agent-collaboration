@@ -51,11 +51,13 @@ const measurementSchema = z.object({
   cpu_ms: z.number().nullable(),
 });
 const tailSchema = z.array(
-  z.object({
-    cpuTime: z.number().optional(),
-    wallTime: z.number().optional(),
-    outcome: z.string().optional(),
-  }),
+  z
+    .object({
+      cpuTime: z.number().optional(),
+      wallTime: z.number().optional(),
+      outcome: z.string().optional(),
+    })
+    .passthrough(),
 );
 type Measurement = z.infer<typeof measurementSchema>;
 
@@ -145,7 +147,14 @@ try {
       assert.equal(outcome.request.proof_key_thumbprint, fixtures.thumbprint, vector.name);
       assert.equal(outcome.request.intent_digest, fixtures.intent, vector.name);
     }
-    vectorResults.push({ name: vector.name, expected: vector.expected, observed: reason });
+    vectorResults.push({
+      name: vector.name,
+      expected: vector.expected,
+      observed: reason,
+      worker_elapsed_ms: observed.elapsed_ms,
+      client_wall_ms: observed.client_wall_ms,
+      cpu_ms: observed.cpu_ms,
+    });
   }
   const valid = fixtures.vectors.find((vector) => vector.name === "valid");
   assert.ok(valid);

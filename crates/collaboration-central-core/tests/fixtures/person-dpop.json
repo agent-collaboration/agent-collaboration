@@ -5,7 +5,7 @@
     "audience": "https://fleet.example.test",
     "public_htu": "https://fleet.example.test/admin/workspaces"
   },
-  "trusted_jwks": "{\"keys\":[{\"kty\":\"OKP\",\"crv\":\"Ed25519\",\"x\":\"iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w\",\"alg\":\"EdDSA\",\"kid\":\"prototype-issuer\",\"use\":\"sig\"}]}",
+  "trusted_jwks": "{\"keys\":[{\"kty\":\"OKP\",\"crv\":\"Ed25519\",\"x\":\"iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w\",\"alg\":\"EdDSA\",\"kid\":\"prototype-issuer\"}]}",
   "now_ms": 1793923200000,
   "thumbprint": "gWjt7nmB1udyFpLYVp0SxJnI8lJEvl7q8AFYZRqnGV8",
   "intent": "84zc51kGigOQcs_lvYbRWEIXbLH3uhSGgc28mvJ2gUY",
@@ -557,7 +557,7 @@
       "expected": "unsupportedHeader"
     },
     {
-      "name": "unknown-critical-header",
+      "name": "unsupported-extra-header",
       "input": {
         "authorization": "DPoP eyJhbGciOiJFZERTQSIsImtpZCI6InByb3RvdHlwZS1pc3N1ZXIiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL3NpZ25pbi5leGFtcGxlLnRlc3QiLCJhdWQiOiJodHRwczovL2ZsZWV0LmV4YW1wbGUudGVzdCIsInN1YiI6IjAxYTFiMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMSIsInNpZCI6IjAxYTFiMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMiIsIm9yZ2FuaXphdGlvbl9pZCI6IjAxYTFiMDAwLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMyIsInRva2VuX3Byb2ZpbGUiOiJwZXJzb24tZmxlZXQiLCJpYXQiOjE3OTM5MjMxOTAsImV4cCI6MTc5MzkyMzUwMCwiY25mIjp7ImprdCI6ImdXanQ3bm1CMXVkeUZwTFlWcDBTeEpuSThsSkV2bDdxOEFGWVpScW5HVjgifSwic2Vzc2lvbl9leHBpcmVzX2F0X21zIjoxNzkzOTIzODAwMDAwLCJhdXRob3JpemF0aW9uX3NuYXBzaG90X2F0X21zIjoxNzkzOTIzMTkwMDAwLCJhdXRob3JpemF0aW9uX3NuYXBzaG90X3ZhbGlkX3VudGlsX21zIjoxNzkzOTIzNDkwMDAwfQ.Y2UEJ9VI0TJLbim5gaaGPLf-gCU_GWCN2hUUKdzVm-ScNxLZf0lGyjDHply_Nm242Lmk7f-Dd5B15IW7MyFEAw",
         "proof": "eyJ0eXAiOiJkcG9wK2p3dCIsImFsZyI6IkVTMjU2IiwiandrIjp7Imt0eSI6IkVDIiwiY3J2IjoiUC0yNTYiLCJ4IjoiSGhoVEw5UjFUQUx6QkIyY2RjNnpPNFBfMkJySHprX29nc3l4eVl2RmlXNCIsInkiOiJwR3d4SEU0djlBM1phalpUNXVSVVJkTXRfa2h1enRkY2VwREdvWWlCd0tNIn0sImV4dHJhIjp0cnVlfQ.eyJqdGkiOiIwMWExYWUyNy1iNDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwMDYiLCJodG0iOiJQT1NUIiwiaHR1IjoiaHR0cHM6Ly9mbGVldC5leGFtcGxlLnRlc3QvYWRtaW4vd29ya3NwYWNlcyIsImlhdCI6MTc5MzkyMzIwMCwiYXRoIjoiUndpWUpHY0RxcHVIUHUtXzBHMmU2eDhHMkhiNnJOZTV6SlV6MzFSWXRFUSIsImludGVudCI6Ijg0emM1MWtHaWdPUWNzX2x2WWJSV0VJWGJMSDN1aFNHZ2MyOG12SjJnVVkifQ.A_KOzARBCZd42mSqpaTpsYg8ovHojKC3DSHyM0V27mMN4fEjLJdWEkPK2r6HIzXGrJ1QDNxHiztOLgnz3nieeQ",

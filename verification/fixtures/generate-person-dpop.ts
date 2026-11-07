@@ -59,7 +59,6 @@ function ed25519Jwk(seedByte: number): JWK {
     ...createPublicKey(privateKey).export({ format: "jwk" }),
     alg: "EdDSA",
     kid: "prototype-issuer",
-    use: "sig",
   };
 }
 function es256Jwk(seedByte: number): JWK {
@@ -294,7 +293,7 @@ add(
   "unsupportedHeader",
 );
 add(
-  "unknown-critical-header",
+  "unsupported-extra-header",
   {
     proof: await new SignJWT(proofClaims)
       .setProtectedHeader({ typ: "dpop+jwt", alg: "ES256", jwk: publicJwk(proofJwk), extra: true })

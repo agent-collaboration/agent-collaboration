@@ -83,7 +83,7 @@ impl IssuerJwks {
             || key.kty != "OKP"
             || key.crv != "Ed25519"
             || key.alg != "EdDSA"
-            || key.key_use != "sig"
+            || key.key_use.as_ref().is_some_and(|usage| usage != "sig")
             || decode(&key.x, DpopRefusal::IssuerKey)?.len() != 32
         {
             return Err(DpopRefusal::IssuerKey);

@@ -27,8 +27,8 @@ pub struct Ed25519Jwk {
     pub crv: String,
     pub x: String,
     pub alg: String,
-    #[serde(rename = "use")]
-    pub key_use: String,
+    #[serde(rename = "use", skip_serializing_if = "Option::is_none")]
+    pub key_use: Option<String>,
 }
 
 /// Public proof key only. A private `d`, `crit`, or alternate key source is refused.
