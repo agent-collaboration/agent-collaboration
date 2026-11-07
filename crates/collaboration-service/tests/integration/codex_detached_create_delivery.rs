@@ -158,7 +158,7 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
             .with_codex_conversation_recorder(Arc::clone(&recorder))
             .with_session_delivery(delivery)
             .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone());
-    let (identity, native_mail) = native_mail_owner::NativeMailOwner::start(
+    let (identity, native_mail) = native_mail_owner::start(
         identity,
         fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,
         collaboration_service::MailPushDeliveryProps {

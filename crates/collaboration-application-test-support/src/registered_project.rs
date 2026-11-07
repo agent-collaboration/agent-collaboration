@@ -2,7 +2,9 @@
 use super::{TestError, fixture_peer};
 use collaboration_runtime::FleetClient;
 use collaboration_runtime::ProjectStoreRegistry;
-use message_board::*;
+use message_board::{
+    ActorOrigin, ProjectCreateRequest, Record, RecordedActor, RequestDecision, RequestResult,
+};
 use runtime_primitives::Clock;
 
 pub async fn prepare_registered_creation(

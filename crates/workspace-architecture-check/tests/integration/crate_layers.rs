@@ -6,6 +6,9 @@ use std::process::Command;
 
 use serde::Deserialize;
 
+#[path = "test_support_policy.rs"]
+mod test_support_policy;
+
 const LAYER_POLICY: [(&str, &[&str]); 17] = [
     ("node-test-fixture", &[]),
     ("ui-preference-store", &[]),
@@ -105,6 +108,25 @@ struct CargoMetadata {
 struct CargoPackage {
     id: String,
     name: String,
+    #[serde(default)]
+    manifest_path: std::path::PathBuf,
+    #[serde(default)]
+    targets: Vec<ManifestTarget>,
+    #[serde(default)]
+    dependencies: Vec<ManifestDependency>,
+}
+
+#[derive(Deserialize)]
+struct ManifestTarget {
+    name: String,
+    kind: Vec<String>,
+    src_path: std::path::PathBuf,
+}
+
+#[derive(Deserialize)]
+struct ManifestDependency {
+    name: String,
+    kind: Option<DependencyKind>,
 }
 
 #[derive(Deserialize)]
@@ -225,7 +247,7 @@ fn collaboration_crate_layers_point_downward() -> Result<(), Box<dyn std::error:
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let output = Command::new("cargo")
         .args(["metadata", "--locked", "--offline", "--format-version", "1"])
-        .current_dir(root)
+        .current_dir(&root)
         .output()?;
     if !output.status.success() {
         return Err(format!(
@@ -236,6 +258,7 @@ fn collaboration_crate_layers_point_downward() -> Result<(), Box<dyn std::error:
         .into());
     }
     let metadata: CargoMetadata = serde_json::from_slice(&output.stdout)?;
+    test_support_policy::check_workspace(&root, &metadata.packages, &metadata.workspace_members)?;
     let graph = NonDevDependencyGraph::from_metadata(metadata);
     for (source, destinations) in &graph.dev_edges {
         if !graph.workspace_members.contains(source) {
@@ -279,6 +302,9 @@ fn fixture_graph(
     .map(|(id, name)| CargoPackage {
         id: id.to_owned(),
         name: name.to_owned(),
+        manifest_path: std::path::PathBuf::new(),
+        targets: Vec::new(),
+        dependencies: Vec::new(),
     })
     .collect();
     let workspace_members = packages.iter().map(|package| package.id.clone()).collect();

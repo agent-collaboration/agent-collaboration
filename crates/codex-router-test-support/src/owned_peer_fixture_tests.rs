@@ -330,7 +330,7 @@ async fn preexisting_key_file_is_preserved_and_not_adopted() -> ProofResult<()> 
 async fn barrier_counts_every_authenticated_frame_without_counting_itself() -> ProofResult<()> {
     let registry = PrivateRegistry::create()?;
     let peer = PeerFixture::start_in_registry(&registry.directory, &fixture_endpoint()?).await?;
-    crate::scenario_finalization::run_scenario(
+    owned_process_test_support::scenario_finalization::run_scenario(
         peer,
         async |peer: &mut PeerFixture| {
             let record: serde_json::Value =
@@ -393,7 +393,7 @@ async fn named_peer_uses_this_process_pid_and_exact_supplied_session() -> ProofR
     let socket = registry
         .directory
         .join(format!("peer-{}.sock", std::process::id()));
-    crate::scenario_finalization::run_scenario(
+    owned_process_test_support::scenario_finalization::run_scenario(
         peer,
         async |peer: &mut PeerFixture| {
             let record: serde_json::Value =
@@ -444,7 +444,7 @@ async fn named_peer_uses_this_process_pid_and_exact_supplied_session() -> ProofR
 async fn matching_barrier_excludes_grants_and_counts_duplicate_post_frames() -> ProofResult<()> {
     let registry = PrivateRegistry::create()?;
     let peer = PeerFixture::start_in_registry(&registry.directory, &fixture_endpoint()?).await?;
-    crate::scenario_finalization::run_scenario(
+    owned_process_test_support::scenario_finalization::run_scenario(
         peer,
         async |peer: &mut PeerFixture| {
             for (text, expected) in [

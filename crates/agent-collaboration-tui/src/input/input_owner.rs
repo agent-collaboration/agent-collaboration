@@ -30,7 +30,7 @@ pub struct InputOwnerProps<'a> {
     /// Extra bindings of the screen's quit action that are active on every surface.
     pub global_quit_aliases: Vec<crate::foundation::KeyChord>,
     pub on_routed: Handler<Routed>,
-    #[cfg(all(feature = "test-support", debug_assertions))]
+    #[cfg(feature = "test-support")]
     pub dispatch_receipt: Option<crate::input::input_dispatch_receipt::InputDispatchReceiptSink>,
     pub children: Vec<AnyElement<'a>>,
 }
@@ -50,25 +50,25 @@ pub fn InputOwner<'a>(
     let quit_action = props.quit_action.clone();
     let global_quit_aliases = props.global_quit_aliases.clone();
     let on_routed = props.on_routed.clone();
-    #[cfg(all(feature = "test-support", debug_assertions))]
+    #[cfg(feature = "test-support")]
     let dispatch_receipt = props.dispatch_receipt.clone();
     #[expect(
         clippy::disallowed_methods,
         reason = "InputOwner is the only terminal subscriber (R5)"
     )]
     hooks.use_terminal_events(move |event| {
-        #[cfg(all(feature = "test-support", debug_assertions))]
+        #[cfg(feature = "test-support")]
         let receipt_event = crate::input::input_dispatch_receipt::InputEventReadback::from(&event);
         stack.reconcile_active_focus();
         let snapshot = stack.snapshot();
         let decision = route_event(stack, &snapshot, &quit_action, &global_quit_aliases, event);
         on_routed(decision.routed);
-        #[cfg(all(feature = "test-support", debug_assertions))]
+        #[cfg(feature = "test-support")]
         if let Some(sink) = &dispatch_receipt {
             sink.record(receipt_event, decision.facts);
         }
     });
-    #[cfg(all(feature = "test-support", debug_assertions))]
+    #[cfg(feature = "test-support")]
     crate::input::dispatch_frame_marker::use_dispatch_frames(
         &mut hooks,
         props
@@ -87,7 +87,7 @@ pub fn InputOwner<'a>(
 
 struct RouteDecision {
     routed: Routed,
-    #[cfg(all(feature = "test-support", debug_assertions))]
+    #[cfg(feature = "test-support")]
     facts: crate::input::input_dispatch_receipt::InputRouteFacts,
 }
 impl RouteDecision {
@@ -99,7 +99,7 @@ impl RouteDecision {
     ) -> Self {
         Self {
             routed,
-            #[cfg(all(feature = "test-support", debug_assertions))]
+            #[cfg(feature = "test-support")]
             facts: crate::input::input_dispatch_receipt::InputRouteFacts {
                 surface: _surface,
                 target: _target.cloned(),

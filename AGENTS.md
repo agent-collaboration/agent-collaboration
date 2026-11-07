@@ -30,6 +30,33 @@ After reducing cycles or their edges, update `architecture/module-cycle-baseline
 - A relaunched child test must fail loudly when its selector matches nothing,
   using the child's actual success signal.
 
+## Test Ownership And Proof
+
+1. **Where a test goes.**
+   - A private implementation detail goes in the sibling `*_test.rs`.
+   - One product's public API goes in that package's `tests/integration`.
+   - A whole-process startup journey goes in `tests/e2e`.
+   - A journey that spans several products stays with its primary product until a named system suite exists (phase 2).
+2. **Shared test code.**
+   - Used by one package: it lives in that package's tests.
+   - Used by two or more packages: it lives in a named support crate (`*-test-support`, `publish = false`), or behind the owning crate's non-default `test-support` feature when it needs that crate's internals.
+   - Never `#[path]` into another crate.
+3. **Production never sees test support.**
+   - A support crate or `test-support` feature appears only in `[dev-dependencies]`, or in another test-support crate.
+   - A test never widens a production API (no `pub` added only for a test).
+4. **Layout.**
+   - Every package sets `autotests = false`.
+   - It has at most one non-empty integration target and one non-empty e2e target, plus a README naming each target's contract.
+   - Modules are named for their responsibility. The file-size limits apply.
+5. **A new test crate needs a reason on record:**
+   - a named contract and owner;
+   - its dependency closure, compared with the alternative;
+   - how it finds compiled artifacts (`CARGO_BIN_EXE_*` works only within a package);
+   - a mapping that keeps every moved case;
+   - a before/after measurement;
+   - an Advisor check before it's built.
+6. **Proof never changes in a move:** ignores, scheduling groups, priorities, deadlines, per-case process isolation and zero-match checks stay as they are.
+
 ## Verification Tooling
 
 - Install tooling dependencies with `pnpm --dir verification install --frozen-lockfile`.

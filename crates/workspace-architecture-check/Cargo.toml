@@ -17,3 +17,8 @@ thiserror.workspace = true
 [[test]]
 name = "integration"
 path = "tests/integration/main.rs"
+
+[dev-dependencies]
+proc-macro2 = { version = "1.0.106", default-features = false }
+syn = { version = "2.0.118", default-features = false, features = ["full", "parsing"] }
+toml = "1.1.2"

@@ -2,8 +2,8 @@ use crate::e2e_support::{
     E2eResult, InterruptedImport, SourceSnapshot, import_status, install_completion_fault,
     published_snapshot, remove_fault, run_cli,
 };
-use codex_router_test_support::scenario_finalization::run_scenario;
 use collaboration_central_core::{AdminImportPhase, CopyDirectorySummary};
+use owned_process_test_support::scenario_finalization::run_scenario;
 
 #[tokio::test]
 #[expect(

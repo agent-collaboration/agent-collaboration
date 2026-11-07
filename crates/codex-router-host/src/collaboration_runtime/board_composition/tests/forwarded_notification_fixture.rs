@@ -1,5 +1,5 @@
 //! Existing native publisher and custody owners attached to a real enrolled holder.
-use super::snapshot_restart::board_fixture::native_mail_owner::NativeMailOwner;
+use super::snapshot_restart::board_fixture::native_mail_owner;
 use super::*;
 use collaboration_runtime::SessionDeliveryRouter;
 use collaboration_service::ApplicationFixture;
@@ -14,6 +14,7 @@ use durable_steps::{AtomicStore, CallFailure, StoreError};
 use fleet_sync_protocol::ItemId;
 use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost};
 use interaction_storage::{InteractionAtomicStore, InteractionStore};
+use native_mail_owner::NativeMailOwner;
 use tokio::sync::Mutex;
 
 struct NoObservationCalls;
@@ -119,8 +120,8 @@ impl HolderNotifications {
         .with_project_replication(board.replication.clone().ok_or("holder replication")?)
         .with_subscription_delivery_service(actors.clone(), carrier.clone());
         let start_mail = match worker_start {
-            MailWorkerStart::Immediate => NativeMailOwner::start_with_session,
-            MailWorkerStart::Deferred => NativeMailOwner::start_deferred_with_session,
+            MailWorkerStart::Immediate => native_mail_owner::start_with_session,
+            MailWorkerStart::Deferred => native_mail_owner::start_deferred_with_session,
         };
         let (identity, mail) = start_mail(
             identity,

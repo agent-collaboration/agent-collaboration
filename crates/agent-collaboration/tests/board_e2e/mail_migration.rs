@@ -3,7 +3,8 @@ use super::{
     mail_fixture::{MailFixture, at, set_field},
     mail_messages::{cli_send, terminal_readback},
 };
-use codex_router_test_support::{FixtureResult, scenario_finalization::run_scenario};
+use codex_router_test_support::FixtureResult;
+use owned_process_test_support::scenario_finalization::run_scenario;
 use serde_json::{Value, json};
 use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
 

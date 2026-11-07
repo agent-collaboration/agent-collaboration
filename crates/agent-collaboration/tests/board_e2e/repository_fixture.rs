@@ -1,6 +1,7 @@
 //! Owned Git checkout and public repository association used by process scenarios.
 use super::fixture::{BoardFixture, accepted, at};
-use codex_router_test_support::{FixtureResult, owned_cli_process::run_cli_output};
+use codex_router_test_support::FixtureResult;
+use owned_process_test_support::owned_cli_process::run_cli_output;
 use serde_json::Value;
 use std::{
     path::{Path, PathBuf},

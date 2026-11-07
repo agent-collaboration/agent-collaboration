@@ -7,7 +7,10 @@ use collaboration_mail_protocol::{
 use fleet_sync_protocol::{
     CancelBody, DeliveryCancel, DeliveryEnvelope, DeliveryItem, ItemId, PeerId, Recipient, SyncTime,
 };
-use message_board::*;
+use message_board::{
+    EndReason, FeedCursor, Identity, MailItemRef, ProjectId, RecordId, SessionEndpointRef,
+    SessionRef, SubscriptionGeneration, SubscriptionPolicy, ThreadId,
+};
 use message_board_storage::{
     MailCancelExpansion, MailCancelGroup, MailCancelGroupCause, MailHandoffItem,
     ProjectWriteTransaction,

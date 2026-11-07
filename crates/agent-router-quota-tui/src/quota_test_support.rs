@@ -1,25 +1,13 @@
-//! Reuse S2's recording backend and causal driver; quota adds no second emulator.
+//! Quota fixtures consume the shared owner’s recording backend and causal driver.
+pub use agent_collaboration_tui::test_support::{
+    control_kind_contract, event_driver, frame_grid, frame_output, grids, recording_backend,
+};
 use futures_util::StreamExt;
 use iocraft::{
     Canvas, TerminalEvent,
     prelude::{KeyCode, KeyEventKind, KeyModifiers},
 };
 use std::time::Duration;
-#[path = "../../agent-collaboration-tui/src/test_support/event_driver.rs"]
-pub mod event_driver;
-#[path = "../../agent-collaboration-tui/src/test_support/frame_grid.rs"]
-pub mod frame_grid;
-#[path = "../../agent-collaboration-tui/src/test_support/frame_inspection.rs"]
-mod frame_inspection;
-#[path = "../../agent-collaboration-tui/src/test_support/frame_output.rs"]
-pub mod frame_output;
-#[path = "../../agent-collaboration-tui/src/test_support/recording_backend.rs"]
-pub mod recording_backend;
-
-#[path = "../../agent-collaboration-tui/src/test_support/control_kind_contract.rs"]
-pub mod control_kind_contract;
-#[path = "../../agent-collaboration-tui/src/test_support/grids.rs"]
-pub mod grids;
 
 #[derive(Clone, Default)]
 pub(crate) struct PublishedQuotaPopup {

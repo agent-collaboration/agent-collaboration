@@ -3,11 +3,10 @@ use super::{
     fixture::{BoardFixture, identity},
 };
 use board_central_test_support::MailWireEvent;
-use codex_router_test_support::{
-    FixtureResult, owned_peer_fixture::PeerFixture, scenario_finalization::run_scenario,
-};
+use codex_router_test_support::{FixtureResult, owned_peer_fixture::PeerFixture};
 use collaboration_client::protocol::{EndpointRef, SessionRef};
 use fleet_sync_protocol::{DeliveryStatus, ItemId};
+use owned_process_test_support::scenario_finalization::run_scenario;
 use serde_json::{Value, json};
 use std::time::Duration;
 

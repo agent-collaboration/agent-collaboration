@@ -10,9 +10,12 @@ publish.workspace = true
 workspace = true
 
 [features]
+test-support = ["conformance", "collaboration-central-conformance/client", "dep:board-sync-protocol", "dep:reqwest-websocket"]
 conformance = ["collaboration-central-core/conformance", "dep:collaboration-central-conformance", "dep:sqlx-core"]
 
 [dependencies]
+board-sync-protocol = { version = "0.1.96", path = "../board-sync-protocol", optional = true }
+reqwest-websocket = { version = "=0.5.1", optional = true }
 collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance", optional = true, default-features = false }
 sqlx-core = { workspace = true, optional = true }
 serde_json.workspace = true

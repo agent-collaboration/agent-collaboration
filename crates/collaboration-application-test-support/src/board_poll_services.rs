@@ -27,7 +27,7 @@ pub async fn fixture_poll_services(
     let identity = identity
         .with_automation_store(automation)
         .with_subscription_delivery_service(delivery.clone(), routes.clone());
-    let (identity, native) = super::native_mail_owner::NativeMailOwner::start(
+    let (identity, native) = super::native_mail_owner::start(
         identity,
         fixture_peer()?,
         collaboration_service::MailPushDeliveryProps {

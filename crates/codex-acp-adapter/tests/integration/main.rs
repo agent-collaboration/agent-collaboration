@@ -1,8 +1,8 @@
 //! Original test roots retain their case namespaces.
 
-#[path = "../support/conversation_operation_recorder.rs"]
+#[path = "../../src/test_support/conversation_operation_recorder.rs"]
 mod conversation_operation_recorder;
-#[path = "../support/native_permission_echo.rs"]
+#[path = "../../src/test_support/native_permission_echo.rs"]
 mod native_permission_echo;
 
 mod acp_connection_dispatch;

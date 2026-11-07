@@ -1,6 +1,6 @@
 use super::{E2eResult, promote_error};
-use crate::upload_support::actual_cli::{ImporterCliInvocation, run_importer_cli};
 use collaboration_central_conformance::owner_assertion;
+use legacy_upgrade_test_support::actual_cli::{ImporterCliInvocation, run_importer_cli};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::process::Output;

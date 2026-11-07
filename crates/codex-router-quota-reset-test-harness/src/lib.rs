@@ -1,10 +1,12 @@
 //! Cross-command dispatch for the hermetic terminal harness.
+#[cfg(feature = "quota-reset-test-harness")]
 use std::io::Write;
 
 /// Runs the compiled sessions-picker PTY harness without loading Codex session state.
 ///
 /// The installed `codex-router` binary does not reference this harness-owned entry point.
 #[doc(hidden)]
+#[cfg(feature = "quota-reset-test-harness")]
 pub fn run_sessions_picker_test_harness() -> i32 {
     let result = agent_collaboration::run_sessions_picker_test_harness();
     if let Err(error) = result {
@@ -13,3 +15,8 @@ pub fn run_sessions_picker_test_harness() -> i32 {
     }
     0
 }
+
+/// Held local provider used by hermetic quota scenarios.
+pub mod loopback_provider;
+
+pub type TestResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;

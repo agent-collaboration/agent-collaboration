@@ -19,10 +19,10 @@ Run only the serial CLI journeys after preparing the artifacts as CI does:
 cargo nextest run --locked --profile ci -p board-legacy-upgrade --test e2e --test-threads 1
 ```
 
-Each aggregate declares shared helper implementations once. The shared upload
-fixture keeps its existing public `actual_cli` module; callers use that export,
-and external consumers retain the unchanged helper source. Case expansions and
-fixture data stay in their existing directories.
+Each aggregate declares shared helper implementations once. The actual CLI
+publication fixture lives in legacy-upgrade-test-support; package tests and
+external consumers use that library through dev-dependencies. Case expansions
+and fixture data stay in their existing directories.
 
 A former binary `<root>` and test `<case>` becomes binary `integration` or
 `e2e` and test `<root>::<case>`. Unit-test identities do not change. CI retains

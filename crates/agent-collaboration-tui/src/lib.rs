@@ -14,7 +14,17 @@ pub use foundation::dialog_sizing::{
     DialogPresentation,
 };
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 extern crate self as agent_collaboration_tui;
+// Keep the owner’s literal test context separate from the feature-built fixtures.
 #[cfg(test)]
-mod test_support;
+pub mod test_support;
+#[cfg(all(not(test), feature = "test-support"))]
+#[expect(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    reason = "These assertion-based fixtures are test code behind a non-default test-support feature; the shipping closure must exclude it."
+)]
+pub mod test_support;

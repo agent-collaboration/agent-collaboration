@@ -5,10 +5,10 @@ use super::SEMANTIC_WAIT;
 use super::ensure;
 use super::isolated_fixture_test::QuotaResetFixture;
 use super::isolated_fixture_test::TestResult;
-use super::loopback_provider_test::HeldLoopbackProvider;
 use super::stage;
 use super::terminal_interaction_test::TerminalDriver;
 use codex_router_core::ids::AccountId;
+use codex_router_quota_reset_test_harness::loopback_provider::HeldLoopbackProvider;
 use codex_router_state::sqlite::AsyncSqliteStateStore;
 
 #[tokio::test(flavor = "current_thread")]

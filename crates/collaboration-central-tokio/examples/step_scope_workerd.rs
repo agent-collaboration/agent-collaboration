@@ -1,8 +1,7 @@
 //! Real-workerd product proof for central's first checked transaction rule.
 #![forbid(unsafe_code)]
 
-#[path = "../../collaboration-central-conformance/examples/support/workerd_process.rs"]
-mod workerd_process;
+use collaboration_central_conformance::workerd_process;
 
 use collaboration_central_conformance::{
     ConformanceResult, JwksFixtureServer, owner_assertion, receipt_fixture,

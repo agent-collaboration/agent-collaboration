@@ -2,12 +2,7 @@
 
 #[path = "../support/board_cli_execution.rs"]
 mod board_cli_execution;
-#[path = "../../../collaboration-service/tests/support/board_fixture.rs"]
-#[expect(
-    dead_code,
-    reason = "The external service fixture also serves capabilities unused by CLI cases."
-)]
-mod board_fixture;
+use collaboration_application_test_support::board_fixture;
 #[path = "../automation_live_support/debug_backend_restart.rs"]
 mod debug_backend_restart;
 #[path = "../delivery_matrix/support.rs"]
