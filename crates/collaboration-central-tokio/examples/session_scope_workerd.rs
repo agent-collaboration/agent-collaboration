@@ -100,6 +100,8 @@ mod relay_transport;
 mod retirement_claim_scenarios;
 #[path = "../tests/support/sender_control_scenarios.rs"]
 mod sender_control_scenarios;
+#[path = "session_scope_workerd/socket_isolation_cases.rs"]
+mod socket_isolation_cases;
 #[path = "session_scope_workerd/template_config_refusals.rs"]
 mod template_config_refusals;
 
@@ -137,6 +139,7 @@ enum Scenario {
     SessionCarryover,
     SessionCapabilities,
     StaleAlarm,
+    SocketIsolation,
     SessionFailures,
     HolderLifecycle,
     HolderSchemaOverlap,
@@ -227,6 +230,7 @@ async fn main() -> ConformanceResult<()> {
         Some("session-carryover") => Scenario::SessionCarryover,
         Some("session-capabilities") => Scenario::SessionCapabilities,
         Some("stale-alarm") => Scenario::StaleAlarm,
+        Some("socket-isolation") => Scenario::SocketIsolation,
         Some("session-failures") => Scenario::SessionFailures,
         Some("holder-lifecycle") => Scenario::HolderLifecycle,
         Some("holder-schema-overlap") => Scenario::HolderSchemaOverlap,
@@ -395,6 +399,13 @@ async fn main() -> ConformanceResult<()> {
         Scenario::SessionFailures => normal_session_cases::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::SessionCapabilities => normal_capability_cases::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::StaleAlarm => normal_capability_cases::stale_alarm(&format!("http://127.0.0.1:{port}")).await,
+        Scenario::SocketIsolation => {
+            let base = format!("http://127.0.0.1:{port}");
+            match socket_isolation_cases::run(&base).await {
+                Ok(()) => fleet_notice_scenarios::one_write_then_mail(&base).await,
+                Err(error) => Err(error),
+            }
+        },
         Scenario::AccessCarryover => {
             let shared = collaboration_central_conformance::ConformanceClient::new(&format!(
                 "http://127.0.0.1:{port}"

@@ -32,6 +32,78 @@ async fn next(socket: &mut WebSocket) -> ConformanceResult<ServerFrame<BoardCons
     };
     Ok(serde_json::from_slice(&bytes)?)
 }
+
+/// The same typed client sockets survive one directory write and then carry mail.
+pub async fn one_write_then_mail(base: &str) -> ConformanceResult<()> {
+    use board_sync_protocol::{BoardDeliveryTypes, MailSubmitAnswer};
+    use fleet_sync_protocol::{
+        DeliveryEnvelope, DeliveryItem, ItemId, PeerId, ServerCall, ServerRequest, SubmitResult,
+    };
+    let client = ConformanceClient::new(base)?;
+    let sender_service = Uuid::now_v7().to_string();
+    let recipient_service = Uuid::now_v7().to_string();
+    let mut sender = enroll_admitted_peer(
+        &client,
+        &sender_service,
+        &Uuid::now_v7().to_string(),
+        "paired sender",
+        &Uuid::now_v7().to_string(),
+    )
+    .await?;
+    let mut recipient = enroll_admitted_peer(
+        &client,
+        &recipient_service,
+        &Uuid::now_v7().to_string(),
+        "paired recipient",
+        &Uuid::now_v7().to_string(),
+    )
+    .await?;
+    let proof = async {
+        if !matches!(feed(&mut recipient.socket, 0).await?, FleetFeedRead::Page {records,head,..} if records.is_empty() && head.get()==0) {
+            return Err("paired recipient did not start on an empty Fleet".into());
+        }
+        let request = FleetRequest {
+            request_id: RequestId::generate(), workspace: WorkspaceId::generate(),
+            actor: RecordedActor::Human {human_id: HumanId::try_from("paired owner".to_owned())?},
+            acting_for: None, protocol_version: ProtocolVersion::CURRENT,
+            operation: FleetOperation::WorkspaceCreate {name: ResourceName::try_from("paired write".to_owned())?,description: Description::try_from("one committed write before mail".to_owned())?},
+        };
+        if !matches!(decide(&mut sender.socket, &request).await?, FleetRequestResult::Decided(RequestDecision::Accepted {change: ChangeOutcome::Changed,..})) {
+            return Err("paired workspace creation was not accepted".into());
+        }
+        hint(&mut recipient.socket, 1).await?;
+        if !matches!(feed(&mut recipient.socket, 0).await?, FleetFeedRead::Page {records,through,head,..} if records.len()==2 && through.get()==2 && head.get()==2) {
+            return Err("paired read did not retain exactly one write and its receipt".into());
+        }
+        let item = DeliveryEnvelope::Item(DeliveryItem::<BoardDeliveryTypes>::new(
+            ItemId::new(Uuid::now_v7())?,
+            serde_json::from_value(serde_json::json!({"kind":"humanUser","installation":sender_service}))?,
+            serde_json::from_value(serde_json::json!({"peer":PeerId::new(recipient.peer)?,"address":{"endpoint":{"serviceId":recipient_service,"endpointId":"codex-local"},"sessionId":"paired-recipient"}}))?,
+            None,
+            serde_json::from_value(serde_json::json!({"kind":"message","text":"mail after Fleet write","delivery":"auto","guard":null,"senderDisplayName":null,"replyTo":null}))?,
+        )?);
+        let expected = serde_json::to_value(&item)?;
+        if !matches!(operation(&mut sender.socket, BoardConsumerRequest::MailSubmit {item:Box::new(item),origin_epoch:None}).await?, BoardConsumerAnswer::MailSubmit(MailSubmitAnswer::Submitted(SubmitResult::Accepted {..}))) {
+            return Err("mail after directory mutation was refused".into());
+        }
+        match next(&mut recipient.socket).await? {
+            ServerFrame::Request {body: ServerRequest::Crate(ServerCall::Push {item,..}),..}
+                if serde_json::to_value(&item)? == expected => {},
+            _ => return Err("exact original Push did not follow the Fleet mutation on the existing recipient socket".into()),
+        }
+        println!("SESSION_PAIR_CASE one_Fleet_write_then_original_mail_Push_on_same_typed_client_sockets passed");
+        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
+    }.await;
+    let _ = sender
+        .socket
+        .close(reqwest_websocket::CloseCode::Normal, None)
+        .await;
+    let _ = recipient
+        .socket
+        .close(reqwest_websocket::CloseCode::Normal, None)
+        .await;
+    proof
+}
 async fn operation(
     socket: &mut WebSocket,
     body: BoardConsumerRequest,
@@ -53,6 +125,13 @@ async fn operation(
                 body: OperationAnswer::Consumer(body),
             } if actual == frame => return Ok(body),
             ServerFrame::Notice { .. } => {}
+            ServerFrame::Request {
+                body:
+                    fleet_sync_protocol::ServerRequest::Crate(
+                        fleet_sync_protocol::ServerCall::PublishStatus { .. },
+                    ),
+                ..
+            } => {}
             _ => {
                 return Err(
                     "Fleet notice scenario lost its typed answer or frame correlation".into(),

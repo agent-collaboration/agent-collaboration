@@ -5,6 +5,9 @@ use super::{Scenario, forwarded_post_scenarios::ForwardCase};
 impl Scenario {
     pub(super) fn print_success(self) {
         match self {
+            Scenario::SocketIsolation => println!(
+                "SESSION_ISOLATION_RESULT 1 scenario passed; 0 failed (missing/invalid actual attachments, healthy socket and replacement; local Worker only)"
+            ),
             Scenario::MailboxReportTerminal => println!(
                 "MAILBOX_REPORT_TERMINAL_RESULT 1 passed; 0 failed; 0 ignored (real SDK report task and central socket; terminal refusal stops retries)"
             ),

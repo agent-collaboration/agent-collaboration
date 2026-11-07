@@ -173,6 +173,17 @@ impl ShellActor {
             return Response::from_json(&self.faults.session_control(command).map_err(error)?)
                 .map(Some);
         }
+        #[cfg(feature = "conformance-faults")]
+        if request.path() == "/test/session-attachment-fault" {
+            let (connection, fault) = request.json().await?;
+            return Response::from_json(
+                &host
+                    .conformance_attachment_fault(connection, fault)
+                    .await
+                    .map_err(error)?,
+            )
+            .map(Some);
+        }
         if request.path() == "/test/session-attachment-codec" {
             if !matches!(runtime, RuntimeFace::Fleet(_)) {
                 return Err(error("codec observation requires a Connection object"));

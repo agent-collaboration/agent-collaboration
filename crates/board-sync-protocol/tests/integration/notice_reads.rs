@@ -6,6 +6,138 @@ use serde_json::{Value, json};
 const FRAME: &str = "019a1234-5678-7000-8000-000000000002";
 const AS_OF: &str = "2026-10-19T11:00:00Z";
 
+// Frozen consumer notice contract from cfd525e16:board_payloads.rs:96-119.
+// Test-only: it records the deliberately unsupported old client, not a shim.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+enum FrozenOldNotice {
+    FleetFeedAdvanced {
+        through: message_board::FleetPosition,
+    },
+    LeaseSuperseded {
+        project: message_board::ProjectId,
+        epoch: wire::Epoch,
+    },
+    LeaseGranted {
+        project: message_board::ProjectId,
+        epoch: wire::Epoch,
+    },
+    BoardArchiving {
+        board: message_board::BoardId,
+    },
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct FrozenOldPositionedNotice {
+    position: wire::NoticePosition,
+    kind: FrozenOldNotice,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+enum FrozenOldNoticeRead {
+    Page {
+        notices: Vec<FrozenOldPositionedNotice>,
+        as_of: chrono::DateTime<chrono::Utc>,
+    },
+    CursorExpired {
+        floor: wire::NoticePosition,
+    },
+    CursorInvalid,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "camelCase",
+    deny_unknown_fields
+)]
+enum FrozenOldReadPage {
+    Notices(FrozenOldNoticeRead),
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "camelCase",
+    deny_unknown_fields
+)]
+enum FrozenOldAnswer {
+    Read(FrozenOldReadPage),
+}
+struct FrozenOldProtocol;
+impl wire::ConsumerProtocol for FrozenOldProtocol {
+    type Delivery = <BoardConsumerProtocol as wire::ConsumerProtocol>::Delivery;
+    type Request = <BoardConsumerProtocol as wire::ConsumerProtocol>::Request;
+    type Answer = FrozenOldAnswer;
+    type ServerRequest = <BoardConsumerProtocol as wire::ConsumerProtocol>::ServerRequest;
+    type ClientAnswer = <BoardConsumerProtocol as wire::ConsumerProtocol>::ClientAnswer;
+    type Notice = FrozenOldPositionedNotice;
+    type Annotation = <BoardConsumerProtocol as wire::ConsumerProtocol>::Annotation;
+}
+
+#[test]
+fn frozen_old_push_decoder_rejects_d1_project_change_but_shared_lease_notices_still_decode() {
+    let notice = json!({"position":1,"kind":{"kind":"projectListChanged","value":{}}});
+    for changed in [
+        pushed_notice(notice.clone()),
+        read_answer(json!({"kind":"page","value":{"notices":[notice],"asOf":AS_OF}})),
+    ] {
+        assert!(
+            serde_json::from_value::<wire::ServerFrame<BoardConsumerProtocol>>(changed.clone())
+                .is_ok()
+        );
+        let old_error = serde_json::from_value::<wire::ServerFrame<FrozenOldProtocol>>(changed)
+            .err()
+            .expect("old decoder must reject D1's new notice variant");
+        assert!(
+            old_error
+                .to_string()
+                .contains("unknown variant `projectListChanged`"),
+            "wrong failure: {old_error}"
+        );
+        eprintln!("PROTOCOL_NEGATIVE_CONTROL old_decoder_rejects_D1_notice: {old_error}");
+    }
+    let shared = pushed_notice(
+        json!({"position":1,"kind":{"kind":"leaseGranted","value":{"project":FRAME,"epoch":1}}}),
+    );
+    assert!(serde_json::from_value::<wire::ServerFrame<FrozenOldProtocol>>(shared.clone()).is_ok());
+    assert!(serde_json::from_value::<wire::ServerFrame<BoardConsumerProtocol>>(shared).is_ok());
+}
+
+#[test]
+fn d1_decoder_rejects_frozen_old_fleet_hints_on_both_push_and_catch_up() {
+    for kind in [
+        json!({"kind":"fleetFeedAdvanced","value":{"through":1}}),
+        json!({"kind":"boardArchiving","value":{"board":FRAME}}),
+    ] {
+        let notice = json!({"position":1,"kind":kind});
+        let pushed = pushed_notice(notice.clone());
+        assert!(
+            serde_json::from_value::<wire::ServerFrame<FrozenOldProtocol>>(pushed.clone()).is_ok()
+        );
+        for frame in [
+            pushed,
+            read_answer(json!({"kind":"page","value":{"notices":[notice],"asOf":AS_OF}})),
+        ] {
+            assert!(
+                serde_json::from_value::<wire::ServerFrame<BoardConsumerProtocol>>(frame).is_err()
+            );
+        }
+    }
+}
+
 fn read_answer(result: Value) -> Value {
     json!({"kind":"answer","value":{"frame":FRAME,"body":{"kind":"consumer","value":{
         "kind":"read","value":{"kind":"notices","value":result}

@@ -5,6 +5,14 @@ use collaboration_central_core::{AccessCaller, ObjectAddress};
 use serde::Deserialize;
 use worker::{Env, Headers, Method, Request, RequestInit, Response, Result};
 
+#[cfg(feature = "conformance-faults")]
+#[derive(serde::Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum AttachmentFault {
+    Missing,
+    Invalid,
+}
+
 #[derive(Deserialize)]
 #[serde(
     tag = "kind",
@@ -49,6 +57,12 @@ enum Command {
     AttachmentCodec {
         service: message_board::ServiceId,
         connection: fleet_sync_protocol::ConnectionId,
+    },
+    #[cfg(feature = "conformance-faults")]
+    SessionAttachmentFault {
+        service: message_board::ServiceId,
+        connection: fleet_sync_protocol::ConnectionId,
+        fault: AttachmentFault,
     },
     SessionAlarm {
         service: message_board::ServiceId,
@@ -152,6 +166,16 @@ async fn forward_command(command: Command, env: Env) -> Result<Response> {
             ObjectAddress::Fleet,
             "/test/session-attachment-codec",
             Some(serde_json::to_string(&connection)?),
+        ),
+        #[cfg(feature = "conformance-faults")]
+        Command::SessionAttachmentFault {
+            service: _service,
+            connection,
+            fault,
+        } => (
+            ObjectAddress::Fleet,
+            "/test/session-attachment-fault",
+            Some(serde_json::to_string(&(connection, fault))?),
         ),
         Command::SessionAlarm {
             service: _service,

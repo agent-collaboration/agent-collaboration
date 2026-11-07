@@ -306,11 +306,23 @@ impl<SharedHost: Host> ObjectHost for CloudflareStorageHost<SharedHost> {
     fn registrations(
         &self,
     ) -> impl Future<Output = Result<RegistrationSnapshot, SocketFailure>> + Send {
-        ready((|| {
+        ready({
             let mut registrations = RegistrationSnapshot::new();
             let mut present = BTreeSet::new();
             for socket in self.state.get_websockets() {
-                let attachment = Self::attachment(&socket)?;
+                if !Self::is_open(&socket) {
+                    continue;
+                }
+                let attachment = match Self::attachment(&socket) {
+                    Ok(attachment) => attachment,
+                    Err(failure) => {
+                        worker::console_warn!(
+                            "isolating websocket with invalid admission attachment: {failure}"
+                        );
+                        let _ = socket.close(Some(1008), Some("invalid admission attachment"));
+                        continue;
+                    }
+                };
                 present.insert(attachment.connection);
                 let registration =
                     if Self::is_open(&socket) && !self.is_quarantined(attachment.connection) {
@@ -322,7 +334,15 @@ impl<SharedHost: Host> ObjectHost for CloudflareStorageHost<SharedHost> {
                     .insert(attachment.connection, registration)
                     .is_some()
                 {
-                    return Err(SocketFailure::Closed);
+                    // Neither socket may impersonate the duplicate identity;
+                    // their failure must not discard unrelated registrations.
+                    worker::console_warn!("isolating duplicate websocket connection identity");
+                    let _ = socket.close(Some(1008), Some("duplicate connection identity"));
+                    self.quarantine
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .insert(attachment.connection);
+                    registrations.insert(attachment.connection, ConnectionRegistration::Closed);
                 }
             }
             match self.quarantine.lock() {
@@ -332,7 +352,7 @@ impl<SharedHost: Host> ObjectHost for CloudflareStorageHost<SharedHost> {
                     .retain(|connection| present.contains(connection)),
             }
             Ok(registrations)
-        })())
+        })
     }
     fn admission_origin(
         &self,
