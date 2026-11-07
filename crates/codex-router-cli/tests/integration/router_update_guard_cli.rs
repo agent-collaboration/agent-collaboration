@@ -206,7 +206,7 @@ async fn a_store_the_host_created_passes_and_one_it_left_unrecorded_is_refused()
     let unrecorded_stderr = String::from_utf8_lossy(&unrecorded.stderr);
     assert_eq!(unrecorded.status.code(), Some(2), "{unrecorded_stderr}");
     assert!(
-        unrecorded_stderr.contains("unfinished (steps 0001, 0005, 0010"),
+        unrecorded_stderr.contains("unfinished (steps 0001, 0002, 0005, 0009, 0010"),
         "{unrecorded_stderr}"
     );
     Ok(())

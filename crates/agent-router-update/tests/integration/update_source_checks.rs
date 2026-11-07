@@ -45,7 +45,7 @@ async fn assert_invalid_value_refused(
     // Act
     let refused = run_update(&root_argument(&root)).await?;
 
-    // Assert: the refusal names the store and the row; 0001 stays done and nothing of
+    // Assert: the refusal names the store and the row; 0001 and 0002 stay done and nothing of
     // 0005 happened, so no store was carried, removed or renamed.
     let stderr = String::from_utf8_lossy(&refused.stderr);
     assert_eq!(refused.status.code(), Some(2), "{stderr}");
@@ -59,10 +59,16 @@ async fn assert_invalid_value_refused(
     let former = router_fleet_cache_database(&root);
     assert_eq!(
         read_update_ledger(&former).await?,
-        StoredUpdateLedger::Present(vec![UpdateLedgerEntry::Step {
-            step: UpdateStepNumber::new(1),
-            progress: UpdateStepProgress::Done,
-        }])
+        StoredUpdateLedger::Present(vec![
+            UpdateLedgerEntry::Step {
+                step: UpdateStepNumber::new(1),
+                progress: UpdateStepProgress::Done,
+            },
+            UpdateLedgerEntry::Step {
+                step: UpdateStepNumber::new(2),
+                progress: UpdateStepProgress::Done,
+            },
+        ])
     );
     let merged = FleetValues::read_merged(&former).await?;
     assert!(

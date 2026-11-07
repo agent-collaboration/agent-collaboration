@@ -1,6 +1,11 @@
 //! Re-enrollment invalidates central-derived state before any new session attaches.
 use serde::{Deserialize, Serialize};
-use std::{future::Future, io, os::unix::fs::OpenOptionsExt, path::Path};
+use std::{
+    future::Future,
+    io,
+    os::unix::fs::OpenOptionsExt,
+    path::{Path, PathBuf},
+};
 
 const JOURNAL_FILE: &str = "enrollment-reset.json";
 pub const ENROLLMENT_RESTART_INSTRUCTION: &str =
@@ -98,6 +103,25 @@ fn save_reset(directory: &Path, reset: &EnrollmentReset) -> io::Result<()> {
     result
 }
 
+/// The journal file, once a reset in it has finished; `None` when there is no journal or
+/// its reset is still unfinished. A journal that can't be read is an error.
+pub fn completed_enrollment_reset_journal(router_root: &Path) -> io::Result<Option<PathBuf>> {
+    let directory = crate::router_collaboration_directory(router_root);
+    Ok(load_reset(&directory)?
+        .filter(|reset| matches!(reset.phase, ResetPhase::Completed))
+        .map(|_| directory.join(JOURNAL_FILE)))
+}
+
+/// Which Fleet database a reset clears, and whether it may be created.
+#[derive(Clone, Copy)]
+enum ResetFleetStore<'path> {
+    /// The Host's own Fleet database; a Router that never opened it gets an empty one.
+    CreateWhenMissing(&'path Path),
+    /// The Fleet database under the name the Router that recorded the reset used. It
+    /// must exist: the reset clears that store and never makes a new one.
+    Existing(&'path Path),
+}
+
 async fn persist_phase(
     directory: &Path,
     reset: &EnrollmentReset,
@@ -121,12 +145,41 @@ pub(crate) async fn resume_enrollment_reset(
     let barrier = reset_barrier();
     #[cfg(not(all(debug_assertions, feature = "runtime-test-support")))]
     let barrier = std::future::ready(Ok(()));
-    resume_with_barrier(journal_directory, storage_directory, barrier).await
+    let fleet_store = storage_directory.join(message_board_storage::FleetStore::FILE_NAME);
+    resume_with_barrier(
+        journal_directory,
+        storage_directory,
+        ResetFleetStore::CreateWhenMissing(&fleet_store),
+        barrier,
+    )
+    .await
+}
+
+/// Update step 0002: finishes a reset an older Router left unfinished, with the Host's
+/// own clearing rules, against `fleet_store`: the Fleet database under the name that
+/// Router used, which those rules clear. A root without an unfinished reset is left as
+/// it is, with no lock file added; an unreadable journal is an error.
+pub async fn finish_enrollment_reset_for_update(
+    router_root: &Path,
+    fleet_store: &Path,
+) -> io::Result<()> {
+    let directory = crate::router_collaboration_directory(router_root);
+    if !reset_pending_in_directory(&directory)? {
+        return Ok(());
+    }
+    resume_with_barrier(
+        &directory,
+        &directory,
+        ResetFleetStore::Existing(fleet_store),
+        std::future::ready(Ok(())),
+    )
+    .await
 }
 
 async fn resume_with_barrier(
     journal_directory: &Path,
     storage_directory: &Path,
+    fleet_store: ResetFleetStore<'_>,
     barrier: impl Future<Output = io::Result<()>>,
 ) -> io::Result<()> {
     let owned = journal_directory.to_owned();
@@ -143,7 +196,7 @@ async fn resume_with_barrier(
         return Ok(());
     }
     if matches!(reset.phase, ResetPhase::Pending) {
-        clear_router_state(storage_directory).await?;
+        clear_router_state(storage_directory, fleet_store).await?;
     }
     // Older reset journals may already have cleared Router state without this
     // central observation. Neither unfinished phase may carry it into attach.
@@ -156,7 +209,7 @@ async fn resume_with_barrier(
     persist_phase(journal_directory, &reset, ResetPhase::Completed).await
 }
 
-async fn clear_router_state(directory: &Path) -> io::Result<()> {
+async fn clear_router_state(directory: &Path, fleet_store: ResetFleetStore<'_>) -> io::Result<()> {
     tokio::fs::create_dir_all(directory).await?;
     for file in [
         "machine-session/state.json",
@@ -168,10 +221,14 @@ async fn clear_router_state(directory: &Path) -> io::Result<()> {
             Err(error) => return Err(error),
         }
     }
-    let store = message_board_storage::FleetStore::open(
-        &directory.join(message_board_storage::FleetStore::FILE_NAME),
-    )
-    .await
+    let store = match fleet_store {
+        ResetFleetStore::CreateWhenMissing(path) => {
+            message_board_storage::FleetStore::open(path).await
+        }
+        ResetFleetStore::Existing(path) => {
+            message_board_storage::FleetStore::open_existing(path).await
+        }
+    }
     .map_err(io::Error::other)?;
     let cleared = store.cache().clear_central_derived_cache().await;
     store.close().await;

@@ -143,7 +143,13 @@ async fn legacy_cleared_phase_discards_old_mail_cursor_before_completing_reset()
     let storage = root.path().join("storage");
     let journal = root.path().join("enrollment");
     seed_link_store(&storage).await?;
-    clear_router_state(&storage).await?;
+    clear_router_state(
+        &storage,
+        ResetFleetStore::CreateWhenMissing(
+            &storage.join(message_board_storage::FleetStore::FILE_NAME),
+        ),
+    )
+    .await?;
     seed_status_cursor(&storage).await?;
     drop(record_pending_enrollment_reset(&journal)?);
     let reset = load_reset(&journal)?.ok_or("pending reset")?;

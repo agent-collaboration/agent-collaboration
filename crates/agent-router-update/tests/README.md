@@ -17,7 +17,17 @@ stopped before recording its new store. Its `update_moves_journey` root (J4)
 covers steps 0005 and 0010: every fixture value carried into `fleet.sqlite`, a
 kill at each merge and rename barrier followed by a rerun, merged rows still
 only in the log right before the rename checkpoint, and a malformed source that
-stops the merge before it changes anything. These cases sign the binary with
+stops the merge before it changes anything. Its `update_source_checks` root (J4)
+covers what step 0005 refuses and what it never reads: a well-formed older store
+holding a value its owning decoder refuses (cursor key, outbox request, creation
+input), a cursor key other than the one the Fleet database holds, and an older
+store that reappears after its rows moved, removed unread. Its
+`update_reset_and_dead_files` root (J4) covers steps 0002 and 0009: each phase of
+an older enrollment reset finished against the store under its former name
+before any store moves, an unreadable journal, approval routes imported before
+the dead files are removed, the root listing afterwards, malformed routes, and
+the Host guard on a dead file, including one back after the update and one on a
+never-connected root. These cases sign the binary with
 the debug runner before launching it, and read values raw from the stores, so
 their oracle is independent of the tool's code.
 `e2e/main.rs` retains the former `upgrade_binary_e2e` root, which drives the real

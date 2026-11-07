@@ -127,6 +127,7 @@ async fn a_full_update_carries_every_value_and_removes_the_older_stores() -> Upd
 #[tokio::test]
 async fn a_kill_at_any_move_barrier_reruns_to_the_same_values() -> UpdateResult {
     let markers = [
+        "step-0002:done",
         "step-0005:fleet-outbox.sqlite:written",
         "step-0005:fleet-outbox.sqlite:verified",
         "step-0005:fleet-outbox.sqlite:database-removed",
@@ -136,6 +137,7 @@ async fn a_kill_at_any_move_barrier_reruns_to_the_same_values() -> UpdateResult 
         "step-0005:board-cursors.sqlite:database-removed",
         "step-0005:board-cursors.sqlite:removed",
         "step-0005:done",
+        "step-0009:done",
         "step-0010:before-checkpoint",
         "step-0010:checkpointed",
         "step-0010:renamed",
@@ -231,17 +233,23 @@ async fn a_malformed_source_stops_the_merge_before_it_changes_anything() -> Upda
     // Act
     let refused = run_update(&root_argument(&root)).await?;
 
-    // Assert: 0001 stays done; nothing of 0005 happened; nothing was renamed.
+    // Assert: 0001 and 0002 stay done; nothing of 0005 happened; nothing was renamed.
     let stderr = String::from_utf8_lossy(&refused.stderr);
     assert_eq!(refused.status.code(), Some(2), "{stderr}");
     assert!(stderr.contains(&outbox.display().to_string()), "{stderr}");
     let former = router_fleet_cache_database(&root);
     assert_eq!(
         read_update_ledger(&former).await?,
-        StoredUpdateLedger::Present(vec![UpdateLedgerEntry::Step {
-            step: UpdateStepNumber::new(1),
-            progress: UpdateStepProgress::Done,
-        }])
+        StoredUpdateLedger::Present(vec![
+            UpdateLedgerEntry::Step {
+                step: UpdateStepNumber::new(1),
+                progress: UpdateStepProgress::Done,
+            },
+            UpdateLedgerEntry::Step {
+                step: UpdateStepNumber::new(2),
+                progress: UpdateStepProgress::Done,
+            },
+        ])
     );
     let merged = FleetValues::read_merged(&former).await?;
     assert!(merged.requests.is_empty() && merged.cursor_keys.is_empty());

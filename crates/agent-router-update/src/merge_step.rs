@@ -138,7 +138,7 @@ pub(crate) fn side_file(path: &Path, suffix: &str) -> PathBuf {
     PathBuf::from(name)
 }
 
-async fn remove_if_present(path: &Path) -> Result<(), RouterUpdateError> {
+pub(crate) async fn remove_if_present(path: &Path) -> Result<(), RouterUpdateError> {
     match tokio::fs::remove_file(path).await {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),

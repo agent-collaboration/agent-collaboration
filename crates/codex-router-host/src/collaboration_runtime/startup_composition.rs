@@ -275,19 +275,6 @@ impl CollaborationRuntime {
             .await
             .map_err(io::Error::other)?,
         );
-        let legacy_approval_history = inputs.directory.join("approval-history.json");
-        match tokio::fs::remove_file(&legacy_approval_history).await {
-            Ok(()) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error),
-        }
-        collaboration_runtime::ServiceInteractionBroker::import_legacy_approval_routes(
-            &interaction_store,
-            &inputs.directory.join("approval-routes.json"),
-            chrono::Utc::now().timestamp_millis(),
-        )
-        .await
-        .map_err(io::Error::other)?;
         let approval_broker = collaboration_runtime::ServiceInteractionBroker::load(
             service_id.clone(),
             native_backend.clone(),

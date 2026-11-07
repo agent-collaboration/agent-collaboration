@@ -52,7 +52,14 @@ mod debug_runtime_barrier;
 mod enrollment_reset;
 mod enrollment_session_transport;
 mod fleet_enrollment_file;
-pub use enrollment_reset::{ENROLLMENT_RESTART_INSTRUCTION, fleet_enrollment_restart_required};
+pub use enrollment_reset::{
+    ENROLLMENT_RESTART_INSTRUCTION, completed_enrollment_reset_journal,
+    finish_enrollment_reset_for_update, fleet_enrollment_restart_required,
+};
+mod router_dead_files;
+pub use router_dead_files::{
+    LEGACY_APPROVAL_ROUTES_FILE, router_dead_files, router_schema_export_folders,
+};
 mod global_claude_executable;
 pub use fleet_enrollment_file::{
     FleetAccess, FleetAccessReference, FleetEnrollmentDocument, FleetEnrollmentMetadata,

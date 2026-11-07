@@ -32,6 +32,14 @@ impl FleetStore {
         })
     }
 
+    /// Opens a Fleet database that must already exist, under whatever name it has now;
+    /// a missing file is an error, never a new store.
+    pub async fn open_existing(path: &Path) -> Result<Self, RouterLocalStorageError> {
+        Ok(Self {
+            database: Arc::new(RouterLocalDatabase::open_existing(path, &CACHE_MIGRATOR).await?),
+        })
+    }
+
     #[must_use]
     pub fn cache(&self) -> FleetCache {
         FleetCache::over(Arc::clone(&self.database))

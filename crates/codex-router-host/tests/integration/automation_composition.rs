@@ -12,8 +12,6 @@ async fn host_supplies_automation_storage_without_native_backend()
         OperationId::generate().as_str()
     ));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
-    let legacy_approval_history = root.join("approval-history.json");
-    std::fs::write(&legacy_approval_history, b"{malformed approval history")?;
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
         board_session: None,
         directory: root.clone(),
@@ -38,11 +36,8 @@ async fn host_supplies_automation_storage_without_native_backend()
     if document.text.as_str() != "Check the repository"
         || !root.join("automation.sqlite").exists()
         || !root.join("session-registry.sqlite").exists()
-        || legacy_approval_history.exists()
     {
-        return Err(
-            "Host did not compose automation persistence or remove legacy approval history".into(),
-        );
+        return Err("Host did not compose automation persistence".into());
     }
     runtime
         .shutdown()

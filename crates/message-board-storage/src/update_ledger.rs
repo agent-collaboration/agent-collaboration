@@ -22,16 +22,23 @@ use std::path::Path;
 pub enum RouterUpdateStep {
     /// 0001: the Fleet database gains the update ledger before anything moves.
     CreateLedger,
+    /// 0002: an enrollment reset an older Router left unfinished is finished against the
+    /// Fleet database it was recorded for, before anything moves or is renamed.
+    FinishEnrollmentReset,
     /// 0005: the Fleet outbox and the board cursor key move into the Fleet database.
     MergeFleetStores,
+    /// 0009: files nothing reads any more are removed; approval routes are imported first.
+    RemoveDeadFiles,
     /// 0010: `fleet-cache.sqlite` is renamed to `fleet.sqlite`.
     RenameFleetDatabase,
 }
 
 impl RouterUpdateStep {
-    pub const KNOWN: [Self; 3] = [
+    pub const KNOWN: [Self; 5] = [
         Self::CreateLedger,
+        Self::FinishEnrollmentReset,
         Self::MergeFleetStores,
+        Self::RemoveDeadFiles,
         Self::RenameFleetDatabase,
     ];
 
@@ -39,7 +46,9 @@ impl RouterUpdateStep {
     pub const fn number(self) -> UpdateStepNumber {
         match self {
             Self::CreateLedger => UpdateStepNumber::new(1),
+            Self::FinishEnrollmentReset => UpdateStepNumber::new(2),
             Self::MergeFleetStores => UpdateStepNumber::new(5),
+            Self::RemoveDeadFiles => UpdateStepNumber::new(9),
             Self::RenameFleetDatabase => UpdateStepNumber::new(10),
         }
     }

@@ -10,6 +10,8 @@ pub(crate) enum UpdateBarrier {
     LedgerMigrated,
     /// Step 0001 recorded itself done.
     LedgerStepDone,
+    /// Step 0002 finished any older reset and recorded itself done.
+    ResetDone,
     /// Step 0005 committed a source's rows and its `written` row together.
     SourceWritten(LegacyFleetSource),
     /// Step 0005 compared every value of a source with the Fleet database.
@@ -20,6 +22,8 @@ pub(crate) enum UpdateBarrier {
     SourceRemoved(LegacyFleetSource),
     /// Step 0005 recorded itself done.
     MergeDone,
+    /// Step 0009 removed the dead files and recorded itself done.
+    DeadFilesDone,
     /// Step 0010 recorded itself in progress, before the checkpoint.
     RenameBeforeCheckpoint,
     /// Step 0010 checkpointed and closed the store, before the rename.
@@ -42,11 +46,13 @@ impl UpdateBarrier {
         match self {
             Self::LedgerMigrated => "step-0001:migrated".to_owned(),
             Self::LedgerStepDone => "step-0001:done".to_owned(),
+            Self::ResetDone => "step-0002:done".to_owned(),
             Self::SourceWritten(source) => source_marker(source, "written"),
             Self::SourceVerified(source) => source_marker(source, "verified"),
             Self::SourceDatabaseRemoved(source) => source_marker(source, "database-removed"),
             Self::SourceRemoved(source) => source_marker(source, "removed"),
             Self::MergeDone => "step-0005:done".to_owned(),
+            Self::DeadFilesDone => "step-0009:done".to_owned(),
             Self::RenameBeforeCheckpoint => "step-0010:before-checkpoint".to_owned(),
             Self::RenameCheckpointed => "step-0010:checkpointed".to_owned(),
             Self::Renamed => "step-0010:renamed".to_owned(),

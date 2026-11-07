@@ -68,12 +68,8 @@ fn write_plan(
         return writeln!(output, "{} needs no update", root.display());
     }
     let verb = if dry_run { "pending" } else { "done" };
-    for stale in &plan.stale_sources {
-        writeln!(
-            output,
-            "{verb} stale store: remove {} unread; its rows were already moved",
-            stale.display()
-        )?;
+    for stale in &plan.stale {
+        writeln!(output, "{verb} {stale}")?;
     }
     for step in &plan.steps {
         writeln!(output, "{verb} {}: {}", step.step.label(), step.change)?;

@@ -39,6 +39,8 @@ pub enum RequiredRouterUpdate {
     BothFleetDatabaseNames { current: PathBuf, former: PathBuf },
     /// A store the update merges or renames away is still here after its step.
     LegacyStoreRemains { path: PathBuf },
+    /// A file nothing reads any more, which the update removes, is still here.
+    DeadFileRemains { path: PathBuf },
 }
 
 impl std::fmt::Display for RequiredRouterUpdate {
@@ -70,6 +72,11 @@ impl std::fmt::Display for RequiredRouterUpdate {
             Self::LegacyStoreRemains { path } => write!(
                 formatter,
                 "{} is left from an older layout; run agent-router-update with the Host stopped",
+                path.display()
+            ),
+            Self::DeadFileRemains { path } => write!(
+                formatter,
+                "{} is no longer read by the Router; run agent-router-update with the Host stopped, which removes it",
                 path.display()
             ),
         }
@@ -124,9 +131,21 @@ pub async fn inspect_router_update_requirement(
             .map(|source| directory.join(source.file_name()))
             .find(|path| exists(path))
     });
-    Ok(match leftover {
+    if let Some(path) = leftover {
+        return Ok(RouterUpdateRequirement::Required(
+            RequiredRouterUpdate::LegacyStoreRemains { path },
+        ));
+    }
+    // Dead files count on every root, a never-connected one included: the Host no longer
+    // moves them at start-up. A directory that can't be listed counts, so the guard fails
+    // closed.
+    let dead_file = match crate::router_dead_files(root) {
+        Ok(files) => files.into_iter().next(),
+        Err(_) => Some(directory),
+    };
+    Ok(match dead_file {
         Some(path) => {
-            RouterUpdateRequirement::Required(RequiredRouterUpdate::LegacyStoreRemains { path })
+            RouterUpdateRequirement::Required(RequiredRouterUpdate::DeadFileRemains { path })
         }
         None => RouterUpdateRequirement::NotRequired,
     })

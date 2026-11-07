@@ -16,15 +16,18 @@ pub use message_copy::{
     MESSAGE_COPY_DIGEST_BASIS, MessageCopyCounts, MessageUpgrade, MessageUpgradeError,
     MessageUpgradeReport,
 };
+mod dead_files_step;
 mod ledger_step;
 mod merge_step;
 mod project_transform;
 mod rename_step;
+mod reset_step;
 mod root_layout;
 mod router_update;
 pub use root_layout::RouterUpdateError;
 pub use router_update::{
-    PendingUpdateStep, PlannedChange, RouterUpdatePlan, plan_router_update, run_router_update,
+    PendingUpdateStep, PlannedChange, RouterUpdatePlan, StaleFile, plan_router_update,
+    run_router_update,
 };
 mod update_barrier;
 mod upgrade_prepare;

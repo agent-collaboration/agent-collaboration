@@ -36,6 +36,12 @@ pub enum RouterUpdateError {
         "{path} still has a write-ahead log or shared-memory file after the checkpoint; the rename stopped so no committed row is lost"
     )]
     LogRemainsAfterCheckpoint { path: PathBuf },
+    #[error("{path}: its approval routes could not be imported into interaction.sqlite: {source}")]
+    ApprovalRoutesImport {
+        path: PathBuf,
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
     #[error("{store}: {source}")]
     Store {
         store: PathBuf,
