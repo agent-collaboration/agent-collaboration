@@ -693,11 +693,11 @@ version = "0.1.134"
 dependencies = [
  "board-sync-protocol",
  "chrono",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-session",
- "fleet-sync-tokio-runner",
- "fleet-sync-writer",
+ "fleet-project-lease",
+ "fleet-project-writer",
+ "fleet-protocol",
+ "fleet-session",
+ "fleet-session-client",
  "futures-util",
  "message-board",
  "message-board-storage",
@@ -732,9 +732,9 @@ dependencies = [
  "collaboration-service",
  "durable-steps",
  "fleet-admission",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-writer",
+ "fleet-project-lease",
+ "fleet-project-writer",
+ "fleet-protocol",
  "interaction-storage",
  "message-board",
  "message-board-storage",
@@ -761,7 +761,7 @@ version = "0.1.134"
 dependencies = [
  "chrono",
  "collaboration-mail-protocol",
- "fleet-sync-protocol",
+ "fleet-protocol",
  "message-board",
  "schemars 1.2.2",
  "serde",
@@ -777,8 +777,8 @@ dependencies = [
  "collaboration-central-tokio",
  "collaboration-protocol",
  "fleet-admission",
- "fleet-sync-lease",
- "fleet-sync-protocol",
+ "fleet-project-lease",
+ "fleet-protocol",
  "message-board",
  "message-board-storage",
  "serde",
@@ -1112,12 +1112,14 @@ dependencies = [
  "collaboration-service",
  "durable-steps",
  "fleet-admission",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-receiver",
- "fleet-sync-session",
- "fleet-sync-tokio-runner",
- "fleet-sync-writer",
+ "fleet-native-writer",
+ "fleet-project-copy",
+ "fleet-project-lease",
+ "fleet-project-writer",
+ "fleet-protocol",
+ "fleet-session",
+ "fleet-session-client",
+ "fleet-tokio-objects",
  "futures-util",
  "httparse",
  "interaction-storage",
@@ -1171,7 +1173,7 @@ dependencies = [
  "board-sync-protocol",
  "chrono",
  "fleet-admission",
- "fleet-sync-protocol",
+ "fleet-protocol",
  "message-board",
  "serde",
 ]
@@ -1188,8 +1190,8 @@ dependencies = [
  "collaboration-client",
  "durable-steps",
  "fleet-admission",
- "fleet-sync-protocol",
- "fleet-sync-session",
+ "fleet-protocol",
+ "fleet-session",
  "futures-util",
  "message-board",
  "reqwest",
@@ -1215,12 +1217,12 @@ dependencies = [
  "durable-steps",
  "fleet-admission",
  "fleet-identity-protocol",
- "fleet-sync-delivery",
- "fleet-sync-lease",
- "fleet-sync-protocol",
+ "fleet-mail-delivery",
+ "fleet-project-copy",
+ "fleet-project-lease",
+ "fleet-protocol",
+ "fleet-session",
  "fleet-sync-query-gen",
- "fleet-sync-receiver",
- "fleet-sync-session",
  "futures-channel",
  "futures-util",
  "http",
@@ -1247,10 +1249,12 @@ dependencies = [
  "collaboration-central-conformance",
  "collaboration-central-core",
  "durable-steps",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-session",
- "fleet-sync-tokio-runner",
+ "fleet-native-writer",
+ "fleet-project-lease",
+ "fleet-protocol",
+ "fleet-session",
+ "fleet-session-client",
+ "fleet-tokio-objects",
  "futures-util",
  "message-board",
  "reqwest",
@@ -1299,8 +1303,8 @@ dependencies = [
  "board-sync-protocol",
  "collaboration-mail-protocol",
  "collaboration-protocol",
- "fleet-sync-protocol",
- "fleet-sync-writer",
+ "fleet-project-writer",
+ "fleet-protocol",
  "message-board",
  "message-board-storage",
  "nix",
@@ -1387,11 +1391,12 @@ dependencies = [
  "collaboration-protocol",
  "durable-steps",
  "fleet-admission",
- "fleet-sync-delivery",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-tokio-runner",
- "fleet-sync-writer",
+ "fleet-mail-delivery",
+ "fleet-project-lease",
+ "fleet-project-writer",
+ "fleet-protocol",
+ "fleet-session-client",
+ "fleet-tokio-objects",
  "futures-util",
  "getrandom 0.3.4",
  "interaction-storage",
@@ -1432,11 +1437,13 @@ dependencies = [
  "collaboration-runtime",
  "durable-steps",
  "fleet-admission",
- "fleet-sync-delivery",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-tokio-runner",
- "fleet-sync-writer",
+ "fleet-mail-delivery",
+ "fleet-native-writer",
+ "fleet-project-lease",
+ "fleet-project-writer",
+ "fleet-protocol",
+ "fleet-session-client",
+ "fleet-tokio-objects",
  "futures-util",
  "getrandom 0.3.4",
  "interaction-storage",
@@ -2053,7 +2060,7 @@ name = "fleet-admission"
 version = "0.1.134"
 dependencies = [
  "chrono",
- "fleet-sync-protocol",
+ "fleet-protocol",
  "message-board",
  "serde",
  "serde_json",
@@ -2072,12 +2079,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "fleet-sync-delivery"
+name = "fleet-mail-delivery"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "durable-steps",
- "fleet-sync-protocol",
+ "fleet-protocol",
  "fleet-sync-query-gen",
  "runtime-primitives",
  "serde",
@@ -2089,93 +2095,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "fleet-sync-lease"
+name = "fleet-native-writer"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "durable-steps",
- "fleet-sync-protocol",
+ "fleet-project-copy",
+ "fleet-project-writer",
+ "fleet-protocol",
+ "fleet-session",
+ "fleet-session-client",
  "fleet-sync-query-gen",
- "runtime-primitives",
- "serde",
- "serde_json",
- "sqlx",
- "sqlx-core",
- "thiserror",
- "uuid",
-]
-
-[[package]]
-name = "fleet-sync-protocol"
-version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
-dependencies = [
- "runtime-primitives",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror",
- "turso_parser",
- "uuid",
-]
-
-[[package]]
-name = "fleet-sync-query-gen"
-version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
-dependencies = [
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror",
-]
-
-[[package]]
-name = "fleet-sync-receiver"
-version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
-dependencies = [
- "durable-steps",
- "fleet-sync-protocol",
- "fleet-sync-query-gen",
- "serde",
- "serde_json",
- "sqlx",
- "sqlx-core",
- "thiserror",
- "turso_parser",
- "uuid",
-]
-
-[[package]]
-name = "fleet-sync-session"
-version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
-dependencies = [
- "bytes",
- "durable-steps",
- "fleet-sync-protocol",
- "fleet-sync-query-gen",
- "runtime-primitives",
- "serde",
- "serde_json",
- "sqlx",
- "sqlx-core",
- "thiserror",
- "url",
-]
-
-[[package]]
-name = "fleet-sync-tokio-runner"
-version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
-dependencies = [
- "durable-steps",
- "fleet-sync-protocol",
- "fleet-sync-query-gen",
- "fleet-sync-receiver",
- "fleet-sync-session",
- "fleet-sync-writer",
+ "fleet-tokio-objects",
  "futures-util",
  "runtime-primitives",
  "serde",
@@ -2190,16 +2120,47 @@ dependencies = [
 ]
 
 [[package]]
-name = "fleet-sync-writer"
+name = "fleet-project-copy"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
+dependencies = [
+ "durable-steps",
+ "fleet-protocol",
+ "fleet-sync-query-gen",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "sqlx-core",
+ "thiserror",
+ "turso_parser",
+ "uuid",
+]
+
+[[package]]
+name = "fleet-project-lease"
+version = "0.4.0"
+dependencies = [
+ "durable-steps",
+ "fleet-protocol",
+ "fleet-sync-query-gen",
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "sqlx-core",
+ "thiserror",
+ "uuid",
+]
+
+[[package]]
+name = "fleet-project-writer"
+version = "0.4.0"
 dependencies = [
  "durable-steps",
  "either",
- "fleet-sync-lease",
- "fleet-sync-protocol",
+ "fleet-project-copy",
+ "fleet-project-lease",
+ "fleet-protocol",
  "fleet-sync-query-gen",
- "fleet-sync-receiver",
  "futures-core",
  "futures-util",
  "runtime-primitives",
@@ -2212,6 +2173,81 @@ dependencies = [
  "tokio",
  "turso",
  "turso_parser",
+]
+
+[[package]]
+name = "fleet-protocol"
+version = "0.4.0"
+dependencies = [
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror",
+ "turso_parser",
+ "uuid",
+]
+
+[[package]]
+name = "fleet-session"
+version = "0.4.0"
+dependencies = [
+ "bytes",
+ "durable-steps",
+ "fleet-protocol",
+ "fleet-sync-query-gen",
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "sqlx-core",
+ "thiserror",
+ "url",
+]
+
+[[package]]
+name = "fleet-session-client"
+version = "0.4.0"
+dependencies = [
+ "durable-steps",
+ "fleet-protocol",
+ "fleet-session",
+ "futures-util",
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "fleet-sync-query-gen"
+version = "0.4.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror",
+]
+
+[[package]]
+name = "fleet-tokio-objects"
+version = "0.4.0"
+dependencies = [
+ "durable-steps",
+ "fleet-project-writer",
+ "futures-util",
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "sqlx-core",
+ "sqlx-turso",
+ "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -2984,8 +3020,8 @@ dependencies = [
  "collaboration-mail-protocol",
  "collaboration-protocol",
  "durable-steps",
- "fleet-sync-delivery",
- "fleet-sync-protocol",
+ "fleet-mail-delivery",
+ "fleet-protocol",
  "message-board",
  "serde",
  "serde_json",
@@ -3382,11 +3418,11 @@ dependencies = [
  "collaboration-mail-protocol",
  "durable-steps",
  "fleet-admission",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-receiver",
- "fleet-sync-session",
- "fleet-sync-writer",
+ "fleet-project-copy",
+ "fleet-project-lease",
+ "fleet-project-writer",
+ "fleet-protocol",
+ "fleet-session",
  "hmac 0.12.1",
  "message-board",
  "serde",

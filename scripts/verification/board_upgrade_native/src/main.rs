@@ -1,7 +1,7 @@
 //! Observe the existing importer through its public preparation and owning snapshots.
 use board_legacy_upgrade::{PreparedUpgrade, UpgradeReport, prepare_sources};
 use fleet_admission::ImportProvenance;
-use fleet_sync_protocol::SnapshotPage;
+use fleet_protocol::SnapshotPage;
 use message_board::{HumanId, Identity, InboxReadMode, ProjectId, RecordKind};
 use message_board_storage::{FeedPageBounds, FeedPageDirection};
 use serde::{Deserialize, Serialize};
