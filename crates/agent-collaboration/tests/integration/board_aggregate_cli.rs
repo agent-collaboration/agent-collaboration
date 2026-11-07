@@ -24,7 +24,7 @@ async fn aggregate_cli_pages_and_batch_acknowledgements_keep_project_keys() -> R
 {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
-    let registry = native_registry::new_registry(directory.path())?;
+    let registry = native_registry::new_registry(directory.path()).await?;
     let origin = message_board::ActorOrigin {
         installation: message_board::ServiceId::try_from(
             "00000000-0000-4000-8000-000000000001".to_owned(),

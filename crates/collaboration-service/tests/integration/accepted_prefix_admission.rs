@@ -108,6 +108,8 @@ async fn cold_metadata_from_another_project_is_refused_without_rewriting_the_fil
         directory.path(),
         Some(board_fixture::fixture_peer()?),
         std::sync::Arc::new(runtime_primitives::SystemClock),
+        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+            .expect("32-byte fixture cursor key"),
     );
     match registry.existing_project(&other).await {
         Err(collaboration_runtime::ProjectRegistryError::Storage(

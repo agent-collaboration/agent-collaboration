@@ -246,6 +246,7 @@ pub(crate) async fn run_host_command<W: Write + Send>(
         return Ok(());
     }
     if command.runs_foreground() {
+        crate::router_update_guard::refuse_root_needing_update(&router_root).await?;
         let port_overrides = command.port_overrides();
         let ports = resolve_host_ports(&router_root, launch_mode.is_isolated(), port_overrides)?;
         let remote_access = command.remote_access.map(|mode| match mode {
@@ -415,6 +416,8 @@ const fn operator_request_deadline(action: HostAction) -> Duration {
 
 #[derive(Debug, Error)]
 pub enum HostCommandError {
+    #[error(transparent)]
+    UpdateGuard(#[from] crate::router_update_guard::RouterUpdateGuardError),
     #[error(transparent)]
     Stop(#[from] host_stop::HostStopError),
     #[error(transparent)]

@@ -149,8 +149,14 @@ impl Reader {
             PeerCredential::new("Bearer cache-reader")?,
             BOUND,
         );
-        let fleet =
-            Arc::new(FleetClient::open(root, Arc::new(NoRegistration), Some(requests)).await?);
+        let fleet = Arc::new(FleetClient::new(
+            message_board_storage::FleetStore::open(
+                &(root).join(message_board_storage::FleetStore::FILE_NAME),
+            )
+            .await?,
+            Arc::new(NoRegistration),
+            Some(requests),
+        ));
         let (stop, stopped) = watch::channel(false);
         let (ready, waiting) = tokio::sync::oneshot::channel();
         let task = tokio::spawn(async move {
@@ -236,7 +242,7 @@ pub async fn assert_visible(
         matches!(fleet.record(&reference).await?, Some(Record::Workspace(workspace)) if workspace.name.as_str() == name)
     );
     let mut reader = sqlx_turso::TursoConnectOptions::new()
-        .filename(root.join("fleet-cache.sqlite"))
+        .filename(root.join(message_board_storage::FleetStore::FILE_NAME))
         .read_only(true)
         .connect()
         .await?;
@@ -266,7 +272,7 @@ pub async fn assert_floor(root: &Path, expected: i64) -> TestResult {
 }
 pub async fn assert_staging_rows(root: &Path, expected: i64) -> TestResult {
     let mut reader = sqlx_turso::TursoConnectOptions::new()
-        .filename(root.join("fleet-cache.sqlite"))
+        .filename(root.join(message_board_storage::FleetStore::FILE_NAME))
         .read_only(true)
         .connect()
         .await?;
@@ -276,5 +282,32 @@ pub async fn assert_staging_rows(root: &Path, expected: i64) -> TestResult {
             .await?;
     assert_eq!(row.try_get::<i64, _>("records")?, expected);
     reader.close().await?;
+    Ok(())
+}
+
+/// A Router keeps no Fleet authority of its own. This was once checked as "no
+/// fleet.sqlite", but that name was never a shipped file and is now the Router's own Fleet
+/// database, so the check reads what the stores hold: no store carries central's authority
+/// tables, and fleet.sqlite holds only the Router's cache, outbox, cursor-key and ledger.
+pub async fn assert_no_local_fleet_authority(root: &Path) -> TestResult {
+    use message_board_storage::router_store_contents::{
+        ROUTER_FLEET_TABLES, store_holding_central_authority, store_table_names,
+    };
+    if let Some((store, table)) = store_holding_central_authority(root).await? {
+        return Err(format!("Router root holds central's {table} in {}", store.display()).into());
+    }
+    let fleet = root.join(message_board_storage::FleetStore::FILE_NAME);
+    if fleet.exists() {
+        let foreign: Vec<String> = store_table_names(&fleet)
+            .await?
+            .into_iter()
+            .filter(|table| !ROUTER_FLEET_TABLES.contains(&table.as_str()))
+            .collect();
+        if !foreign.is_empty() {
+            return Err(
+                format!("fleet.sqlite holds tables a Router store never has: {foreign:?}").into(),
+            );
+        }
+    }
     Ok(())
 }

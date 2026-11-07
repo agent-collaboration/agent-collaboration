@@ -10,6 +10,10 @@ cargo nextest run --locked --profile ci -p codex-router-host --features keychain
 module namespace. The cases cover Host startup and configuration, singleton
 ownership, child process groups, update and restart lifecycles, enrollment,
 collaboration composition, provider routes, wakes and native inventory.
+`shared_fleet_store` starts the real runtime on a fresh root and checks it keeps
+one Fleet database (`fleet.sqlite`, no older store beside it), that a second
+process asking to write it gets the store's lock error, and that a restart keeps
+the board cursor key the composition installed.
 Library unit tests remain colocated with their implementations.
 
 The aggregate declares shared helper implementations once. Other directories

@@ -5,7 +5,7 @@ use board_fleet_sync::MachineNoticeProgressStore;
 use board_sync_protocol::{BoardConsumerProtocol, BoardNotice, NoticeRead, PositionedBoardNotice};
 use fleet_sync_protocol::{Epoch, NoticePosition};
 use fleet_sync_tokio_runner::SessionRequests;
-use message_board_storage::{FleetCache, FleetRecordSnapshot};
+use message_board_storage::FleetRecordSnapshot;
 use std::os::unix::fs::PermissionsExt;
 
 #[path = "archive_sync_barrier.rs"]
@@ -61,14 +61,18 @@ impl Runtime {
         // Holding authentication while doing SQLite setup can outlive the real
         // transport's connection deadline and close the fixture's waiter.
         settle_fixture_directory(&fleet, &creation).await?;
-        let cache = FleetCache::open(&root.join("fleet-cache.sqlite")).await?;
+        let cache_store = message_board_storage::FleetStore::open(
+            &root.join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?;
+        let cache = cache_store.cache();
         central
             .freeze_fleet_snapshot(FleetRecordSnapshot {
                 through: cache.checkpoint().await?,
                 records: fleet.records().await?,
             })
             .await?;
-        cache.close().await;
+        cache_store.close().await;
         assert_eq!(
             central
                 .auth
@@ -177,14 +181,22 @@ impl Runtime {
         }
     }
     async fn clear_cache(&self) -> TestResult {
-        let cache =
-            FleetCache::open(&self.directory.path().join("router/fleet-cache.sqlite")).await?;
-        cache
+        let store = message_board_storage::FleetStore::open(
+            &self
+                .directory
+                .path()
+                .join("router")
+                .join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?;
+        store
+            .cache()
             .replace_snapshot(&FleetRecordSnapshot {
                 through: FleetPosition::ZERO,
                 records: Vec::new(),
             })
             .await?;
+        store.close().await;
         assert!(self.fleet.records().await?.is_empty());
         Ok(())
     }

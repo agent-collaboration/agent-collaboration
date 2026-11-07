@@ -26,6 +26,22 @@ pub enum RouterLocalStorageError {
     PositionGap,
     #[error("Router-local data cannot be encoded: {0}")]
     Encoding(#[from] serde_json::Error),
+    /// A legacy store's row and the Fleet database's row under the same key differ.
+    #[error("a legacy row in {table} conflicts with the Fleet database's row under the same key")]
+    LegacyRowConflict { table: &'static str },
+    /// After a merge, a legacy row is missing from the Fleet database or differs there.
+    #[error("a legacy row in {table} is missing or different in the Fleet database")]
+    LegacyRowNotCarried { table: &'static str },
+    /// A legacy store holds a row its owning decoder refuses; the update stops before
+    /// copying or removing anything. The row is named by its key, never its value.
+    #[error("{store} has an invalid row in {table} under key {key}: {reason}")]
+    InvalidLegacyRow {
+        store: &'static str,
+        table: &'static str,
+        key: String,
+        #[source]
+        reason: Box<RouterLocalStorageError>,
+    },
 }
 
 pub(crate) struct RouterLocalDatabase {
@@ -38,9 +54,25 @@ impl RouterLocalDatabase {
         path: &Path,
         migrator: &Migrator,
     ) -> Result<Self, RouterLocalStorageError> {
+        Self::open_with(path, migrator, true).await
+    }
+
+    /// Migrates a store that must already exist; a missing file is an error, never created.
+    pub(crate) async fn open_existing(
+        path: &Path,
+        migrator: &Migrator,
+    ) -> Result<Self, RouterLocalStorageError> {
+        Self::open_with(path, migrator, false).await
+    }
+
+    async fn open_with(
+        path: &Path,
+        migrator: &Migrator,
+        create_if_missing: bool,
+    ) -> Result<Self, RouterLocalStorageError> {
         let options = TursoConnectOptions::new()
             .filename(path)
-            .create_if_missing(true);
+            .create_if_missing(create_if_missing);
         let pool = PoolOptions::<Turso>::new()
             .max_connections(1)
             .min_connections(1)

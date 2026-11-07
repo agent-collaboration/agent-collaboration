@@ -73,10 +73,14 @@ async fn a_large_fleet_write_returns_a_signed_public_continuation() -> Result<()
     );
 
     // Re-sign only test-owned payloads to check current commitment binding, beyond MAC integrity.
-    let keys = message_board_storage::CursorStore::open(
-        &fixture._directory.path().join("board-cursors.sqlite"),
+    let keys_store = message_board_storage::FleetStore::open(
+        &fixture
+            ._directory
+            .path()
+            .join(message_board_storage::FleetStore::FILE_NAME),
     )
     .await?;
+    let keys = keys_store.cursors();
     let key = keys.key().await?.ok_or("stored signer")?;
     let payload: serde_json::Value = message_board_storage::decode_board_cursor(&key, &next)?;
     for field in ["count", "digest"] {
@@ -95,7 +99,7 @@ async fn a_large_fleet_write_returns_a_signed_public_continuation() -> Result<()
             }
         );
     }
-    keys.close().await;
+    keys_store.close().await;
     let mut invalid = query.clone();
     invalid.after = Some(format!("{next}x"));
     assert_eq!(
@@ -229,10 +233,14 @@ async fn one_creating_request_has_distinct_project_and_fleet_receipts() -> Resul
     assert_ne!(project_effects.digest(), fleet_effects.digest());
     // Creation has small receipts, so these are fixture-signed, valid in-scope
     // keysets. Actual server-issued continuation paging is covered by the archive case.
-    let keys = message_board_storage::CursorStore::open(
-        &fixture._directory.path().join("board-cursors.sqlite"),
+    let keys_store = message_board_storage::FleetStore::open(
+        &fixture
+            ._directory
+            .path()
+            .join(message_board_storage::FleetStore::FILE_NAME),
     )
     .await?;
+    let keys = keys_store.cursors();
     let key = keys
         .get_or_install_key(&vec![23_u8; 32].try_into()?)
         .await?;
@@ -290,7 +298,7 @@ async fn one_creating_request_has_distinct_project_and_fleet_receipts() -> Resul
             }
         );
     }
-    keys.close().await;
+    keys_store.close().await;
     let unknown_project = message_board::ProjectId::generate();
     let unknown_path = fixture
         ._directory

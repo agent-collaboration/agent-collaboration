@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT canonical_hash AS \"canonical_hash!: String\", input AS \"input!: String\" FROM fleet_project_creation_inputs WHERE request_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "canonical_hash!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "input!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "479015561786773382da9c290646a57088ac73e9b20fcbd5b858edc9eef54eb6"
+}

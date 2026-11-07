@@ -1,6 +1,6 @@
 //! D's real importer composes with B's actual Claim, install, writer and replication owners.
 use super::*;
-use board_legacy_upgrade::{UpgradePublisher, prepare_sources};
+use agent_router_update::{UpgradePublisher, prepare_sources};
 use board_sync_protocol::{ProjectClaimReply, ProjectClaimRequest};
 use fleet_sync_protocol::{
     CopyStatusAnswer, OperationAnswer, OperationRequest, ReplicationAnswer, ReplicationRequest,
@@ -37,7 +37,7 @@ async fn run_claim_after_import(interrupted: bool) -> TestResult {
     let source = directory.path().join("legacy.sqlite");
     std::fs::copy(
         Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../board-legacy-upgrade/tests/fixtures/legacy-complete.sqlite"),
+            .join("../agent-router-update/tests/fixtures/legacy-complete.sqlite"),
         &source,
     )?;
     let prepared = prepare_sources(

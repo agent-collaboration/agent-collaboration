@@ -62,6 +62,7 @@ mod router_settings;
 mod runtime_lifecycle;
 mod runtime_restart;
 mod session_message_route_composition;
+mod shared_fleet_store;
 mod singleton_authority;
 mod stale_endpoint_sockets;
 mod update_reexec;

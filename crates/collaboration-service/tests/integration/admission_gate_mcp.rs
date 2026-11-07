@@ -194,6 +194,7 @@ async fn seed_empty_project(
         fixture._directory.path(),
         Some(fixture_peer()?),
         clock.clone(),
+        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])?,
     );
     let store = registry.open_project(project).await?;
     let database = registry.database(project).await?;

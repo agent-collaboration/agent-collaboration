@@ -698,7 +698,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "board-legacy-upgrade"
+name = "agent-router-update"
 version = "0.1.123"
 dependencies = [
  "automation-storage",
@@ -757,7 +757,7 @@ dependencies = [
 name = "board-upgrade-native-observer"
 version = "0.0.0"
 dependencies = [
- "board-legacy-upgrade",
+ "agent-router-update",
  "collaboration-central-conformance",
  "collaboration-central-tokio",
  "collaboration-protocol",

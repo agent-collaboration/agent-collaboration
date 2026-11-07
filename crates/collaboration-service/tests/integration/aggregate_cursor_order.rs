@@ -31,7 +31,7 @@ async fn aggregate_continuation_keeps_every_post_when_router_wall_clock_moves_ba
     )
     .await?;
     let fleet = Arc::new(fleet);
-    let registry = crate::native_registry::new_registry(directory.path())?;
+    let registry = crate::native_registry::new_registry(directory.path()).await?;
     let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
         registry: registry.clone(),
         fleet: fleet.clone(),

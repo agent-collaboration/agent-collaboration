@@ -35,7 +35,7 @@ async fn subscribe_join_wait_and_cancel_use_the_real_api_and_sqlite_paths() -> T
     let directory = tempfile::tempdir_in("/tmp")?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
     let service_directory = directory.path();
-    let registry = native_registry::new_registry(service_directory)?;
+    let registry = native_registry::new_registry(service_directory).await?;
     let origin = message_board::ActorOrigin {
         installation: message_board::ServiceId::try_from(SERVICE_ID.to_owned())?,
         machine: message_board::MachineLabel::try_from("CLI subscription proof".to_owned())?,

@@ -6,7 +6,7 @@ use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::{human_reader, keyed_call};
 use collaboration_client::CollaborationClient;
 use message_board::*;
-use message_board_storage::{CursorStore, encode_board_cursor};
+use message_board_storage::encode_board_cursor;
 use read_cost_counter::{ReadCost, current_cost};
 use serde_json::{Value, json};
 use sqlx::{ConnectOptions, Connection};
@@ -69,8 +69,14 @@ async fn reject_old_cursor(
     let request = page_request(thread, None)?;
     let mut filter = serde_json::to_value(&request)?;
     filter.as_object_mut().ok_or("filter")?.remove("page");
-    let cursors =
-        CursorStore::open(&fixture._directory.path().join("board-cursors.sqlite")).await?;
+    let cursors = message_board_storage::FleetStore::open(
+        &fixture
+            ._directory
+            .path()
+            .join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?
+    .cursors();
     let key = cursors.key().await?.ok_or("installed signing key")?;
     let cursor = encode_board_cursor(
         &key,
@@ -85,7 +91,7 @@ async fn reject_old_cursor(
     assert!(
         matches!(error, collaboration_client::BoardClientError::Rejected(error) if error.kind == BoardFailureKind::InvalidCursor)
     );
-    cursors.close().await;
+    drop(cursors);
     Ok(())
 }
 

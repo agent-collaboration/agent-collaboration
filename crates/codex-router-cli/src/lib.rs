@@ -32,6 +32,7 @@ mod presentation;
 pub mod profile;
 pub mod quota;
 mod quota_reset;
+mod router_update_guard;
 mod secret_store_factory;
 mod telemetry;
 pub mod token;

@@ -90,7 +90,14 @@ async fn offline_project_creation_waits_for_the_central_decision_before_registra
         board,
         title: "queued project".to_owned().try_into()?,
     });
-    let offline = FleetClient::open(directory.path(), registration.clone(), None).await?;
+    let offline = FleetClient::new(
+        message_board_storage::FleetStore::open(
+            &(directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?,
+        registration.clone(),
+        None,
+    );
     assert_eq!(
         offline.submit(&offered, &origin).await?.result,
         RequestResult::PendingUnreachable
@@ -120,7 +127,7 @@ async fn offline_project_creation_waits_for_the_central_decision_before_registra
             .join(project.as_str())
             .exists()
     );
-    assert!(!directory.path().join("fleet.sqlite").exists());
+    assert_no_local_fleet_authority(directory.path()).await?;
     offline.close().await;
 
     let (reconnected, runtime) =
@@ -142,7 +149,7 @@ async fn offline_project_creation_waits_for_the_central_decision_before_registra
         .clone();
     assert!(!registrations.is_empty());
     assert!(registrations.iter().all(|actual| actual == &project));
-    assert!(!directory.path().join("fleet.sqlite").exists());
+    assert_no_local_fleet_authority(directory.path()).await?;
     reconnected.close().await;
     runtime.shutdown().await?;
     Ok(())
@@ -173,12 +180,14 @@ async fn central_reply_cache_and_original_outbox_input_survive_restart()
         installation: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
         machine: MachineLabel::try_from("fleet fixture".to_owned())?,
     };
-    let offline = FleetClient::open(
-        directory.path(),
+    let offline = FleetClient::new(
+        message_board_storage::FleetStore::open(
+            &(directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?,
         std::sync::Arc::new(native_registry::PendingRegistration),
         None,
-    )
-    .await?;
+    );
     assert_eq!(
         offline.submit(&request, &origin).await?.result,
         RequestResult::PendingUnreachable
@@ -209,9 +218,13 @@ async fn central_reply_cache_and_original_outbox_input_survive_restart()
         if effects.entries() == [(request.workspace.clone().into(), workspace.envelope.position.clone())])
     );
     assert!(client.pending_requests().await?.is_empty());
-    let outbox =
-        message_board_storage::FleetOutbox::open(&directory.path().join("fleet-outbox.sqlite"))
-            .await?;
+    let outbox = message_board_storage::FleetStore::open(
+        &directory
+            .path()
+            .join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?
+    .outbox();
     let queued = outbox
         .request(&request.request_id)
         .await?
@@ -221,15 +234,17 @@ async fn central_reply_cache_and_original_outbox_input_survive_restart()
         queued.state,
         message_board_storage::FleetOutboxState::Decided { .. }
     ));
-    outbox.close().await;
+    drop(outbox);
     client.close().await;
     runtime.shutdown().await?;
-    let offline_replay = FleetClient::open(
-        directory.path(),
+    let offline_replay = FleetClient::new(
+        message_board_storage::FleetStore::open(
+            &(directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?,
         std::sync::Arc::new(native_registry::PendingRegistration),
         None,
-    )
-    .await?;
+    );
     assert_eq!(
         offline_replay.submit(&request, &origin).await?,
         first,
@@ -264,8 +279,37 @@ async fn central_reply_cache_and_original_outbox_input_survive_restart()
         reopened.submit(&conflict, &origin).await?.result,
         RequestResult::ConflictingRequest
     );
-    assert!(!directory.path().join("fleet.sqlite").exists());
+    assert_no_local_fleet_authority(directory.path()).await?;
     reopened.close().await;
     runtime.shutdown().await?;
+    Ok(())
+}
+
+/// A Router keeps no Fleet authority of its own. This was once checked as "no
+/// fleet.sqlite", but that name was never a shipped file and is now the Router's own Fleet
+/// database, so the check reads what the stores hold: no store carries central's authority
+/// tables, and fleet.sqlite holds only the Router's cache, outbox, cursor-key and ledger.
+async fn assert_no_local_fleet_authority(
+    root: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use message_board_storage::router_store_contents::{
+        ROUTER_FLEET_TABLES, store_holding_central_authority, store_table_names,
+    };
+    if let Some((store, table)) = store_holding_central_authority(root).await? {
+        return Err(format!("Router root holds central's {table} in {}", store.display()).into());
+    }
+    let fleet = root.join(message_board_storage::FleetStore::FILE_NAME);
+    if fleet.exists() {
+        let foreign: Vec<String> = store_table_names(&fleet)
+            .await?
+            .into_iter()
+            .filter(|table| !ROUTER_FLEET_TABLES.contains(&table.as_str()))
+            .collect();
+        if !foreign.is_empty() {
+            return Err(
+                format!("fleet.sqlite holds tables a Router store never has: {foreign:?}").into(),
+            );
+        }
+    }
     Ok(())
 }

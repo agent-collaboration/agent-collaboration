@@ -16,7 +16,14 @@ async fn pending_request_replays_through_the_session_and_keeps_central_provenanc
         installation: ServiceId::try_from(WRITER_SERVICE.to_owned())?,
         machine: MachineLabel::try_from("caller supplied label must be ignored".to_owned())?,
     };
-    let offline = FleetClient::open(&router_root, Arc::new(NoRegistration), None).await?;
+    let offline = FleetClient::new(
+        message_board_storage::FleetStore::open(
+            &router_root.join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?,
+        Arc::new(NoRegistration),
+        None,
+    );
     assert_eq!(
         offline.submit(&offered, &forged_origin).await?.result,
         RequestResult::PendingUnreachable
@@ -27,7 +34,7 @@ async fn pending_request_replays_through_the_session_and_keeps_central_provenanc
         pending.first().ok_or("missing pending request")?.request,
         offered
     );
-    assert!(!router_root.join("fleet.sqlite").exists());
+    fixture::assert_no_local_fleet_authority(&router_root).await?;
     offline.close().await;
 
     let jwks = JwksFixtureServer::start().await?;
@@ -78,7 +85,7 @@ async fn pending_request_replays_through_the_session_and_keeps_central_provenanc
         reader.fleet.request_effects(&effects_request).await?,
         receipt
     );
-    assert!(!router_root.join("fleet.sqlite").exists());
+    fixture::assert_no_local_fleet_authority(&router_root).await?;
     reader.shutdown().await?;
     live.shutdown().await?;
     jwks.shutdown().await?;
