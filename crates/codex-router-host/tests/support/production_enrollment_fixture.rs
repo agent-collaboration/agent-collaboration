@@ -16,6 +16,13 @@ pub(super) struct ProductionEnrollmentFixture {
 }
 impl ProductionEnrollmentFixture {
     pub async fn start(location: EnrollmentLocation) -> TestResult<Self> {
+        Self::start_with_legacy_state(location, None).await
+    }
+
+    pub async fn start_with_legacy_state(
+        location: EnrollmentLocation,
+        legacy_state: Option<&[u8]>,
+    ) -> TestResult<Self> {
         let root = fixture_root()?;
         let directory = root.path().join("collaboration");
         let peer = collaboration_runtime::load_installation_peer(&directory)?;
@@ -41,6 +48,10 @@ impl ProductionEnrollmentFixture {
                 return Err(error.into());
             }
         };
+        if let Some(state) = legacy_state {
+            std::fs::create_dir(directory.join("machine-session"))?;
+            std::fs::write(directory.join("machine-session/state.json"), state)?;
+        }
         let host = match OwnedHost::spawn(root.path(), router.address()) {
             Ok(host) => host,
             Err(error) => {

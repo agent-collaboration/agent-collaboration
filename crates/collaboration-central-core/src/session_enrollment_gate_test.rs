@@ -68,17 +68,32 @@ impl ObjectHost for ScopeHost {
     }
 }
 async fn selection(body: Value, expected: Value) -> Result<(), TestError> {
+    selection_with_enrollment(body, expected, CallerEnrollment::Revoked).await
+}
+
+enum CallerEnrollment {
+    Enrolled,
+    Revoked,
+}
+
+async fn selection_with_enrollment(
+    body: Value,
+    expected: Value,
+    enrollment: CallerEnrollment,
+) -> Result<(), TestError> {
     let fixture = FleetStorageFixture::open().await?;
     fixture.enroll(PEER.to_owned().try_into()?, SERVICE).await?;
     fixture
         .object
         .transaction(move |scope| {
             Box::pin(async move {
-                scope
-                    .executor()
-                    .execute("UPDATE machine_enrollments SET state='revoked'")
-                    .await
-                    .map_err(StoreError::backend)?;
+                if matches!(enrollment, CallerEnrollment::Revoked) {
+                    scope
+                        .executor()
+                        .execute("UPDATE machine_enrollments SET state='revoked'")
+                        .await
+                        .map_err(StoreError::backend)?;
+                }
                 let mut session_scope = CoreSessionScope::<ScopeHost, FixtureIo> {
                     inner: Store::reborrow(scope),
                     registrations: Default::default(),
@@ -114,7 +129,7 @@ async fn selection(body: Value, expected: Value) -> Result<(), TestError> {
                     session_scope.transport.as_slice()
                 else {
                     return Err(StoreError::backend(
-                        "revoked caller selected shared work instead of one refusal",
+                        "caller selected shared work instead of one refusal",
                     ));
                 };
                 let frame: Value = serde_json::from_slice(bytes).map_err(StoreError::backend)?;
@@ -147,6 +162,19 @@ async fn revoked_forward_selects_no_pending_row_or_route() -> Result<(), TestErr
 #[tokio::test]
 async fn revoked_project_settle_selects_no_negative_custody() -> Result<(), TestError> {
     selection(json!({"kind":"delivery","value":{"kind":"settle","value":{"call":{"operation":PROJECT,"step":"settle"},"submitter":{"kind":"project","value":PROJECT},"mailbox":PEER,"item":PROJECT,"digest":"ab".repeat(32)}}}),json!({"kind":"delivery","value":{"kind":"deliveryUnavailable","value":{"reason":{"kind":"senderNotEnrolled"}}}})).await
+}
+
+#[tokio::test]
+async fn fleet_settlement_is_refused_for_enrolled_and_revoked_machine_callers()
+-> Result<(), TestError> {
+    for enrollment in [CallerEnrollment::Enrolled, CallerEnrollment::Revoked] {
+        selection_with_enrollment(
+            json!({"kind":"delivery","value":{"kind":"settle","value":{"call":{"operation":PROJECT,"step":"settle"},"submitter":{"kind":"fleet","value":PEER},"mailbox":PEER,"item":PROJECT,"digest":"ab".repeat(32)}}}),
+            json!({"kind":"delivery","value":{"kind":"deliveryUnavailable","value":{"reason":{"kind":"notSubmitter"}}}}),
+            enrollment,
+        ).await?;
+    }
+    Ok(())
 }
 
 fn gate_reason() -> Value {

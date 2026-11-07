@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT id AS \"id!: String\" FROM fleet_snapshot_install_attempts WHERE project = ? AND epoch = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d3b4706debb19c9cd2dc1523e15ad5eea12e2f22e77216fdafa79ccbf43f7495"
+}

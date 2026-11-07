@@ -19,12 +19,15 @@ async fn interrupted_reset_resumes_before_activation_and_preserves_router_owned_
     tokio::fs::create_dir_all(storage.join("board-read-cache/generation")).await?;
     tokio::fs::write(
         storage.join("machine-session/state.json"),
-        b"old session cursor",
+        serde_json::to_vec(&fleet_sync_session::ClientSessionState {
+            session_id: fleet_sync_protocol::SessionId::new(uuid::Uuid::now_v7())?,
+            notice_cursor: fleet_sync_protocol::NoticePosition::new(17),
+        })?,
     )
     .await?;
     tokio::fs::write(
         storage.join("machine-session/machine-notice-progress.json"),
-        b"old notice cursor",
+        br#"{"handledThrough":17}"#,
     )
     .await?;
     tokio::fs::write(

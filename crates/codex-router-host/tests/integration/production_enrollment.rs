@@ -69,6 +69,7 @@ async fn production_host_discovers_enrollment_and_creates_a_central_project() ->
                 central.session_connections() > 0,
                 "central did not accept a machine connection",
             )?;
+            require_shared_link_status(&client, host, peer).await?;
             require(
                 collaboration_runtime::load_installation_peer(directory)? == peer,
                 "startup changed the persisted installation peer",
@@ -106,6 +107,38 @@ async fn production_host_without_enrollment_keeps_ready_and_creation_unreachable
             Ok::<_, Box<dyn Error>>(())
         })
         .await
+}
+
+#[tokio::test]
+async fn failed_session_preparation_keeps_its_typed_failure_on_both_status_surfaces() -> TestResult
+{
+    let fixture = ProductionEnrollmentFixture::start_with_legacy_state(
+        EnrollmentLocation::RouterRoot,
+        Some(b"{truncated"),
+    )
+    .await?;
+    fixture.run(async |fixture| {
+        fixture.host.await_ready().await?;
+        let client = CollaborationClient::connect(&fixture.directory, "failed-link-test", "1").await?;
+        let record = client.installation_show().await?.central.ok_or("failed configured link was hidden")?;
+        require(matches!(record.state, board_sync_protocol::FleetLinkState::Disconnected { .. }), "failed preparation did not disconnect")?;
+        require(matches!(record.last_failure.as_ref().map(|failure| &failure.reason), Some(board_sync_protocol::FleetLinkFailureReason::CorruptStore { field }) if field == "machineSessionState"), "typed store failure missing")?;
+        require(fixture.central.session_connections() == 0, "failed preparation opened a session")?;
+        let frames = operator_client::send_operator_request(&fixture.host.operator, OperatorRequest::Status, BOUND).await?;
+        let central = frames.iter().find_map(|frame| match frame {
+            OperatorFrame::Terminal(response) => match response.snapshot().fleet() {
+                codex_router_host::FleetHostObservation::Available { central, .. } => central.as_ref(),
+                _ => None,
+            },
+            OperatorFrame::Progress(_) => None,
+        }).ok_or("Host hid failed configured link")?;
+        require(central == &record, "Host and MCP retained different failed-start records")?;
+        let reopened = message_board_storage::FleetCache::open(&fixture.directory.join("fleet-cache.sqlite")).await?;
+        require(reopened.fleet_link().await? == Some(record), "failed-start owner did not persist its final record")?;
+        reopened.close().await;
+        require(std::fs::read(fixture.directory.join("machine-session/state.json"))? == b"{truncated", "failed import changed the legacy source")?;
+        Ok::<_, Box<dyn Error>>(())
+    }).await
 }
 
 #[tokio::test]
@@ -474,4 +507,76 @@ async fn production_enrollment_native_child() -> TestResult {
         Some(Path::new(&log)),
     )
     .await
+}
+
+async fn require_shared_link_status(
+    client: &CollaborationClient,
+    host: &OwnedHost,
+    peer: fleet_sync_protocol::PeerId,
+) -> TestResult {
+    let before = client
+        .installation_show()
+        .await?
+        .central
+        .ok_or("MCP link missing")?;
+    let status =
+        operator_client::send_operator_request(&host.operator, OperatorRequest::Status, BOUND)
+            .await?;
+    let observed = status
+        .iter()
+        .find_map(|frame| match frame {
+            OperatorFrame::Terminal(response) => Some(response.snapshot().fleet()),
+            OperatorFrame::Progress(_) => None,
+        })
+        .ok_or("Host fleet status missing")?;
+    let codex_router_host::FleetHostObservation::Available {
+        central: Some(link),
+        stuck_mail,
+    } = observed
+    else {
+        return Err("Host Fleet observation unavailable".into());
+    };
+    let after = client
+        .installation_show()
+        .await?
+        .central
+        .ok_or("MCP link missing after status")?;
+    require(
+        link.peer == peer
+            && before.peer == peer
+            && after.peer == peer
+            && before.endpoint == link.endpoint
+            && after.endpoint == link.endpoint,
+        "Host and MCP link identity differs",
+    )?;
+    let (
+        board_sync_protocol::FleetLinkState::Connected {
+            since: before_since,
+            last_contact: before_contact,
+        },
+        board_sync_protocol::FleetLinkState::Connected {
+            since,
+            last_contact,
+        },
+        board_sync_protocol::FleetLinkState::Connected {
+            since: after_since,
+            last_contact: after_contact,
+        },
+    ) = (&before.state, &link.state, &after.state)
+    else {
+        return Err("link was not connected through both status paths".into());
+    };
+    require(
+        before_since == since
+            && after_since == since
+            && before_contact <= last_contact
+            && last_contact <= after_contact
+            && link.last_drop == after.last_drop,
+        "Host and MCP status do not read the same link record",
+    )?;
+    require(
+        *stuck_mail == collaboration_protocol::StuckMailSummary::Empty,
+        "fresh Host unexpectedly has stuck mail",
+    )?;
+    Ok(())
 }

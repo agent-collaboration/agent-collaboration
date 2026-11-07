@@ -20,6 +20,8 @@ struct ControlledSocket {
     incoming: mpsc::UnboundedReceiver<Result<Message, ()>>,
     frames: mpsc::UnboundedSender<Result<Message, ()>>,
     outgoing: mpsc::UnboundedSender<Message>,
+    welcome: bool,
+    send_pending: bool,
 }
 
 impl Stream for ControlledSocket {
@@ -32,10 +34,15 @@ impl Stream for ControlledSocket {
 impl Sink<Message> for ControlledSocket {
     type Error = ();
     fn poll_ready(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), ()>> {
-        Poll::Ready(Ok(()))
+        if self.send_pending {
+            Poll::Pending
+        } else {
+            Poll::Ready(Ok(()))
+        }
     }
     fn start_send(self: Pin<&mut Self>, message: Message) -> Result<(), ()> {
-        if let Message::Binary(bytes) = &message
+        if self.welcome
+            && let Message::Binary(bytes) = &message
             && let Ok(ClientFrame::<NoConsumer>::Hello { session_id, .. }) =
                 serde_json::from_slice(bytes)
         {
@@ -71,6 +78,8 @@ fn controlled_connection() -> (
             incoming,
             frames: frames.clone(),
             outgoing,
+            welcome: true,
+            send_pending: false,
         },
         Duration::from_secs(5),
     );
@@ -82,7 +91,29 @@ async fn silent_socket_closes_at_the_idle_bound() {
     // No incoming frame at all, even though writes keep succeeding.
     let (mut connection, _frames, _sent) = controlled_connection();
     let result = timeout(Duration::from_secs(61), connection.receive()).await;
-    assert_eq!(result, Ok(Some(Err(ConnectionClosed::Transport))));
+    assert_eq!(result, Ok(Some(Err(ConnectionClosed::IdleTimeout))));
+    assert_eq!(connection.receive().await, None);
+}
+
+#[tokio::test(start_paused = true)]
+async fn binary_send_timeout_retains_its_native_reason_and_invalidates_the_socket() {
+    let (mut connection, _frames, _sent) = controlled_connection();
+    connection.socket.as_mut().unwrap().send_pending = true;
+    assert_eq!(
+        connection.send(Bytes::from_static(b"outgoing")).await,
+        Err(ConnectionClosed::SendTimeout)
+    );
+    assert_eq!(connection.receive().await, None);
+}
+
+#[tokio::test(start_paused = true)]
+async fn ping_send_timeout_retains_its_native_reason_and_invalidates_the_socket() {
+    let (mut connection, _frames, _sent) = controlled_connection();
+    connection.socket.as_mut().unwrap().send_pending = true;
+    assert_eq!(
+        timeout(Duration::from_secs(26), connection.receive()).await,
+        Ok(Some(Err(ConnectionClosed::SendTimeout)))
+    );
     assert_eq!(connection.receive().await, None);
 }
 
@@ -107,7 +138,7 @@ async fn ping_period_and_idle_bound_survive_cancelled_receives_and_outgoing_fram
     }
     assert_eq!(
         connection.receive().await,
-        Some(Err(ConnectionClosed::Transport))
+        Some(Err(ConnectionClosed::IdleTimeout))
     );
     assert!(sent.try_recv().is_err());
 }
@@ -136,7 +167,7 @@ async fn incoming_binary_ping_and_pong_each_extend_the_idle_bound() {
         }
         assert_eq!(
             timeout(Duration::from_secs(61), connection.receive()).await,
-            Ok(Some(Err(ConnectionClosed::Transport)))
+            Ok(Some(Err(ConnectionClosed::IdleTimeout)))
         );
     }
 }
@@ -153,8 +184,14 @@ impl SessionClientStore for MemoryStore {
     }
 }
 
+type ControlledSocketChannels = (
+    mpsc::UnboundedReceiver<Message>,
+    mpsc::UnboundedSender<Result<Message, ()>>,
+);
+
 struct ControlledTransport {
-    connected: mpsc::UnboundedSender<mpsc::UnboundedReceiver<Message>>,
+    connected: mpsc::UnboundedSender<ControlledSocketChannels>,
+    welcome: bool,
 }
 impl SessionTransport for ControlledTransport {
     type Connection = SessionSocket<ControlledSocket>;
@@ -163,8 +200,9 @@ impl SessionTransport for ControlledTransport {
         _: &Endpoint,
         _: &PeerCredential,
     ) -> Result<Self::Connection, ConnectFailure> {
-        let (connection, _frames, outgoing) = controlled_connection();
-        self.connected.send(outgoing).unwrap();
+        let (mut connection, frames, outgoing) = controlled_connection();
+        connection.socket.as_mut().unwrap().welcome = self.welcome;
+        self.connected.send((outgoing, frames)).unwrap();
         Ok(connection)
     }
 }
@@ -173,7 +211,10 @@ impl SessionTransport for ControlledTransport {
 async fn session_pump_reconnects_after_a_silent_socket() {
     let (connected, mut connections) = mpsc::unbounded_channel();
     let client = SessionClient::<_, _, NoConsumer>::load(
-        ControlledTransport { connected },
+        ControlledTransport {
+            connected,
+            welcome: true,
+        },
         MemoryStore::default(),
         &UuidV7Ids,
         SchemaSupport { max_version: 1 },
@@ -207,6 +248,89 @@ async fn session_pump_reconnects_after_a_silent_socket() {
         events.recv().await,
         Some(ClientEvent::Welcome { .. })
     ));
+    stop.send_replace(true);
+    pumping.await.unwrap().unwrap();
+}
+
+#[derive(Clone)]
+struct PausedClock(Instant);
+impl runtime_primitives::Clock for PausedClock {
+    fn now(&self) -> runtime_primitives::SyncTime {
+        runtime_primitives::SyncTime::from_unix_millis(
+            i64::try_from(self.0.elapsed().as_millis()).unwrap(),
+        )
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn native_welcome_timeout_closes_a_socket_despite_regular_pongs() {
+    use fleet_sync_tokio_runner::{SessionLinkEventKind, SessionRecoveryPolicy};
+    let (connected, mut connections) = mpsc::unbounded_channel();
+    let client = SessionClient::<_, _, NoConsumer>::load(
+        ControlledTransport {
+            connected,
+            welcome: false,
+        },
+        MemoryStore::default(),
+        &UuidV7Ids,
+        SchemaSupport { max_version: 1 },
+        Backoff {
+            initial: Duration::from_secs(1),
+            max: Duration::from_secs(30),
+            factor: 2,
+        },
+    )
+    .await
+    .unwrap();
+    let (_requests, _events, pump) = SessionPump::new(
+        client,
+        Endpoint::new("ws://fixture/session").unwrap(),
+        PeerCredential::new("Bearer fixture").unwrap(),
+        Duration::from_secs(5),
+    );
+    let pump = pump.with_recovery_policy(SessionRecoveryPolicy {
+        welcome_timeout: Some(Duration::from_secs(30)),
+        ..SessionRecoveryPolicy::default()
+    });
+    let mut links = pump.observe_link();
+    let (stop, stopped) = watch::channel(false);
+    let pumping = tokio::spawn(pump.run_with_clock(stopped, PausedClock(Instant::now())));
+    let (mut outgoing, frames) = connections.recv().await.unwrap();
+    assert!(matches!(outgoing.recv().await, Some(Message::Binary(_))));
+    assert_eq!(
+        links.recv().await.unwrap().kind,
+        SessionLinkEventKind::Connecting { attempt: 1 }
+    );
+    for _ in 0..29 {
+        frames.send(Ok(Message::Pong(Bytes::new()))).unwrap();
+        tokio::task::yield_now().await;
+        tokio::time::advance(Duration::from_secs(1)).await;
+        tokio::task::yield_now().await;
+        assert!(matches!(
+            links.try_recv(),
+            Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+        ));
+    }
+    tokio::time::advance(Duration::from_secs(1)).await;
+    assert_eq!(
+        links.recv().await.unwrap().kind,
+        SessionLinkEventKind::WelcomeTimeout
+    );
+    let mut close_observed = false;
+    while let Some(frame) = outgoing.recv().await {
+        if matches!(frame, Message::Close { .. }) {
+            close_observed = true;
+            break;
+        }
+    }
+    assert!(
+        close_observed,
+        "Welcome timeout must close the physical socket"
+    );
+    assert!(
+        connections.try_recv().is_err(),
+        "reconnect must honor backoff"
+    );
     stop.send_replace(true);
     pumping.await.unwrap().unwrap();
 }

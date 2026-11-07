@@ -60,7 +60,21 @@ impl CollaborationRuntime {
         if let Some(session) = self.board_session.take()
             && let Err(error) = session.shutdown().await
         {
-            failure.get_or_insert(error);
+            match self.fleet_link.read().await {
+                Ok(Some(record))
+                    if super::board_composition::RunningMachineSession::is_observed_refusal(
+                        &error, &record,
+                    ) =>
+                {
+                    tracing::info!(event = "fleet.link.refusalObservedAtShutdown", %error, "Fleet refusal was already observed; Host cleanup completed");
+                }
+                Err(observation_error) => {
+                    failure.get_or_insert(io::Error::other(observation_error));
+                }
+                _ => {
+                    failure.get_or_insert(error);
+                }
+            }
         }
         if let Some(route) = self.provider_delivery_route.take() {
             route.shutdown_queue().await;

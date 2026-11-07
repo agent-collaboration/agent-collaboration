@@ -12,6 +12,8 @@ use collaboration_runtime::new_service_uuid;
 use std::{io, net::SocketAddr, path::PathBuf};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
+#[path = "collaboration_runtime/fleet_observation.rs"]
+mod fleet_observation;
 
 pub struct CollaborationRuntimeInputs {
     /// Enrollment/configuration supplies inputs; this Host owns the session itself.
@@ -110,6 +112,8 @@ pub enum CollaborationFailure {
     TailnetExposure(#[source] io::Error),
 }
 pub struct CollaborationRuntime {
+    fleet_link: board_fleet_sync::FleetLinkObservation,
+    interactions: std::sync::Weak<interaction_storage::InteractionStore>,
     #[cfg(test)]
     startup_test_mail: Option<std::sync::Weak<collaboration_service::MailDeliveryRuntime>>,
     #[cfg(test)]
@@ -155,6 +159,9 @@ pub struct CollaborationRuntime {
     tailscale_exposure: Option<crate::tailscale_exposure::TailscaleExposure>,
 }
 impl CollaborationRuntime {
+    pub(crate) async fn observe_fleet(&self) -> crate::FleetHostObservation {
+        fleet_observation::observe_fleet_sources(&self.fleet_link, &self.interactions).await
+    }
     pub(crate) const fn mcp_listen_address(&self) -> std::net::SocketAddr {
         self.collaboration_api.local_address()
     }

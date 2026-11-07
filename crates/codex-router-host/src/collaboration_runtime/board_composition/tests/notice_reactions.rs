@@ -6,7 +6,6 @@ use board_sync_protocol::{BoardConsumerProtocol, BoardNotice, NoticeRead, Positi
 use fleet_sync_protocol::{Epoch, NoticePosition};
 use fleet_sync_tokio_runner::SessionRequests;
 use message_board_storage::{FleetCache, FleetRecordSnapshot};
-use std::os::unix::fs::PermissionsExt;
 
 #[path = "archive_sync_barrier.rs"]
 mod archive_sync_barrier;
@@ -493,8 +492,11 @@ async fn progress_write_failure_rehandles_the_hint_without_changing_lease_author
     runtime.set_progress(5).await?;
     let mut reactions = runtime.reactions().await?;
     let before = runtime.accepted_renewal_count()?;
-    let progress_directory = runtime.progress_directory().join("machine-session");
-    tokio::fs::set_permissions(&progress_directory, std::fs::Permissions::from_mode(0o500)).await?;
+    let failure = CacheWriteFailure::hold(
+        &runtime.progress_directory(),
+        CacheWriteTarget::NoticeProgress,
+    )
+    .await?;
     let failed_save = reactions
         .handle_pushed_notice(
             runtime.notice(6),
@@ -505,7 +507,7 @@ async fn progress_write_failure_rehandles_the_hint_without_changing_lease_author
             &runtime.requests,
         )
         .await;
-    tokio::fs::set_permissions(&progress_directory, std::fs::Permissions::from_mode(0o700)).await?;
+    failure.restore().await?;
     assert!(failed_save.is_err());
     assert_eq!(runtime.progress().await?, NoticePosition::new(5));
     assert_eq!(

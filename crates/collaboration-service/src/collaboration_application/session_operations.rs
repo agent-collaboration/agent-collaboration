@@ -14,6 +14,7 @@ use collaboration_protocol::{
     NativeSessionListResult, ProviderSessionListParams, ProviderSessionListResult,
 };
 pub struct SessionOperations {
+    link: board_fleet_sync::FleetLinkObservation,
     identity: collaboration_contracts::RouterIdentity,
     directory: collaboration_runtime::EndpointDirectory,
     native: NativeSessionControl,
@@ -31,6 +32,7 @@ impl SessionOperations {
         journal: super::journal_operations::JournalOperations,
     ) -> Self {
         Self {
+            link: board_fleet_sync::FleetLinkObservation::Unconfigured,
             identity,
             directory,
             native,
@@ -50,20 +52,30 @@ impl SessionOperations {
             endpoints: inventory.endpoints,
         })
     }
-    pub fn installation_show(
+    pub fn with_fleet_link(mut self, link: board_fleet_sync::FleetLinkObservation) -> Self {
+        self.link = link;
+        self
+    }
+
+    pub async fn installation_show(
         &self,
     ) -> Result<collaboration_protocol::InstallationIdentity, InstallationIdentityUnavailable> {
         let peer = self
             .identity
             .installation_peer()
-            .ok_or(InstallationIdentityUnavailable)?;
+            .ok_or(InstallationIdentityUnavailable::Identity)?;
         Ok(collaboration_protocol::InstallationIdentity {
             service_id: self.identity.service_id().clone(),
             machine_label: self.identity.machine_identity().machine_label().clone(),
             peer_id: peer
                 .to_string()
                 .try_into()
-                .map_err(|_| InstallationIdentityUnavailable)?,
+                .map_err(|_| InstallationIdentityUnavailable::Identity)?,
+            central: self.link.read().await.map_err(|error| {
+                InstallationIdentityUnavailable::CentralLink {
+                    message: error.to_string(),
+                }
+            })?,
         })
     }
     pub async fn codex_session_list(
@@ -106,9 +118,13 @@ impl SessionOperations {
 #[error("Endpoint directory unavailable")]
 pub struct EndpointDirectoryUnavailable;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-#[error("Installation identity unavailable")]
-pub struct InstallationIdentityUnavailable;
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum InstallationIdentityUnavailable {
+    #[error("Installation identity unavailable")]
+    Identity,
+    #[error("Central link unavailable: {message}")]
+    CentralLink { message: String },
+}
 
 impl CollaborationRejection for InstallationIdentityUnavailable {
     fn rejection_reason(&self) -> Option<CollaborationRejectionReason> {

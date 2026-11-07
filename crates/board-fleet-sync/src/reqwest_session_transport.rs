@@ -1,4 +1,6 @@
+use crate::fleet_link_owner::FleetLinkPublisher;
 use crate::{AccessServiceToken, session_credentials::sensitive_header};
+use board_sync_protocol::FleetLinkDropReason;
 use fleet_sync_protocol::{AuthRefusal, CloseReason};
 use fleet_sync_session::{
     Bytes, ConnectFailure, ConnectionClosed, Endpoint, PeerCredential, SessionTransport,
@@ -41,6 +43,10 @@ impl ReqwestSessionTransport {
             send_timeout,
         })
     }
+
+    pub fn connection_blocked(&self, error: &ConnectFailure) {
+        FleetLinkPublisher::log_connect_failure(error);
+    }
 }
 
 pub struct ReqwestSessionConnection {
@@ -67,9 +73,13 @@ impl<S> SessionSocket<S> {
         }
     }
 
-    fn dropped(&mut self, reason: &'static str) {
+    fn dropped(&mut self, reason: FleetLinkDropReason) {
         if self.socket.take().is_some() {
-            tracing::warn!(event = "fleet.link.dropped", reason, "fleet.link.dropped");
+            tracing::warn!(
+                event = "fleet.link.dropped",
+                reason = reason.as_str(),
+                "fleet.link.dropped"
+            );
         }
     }
 }
@@ -82,34 +92,45 @@ impl SessionTransport for ReqwestSessionTransport {
         endpoint: &Endpoint,
         credential: &PeerCredential,
     ) -> Result<Self::Connection, ConnectFailure> {
-        let endpoint =
-            reqwest::Url::parse(endpoint.as_str()).map_err(|_| ConnectFailure::InvalidEndpoint)?;
-        if !matches!(endpoint.scheme(), "ws" | "wss" | "http" | "https") {
-            return Err(ConnectFailure::InvalidEndpoint);
+        let connected = async {
+            let endpoint = reqwest::Url::parse(endpoint.as_str())
+                .map_err(|_| ConnectFailure::InvalidEndpoint)?;
+            if !matches!(endpoint.scheme(), "ws" | "wss" | "http" | "https") {
+                return Err(ConnectFailure::InvalidEndpoint);
+            }
+            let request = self.access.apply(self.client.get(endpoint)).header(
+                reqwest::header::AUTHORIZATION,
+                sensitive_header(credential.expose())?,
+            );
+            let response = timeout(self.connect_timeout, request.upgrade().send())
+                .await
+                .map_err(|_| ConnectFailure::Unavailable)?
+                .map_err(|_| ConnectFailure::Unavailable)?;
+            if matches!(
+                response.status(),
+                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
+            ) {
+                return Err(ConnectFailure::CredentialRejected(auth_refusal(
+                    response.headers(),
+                )));
+            }
+            let socket = timeout(self.connect_timeout, response.into_websocket())
+                .await
+                .map_err(|_| ConnectFailure::Unavailable)?
+                .map_err(|_| ConnectFailure::Unavailable)?;
+            Ok(socket)
         }
-        let request = self.access.apply(self.client.get(endpoint)).header(
-            reqwest::header::AUTHORIZATION,
-            sensitive_header(credential.expose())?,
-        );
-        let response = timeout(self.connect_timeout, request.upgrade().send())
-            .await
-            .map_err(|_| ConnectFailure::Unavailable)?
-            .map_err(|_| ConnectFailure::Unavailable)?;
-        if matches!(
-            response.status(),
-            StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN
-        ) {
-            return Err(ConnectFailure::CredentialRejected(auth_refusal(
-                response.headers(),
-            )));
+        .await;
+        match connected {
+            Ok(socket) => {
+                let connection = SessionSocket::new(socket, self.send_timeout);
+                Ok(ReqwestSessionConnection { connection })
+            }
+            Err(error) => {
+                FleetLinkPublisher::log_connect_failure(&error);
+                Err(error)
+            }
         }
-        let socket = timeout(self.connect_timeout, response.into_websocket())
-            .await
-            .map_err(|_| ConnectFailure::Unavailable)?
-            .map_err(|_| ConnectFailure::Unavailable)?;
-        Ok(ReqwestSessionConnection {
-            connection: SessionSocket::new(socket, self.send_timeout),
-        })
     }
 }
 
@@ -151,12 +172,12 @@ where
         match timeout(self.send_timeout, socket.send(Message::Binary(frame))).await {
             Ok(Ok(())) => Ok(()),
             Ok(Err(_)) => {
-                self.dropped("transportError");
+                self.dropped(FleetLinkDropReason::TransportError);
                 Err(ConnectionClosed::Transport)
             }
             Err(_) => {
-                self.dropped("sendTimeout");
-                Err(ConnectionClosed::Transport)
+                self.dropped(FleetLinkDropReason::SendTimeout);
+                Err(ConnectionClosed::SendTimeout)
             }
         }
     }
@@ -169,15 +190,18 @@ where
             let incoming = tokio::select! {
                 biased;
                 _ = sleep_until(self.idle_deadline) => {
-                    self.dropped("idleTimeout");
-                    return Some(Err(ConnectionClosed::Transport));
+                    self.dropped(FleetLinkDropReason::IdleTimeout);
+                    return Some(Err(ConnectionClosed::IdleTimeout));
                 }
                 _ = sleep_until(self.next_ping) => {
                     self.next_ping = Instant::now() + LINK_PING_PERIOD;
                     match timeout(self.send_timeout, socket.send(Message::Ping(Bytes::new()))).await {
                         Ok(Ok(())) => continue,
-                        Ok(Err(_)) => self.dropped("transportError"),
-                        Err(_) => self.dropped("sendTimeout"),
+                        Ok(Err(_)) => self.dropped(FleetLinkDropReason::TransportError),
+                        Err(_) => {
+                            self.dropped(FleetLinkDropReason::SendTimeout);
+                            return Some(Err(ConnectionClosed::SendTimeout));
+                        }
                     }
                     return Some(Err(ConnectionClosed::Transport));
                 }
@@ -187,18 +211,24 @@ where
                 self.idle_deadline = Instant::now() + LINK_IDLE_BOUND;
             }
             match incoming {
-                Some(Ok(Message::Binary(frame))) => return Some(Ok(frame)),
+                Some(Ok(Message::Binary(frame))) => {
+                    return Some(Ok(frame));
+                }
                 Some(Ok(Message::Ping(_) | Message::Pong(_))) => {}
-                Some(Ok(Message::Close { .. })) | None => {
-                    self.dropped("closed");
+                Some(Ok(Message::Close { .. })) => {
+                    self.dropped(FleetLinkDropReason::Closed);
+                    return None;
+                }
+                None => {
+                    self.dropped(FleetLinkDropReason::Closed);
                     return None;
                 }
                 Some(Ok(Message::Text(_))) => {
-                    self.dropped("transportError");
+                    self.dropped(FleetLinkDropReason::TransportError);
                     return Some(Err(ConnectionClosed::UnsupportedFrame));
                 }
                 Some(Err(_)) => {
-                    self.dropped("transportError");
+                    self.dropped(FleetLinkDropReason::TransportError);
                     return Some(Err(ConnectionClosed::Transport));
                 }
             }

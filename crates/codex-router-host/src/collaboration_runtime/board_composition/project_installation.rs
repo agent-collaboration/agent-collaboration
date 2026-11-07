@@ -111,7 +111,7 @@ impl ProjectWriters {
         }
         *owner = ProjectWriterSlot::Empty;
         let attempt =
-            super::install_attempts::recorded_attempt(&self.directory, project, epoch).await?;
+            super::install_attempts::recorded_attempt(&self.cache, project, epoch).await?;
         let seed = registry
             .prepare_claim_seed(project, grant)
             .await

@@ -109,6 +109,7 @@ impl FleetClient {
         tokio::fs::create_dir_all(directory).await?;
         let outbox = FleetOutbox::open(&directory.join("fleet-outbox.sqlite")).await?;
         let cache = FleetCache::open(&directory.join("fleet-cache.sqlite")).await?;
+        cache.import_legacy_runtime(directory).await?;
         Ok(Self {
             session,
             outbox,

@@ -73,6 +73,7 @@ pub(super) enum NoticeHandling {
 }
 
 pub(super) struct ProjectWriters {
+    pub(super) cache: Arc<message_board_storage::FleetCache>,
     #[cfg(test)]
     pub(super) notice_completions:
         tokio::sync::broadcast::Sender<(fleet_sync_protocol::NoticePosition, NoticeHandling)>,
@@ -96,6 +97,17 @@ pub(super) struct ProjectWriters {
     registration_waits: tokio::sync::broadcast::Sender<ProjectId>,
 }
 
+pub(super) struct ProjectWriterInputs<'a> {
+    pub cache: Arc<message_board_storage::FleetCache>,
+    pub directory: &'a std::path::Path,
+    pub peer: fleet_sync_protocol::PeerId,
+    pub registry: &'a Arc<ProjectStoreRegistry>,
+    pub requests: SessionRequests<BoardConsumerProtocol>,
+    pub receiver: ReceiverId,
+    pub welcomed: watch::Receiver<bool>,
+    pub stopped: watch::Receiver<bool>,
+}
+
 impl ProjectWriters {
     #[cfg(any(test, feature = "runtime-test-support"))]
     pub(in crate::collaboration_runtime) async fn replicate_project_for_test(
@@ -108,17 +120,20 @@ impl ProjectWriters {
             .await
     }
 
-    pub fn new(
-        directory: &std::path::Path,
-        peer: fleet_sync_protocol::PeerId,
-        registry: &Arc<ProjectStoreRegistry>,
-        requests: SessionRequests<BoardConsumerProtocol>,
-        receiver: ReceiverId,
-        welcomed: watch::Receiver<bool>,
-        stopped: watch::Receiver<bool>,
-    ) -> Self {
+    pub fn new(inputs: ProjectWriterInputs<'_>) -> Self {
+        let ProjectWriterInputs {
+            cache,
+            directory,
+            peer,
+            registry,
+            requests,
+            receiver,
+            welcomed,
+            stopped,
+        } = inputs;
         let (lifecycle_signals, lifecycle_requests) = mpsc::unbounded_channel();
         Self {
+            cache,
             #[cfg(test)]
             notice_completions: tokio::sync::broadcast::channel(32).0,
             directory: directory.into(),

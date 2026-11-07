@@ -1,6 +1,49 @@
 use super::*;
 
 #[tokio::test]
+async fn installation_show_transmits_the_observed_central_record_over_mcp() {
+    use crate::api_test_harness::{ServedApi, api_config, test_identity};
+    use board_sync_protocol::{FleetLinkRecord, FleetLinkRefusal, FleetLinkState};
+
+    // Arrange: the retained failed-start record is independent of a running session.
+    let peer = fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).expect("UUIDv7 peer");
+    let record = FleetLinkRecord {
+        peer,
+        endpoint: "wss://central.example.test/session".to_owned(),
+        state: FleetLinkState::Refused {
+            reason: FleetLinkRefusal::IdentityInUseElsewhere,
+            at: "2026-11-06T12:00:00Z".parse().expect("refusal timestamp"),
+        },
+        last_drop: None,
+        last_failure: None,
+    };
+    let application = test_identity()
+        .with_installation_peer(peer)
+        .expect("installation peer")
+        .with_fleet_link(board_fleet_sync::FleetLinkObservation::Failed(Box::new(
+            record.clone(),
+        )))
+        .build();
+    let directory = tempfile::tempdir().expect("service directory");
+    let listener = ServedApi::tcp(&api_config(application, directory.path())).await;
+
+    // Act: the real RMCP client crosses the listener and application boundary.
+    let result = listener
+        .call_tool("installation_show", serde_json::json!({}))
+        .await;
+    listener.stop().await;
+
+    // Assert: returning identity alone or dropping refusal details must fail.
+    assert_ne!(result.is_error, Some(true));
+    let identity = result.structured_content.expect("installation identity");
+    assert_eq!(identity["peerId"], peer.to_string());
+    assert_eq!(
+        identity["central"],
+        serde_json::to_value(record).expect("link record")
+    );
+}
+
+#[tokio::test]
 async fn installation_read_without_a_configured_peer_does_not_mint_an_identity() {
     let server = CollaborationMcpServer::catalog_only();
     assert!(server.application.installation_peer().is_none());

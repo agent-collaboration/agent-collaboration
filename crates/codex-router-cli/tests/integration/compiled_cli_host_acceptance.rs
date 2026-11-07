@@ -226,6 +226,17 @@ async fn run_host_install_journey(atomic_install: bool) -> Result<(), Box<dyn st
     install_curl_fixture(&curl_executable)?;
     let port = reserve_loopback_port()?;
     install_debug_profile(&codex_home, port)?;
+    // This journey owns Codex replacement, not ambient Claude/Cursor admission.
+    // Keep installed provider executables from changing its startup prerequisites.
+    std::fs::create_dir_all(&router_root)?;
+    let provider_configuration = serde_json::to_vec(&serde_json::json!({
+        "version": 1,
+        "providers": {
+            "claude": { "enabled": false, "executable": null, "arguments": [] },
+            "cursor": { "enabled": false, "executable": null, "arguments": [] }
+        }
+    }))?;
+    std::fs::write(router_root.join("providers.json"), &provider_configuration)?;
     let candidate_binary = PathBuf::from(env!("CARGO_BIN_EXE_codex-router"));
     let prior_binary = std::env::var_os("CODEX_ROUTER_RESTART_PRIOR_BINARY").map(PathBuf::from);
     if let Some(prior) = &prior_binary {
@@ -494,6 +505,10 @@ async fn run_host_install_journey(atomic_install: bool) -> Result<(), Box<dyn st
             &replacement_binary, &router_root, &codex_home, &socket_path, &["status"],
         ).await?;
         check(String::from_utf8_lossy(&after.stderr).contains("no shared Codex host is running"), "status did not report absence after stop")?;
+        check(
+            std::fs::read(router_root.join("providers.json"))? == provider_configuration,
+            "Host replacement changed the fixture's provider configuration",
+        )?;
         Ok::<(), Box<dyn std::error::Error>>(())
     }
     .await;

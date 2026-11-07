@@ -125,13 +125,19 @@ impl MailHarness {
             Arc::new(runtime_primitives::SystemClock),
         ));
         let projects = Arc::new(ProjectWriters::new(
-            &root,
-            central.peer,
-            &registry,
-            requests.clone(),
-            inputs.receiver,
-            readiness,
-            stopped.clone(),
+            crate::collaboration_runtime::board_composition::project_writers::ProjectWriterInputs {
+                cache: Arc::new(
+                    message_board_storage::FleetCache::open(&root.join("fleet-cache.sqlite"))
+                        .await?,
+                ),
+                directory: &root,
+                peer: central.peer,
+                registry: &registry,
+                requests: requests.clone(),
+                receiver: inputs.receiver,
+                welcomed: readiness,
+                stopped: stopped.clone(),
+            },
         ));
         projects.prepare_existing().await?;
         let (events, receiving) = mpsc::channel(128);
@@ -168,6 +174,7 @@ impl MailHarness {
                 requests.clone(),
                 MachineNoticeReactions::open(&root).await?,
                 MachineSessionEventOwners {
+                    link_failures: None,
                     projects: projects.clone(),
                     admission: Weak::new(),
                     fleet: Weak::new(),
@@ -317,6 +324,7 @@ impl MailHarness {
             self.requests.clone(),
             MachineNoticeReactions::open(&self.root).await?,
             MachineSessionEventOwners {
+                link_failures: None,
                 projects: self.projects.clone(),
                 admission: self.admission.clone(),
                 fleet: self.fleet.clone(),

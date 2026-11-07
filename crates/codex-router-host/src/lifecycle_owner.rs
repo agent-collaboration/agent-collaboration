@@ -651,6 +651,11 @@ impl HostRuntime {
                     let mcp_listen_address = collaboration.as_ref()
                         .and_then(|owner| owner.mcp_listen_address());
                     let (snapshot, status_identity) = status_observation.snapshot(&state, mcp_listen_address);
+                    let fleet = match &collaboration {
+                        Some(owner) => owner.observe_fleet().await,
+                        None => crate::FleetHostObservation::Unavailable { message: "collaboration runtime is not configured".to_owned() },
+                    };
+                    let snapshot = snapshot.with_fleet(fleet);
                     if pending_identity.is_none() {
                         pending_identity = status_identity;
                     }

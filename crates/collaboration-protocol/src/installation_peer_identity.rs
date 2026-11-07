@@ -10,6 +10,7 @@ pub struct InstallationIdentity {
     pub service_id: crate::UuidIdentity,
     pub machine_label: crate::MachineLabel,
     pub peer_id: InstallationPeerId,
+    pub central: Option<board_sync_protocol::FleetLinkRecord>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
