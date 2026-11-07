@@ -20,8 +20,16 @@
 # such as the debug Router a debug-host example launches, or the
 # board-debug-runtime Host that end-to-end tests start.
 #
-# Signing is a convenience: when it cannot happen the executable still runs,
-# linker-signed, and Keychain access prompts again after the next rebuild.
+# Tests also launch bin targets directly (env!("CARGO_BIN_EXE_<name>"), often
+# from a copy), bypassing the runner. So before running any executable the
+# runner also signs every executable at the top of its profile directory
+# (target/<profile>/), the files CARGO_BIN_EXE_* names. A copy keeps the
+# signature.
+#
+# On a developer Mac the runner fails closed: an executable it cannot sign is
+# never run, because every unsigned launch makes macOS verify it again and
+# raises security prompts. In GitHub Actions (no prompts, maybe no
+# certificate) it warns and runs the build linker-signed.
 set -euo pipefail
 
 if [[ "$(uname -s)" != Darwin ]]; then
@@ -39,16 +47,25 @@ debug_identifier_for() {
       echo "dev.shravansunder.$(basename "$1").debug"
       ;;
     *)
-      # Cargo test and example artifacts end in "-<hash>"; keep the stable name.
+      # Cargo test and example artifacts end in "-<16 hex digits>"; keep the
+      # stable name. Bin targets have no hash and may contain "-".
       local name
       name="$(basename "$1")"
-      echo "dev.shravansunder.test.${name%-*}"
+      if [[ "${name}" =~ ^(.+)-[0-9a-f]{16}$ ]]; then
+        name="${BASH_REMATCH[1]}"
+      fi
+      echo "dev.shravansunder.test.${name}"
       ;;
   esac
 }
 
 warn_unsigned() {
-  echo "cargo debug runner: $(basename "$1") stays linker-signed ($2); Keychain access prompts after each rebuild" >&2
+  if [[ "${GITHUB_ACTIONS:-}" == true ]]; then
+    echo "cargo debug runner: $(basename "$1") stays linker-signed ($2)" >&2
+    return 0
+  fi
+  echo "cargo debug runner: refusing to run unsigned $(basename "$1"): $2. Fix signing (login keychain unlocked, Developer ID for team ${DEVELOPER_ID_TEAM}); never run it unsigned." >&2
+  exit 1
 }
 
 has_debug_identity() {
@@ -106,6 +123,44 @@ sign_with_debug_identity() {
   fi
 }
 
+# Bin targets sit directly in the profile directory; test binaries in its
+# deps/ subdirectory and examples in examples/.
+profile_directory_for() {
+  local directory
+  directory="$(cd "$(dirname "$1")" && pwd)"
+  case "$(basename "${directory}")" in
+    deps | examples) dirname "${directory}" ;;
+    *) echo "${directory}" ;;
+  esac
+}
+
+# Sign every executable at the top of the profile directory that changed since
+# the last sweep (all of them on the first), so a test that launches
+# CARGO_BIN_EXE_<name> directly, or a copy of it, starts a signed build. A
+# stamp file keeps repeated launches (nextest runs each test binary many
+# times) to a find over new files.
+sign_profile_bins() {
+  local profile_directory="$1"
+  local stamp="${profile_directory}/.debug-signing-checked"
+  local candidate
+  # Global, so the EXIT trap can still see it after a refusal exits.
+  if ! sweep_stamp="$(mktemp "${stamp}.XXXXXX" 2>&1)"; then
+    warn_unsigned "${profile_directory}" "could not create the sweep stamp: ${sweep_stamp}"
+    return 0
+  fi
+  # A refusal exits the runner; don't leave the new stamp behind.
+  trap 'rm -f "${sweep_stamp}"' EXIT
+  local newer_than=()
+  if [[ -e "${stamp}" ]]; then
+    newer_than=(-newer "${stamp}")
+  fi
+  while IFS= read -r -d '' candidate; do
+    sign_with_debug_identity "${candidate}" "$(debug_identifier_for "${candidate}")"
+  done < <(find "${profile_directory}" -maxdepth 1 -type f -perm -u+x ! -name '*.dylib' ! -name '*.signing.*' ${newer_than[@]+"${newer_than[@]}"} -print0)
+  mv -f "${sweep_stamp}" "${stamp}"
+  trap - EXIT
+}
+
 if [[ "${1:-}" == "--sign-only" ]]; then
   shift
   for executable in "$@"; do
@@ -116,5 +171,6 @@ fi
 
 executable="$1"
 shift
+sign_profile_bins "$(profile_directory_for "${executable}")"
 sign_with_debug_identity "${executable}" "$(debug_identifier_for "${executable}")"
 exec "${executable}" "$@"

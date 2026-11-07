@@ -125,6 +125,8 @@ jobs:
           pnpm --dir scripts/verification/tui test
       - name: Test main cache pruning
         run: bash scripts/tests/test_main_cache_pruning.sh
+      - name: Test cargo debug signing runner
+        run: bash scripts/tests/test_cargo_debug_signing_runner.sh
       - name: Wait for runner disk cleanup
         wait-all:
       - name: Check Rust formatting
