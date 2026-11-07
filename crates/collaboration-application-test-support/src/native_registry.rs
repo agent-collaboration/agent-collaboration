@@ -5,20 +5,29 @@ use std::sync::Arc;
 
 type FixtureError = Box<dyn std::error::Error + Send + Sync>;
 
-pub fn new_registry(root: &std::path::Path) -> Result<Arc<ProjectStoreRegistry>, FixtureError> {
-    new_registry_with_clock(root, Arc::new(runtime_primitives::SystemClock))
+pub async fn new_registry(
+    root: &std::path::Path,
+) -> Result<Arc<ProjectStoreRegistry>, FixtureError> {
+    new_registry_with_clock(root, Arc::new(runtime_primitives::SystemClock)).await
 }
 
-pub fn new_registry_with_clock(
+/// Installs the board cursor key in the root's Fleet database, as the Host does, so each
+/// fixture root has its own key and keeps it across a fixture restart.
+pub async fn new_registry_with_clock(
     root: &std::path::Path,
     clock: Arc<dyn runtime_primitives::Clock>,
 ) -> Result<Arc<ProjectStoreRegistry>, FixtureError> {
+    let fleet = message_board_storage::FleetStore::open(
+        &root.join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?;
+    let cursor_key = collaboration_runtime::install_board_cursor_key(&fleet.cursors()).await;
+    fleet.close().await;
     Ok(Arc::new(ProjectStoreRegistry::new(
         root,
         Some(fixture_peer()?),
         clock,
-        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
-            .expect("32-byte fixture cursor key"),
+        cursor_key?,
     )))
 }
 

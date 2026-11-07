@@ -47,7 +47,7 @@ collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime"
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }
 chrono.workspace = true
-message-board-storage = { version = "0.1.96", path = "../message-board-storage" }
+message-board-storage = { version = "0.1.96", path = "../message-board-storage", features = ["test-support"] }
 collaboration-service = { version = "0.1.96", path = "../collaboration-service", features = ["test-support"] }
 board-fleet-sync = { version = "0.1.96", path = "../board-fleet-sync" }
 board-sync-protocol = { version = "0.1.96", path = "../board-sync-protocol" }

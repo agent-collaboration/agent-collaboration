@@ -55,6 +55,7 @@ tracing.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+message-board-storage = { path = "../message-board-storage", version = "0.1.20", features = ["test-support"] }
 codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.14", features = ["test-support"] }
 collaboration-application-test-support = { path = "../collaboration-application-test-support", version = "0.1.126" }
 node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }

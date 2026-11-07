@@ -12,8 +12,14 @@ seed integrity, message cutover, native inbox fidelity, publication and fleet
 owner routes. Its `update_ledger_journey` root drives the real update binary
 (J0) on a copy of `fixtures/populated-root`: refusal while the Host holds the
 root, a dry run that changes no byte, kills at each step-0001 barrier followed
-by a rerun, a never-connected root and an unexplained `fleet.sqlite`. Those
-cases sign the binary with the debug runner before launching it.
+by a rerun, a never-connected root, an unexplained `fleet.sqlite` and a Host
+stopped before recording its new store. Its `update_moves_journey` root (J4)
+covers steps 0005 and 0010: every fixture value carried into `fleet.sqlite`, a
+kill at each merge and rename barrier followed by a rerun, merged rows still
+only in the log right before the rename checkpoint, and a malformed source that
+stops the merge before it changes anything. These cases sign the binary with
+the debug runner before launching it, and read values raw from the stores, so
+their oracle is independent of the tool's code.
 `e2e/main.rs` retains the former `upgrade_binary_e2e` root, which drives the real
 importer CLI through preparation, publication, replay and restart journeys.
 Library and binary unit tests remain colocated.

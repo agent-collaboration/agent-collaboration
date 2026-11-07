@@ -488,6 +488,24 @@ impl FleetClient {
         )
         .await
     }
+    /// Pending creations for `workspace`, read through a held snapshot on its own
+    /// connection: inside a snapshot, `pending_workspace_projects` would wait for the
+    /// Fleet database's one connection, which the snapshot holds.
+    pub async fn pending_workspace_projects_in(
+        snapshot: &mut message_board_storage::FleetCacheSnapshot,
+        workspace: &message_board::WorkspaceId,
+        registry: &crate::ProjectStoreRegistry,
+    ) -> Result<Vec<message_board::ProjectId>, FleetClientError> {
+        Self::without_rejected(
+            snapshot
+                .pending_project_ids(workspace)
+                .await?
+                .into_iter()
+                .collect(),
+            registry,
+        )
+        .await
+    }
     async fn without_rejected(
         projects: std::collections::BTreeSet<message_board::ProjectId>,
         registry: &crate::ProjectStoreRegistry,

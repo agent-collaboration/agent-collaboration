@@ -127,7 +127,7 @@ async fn offline_project_creation_waits_for_the_central_decision_before_registra
             .join(project.as_str())
             .exists()
     );
-    assert!(!directory.path().join("fleet.sqlite").exists());
+    assert_no_local_fleet_authority(directory.path()).await?;
     offline.close().await;
 
     let (reconnected, runtime) =
@@ -149,7 +149,7 @@ async fn offline_project_creation_waits_for_the_central_decision_before_registra
         .clone();
     assert!(!registrations.is_empty());
     assert!(registrations.iter().all(|actual| actual == &project));
-    assert!(!directory.path().join("fleet.sqlite").exists());
+    assert_no_local_fleet_authority(directory.path()).await?;
     reconnected.close().await;
     runtime.shutdown().await?;
     Ok(())
@@ -279,8 +279,37 @@ async fn central_reply_cache_and_original_outbox_input_survive_restart()
         reopened.submit(&conflict, &origin).await?.result,
         RequestResult::ConflictingRequest
     );
-    assert!(!directory.path().join("fleet.sqlite").exists());
+    assert_no_local_fleet_authority(directory.path()).await?;
     reopened.close().await;
     runtime.shutdown().await?;
+    Ok(())
+}
+
+/// A Router keeps no Fleet authority of its own. This was once checked as "no
+/// fleet.sqlite", but that name was never a shipped file and is now the Router's own Fleet
+/// database, so the check reads what the stores hold: no store carries central's authority
+/// tables, and fleet.sqlite holds only the Router's cache, outbox, cursor-key and ledger.
+async fn assert_no_local_fleet_authority(
+    root: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use message_board_storage::router_store_contents::{
+        ROUTER_FLEET_TABLES, store_holding_central_authority, store_table_names,
+    };
+    if let Some((store, table)) = store_holding_central_authority(root).await? {
+        return Err(format!("Router root holds central's {table} in {}", store.display()).into());
+    }
+    let fleet = root.join(message_board_storage::FleetStore::FILE_NAME);
+    if fleet.exists() {
+        let foreign: Vec<String> = store_table_names(&fleet)
+            .await?
+            .into_iter()
+            .filter(|table| !ROUTER_FLEET_TABLES.contains(&table.as_str()))
+            .collect();
+        if !foreign.is_empty() {
+            return Err(
+                format!("fleet.sqlite holds tables a Router store never has: {foreign:?}").into(),
+            );
+        }
+    }
     Ok(())
 }

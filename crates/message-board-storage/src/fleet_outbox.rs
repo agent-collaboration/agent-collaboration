@@ -89,15 +89,7 @@ impl FleetOutbox {
         &self,
         workspace: &message_board::WorkspaceId,
     ) -> Result<Vec<message_board::ProjectId>, RouterLocalStorageError> {
-        let workspace = workspace.as_str();
-        let state = serde_json::to_string(&FleetOutboxState::Pending {})?;
-        let rows = sqlx_turso::query_scalar!(r#"SELECT json_extract(request, '$.operation.project') AS "project!: String" FROM fleet_outbox_requests WHERE state = ? AND json_extract(request, '$.workspace') = ? AND json_extract(request, '$.operation.kind') = 'projectDirectoryCreate' ORDER BY request_id"#, state, workspace).fetch_all(&self.database.pool).await?;
-        rows.into_iter()
-            .map(|id| {
-                message_board::ProjectId::try_from(id)
-                    .map_err(|_| RouterLocalStorageError::InvalidRecord)
-            })
-            .collect()
+        pending_project_ids_on(&self.database.pool, workspace).await
     }
     pub async fn pending_scoped_projects(
         &self,
@@ -359,4 +351,21 @@ async fn enqueue_request(
         request: request.clone(),
         state: FleetOutboxState::Pending {},
     })
+}
+
+/// Projects whose creation is still pending in the outbox for `workspace`, read on the
+/// given executor: the pool, or a Fleet read snapshot's own transaction.
+pub(crate) async fn pending_project_ids_on<'executor>(
+    executor: impl sqlx::Executor<'executor, Database = sqlx_turso::Turso>,
+    workspace: &message_board::WorkspaceId,
+) -> Result<Vec<message_board::ProjectId>, RouterLocalStorageError> {
+    let workspace = workspace.as_str();
+    let state = serde_json::to_string(&FleetOutboxState::Pending {})?;
+    let rows = sqlx_turso::query_scalar!(r#"SELECT json_extract(request, '$.operation.project') AS "project!: String" FROM fleet_outbox_requests WHERE state = ? AND json_extract(request, '$.workspace') = ? AND json_extract(request, '$.operation.kind') = 'projectDirectoryCreate' ORDER BY request_id"#, state, workspace).fetch_all(executor).await?;
+    rows.into_iter()
+        .map(|id| {
+            message_board::ProjectId::try_from(id)
+                .map_err(|_| RouterLocalStorageError::InvalidRecord)
+        })
+        .collect()
 }

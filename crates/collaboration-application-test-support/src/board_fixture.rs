@@ -162,7 +162,8 @@ impl BoardFixture {
     ) -> Result<Self, TestError> {
         let directory = tempfile::tempdir()?;
         std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
-        let registry = native_registry::new_registry_with_clock(directory.path(), clock.clone())?;
+        let registry =
+            native_registry::new_registry_with_clock(directory.path(), clock.clone()).await?;
         let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
             directory.path(),
             Arc::new(PendingRegistration),
@@ -376,7 +377,8 @@ impl BoardFixture {
             .await?;
         _fleet_runtime.shutdown().await?;
         after_close(_directory.path())?;
-        let registry = native_registry::new_registry_with_clock(_directory.path(), _clock.clone())?;
+        let registry =
+            native_registry::new_registry_with_clock(_directory.path(), _clock.clone()).await?;
         let (fleet, fleet_runtime) = if offline {
             let (requests, mut runtime) = board_central_test_support::machine_session(
                 _directory.path(),

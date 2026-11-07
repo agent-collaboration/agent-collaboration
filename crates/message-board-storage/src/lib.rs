@@ -2,8 +2,11 @@
 mod cursor_store;
 mod fleet_cache;
 mod fleet_cache_schema;
+mod fleet_snapshot_outbox;
 mod fleet_store;
 mod legacy_fleet_sources;
+#[cfg(feature = "test-support")]
+pub mod router_store_contents;
 pub use fleet_store::FleetStore;
 pub use legacy_fleet_sources::LegacyFleetSource;
 mod fleet_outbox;

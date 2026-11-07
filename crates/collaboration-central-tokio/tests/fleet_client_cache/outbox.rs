@@ -34,7 +34,7 @@ async fn pending_request_replays_through_the_session_and_keeps_central_provenanc
         pending.first().ok_or("missing pending request")?.request,
         offered
     );
-    assert!(!router_root.join("fleet.sqlite").exists());
+    assert_no_local_fleet_authority(&router_root).await?;
     offline.close().await;
 
     let jwks = JwksFixtureServer::start().await?;
@@ -85,7 +85,7 @@ async fn pending_request_replays_through_the_session_and_keeps_central_provenanc
         reader.fleet.request_effects(&effects_request).await?,
         receipt
     );
-    assert!(!router_root.join("fleet.sqlite").exists());
+    assert_no_local_fleet_authority(&router_root).await?;
     reader.shutdown().await?;
     live.shutdown().await?;
     jwks.shutdown().await?;

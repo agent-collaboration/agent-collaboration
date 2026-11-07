@@ -91,7 +91,7 @@ async fn child_capture_marks_wait_for_final_ack_and_survive_all_native_owners_re
     drop(store);
     drop(database);
     let directory = target.stop_and_keep_directory().await?;
-    let registry = crate::native_registry::new_registry(directory.path())?;
+    let registry = crate::native_registry::new_registry(directory.path()).await?;
     let store = registry
         .existing_project(&project)
         .await?

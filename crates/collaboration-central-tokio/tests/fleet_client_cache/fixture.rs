@@ -284,3 +284,30 @@ pub async fn assert_staging_rows(root: &Path, expected: i64) -> TestResult {
     reader.close().await?;
     Ok(())
 }
+
+/// A Router keeps no Fleet authority of its own. This was once checked as "no
+/// fleet.sqlite", but that name was never a shipped file and is now the Router's own Fleet
+/// database, so the check reads what the stores hold: no store carries central's authority
+/// tables, and fleet.sqlite holds only the Router's cache, outbox, cursor-key and ledger.
+pub async fn assert_no_local_fleet_authority(root: &Path) -> TestResult {
+    use message_board_storage::router_store_contents::{
+        ROUTER_FLEET_TABLES, store_holding_central_authority, store_table_names,
+    };
+    if let Some((store, table)) = store_holding_central_authority(root).await? {
+        return Err(format!("Router root holds central's {table} in {}", store.display()).into());
+    }
+    let fleet = root.join(message_board_storage::FleetStore::FILE_NAME);
+    if fleet.exists() {
+        let foreign: Vec<String> = store_table_names(&fleet)
+            .await?
+            .into_iter()
+            .filter(|table| !ROUTER_FLEET_TABLES.contains(&table.as_str()))
+            .collect();
+        if !foreign.is_empty() {
+            return Err(
+                format!("fleet.sqlite holds tables a Router store never has: {foreign:?}").into(),
+            );
+        }
+    }
+    Ok(())
+}
