@@ -11,6 +11,42 @@ impl ShellActor {
         host: &StoreHost,
         runtime: &RuntimeFace,
     ) -> Result<Option<Response>> {
+        #[cfg(feature = "conformance-faults")]
+        if request.path() == "/test/request-session-wake" {
+            use durable_steps::{AtomicStore, JournalScope};
+            let (connection, at): (
+                fleet_sync_protocol::ConnectionId,
+                collaboration_central_core::RegistryTime,
+            ) = request.json().await?;
+            let at = SyncTime::from_unix_millis(at.0.timestamp_millis());
+            host.store()
+                .transaction(move |scope| Box::pin(async move { scope.ensure_wake(at).await }))
+                .await
+                .map_err(error)?;
+            host.wake().wake_at(at).await.map_err(error)?;
+            return Response::from_json(&host.conformance_session_alarm(connection).await?)
+                .map(Some);
+        }
+        #[cfg(feature = "conformance-faults")]
+        if request.path() == "/test/seed-session-alarm" {
+            if !matches!(runtime, RuntimeFace::Fleet(_)) {
+                return Err(error("alarm fixture requires Fleet"));
+            }
+            let (now, at): (
+                collaboration_central_core::RegistryTime,
+                collaboration_central_core::RegistryTime,
+            ) = request.json().await?;
+            self.state
+                .storage()
+                .put(crate::composed_control::CLOCK_KEY, &now)
+                .await?;
+            self.faults.restore_clock(Some(now)).map_err(error)?;
+            self.state
+                .storage()
+                .set_alarm(worker::ScheduledTime::from(at.0))
+                .await?;
+            return Response::from_json(&()).map(Some);
+        }
         if request.path() == "/test/fleet-mail-custody" {
             let RuntimeFace::Fleet(runtime) = runtime else {
                 return Err(error("custody observation requires Fleet"));

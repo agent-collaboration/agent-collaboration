@@ -242,47 +242,6 @@ where
             .collect()
     }
 }
-pub(crate) fn read_expired_machine_notices<S>(
-    scope: &mut S,
-    machine_id: String,
-    now: String,
-) -> impl std::future::Future<Output = Result<Vec<StoredMachineNotice>, sqlx_core::Error>> + Send
-where
-    S: TransactionScope,
-    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
-    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
-    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
-{
-    async move {
-        let statement = query::<S::Database>(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/sql/machine_notices/read_expired_machine_notices.sql"
-        )))
-        .bind(machine_id)
-        .bind(now);
-        let rows = statement.fetch_all(scope.executor()).await?;
-        rows.iter()
-            .map(|row| {
-                Ok(StoredMachineNotice {
-                    notice_id: row.try_get("notice_id")?,
-                    machine_id: row.try_get("machine_id")?,
-                    position: row.try_get("position")?,
-                    position_class: row.try_get("position_class")?,
-                    kind: row.try_get("kind")?,
-                    project_id: row.try_get("project_id")?,
-                    epoch: row.try_get("epoch")?,
-                    created_at: row.try_get("created_at")?,
-                    created_class: row.try_get("created_class")?,
-                    expires_at: row.try_get("expires_at")?,
-                    expiry_class: row.try_get("expiry_class")?,
-                    updated_at: row.try_get("updated_at")?,
-                    updated_class: row.try_get("updated_class")?,
-                })
-            })
-            .collect()
-    }
-}
 pub(crate) fn prune_machine_notices<S>(
     scope: &mut S,
     machine_id: String,
@@ -311,18 +270,21 @@ pub(crate) struct MachineNoticeExpiry {
 }
 pub(crate) fn read_machine_notice_expiry<S>(
     scope: &mut S,
+    peer: String,
 ) -> impl std::future::Future<Output = Result<Option<MachineNoticeExpiry>, sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
     for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
     for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
         let statement = query::<S::Database>(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/sql/machine_notices/read_machine_notice_expiry.sql"
-        )));
+        )))
+        .bind(peer);
         let row = statement.fetch_optional(scope.executor()).await?;
         row.as_ref()
             .map(|row| {

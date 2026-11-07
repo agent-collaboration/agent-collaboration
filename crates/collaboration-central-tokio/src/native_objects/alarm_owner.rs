@@ -54,3 +54,7 @@ async fn drive(
     }
     *retry_delay = retry_delay.saturating_mul(2).min(MAXIMUM_RETRY_DELAY);
 }
+
+#[cfg(all(test, feature = "conformance"))]
+#[path = "alarm_owner_test.rs"]
+mod tests;

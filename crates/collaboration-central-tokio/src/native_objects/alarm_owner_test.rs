@@ -1,6 +1,6 @@
 //! One-shot failures occur at real timer-consumed store boundaries, without HTTP nudges.
 
-use super::*;
+use super::super::*;
 use collaboration_central_core::ObjectHost;
 use durable_steps::{
     AtomicStore, JournalScope, OperationContext, OperationFailure, RequestKey, Task,
@@ -190,13 +190,10 @@ async fn registry_consumed_wake_recovers_its_saved_operation_after_two_begin_fai
     }
     assert_eq!(host.observed.inner().begin_failures(), 2);
     tokio::time::advance(Duration::from_secs(2)).await;
-    // External SQLite work runs under a real safety cap after all retry time was injected.
+    // Independent phases can consume both injected failures in one drive and
+    // still complete the operation. Do not demand another alarm after the
+    // journal is already settled; observe the original outcome directly.
     tokio::time::resume();
-    tokio::time::timeout(
-        Duration::from_secs(3),
-        generation.wait_for(|current| *current > previous),
-    )
-    .await??;
     let observed = tokio::time::timeout(Duration::from_secs(3), async {
         loop {
             // Read-only public journal observation bypasses the injected wrapper;

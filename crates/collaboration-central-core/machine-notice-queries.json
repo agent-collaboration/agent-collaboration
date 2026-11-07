@@ -157,24 +157,6 @@
       ]
     },
     {
-      "name": "read_expired_machine_notices",
-      "sql": "sql/machine_notices/read_expired_machine_notices.sql",
-      "row": "StoredMachineNotice",
-      "result": "many",
-      "parameters": [
-        {
-          "name": "machine_id",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "now",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
       "name": "prune_machine_notices",
       "sql": "sql/machine_notices/prune_machine_notices.sql",
       "row": null,
@@ -197,7 +179,13 @@
       "sql": "sql/machine_notices/read_machine_notice_expiry.sql",
       "row": "MachineNoticeExpiry",
       "result": "optional",
-      "parameters": []
+      "parameters": [
+        {
+          "name": "peer",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
     },
     {
       "name": "read_machine_notice_bounds",

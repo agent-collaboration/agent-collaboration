@@ -136,6 +136,7 @@ enum Scenario {
     AccessCarryover,
     SessionCarryover,
     SessionCapabilities,
+    StaleAlarm,
     SessionFailures,
     HolderLifecycle,
     HolderSchemaOverlap,
@@ -225,6 +226,7 @@ async fn main() -> ConformanceResult<()> {
         Some("access-carryover") => Scenario::AccessCarryover,
         Some("session-carryover") => Scenario::SessionCarryover,
         Some("session-capabilities") => Scenario::SessionCapabilities,
+        Some("stale-alarm") => Scenario::StaleAlarm,
         Some("session-failures") => Scenario::SessionFailures,
         Some("holder-lifecycle") => Scenario::HolderLifecycle,
         Some("holder-schema-overlap") => Scenario::HolderSchemaOverlap,
@@ -392,6 +394,7 @@ async fn main() -> ConformanceResult<()> {
         Scenario::HolderLifecycle => normal_holder_cases::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::SessionFailures => normal_session_cases::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::SessionCapabilities => normal_capability_cases::run(&format!("http://127.0.0.1:{port}")).await,
+        Scenario::StaleAlarm => normal_capability_cases::stale_alarm(&format!("http://127.0.0.1:{port}")).await,
         Scenario::AccessCarryover => {
             let shared = collaboration_central_conformance::ConformanceClient::new(&format!(
                 "http://127.0.0.1:{port}"

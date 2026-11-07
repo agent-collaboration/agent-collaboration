@@ -132,8 +132,8 @@ pub(super) fn validate_alarm(sql: &[String], dispatches: usize, appends: usize) 
     const BOUNDS: &str = include_str!(
         "../../../collaboration-central-core/sql/machine_notices/read_machine_notice_bounds.sql"
     );
-    const EXPIRED: &str = include_str!(
-        "../../../collaboration-central-core/sql/machine_notices/read_expired_machine_notices.sql"
+    const RETAINED: &str = include_str!(
+        "../../../collaboration-central-core/sql/machine_notices/read_machine_notices.sql"
     );
     const EXPIRY: &str = include_str!(
         "../../../collaboration-central-core/sql/machine_notices/read_machine_notice_expiry.sql"
@@ -151,7 +151,7 @@ pub(super) fn validate_alarm(sql: &[String], dispatches: usize, appends: usize) 
         ),
         STATE,
         BOUNDS,
-        EXPIRED,
+        RETAINED,
         EXPIRY,
     ]
     .map(normalized);
@@ -167,7 +167,7 @@ pub(super) fn validate_alarm(sql: &[String], dispatches: usize, appends: usize) 
         )
         .into());
     };
-    let append = [STATE, BOUNDS, EXPIRED, STATE, BOUNDS,
+    let append = [STATE, BOUNDS, RETAINED, STATE, BOUNDS,
         include_str!("../../../collaboration-central-core/sql/machine_notices/append_machine_notice.sql"),
         include_str!("../../../collaboration-central-core/sql/machine_notices/advance_machine_notice_head.sql"), EXPIRY,
     ].map(normalized);
