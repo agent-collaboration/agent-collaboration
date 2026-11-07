@@ -1,7 +1,51 @@
 use std::{
     fs,
     path::{Path, PathBuf},
+    process::Command,
 };
+
+#[derive(serde::Deserialize)]
+struct CargoMetadata {
+    packages: Vec<CargoPackage>,
+}
+
+#[derive(serde::Deserialize)]
+struct CargoPackage {
+    name: String,
+    manifest_path: PathBuf,
+}
+
+fn durable_step_query_directory(manifest_directory: &Path) -> PathBuf {
+    let output = Command::new(env!("CARGO"))
+        .args(["metadata", "--locked", "--offline", "--format-version", "1"])
+        .arg("--manifest-path")
+        .arg(manifest_directory.join("Cargo.toml"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "cargo metadata failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let metadata: CargoMetadata = serde_json::from_slice(&output.stdout).unwrap();
+    let packages = metadata
+        .packages
+        .into_iter()
+        .filter(|package| package.name == "durable-steps")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        packages.len(),
+        1,
+        "expected one pinned durable-steps package"
+    );
+    packages
+        .first()
+        .unwrap()
+        .manifest_path
+        .parent()
+        .unwrap()
+        .join("queries")
+}
 
 fn sql_files(directory: &Path) -> Vec<PathBuf> {
     let mut paths = Vec::new();
@@ -18,15 +62,22 @@ fn sql_files(directory: &Path) -> Vec<PathBuf> {
 
 #[test]
 fn checked_write_and_identity_queries_never_evaluate_the_sql_wall_clock() {
-    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-    for (package, folder) in [
-        ("fleet-sync-delivery", "sql"),
-        ("fleet-sync-lease", "sql"),
-        ("fleet-sync-session", "sql"),
-        ("durable-steps", "queries"),
+    let manifest_directory = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let crates_directory = manifest_directory.parent().unwrap();
+    for (package, directory) in [
+        ("fleet-mail-delivery", manifest_directory.join("sql")),
+        (
+            "fleet-project-lease",
+            crates_directory.join("fleet-project-lease/sql"),
+        ),
+        ("fleet-session", crates_directory.join("fleet-session/sql")),
+        (
+            "durable-steps",
+            durable_step_query_directory(manifest_directory),
+        ),
     ] {
         let mut writes = 0;
-        for path in sql_files(&workspace.join(package).join(folder)) {
+        for path in sql_files(&directory) {
             let sql = fs::read_to_string(&path).unwrap();
             let statement = sql
                 .lines()
