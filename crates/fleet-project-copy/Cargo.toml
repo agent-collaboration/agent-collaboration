@@ -11,7 +11,7 @@ description = "Runtime-independent replication copy rules over borrowed SQLx sco
 [dependencies]
 durable-steps = { workspace = true }
 sqlx-core = { workspace = true, features = ["migrate"] }
-sqlx = { workspace = true, features = ["migrate", "macros"] }
+sqlx = { version = "=0.9.0", default-features = false, features = ["migrate", "macros"] }
 fleet-protocol = { workspace = true }
 serde.workspace = true
 serde_json = { workspace = true, features = ["float_roundtrip"] }
