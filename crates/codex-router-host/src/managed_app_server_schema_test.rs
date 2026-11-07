@@ -293,6 +293,11 @@ async fn host_starts_keep_the_bundle_in_use_and_bundles_used_within_thirty_days(
     // An export a crashed start never cleaned up.
     let crashed = directory.join("native-schema-export-01a1b6ff-0000-7000-8000-00000000c0de");
     std::fs::create_dir(&crashed)?;
+    // An interrupted generator leaves a partly written schema behind.
+    std::fs::write(
+        crashed.join("codex_app_server_protocol.schemas.json"),
+        br#"{"definitions":{"v2":{"ThreadReadParams":{"type":"obj"#,
+    )?;
 
     let mut b_name = None;
     for (start, executable) in [codex_a.as_path(), broken.as_path(), codex_b.as_path()]
