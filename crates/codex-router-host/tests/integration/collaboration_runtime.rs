@@ -246,6 +246,20 @@ async fn host_composes_discovery_and_retires_only_owned_communication_sockets() 
     )
     .await
     .unwrap_or_else(|error| panic!("export: {error}"));
+    // A bundle no start has used for 31 days; backend publication retires it.
+    let unused_bundle = codex_native_integration::NativeSchemaBundle::from_documents(
+        std::collections::BTreeMap::from([(
+            "codex_app_server_protocol.schemas.json".to_owned(),
+            br#"{"definitions":{"v2":{"unused":{}}}}"#.to_vec(),
+        )]),
+    )
+    .unwrap_or_else(|error| panic!("unused bundle: {error}"));
+    let unused_bundle_path = unused_bundle
+        .publish(
+            &root,
+            std::time::SystemTime::now() - std::time::Duration::from_secs(31 * 24 * 60 * 60),
+        )
+        .unwrap_or_else(|error| panic!("unused bundle publish: {error}"));
     let backend = tokio::net::UnixListener::bind(root.join("backend.sock"))
         .unwrap_or_else(|error| panic!("backend fixture: {error}"));
     let backend_task = tokio::spawn(async move {
@@ -328,6 +342,10 @@ async fn host_composes_discovery_and_retires_only_owned_communication_sockets() 
     assert_eq!(
         std::fs::read(&schema_path).unwrap_or_else(|error| panic!("published schema: {error}")),
         export.bundle().canonical_bytes()
+    );
+    assert!(
+        !unused_bundle_path.exists(),
+        "backend publication retires a bundle unused for 31 days"
     );
     let status = client
         .journal_status()

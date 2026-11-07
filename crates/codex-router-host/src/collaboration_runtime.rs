@@ -260,6 +260,8 @@ mod lifecycle;
 mod mail_delivery_composition;
 #[path = "collaboration_runtime/native_backend.rs"]
 mod native_backend;
+#[path = "collaboration_runtime/schema_bundle_retention.rs"]
+mod schema_bundle_retention;
 #[path = "collaboration_runtime/startup_composition.rs"]
 mod startup_composition;
 #[cfg(test)]

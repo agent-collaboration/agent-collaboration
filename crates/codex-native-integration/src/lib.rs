@@ -88,6 +88,7 @@ mod schema_export_collection;
 mod schema_json_validation;
 pub use native_schema_bundle::{NativeSchemaBundle, NativeSchemaError};
 pub use native_schema_digest::{NativeSchemaDigest, NativeSchemaDigestError};
+pub use schema_bundle_storage::{SchemaBundleRetirement, retire_unused_schema_bundles};
 mod native_thread_operations;
 pub use native_input_submission::NativeInputSubmission;
 

@@ -95,10 +95,10 @@ impl CollaborationRuntime {
         )
         .map_err(io::Error::other)?;
         let native_digest = if let Some(export) = &inputs.native_schema {
-            export
-                .bundle()
-                .publish(&inputs.directory)
-                .map_err(io::Error::other)?;
+            super::schema_bundle_retention::publish_in_use_schema_bundle(
+                &inputs.directory,
+                export.bundle(),
+            )?;
             let encoded = format!(
                 "sha256:{}",
                 export
