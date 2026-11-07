@@ -331,6 +331,7 @@ const typed = ${JSON.stringify(typed)};
 const frame = ${JSON.stringify(frame)};
 const effects = ${JSON.stringify(effects === null ? null : { ...effects, replyFrame: standInFrame(effects.replyRows) })};
 process.stdout.write('TUI_GRID READY 120 36 STREAM\\n');
+process.stdout.write('TUI_GRID BYTES ' + ${JSON.stringify(standInFrame(['› Ask Codex to do anything']))} + '\\n');
 let pending = '';
 process.stdin.on('data', (chunk) => {
 	pending += chunk.toString('utf8');

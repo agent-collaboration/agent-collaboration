@@ -201,6 +201,7 @@ async function controlledRun(options: CaseOptions = {}): Promise<{
 		}),
 	);
 	const core = await createTerminalCore(120, 36);
+	core.writeRaw(Buffer.from('\u001b[2J\u001b[H› Ask Codex to do anything'));
 	const hooks = cliPromptReadback({ target: fixture.target, declaration, evidence });
 	const journey = promptJourney({
 		provider: 'cursor',

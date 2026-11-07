@@ -32,6 +32,7 @@ import { gridLines } from '../terminal/terminal-grid.ts';
 import type { TerminalGrid } from '../terminal/terminal-grid.ts';
 import { renderOriginal } from '../terminal/terminal-original.ts';
 import { qualifyTerminal } from '../terminal/terminal-qualification.ts';
+import { requireLaunchComposer } from './codex-acp-composer-ready.ts';
 import { settleWholeRunFrames } from './codex-acp-frame-observation.ts';
 import {
 	codexInformationCommandSchema,
@@ -412,6 +413,9 @@ export async function driveCodexJourney(
 			throw new Error('CLI MCP guard requires the ordinary prompt then submission Enter');
 		await promptReadback.beforeInput();
 	}
+	const firstScene = journey.steps[0]?.checkpoint.scene;
+	if (firstScene === 'prompt-composed' || firstScene === 'skill-picker-open-1')
+		await requireLaunchComposer({ driver, keys, record });
 	await journey.steps.reduce<Promise<void>>(async (previous, step, index) => {
 		await previous;
 		if (promptReadback !== null && step.checkpoint.scene === 'prompt-replied')
