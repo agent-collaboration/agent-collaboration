@@ -65,7 +65,22 @@ async fn native_job_before_first_prompt_and_terminal_history_reach_public_api_wi
         ))
         .await
         .unwrap();
-    assert_eq!(count_background(&stored), 4);
+    assert_eq!(
+        count_background(&stored),
+        4,
+        "native coverage: {:?}; background jobs (handle, state): {:?}",
+        stored.native_coverage,
+        stored
+            .sessions
+            .iter()
+            .filter_map(|summary| match summary {
+                ProviderSessionSummary::ClaudeCodeBackground {
+                    job_handle, state, ..
+                } => Some((job_handle, state)),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    );
     let coverage = stored.native_coverage.as_ref().unwrap();
     assert_eq!(coverage.peer, NativeClaudeInventoryPart::NotRequested);
     assert_eq!(coverage.background, NativeClaudeInventoryPart::Complete);

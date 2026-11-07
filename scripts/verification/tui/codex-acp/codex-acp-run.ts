@@ -2,9 +2,9 @@
  * `capture-run.ts --codex-acp-only --codex-acp-plan PLAN.json [--check]`: one declared Codex ACP
  * journey in the unchanged installed Codex TUI, on the shared Rust TerminalDriver and wterm grid.
  * It qualifies the target before launch, renders same-byte original PNGs per checkpoint, requires
- * one unchanged Codex child and the declared checkpoint order, then exits Codex normally. Provider
- * effects, history and settings are decided separately by the same-session observer
- * (verification/observations/providers/acp/acp-journey-observation.ts); this run never claims them.
+ * one unchanged Codex child and the declared checkpoint order, then exits Codex normally. The
+ * ordinary-prompt input, turn, terminal outcome and reply are read back through ordinary MCP.
+ * Other effects, history and settings still need the same-session ACP observer.
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -13,6 +13,7 @@ import { isAbsolute, join } from 'node:path';
 
 import { z } from 'zod';
 
+import { declaredProviderSelectionSchema } from '../../../../verification/observations/mcp-control/observations/declared-model.ts';
 import { normalBuildManifestSchema } from '../../../../verification/observations/providers/acp/acp-metadata-models.ts';
 import {
 	MAX_ROUTE_PREFIX_BYTES,
@@ -31,11 +32,14 @@ import { gridLines } from '../terminal/terminal-grid.ts';
 import type { TerminalGrid } from '../terminal/terminal-grid.ts';
 import { renderOriginal } from '../terminal/terminal-original.ts';
 import { qualifyTerminal } from '../terminal/terminal-qualification.ts';
+import { requireLaunchComposer } from './codex-acp-composer-ready.ts';
 import { settleWholeRunFrames } from './codex-acp-frame-observation.ts';
 import {
 	codexInformationCommandSchema,
 	informationJourney,
 } from './codex-acp-information-scenes.ts';
+import { cliMcpEndpoint, cliPromptReadback } from './codex-acp-mcp-readback.ts';
+import type { PromptReadbackHooks } from './codex-acp-mcp-readback.ts';
 import {
 	codexMenuKeySchema,
 	codexSavedDefaultMessage,
@@ -179,6 +183,7 @@ export const codexAcpRunPlanSchema = z
 			z.strictObject({
 				kind: z.literal('prompt'),
 				provider: providerSchema,
+				selection: declaredProviderSelectionSchema,
 				prompt: codexOrdinaryPromptSchema,
 				completion: z.string().min(8),
 				reply_deadline_ms: z.number().int().positive().max(600_000),
@@ -315,6 +320,7 @@ export async function checkCodexAcp(plan: CodexAcpRunPlan): Promise<CodexJourney
 		throw new Error('the run must use the declared Node v26.13.0');
 	await qualifyTerminal();
 	qualifyCodexAcpTarget(plan.target);
+	if (plan.journey.kind === 'prompt') cliMcpEndpoint(plan.target);
 	const binding = claudeRouteBinding(plan);
 	if (binding !== null) {
 		requireClaudeRouteBinding(binding);
@@ -358,7 +364,7 @@ export function codexChild(output: string, target: CodexAcpTarget): ProcessIdent
 
 /** Writes one step's actions in order (one write each), then waits for its checkpoint frame. */
 export async function driveCodexStep(
-	driver: PtyGridDriver,
+	driver: Pick<PtyGridDriver, 'frameGeneration' | 'send' | 'waitForGrid'>,
 	step: CodexJourney['steps'][number],
 	keys: KeyProtocol,
 ): Promise<TerminalGrid> {
@@ -389,18 +395,36 @@ export interface RouteBaselineHook {
  * submission Enter, has not been sent.
  */
 export async function driveCodexJourney(
-	driver: PtyGridDriver,
+	driver: Pick<PtyGridDriver, 'frameGeneration' | 'send' | 'waitForGrid'>,
 	journey: CodexJourney,
 	keys: KeyProtocol,
 	record: (step: CodexJourney['steps'][number], grid: TerminalGrid) => Promise<void>,
 	routeBaseline: RouteBaselineHook | null,
+	promptReadback: PromptReadbackHooks | null = null,
 ): Promise<string[]> {
 	const observed: string[] = [];
+	if (promptReadback !== null) {
+		const [compose, submit] = journey.steps;
+		if (
+			compose?.checkpoint.scene !== 'prompt-composed' ||
+			submit?.checkpoint.scene !== 'prompt-replied' ||
+			JSON.stringify(submit.actions) !== JSON.stringify([{ kind: 'key', key: 'Enter' }])
+		)
+			throw new Error('CLI MCP guard requires the ordinary prompt then submission Enter');
+		await promptReadback.beforeInput();
+	}
+	const firstScene = journey.steps[0]?.checkpoint.scene;
+	if (firstScene === 'prompt-composed' || firstScene === 'skill-picker-open-1')
+		await requireLaunchComposer({ driver, keys, record });
 	await journey.steps.reduce<Promise<void>>(async (previous, step, index) => {
 		await previous;
+		if (promptReadback !== null && step.checkpoint.scene === 'prompt-replied')
+			await promptReadback.beforeSubmit();
 		const grid = await driveCodexStep(driver, step, keys);
 		await record(step, grid);
 		observed.push(step.checkpoint.scene);
+		if (promptReadback !== null && step.checkpoint.scene === 'prompt-replied')
+			await promptReadback.afterReply(gridLines(grid));
 		if (routeBaseline === null || step.checkpoint.scene !== routeBaseline.afterScene) return;
 		const submission = journey.steps[index + 1]?.actions;
 		if (JSON.stringify(submission) !== JSON.stringify([{ kind: 'key', key: 'Enter' }]))
@@ -417,7 +441,8 @@ export async function exitCodex(driver: PtyGridDriver, keys: KeyProtocol): Promi
 	await driver.waitForEof('codex /quit', UI_CHECKPOINT_MS);
 }
 
-export async function runCodexAcp(plan: CodexAcpRunPlan): Promise<void> {
+export async function runCodexAcp(declaredPlan: CodexAcpRunPlan): Promise<void> {
+	const plan = codexAcpRunPlanSchema.parse(declaredPlan);
 	const journey = await checkCodexAcp(plan);
 	if (existsSync(plan.output)) throw new Error('fresh Codex ACP output required');
 	mkdirSync(plan.output, { mode: 0o700 });
@@ -496,7 +521,20 @@ export async function runCodexAcp(plan: CodexAcpRunPlan): Promise<void> {
 				}),
 			);
 		};
-		observed = await driveCodexJourney(driver, journey, plan.keys, record, routeBaseline);
+		observed = await driveCodexJourney(
+			driver,
+			journey,
+			plan.keys,
+			record,
+			routeBaseline,
+			plan.journey.kind === 'prompt'
+				? cliPromptReadback({
+						target: plan.target,
+						declaration: plan.journey,
+						evidence: plan.output,
+					})
+				: null,
+		);
 		requireCheckpointSequence(observed, journey);
 		await exitCodex(driver, plan.keys);
 		// The PTY has ended: every byte of the run is retained, so every completed frame can be
@@ -523,7 +561,7 @@ export async function runCodexAcp(plan: CodexAcpRunPlan): Promise<void> {
 				originals,
 				complete: false,
 				limits:
-					'TUI scenes only; provider effect, history and settings need the same-session observer.',
+					'Ordinary prompt MCP reads retain Session/input/turn/outcome/reply; the native CLI operation identifier is unobservable. Other provider effects, history and settings need the same-session observer.',
 			},
 			null,
 			2,
