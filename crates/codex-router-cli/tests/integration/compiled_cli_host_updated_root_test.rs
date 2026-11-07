@@ -154,7 +154,16 @@ async fn a_host_starts_ready_on_a_never_connected_root_after_the_update() -> Tes
     }
     .await;
     let stopped = host_answer(&binary, &router_root, &codex_home, &socket_path, "stop").await;
-    let exited = tokio::time::timeout(HOST_SIGNAL_BOUND, host.wait()).await;
+    // A Host that doesn't exit after `stop` is killed here, which also ends its stderr,
+    // so neither this wait nor the drain below can outlast its bound.
+    let Ok(exited) = tokio::time::timeout(HOST_SIGNAL_BOUND, host.wait()).await else {
+        host.kill().await?;
+        return Err(format!(
+            "the Host did not exit within {HOST_SIGNAL_BOUND:?} of `host stop`; stderr: {}",
+            std::fs::read_to_string(&host_stderr).unwrap_or_default()
+        )
+        .into());
+    };
 
     // Assert
     let drained = ready.map_err(|error| {
@@ -163,11 +172,11 @@ async fn a_host_starts_ready_on_a_never_connected_root_after_the_update() -> Tes
             std::fs::read_to_string(&host_stderr).unwrap_or_default()
         ))
     })?;
-    drained.await??;
+    tokio::time::timeout(HOST_SIGNAL_BOUND, drained).await???;
     check(
         mode & 0o077 == 0,
         &format!("the update made the collaboration directory {mode:o}, not owner-private"),
     )?;
     check(stopped?.status.success(), "the Host must stop cleanly")?;
-    check(exited??.success(), "the Host must exit cleanly")
+    check(exited?.success(), "the Host must exit cleanly")
 }
