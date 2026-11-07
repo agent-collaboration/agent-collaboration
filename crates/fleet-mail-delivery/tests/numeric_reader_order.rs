@@ -1,5 +1,5 @@
 #![allow(clippy::unwrap_used)]
-mod support;
+use crate::support;
 use durable_steps::AtomicStore;
 use fleet_mail_delivery::*;
 use support::*;

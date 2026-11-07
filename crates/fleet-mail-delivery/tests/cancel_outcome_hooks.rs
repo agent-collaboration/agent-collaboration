@@ -1,9 +1,5 @@
 #![allow(clippy::unwrap_used)]
-#[path = "support/local_cancellation.rs"]
-mod local_cancellation;
-#[path = "support/projection.rs"]
-mod projection;
-mod support;
+use crate::{cancellation_support as local_cancellation, projection, support};
 
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
 use fleet_mail_delivery::*;
