@@ -52,7 +52,10 @@ impl ObservationJournal {
                 .busy_timeout(JOURNAL_BUSY_TIMEOUT),
             path,
         )?;
-        let mut connection = connect_journal(options).await?;
+        let mut connection = connect_journal(options, |options| async move {
+            SqliteConnection::connect_with(&options).await
+        })
+        .await?;
         prepare_existing_database(&mut connection, path).await?;
         let journal_id =
             crate::journal_migrations::initialize(&mut connection, new_identity).await?;
@@ -189,29 +192,41 @@ impl ObservationJournal {
     }
 }
 
-async fn connect_journal(options: SqliteConnectOptions) -> Result<SqliteConnection, sqlx::Error> {
-    let deadline = tokio::time::Instant::now() + JOURNAL_BUSY_TIMEOUT;
+async fn connect_journal<Connect, Attempt>(
+    options: SqliteConnectOptions,
+    mut connect: Connect,
+) -> Result<SqliteConnection, sqlx::Error>
+where
+    Connect: FnMut(SqliteConnectOptions) -> Attempt,
+    Attempt: std::future::Future<Output = Result<SqliteConnection, sqlx::Error>>,
+{
     // SQLx runs this last, restoring the normal busy timeout on a successful
-    // connection after establishment used only the remaining retry budget.
+    // connection after establishment used a shorter per-statement native wait.
     let options = options.pragma("busy_timeout", JOURNAL_BUSY_TIMEOUT.as_millis().to_string());
+    // The first attempt starts the retry-admission budget. Native busy timeouts
+    // apply per SQLite statement, so this is not a total wall-clock deadline.
+    let deadline = tokio::time::Instant::now() + JOURNAL_BUSY_TIMEOUT;
+    let mut result = connect(options.clone().busy_timeout(JOURNAL_BUSY_TIMEOUT)).await;
     loop {
-        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-        match SqliteConnection::connect_with(&options.clone().busy_timeout(remaining)).await {
+        let error = match result {
             Ok(connection) => return Ok(connection),
-            Err(error) => {
-                let is_busy = error
-                    .as_database_error()
-                    .is_some_and(|database| database.code().as_deref() == Some("5"));
-                let now = tokio::time::Instant::now();
-                if !is_busy || now >= deadline {
-                    return Err(error);
-                }
-                // SQLite's WAL-mode transition can return SQLITE_BUSY without
-                // invoking its busy handler. Drop that connection (and its
-                // locks), then retry establishment within the original budget.
-                tokio::time::sleep_until((now + Duration::from_millis(10)).min(deadline)).await;
-            }
+            Err(error) => error,
+        };
+        let is_busy = error
+            .as_database_error()
+            .is_some_and(|database| database.code().as_deref() == Some("5"));
+        let now = tokio::time::Instant::now();
+        if !is_busy || now >= deadline {
+            return Err(error);
         }
+        // WAL's lock upgrade can bypass SQLite's busy handler. A failed
+        // connection is dropped before considering another attempt.
+        tokio::time::sleep_until((now + Duration::from_millis(10)).min(deadline)).await;
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return Err(error);
+        }
+        result = connect(options.clone().busy_timeout(remaining)).await;
     }
 }
 
