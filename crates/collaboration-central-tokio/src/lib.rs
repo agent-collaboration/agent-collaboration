@@ -2,6 +2,8 @@
 #![forbid(unsafe_code)]
 
 mod access_crypto;
+mod person_dpop_crypto;
+pub use person_dpop_crypto::NativePersonDpopCrypto;
 #[cfg(feature = "conformance")]
 mod conformance_control;
 #[cfg(feature = "conformance")]

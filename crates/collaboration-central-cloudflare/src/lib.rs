@@ -14,6 +14,10 @@ mod conformance_capabilities;
 #[cfg(feature = "conformance")]
 mod conformance_core_store;
 #[cfg(feature = "conformance")]
+mod person_dpop_crypto;
+#[cfg(feature = "conformance")]
+mod person_dpop_probe;
+#[cfg(feature = "conformance")]
 pub use conformance_bootstrap::BootstrapObject;
 mod cloudflare_transport;
 #[cfg(feature = "conformance")]
@@ -30,6 +34,10 @@ pub use shared_object_store::CloudflareStorageHost;
 use worker::{Context, Env, Request, Response, Result, event};
 #[event(fetch)]
 pub async fn main(request: Request, env: Env, _context: Context) -> Result<Response> {
+    #[cfg(feature = "conformance")]
+    if request.path() == "/__conformance/person-dpop" {
+        return person_dpop_probe::fetch(request).await;
+    }
     let labels = access_verification::InvocationLabels::for_request(&request, &env)?;
     let request: worker::HttpRequest = request.try_into()?;
     let (parts, body) = request.into_parts();

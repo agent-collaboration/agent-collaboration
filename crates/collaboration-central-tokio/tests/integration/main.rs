@@ -1,5 +1,7 @@
 //! One namespace per original central runtime test root.
 
+mod person_dpop;
+
 #[cfg(feature = "conformance")]
 #[path = "../support/fleet_record_rows.rs"]
 mod fleet_record_rows;

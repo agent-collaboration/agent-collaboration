@@ -43,5 +43,5 @@ serde-wasm-bindgen = "0.6.5"
 sha2 = "0.10.9"
 thiserror = "2.0.18"
 uuid = { version = "=1.26.0", features = ["v7", "js"] }
-web-sys = { version = "=0.3.106", features = ["WorkerGlobalScope", "Crypto", "SubtleCrypto", "CryptoKey"] }
+web-sys = { version = "=0.3.106", features = ["WorkerGlobalScope", "Crypto", "SubtleCrypto", "CryptoKey", "Performance"] }
 js-sys = "=0.3.106"

@@ -1,5 +1,9 @@
 # Central Tokio tests
 
+- `integration/person_dpop.rs` checks fixed JOSE person-token/DPoP vectors against
+  the native signature adapter and runtime-free prototype verifier, using an
+  injected clock. It covers crypto/intent/time checks, not durable admission.
+
 Run this package's tests with nextest:
 
 ```sh
