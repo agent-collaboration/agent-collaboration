@@ -14,7 +14,7 @@ where
     TObservation:
         for<'runtime> std::ops::AsyncFnOnce(&'runtime mut CollaborationRuntime) -> TestResult,
 {
-    codex_router_test_support::scenario_finalization::run_scenario(
+    owned_process_test_support::scenario_finalization::run_scenario(
         runtime,
         async |runtime: &mut CollaborationRuntime| {
             observation(runtime).await.map_err(scenario_error)
