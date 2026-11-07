@@ -1,9 +1,11 @@
 //! J0 and J4 together: every PR A step, in order, on one root holding everything an
 //! older Router leaves: the populated Fleet stores, the old settings files, the old
 //! provider proxy store with rows only in its log, the dead files with approval routes,
-//! and an unfinished enrollment reset. A full update, and a kill at every barrier of
+//! an unfinished enrollment reset, and the machine's identity and enrollment files,
+//! which PR A leaves for PR B. A full update, and a kill at every barrier of
 //! every step followed by a rerun, both end at the same root: each step's values read
-//! back through their owners, and the root holds exactly the files listed below.
+//! back through their owners, the identity and enrollment files keep their bytes, and
+//! the root holds exactly the files listed below.
 use crate::update_ledger_journey::root_argument;
 use crate::update_moves_journey::fixture_values;
 use crate::update_proxy_store_journey::{
@@ -21,6 +23,7 @@ use codex_router_host::{
     router_fleet_database,
 };
 use message_board_storage::{RouterUpdateStep, read_update_ledger};
+use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
 
 /// Every barrier of every step, in the order the update reaches them.
@@ -60,6 +63,34 @@ struct OldRoot {
     proxy: ProxyValues,
     reset_journal: PathBuf,
     session_state: PathBuf,
+    /// Files PR A must not touch, with the bytes the older Router left in them.
+    kept_for_pr_b: Vec<(PathBuf, Vec<u8>)>,
+}
+
+/// The machine's identity and enrollment files as an older Router wrote them. PR B's
+/// step 0003 moves them; until then no PR A step reads, rewrites or removes them.
+fn write_identity_and_enrollment(root: &Path) -> UpdateResult<Vec<(PathBuf, Vec<u8>)>> {
+    let collaboration = router_collaboration_directory(root);
+    let fleet = root.join("fleet");
+    std::fs::DirBuilder::new().mode(0o700).create(&fleet)?;
+    let files = [
+        (
+            collaboration.join("service-identity.json"),
+            br#"{"version":1,"serviceId":"7c6c8a4e-3f1b-4b6a-9d2e-5a1f0c3b8e71"}"#.to_vec(),
+        ),
+        (
+            collaboration.join("installation-peer.json"),
+            br#"{"version":1,"peerId":"019f0000-0000-7000-8000-00000000d3f1"}"#.to_vec(),
+        ),
+        (
+            fleet.join("enrollment.json"),
+            br#"{"endpoint":"https://fleet.example.test","access":{"clientId":"d3-access-client","clientSecretKey":"fleet-access-client-secret"},"credentialKey":"fleet-machine-credential","peer":"019f0000-0000-7000-8000-00000000d3f1","receiver":"019f0000-0000-7000-8000-00000000d3f2","relay":"019f0000-0000-7000-8000-00000000d3f3","expiresAt":null}"#.to_vec(),
+        ),
+    ];
+    for (path, bytes) in &files {
+        std::fs::write(path, bytes)?;
+    }
+    Ok(files.into())
 }
 
 /// One root with everything an older Router leaves that PR A's steps handle.
@@ -76,12 +107,14 @@ async fn whole_old_root(root: &Path) -> UpdateResult<OldRoot> {
     let session_state = collaboration.join("machine-session/state.json");
     std::fs::create_dir_all(collaboration.join("machine-session"))?;
     std::fs::write(&session_state, b"old session cursor")?;
+    let kept_for_pr_b = write_identity_and_enrollment(root)?;
     Ok(OldRoot {
         fleet,
         settings,
         proxy,
         reset_journal,
         session_state,
+        kept_for_pr_b,
     })
 }
 
@@ -90,12 +123,14 @@ async fn whole_old_root(root: &Path) -> UpdateResult<OldRoot> {
 async fn assert_whole_update_finished(root: &Path, old: &OldRoot, context: &str) -> UpdateResult {
     // Listed before any check opens a store, since an open adds its own log files.
     // The Router root: the update's Host lock, the carried settings and machine list,
-    // the renamed proxy store with its lock folder, and the collaboration directory.
+    // the renamed proxy store with its lock folder, the enrollment folder PR B moves,
+    // and the collaboration directory.
     assert_eq!(
         names_in(root)?,
         [
             "agent-communication",
             "agent-sessions.jsonc",
+            "fleet",
             "host.lock",
             "provider-proxy.sqlite",
             "provider-proxy.sqlite.credential-locks",
@@ -105,17 +140,19 @@ async fn assert_whole_update_finished(root: &Path, old: &OldRoot, context: &str)
     );
     // The collaboration directory: the reset's lock file, which the Host also takes at
     // every start; the Fleet database and the store the routes moved into, each with
-    // the log Turso leaves on close; and the session folder the reset emptied. No older
-    // store, no JSON file, no dead file is left.
+    // the log Turso leaves on close; the two identity files PR B moves; and the session
+    // folder the reset emptied. No older store, no other JSON file, no dead file is left.
     assert_eq!(
         names_in(&router_collaboration_directory(root))?,
         [
             "enrollment-reset.lock",
             "fleet.sqlite",
             "fleet.sqlite-wal",
+            "installation-peer.json",
             "interaction.sqlite",
             "interaction.sqlite-wal",
             "machine-session",
+            "service-identity.json",
         ],
         "{context}: collaboration listing"
     );
@@ -131,6 +168,19 @@ async fn assert_whole_update_finished(root: &Path, old: &OldRoot, context: &str)
         vec![ROUTE_THREAD],
         "{context}: approval routes imported"
     );
+    assert_eq!(
+        names_in(&root.join("fleet"))?,
+        ["enrollment.json"],
+        "{context}"
+    );
+    for (path, bytes) in &old.kept_for_pr_b {
+        assert_eq!(
+            &std::fs::read(path)?,
+            bytes,
+            "{context}: {} must keep its bytes until PR B",
+            path.display()
+        );
+    }
     assert!(!old.reset_journal.exists(), "{context}: reset journal");
     assert!(!old.session_state.exists(), "{context}: session cursor");
     let ledger = read_update_ledger(&router_fleet_database(root)).await?;

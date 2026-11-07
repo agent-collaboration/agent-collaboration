@@ -31,7 +31,8 @@ the Host guard on a dead file, including one back after the update and one on a
 never-connected root. Its `update_whole_journey` root (J0 and J4 together) runs
 every PR A step in order on one root holding everything an older Router leaves:
 the populated stores, old settings, the old proxy store with rows only in its
-log, dead files with approval routes and an unfinished reset. A full update, and
+log, dead files with approval routes, an unfinished reset, and the identity and
+enrollment files PR B moves, which keep their bytes. A full update, and
 a kill at every barrier of every step followed by a rerun, end at the same root:
 each step's values through their owners and an exact listing of the root. These
 cases sign the binary with
