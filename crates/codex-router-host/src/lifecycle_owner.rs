@@ -48,6 +48,9 @@ mod request_admission;
 mod retained_lifecycle;
 mod startup_convergence;
 mod status_observation;
+#[cfg(test)]
+#[path = "lifecycle_owner_test.rs"]
+mod tests;
 mod update_activation;
 
 use retained_lifecycle::RuntimeState;
@@ -193,6 +196,26 @@ pub enum HostError {
 pub struct HostRuntime;
 
 pub type HostProgressCallback<'a> = &'a mut (dyn FnMut(Option<crate::HostProgress>) + Send);
+
+fn cancel_status_observation(
+    active_status: &mut Option<request_admission::ActiveStatusObservation>,
+    snapshot: HostSnapshot,
+) {
+    let Some(active) = active_status.take() else {
+        return;
+    };
+    for (request, response) in active.responses {
+        request_admission::send_terminal_response(
+            response,
+            request,
+            TerminalClassification::Unavailable,
+            snapshot.clone(),
+            "status observation cancelled because the collaboration runtime is retiring",
+        );
+    }
+    // Release any storage owner retained by the cancelled read before retirement.
+    drop(active.future);
+}
 
 impl HostRuntime {
     /// Acquires authority, converges startup, then owns all retained handles.
@@ -389,7 +412,7 @@ impl HostRuntime {
         loop {
             if let Some(owner) = &mut collaboration {
                 let result = if active_host_replacement.is_some() {
-                    drop(active_status.take());
+                    cancel_status_observation(&mut active_status, state.snapshot());
                     owner.shutdown().await
                 } else {
                     owner
@@ -400,13 +423,13 @@ impl HostRuntime {
                             } else {
                                 None
                             },
-                            || drop(active_status.take()),
+                            || cancel_status_observation(&mut active_status, state.snapshot()),
                         )
                         .await
                 };
                 if let Err(error) = result {
                     tracing::error!("collaboration lifecycle synchronization failed");
-                    drop(active_status.take());
+                    cancel_status_observation(&mut active_status, state.snapshot());
                     let cleanup = owner.shutdown().await;
                     if config.remote_access().is_some() {
                         let error = match cleanup {
@@ -439,7 +462,7 @@ impl HostRuntime {
             tokio::select! {
                 never = &mut login_reload, if matches!(state.phase, HostPhase::Steady) && app_server.is_some() => match never {},
                 failure = collaboration_lifecycle::wait_failure(&mut collaboration), if collaboration.is_some() => {
-                    drop(active_status.take());
+                    cancel_status_observation(&mut active_status, state.snapshot());
                     match failure {
                         crate::CollaborationFailure::LocalListener(error) => {
                             tracing::error!("collaboration listener failed");
@@ -768,7 +791,7 @@ impl HostRuntime {
                     });
                 }
                 _ = interrupt.recv() => {
-                    drop(active_status.take());
+                    cancel_status_observation(&mut active_status, state.snapshot());
                     let collaboration_shutdown = match &mut collaboration {
                         Some(owner) => owner.shutdown().await,
                         None => Ok(()),
@@ -791,7 +814,7 @@ impl HostRuntime {
                     return Ok(HostExit::Signal);
                 }
                 _ = terminate.recv() => {
-                    drop(active_status.take());
+                    cancel_status_observation(&mut active_status, state.snapshot());
                     let collaboration_shutdown = match &mut collaboration {
                         Some(owner) => owner.shutdown().await,
                         None => Ok(()),
@@ -814,7 +837,7 @@ impl HostRuntime {
                     return Ok(HostExit::Signal);
                 }
                 _ = hangup.recv() => {
-                    drop(active_status.take());
+                    cancel_status_observation(&mut active_status, state.snapshot());
                     let collaboration_shutdown = match &mut collaboration {
                         Some(owner) => owner.shutdown().await,
                         None => Ok(()),

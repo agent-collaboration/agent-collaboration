@@ -66,6 +66,7 @@ mod provider_startup_isolation;
 mod remote_wake;
 mod runtime_lifecycle;
 mod runtime_restart;
+mod runtime_status_retirement;
 mod session_message_route_composition;
 mod singleton_authority;
 mod stale_endpoint_sockets;
