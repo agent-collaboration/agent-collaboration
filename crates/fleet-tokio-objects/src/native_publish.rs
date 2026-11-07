@@ -9,7 +9,7 @@ use std::path::Path;
 
 impl<H: Host> TokioObject<H> {
     /// Permanently close one disposable generation after checkpointing its writes.
-    pub(crate) async fn close_for_read_copy(&self) -> Result<(), PublishError> {
+    pub async fn close_for_read_copy(&self) -> Result<(), PublishError> {
         let _engine = self.engine_work.lock().await;
         let mut owner = self.connection.lock().await;
         match &mut *owner {

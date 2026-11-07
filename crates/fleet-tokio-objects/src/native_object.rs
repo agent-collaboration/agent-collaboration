@@ -36,7 +36,7 @@ pub struct TokioObject<H: Host> {
     key: ObjectKey,
     path: PathBuf,
     pub(crate) options: ObjectOptions,
-    pub(crate) connection: Mutex<ObjectConnection>,
+    pub connection: Mutex<ObjectConnection>,
     host: Arc<H>,
     /// A publish also acquires this lock before draining the file connection.
     pub(crate) engine_work: Arc<Mutex<()>>,
@@ -50,7 +50,7 @@ pub enum TransactionReplyFault {
     Commit,
     Rollback,
 }
-pub(crate) enum ObjectConnection {
+pub enum ObjectConnection {
     Open(Box<TursoConnection>),
     Publishing,
     Closed,
@@ -188,7 +188,7 @@ impl<H: Host> TokioObject<H> {
     pub fn subscribe_commits(&self) -> watch::Receiver<()> {
         self.committed.subscribe()
     }
-    pub(crate) fn notify_committed(&self) {
+    pub fn notify_committed(&self) {
         self.committed.send_replace(());
     }
     pub async fn close(&self) -> Result<(), StoreError> {

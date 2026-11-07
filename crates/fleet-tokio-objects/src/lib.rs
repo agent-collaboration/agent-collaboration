@@ -1,8 +1,8 @@
 mod call_host;
-mod native_object;
+pub mod native_object;
 #[cfg(feature = "test-fault")]
 pub use native_object::TransactionReplyFault;
-mod native_publish;
+pub mod native_publish;
 mod object_key;
 mod object_runner;
 #[cfg(test)]
