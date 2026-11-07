@@ -181,9 +181,9 @@ const FLEET_ALARM_QUERIES: [(&str, &str); 11] = [
         ),
     ),
     (
-        "notices.expired",
+        "notices.rows",
         include_str!(
-            "../../../collaboration-central-core/sql/machine_notices/read_expired_machine_notices.sql"
+            "../../../collaboration-central-core/sql/machine_notices/read_machine_notices.sql"
         ),
     ),
     (
@@ -213,7 +213,7 @@ const FLEET_ALARM_QUERIES: [(&str, &str); 11] = [
 const NOTICE_APPEND_QUERY_OWNERS: [&str; 8] = [
     "notices.state",
     "notices.bounds",
-    "notices.expired",
+    "notices.rows",
     "notices.state",
     "notices.bounds",
     "notices.append",
@@ -245,7 +245,7 @@ pub fn fixed_fleet_maintenance_profiles(
         ("notices.peers", 1),
         ("notices.state", 1),
         ("notices.bounds", 1),
-        ("notices.expired", 1),
+        ("notices.rows", 1),
         ("notices.next_expiry", 1),
     ]);
     let mut observed = BTreeSet::new();
