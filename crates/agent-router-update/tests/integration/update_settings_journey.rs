@@ -139,7 +139,8 @@ async fn a_kill_at_every_step_0007_barrier_reruns_to_the_same_carried_settings()
     let markers = [
         "step-0007:settings-written",
         "step-0007:recorded-written",
-        "step-0007:old-file-removed",
+        "step-0007:old-file-removed:providers.json",
+        "step-0007:old-file-removed:ports.json",
         "step-0007:machine-list-renamed",
         "step-0007:done",
     ];

@@ -24,8 +24,8 @@ pub(crate) enum UpdateBarrier {
     SettingsFileWritten,
     /// Step 0007 recorded `settings.jsonc` written.
     SettingsRecordedWritten,
-    /// Step 0007 removed one carried old settings file.
-    SettingsOldFileRemoved,
+    /// Step 0007 removed this carried old settings file.
+    SettingsOldFileRemoved(&'static str),
     /// Step 0007 renamed `routers.jsonc` to `agent-sessions.jsonc`.
     MachineListRenamed,
     /// Step 0007 recorded itself done.
@@ -59,7 +59,7 @@ impl UpdateBarrier {
             Self::MergeDone => "step-0005:done".to_owned(),
             Self::SettingsFileWritten => "step-0007:settings-written".to_owned(),
             Self::SettingsRecordedWritten => "step-0007:recorded-written".to_owned(),
-            Self::SettingsOldFileRemoved => "step-0007:old-file-removed".to_owned(),
+            Self::SettingsOldFileRemoved(file) => format!("step-0007:old-file-removed:{file}"),
             Self::MachineListRenamed => "step-0007:machine-list-renamed".to_owned(),
             Self::SettingsDone => "step-0007:done".to_owned(),
             Self::RenameBeforeCheckpoint => "step-0010:before-checkpoint".to_owned(),

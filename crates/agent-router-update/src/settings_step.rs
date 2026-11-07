@@ -82,6 +82,10 @@ impl std::fmt::Display for SettingsChange {
                 into.display(),
                 joined(from)
             ),
+            SettingsFileChange::RemoveCarried { into, from } if from.is_empty() => format!(
+                "record the older settings files removed, already carried into {}",
+                into.display()
+            ),
             SettingsFileChange::RemoveCarried { into, from } => format!(
                 "remove {}, already carried into {}",
                 joined(from),
@@ -120,10 +124,12 @@ pub(crate) fn plan_settings_step(
         RouterUpdateStep::CarrySettingsFiles.number(),
         SETTINGS_LEDGER_SOURCE,
     ) == Some(UpdateSourceProgress::Written);
-    let settings = if from.is_empty() {
-        SettingsFileChange::Nothing
-    } else if written {
+    let settings = if written {
+        // Carried already: finish any removal left, and record it, even when a kill
+        // came after the last old file went but before its `removed` row.
         SettingsFileChange::RemoveCarried { into, from }
+    } else if from.is_empty() {
+        SettingsFileChange::Nothing
     } else if exists(&into)? {
         let expected = render_settings(root)?;
         let present = std::fs::read(&into).map_err(|source| RouterUpdateError::File {
@@ -293,7 +299,10 @@ async fn remove_carried(
                 });
             }
         }
-        barrier(UpdateBarrier::SettingsOldFileRemoved).await?;
+        barrier(UpdateBarrier::SettingsOldFileRemoved(carried_file_name(
+            path,
+        )))
+        .await?;
     }
     ledger
         .record_step_source(
@@ -303,6 +312,15 @@ async fn remove_carried(
         )
         .await
         .map_err(|source| store_error(store, source))
+}
+
+/// The old settings file's name as the catalog spells it, for its barrier marker.
+fn carried_file_name(path: &Path) -> &'static str {
+    SETTINGS_SOURCES
+        .iter()
+        .map(|(file, _)| *file)
+        .find(|file| path.file_name().and_then(|name| name.to_str()) == Some(*file))
+        .unwrap_or("unknown")
 }
 
 fn store_error(
