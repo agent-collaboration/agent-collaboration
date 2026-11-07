@@ -2,45 +2,6 @@
 use super::super::project_writers::NoticeHandling;
 use super::*;
 use fleet_sync_protocol::*;
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-
-struct ReadOnlyAttemptDirectory {
-    path: std::path::PathBuf,
-    original: std::fs::Permissions,
-}
-impl ReadOnlyAttemptDirectory {
-    fn hold(path: std::path::PathBuf) -> io::Result<Self> {
-        std::fs::create_dir(&path)?;
-        let original = std::fs::metadata(&path)?.permissions();
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o500))?;
-        let probe = path.join("permission-probe");
-        match std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(&probe)
-        {
-            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
-                Ok(Self { path, original })
-            }
-            result => {
-                std::fs::set_permissions(&path, original)?;
-                if result.is_ok() {
-                    std::fs::remove_file(probe)?;
-                }
-                Err(io::Error::other(
-                    "fixture did not establish an actual attempt-directory write failure",
-                ))
-            }
-        }
-    }
-}
-impl Drop for ReadOnlyAttemptDirectory {
-    fn drop(&mut self) {
-        let _ = std::fs::set_permissions(&self.path, self.original.clone());
-    }
-}
-
 async fn wait_notice_completion(
     received: &mut tokio::sync::broadcast::Receiver<(NoticePosition, NoticeHandling)>,
     wanted: NoticePosition,
@@ -115,8 +76,7 @@ async fn received_grant_record_failure_defers_later_notices_then_reconnect_recov
     let second_running = second_board.start().ok_or("second runtime")?;
     wait_welcome(second_projects.welcomed.clone()).await?;
     second_fleet.synchronize().await?;
-    let read_only = ReadOnlyAttemptDirectory::hold(second_root.join("snapshot-install-attempts"))?;
-    let original_permissions = read_only.original.mode();
+    let failure = CacheWriteFailure::hold(&second_root, CacheWriteTarget::InstallAttempt).await?;
     let mut first_notice = second_machine.hold_granted_notice(project.clone(), Epoch::new(3)?)?;
     let proof = async {
         let moved = fixture.central.move_project(DatabaseId::try_from(project.as_str().to_owned())?, &second_origin.installation, fleet_sync_protocol::TransferId::new(durable_steps::Uuid::now_v7())?).await?;
@@ -169,7 +129,7 @@ async fn received_grant_record_failure_defers_later_notices_then_reconnect_recov
         let session = board_fleet_sync::MachineSessionStore::open(&second_root).await?;
         let cursor = SessionClientStore::load(&session).await?.ok_or("real session state")?.notice_cursor;
         assert!(cursor < failed_position, "failed grant was acknowledged: cursor={cursor:?}, failure={failed_position:?}");
-        assert_eq!(std::fs::read_dir(second_root.join("snapshot-install-attempts"))?.count(), 0);
+        assert_eq!(attempt_count(&second_root).await?, 0);
         assert!(!second_root.join("projects").join(project.as_str()).exists());
         assert!(second_registry.existing_project(&project).await?.is_none());
         println!("NOTICE_ACK_CASE later_deferred_positions={},{} cursor={} failed={} no_seed_no_record", granted_position.value(), later_position.value(), cursor.value(), failed_position.value());
@@ -187,13 +147,7 @@ async fn received_grant_record_failure_defers_later_notices_then_reconnect_recov
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(later_position)
     }.await;
     drop(first_notice);
-    drop(read_only); // finally: restore exact directory permissions on every exit.
-    assert_eq!(
-        std::fs::metadata(second_root.join("snapshot-install-attempts"))?
-            .permissions()
-            .mode(),
-        original_permissions
-    );
+    let restored = failure.restore().await;
     let second_stopped = second_running.shutdown().await;
     drop(second_projects);
     drop(second_registry);
@@ -203,6 +157,7 @@ async fn received_grant_record_failure_defers_later_notices_then_reconnect_recov
         .close()
         .await;
     let recovery = async {
+        restored?;
         let through = proof?;
         println!("NOTICE_ACK_CASE failed_session_stopped_and_reopening");
         second_stopped?;
@@ -308,8 +263,9 @@ async fn recovered_prefix(
                 tokio::task::yield_now().await;
             }
         }).await??;
-        let bytes = std::fs::read(root.join("snapshot-install-attempts").join(format!("{}-e3.json", project.as_str())))?;
-        assert_eq!(std::fs::read_dir(root.join("snapshot-install-attempts"))?.count(), 1);
+        timeout(BOUND, projects.settle_operations()).await??;
+        assert!(attempt_record(&attempt_key(root, project, Epoch::new(3)?)).await?.is_none());
+        assert_eq!(attempt_count(root).await?, 0);
         let database = registry.database(project).await?;
         let installed = database.installed_snapshot().await?.ok_or("recovered native receipt")?;
         let mut observer = fleet_sync_tokio_runner::NativeWriterRuntime::<_, board_sync_protocol::BoardConsumerProtocol>::new(
@@ -317,6 +273,7 @@ async fn recovered_prefix(
         ).await?;
         observer.enable_snapshot_installs(&root.join("claim-installs").join(project.as_str())).await?;
         let install_record = observer.install_record(installed.install.install_id).await?;
+        let bytes = serde_json::to_vec(&install_record.request.attempt)?;
         assert_eq!(install_record.generation, 1);
         assert!(matches!(install_record.status, fleet_sync_tokio_runner::InstallStatus::Ready { .. }));
         let mut snapshot = store.snapshot().await?;

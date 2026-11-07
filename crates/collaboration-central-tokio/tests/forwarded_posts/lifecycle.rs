@@ -203,7 +203,7 @@ async fn await_empty_pending(root: &std::path::Path) -> ConformanceResult<()> {
     let proof = tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
             let row = query::<sqlx_turso::Turso>(
-                "SELECT count(*) AS pending FROM machine_forward_requests WHERE side='origin'",
+                "SELECT count(*) AS pending FROM machine_project_requests",
             )
             .fetch_one(&mut reader)
             .await?;

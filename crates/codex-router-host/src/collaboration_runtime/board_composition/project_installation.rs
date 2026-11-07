@@ -28,6 +28,49 @@ enum StoppedWriterRenewal {
 }
 
 impl ProjectWriters {
+    pub(super) async fn observe_completed_install(&self, project: &ProjectId) -> io::Result<()> {
+        let slot = self.writer_slot(project).await;
+        let owner = slot.lock().await;
+        if let ProjectWriterSlot::Ready(writer) = &*owner {
+            self.retire_completed_install_attempt(project, writer)
+                .await?;
+        }
+        Ok(())
+    }
+
+    pub(super) async fn retire_completed_install_attempt(
+        &self,
+        project: &ProjectId,
+        writer: &ProjectWriter,
+    ) -> io::Result<()> {
+        // A process can die after native publication but before cache cleanup.
+        // Reopened native Ready + Writing facts prove this attempt completed.
+        let fleet_sync_lease::WriterState::Writing { epoch } = writer
+            .store
+            .writer_state()
+            .await
+            .map_err(io::Error::other)?
+        else {
+            return Ok(());
+        };
+        if self
+            .registry()?
+            .database(project)
+            .await
+            .map_err(io::Error::other)?
+            .installed_snapshot()
+            .await
+            .map_err(io::Error::other)?
+            .is_some_and(|receipt| receipt.verified && receipt.ready)
+        {
+            self.cache
+                .complete_snapshot_install(project, epoch)
+                .await
+                .map_err(io::Error::other)?;
+        }
+        Ok(())
+    }
+
     /// Return after the durable attempt is admitted and its native runner is owned.
     pub(super) async fn prepare_snapshot_install(
         &self,
@@ -111,7 +154,7 @@ impl ProjectWriters {
         }
         *owner = ProjectWriterSlot::Empty;
         let attempt =
-            super::install_attempts::recorded_attempt(&self.directory, project, epoch).await?;
+            super::install_attempts::recorded_attempt(&self.cache, project, epoch).await?;
         let seed = registry
             .prepare_claim_seed(project, grant)
             .await
@@ -171,6 +214,10 @@ impl ProjectWriters {
                         return Ok(SnapshotAdmission::NoLongerOwned);
                     }
                     require_published_grant(&registry, project, writer, epoch, start).await?;
+                    self.cache
+                        .complete_snapshot_install(project, epoch)
+                        .await
+                        .map_err(io::Error::other)?;
                     return Ok(SnapshotAdmission::Ready);
                 }
                 ProjectWriterSlot::Installing(install) => install.clone(),
@@ -198,6 +245,7 @@ impl ProjectWriters {
                         return Ok(SnapshotAdmission::NoLongerOwned);
                     }
                     require_published_grant(&registry, project, writer, epoch, start).await?;
+                    self.cache.complete_snapshot_install(project, epoch).await.map_err(io::Error::other)?;
                     return Ok(SnapshotAdmission::Ready);
                 }
                 ProjectWriterSlot::Installing(current) if Arc::ptr_eq(current, &install) => {}
@@ -217,6 +265,7 @@ impl ProjectWriters {
                 self.stopped.clone(), self.lifecycle_signals.clone(),
             ).await?);
             writer.activate(project).await?;
+            self.cache.complete_snapshot_install(project, epoch).await.map_err(io::Error::other)?;
             *owner = ProjectWriterSlot::Ready(writer);
             Ok(SnapshotAdmission::Ready)
         }).await;

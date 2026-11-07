@@ -10,6 +10,8 @@ cargo nextest run --locked --profile ci -p codex-router-host --features keychain
 module namespace. The cases cover Host startup and configuration, singleton
 ownership, child process groups, update and restart lifecycles, enrollment,
 collaboration composition, provider routes, wakes and native inventory.
+Runtime replacement cases hold a real status probe across an app-server schema
+change and require one Unavailable terminal for each cancelled operator request.
 Library unit tests remain colocated with their implementations.
 
 The aggregate declares shared helper implementations once. Other directories

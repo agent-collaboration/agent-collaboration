@@ -18,7 +18,7 @@ use crate::{
 };
 use board_sync_protocol::BoardDeliveryTypes;
 use durable_steps::{
-    AtomicStore, BoxFuture, CallFailure, CallTarget, NotSentReason, StoreError,
+    AtomicStore, BoxFuture, CallFailure, CallTarget, JournalScope, NotSentReason, StoreError,
     storage::{JournalStorage, TransactionScope},
 };
 use fleet_sync_delivery::{DeliveryLimits, Outbox};
@@ -191,6 +191,12 @@ where
         })
     }
     pub async fn on_alarm(&self) -> Result<durable_steps::DriveReport, StoreError> {
+        // Callers combine this alarm with socket work. Keep all its phases in
+        // one heap-owned future rather than inflating every caller's frame.
+        Box::pin(self.drive_fleet_alarm()).await
+    }
+
+    async fn drive_fleet_alarm(&self) -> Result<durable_steps::DriveReport, StoreError> {
         let ObjectWork::Fleet {
             engine,
             host,
@@ -201,27 +207,46 @@ where
         else {
             return Err(wrong_face());
         };
-        self.prune_feed().await?;
+        let mut maintenance_failure = self.prune_feed().await.err();
         let now = runtime_primitives::Clock::now(shared_host.as_ref());
         replies.expire(now);
         if let Some(at) = replies.next_deadline() {
-            host.wake().wake_at(at).await.map_err(StoreError::backend)?;
+            let wake = host.wake().wake_at(at).await.map_err(StoreError::backend);
+            maintenance_failure = maintenance_failure.or(wake.err());
         }
         let (store, shared) = self.session_store()?;
         let now = runtime_primitives::Clock::now(shared.as_ref());
-        store
-            .transaction(move |scope| {
+        let forwards = store
+            .transaction(move |scope| Box::pin(async move { scope.expire_forwards(now).await }))
+            .await;
+        maintenance_failure = maintenance_failure.or(forwards.err());
+        let notices = crate::machine_notice_store::prune::<_, Host::Database>(store, now).await;
+        maintenance_failure = maintenance_failure.or(notices.err());
+        // Maintenance failure must not prevent the existing journal from
+        // deciding which unrelated operations can make progress.
+        let driven = engine.drive_due().await;
+        let rearmed = host
+            .store()
+            .transaction(|scope| {
                 Box::pin(async move {
-                    scope.expire_forwards(now).await?;
-                    crate::machine_notice_store::prune(scope, now).await?;
-                    if let Some(at) = crate::machine_notice_store::next_expiry(scope).await? {
-                        durable_steps::JournalScope::ensure_wake(scope, at).await?;
+                    if let Some(at) = scope.earliest().await? {
+                        scope.ensure_wake(at).await?;
                     }
                     Ok(())
                 })
             })
-            .await?;
-        let report = engine.drive_due().await?;
+            .await;
+        if let Err(failure) = &driven {
+            eprintln!("Fleet job drive failed: {failure}");
+        }
+        if let Err(failure) = &rearmed {
+            eprintln!("Fleet journal rearm failed: {failure}");
+        }
+        if let Some(failure) = maintenance_failure {
+            return Err(failure);
+        }
+        let report = driven?;
+        rearmed?;
         Ok(report)
     }
     pub async fn initialize(&self) -> Result<usize, StoreError> {

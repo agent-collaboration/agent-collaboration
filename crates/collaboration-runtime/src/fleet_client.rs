@@ -109,6 +109,7 @@ impl FleetClient {
         tokio::fs::create_dir_all(directory).await?;
         let outbox = FleetOutbox::open(&directory.join("fleet-outbox.sqlite")).await?;
         let cache = FleetCache::open(&directory.join("fleet-cache.sqlite")).await?;
+        cache.import_legacy_runtime(directory).await?;
         Ok(Self {
             session,
             outbox,
@@ -252,7 +253,9 @@ impl FleetClient {
         if matches!(reply.result, RequestResult::PendingUnreachable) {
             return Ok(reply);
         }
-        self.refresh_cache().await?;
+        if let Err(error) = self.refresh_cache().await {
+            tracing::warn!(%error, "Fleet projection refresh failed; submission reply retained");
+        }
         Ok(reply)
     }
 
@@ -294,7 +297,9 @@ impl FleetClient {
         if matches!(reply.result, RequestResult::PendingUnreachable) {
             return Ok(reply);
         }
-        self.refresh_cache().await?;
+        if let Err(error) = self.refresh_cache().await {
+            tracing::warn!(%error, "Fleet projection refresh failed; creation reply retained");
+        }
         Ok(reply)
     }
 

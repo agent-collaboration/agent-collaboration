@@ -12,13 +12,13 @@ use super::{
 
 #[tool_router(router = session_tool_router, vis = "pub(super)")]
 impl CollaborationMcpServer {
-    #[tool(name = "installation_show", description = "Shows this Router's stable installation peer for admin enrollment. Read-only; does not enroll or change the installation.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<InstallationIdentity>>())]
+    #[tool(name = "installation_show", description = "Shows this Router's stable installation peer and current central link observation. Read-only; does not enroll or change the installation.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<InstallationIdentity>>())]
     pub(super) async fn installation_show(
         &self,
         Parameters(EmptyToolInput {}): Parameters<EmptyToolInput>,
     ) -> CallToolResult {
         application_result(
-            self.application.sessions().installation_show(),
+            self.application.sessions().installation_show().await,
             OperationEffect::None,
         )
     }

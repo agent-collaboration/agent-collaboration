@@ -93,7 +93,7 @@ pub mod schema_fingerprint;
 pub use cursor_store::{CursorSigningKey, CursorStore};
 pub use fleet_cache::{
     FleetCache, FleetCacheRebuild, FleetCacheSnapshot, FleetDiscoveryKey, FleetListFilter,
-    FleetRecordSnapshot, StoredFleetRecord,
+    FleetRecordSnapshot, SnapshotInstallAttempt, StoredFleetRecord,
 };
 pub use fleet_outbox::{FleetOutbox, FleetOutboxEntry, FleetOutboxState};
 pub use fleet_storage_error::FleetStorageError;

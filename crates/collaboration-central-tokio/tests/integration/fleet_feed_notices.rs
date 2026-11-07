@@ -59,15 +59,15 @@ async fn feed(fixture: &Fixture, after: u64) -> TestResult<BoardReadPage> {
             .await?,
     )?)
 }
-async fn notices(fixture: &Fixture) -> TestResult<Vec<(String, i64, i64)>> {
+async fn notices(fixture: &Fixture) -> TestResult<Vec<(String, i64)>> {
     Ok(fixture.store.transaction(|scope|Box::pin(async move {
-        query::<sqlx_turso::Turso>("SELECT machine_id,notice_id,position,kind,feed_through FROM machine_control_notices ORDER BY machine_id,position")
+        query::<sqlx_turso::Turso>("SELECT machine_id,notice_id,position,kind FROM machine_control_project_notices ORDER BY machine_id,position")
             .fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter()
             .map(|row| {
-                if row.try_get::<String,_>("machine_id").map_err(StoreError::backend)? != A || row.try_get::<String,_>("kind").map_err(StoreError::backend)? != "fleet_feed_advanced" {
+                if row.try_get::<String,_>("machine_id").map_err(StoreError::backend)? != A || row.try_get::<String,_>("kind").map_err(StoreError::backend)? != "project_list_changed" {
                     return Err(StoreError::Aborted {reason:"unexpected notice recipient or kind".into()});
                 }
-                Ok((row.try_get("notice_id").map_err(StoreError::backend)?,row.try_get("position").map_err(StoreError::backend)?,row.try_get("feed_through").map_err(StoreError::backend)?))
+                Ok((row.try_get("notice_id").map_err(StoreError::backend)?,row.try_get("position").map_err(StoreError::backend)?))
             }).collect::<Result<_,StoreError>>()
     })).await?)
 }
@@ -107,6 +107,10 @@ async fn rejected_local_dispatch_recovers_after_fleet_reopen_without_changing_th
     assert_eq!(fixture.runtime.on_alarm().await?.retried.len(), 1);
     let frozen = calls(&fixture)?;
     assert_eq!(frozen.len(), 1);
+    assert_eq!(
+        frozen[0]["request"]["kind"], "projectListChanged",
+        "directory changes must produce the shared project-list hint"
+    );
     assert!(notices(&fixture).await?.is_empty());
     fixture.close().await?;
 
@@ -117,7 +121,10 @@ async fn rejected_local_dispatch_recovers_after_fleet_reopen_without_changing_th
     assert_eq!(reopened.runtime.on_alarm().await?.completed.len(), 1);
     let committed = notices(&reopened).await?;
     assert_eq!(committed.len(), 1);
-    assert_eq!((committed[0].1, committed[0].2), (1, 2));
+    assert_eq!(committed[0].1, 1);
+    assert!(
+        matches!(feed(&reopened, 0).await?, BoardReadPage::FleetFeed(FleetFeedRead::Page { through, head, records, .. }) if through.get() == 2 && head.get() == 2 && records.len() == 2)
+    );
     assert!(runtime_primitives::uuid_v7(durable_steps::Uuid::parse_str(
         &committed[0].0
     )?));
@@ -222,9 +229,9 @@ async fn lost_offered_page_keeps_its_applied_cursor_and_a_later_append_still_hin
     fixture.runtime.on_alarm().await?;
     let rows = notices(&fixture).await?;
     assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].2, 4);
+    assert_eq!(rows[0].1, 1);
     assert!(
-        matches!(feed(&fixture,4).await?,BoardReadPage::FleetFeed(FleetFeedRead::Page {records,..}) if records.is_empty())
+        matches!(feed(&fixture,4).await?,BoardReadPage::FleetFeed(FleetFeedRead::Page {records,head,through,..}) if records.is_empty() && head.get() == 4 && through.get() == 4)
     );
     feed(&fixture, 2).await?;
     assert_eq!(reader(&fixture).await?, (before.0, 4));

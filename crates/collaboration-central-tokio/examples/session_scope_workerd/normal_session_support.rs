@@ -101,6 +101,22 @@ impl NormalSession {
     }
 
     pub async fn replacement(&self, base: &str, label: &str, now: i64) -> ConformanceResult<Self> {
+        let mut replacement = self.open_replacement(base, label).await?;
+        replacement.pin(base, now).await?;
+        replacement.hello().await?;
+        replacement.pin(base, now).await?;
+        replacement.welcome().await?;
+        Ok(replacement)
+    }
+
+    pub async fn reconnect(&self, base: &str, label: &str) -> ConformanceResult<Self> {
+        let mut replacement = self.open_replacement(base, label).await?;
+        replacement.hello().await?;
+        replacement.welcome().await?;
+        Ok(replacement)
+    }
+
+    async fn open_replacement(&self, base: &str, label: &str) -> ConformanceResult<Self> {
         let admitted = enroll_open_peer_with_label(
             &ConformanceClient::new(base)?,
             &self.service,
@@ -124,19 +140,14 @@ impl NormalSession {
             .and_then(Value::as_str)
             .ok_or("replacement Opening connection missing")?
             .to_owned();
-        let mut replacement = Self {
+        Ok(Self {
             base: base.to_owned(),
             service: self.service.clone(),
             peer: admitted.peer,
             session: self.session.clone(),
             connection,
             socket: admitted.socket,
-        };
-        replacement.pin(base, now).await?;
-        replacement.hello().await?;
-        replacement.pin(base, now).await?;
-        replacement.welcome().await?;
-        Ok(replacement)
+        })
     }
 
     pub async fn registration(&self, base: &str) -> ConformanceResult<Value> {

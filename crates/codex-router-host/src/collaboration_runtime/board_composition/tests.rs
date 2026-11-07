@@ -9,6 +9,16 @@ use message_board::*;
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, path::Path, sync::atomic::Ordering};
 use tokio::{sync::watch, time::timeout};
+#[path = "tests/install_attempt_completion_test.rs"]
+mod install_attempt_completion_test;
+#[path = "tests/install_attempt_observer.rs"]
+mod install_attempt_observer;
+pub(super) use install_attempt_observer::{
+    attempt_bytes, attempt_count, attempt_key, attempt_record,
+};
+#[path = "tests/cache_write_failure.rs"]
+mod cache_write_failure;
+use cache_write_failure::{CacheWriteFailure, CacheWriteTarget};
 
 #[path = "tests/archive_observation.rs"]
 mod archive_observation;
@@ -32,6 +42,8 @@ mod claim_refusals;
 mod claim_restart;
 #[path = "tests/directory_inputs.rs"]
 mod directory_inputs;
+#[path = "tests/duplicate_machine_identity.rs"]
+mod duplicate_machine_identity;
 #[cfg(feature = "runtime-test-support")]
 #[path = "tests/forwarded_notification_fixture.rs"]
 mod forwarded_notification_fixture;

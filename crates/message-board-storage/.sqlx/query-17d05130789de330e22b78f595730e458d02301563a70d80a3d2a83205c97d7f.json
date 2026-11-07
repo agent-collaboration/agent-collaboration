@@ -1,0 +1,172 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT id AS \"id!: String\", peer_id AS \"peer_id!: String\", endpoint AS \"endpoint!: String\", instance AS \"instance!: String\", connection AS \"connection!: String\", revision AS \"revision!: String\", state_kind AS \"state_kind!: String\", state_since AS \"state_since!: String\", connecting_attempt AS \"connecting_attempt?: i64\", last_frame_at AS \"last_frame_at?: String\", refusal_kind AS \"refusal_kind?: String\", refusal_detail AS \"refusal_detail?: String\", last_drop_kind AS \"last_drop_kind?: String\", last_drop_at AS \"last_drop_at?: String\", last_drop_connection AS \"last_drop_connection?: String\", last_failure_kind AS \"last_failure_kind?: String\", last_failure_detail AS \"last_failure_detail?: String\", last_failure_at AS \"last_failure_at?: String\", created_at AS \"created_at!: String\", updated_at AS \"updated_at!: String\" FROM fleet_link_state",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "peer_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "endpoint!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "instance!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "connection!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "revision!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "state_kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "state_since!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "connecting_attempt?: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "last_frame_at?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "refusal_kind?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "refusal_detail?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "last_drop_kind?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "last_drop_at?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "last_drop_connection?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "last_failure_kind?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "last_failure_detail?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "last_failure_at?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "created_at!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "updated_at!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "17d05130789de330e22b78f595730e458d02301563a70d80a3d2a83205c97d7f"
+}
