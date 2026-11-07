@@ -1,0 +1,28 @@
+{
+  "source_head": "09a23bc78a55835704e386f66bd0ef3edcdd8128",
+  "vectors_passed": 43,
+  "first_probe": {
+    "name": "valid",
+    "expected": "verified",
+    "observed": "verified",
+    "worker_elapsed_ms": 5,
+    "client_wall_ms": 36.1223329999998,
+    "cpu_ms": null
+  },
+  "batch_count": 10,
+  "calls_per_batch": 1000,
+  "total_measured_calls": 10000,
+  "worker_ms_per_call_mean": 0.14889999999999998,
+  "worker_ms_per_call_median": 0.1475,
+  "worker_ms_per_call_min": 0.145,
+  "worker_ms_per_call_max": 0.16,
+  "client_batch_ms_per_call_mean": 0.1508929042999999,
+  "observed_tail_events": 53,
+  "reported_cpu_values": [
+    0
+  ],
+  "reported_wall_values": [
+    0
+  ],
+  "interpretation": "Local elapsed microbenchmark only. The local trace CPU=0 and wall=0 counters are unusable for CPU/billing conclusions."
+}

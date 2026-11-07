@@ -1,0 +1,17 @@
+Default host: aarch64-apple-darwin
+rustup home:  /Users/shravansunder/.rustup
+
+installed toolchains
+--------------------
+stable-aarch64-apple-darwin (default)
+nightly-aarch64-apple-darwin
+1.59-aarch64-apple-darwin
+1.98.1-aarch64-apple-darwin (active)
+
+active toolchain
+----------------
+name: 1.98.1-aarch64-apple-darwin
+active because: overridden by '/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/rust-toolchain.toml'
+installed targets:
+  aarch64-apple-darwin
+  wasm32-unknown-unknown

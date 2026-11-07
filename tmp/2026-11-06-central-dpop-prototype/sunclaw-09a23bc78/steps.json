@@ -1,0 +1,204 @@
+{
+  "source_head": "09a23bc78a55835704e386f66bd0ef3edcdd8128",
+  "steps": [
+    {
+      "name": "rust-toolchain",
+      "command": "rustup",
+      "args": [
+        "show"
+      ],
+      "status": 0
+    },
+    {
+      "name": "install-node",
+      "command": "npm",
+      "args": [
+        "install",
+        "--prefix",
+        "/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/tmp/2026-11-06-central-dpop-prototype/tools/node",
+        "--no-save",
+        "node@26.11.1",
+        "pnpm@12.14.0"
+      ],
+      "status": 0
+    },
+    {
+      "name": "node-version",
+      "command": "node",
+      "args": [
+        "--version"
+      ],
+      "status": 0
+    },
+    {
+      "name": "install-verification",
+      "command": "pnpm",
+      "args": [
+        "--dir",
+        "verification",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "status": 0
+    },
+    {
+      "name": "fmt",
+      "command": "cargo",
+      "args": [
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "status": 0
+    },
+    {
+      "name": "native-clippy",
+      "command": "cargo",
+      "args": [
+        "clippy",
+        "--locked",
+        "-p",
+        "collaboration-central-core",
+        "-p",
+        "collaboration-central-tokio",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "status": 0
+    },
+    {
+      "name": "native-vectors",
+      "command": "cargo",
+      "args": [
+        "nextest",
+        "run",
+        "--locked",
+        "-p",
+        "collaboration-central-tokio",
+        "--test",
+        "integration",
+        "-E",
+        "test(person_dpop::)"
+      ],
+      "status": 0
+    },
+    {
+      "name": "install-worker-build",
+      "command": "cargo",
+      "args": [
+        "install",
+        "worker-build",
+        "--version",
+        "0.8.7",
+        "--locked",
+        "--root",
+        "/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/tmp/2026-11-06-central-dpop-prototype/tools",
+        "--target-dir",
+        "/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/target"
+      ],
+      "status": 0
+    },
+    {
+      "name": "worker-build",
+      "command": "worker-build",
+      "args": [
+        "crates/collaboration-central-cloudflare",
+        "--profile",
+        "worker-release",
+        "--no-opt",
+        "--",
+        "--locked",
+        "--features",
+        "conformance"
+      ],
+      "status": 0
+    },
+    {
+      "name": "worker-clippy",
+      "command": "cargo",
+      "args": [
+        "clippy",
+        "--locked",
+        "-p",
+        "collaboration-central-cloudflare",
+        "--target",
+        "wasm32-unknown-unknown",
+        "--features",
+        "conformance",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "status": 0
+    },
+    {
+      "name": "verification-check",
+      "command": "pnpm",
+      "args": [
+        "--dir",
+        "verification",
+        "run",
+        "check"
+      ],
+      "status": 0
+    },
+    {
+      "name": "verification-lint",
+      "command": "pnpm",
+      "args": [
+        "--dir",
+        "verification",
+        "run",
+        "lint"
+      ],
+      "status": 0
+    },
+    {
+      "name": "verification-format",
+      "command": "pnpm",
+      "args": [
+        "--dir",
+        "verification",
+        "run",
+        "format:check"
+      ],
+      "status": 0
+    },
+    {
+      "name": "verification-tests",
+      "command": "pnpm",
+      "args": [
+        "--dir",
+        "verification",
+        "test"
+      ],
+      "status": 0
+    },
+    {
+      "name": "workerd-probe",
+      "command": "node",
+      "args": [
+        "verification/tooling/measure-person-dpop.ts",
+        "/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/tmp/2026-11-06-central-dpop-prototype/sunclaw-09a23bc78/workerd-measurement.json"
+      ],
+      "status": 0
+    },
+    {
+      "name": "module-cycle-ratchet",
+      "command": "cargo",
+      "args": [
+        "nextest",
+        "run",
+        "--locked",
+        "-p",
+        "workspace-architecture-check",
+        "--run-ignored",
+        "only"
+      ],
+      "status": 100
+    }
+  ]
+}

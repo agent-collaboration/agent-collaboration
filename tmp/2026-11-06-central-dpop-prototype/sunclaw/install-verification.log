@@ -1,0 +1,27 @@
+? Verifying lockfile against supply-chain policies (125 entries)...
+Packages are cloned from the content-addressable store to the virtual store.
+  Content-addressable store is at: /Users/shravansunder/Library/pnpm/store/v11
+  Virtual store is at:             node_modules/.pnpm
+✓ Lockfile passes supply-chain policies (125 entries in 913ms)
+Lockfile is up to date, resolution step is skipped
+Packages: +40
+++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 40, reused 40, downloaded 0, added 40, done
+
+dependencies:
++ lossless-json 4.3.3
++ miniflare 5.20261012.0-beta
++ smol-toml 1.9.1
++ workerd 1.20261012.1
++ ws 8.21.0
++ zod 4.6.7
+
+devDependencies:
++ @types/node 26.6.5
++ @types/ws 8.18.1
++ jose 6.2.12
++ oxfmt 0.74.0
++ oxlint 1.89.0
++ typescript 7.0.2
+
+Done in 1s using pnpm v12.14.0

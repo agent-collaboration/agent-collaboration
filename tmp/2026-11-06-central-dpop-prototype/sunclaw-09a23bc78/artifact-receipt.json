@@ -1,0 +1,31 @@
+{
+  "source_head": "09a23bc78a55835704e386f66bd0ef3edcdd8128",
+  "tracked_tree_clean_when_artifacts_were_hashed": true,
+  "machine": "Sunclaw",
+  "cpu": "Apple M1 Pro",
+  "logical_cpus": 10,
+  "os": "macOS 26.6.2",
+  "arch": "arm64",
+  "node": "26.11.1",
+  "rust": "1.98.1",
+  "worker_build": "0.8.7",
+  "miniflare": "5.20261012.0-beta",
+  "workerd_package": "1.20261012.1",
+  "workerd_version_output": "workerd 2026-10-12",
+  "cargo_profile": "worker-release",
+  "artifacts": [
+    {
+      "path": "crates/collaboration-central-cloudflare/build/index.js",
+      "sha256": "fc19de10459ff2d029a80e0599b17251d25bcd74cf1b8cf26fbe3c7cc9ce638b"
+    },
+    {
+      "path": "crates/collaboration-central-cloudflare/build/index_bg.wasm",
+      "sha256": "17cc8cde25adf8641c93ef1618937f22f957729eedac8e982a98ee0f06869557"
+    },
+    {
+      "path": "crates/collaboration-central-core/tests/fixtures/person-dpop.json",
+      "sha256": "0998b8d8dc8fce2475ce6c1346e1cbd074a2654bc6fb9cc28540e125934ffc03"
+    }
+  ],
+  "provenance": "Direct ssh command: git rev-parse HEAD; git status --porcelain --untracked-files=no; shasum -a 256 <three artifacts>; workerd --version; sysctl CPU model/count; sw_vers. Values transcribed from observed output. This is not a release attestation."
+}

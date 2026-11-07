@@ -1,0 +1,31 @@
+{
+  "source_head": "09a23bc78a55835704e386f66bd0ef3edcdd8128",
+  "steps": [
+    {
+      "name": "module-cycle-bless",
+      "args": [
+        "nextest",
+        "run",
+        "--locked",
+        "-p",
+        "workspace-architecture-check",
+        "--run-ignored",
+        "only"
+      ],
+      "status": 0
+    },
+    {
+      "name": "native-scope-suite",
+      "args": [
+        "nextest",
+        "run",
+        "--locked",
+        "-p",
+        "collaboration-central-core",
+        "-p",
+        "collaboration-central-tokio"
+      ],
+      "status": 100
+    }
+  ]
+}

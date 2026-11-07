@@ -1,0 +1,506 @@
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/axum/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world-http/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: missing key for inline table element, expected `,`
+  --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/leptos/Cargo.toml:20:27
+   |
+20 | leptos = { version = "0.8"{% if use_nightly %}, features = ["nightly"]{% endif %} }
+   |                           ^
+   Compiling proc-macro2 v1.0.106
+   Compiling quote v1.0.46
+   Compiling unicode-ident v1.0.24
+   Compiling libc v0.2.186
+   Compiling version_check v0.9.5
+   Compiling serde v1.0.228
+   Compiling generic-array v0.14.7
+    Checking cfg-if v1.0.4
+   Compiling autocfg v1.5.1
+   Compiling serde_core v1.0.228
+   Compiling thiserror v2.0.18
+   Compiling zmij v1.0.23
+   Compiling syn v2.0.118
+   Compiling num-traits v0.2.19
+   Compiling jobserver v0.1.35
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.9
+   Compiling cc v1.2.65
+    Checking memchr v2.8.2
+    Checking getrandom v0.2.17
+   Compiling icu_normalizer_data v2.2.0
+   Compiling icu_properties_data v2.2.0
+    Checking itoa v1.0.18
+   Compiling syn v3.0.5
+    Checking typenum v1.20.1
+   Compiling synstructure v0.13.2
+    Checking pin-project-lite v0.2.17
+   Compiling serde_derive v1.0.228
+   Compiling zerofrom-derive v0.1.7
+   Compiling yoke-derive v0.8.2
+   Compiling thiserror-impl v2.0.18
+   Compiling zerovec-derive v0.11.3
+   Compiling displaydoc v0.2.6
+    Checking rand_core v0.6.4
+    Checking crypto-common v0.1.7
+    Checking subtle v2.6.1
+    Checking smallvec v1.15.2
+    Checking zerofrom v0.1.8
+    Checking bytes v1.12.0
+    Checking stable_deref_trait v1.2.1
+   Compiling getrandom v0.3.4
+    Checking yoke v0.8.3
+   Compiling crossbeam-utils v0.8.21
+   Compiling heck v0.5.0
+   Compiling zerocopy v0.8.52
+    Checking zerovec v0.11.6
+    Checking errno v0.3.14
+   Compiling tracing-attributes v0.1.31
+   Compiling tokio-macros v2.7.0
+    Checking cpufeatures v0.2.17
+    Checking once_cell v1.21.4
+    Checking writeable v0.6.3
+   Compiling parking_lot_core v0.9.12
+    Checking tinystr v0.8.3
+    Checking litemap v0.8.2
+    Checking potential_utf v0.1.5
+    Checking zerotrie v0.2.4
+   Compiling serde_json v1.0.150
+    Checking icu_locale_core v2.2.0
+    Checking utf8_iter v1.0.4
+    Checking icu_collections v2.2.0
+    Checking futures-core v0.3.34
+    Checking icu_provider v2.2.0
+    Checking utf16_iter v1.0.5
+    Checking core-foundation-sys v0.8.7
+    Checking write16 v1.0.0
+    Checking icu_normalizer v2.2.0
+    Checking iana-time-zone v0.1.65
+    Checking icu_properties v2.2.0
+    Checking block-buffer v0.10.4
+    Checking percent-encoding v2.3.2
+    Checking log v0.4.33
+    Checking digest v0.10.7
+    Checking chrono v0.4.45
+    Checking signal-hook-registry v1.4.8
+   Compiling either v1.16.0
+    Checking socket2 v0.6.4
+    Checking mio v1.2.1
+   Compiling rustversion v1.0.22
+    Checking tokio v1.53.3
+   Compiling getrandom v0.4.3
+    Checking equivalent v1.0.2
+    Checking rand_core v0.10.1
+    Checking allocator-api2 v0.2.21
+    Checking foldhash v0.2.0
+    Checking futures-sink v0.3.34
+   Compiling sha2 v0.10.9
+    Checking futures-channel v0.3.34
+    Checking hashbrown v0.17.1
+    Checking tracing-core v0.1.36
+    Checking form_urlencoded v1.2.2
+   Compiling futures-macro v0.3.34
+    Checking futures-task v0.3.34
+    Checking futures-io v0.3.34
+    Checking slab v0.4.12
+    Checking futures-util v0.3.34
+    Checking idna_adapter v1.2.2
+    Checking sha1_smol v1.0.1
+    Checking scopeguard v1.2.0
+    Checking uuid v1.26.0
+    Checking lock_api v0.4.14
+    Checking idna v1.1.0
+    Checking tracing v0.1.44
+    Checking indexmap v2.14.0
+   Compiling strum_macros v0.26.4
+    Checking http v1.4.2
+   Compiling miette-derive v7.6.0
+   Compiling turso_macros v0.8.1
+   Compiling pkg-config v0.3.33
+    Checking url v2.5.8
+    Checking base64 v0.22.1
+   Compiling bitflags v2.13.0
+   Compiling semver v1.0.28
+    Checking parking_lot v0.12.5
+    Checking num-integer v0.1.47
+   Compiling rustc_version v0.4.1
+    Checking regex-syntax v0.8.11
+    Checking aho-corasick v1.1.4
+   Compiling icu_locale_data v2.2.0
+   Compiling libm v0.2.16
+    Checking regex-automata v0.4.18
+    Checking num-bigint v0.4.8
+    Checking ppv-lite86 v0.2.21
+    Checking rand_core v0.9.5
+   Compiling bytemuck_derive v1.10.2
+   Compiling vcpkg v0.2.15
+    Checking rand_chacha v0.9.0
+   Compiling memoffset v0.9.1
+   Compiling icu_collator_data v2.2.0
+    Checking rand v0.9.4
+   Compiling itertools v0.12.1
+    Checking siphasher v1.0.3
+   Compiling lazy_static v1.5.0
+   Compiling branches v0.4.4
+   Compiling crc32c v0.6.8
+   Compiling aegis v0.9.8
+   Compiling simsimd v6.5.16
+   Compiling bigdecimal v0.4.10
+   Compiling uncased v0.9.10
+   Compiling crossbeam-epoch v0.9.21
+   Compiling hex v0.4.3
+   Compiling glob v0.3.3
+   Compiling turso_ext v0.8.1
+   Compiling clang-sys v1.8.1
+   Compiling toml_datetime v0.6.11
+   Compiling serde_spanned v0.6.9
+   Compiling aristo-macros v0.4.1
+   Compiling libloading v0.8.9
+   Compiling toml_write v0.1.2
+   Compiling pastey v0.2.3
+   Compiling winnow v0.7.15
+   Compiling prettyplease v0.2.37
+   Compiling rustix v0.38.44
+   Compiling cfg_aliases v0.2.1
+   Compiling turso_core v0.8.1
+   Compiling toml_edit v0.22.27
+   Compiling hashbrown v0.16.1
+   Compiling regex v1.12.4
+   Compiling libsqlite3-sys v0.35.0
+   Compiling concurrent-queue v2.5.0
+   Compiling crc-catalog v2.5.0
+   Compiling anyhow v1.0.103
+   Compiling ref-cast v1.0.27
+   Compiling parking v2.2.1
+   Compiling minimal-lexical v0.2.1
+   Compiling nom v7.1.3
+   Compiling event-listener v5.4.1
+   Compiling crc v3.4.0
+   Compiling toml v0.8.23
+   Compiling tokio-stream v0.1.18
+   Compiling hashlink v0.11.1
+   Compiling futures-intrusive v0.5.0
+   Compiling spin v0.9.9
+   Compiling crossbeam-queue v0.3.12
+   Compiling ref-cast-impl v1.0.27
+   Compiling bindgen v0.69.5
+   Compiling home v0.5.12
+    Checking unicode-width v0.1.14
+   Compiling which v4.4.2
+    Checking miette v7.6.0
+   Compiling sqlx-core v0.9.0
+   Compiling flume v0.12.0
+   Compiling cexpr v0.6.0
+   Compiling futures-executor v0.3.32
+    Checking strum v0.26.3
+   Compiling atoi v2.0.0
+   Compiling fleet-sync-query-gen v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efd)
+   Compiling shlex v1.3.0
+   Compiling lazycell v1.3.0
+   Compiling rustc-hash v1.1.0
+   Compiling sqlx-sqlite v0.9.0
+    Checking turso_parser v0.8.1
+   Compiling prost-derive v0.14.4
+   Compiling inout v0.1.4
+   Compiling dotenvy v0.15.7
+    Checking ryu v1.0.23
+   Compiling rustix v1.1.4
+   Compiling universal-hash v0.5.1
+   Compiling turso_sdk_kit v0.8.1
+   Compiling sqlx-macros-core v0.9.0
+   Compiling cipher v0.4.4
+   Compiling serde_derive_internals v0.30.0
+   Compiling opaque-debug v0.3.1
+   Compiling polyval v0.6.2
+   Compiling schemars_derive v1.2.2
+   Compiling matchers v0.2.0
+   Compiling sharded-slab v0.1.7
+   Compiling bytemuck v1.25.0
+   Compiling tracing-log v0.2.0
+   Compiling turso_sdk_kit_macros v0.8.1
+   Compiling thread_local v1.1.9
+   Compiling nu-ansi-term v0.50.3
+    Checking dyn-clone v1.0.20
+    Checking schemars v1.2.2
+   Compiling tracing-subscriber v0.3.23
+   Compiling icu_locale v2.2.0
+   Compiling ghash v0.5.1
+   Compiling aes v0.8.4
+   Compiling ctr v0.9.2
+    Checking tracing-serde v0.2.0
+   Compiling aead v0.5.2
+   Compiling fastrand v2.5.0
+    Checking foldhash v0.1.5
+   Compiling byteorder v1.5.0
+   Compiling softaes v0.1.3
+   Compiling roaring v0.11.4
+    Checking hashbrown v0.15.5
+   Compiling tempfile v3.27.0
+   Compiling fastbloom v0.14.1
+   Compiling aes-gcm v0.10.3
+   Compiling icu_collator v2.2.0
+   Compiling intrusive-collections v0.9.7
+   Compiling twox-hash v2.1.2
+   Compiling polling v3.11.0
+   Compiling pack1 v1.1.0
+   Compiling sqlx-macros v0.9.0
+   Compiling aristo v0.4.1
+   Compiling rapidhash v4.4.1
+   Compiling arc-swap v1.9.1
+   Compiling cfg_block v0.1.1
+   Compiling allocator-api2 v0.4.0
+   Compiling simdutf8 v0.1.5
+   Compiling time-core v0.1.9
+   Compiling bumpalo v3.20.3
+   Compiling deranged v0.5.8
+   Compiling num-conv v0.2.2
+   Compiling rustc-hash v2.1.2
+    Checking fixedbitset v0.5.7
+   Compiling powerfmt v0.2.0
+   Compiling fallible-iterator v0.3.0
+    Checking petgraph v0.8.3
+   Compiling time v0.3.55
+    Checking sqlx v0.9.0
+   Compiling crossbeam-channel v0.5.15
+   Compiling env_filter v1.0.1
+   Compiling symlink v0.1.0
+   Compiling httparse v1.10.1
+    Checking zeroize v1.9.0
+   Compiling genawaiter-macro v0.99.1
+   Compiling genawaiter v0.99.1
+   Compiling tracing-appender v0.2.5
+   Compiling env_logger v0.11.10
+    Checking message-board v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/message-board)
+   Compiling prost v0.14.4
+   Compiling ring v0.17.14
+    Checking data-encoding v2.11.0
+   Compiling strsim v0.11.1
+   Compiling ident_case v1.0.1
+    Checking rustls-pki-types v1.15.0
+    Checking runtime-primitives v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efd)
+   Compiling winnow v1.0.3
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+    Checking untrusted v0.9.0
+   Compiling toml_parser v1.1.2+spec-1.1.0
+   Compiling toml_edit v0.25.11+spec-1.1.0
+    Checking fleet-sync-protocol v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efd)
+   Compiling rustls v0.23.46
+   Compiling proc-macro-crate v3.5.0
+    Checking rustls-webpki v0.103.16
+    Checking http-body v1.0.1
+    Checking collaboration-mail-protocol v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-mail-protocol)
+   Compiling ahash v0.8.12
+   Compiling fnv v1.0.7
+   Compiling darling_core v0.20.11
+    Checking webpki-roots v1.0.10
+    Checking num-rational v0.4.2
+    Checking num-iter v0.1.46
+    Checking sha1 v0.10.6
+    Checking num-complex v0.4.6
+    Checking tower-service v0.3.3
+    Checking num v0.4.3
+   Compiling darling_macro v0.20.11
+    Checking tokio-rustls v0.26.4
+    Checking try-lock v0.2.5
+    Checking borrow-or-share v0.2.4
+   Compiling unicode-general-category v1.1.0
+    Checking atomic-waker v1.1.2
+    Checking bit-vec v0.8.0
+    Checking bit-set v0.8.0
+    Checking fluent-uri v0.4.1
+    Checking turso_sync_engine v0.8.1
+   Compiling darling v0.20.11
+    Checking want v0.3.1
+    Checking fraction v0.17.0
+   Compiling strum_macros v0.28.0
+    Checking num-cmp v0.1.0
+    Checking vsimd v0.8.0
+    Checking micromap v0.3.0
+    Checking bytecount v0.6.9
+    Checking outref v0.5.2
+    Checking httpdate v1.0.3
+    Checking hyper v1.10.1
+    Checking strum v0.28.0
+    Checking uuid-simd v0.8.0
+    Checking jsonschema-value v0.53.0
+    Checking referencing v0.53.0
+   Compiling derive_builder_core v0.20.2
+    Checking fancy-regex v0.19.0
+    Checking turso_sync_sdk_kit v0.8.1
+    Checking http-body-util v0.1.3
+    Checking fleet-identity-protocol v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/fleet-identity-protocol)
+    Checking turso v0.8.1
+    Checking jsonschema-regex v0.53.0
+    Checking sync_wrapper v1.0.2
+    Checking email_address v0.2.9
+    Checking tower-layer v0.3.3
+    Checking sqlx-turso-core v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efd)
+    Checking ipnet v2.12.0
+    Checking jsonschema v0.53.0
+    Checking hyper-util v0.1.20
+   Compiling derive_builder_macro v0.20.2
+   Compiling fleet-sync-receiver v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efd)
+   Compiling fleet-sync-lease v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efd)
+    Checking phf_shared v0.12.1
+   Compiling strum_macros v0.27.2
+   Compiling chrono-tz v0.10.4
+    Checking strum v0.27.2
+    Checking phf v0.12.1
+    Checking derive_builder v0.20.2
+    Checking tower v0.5.3
+    Checking tungstenite v0.29.0
+    Checking webpki-roots v0.26.11
+    Checking ryu-js v1.0.3
+    Checking serde_json_canonicalizer v0.3.2
+    Checking croner v4.0.0
+    Checking tokio-tungstenite v0.29.0
+    Checking board-sync-protocol v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/board-sync-protocol)
+    Checking fleet-admission v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/fleet-admission)
+    Checking serde_urlencoded v0.7.1
+    Checking session-event-model v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/session-event-model)
+   Compiling fleet-sync-writer v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efd)
+   Compiling fleet-sync-session v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efd)
+   Compiling fleet-sync-delivery v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efd)
+    Checking agent-automation v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/agent-automation)
+    Checking tokio-util v0.7.18
+    Checking tower-http v0.6.11
+    Checking hyper-rustls v0.27.9
+    Checking serde_spanned v1.1.1
+    Checking toml_writer v1.1.1+spec-1.1.0
+    Checking reqwest v0.12.28
+    Checking toml v1.1.2+spec-1.1.0
+    Checking collaboration-protocol v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-protocol)
+   Compiling fleet-sync-tokio-runner v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efd)
+    Checking mime v0.3.17
+    Checking utf-8 v0.7.6
+    Checking tungstenite v0.27.0
+    Checking axum-core v0.5.6
+    Checking codex-native-integration v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/codex-native-integration)
+    Checking collaboration-central-admin-protocol v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-central-admin-protocol)
+   Compiling darling_core v0.24.1
+   Compiling message-board-storage v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/message-board-storage)
+   Compiling collaboration-central-core v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-central-core)
+    Checking serde_path_to_error v0.1.20
+   Compiling cmake v0.1.58
+    Checking fs2 v0.4.3
+    Checking matchit v0.8.4
+   Compiling dunce v1.0.5
+   Compiling fs_extra v1.3.0
+   Compiling cfg_aliases v0.1.1
+   Compiling nix v0.28.0
+   Compiling darling_macro v0.24.1
+   Compiling aws-lc-sys v0.46.0
+    Checking axum v0.8.9
+    Checking sqlite-storage-maintenance v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/sqlite-storage-maintenance)
+    Checking async-tungstenite v0.31.0
+    Checking hmac v0.12.1
+   Compiling automation-storage v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/automation-storage)
+    Checking reqwest-websocket v0.5.1
+   Compiling darling v0.24.1
+    Checking chacha20 v0.10.2
+   Compiling interaction-storage v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/interaction-storage)
+   Compiling lifecycle-observation v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/lifecycle-observation)
+   Compiling rmcp v3.4.0
+    Checking rand v0.10.2
+   Compiling rmcp-macros v3.4.0
+    Checking sse-stream v0.2.6
+    Checking futures v0.3.32
+   Compiling async-trait v0.1.89
+    Checking base64 v0.23.1
+   Compiling aws-lc-rs v1.18.2
+   Compiling collaboration-runtime v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-runtime)
+    Checking codex-acp-adapter v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/codex-acp-adapter)
+    Checking claude-code-peer-messaging v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/claude-code-peer-messaging)
+    Checking collaboration-client v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-client)
+   Compiling sqlx-turso-macros v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efd)
+    Checking sqlx-turso v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efd)
+    Checking durable-steps v0.4.0 (https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efd)
+    Checking collaboration-central-conformance v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-central-conformance)
+    Checking board-fleet-sync v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/board-fleet-sync)
+    Checking collaboration-contracts v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-contracts)
+    Checking collaboration-central-tokio v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-central-tokio)
+    Checking collaboration-service v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-service)
+error: used `panic!()` or assertion in a function that returns `Result`
+  --> crates/collaboration-central-tokio/tests/integration/person_dpop.rs:38:7
+   |
+38 |   async fn jose_vectors_cross_native_crypto_and_core() -> Result<(), Box<dyn std::error::Error>> {
+   |  _______^
+39 | |     // Arrange: fixed TS JOSE signatures, RFC 7638 thumbprint and canonical intent.
+40 | |     let fixtures: Fixtures = serde_json::from_str(include_str!(
+41 | |         "../../../collaboration-central-core/tests/fixtures/person-dpop.json"
+...  |
+80 | |     Ok(())
+81 | | }
+   | |_^
+   |
+   = help: `panic!()` or assertions should not be used in a function that returns `Result` as `Result` is expected to return an error instead of crashing
+note: return Err() instead of panicking
+  --> crates/collaboration-central-tokio/tests/integration/person_dpop.rs:43:5
+   |
+43 |       assert!(fixtures.vectors.len() >= 40, "missing prototype scenarios");
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+57 |                   assert_eq!(vector.expected, "verified", "{}", vector.name);
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+58 | /                 assert_eq!(
+59 | |                     request.proof_key_thumbprint, fixtures.thumbprint,
+60 | |                     "{}",
+61 | |                     vector.name
+62 | |                 );
+   | |_________________^
+63 |                   assert_eq!(request.intent_digest, fixtures.intent, "{}", vector.name);
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+64 | /                 assert_eq!(
+65 | |                     request.request_id, vector.input.request_id,
+66 | |                     "{}",
+67 | |                     vector.name
+68 | |                 );
+   | |_________________^
+...
+71 | /                 assert_eq!(
+72 | |                     serde_json::to_value(reason)?,
+73 | |                     vector.expected,
+74 | |                     "{}",
+75 | |                     vector.name
+76 | |                 );
+   | |_________________^
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#panic_in_result_fn
+   = note: requested on the command line with `-D clippy::panic-in-result-fn`
+
+error: used `panic!()` or assertion in a function that returns `Result`
+   --> crates/collaboration-central-tokio/tests/integration/person_dpop.rs:119:7
+    |
+119 |   async fn expiry_is_sampled_after_host_crypto_finishes() -> Result<(), Box<dyn std::error::Error>> {
+    |  _______^
+120 | |     // Arrange: valid at ingress, but host crypto finishes at the signed deadline.
+121 | |     let fixtures: Fixtures = serde_json::from_str(include_str!(
+122 | |         "../../../collaboration-central-core/tests/fixtures/person-dpop.json"
+...   |
+150 | |     Ok(())
+151 | | }
+    | |_^
+    |
+    = help: `panic!()` or assertions should not be used in a function that returns `Result` as `Result` is expected to return an error instead of crashing
+note: return Err() instead of panicking
+   --> crates/collaboration-central-tokio/tests/integration/person_dpop.rs:144:5
+    |
+144 | /     assert_eq!(
+145 | |         result,
+146 | |         DpopVerification::Refused {
+147 | |             reason: DpopRefusal::Expired
+148 | |         }
+149 | |     );
+    | |_____^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#panic_in_result_fn
+
+error: could not compile `collaboration-central-tokio` (test "integration") due to 2 previous errors

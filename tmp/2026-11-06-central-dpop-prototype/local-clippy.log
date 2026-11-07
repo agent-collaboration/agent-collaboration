@@ -1,0 +1,45 @@
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/axum/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world-http/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: missing key for inline table element, expected `,`
+  --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/leptos/Cargo.toml:20:27
+   |
+20 | leptos = { version = "0.8"{% if use_nightly %}, features = ["nightly"]{% endif %} }
+   |                           ^
+    Checking message-board v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/message-board)
+   Compiling collaboration-central-core v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-central-core)
+    Checking collaboration-mail-protocol v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-mail-protocol)
+    Checking fleet-admission v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/fleet-admission)
+    Checking fleet-identity-protocol v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/fleet-identity-protocol)
+    Checking board-sync-protocol v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/board-sync-protocol)
+    Checking collaboration-central-admin-protocol v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-central-admin-protocol)
+error: usage of wildcard import
+ --> crates/collaboration-central-core/src/person_dpop_prototype/proof_verification.rs:1:13
+  |
+1 | use super::{jwt_validation::*, request_contract::*};
+  |             ^^^^^^^^^^^^^^^^^ help: try: `jwt_validation::{CompactJwt, TokenHeader, from_json, IssuerJwks, PersonClaims, MAX_SAFE_INTEGER, uuid_v7, sha256_url, decode}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#wildcard_imports
+  = note: requested on the command line with `-D clippy::wildcard-imports`
+
+error: usage of wildcard import
+ --> crates/collaboration-central-core/src/person_dpop_prototype/proof_verification.rs:1:32
+  |
+1 | use super::{jwt_validation::*, request_contract::*};
+  |                                ^^^^^^^^^^^^^^^^^^^ help: try: `request_contract::{Es256Jwk, DpopCrypto, PersonDpopPolicy, PersonDpopInput, DpopVerification, VerifiedPersonRequest, DpopRefusal, PrototypeOperation}`
+  |
+  = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#wildcard_imports
+
+error: could not compile `collaboration-central-core` (lib) due to 2 previous errors

@@ -1,0 +1,21 @@
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/axum/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world-http/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: missing key for inline table element, expected `,`
+  --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/leptos/Cargo.toml:20:27
+   |
+20 | leptos = { version = "0.8"{% if use_nightly %}, features = ["nightly"]{% endif %} }
+   |                           ^
+     Removed 932 files, 1.9GiB total

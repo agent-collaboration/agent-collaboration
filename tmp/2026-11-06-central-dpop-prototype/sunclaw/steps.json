@@ -1,0 +1,73 @@
+{
+  "source_head": "76ea876492ccddf7c6d6d62cd028db061f395b38",
+  "steps": [
+    {
+      "name": "rust-toolchain",
+      "command": "rustup",
+      "args": [
+        "show"
+      ],
+      "status": 0
+    },
+    {
+      "name": "install-node",
+      "command": "npm",
+      "args": [
+        "install",
+        "--prefix",
+        "/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/tmp/2026-11-06-central-dpop-prototype/tools/node",
+        "--no-save",
+        "node@26.11.1",
+        "pnpm@12.14.0"
+      ],
+      "status": 0
+    },
+    {
+      "name": "node-version",
+      "command": "node",
+      "args": [
+        "--version"
+      ],
+      "status": 0
+    },
+    {
+      "name": "install-verification",
+      "command": "pnpm",
+      "args": [
+        "--dir",
+        "verification",
+        "install",
+        "--frozen-lockfile"
+      ],
+      "status": 0
+    },
+    {
+      "name": "fmt",
+      "command": "cargo",
+      "args": [
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "status": 0
+    },
+    {
+      "name": "native-clippy",
+      "command": "cargo",
+      "args": [
+        "clippy",
+        "--locked",
+        "-p",
+        "collaboration-central-core",
+        "-p",
+        "collaboration-central-tokio",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "status": 101
+    }
+  ]
+}

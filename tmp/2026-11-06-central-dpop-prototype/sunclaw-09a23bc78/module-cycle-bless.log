@@ -1,0 +1,51 @@
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/axum/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world-http/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: missing key for inline table element, expected `,`
+  --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/leptos/Cargo.toml:20:27
+   |
+20 | leptos = { version = "0.8"{% if use_nightly %}, features = ["nightly"]{% endif %} }
+   |                           ^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/axum/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world-http/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: missing key for inline table element, expected `,`
+  --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/leptos/Cargo.toml:20:27
+   |
+20 | leptos = { version = "0.8"{% if use_nightly %}, features = ["nightly"]{% endif %} }
+   |                           ^
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.16s
+info: using target runner `/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/scripts/cargo_debug_signing_runner.sh` defined by `target.aarch64-apple-darwin.runner` within `/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/.cargo/config.toml`
+────────────
+ Nextest run ID 70862b53-d08f-4157-b48e-8cb61b606d7e with nextest profile: default
+    Starting 1 test across 2 binaries (22 tests skipped)
+        SLOW [> 60.000s] (───) workspace-architecture-check::integration module_cycles::module_cycles_do_not_grow
+        SLOW [>120.000s] (───) workspace-architecture-check::integration module_cycles::module_cycles_do_not_grow
+        SLOW [>180.000s] (───) workspace-architecture-check::integration module_cycles::module_cycles_do_not_grow
+        PASS [ 182.483s] (1/1) workspace-architecture-check::integration module_cycles::module_cycles_do_not_grow
+────────────
+     Summary [ 182.484s] 1 test run: 1 passed (1 slow), 22 skipped

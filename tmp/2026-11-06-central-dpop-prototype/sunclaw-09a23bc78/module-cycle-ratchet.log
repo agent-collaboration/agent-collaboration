@@ -1,0 +1,137 @@
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/axum/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world-http/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: missing key for inline table element, expected `,`
+  --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/leptos/Cargo.toml:20:27
+   |
+20 | leptos = { version = "0.8"{% if use_nightly %}, features = ["nightly"]{% endif %} }
+   |                           ^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/axum/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world-http/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: missing key for inline table element, expected `,`
+  --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/leptos/Cargo.toml:20:27
+   |
+20 | leptos = { version = "0.8"{% if use_nightly %}, features = ["nightly"]{% endif %} }
+   |                           ^
+   Compiling serde_core v1.0.228
+   Compiling serde_json v1.0.150
+   Compiling syn v2.0.118
+   Compiling serde v1.0.228
+   Compiling memchr v2.8.2
+   Compiling thiserror-impl v2.0.18
+   Compiling serde_derive v1.0.228
+   Compiling thiserror v2.0.18
+   Compiling workspace-architecture-check v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/workspace-architecture-check)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.03s
+info: using target runner `/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/scripts/cargo_debug_signing_runner.sh` defined by `target.aarch64-apple-darwin.runner` within `/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/.cargo/config.toml`
+────────────
+ Nextest run ID d729fa12-1fbe-45ca-9d43-479d50afc4d8 with nextest profile: default
+    Starting 1 test across 2 binaries (22 tests skipped)
+        SLOW [> 60.000s] (───) workspace-architecture-check::integration module_cycles::module_cycles_do_not_grow
+        SLOW [>120.000s] (───) workspace-architecture-check::integration module_cycles::module_cycles_do_not_grow
+        SLOW [>180.000s] (───) workspace-architecture-check::integration module_cycles::module_cycles_do_not_grow
+        FAIL [ 189.040s] (1/1) workspace-architecture-check::integration module_cycles::module_cycles_do_not_grow
+  stdout ───
+
+    running 1 test
+    test module_cycles::module_cycles_do_not_grow has been running for over 60 seconds
+    test module_cycles::module_cycles_do_not_grow ... FAILED
+
+    failures:
+
+    failures:
+        module_cycles::module_cycles_do_not_grow
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 188.98s
+
+  stderr ───
+    cargo debug runner: integration-4cab08467129ac99 stays linker-signed (no Developer ID identity for team 974QD84WVC); Keychain access prompts after each rebuild
+    agent-automation (agent_automation): 15.962s, 0 SCC(s)
+    acp-provider-adapters (acp_provider_adapters): 18.526s, 0 SCC(s)
+    acp-client-runtime (acp_client_runtime): 18.547s, 1 SCC(s)
+    agent-collaboration (agent_collaboration): 25.887s, 0 SCC(s)
+    agent-collaboration-tui (agent_collaboration_tui): 6.199s, 0 SCC(s)
+    agent-router-quota-tui (agent_router_quota_tui): 8.944s, 0 SCC(s)
+    agent-session-inventory (agent_session_inventory): 13.638s, 1 SCC(s)
+    agent-session-tui (agent_session_tui): 14.106s, 0 SCC(s)
+    automation-storage (automation_storage): 8.146s, 1 SCC(s)
+    board-fleet-sync (board_fleet_sync): 11.361s, 0 SCC(s)
+    board-central-test-support (board_central_test_support): 12.719s, 0 SCC(s)
+    board-legacy-upgrade (board_legacy_upgrade): 14.727s, 1 SCC(s)
+    claude-code-peer-messaging (claude_code_peer_messaging): 6.818s, 0 SCC(s)
+    board-sync-protocol (board_sync_protocol): 7.485s, 1 SCC(s)
+    codex-acp-adapter (codex_acp_adapter): 8.876s, 0 SCC(s)
+    board-staging-cutover (board_staging_cutover): 14.843s, 0 SCC(s)
+    codex-router-core (codex_router_core): 4.363s, 0 SCC(s)
+    codex-native-integration (codex_native_integration): 7.819s, 2 SCC(s)
+    codex-router-auth (codex_router_auth): 8.108s, 1 SCC(s)
+    codex-router-cli (codex_router_cli): 14.700s, 1 SCC(s)
+    codex-router-quota (codex_router_quota): 4.617s, 0 SCC(s)
+    codex-router-proxy (codex_router_proxy): 8.179s, 1 SCC(s)
+    codex-router-host (codex_router_host): 13.610s, 2 SCC(s)
+    codex-router-quota-reset-test-harness (codex_router_quota_reset_test_harness): 14.850s, 0 SCC(s)
+    codex-router-selection (codex_router_selection): 4.682s, 0 SCC(s)
+    codex-router-secret-store (codex_router_secret_store): 5.072s, 0 SCC(s)
+    codex-router-state (codex_router_state): 7.055s, 1 SCC(s)
+    codex-router-quota-service (codex_router_quota_service): 8.539s, 1 SCC(s)
+    codex-router-ux-prototype (codex_router_ux_prototype): 5.418s, 0 SCC(s)
+    collaboration-central-admin-protocol (collaboration_central_admin_protocol): 7.685s, 0 SCC(s)
+    codex-router-tailnet-verification-host (codex_router_tailnet_verification_host): 14.169s, 0 SCC(s)
+    codex-router-test-support (codex_router_test_support): 15.024s, 0 SCC(s)
+    collaboration-central-core (collaboration_central_core): 11.850s, 3 SCC(s)
+    collaboration-central-cloudflare (collaboration_central_cloudflare): 11.957s, 1 SCC(s)
+    collaboration-central-conformance (collaboration_central_conformance): 12.936s, 0 SCC(s)
+    collaboration-central-tokio (collaboration_central_tokio): 12.938s, 0 SCC(s)
+    collaboration-mail-protocol (collaboration_mail_protocol): 5.686s, 1 SCC(s)
+    collaboration-contracts (collaboration_contracts): 12.441s, 0 SCC(s)
+    collaboration-client (collaboration_client): 12.797s, 2 SCC(s)
+    collaboration-mcp (collaboration_mcp): 13.853s, 1 SCC(s)
+    collaboration-protocol (collaboration_protocol): 7.058s, 3 SCC(s)
+    fleet-admission (fleet_admission): 8.187s, 0 SCC(s)
+    collaboration-runtime (collaboration_runtime): 12.173s, 3 SCC(s)
+    collaboration-service (collaboration_service): 12.697s, 1 SCC(s)
+    message-board (message_board): 5.891s, 1 SCC(s)
+    fleet-identity-protocol (fleet_identity_protocol): 5.954s, 0 SCC(s)
+    lifecycle-observation (lifecycle_observation): 8.666s, 0 SCC(s)
+    interaction-storage (interaction_storage): 11.217s, 1 SCC(s)
+    node-test-fixture (node_test_fixture): 4.083s, 0 SCC(s)
+    session-event-model (session_event_model): 5.762s, 1 SCC(s)
+    sqlite-storage-maintenance (sqlite_storage_maintenance): 6.450s, 0 SCC(s)
+    message-board-storage (message_board_storage): 10.578s, 2 SCC(s)
+    workspace-architecture-check (workspace_architecture_check): 2.538s, 0 SCC(s)
+    ui-preference-store (ui_preference_store): 4.912s, 0 SCC(s)
+    TOTAL: 188.967s, 54 packages, 54 targets, jobs=4
+    collaboration-central-core: baseline SCC or its edges shrank or disappeared: collaboration_central_core::access_key_cache, collaboration_central_core::access_rules, collaboration_central_core::call_graph, collaboration_central_core::caller_context, collaboration_central_core::central_application, collaboration_central_core::copy_mutations, collaboration_central_core::copy_read_calls, collaboration_central_core::copy_write_calls, collaboration_central_core::core_contract, collaboration_central_core::core_host, collaboration_central_core::effect_execution, collaboration_central_core::fleet_creation_calls, collaboration_central_core::fleet_decision_step, collaboration_central_core::fleet_lease_calls, collaboration_central_core::fleet_lease_step, collaboration_central_core::machine_enrollment, collaboration_central_core::object_call_envelope, collaboration_central_core::object_calls, collaboration_central_core::object_effects, collaboration_central_core::object_runtime, collaboration_central_core::object_transport, collaboration_central_core::platform_capabilities, collaboration_central_core::registry_lease_store, collaboration_central_core::registry_peer_lookup, collaboration_central_core::step_driver, collaboration_central_core::wire_contract; update the baseline (it may only shrink)
+
+    Error: RatchetViolation { changes: [Shrink { package: "collaboration-central-core", modules: ["collaboration_central_core::access_key_cache", "collaboration_central_core::access_rules", "collaboration_central_core::call_graph", "collaboration_central_core::caller_context", "collaboration_central_core::central_application", "collaboration_central_core::copy_mutations", "collaboration_central_core::copy_read_calls", "collaboration_central_core::copy_write_calls", "collaboration_central_core::core_contract", "collaboration_central_core::core_host", "collaboration_central_core::effect_execution", "collaboration_central_core::fleet_creation_calls", "collaboration_central_core::fleet_decision_step", "collaboration_central_core::fleet_lease_calls", "collaboration_central_core::fleet_lease_step", "collaboration_central_core::machine_enrollment", "collaboration_central_core::object_call_envelope", "collaboration_central_core::object_calls", "collaboration_central_core::object_effects", "collaboration_central_core::object_runtime", "collaboration_central_core::object_transport", "collaboration_central_core::platform_capabilities", "collaboration_central_core::registry_lease_store", "collaboration_central_core::registry_peer_lookup", "collaboration_central_core::step_driver", "collaboration_central_core::wire_contract"] }] }
+
+  Cancelling due to test failure
+────────────
+     Summary [ 189.044s] 1 test run: 0 passed, 1 failed, 22 skipped
+        FAIL [ 189.040s] (1/1) workspace-architecture-check::integration module_cycles::module_cycles_do_not_grow
+error: test run failed

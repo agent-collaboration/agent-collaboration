@@ -1,0 +1,18 @@
+{
+  "prototype_head": "09a23bc78a55835704e386f66bd0ef3edcdd8128",
+  "base_head": "8df6e7599ae555f463133bc889e2a2a8aac46b0b",
+  "prototype": {
+    "exit": 100,
+    "passed": 0,
+    "failed": 2,
+    "skipped": 26
+  },
+  "base": {
+    "exit": 100,
+    "passed": 0,
+    "failed": 2,
+    "skipped": 23
+  },
+  "same_error": "Copy apply did not answer: NotSent { reason: Unreachable { last_seen: None } }",
+  "scope": "Lead 01a1b3cc-42bf-7090-819d-f82e9510079f: held B2a Copy routing; no fixes or assertion changes commissioned."
+}

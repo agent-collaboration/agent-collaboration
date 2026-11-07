@@ -1,0 +1,88 @@
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/axum/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world-http/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: missing key for inline table element, expected `,`
+  --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/leptos/Cargo.toml:20:27
+   |
+20 | leptos = { version = "0.8"{% if use_nightly %}, features = ["nightly"]{% endif %} }
+   |                           ^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/axum/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world-http/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: missing key for inline table element, expected `,`
+  --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/leptos/Cargo.toml:20:27
+   |
+20 | leptos = { version = "0.8"{% if use_nightly %}, features = ["nightly"]{% endif %} }
+   |                           ^
+   Compiling collaboration-central-core v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-central-core)
+   Compiling collaboration-central-tokio v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-central-tokio)
+   Compiling collaboration-central-conformance v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-central-conformance)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 30.29s
+info: using target runner `/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/scripts/cargo_debug_signing_runner.sh` defined by `target.aarch64-apple-darwin.runner` within `/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/.cargo/config.toml`
+────────────
+ Nextest run ID 3458b1b0-495d-4be8-90a9-5086e33240c4 with nextest profile: default
+    Starting 2 tests across 1 binary (23 tests skipped)
+        FAIL [   0.370s] (1/2) collaboration-central-tokio::integration copy_receiver::capacity::summary_storage_full_is_preserved_as_copy_unavailable_after_real_rollback
+  stdout ───
+
+    running 1 test
+    test copy_receiver::capacity::summary_storage_full_is_preserved_as_copy_unavailable_after_real_rollback ... FAILED
+
+    failures:
+
+    failures:
+        copy_receiver::capacity::summary_storage_full_is_preserved_as_copy_unavailable_after_real_rollback
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 24 filtered out; finished in 0.30s
+
+  stderr ───
+    cargo debug runner: integration-9c38abc62fc6c2e9 stays linker-signed (no Developer ID identity for team 974QD84WVC); Keychain access prompts after each rebuild
+    Error: "Copy apply did not answer: NotSent { reason: Unreachable { last_seen: None } }"
+
+  Cancelling due to test failure: 1 test still running
+        FAIL [   0.378s] (2/2) collaboration-central-tokio::integration copy_receiver::retry::lost_directory_ack_reopens_with_same_call_and_never_overwrites_a_newer_summary
+  stdout ───
+
+    running 1 test
+    test copy_receiver::retry::lost_directory_ack_reopens_with_same_call_and_never_overwrites_a_newer_summary ... FAILED
+
+    failures:
+
+    failures:
+        copy_receiver::retry::lost_directory_ack_reopens_with_same_call_and_never_overwrites_a_newer_summary
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 24 filtered out; finished in 0.30s
+
+  stderr ───
+    cargo debug runner: integration-9c38abc62fc6c2e9 stays linker-signed (no Developer ID identity for team 974QD84WVC); Keychain access prompts after each rebuild
+    Error: "Copy apply did not answer: NotSent { reason: Unreachable { last_seen: None } }"
+
+────────────
+     Summary [   0.378s] 2 tests run: 0 passed, 2 failed, 23 skipped
+        FAIL [   0.370s] (1/2) collaboration-central-tokio::integration copy_receiver::capacity::summary_storage_full_is_preserved_as_copy_unavailable_after_real_rollback
+        FAIL [   0.378s] (2/2) collaboration-central-tokio::integration copy_receiver::retry::lost_directory_ack_reopens_with_same_call_and_never_overwrites_a_newer_summary
+error: test run failed

@@ -1,0 +1,396 @@
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/axum/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world-http/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: missing key for inline table element, expected `,`
+  --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/leptos/Cargo.toml:20:27
+   |
+20 | leptos = { version = "0.8"{% if use_nightly %}, features = ["nightly"]{% endif %} }
+   |                           ^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/axum/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: invalid character `{` in package name: `{{project-name}}`, the first character must be a Unicode XID start character (most letters or `_`)
+ --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/hello-world-http/Cargo.toml:2:8
+  |
+2 | name = "{{project-name}}"
+  |        ^^^^^^^^^^^^^^^^^^
+error: missing key for inline table element, expected `,`
+  --> ../../../.cargo/git/checkouts/workers-rs-9aa272726cd25a93/b171cb4/templates/leptos/Cargo.toml:20:27
+   |
+20 | leptos = { version = "0.8"{% if use_nightly %}, features = ["nightly"]{% endif %} }
+   |                           ^
+   Compiling ring v0.17.14
+   Compiling rustls v0.23.46
+   Compiling rustls-webpki v0.103.16
+   Compiling tokio-rustls v0.26.4
+   Compiling tungstenite v0.29.0
+   Compiling hyper-rustls v0.27.9
+   Compiling reqwest v0.12.28
+   Compiling tokio-tungstenite v0.29.0
+   Compiling axum v0.8.9
+   Compiling codex-native-integration v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/codex-native-integration)
+   Compiling reqwest-websocket v0.5.1
+   Compiling codex-acp-adapter v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/codex-acp-adapter)
+   Compiling lifecycle-observation v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/lifecycle-observation)
+   Compiling board-fleet-sync v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/board-fleet-sync)
+   Compiling collaboration-central-core v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-central-core)
+   Compiling collaboration-runtime v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-runtime)
+   Compiling collaboration-client v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-client)
+   Compiling collaboration-service v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-service)
+   Compiling collaboration-central-conformance v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-central-conformance)
+   Compiling collaboration-central-tokio v0.1.128 (/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/crates/collaboration-central-tokio)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 56.31s
+info: using target runner `/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/scripts/cargo_debug_signing_runner.sh` defined by `target.aarch64-apple-darwin.runner` within `/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/.cargo/config.toml`
+────────────
+ Nextest run ID 166f651c-4ede-419a-8dd1-e23d52e11926 with nextest profile: default
+    Starting 293 tests across 4 binaries
+        PASS [   0.118s] (  1/293) collaboration-central-core copy_call_failure::tests::only_validated_copy_carriers_preserve_no_effect_certainty
+        PASS [   0.122s] (  2/293) collaboration-central-core copy_fleet_reference::tests::copy_fleet_reference_is_missing_until_the_admitting_fleet_binds_it
+        PASS [   0.124s] (  3/293) collaboration-central-core copy_change_notifier::tests::expiry_and_instance_loss_cancel_the_wait_without_reporting_a_change
+        PASS [   0.127s] (  4/293) collaboration-central-core copy_fleet_reference::tests::copy_fleet_reference_repeats_are_safe_but_another_fleet_cannot_take_it
+        PASS [   0.127s] (  5/293) collaboration-central-core copy_change_notifier::tests::a_commit_between_subscribe_and_wait_remains_ready_for_every_reader
+        PASS [   0.128s] (  6/293) collaboration-central-core admin_import_routes::integrity_refusal_tests::seed_integrity_refusal_retains_both_tables_in_the_admin_answer
+        PASS [   0.129s] (  7/293) collaboration-central-core copy_fleet_reference::tests::copy_fleet_reference_stand_in_does_not_claim_process_restart_durability
+        PASS [   0.130s] (  8/293) collaboration-central-core copy_fleet_reference::tests::copy_fleet_reference_keeps_distinct_projects_and_fleets_separate
+        PASS [   0.130s] (  9/293) collaboration-central-core fleet_location::tests::fleet_location_cloudflare_names_keep_organizations_separate
+        PASS [   0.134s] ( 10/293) collaboration-central-core delivery_config::tests::relay_identity_is_required_validated_and_serialized_explicitly
+        PASS [   0.110s] ( 11/293) collaboration-central-core fleet_location::tests::fleet_location_native_reopen_recovers_the_same_nonlegacy_organization
+        PASS [   0.106s] ( 12/293) collaboration-central-core fleet_location::tests::fleet_location_only_the_configured_organization_uses_legacy_physical_names
+        PASS [   0.115s] ( 13/293) collaboration-central-core fleet_mail_observation::tests::custody_response_is_closed_and_absent_rows_cannot_carry_status_or_payload
+        PASS [   0.121s] ( 14/293) collaboration-central-core fleet_location::tests::fleet_location_rejects_aliases_and_unvalidated_file_keys
+        PASS [   0.164s] ( 15/293) collaboration-central-core fleet_outbox_limits::tests::fleet_outbox_defaults_reserve_enough_room_to_settle_admitted_items
+        PASS [   0.187s] ( 16/293) collaboration-central-core fleet_sender_binding::tests::missing_or_malformed_enrollment_never_supplies_a_guessed_machine
+        PASS [   0.193s] ( 17/293) collaboration-central-core fleet_sender_binding::tests::every_sender_variant_resolves_without_changing_its_source_bytes_after_reopen
+        PASS [   0.143s] ( 18/293) collaboration-central-core fleet_snapshot_read::tests::statement_count::tests::counts_polled_executions_including_cached_queries_but_not_preparation
+        PASS [   0.126s] ( 19/293) collaboration-central-core forward_store::tests::a_stored_unknown_forward_phase_is_refused
+        PASS [   0.101s] ( 20/293) collaboration-central-core holder_reply_hub::tests::an_answer_at_the_expiry_boundary_is_lost_even_before_the_alarm_runs
+        PASS [   0.211s] ( 21/293) collaboration-central-core fleet_snapshot_read::tests::snapshot_hydration_statement_count_is_independent_of_page_size
+        PASS [   0.236s] ( 22/293) collaboration-central-core fleet_snapshot_read::tests::import_hydration_statement_count_is_independent_of_bundle_size
+        PASS [   0.153s] ( 23/293) collaboration-central-core forward_store::tests::origin_and_holder_correlations_coexist_for_two_origins_and_delete_independently
+        PASS [   0.099s] ( 24/293) collaboration-central-core holder_reply_hub::tests::close_timeout_drop_and_instance_loss_cancel_only_their_pending_replies
+        PASS [   0.370s] ( 25/293) collaboration-central-core fleet_snapshot_read::tests::batch_pages_and_import_inputs_keep_strict_child_and_reason_validation
+        PASS [   0.097s] ( 26/293) collaboration-central-core holder_reply_hub::tests::only_the_exact_session_connection_and_frame_can_resolve_a_waiter
+        PASS [   0.097s] ( 27/293) collaboration-central-core issuer_key_cache::tests::ambiguous_or_wrong_kind_keys_are_refused
+        PASS [   0.100s] ( 28/293) collaboration-central-core issuer_key_cache::tests::issuer_keys_expire_at_the_five_minute_boundary
+        PASS [   0.092s] ( 29/293) collaboration-central-core issuer_key_cache::tests::issuer_keys_from_another_configured_source_are_never_reused
+        PASS [   0.438s] ( 30/293) collaboration-central-core fleet_sender_binding::tests::admission_compares_independent_binding_and_claim_before_any_custody_or_work
+        PASS [   0.437s] ( 31/293) collaboration-central-core fleet_sender_binding::tests::confirmed_binding_rollback_is_retryable_and_retains_custody_and_original_source
+        PASS [   0.097s] ( 32/293) collaboration-central-core issuer_key_cache::tests::issuer_keys_preserve_shorter_and_zero_cache_lifetimes
+        PASS [   0.109s] ( 33/293) collaboration-central-core issuer_key_cache::tests::malformed_key_sets_cannot_partially_replace_a_retained_set
+        PASS [   0.099s] ( 34/293) collaboration-central-core issuer_key_cache::tests::unknown_keys_and_a_withdrawn_empty_set_are_explicit
+        PASS [   0.377s] ( 35/293) collaboration-central-core fleet_snapshot_read::tests::mixed_typed_children_and_reason_trees_use_fixed_statement_ranges
+        PASS [   0.103s] ( 36/293) collaboration-central-core issuer_key_resolution::tests::a_failed_expiry_refresh_never_falls_back_to_old_keys
+        PASS [   0.107s] ( 37/293) collaboration-central-core issuer_key_resolution::tests::a_cold_unknown_key_never_fetches_twice
+        PASS [   0.090s] ( 38/293) collaboration-central-core issuer_key_resolution::tests::a_rotated_key_is_selected_from_the_one_forced_refresh
+        PASS [   0.095s] ( 39/293) collaboration-central-core issuer_key_resolution::tests::a_known_fresh_key_needs_no_second_fetch
+        PASS [   0.101s] ( 40/293) collaboration-central-core issuer_key_resolution::tests::an_unknown_cached_key_refetches_once_then_refuses
+        PASS [   0.101s] ( 41/293) collaboration-central-core issuer_key_resolution::tests::cache_lifetime_is_measured_from_the_key_response_receipt
+        PASS [   0.100s] ( 42/293) collaboration-central-core issuer_key_resolution::tests::different_unknown_requests_each_fetch_once_then_a_known_key_hits
+        PASS [   0.087s] ( 43/293) collaboration-central-core issuer_signature_verifier::tests::issuer_signature_does_not_use_a_malformed_key_set
+        PASS [   0.096s] ( 44/293) collaboration-central-core issuer_signature_verifier::tests::issuer_signature_does_not_guess_a_verdict_when_key_fetch_fails
+        PASS [   0.094s] ( 45/293) collaboration-central-core issuer_signature_verifier::tests::issuer_signature_keeps_invalid_separate_from_unavailable_crypto
+        PASS [   0.102s] ( 46/293) collaboration-central-core issuer_signature_verifier::tests::issuer_signature_refuses_empty_or_unknown_key_without_crypto
+        PASS [   0.103s] ( 47/293) collaboration-central-core issuer_signature_verifier::tests::issuer_signature_preserves_the_selected_key_and_original_signed_bytes
+        PASS [   0.094s] ( 48/293) collaboration-central-core machine_notice_store::notice_columns::tests::retired_mail_waiting_rows_are_refused_instead_of_coerced
+        PASS [   0.098s] ( 49/293) collaboration-central-core machine_notice_store::notice_columns::tests::every_control_variant_roundtrips_through_its_columns
+        PASS [   0.094s] ( 50/293) collaboration-central-core machine_notice_store::notice_columns::tests::unknown_kinds_and_mismatched_variant_columns_are_refused
+        PASS [   0.149s] ( 51/293) collaboration-central-core machine_notice_store::tests::machines_keep_independent_notice_positions_and_retention_floors
+        PASS [   0.093s] ( 52/293) collaboration-central-core mail_status_dispatch::tests::a_push_answer_cannot_complete_a_project_status_call
+        PASS [   0.093s] ( 53/293) collaboration-central-core mail_status_dispatch::tests::a_correlated_negative_status_answer_keeps_its_refusal
+        PASS [   0.092s] ( 54/293) collaboration-central-core mail_status_dispatch::tests::a_silent_project_answer_waits_for_its_causal_deadline_then_remains_retryable
+        PASS [   0.131s] ( 55/293) collaboration-central-core object_bootstrap::admin_import_columns_tests::admin_import_first_header_guards_and_empty_manifest_use_existing_domain_rules
+        PASS [   0.256s] ( 56/293) collaboration-central-core mail_submit_admission::tests::enrollment_expiry_refuses_at_its_exact_boundary_and_preserves_historical_binding
+        PASS [   0.189s] ( 57/293) collaboration-central-core object_bootstrap::admin_import_columns_tests::admin_import_schema_exposes_typed_header_phase_and_manifest_children
+        PASS [   0.201s] ( 58/293) collaboration-central-core object_bootstrap::admin_import_columns_tests::admin_import_late_child_key_failure_rolls_back_header_and_manifest
+        PASS [   0.168s] ( 59/293) collaboration-central-core object_bootstrap::adr_columns_tests::adr_and_repository_file_schemas_have_only_the_approved_typed_columns
+        PASS [   0.308s] ( 60/293) collaboration-central-core object_bootstrap::admin_import_columns_tests::admin_import_header_and_ordered_manifest_survive_phases_replay_and_owning_reopen
+        PASS [   0.509s] ( 61/293) collaboration-central-core mail_push_dispatch::tests::actual_no_capacity_refusal_keeps_no_effect_and_expires_without_recipient_custody
+        PASS [   0.489s] ( 62/293) collaboration-central-core mail_sender_calls::tests::unauthorized_settlement_claims_never_create_negative_custody_or_removal_work
+        PASS [   0.525s] ( 63/293) collaboration-central-core mail_push_dispatch::tests::committed_inbox_answer_timeout_preserves_possible_reach_and_its_later_report_advances_sent
+        PASS [   0.254s] ( 64/293) collaboration-central-core object_bootstrap::adr_columns_tests::adr_revision_extremes_and_full_ordered_file_list_survive_transition_and_reopen
+        PASS [   0.196s] ( 65/293) collaboration-central-core object_bootstrap::adr_columns_tests::late_adr_write_failure_rolls_back_parent_and_ordered_repository_files
+        PASS [   0.263s] ( 66/293) collaboration-central-core object_bootstrap::adr_columns_tests::adr_supersedes_reference_and_terminal_lifecycle_states_survive_reopen
+        PASS [   0.638s] ( 67/293) collaboration-central-core mail_sender_calls::tests::current_holder_settles_unknown_project_and_query_preserves_its_owner_after_reopen
+        PASS [   0.163s] ( 68/293) collaboration-central-core object_bootstrap::board_columns_tests::board_schema_contains_only_approved_typed_body_and_envelope_columns
+        PASS [   0.248s] ( 69/293) collaboration-central-core object_bootstrap::board_columns_tests::board_position_boundaries_and_precise_session_envelopes_survive_reopen
+        PASS [   0.152s] ( 70/293) collaboration-central-core object_bootstrap::board_columns_tests::late_board_write_failure_restores_original_kind_body_and_envelope
+        PASS [   0.187s] ( 71/293) collaboration-central-core object_bootstrap::directory_columns_tests::directory_precise_envelope_position_extremes_and_first_time_survive_reopen
+        PASS [   0.129s] ( 72/293) collaboration-central-core object_bootstrap::directory_columns_tests::directory_schema_exposes_identity_envelope_copy_and_lease_columns
+        PASS [   0.161s] ( 73/293) collaboration-central-core object_bootstrap::directory_columns_tests::late_directory_transaction_failure_restores_identity_copy_and_lease_across_reopen
+        PASS [   0.174s] ( 74/293) collaboration-central-core object_bootstrap::directory_projection_tests::directory_lease_older_conflicting_and_newer_revisions_keep_original_rules
+        PASS [   0.524s] ( 75/293) collaboration-central-core object_bootstrap::board_columns_tests::board_rejects_unknown_tags_classes_and_malformed_initiative_variants
+        PASS [   0.212s] ( 76/293) collaboration-central-core object_bootstrap::directory_projection_tests::directory_copy_summary_keeps_full_position_domain_time_and_ack_across_reopen
+        PASS [   0.485s] ( 77/293) collaboration-central-core object_bootstrap::board_columns_tests::board_variants_states_and_first_timestamps_survive_rename_and_reopen
+        PASS [   0.176s] ( 78/293) collaboration-central-core object_bootstrap::feed_columns_tests::feed_schema_exposes_typed_snapshots_and_ordered_children
+        PASS [   0.898s] ( 79/293) collaboration-central-core object_bootstrap::adr_columns_tests::adr_rejects_corrupt_tags_classes_partial_references_and_file_gaps
+        PASS [   0.228s] ( 80/293) collaboration-central-core object_bootstrap::feed_columns_tests::feed_all_five_kinds_keep_exact_snapshots_ordered_lists_and_request_envelopes_after_reopen
+        PASS [   0.555s] ( 81/293) collaboration-central-core object_bootstrap::directory_projection_tests::directory_copy_rejects_partial_noncanonical_time_and_wrong_physical_classes
+        PASS [   0.715s] ( 82/293) collaboration-central-core object_bootstrap::directory_columns_tests::directory_rejects_unknown_envelopes_wrong_classes_and_noncanonical_values
+        PASS [   1.063s] ( 83/293) collaboration-central-core object_bootstrap::adr_columns_tests::adr_made_in_accepts_the_full_shared_record_kind_vocabulary
+        PASS [   0.167s] ( 84/293) collaboration-central-core object_bootstrap::feed_retention_tests::late_feed_child_key_collision_rolls_back_initialized_state_parent_and_first_child
+        PASS [   0.220s] ( 85/293) collaboration-central-core object_bootstrap::feed_retention_tests::feed_retention_preserves_the_nanosecond_boundary_and_keeps_request_authorities
+        PASS [   0.185s] ( 86/293) collaboration-central-core object_bootstrap::feed_retention_tests::late_feed_prune_failure_restores_floor_parent_and_both_ordered_child_tables
+        PASS [   0.446s] ( 87/293) collaboration-central-core object_bootstrap::directory_projection_tests::directory_lease_variants_and_full_u64_counters_survive_reopen
+        PASS [   0.142s] ( 88/293) collaboration-central-core object_bootstrap::ledger_columns_tests::ledger_schema_exposes_typed_decisions_reason_nodes_and_evidence
+        PASS [   0.165s] ( 89/293) collaboration-central-core object_bootstrap::ledger_integrity_tests::ledger_late_uniqueness_failure_rolls_back_entire_reason_tree
+        PASS [   0.178s] ( 90/293) collaboration-central-core object_bootstrap::ledger_integrity_tests::ledger_retains_full_unsigned_effect_count_in_immutable_header
+        PASS [   0.192s] ( 91/293) collaboration-central-core object_bootstrap::ledger_integrity_tests::ledger_replay_preserves_first_authority_and_ingestion_time_after_reopen
+        PASS [   0.167s] ( 92/293) collaboration-central-core object_bootstrap::receipt_columns_tests::receipts_keep_exact_order_original_placements_and_owner_times_after_replay_and_reopen
+        PASS [   0.149s] ( 93/293) collaboration-central-core object_bootstrap::receipt_columns_tests::receipts_late_sql_conflict_rolls_back_header_and_all_typed_effect_rows
+        PASS [   0.279s] ( 94/293) collaboration-central-core object_bootstrap::ledger_integrity_tests::ledger_rejects_cross_request_parent_and_stored_stale_seat_pair
+        PASS [   0.120s] ( 95/293) collaboration-central-core object_bootstrap::receipt_columns_tests::receipts_schema_exposes_typed_reference_placement_and_owner_times
+        PASS [   1.606s] ( 96/293) collaboration-central-core object_bootstrap::admin_import_corruption_tests::admin_import_rejects_corrupt_header_phase_and_ordered_manifest_rows
+        PASS [   0.885s] ( 97/293) collaboration-central-core object_bootstrap::directory_projection_tests::directory_lease_rejects_unknown_partial_noncanonical_and_wrong_class_fields
+        PASS [   0.132s] ( 98/293) collaboration-central-core object_bootstrap::repository_columns_tests::late_attachment_key_failure_rolls_back_the_entire_multi_reference_transaction
+        PASS [   0.118s] ( 99/293) collaboration-central-core object_bootstrap::repository_columns_tests::repository_attachment_schema_exposes_typed_reference_and_original_header_columns
+        PASS [   0.120s] (100/293) collaboration-central-core object_bootstrap::repository_columns_tests::reference_business_keys_are_distinct_and_primary_key_conflicts_are_not_swallowed
+        PASS [   0.163s] (101/293) collaboration-central-core object_bootstrap::repository_columns_tests::origin_and_local_replays_keep_the_first_association_header_and_ingestion_times
+        PASS [   0.169s] (102/293) collaboration-central-core object_bootstrap::tests::backwards_clock_records_zero_execution_time_and_commits_history
+        PASS [   0.152s] (103/293) collaboration-central-core object_bootstrap::tests::latest_failure_keeps_identity_and_creation_but_advances_its_injected_failure_time
+        PASS [   0.167s] (104/293) collaboration-central-core object_bootstrap::tests::fresh_bootstrap_matches_sqlx_migration_column_types_and_checksum_bytes
+        PASS [   0.180s] (105/293) collaboration-central-core object_bootstrap::tests::fleet_and_copy_bootstrap_create_final_bookkeeping_with_integer_injected_times
+        PASS [   0.112s] (106/293) collaboration-central-core object_bootstrap::tests::migration_execution_time_uses_the_injected_clock_around_each_execute
+        PASS [   0.320s] (107/293) collaboration-central-core object_bootstrap::tests::corrupt_native_bookkeeping_times_refuse_bootstrap_or_make_health_explicitly_unreadable
+        PASS [   0.478s] (108/293) collaboration-central-core object_bootstrap::repository_columns_tests::attachment_rejects_unknown_tags_physical_classes_and_partial_reference_variants
+        PASS [   0.129s] (109/293) collaboration-central-core object_bootstrap::workspace_columns_tests::workspace_and_ordered_repository_schema_have_only_the_approved_typed_columns
+        PASS [   0.144s] (110/293) collaboration-central-core object_bootstrap::workspace_columns_tests::late_workspace_child_write_failure_keeps_original_parent_and_repository_list
+        PASS [   0.136s] (111/293) collaboration-central-core object_bootstrap::workspace_columns_tests::workspace_preserves_embedded_nul_resource_text_at_the_declared_bounds
+        PASS [   0.185s] (112/293) collaboration-central-core object_bootstrap::workspace_columns_tests::workspace_preserves_bounded_position_extremes_repository_order_and_creation_across_reopen
+        PASS [   0.106s] (113/293) collaboration-central-core object_transport::tests::a_project_can_deliver_only_its_durable_directory_summary_to_fleet
+        PASS [   0.106s] (114/293) collaboration-central-core object_transport::tests::decoder_allows_the_session_to_registry_edge
+        PASS [   0.702s] (115/293) collaboration-central-core object_bootstrap::receipt_columns_tests::receipts_refuse_invalid_classes_tags_ordinals_and_changed_commitments
+        PASS [   0.160s] (116/293) collaboration-central-core object_bootstrap::workspace_columns_tests::workspace_repository_ordinals_remain_numeric_through_the_full_sixteen_entry_list
+        PASS [   0.123s] (117/293) collaboration-central-core object_transport::tests::decoder_refuses_a_synchronous_copy_to_fleet_call
+        PASS [   0.243s] (118/293) collaboration-central-core object_bootstrap::workspace_columns_tests::workspace_preserves_session_and_router_actor_variants_and_nanosecond_time
+        PASS [   0.131s] (119/293) collaboration-central-core object_transport::tests::decoder_refuses_the_well_formed_copy_to_registry_edge
+        PASS [   0.123s] (120/293) collaboration-central-core object_transport::tests::organization_binding_refuses_a_foreign_fleet_before_dispatch
+        PASS [   0.117s] (121/293) collaboration-central-core object_transport::tests::organization_binding_refuses_encoding_a_cross_fleet_dispatch
+        PASS [   0.131s] (122/293) collaboration-central-core object_transport::tests::organization_binding_refuses_global_and_missing_organization_shapes
+        PASS [   0.121s] (123/293) collaboration-central-core object_transport::tests::project_calls_require_the_fleet_physical_owner
+        PASS [   0.119s] (124/293) collaboration-central-core object_transport::tests::removed_mailbox_addresses_and_faces_are_rejected_before_dispatch
+        PASS [   0.112s] (125/293) collaboration-central-core organization_authority::fleet_statement::tests::fleet_statement_accepts_a_real_signature_with_the_exact_sign_in_profile
+        PASS [   0.099s] (126/293) collaboration-central-core organization_authority::fleet_statement::tests::fleet_statement_expires_at_the_exact_exp_boundary
+        PASS [   0.115s] (127/293) collaboration-central-core organization_authority::fleet_statement::tests::fleet_statement_keeps_a_valid_signed_predecessor_without_applying_policy
+        PASS [   0.107s] (128/293) collaboration-central-core organization_authority::fleet_statement::tests::fleet_statement_refuses_a_different_issuer
+        PASS [   0.100s] (129/293) collaboration-central-core organization_authority::fleet_statement::tests::fleet_statement_refuses_a_forged_signature
+        PASS [   0.101s] (130/293) collaboration-central-core organization_authority::fleet_statement::tests::fleet_statement_refuses_a_future_issuance_time
+        PASS [   0.100s] (131/293) collaboration-central-core organization_authority::fleet_statement::tests::fleet_statement_refuses_a_person_token_header
+        PASS [   0.095s] (132/293) collaboration-central-core organization_authority::fleet_statement::tests::fleet_statement_refuses_an_edited_signed_predecessor
+        PASS [   0.098s] (133/293) collaboration-central-core organization_authority::fleet_statement::tests::fleet_statement_refuses_an_unsupported_version
+        PASS [   0.102s] (134/293) collaboration-central-core organization_authority::fleet_statement::tests::fleet_statement_refuses_another_audience
+        PASS [   0.100s] (135/293) collaboration-central-core organization_authority::fleet_statement::tests::fleet_statement_refuses_another_organization_even_with_its_real_signature
+        PASS [   0.098s] (136/293) collaboration-central-core organization_authority::fleet_statement::tests::fleet_statement_refuses_another_signature_algorithm
+        PASS [   0.096s] (137/293) collaboration-central-core organization_authority::fleet_statement::tests::fleet_statement_refuses_another_signed_purpose
+        PASS [   0.103s] (138/293) collaboration-central-core organization_authority::fleet_statement::tests::fleet_statement_refuses_null_malformed_or_unsigned_profile_fields
+        PASS [   0.092s] (139/293) collaboration-central-core organization_authority::fleet_statement::tests::fleet_statement_requires_subject_and_organization_to_agree
+        PASS [   0.091s] (140/293) collaboration-central-core organization_authority::identity::tests::provisioning_distinguishes_initialization_repeat_and_foreign_organization
+        PASS [   0.085s] (141/293) collaboration-central-core organization_authority::identity::tests::public_requests_require_a_stamp_for_the_same_organization
+        PASS [   0.097s] (142/293) collaboration-central-core organization_authority::project_ownership::tests::fleet_ownership_accepts_its_directory_project_for_the_same_token_organization
+        PASS [   0.087s] (143/293) collaboration-central-core organization_authority::project_ownership::tests::fleet_ownership_refuses_a_foreign_project_even_with_a_matching_token
+        PASS [   0.112s] (144/293) collaboration-central-core organization_authority::project_ownership::tests::fleet_ownership_refuses_a_foreign_token_before_reading_the_directory
+        PASS [   0.109s] (145/293) collaboration-central-core organization_authority::statement_replacement::tests::fleet_replacement_clock_correction_cannot_rebase_a_delayed_candidate
+        PASS [   0.115s] (146/293) collaboration-central-core organization_authority::statement_replacement::tests::fleet_replacement_accepts_the_matching_signed_predecessor
+        PASS [   0.106s] (147/293) collaboration-central-core organization_authority::statement_replacement::tests::fleet_replacement_initializes_only_without_a_signed_predecessor
+        PASS [   0.731s] (148/293) collaboration-central-core object_bootstrap::workspace_columns_tests::workspace_rejects_unknown_tags_wrong_sqlite_classes_and_repository_child_gaps
+        PASS [   0.106s] (149/293) collaboration-central-core organization_authority::statement_replacement::tests::fleet_replacement_never_changes_the_stored_organization
+        PASS [   0.112s] (150/293) collaboration-central-core organization_authority::statement_replacement::tests::fleet_replacement_keeps_a_setup_retry_after_a_lost_reply
+        PASS [   0.102s] (151/293) collaboration-central-core organization_provisioning_http::tests::a_failed_attempt_is_never_reported_provisioned_or_retried
+        PASS [   0.107s] (152/293) collaboration-central-core organization_authority::statement_replacement::tests::fleet_replacement_two_candidates_for_one_predecessor_have_one_decision_winner
+        PASS [   0.098s] (153/293) collaboration-central-core organization_provisioning_http::tests::another_operation_or_malformed_body_never_calls_the_provisioner
+        PASS [   0.107s] (154/293) collaboration-central-core organization_provisioning_http::tests::a_valid_request_calls_the_provisioner_once_and_returns_the_closed_answer
+        PASS [   0.113s] (155/293) collaboration-central-core organization_authority::statement_replacement::tests::fleet_replacement_original_setup_replay_preserves_the_replacement
+        PASS [   0.096s] (156/293) collaboration-central-core organization_provisioning_http::tests::the_method_and_path_select_the_operation_before_a_body_is_used
+        PASS [   0.096s] (157/293) collaboration-central-core owner_http_routes::tests::owner_http_preserves_full_and_other_shared_unavailable_reasons
+        PASS [   1.702s] (158/293) collaboration-central-core object_bootstrap::ledger_integrity_tests::ledger_rejects_corrupt_headers_reason_graphs_and_evidence
+        PASS [   0.116s] (159/293) collaboration-central-core peer_request::enrollment_tests::enrolled_peer_can_acquire_an_outgoing_call
+        PASS [   0.114s] (160/293) collaboration-central-core peer_request::enrollment_tests::forward_tests::enrolled_holder_selects_a_forward_correlation
+        PASS [   0.117s] (161/293) collaboration-central-core peer_request::enrollment_tests::forward_tests::an_exact_forward_selected_before_revoke_can_replay
+        PASS [   2.031s] (162/293) collaboration-central-core object_bootstrap::feed_retention_tests::feed_rejects_corrupt_header_variants_lists_and_cross_authority_request_envelopes
+        PASS [   1.765s] (163/293) collaboration-central-core object_bootstrap::ledger_columns_tests::ledger_preserves_full_shared_refusal_vocabulary_and_commitments_across_owning_reopen
+        PASS [   0.127s] (164/293) collaboration-central-core peer_request::enrollment_tests::outgoing_selection_samples_expiry_after_waiting_for_the_fleet_transaction
+        PASS [   0.110s] (165/293) collaboration-central-core registration_refusal::tests::creation_refusals_keep_literal_text_and_stable_wire_codes
+        PASS [   0.157s] (166/293) collaboration-central-core peer_request::enrollment_tests::forward_tests::revoked_holder_gets_no_new_forward_correlation
+        PASS [   0.155s] (167/293) collaboration-central-core peer_request::enrollment_tests::revoked_peer_cannot_acquire_a_new_outgoing_call
+        PASS [   0.092s] (168/293) collaboration-central-core registration_refusal::tests::other_typed_refusals_preserve_explicit_compact_structure
+        PASS [   0.104s] (169/293) collaboration-central-core session_request_admission::tests::the_authenticated_writer_is_not_refused_by_the_session_peer_guard
+        PASS [   0.137s] (170/293) collaboration-central-core session_scope::enrollment_gate_tests::revoked_claim_selects_no_transfer
+        PASS [   0.139s] (171/293) collaboration-central-core session_scope::enrollment_gate_tests::revoked_archive_seen_selects_only_its_admission_refusal
+        PASS [   0.130s] (172/293) collaboration-central-core session_scope::enrollment_gate_tests::revoked_forward_selects_no_pending_row_or_route
+        PASS [   0.125s] (173/293) collaboration-central-core session_scope::enrollment_gate_tests::revoked_piece_selects_no_copy_write
+        PASS [   0.133s] (174/293) collaboration-central-core session_scope::enrollment_gate_tests::revoked_fleet_request_selects_only_its_admission_refusal
+        PASS [   0.116s] (175/293) collaboration-central-core session_scope::enrollment_gate_tests::revoked_project_settle_selects_no_negative_custody
+        PASS [   0.117s] (176/293) collaboration-central-core session_scope::enrollment_gate_tests::revoked_register_selects_no_registration
+        PASS [   0.120s] (177/293) collaboration-central-core session_scope::enrollment_gate_tests::revoked_renew_selects_no_renewal
+        PASS [   0.117s] (178/293) collaboration-central-core session_scope::enrollment_gate_tests::revoked_seed_begin_selects_no_copy_write
+        PASS [   0.112s] (179/293) collaboration-central-core session_scope::enrollment_gate_tests::revoked_seed_complete_selects_no_copy_write
+        PASS [   0.102s] (180/293) collaboration-central-core::integration access_rules::caller_is_not_released_until_the_signature_port_returns_valid
+        PASS [   0.100s] (181/293) collaboration-central-core::integration access_rules::jwks_selects_only_one_compatible_key_by_kid
+        PASS [   0.099s] (182/293) collaboration-central-core::integration access_rules::observed_service_token_payload_parses_as_machine
+        PASS [   0.103s] (183/293) collaboration-central-core::integration access_rules::missing_malformed_algorithm_issuer_audience_and_path_fail_closed
+        PASS [   0.095s] (184/293) collaboration-central-core::integration access_rules::owner_is_an_identity_assertion_and_must_match_the_configured_identity
+        PASS [   0.087s] (185/293) collaboration-central-core::integration access_rules::rsa_key_selection_enforces_the_native_modulus_and_exponent_profile
+        PASS [   0.125s] (186/293) collaboration-central-core session_scope::enrollment_gate_tests::revoked_seed_page_selects_no_copy_write
+        PASS [   0.096s] (187/293) collaboration-central-core::integration access_rules::single_string_audience_for_another_app_is_refused
+        PASS [   0.084s] (188/293) collaboration-central-core::integration access_rules::supplied_clock_exact_expiry_and_not_before_boundaries_are_enforced
+        PASS [   0.088s] (189/293) collaboration-central-core::integration access_rules::the_existing_valid_1024_bit_fixture_is_refused_by_core_key_selection
+        PASS [   0.092s] (190/293) collaboration-central-core::integration call_edge_mapping::project_sync_calls_refuse_registry_and_fleet_with_exact_typed_edges
+        PASS [   0.104s] (191/293) collaboration-central-core::integration admin_lookup_result_contracts::allowed_machine_row_wire_contract
+        PASS [   0.111s] (192/293) collaboration-central-core::integration admin_lookup_result_contracts::command_status_result_wire_contract
+        PASS [   0.094s] (193/293) collaboration-central-core::integration enrollment_contracts::admission_id_wire_contract
+        PASS [   0.115s] (194/293) collaboration-central-core::integration admin_lookup_result_contracts::workspace_lookup_result_wire_contract
+        PASS [   0.120s] (195/293) collaboration-central-core::integration admin_lookup_result_contracts::identity_lookup_result_wire_contract
+        PASS [   0.118s] (196/293) collaboration-central-core::integration admin_lookup_result_contracts::machine_lookup_result_wire_contract
+        PASS [   0.096s] (197/293) collaboration-central-core::integration enrollment_contracts::client_id_wire_contract
+        PASS [   0.103s] (198/293) collaboration-central-core::integration enrollment_contracts::admission_ref_wire_contract
+        PASS [   0.099s] (199/293) collaboration-central-core::integration enrollment_contracts::command_id_wire_contract
+        PASS [   0.105s] (200/293) collaboration-central-core::integration enrollment_contracts::device_login_request_id_wire_contract
+        PASS [   0.121s] (201/293) collaboration-central-core::integration enrollment_contracts::enrollment_authorization_wire_contract
+        PASS [   0.122s] (202/293) collaboration-central-core::integration enrollment_contracts::enrollment_revocation_reason_wire_contract
+        PASS [   0.116s] (203/293) collaboration-central-core::integration identity_boundary_rules::configured_token_lifetime_requires_the_adopted_range
+        PASS [   0.118s] (204/293) collaboration-central-core::integration enrollment_contracts::person_id_wire_contract
+        PASS [   0.133s] (205/293) collaboration-central-core::integration enrollment_contracts::machine_enrollment_wire_contract
+        PASS [   0.128s] (206/293) collaboration-central-core::integration identity_boundary_rules::internal_enrollments_never_become_public_states
+        PASS [   0.117s] (207/293) collaboration-central-core::integration identity_boundary_rules::javascript_counters_refuse_two_to_the_fifty_third
+        PASS [   0.123s] (208/293) collaboration-central-core::integration identity_boundary_rules::optional_reads_accept_null_but_writes_omit_the_key
+        PASS [   0.108s] (209/293) collaboration-central-core::integration identity_boundary_rules::resource_name_schema_refuses_blank_and_noncanonical_text
+        PASS [   0.094s] (210/293) collaboration-central-core::integration identity_boundary_rules::reviewed_scalar_claim_schema_rejects_invalid_installation
+        PASS [   0.104s] (211/293) collaboration-central-core::integration issuer_decision_contracts::admit_machine_connection_wire_contract
+        PASS [   0.108s] (212/293) collaboration-central-core::integration issuer_decision_contracts::admitted_machine_wire_contract
+        PASS [   0.107s] (213/293) collaboration-central-core::integration issuer_decision_contracts::decide_machine_token_wire_contract
+        PASS [   0.115s] (214/293) collaboration-central-core::integration issuer_decision_contracts::decide_device_login_wire_contract
+        PASS [   0.108s] (215/293) collaboration-central-core::integration issuer_decision_contracts::device_login_refusal_wire_contract
+        PASS [   0.114s] (216/293) collaboration-central-core::integration issuer_decision_contracts::device_login_decision_wire_contract
+        PASS [   0.108s] (217/293) collaboration-central-core::integration issuer_decision_contracts::disable_machine_client_wire_contract
+        PASS [   0.105s] (218/293) collaboration-central-core::integration issuer_decision_contracts::disabled_machine_client_wire_contract
+        PASS [   0.105s] (219/293) collaboration-central-core::integration issuer_decision_contracts::machine_connection_admission_wire_contract
+        PASS [   0.105s] (220/293) collaboration-central-core::integration issuer_decision_contracts::machine_connection_refusal_wire_contract
+        PASS [   0.101s] (221/293) collaboration-central-core::integration issuer_decision_contracts::machine_principal_wire_contract
+        PASS [   0.099s] (222/293) collaboration-central-core::integration issuer_decision_contracts::machine_token_claims_wire_contract
+        PASS [   0.098s] (223/293) collaboration-central-core::integration issuer_decision_contracts::machine_token_decision_wire_contract
+        PASS [   0.099s] (224/293) collaboration-central-core::integration issuer_decision_contracts::machine_token_refusal_wire_contract
+        PASS [   0.095s] (225/293) collaboration-central-core::integration issuer_decision_contracts::organization_standing_wire_contract
+        PASS [   0.100s] (226/293) collaboration-central-core::integration issuer_policy::a_private_network_issuer_has_an_independent_key_source
+        PASS [   0.108s] (227/293) collaboration-central-core::integration issuer_decision_contracts::presented_machine_wire_contract
+        PASS [   0.110s] (228/293) collaboration-central-core::integration issuer_decision_contracts::person_admission_request_wire_contract
+        PASS [   0.110s] (229/293) collaboration-central-core::integration issuer_decision_contracts::standing_role_wire_contract
+        PASS [   0.089s] (230/293) collaboration-central-core::integration issuer_policy::cloudflare_configuration_keeps_its_exact_issuer_key_source_and_validation
+        PASS [   0.089s] (231/293) collaboration-central-core::integration issuer_policy::malformed_or_credential_bearing_issuer_and_key_source_are_refused
+        PASS [   0.104s] (232/293) collaboration-central-core::integration machine_claim_boundaries::full_issuer_payload_keeps_registered_claims_outside_extension_ownership
+        PASS [   0.101s] (233/293) collaboration-central-core::integration machine_claim_boundaries::machine_claims_refuse_camel_case_identity_fields
+        PASS [   0.097s] (234/293) collaboration-central-core::integration object_addresses::copy_address_round_trip_preserves_the_original_persisted_encoding
+        PASS [   0.107s] (235/293) collaboration-central-core::integration organization_command_contracts::allow_machine_wire_contract
+        PASS [   0.154s] (236/293) collaboration-central-core::integration organization_command_contracts::allowance_state_wire_contract
+        PASS [   0.159s] (237/293) collaboration-central-core::integration organization_command_contracts::command_refusal_wire_contract
+        PASS [   0.171s] (238/293) collaboration-central-core::integration organization_command_contracts::command_status_wire_contract
+        PASS [   0.179s] (239/293) collaboration-central-core::integration organization_command_contracts::create_workspace_wire_contract
+        PASS [   0.175s] (240/293) collaboration-central-core::integration organization_command_contracts::identity_lookup_wire_contract
+        PASS [   0.165s] (241/293) collaboration-central-core::integration organization_command_contracts::machine_allowance_wire_contract
+        PASS [   0.172s] (242/293) collaboration-central-core::integration organization_command_contracts::organization_command_result_wire_contract
+        PASS [   0.174s] (243/293) collaboration-central-core::integration organization_command_contracts::machine_lookup_wire_contract
+        PASS [   0.171s] (244/293) collaboration-central-core::integration organization_command_contracts::remove_session_wire_contract
+        PASS [   0.165s] (245/293) collaboration-central-core::integration organization_command_contracts::revoke_machine_enrollment_wire_contract
+        PASS [   0.106s] (246/293) collaboration-central-core::integration organization_command_contracts::set_token_lifetime_wire_contract
+        PASS [   0.107s] (247/293) collaboration-central-core::integration organization_command_contracts::token_lifetime_seconds_wire_contract
+        PASS [   0.098s] (248/293) collaboration-central-core::integration organization_command_contracts::withdraw_machine_allowance_wire_contract
+        PASS [   0.100s] (249/293) collaboration-central-core::integration organization_command_contracts::workspace_lookup_wire_contract
+        PASS [   0.099s] (250/293) collaboration-central-core::integration organization_provisioning_contracts::provision_organization_result_wire_contract
+        PASS [   0.111s] (251/293) collaboration-central-core::integration organization_provisioning_contracts::provision_organization_wire_contract
+        PASS [   0.094s] (252/293) collaboration-central-core::integration organization_provisioning_contracts::retired_people_commands_are_not_provisioning_requests
+        PASS [   0.094s] (253/293) collaboration-central-core::integration presence_lookup_contracts::admitted_person_row_wire_contract
+        PASS [   0.102s] (254/293) collaboration-central-core::integration presence_lookup_contracts::connection_view_wire_contract
+        PASS [   0.102s] (255/293) collaboration-central-core::integration presence_lookup_contracts::enrollment_view_wire_contract
+        PASS [   0.103s] (256/293) collaboration-central-core::integration presence_lookup_contracts::machine_presence_answer_wire_contract
+        PASS [   0.102s] (257/293) collaboration-central-core::integration presence_lookup_contracts::owner_refusal_wire_contract
+        PASS [   0.101s] (258/293) collaboration-central-core::integration presence_lookup_contracts::project_ref_wire_contract
+        PASS [   0.096s] (259/293) collaboration-central-core::integration presence_lookup_contracts::read_machine_presence_wire_contract
+        PASS [   0.130s] (260/293) collaboration-central-core::integration presence_lookup_contracts::machine_row_wire_contract
+        PASS [   0.110s] (261/293) collaboration-central-core::integration presence_lookup_contracts::session_row_wire_contract
+        PASS [   0.101s] (262/293) collaboration-central-core::integration presence_lookup_contracts::session_state_view_wire_contract
+        PASS [   0.097s] (263/293) collaboration-central-core::integration presence_lookup_contracts::workspace_ref_wire_contract
+        PASS [   0.113s] (264/293) collaboration-central-core::integration presence_lookup_contracts::who_is_logged_in_wire_contract
+        PASS [   0.100s] (265/293) collaboration-central-tokio::integration access_workflow::bad_signature_and_wrong_owner_never_release_an_authorized_caller
+        PASS [   0.111s] (266/293) collaboration-central-tokio::integration access_workflow::an_unknown_key_refreshes_before_verifying_the_rotated_assertion
+        PASS [   0.144s] (267/293) collaboration-central-core::integration presence_lookup_contracts::who_is_logged_in_result_wire_contract
+        PASS [   0.106s] (268/293) collaboration-central-tokio::integration access_workflow::key_expiry_honors_max_age_with_the_default_and_one_hour_cap
+        PASS [   0.108s] (269/293) collaboration-central-tokio::integration access_workflow::fetch_parse_and_key_selection_failures_refuse_before_crypto
+        PASS [   0.103s] (270/293) collaboration-central-tokio::integration access_workflow::missing_malformed_and_expired_assertions_are_refused_without_capabilities
+        PASS [   0.107s] (271/293) collaboration-central-tokio::integration access_workflow::zero_max_age_does_not_reuse_keys_at_the_same_clock_value
+        PASS [   0.100s] (272/293) collaboration-central-tokio::integration binding_attachment::malformed_noncanonical_and_out_of_domain_attachments_are_refused
+        PASS [   0.115s] (273/293) collaboration-central-tokio::integration binding_attachment::full_integer_domains_roundtrip_as_decimal_text_without_losing_admission_origin
+        PASS [   0.111s] (274/293) collaboration-central-tokio::integration object_identity::copy_identity_keeps_the_original_json_worker_name_and_native_key
+        PASS [   0.121s] (275/293) collaboration-central-tokio::integration person_dpop::expiry_is_sampled_after_host_crypto_finishes
+        PASS [   0.104s] (276/293) collaboration-central-tokio::integration person_dpop::issuer_usage_is_optional_and_conflicting_usage_is_refused
+        PASS [   0.457s] (277/293) collaboration-central-tokio::integration copy_receiver::applied_summary_keeps_unknown_time_and_no_status_in_copy_and_directory
+        PASS [   0.437s] (278/293) collaboration-central-tokio::integration copy_receiver::rollback::a_failure_after_hook_write_rolls_back_rows_ack_summary_and_admitted_follow_ups
+        PASS [   0.465s] (279/293) collaboration-central-tokio::integration copy_receiver::operations_metadata::own_history_and_failure_tables_are_excluded_and_cannot_be_claimed_by_project_schema
+        PASS [   0.489s] (280/293) collaboration-central-tokio::integration copy_receiver::a_piece_without_annotation_keeps_the_last_summary_and_admits_no_new_update
+        PASS [   0.460s] (281/293) collaboration-central-tokio::integration copy_receiver::owner_repair::owner_repair_discharges_real_directory_debt_and_expired_staged_parts
+        PASS [   0.477s] (282/293) collaboration-central-tokio::integration copy_receiver::snapshot::admin_seed_summary_and_follow_up_share_publication_and_never_rewrite_on_replay
+        PASS [   0.131s] (283/293) collaboration-central-tokio::integration person_dpop::jose_vectors_cross_native_crypto_and_core
+        FAIL [   0.560s] (284/293) collaboration-central-tokio::integration copy_receiver::capacity::summary_storage_full_is_preserved_as_copy_unavailable_after_real_rollback
+  stdout ───
+
+    running 1 test
+    test copy_receiver::capacity::summary_storage_full_is_preserved_as_copy_unavailable_after_real_rollback ... FAILED
+
+    failures:
+
+    failures:
+        copy_receiver::capacity::summary_storage_full_is_preserved_as_copy_unavailable_after_real_rollback
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 27 filtered out; finished in 0.43s
+
+  stderr ───
+    cargo debug runner: integration-9c38abc62fc6c2e9 stays linker-signed (no Developer ID identity for team 974QD84WVC); Keychain access prompts after each rebuild
+    Error: "Copy apply did not answer: NotSent { reason: Unreachable { last_seen: None } }"
+
+  Cancelling due to test failure: 9 tests still running
+        PASS [   0.106s] (285/293) collaboration-central-tokio::integration self_hosted_access::self_hosted_admin_audience_cannot_open_a_machine_session
+        PASS [   0.495s] (286/293) collaboration-central-tokio::integration copy_receiver::snapshot::ordinary_seed_keeps_summary_absent_until_an_annotated_piece
+        PASS [   0.098s] (287/293) collaboration-central-tokio::integration self_hosted_access::self_hosted_expired_assertion_is_refused
+        PASS [   0.101s] (288/293) collaboration-central-tokio::integration self_hosted_access::self_hosted_owner_and_machine_claims_pass_real_native_crypto
+        FAIL [   0.571s] (289/293) collaboration-central-tokio::integration copy_receiver::retry::lost_directory_ack_reopens_with_same_call_and_never_overwrites_a_newer_summary
+  stdout ───
+
+    running 1 test
+    test copy_receiver::retry::lost_directory_ack_reopens_with_same_call_and_never_overwrites_a_newer_summary ... FAILED
+
+    failures:
+
+    failures:
+        copy_receiver::retry::lost_directory_ack_reopens_with_same_call_and_never_overwrites_a_newer_summary
+
+    test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 27 filtered out; finished in 0.45s
+
+  stderr ───
+    cargo debug runner: integration-9c38abc62fc6c2e9 stays linker-signed (no Developer ID identity for team 974QD84WVC); Keychain access prompts after each rebuild
+    Error: "Copy apply did not answer: NotSent { reason: Unreachable { last_seen: None } }"
+
+        PASS [   0.093s] (290/293) collaboration-central-tokio::integration self_hosted_access::self_hosted_owner_must_match_after_signature_verification
+        PASS [   0.082s] (291/293) collaboration-central-tokio::integration self_hosted_access::self_hosted_wrong_issuer_is_refused
+        PASS [   0.087s] (292/293) collaboration-central-tokio::integration self_hosted_access::self_hosted_unknown_key_is_refused
+        PASS [   0.246s] (293/293) collaboration-central-tokio::integration self_hosted_access::generated_key_roundtrips_through_pkcs8_and_issues_verifiable_rs256
+────────────
+     Summary [   5.672s] 293 tests run: 291 passed, 2 failed, 0 skipped
+        FAIL [   0.560s] (284/293) collaboration-central-tokio::integration copy_receiver::capacity::summary_storage_full_is_preserved_as_copy_unavailable_after_real_rollback
+        FAIL [   0.571s] (289/293) collaboration-central-tokio::integration copy_receiver::retry::lost_directory_ack_reopens_with_same_call_and_never_overwrites_a_newer_summary
+error: test run failed

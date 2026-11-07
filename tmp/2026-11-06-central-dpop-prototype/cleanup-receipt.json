@@ -1,0 +1,45 @@
+{
+  "command": "cargo clean --workspace --profile dev",
+  "previews_reviewed": true,
+  "all_known_task_builds_and_tests_ended": true,
+  "open_file_checks": "lsof -n -P +D target; no consumers reported",
+  "local": {
+    "path": "/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/target",
+    "removed_files": 122,
+    "removed_size_reported": "63.3MiB",
+    "remaining_debug_size": "1.2G",
+    "available_before": "127Gi",
+    "available_after": "126Gi"
+  },
+  "sunclaw": {
+    "path": "/Users/shravansunder/code/projects/codex-router.item2-b2-central-dpop-prototype/target",
+    "removed_files": 932,
+    "removed_size_reported": "1.9GiB",
+    "remaining_debug_size": "2.5G",
+    "available_before": "357Gi",
+    "available_after": "359Gi"
+  },
+  "space_note": "df readings are whole-filesystem observations under concurrent activity; their delta is not attributed solely to this cleanup.",
+  "retained": [
+    "Worker build/index.js and build/index_bg.wasm, with hashes unchanged",
+    "Task-local worker-build and pinned Node tools",
+    "Raw proof, graph and failure receipts",
+    "Source worktrees and archive"
+  ],
+  "passive_waiters": {
+    "pids": [
+      11713,
+      77897,
+      89643
+    ],
+    "parent_verified": 94634,
+    "signal": "SIGTERM",
+    "tool_exit_codes": [
+      143,
+      143,
+      143
+    ],
+    "reason": "SSH observed returning 0 for remote exit17; loops could not terminate from the remote predicate"
+  },
+  "production_processes_touched": false
+}
