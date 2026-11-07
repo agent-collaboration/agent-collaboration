@@ -115,9 +115,13 @@ After reducing cycles or their edges, update `architecture/module-cycle-baseline
   directly, such as the `--router-binary` a debug-host example launches,
   bypasses the runner; sign it first with
   `scripts/cargo_debug_signing_runner.sh --sign-only <executable>...` (any
-  built executable).
+  built executable). Before running anything, the runner also signs every
+  executable at the top of its profile directory (the files
+  `CARGO_BIN_EXE_*` names), so tests that launch bin targets or copies of
+  them start signed builds.
   When signing cannot happen (no certificate in the login keychain, a locked
-  keychain) the runner runs the build linker-signed and says so.
+  keychain) the runner refuses to run the executable on a developer Mac;
+  only GitHub Actions runs it linker-signed.
 - Keep release publication separate from production process replacement.
   Publishing or installing a new binary never authorizes restarting the
   running production router.
