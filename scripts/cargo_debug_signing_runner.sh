@@ -134,30 +134,60 @@ profile_directory_for() {
   esac
 }
 
-# Sign every executable at the top of the profile directory that changed since
-# the last sweep (all of them on the first), so a test that launches
-# CARGO_BIN_EXE_<name> directly, or a copy of it, starts a signed build. A
-# stamp file keeps repeated launches (nextest runs each test binary many
-# times) to a find over new files.
+# A file's identity for the verified list: its inode and inode-change time,
+# to the nanosecond (an in-place overwrite keeps the inode).
+# Cargo can install an older unsigned build with its original modification
+# time (copies keep it), but any new file at the path gets a new inode and a
+# new change time, which userland can't set back.
+file_identity() {
+  if stat --version > /dev/null 2>&1; then
+    stat -c '%i:%z' "$1"
+  else
+    stat -f '%i:%Fc' "$1"
+  fi
+}
+
+# Sign every executable at the top of the profile directory, so a test that
+# launches CARGO_BIN_EXE_<name> directly, or a copy of it, starts a signed
+# build. A list of files already verified (path, inode, change time) keeps
+# repeated launches (nextest runs each test binary many times) to a stat per
+# file; any file not on the list as it is now is checked and signed.
 sign_profile_bins() {
   local profile_directory="$1"
-  local stamp="${profile_directory}/.debug-signing-checked"
-  local candidate
-  # Global, so the EXIT trap can still see it after a refusal exits.
-  if ! sweep_stamp="$(mktemp "${stamp}.XXXXXX" 2>&1)"; then
-    warn_unsigned "${profile_directory}" "could not create the sweep stamp: ${sweep_stamp}"
+  # Optional: the executable about to run, checked against the same list.
+  local requested="${2:-}"
+  local verified="${profile_directory}/.debug-signing-verified"
+  local candidate identity
+  # Globals, so the EXIT trap can still see them after a refusal exits.
+  if ! sweep_listing="$(mktemp "${verified}.listing.XXXXXX" 2>&1)" ||
+    ! sweep_verified="$(mktemp "${verified}.next.XXXXXX" 2>&1)"; then
+    warn_unsigned "${profile_directory}" "could not create sweep files"
     return 0
   fi
-  # A refusal exits the runner; don't leave the new stamp behind.
-  trap 'rm -f "${sweep_stamp}"' EXIT
-  local newer_than=()
-  if [[ -e "${stamp}" ]]; then
-    newer_than=(-newer "${stamp}")
+  # A refusal exits the runner; don't leave sweep files behind.
+  trap 'rm -f "${sweep_listing}" "${sweep_verified}"' EXIT
+  # Enumerate into a file so a failed or partial scan is a refusal, not a
+  # silently shorter list.
+  if ! find "${profile_directory}" -maxdepth 1 -type f -perm -u+x ! -name '*.dylib' ! -name '*.signing.*' -print0 > "${sweep_listing}"; then
+    warn_unsigned "${profile_directory}" "could not list its executables"
+    return 0
+  fi
+  if [[ -n "${requested}" && "$(dirname "${requested}")" != "${profile_directory}" ]]; then
+    printf '%s\0' "${requested}" >> "${sweep_listing}"
   fi
   while IFS= read -r -d '' candidate; do
+    identity="$(file_identity "${candidate}")"
+    if [[ -f "${verified}" ]] && grep -Fqx -- "${identity} ${candidate}" "${verified}"; then
+      echo "${identity} ${candidate}" >> "${sweep_verified}"
+      continue
+    fi
     sign_with_debug_identity "${candidate}" "$(debug_identifier_for "${candidate}")"
-  done < <(find "${profile_directory}" -maxdepth 1 -type f -perm -u+x ! -name '*.dylib' ! -name '*.signing.*' ${newer_than[@]+"${newer_than[@]}"} -print0)
-  mv -f "${sweep_stamp}" "${stamp}"
+    if has_debug_identity "${candidate}" "$(debug_identifier_for "${candidate}")"; then
+      echo "$(file_identity "${candidate}") ${candidate}" >> "${sweep_verified}"
+    fi
+  done < "${sweep_listing}"
+  mv -f "${sweep_verified}" "${verified}"
+  rm -f "${sweep_listing}"
   trap - EXIT
 }
 
@@ -171,6 +201,7 @@ fi
 
 executable="$1"
 shift
-sign_profile_bins "$(profile_directory_for "${executable}")"
-sign_with_debug_identity "${executable}" "$(debug_identifier_for "${executable}")"
+# The sweep also checks (and signs) the executable itself, so an unchanged
+# build costs a stat, not a full signature verification, on every launch.
+sign_profile_bins "$(profile_directory_for "${executable}")" "$(cd "$(dirname "${executable}")" && pwd)/$(basename "${executable}")"
 exec "${executable}" "$@"
