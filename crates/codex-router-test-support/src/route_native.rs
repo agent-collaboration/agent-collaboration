@@ -22,7 +22,7 @@ use upstream::assert_route_native_transcript;
 /// Runs route-native black-box proof against a served local router.
 pub fn run_route_native_black_box() -> Result<RouteNativeReport, String> {
     let test_root = RouteNativeTempRoot::new("route-native")?;
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     seed_route_native_state(&state_path, &secret_root)?;
 

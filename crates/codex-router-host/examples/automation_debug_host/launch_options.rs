@@ -262,7 +262,7 @@ impl DebugHostOptions {
                 OsString::from("--port"),
                 OsString::from(self.port.to_string()),
                 OsString::from("--state-db"),
-                router_root.join("state.sqlite").into_os_string(),
+                codex_router_state::provider_proxy_database_path(router_root).into_os_string(),
                 OsString::from("--secret-root"),
                 router_root.join("secrets").into_os_string(),
                 OsString::from("--audit-file"),

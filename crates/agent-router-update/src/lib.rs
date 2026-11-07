@@ -19,9 +19,11 @@ pub use message_copy::{
 mod ledger_step;
 mod merge_step;
 mod project_transform;
+mod proxy_store_step;
 mod rename_step;
 mod root_layout;
 mod router_update;
+pub use proxy_store_step::ProxyStoreChange;
 mod settings_step;
 pub use root_layout::RouterUpdateError;
 pub use router_update::{

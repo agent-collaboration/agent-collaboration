@@ -84,7 +84,7 @@ async fn older_responses_provider_failure_cannot_replace_newer_service_commit() 
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state_path = router_root.join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let state = must_ok(SqliteStateStore::open(&state_path));
     let account_id = account_id("acct_reversed_service_completion");
     must_ok(AccountStateRepository::upsert_account(
@@ -250,7 +250,9 @@ fn quota_refresh_http_provider_fetches_usage_and_persists_sqlite_state() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let account_id = account_id("acct_quota_http");
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
@@ -261,7 +263,7 @@ fn quota_refresh_http_provider_fetches_usage_and_persists_sqlite_state() {
     .with_active_credential_generation(1);
     must_ok(AccountStateRepository::upsert_account(&state, &account));
     let policy_state = must_ok(test_async_runtime().block_on(AsyncSqliteStateStore::open(
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
     )));
     must_ok(
         test_async_runtime().block_on(policy_state.save_account_credit_usage_policy(
@@ -445,7 +447,9 @@ fn quota_refresh_http_provider_fetches_usage_and_persists_sqlite_state() {
     assert_eq!(weekly_window.reset_unix_seconds(), Some(9_000));
     assert!(!weekly_window.effective());
     let async_state = must_ok(test_async_runtime().block_on(
-        AsyncSqliteStateStore::open_read_only(&router_root.join("state.sqlite")),
+        AsyncSqliteStateStore::open_read_only(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        )),
     ));
     let selector_inputs = must_ok(
         test_async_runtime()
@@ -535,7 +539,9 @@ fn quota_refresh_http_provider_fetches_usage_and_persists_sqlite_state() {
     ));
 
     let weekly_zero_state = must_ok(test_async_runtime().block_on(
-        AsyncSqliteStateStore::open_read_only(&router_root.join("state.sqlite")),
+        AsyncSqliteStateStore::open_read_only(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        )),
     ));
     let weekly_zero_projection = must_ok(test_async_runtime().block_on(
         codex_router_state::selection_projection::project_route_band_selection_inputs_read_only(
@@ -609,7 +615,7 @@ fn quota_refresh_http_provider_fetches_usage_and_persists_sqlite_state() {
     must_ok(test_async_runtime().block_on(weekly_zero_state.close()));
 
     let guard_state = must_ok(test_async_runtime().block_on(AsyncSqliteStateStore::open(
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
     )));
     for status in [
         SelectorQuotaWindowStatus::Ineligible,
@@ -682,7 +688,7 @@ fn claude_usage_http_response_is_persisted_as_started_window_observations() {
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
     ensure_async_state_schema(&router_root);
-    let state_path = router_root.join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let account_id = account_id("acct_claude_usage_persisted");
     let state = must_ok(test_async_runtime().block_on(AsyncSqliteStateStore::open(&state_path)));
     must_ok(
@@ -789,7 +795,7 @@ fn claude_usage_http_response_is_persisted_as_started_window_observations() {
 fn loopback_quota_401_retries_with_a_concurrently_committed_generation() {
     let test_root = TestRoot::new("quota-http-401-generation-race");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let account_id = account_id("quota-http-401-race-account");

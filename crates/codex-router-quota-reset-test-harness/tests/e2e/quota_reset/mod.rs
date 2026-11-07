@@ -453,7 +453,8 @@ mod quota_reset_pty_test {
             "root rejection did not identify the missing capability marker",
         )?;
         ensure(
-            !ordinary_root.join("state.sqlite").exists() && !ordinary_root.join("secrets").exists(),
+            !codex_router_state::provider_proxy_database_path(&ordinary_root).exists()
+                && !ordinary_root.join("secrets").exists(),
             "root rejection reached state or secret construction",
         )?;
         fs::remove_dir(ordinary_root)?;

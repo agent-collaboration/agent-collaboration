@@ -25,15 +25,19 @@ pub enum RouterUpdateStep {
     /// 0007: `providers.json` and `ports.json` become `settings.jsonc`, and
     /// `routers.jsonc` is renamed to `agent-sessions.jsonc`.
     CarrySettingsFiles,
+    /// 0008: the provider proxy store `state.sqlite` and its lock folder are renamed to
+    /// `provider-proxy.sqlite` after a full checkpoint.
+    RenameProviderProxyStore,
     /// 0010: `fleet-cache.sqlite` is renamed to `fleet.sqlite`.
     RenameFleetDatabase,
 }
 
 impl RouterUpdateStep {
-    pub const KNOWN: [Self; 4] = [
+    pub const KNOWN: [Self; 5] = [
         Self::CreateLedger,
         Self::MergeFleetStores,
         Self::CarrySettingsFiles,
+        Self::RenameProviderProxyStore,
         Self::RenameFleetDatabase,
     ];
 
@@ -43,6 +47,7 @@ impl RouterUpdateStep {
             Self::CreateLedger => UpdateStepNumber::new(1),
             Self::MergeFleetStores => UpdateStepNumber::new(5),
             Self::CarrySettingsFiles => UpdateStepNumber::new(7),
+            Self::RenameProviderProxyStore => UpdateStepNumber::new(8),
             Self::RenameFleetDatabase => UpdateStepNumber::new(10),
         }
     }

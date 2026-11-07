@@ -36,6 +36,7 @@ mod seed_integrity_refusal;
 mod source_schema_refusals;
 mod update_ledger_journey;
 mod update_moves_journey;
+mod update_proxy_store_journey;
 mod update_settings_journey;
 mod update_source_checks;
 mod upgrade_singleton;

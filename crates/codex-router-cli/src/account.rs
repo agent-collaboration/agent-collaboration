@@ -524,7 +524,7 @@ fn login_with_openai_device_auth(
 
     create_router_root(&router_root)?;
     let state = runtime.block_on(AsyncSqliteStateStore::open(
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
     ))?;
     if resolve_login_account_id(&state, &label, Provider::Openai, &runtime)? != account_id {
         return Err(AccountCommandError::DuplicateAccountLabel { label });
@@ -636,7 +636,7 @@ fn login_with_claude_oauth(
     create_router_root(&router_root)?;
     let runtime = account_command_runtime()?;
     let state = runtime.block_on(AsyncSqliteStateStore::open(
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
     ))?;
     if resolve_login_account_id(&state, &label, Provider::Claude, &runtime)? != account_id {
         return Err(AccountCommandError::DuplicateAccountLabel { label });
@@ -767,7 +767,7 @@ fn list_accounts(stdout: &mut impl Write, router_root: PathBuf) -> Result<(), Ac
         ))
         .map_err(|_| AccountCommandError::CredentialStoreInitialization)?;
     let state = runtime.block_on(AsyncSqliteStateStore::open_read_only(
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
     ))?;
     let accounts = runtime.block_on(state.list_accounts())?;
     let policies = runtime.block_on(state.list_account_routing_policies())?;
@@ -826,7 +826,7 @@ fn set_weekly_floor(
     percent: u16,
 ) -> Result<(), AccountCommandError> {
     let runtime = account_command_runtime()?;
-    let database_path = router_root.join("state.sqlite");
+    let database_path = codex_router_state::provider_proxy_database_path(&router_root);
     let floor = if percent == 0 {
         None
     } else {
@@ -867,7 +867,7 @@ fn set_account_status(
     let runtime = account_command_runtime()?;
     let mutation = runtime
         .block_on(AsyncWeeklyQuotaFloorMutationStore::open(
-            &router_root.join("state.sqlite"),
+            &codex_router_state::provider_proxy_database_path(&router_root),
         ))
         .map_err(redacted_account_status_state_error)?;
     let mutation_result =

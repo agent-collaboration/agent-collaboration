@@ -6,7 +6,7 @@ fn serve_at(root: &Path, flags: &[&str]) -> cli_argument_parsing::ServeCommand {
     let mut arguments = vec![
         OsString::from("serve"),
         OsString::from("--state-db"),
-        root.join("state.sqlite").into_os_string(),
+        codex_router_state::provider_proxy_database_path(root).into_os_string(),
         OsString::from("--secret-root"),
         root.join("secrets").into_os_string(),
     ];

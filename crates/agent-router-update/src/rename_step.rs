@@ -63,7 +63,7 @@ pub(crate) async fn rename_fleet_database(root: &Path) -> Result<(), RouterUpdat
 
 /// After the checkpoint the write-ahead log is empty (removed here) and no shared-memory
 /// file exists; anything else means a row could be left behind, so the rename stops.
-fn refuse_leftover_log(store: &Path) -> Result<(), RouterUpdateError> {
+pub(crate) fn refuse_leftover_log(store: &Path) -> Result<(), RouterUpdateError> {
     let log = side_file(store, "-wal");
     if exists(&log)? {
         let length = std::fs::metadata(&log)

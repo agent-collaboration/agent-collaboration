@@ -73,7 +73,7 @@ async fn debug_plaintext_compiled_cli_activates_and_selects_current_token_across
 
     let directory = tempfile::tempdir()?;
     let router_root = directory.path().join("router");
-    let state_path = router_root.join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let secret_root = router_root.join("secrets");
     let first_port = reserve_loopback_port()?;
     let mut initialize = candidate_command();
@@ -362,7 +362,9 @@ async fn release_compiled_cli_refuses_plaintext_flags_and_declared_roots() -> Pr
         candidate_command()
             .arg("serve")
             .arg("--state-db")
-            .arg(directory.path().join("state.sqlite"))
+            .arg(codex_router_state::provider_proxy_database_path(
+                &directory.path(),
+            ))
             .arg("--secret-root")
             .arg(&secret_root)
             .args(["--max-connections", "0"])
@@ -378,7 +380,7 @@ async fn release_compiled_cli_refuses_plaintext_flags_and_declared_roots() -> Pr
         "release must report the unavailable credential root",
     )?;
     check(
-        !directory.path().join("state.sqlite").exists(),
+        !codex_router_state::provider_proxy_database_path(&directory.path()).exists(),
         "release rejection must precede SQLite creation",
     )?;
     check(

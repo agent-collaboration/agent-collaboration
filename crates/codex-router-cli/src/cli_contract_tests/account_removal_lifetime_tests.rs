@@ -164,7 +164,7 @@ async fn held_removal_scenario(fixture: &RemovalFixture) -> Result<(), String> {
             }
         }
         if fixture.credential_exists(1) {return Err("credential deletion has not happened at the hold".to_owned());}
-        let state=AsyncSqliteStateStore::open_read_only(&fixture.root.path().join("state.sqlite")).await.map_err(|error|error.to_string())?;
+        let state=AsyncSqliteStateStore::open_read_only(&codex_router_state::provider_proxy_database_path(fixture.root.path())).await.map_err(|error|error.to_string())?;
         let retained=state.load_account(&account_id("acct_primary")).await.map_err(|error|error.to_string())?.is_some();state.close().await.map_err(|error|error.to_string())?;
         if !retained {return Err("the held removal committed before its release".to_owned());}
         input.send(ctrl_c()).map_err(|error|error.to_string())?;

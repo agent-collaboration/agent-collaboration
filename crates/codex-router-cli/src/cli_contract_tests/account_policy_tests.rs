@@ -62,7 +62,9 @@ fn account_status_commands_parse_and_preserve_credential_generation() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     must_ok(AccountStateRepository::upsert_account(
         &state,
         &AccountRecord::new(
@@ -74,7 +76,9 @@ fn account_status_commands_parse_and_preserve_credential_generation() {
         .with_active_credential_generation(7),
     ));
     drop(state);
-    migrate_test_state_database(&router_root.join("state.sqlite"));
+    migrate_test_state_database(&codex_router_state::provider_proxy_database_path(
+        &router_root,
+    ));
 
     for (command, expected_status) in [
         ("disable", AccountStatus::Disabled),
@@ -102,7 +106,7 @@ fn account_status_commands_parse_and_preserve_credential_generation() {
 
         let runtime = test_async_runtime();
         let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open_read_only(
-            &router_root.join("state.sqlite"),
+            &codex_router_state::provider_proxy_database_path(&router_root),
         )));
         let account = must_ok(runtime.block_on(state.load_account(&account_id("acct_primary"))))
             .unwrap_or_else(|| panic!("status command must retain account metadata"));
@@ -211,7 +215,9 @@ fn account_set_weekly_floor_updates_disables_and_lists_policy() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     must_ok(AccountStateRepository::upsert_account(
         &state,
         &AccountRecord::new(
@@ -222,7 +228,9 @@ fn account_set_weekly_floor_updates_disables_and_lists_policy() {
         ),
     ));
     drop(state);
-    migrate_test_state_database(&router_root.join("state.sqlite"));
+    migrate_test_state_database(&codex_router_state::provider_proxy_database_path(
+        &router_root,
+    ));
 
     let enabled = run_cli(
         [
@@ -279,7 +287,9 @@ fn account_set_weekly_floor_label_failures_are_redacted_and_do_not_mutate() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     for (account_id_value, label) in [
         ("acct_duplicate_a", "duplicate"),
         ("acct_duplicate_b", "duplicate"),
@@ -295,7 +305,9 @@ fn account_set_weekly_floor_label_failures_are_redacted_and_do_not_mutate() {
         ));
     }
     drop(state);
-    migrate_test_state_database(&router_root.join("state.sqlite"));
+    migrate_test_state_database(&codex_router_state::provider_proxy_database_path(
+        &router_root,
+    ));
 
     for supplied_label in ["missing-sensitive-label", "duplicate"] {
         let mut stdout = Vec::new();
@@ -327,7 +339,7 @@ fn account_set_weekly_floor_label_failures_are_redacted_and_do_not_mutate() {
 
     let runtime = test_async_runtime();
     let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open_read_only(
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
     )));
     let policies = must_ok(runtime.block_on(state.list_account_routing_policies()));
     assert!(policies.is_empty(), "failed label lookup must not mutate");
@@ -339,7 +351,9 @@ fn account_list_renders_friendly_table_without_account_ids() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     must_ok(AccountStateRepository::upsert_account(
         &state,
         &AccountRecord::new(
@@ -350,7 +364,9 @@ fn account_list_renders_friendly_table_without_account_ids() {
         ),
     ));
     drop(state);
-    migrate_test_state_database(&router_root.join("state.sqlite"));
+    migrate_test_state_database(&codex_router_state::provider_proxy_database_path(
+        &router_root,
+    ));
 
     let output = run_cli(
         [

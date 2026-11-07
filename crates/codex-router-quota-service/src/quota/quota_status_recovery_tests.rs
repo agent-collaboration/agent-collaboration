@@ -120,9 +120,11 @@ impl ClaudeRefreshFixture {
         let router_root = test_root.path().join("router");
         std::fs::create_dir_all(&router_root).expect("router root");
         let account_id = AccountId::new("claude_refresh_recovery").expect("Claude account id");
-        let state = AsyncSqliteStateStore::open(&router_root.join("state.sqlite"))
-            .await
-            .expect("state store should open");
+        let state = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await
+        .expect("state store should open");
         state
             .upsert_account(
                 &AccountRecord::new(
@@ -176,9 +178,11 @@ impl ClaudeRefreshFixture {
     async fn read_observations_and_status(
         &self,
     ) -> (Vec<WindowObservation>, Option<QuotaRefreshStatusView>) {
-        let state = AsyncSqliteStateStore::open_read_only(&self.router_root.join("state.sqlite"))
-            .await
-            .expect("read state");
+        let state = AsyncSqliteStateStore::open_read_only(
+            &codex_router_state::provider_proxy_database_path(&self.router_root),
+        )
+        .await
+        .expect("read state");
         let observations = state
             .window_observations_for_account(&self.account_id)
             .await
@@ -351,9 +355,11 @@ async fn actual_claude_refresh_success_clears_failure_and_records_observation_ti
     // An actual future provider attempt is unavailable here; exercise expiry
     // through the real state API with an explicit synthetic timestamp.
     let after_expiry_attempt = fresh_until + 1;
-    let state = AsyncSqliteStateStore::open(&fixture.router_root.join("state.sqlite"))
-        .await
-        .expect("state store for deterministic expiry write");
+    let state = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+        &fixture.router_root,
+    ))
+    .await
+    .expect("state store for deterministic expiry write");
     state
         .record_refresh_failure_preserving_selector_windows(
             &fixture.account_id,
@@ -406,9 +412,11 @@ async fn claude_refresh_without_accepted_observations_preserves_failure_status()
         SyntheticClaudeQuotaResponse::Windows(successful_claude_windows()),
     ] {
         let fixture = ClaudeRefreshFixture::new().await;
-        let state = AsyncSqliteStateStore::open(&fixture.router_root.join("state.sqlite"))
-            .await
-            .expect("state");
+        let state = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &fixture.router_root,
+        ))
+        .await
+        .expect("state");
         let future_start = current_unix_seconds() + 10_000;
         for window_kind in [WindowKind::FiveHour, WindowKind::Weekly] {
             let observation = WindowObservation::new(
@@ -455,7 +463,7 @@ async fn claude_refresh_metadata_write_failure_is_not_reported_as_success() {
         prior_status.last_error_class(),
         Some(QuotaRefreshErrorClass::ParseError)
     );
-    let database_path = fixture.router_root.join("state.sqlite");
+    let database_path = codex_router_state::provider_proxy_database_path(&fixture.router_root);
     let (result, stdout) = fixture
         .refresh(
             SyntheticClaudeQuotaResponse::RejectMetadataWrite(database_path.clone()),

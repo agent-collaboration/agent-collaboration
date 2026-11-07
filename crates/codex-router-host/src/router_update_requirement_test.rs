@@ -36,7 +36,7 @@ fn an_empty_ledger_means_an_interrupted_update() {
     // update (or a Host's first open) that stopped before recording anything.
     let empty = requirement_for_ledger(store(), &StoredUpdateLedger::Present(vec![]));
 
-    assert_eq!(empty, unfinished(&[1, 5, 7, 10]));
+    assert_eq!(empty, unfinished(&[1, 5, 7, 8, 10]));
 }
 
 #[test]
@@ -57,6 +57,7 @@ fn a_ledger_with_every_known_step_done_needs_no_update() {
         step_entry(1, UpdateStepProgress::Done),
         step_entry(5, UpdateStepProgress::Done),
         step_entry(7, UpdateStepProgress::Done),
+        step_entry(8, UpdateStepProgress::Done),
         step_entry(10, UpdateStepProgress::Done),
     ]);
 
@@ -79,11 +80,11 @@ fn a_started_update_missing_a_known_step_requires_the_update() {
 
     assert_eq!(
         requirement_for_ledger(store(), &in_progress),
-        unfinished(&[1, 5, 7, 10])
+        unfinished(&[1, 5, 7, 8, 10])
     );
     assert_eq!(
         requirement_for_ledger(store(), &only_a_source),
-        unfinished(&[1, 5, 7, 10])
+        unfinished(&[1, 5, 7, 8, 10])
     );
 }
 
@@ -93,6 +94,7 @@ fn a_step_left_in_progress_counts_even_when_this_router_does_not_know_it() {
         step_entry(1, UpdateStepProgress::Done),
         step_entry(5, UpdateStepProgress::Done),
         step_entry(7, UpdateStepProgress::Done),
+        step_entry(8, UpdateStepProgress::Done),
         step_entry(10, UpdateStepProgress::Done),
         step_entry(42, UpdateStepProgress::InProgress),
     ]);

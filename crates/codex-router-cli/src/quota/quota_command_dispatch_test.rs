@@ -197,7 +197,7 @@ async fn quota_async_entry_owns_help_and_reset_migration_guidance() {
 #[tokio::test]
 async fn production_quota_refresh_composition_runs_inside_the_process_runtime() {
     let router_root = IsolatedAsyncRefreshRoot::new();
-    let state_path = router_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(router_root.path());
     let state = AsyncSqliteStateStore::open(&state_path)
         .await
         .expect("quota history state should open");

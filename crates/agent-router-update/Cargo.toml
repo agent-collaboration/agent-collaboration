@@ -27,6 +27,7 @@ collaboration-service = { version = "0.1.100", path = "../collaboration-service"
 collaboration-client = { version = "0.1.100", path = "../collaboration-client" }
 codex-router-host = { version = "0.1.100", path = "../codex-router-host" }
 codex-router-secret-store = { version = "0.1.102", path = "../codex-router-secret-store" }
+codex-router-state = { path = "../codex-router-state", version = "0.1.4" }
 automation-storage = { version = "0.1.100", path = "../automation-storage" }
 interaction-storage = { version = "0.1.100", path = "../interaction-storage" }
 collaboration-protocol = { version = "0.1.100", path = "../collaboration-protocol" }
@@ -53,6 +54,7 @@ uuid.workspace = true
 tempfile = "3.27.0"
 
 [dev-dependencies]
+codex-router-core.workspace = true
 legacy-upgrade-test-support = { path = "../legacy-upgrade-test-support", version = "0.1.126" }
 owned-process-test-support = { path = "../owned-process-test-support", version = "0.1.126" }
 futures-util.workspace = true

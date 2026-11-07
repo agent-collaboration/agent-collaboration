@@ -30,6 +30,14 @@ pub(crate) enum UpdateBarrier {
     MachineListRenamed,
     /// Step 0007 recorded itself done.
     SettingsDone,
+    /// Step 0008 checkpointed and closed the proxy store, before its rename.
+    ProxyStoreCheckpointed,
+    /// Step 0008 renamed the proxy store, before its lock folder.
+    ProxyStoreRenamed,
+    /// Step 0008 renamed the proxy store's lock folder.
+    ProxyLockFolderRenamed,
+    /// Step 0008 recorded itself done.
+    ProxyStoreDone,
     /// Step 0010 recorded itself in progress, before the checkpoint.
     RenameBeforeCheckpoint,
     /// Step 0010 checkpointed and closed the store, before the rename.
@@ -62,6 +70,10 @@ impl UpdateBarrier {
             Self::SettingsOldFileRemoved(file) => format!("step-0007:old-file-removed:{file}"),
             Self::MachineListRenamed => "step-0007:machine-list-renamed".to_owned(),
             Self::SettingsDone => "step-0007:done".to_owned(),
+            Self::ProxyStoreCheckpointed => "step-0008:checkpointed".to_owned(),
+            Self::ProxyStoreRenamed => "step-0008:store-renamed".to_owned(),
+            Self::ProxyLockFolderRenamed => "step-0008:lock-folder-renamed".to_owned(),
+            Self::ProxyStoreDone => "step-0008:done".to_owned(),
             Self::RenameBeforeCheckpoint => "step-0010:before-checkpoint".to_owned(),
             Self::RenameCheckpointed => "step-0010:checkpointed".to_owned(),
             Self::Renamed => "step-0010:renamed".to_owned(),

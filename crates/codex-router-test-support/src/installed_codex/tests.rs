@@ -44,7 +44,10 @@ use super::write_redacted_transcript;
 #[test]
 fn access_forwarding_smoke_seed_cannot_refresh_with_production_oauth() {
     let root = SmokeTempRoot::new("access-forwarding-no-refresh").expect("fixture root");
-    let state = SqliteStateStore::open(&root.path().join("state.sqlite")).expect("fixture state");
+    let state = SqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+        root.path(),
+    ))
+    .expect("fixture state");
     let secrets = codex_router_secret_store::test_support::open_encrypted_credential_store(
         root.path().join("secrets"),
     )
@@ -484,11 +487,16 @@ fn copied_dev_state_roots_reject_symlinked_db_and_secret_targets_before_mutation
         .unwrap_or_else(|error| panic!("failed to write external Codex DB: {error}"));
     fs::create_dir_all(&external_secrets)
         .unwrap_or_else(|error| panic!("failed to create external secrets dir: {error}"));
-    let _ = fs::remove_file(router_root.join("state.sqlite"));
+    let _ = fs::remove_file(codex_router_state::provider_proxy_database_path(
+        &router_root,
+    ));
     let _ = fs::remove_file(codex_home.join("state_5.sqlite"));
     let _ = fs::remove_file(router_root.join("secrets"));
-    unix_fs::symlink(&external_router_db, router_root.join("state.sqlite"))
-        .unwrap_or_else(|error| panic!("failed to create router DB symlink: {error}"));
+    unix_fs::symlink(
+        &external_router_db,
+        codex_router_state::provider_proxy_database_path(&router_root),
+    )
+    .unwrap_or_else(|error| panic!("failed to create router DB symlink: {error}"));
     unix_fs::symlink(&external_codex_db, codex_home.join("state_5.sqlite"))
         .unwrap_or_else(|error| panic!("failed to create Codex DB symlink: {error}"));
     unix_fs::symlink(&external_secrets, router_root.join("secrets"))
@@ -503,8 +511,10 @@ fn copied_dev_state_roots_reject_symlinked_db_and_secret_targets_before_mutation
         error.contains("symlink") || error.contains("tmp/dev-state"),
         "error should explain copied-dev-state symlink target rejection: {error}"
     );
-    fs::remove_file(router_root.join("state.sqlite"))
-        .unwrap_or_else(|error| panic!("failed to clean router DB symlink: {error}"));
+    fs::remove_file(codex_router_state::provider_proxy_database_path(
+        &router_root,
+    ))
+    .unwrap_or_else(|error| panic!("failed to clean router DB symlink: {error}"));
     fs::remove_file(codex_home.join("state_5.sqlite"))
         .unwrap_or_else(|error| panic!("failed to clean Codex DB symlink: {error}"));
     fs::remove_file(router_root.join("secrets"))

@@ -40,6 +40,16 @@ pub enum RouterUpdateError {
         "{path} is not valid settings JSON ({message}); fix or move it aside, then run agent-router-update again"
     )]
     MalformedSettingsFile { path: PathBuf, message: String },
+    #[error(
+        "both {current} and {former} exist; keep the one that holds this Router's accounts, move the other aside, then run agent-router-update again"
+    )]
+    BothProviderProxyNames { current: PathBuf, former: PathBuf },
+    #[error("{store}: {source}")]
+    ProviderProxyStore {
+        store: PathBuf,
+        #[source]
+        source: codex_router_state::sqlite::StateStoreError,
+    },
     #[error("{store}: {source}")]
     Store {
         store: PathBuf,
