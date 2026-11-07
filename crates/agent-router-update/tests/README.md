@@ -24,7 +24,8 @@ input), a cursor key other than the one the Fleet database holds, and an older
 store that reappears after its rows moved, removed unread. Its
 `update_reset_and_dead_files` root (J4) covers steps 0002 and 0009: each phase of
 an older enrollment reset finished against the store under its former name
-before any store moves, an unreadable journal, approval routes imported before
+before any store moves, a pending reset on a root with no Fleet store, an
+unreadable journal, approval routes imported before
 the dead files are removed, the root listing afterwards, malformed routes, and
 the Host guard on a dead file, including one back after the update and one on a
 never-connected root. These cases sign the binary with

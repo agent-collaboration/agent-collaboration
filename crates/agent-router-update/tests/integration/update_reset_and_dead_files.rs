@@ -12,6 +12,7 @@ use codex_router_host::{
     RequiredRouterUpdate, RouterUpdateRequirement, inspect_router_update_requirement,
     router_collaboration_directory, router_fleet_cache_database, router_fleet_database,
 };
+use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
 
 const RESET_GENERATION: &str = "019f0000-0000-7000-8000-00000000d3a1";
@@ -387,5 +388,64 @@ async fn a_reset_journal_the_running_host_writes_does_not_stop_it() -> UpdateRes
         // Assert: the journal belongs to the running Host, which finishes it itself.
         assert_eq!(requirement, RouterUpdateRequirement::NotRequired, "{phase}");
     }
+    Ok(())
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
+#[tokio::test]
+async fn a_pending_reset_on_a_root_without_a_fleet_store_finishes_against_the_new_store()
+-> UpdateResult {
+    // Arrange: a pending reset and the state it clears, but no Fleet database under
+    // either name. The store step 0001 creates holds nothing the reset must clear.
+    let directory = tempfile::tempdir()?;
+    let root = directory.path().join("router");
+    let collaboration = router_collaboration_directory(&root);
+    std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(&collaboration)?;
+    let journal = write_reset_journal(&root, "pending")?;
+    let session_state = collaboration.join("machine-session/state.json");
+    std::fs::create_dir_all(collaboration.join("machine-session"))?;
+    std::fs::write(&session_state, b"old cursor")?;
+    let read_cache = collaboration.join("board-read-cache");
+    std::fs::create_dir_all(read_cache.join("generation"))?;
+    std::fs::write(
+        read_cache.join("generation/copy.sqlite"),
+        b"old central copy",
+    )?;
+
+    // Act
+    let update = run_update(&root_argument(&root)).await?;
+
+    // Assert: the update completes; the reset's other clearings happened; the new
+    // Fleet database holds no cache rows; the Host may start.
+    assert_eq!(
+        update.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&update.stderr)
+    );
+    assert!(!journal.exists(), "the finished journal is removed");
+    assert!(
+        !session_state.exists(),
+        "the reset clears the session cursor"
+    );
+    assert!(
+        !read_cache.exists(),
+        "the reset clears the central read cache"
+    );
+    let fleet = FleetValues::read_merged(&router_fleet_database(&root)).await?;
+    assert!(
+        fleet.cached_records.is_empty() && fleet.checkpoint == 0,
+        "{fleet:?}"
+    );
+    assert_eq!(
+        inspect_router_update_requirement(&root).await?,
+        RouterUpdateRequirement::NotRequired
+    );
     Ok(())
 }

@@ -9,35 +9,54 @@ use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-/// Bounds each wait on the Host's own signals: its operator socket, and its answers to
-/// `host status` and `host stop`. The status answer comes once its collaboration runtime
-/// is up, which took about 16 seconds on a loaded development machine, with or without
-/// the update before it.
+/// Bounds each wait on the Host's own signals, only so a Host that never gives one
+/// fails the test: its readiness line, and its answers to `host status` and
+/// `host stop`. Its collaboration runtime took about 16 seconds to come up on a loaded
+/// development machine, with or without the update before it.
 const HOST_SIGNAL_BOUND: Duration = Duration::from_secs(60);
 
-/// Waits until the Host binds its operator socket, failing at once if it exits first.
-async fn operator_socket_bound(
-    host: &mut tokio::process::Child,
-    socket: &Path,
-    stderr: &Path,
-) -> TestResult {
-    tokio::time::timeout(HOST_SIGNAL_BOUND, async {
-        while !socket.exists() {
-            if let Some(status) = host.try_wait()? {
-                return Err(std::io::Error::other(format!(
-                    "fixture Host exited {status}: {}",
-                    std::fs::read_to_string(stderr)?
-                )));
+/// The readiness-timing stage the Host writes once its collaboration runtime is
+/// synchronized; its operator socket is bound and `host status` answers after it.
+const COLLABORATION_SYNCHRONIZED: &str = r#""stage":"collaborationSynchronized""#;
+
+/// Reads the Host's stderr line by line, copying each line into `log`, until the Host
+/// reports its collaboration runtime synchronized. A Host that exits first ends the
+/// stream and fails the wait with what it wrote. The returned task keeps draining the
+/// rest into `log`, so the Host never blocks on a full pipe.
+async fn host_synchronized(
+    stderr: tokio::process::ChildStderr,
+    log: &Path,
+) -> Result<tokio::task::JoinHandle<std::io::Result<()>>, Box<dyn std::error::Error>> {
+    let mut lines = BufReader::new(stderr).lines();
+    let mut file = tokio::fs::File::create(log).await?;
+    let synchronized = tokio::time::timeout(HOST_SIGNAL_BOUND, async {
+        while let Some(line) = lines.next_line().await? {
+            file.write_all(format!("{line}\n").as_bytes()).await?;
+            if line.contains(COLLABORATION_SYNCHRONIZED) {
+                return Ok(true);
             }
-            tokio::time::sleep(Duration::from_millis(20)).await;
         }
-        Ok(())
+        Ok::<bool, std::io::Error>(false)
     })
     .await??;
-    Ok(())
+    file.flush().await?;
+    if !synchronized {
+        return Err(format!(
+            "fixture Host exited before it was ready: {}",
+            std::fs::read_to_string(log)?
+        )
+        .into());
+    }
+    Ok(tokio::spawn(async move {
+        while let Some(line) = lines.next_line().await? {
+            file.write_all(format!("{line}\n").as_bytes()).await?;
+        }
+        file.flush().await
+    }))
 }
 
 /// Runs `codex-router host <subcommand>` against the fixture Host and returns its answer.
@@ -120,28 +139,31 @@ async fn a_host_starts_ready_on_a_never_connected_root_after_the_update() -> Tes
         // A fresh Host, not a handoff: it must not inherit a running Host's lock marker.
         .env_remove(codex_router_host::inherited_lock_environment())
         .stdout(Stdio::null())
-        .stderr(Stdio::from(std::fs::File::create(&host_stderr)?))
+        .stderr(Stdio::piped())
         .kill_on_drop(true)
         .spawn()?;
+    let stderr = host.stderr.take().ok_or("Host stderr unavailable")?;
     let ready = async {
-        operator_socket_bound(&mut host, &router_root.join("host.sock"), &host_stderr).await?;
+        let drained = host_synchronized(stderr, &host_stderr).await?;
         let status =
             host_answer(&binary, &router_root, &codex_home, &socket_path, "status").await?;
         let stdout = String::from_utf8(status.stdout)?;
         check(status.status.success(), &stdout)?;
-        check(stdout.contains("readiness: ready"), &stdout)
+        check(stdout.contains("readiness: ready"), &stdout)?;
+        Ok::<_, Box<dyn std::error::Error>>(drained)
     }
     .await;
     let stopped = host_answer(&binary, &router_root, &codex_home, &socket_path, "stop").await;
     let exited = tokio::time::timeout(HOST_SIGNAL_BOUND, host.wait()).await;
 
     // Assert
-    ready.map_err(|error| {
+    let drained = ready.map_err(|error| {
         std::io::Error::other(format!(
             "{error}; fixture Host stderr: {}",
             std::fs::read_to_string(&host_stderr).unwrap_or_default()
         ))
     })?;
+    drained.await??;
     check(
         mode & 0o077 == 0,
         &format!("the update made the collaboration directory {mode:o}, not owner-private"),
