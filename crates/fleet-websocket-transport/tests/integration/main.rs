@@ -542,5 +542,4 @@ async fn session_host_process() -> TestResult {
     support::session_fixture_server::run_server(std::path::Path::new(&path)).await
 }
 
-#[path = "../upgrade_refusal.rs"]
 mod upgrade_refusal;
