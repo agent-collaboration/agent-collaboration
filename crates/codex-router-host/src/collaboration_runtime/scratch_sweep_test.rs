@@ -570,3 +570,72 @@ async fn a_folder_whose_use_cannot_be_read_is_kept_reported_and_retried_the_next
     assert_eq!(pass.next_pass_at, Some(ran + DAY), "retried the next day");
     fixture.stop().await;
 }
+
+/// Reads a scope's recorded last use.
+fn last_used(folder: &Path) -> SystemTime {
+    std::fs::metadata(folder.join(codex_native_integration::SCRATCH_LAST_USED_FILE_NAME))
+        .and_then(|metadata| metadata.modified())
+        .unwrap_or_else(|error| panic!("use stamp {}: {error}", folder.display()))
+}
+
+#[tokio::test]
+async fn a_folder_with_a_session_held_open_for_31_quiet_days_stays_and_its_use_is_recorded() {
+    let mut fixture = Fixture::start(|scratch, now| {
+        seed_scope(scratch, "held-open", now, 40 * DAY);
+    })
+    .await;
+    let folder = fixture.folder("held-open");
+    let open = Arc::clone(&fixture.runtime.open_scratch_scopes);
+    open.opened(&folder);
+    fixture.start_sweep();
+    let first = fixture.next_pass().await;
+    // The use stamp is now 31 days old by the sweep's clock.
+    let stamped_before = last_used(&folder);
+    set_changed(
+        &folder.join(codex_native_integration::SCRATCH_LAST_USED_FILE_NAME),
+        stamped_before - DAY,
+    );
+
+    fixture.clock.advance(31 * DAY);
+    let second = fixture.next_pass().await;
+
+    assert!(
+        folder.join("notes.md").is_file(),
+        "an open session keeps its folder"
+    );
+    assert_eq!(second.kept_open, vec!["held-open".to_owned()]);
+    assert!(second.removed.is_empty(), "{:?}", second.removed);
+    assert!(
+        last_used(&folder) > stamped_before - DAY,
+        "the pass records the open session's use"
+    );
+    assert_eq!(first.kept_open, vec!["held-open".to_owned()]);
+    fixture.stop().await;
+}
+
+#[tokio::test]
+async fn a_thread_folder_stays_for_31_quiet_days_while_one_of_two_sessions_remains_open() {
+    let mut fixture = Fixture::start(|scratch, now| {
+        seed_scope(scratch, "thread-root", now, 40 * DAY);
+    })
+    .await;
+    let folder = fixture.folder("thread-root");
+    let open = Arc::clone(&fixture.runtime.open_scratch_scopes);
+    open.opened(&folder);
+    open.opened(&folder);
+    open.closed(&folder);
+    fixture.start_sweep();
+    let first = fixture.next_pass().await;
+
+    fixture.clock.advance(31 * DAY);
+    let second = fixture.next_pass().await;
+
+    assert!(
+        folder.join("notes.md").is_file(),
+        "the remaining session keeps the folder"
+    );
+    assert_eq!(second.kept_open, vec!["thread-root".to_owned()]);
+    assert!(second.removed.is_empty(), "{:?}", second.removed);
+    assert_eq!(first.kept_open, vec!["thread-root".to_owned()]);
+    fixture.stop().await;
+}
