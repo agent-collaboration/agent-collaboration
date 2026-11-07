@@ -365,17 +365,24 @@ jobs:
         with:
           name: ${{ env.TEST_ARCHIVE_NAME }}
           path: ${{ runner.temp }}
+      # Tests start compiled binaries through compile-time CARGO_BIN_EXE paths
+      # under target/. The checkout path is the same on both runners, so unpack
+      # the archive (whose entries start with target/) in place and run from its
+      # metadata instead of letting nextest relocate it to a temporary folder.
+      - name: Unpack shard 1's test binaries into target/
+        if: matrix.shard == 2
+        run: tar --zstd -xf "$RUNNER_TEMP/workspace-tests.tar.zst" -C "$GITHUB_WORKSPACE"
       - name: Test Rust workspace, second half
         if: matrix.shard == 2
         run: |
           # Exercise private fixture setup under the ordinary Unix mask.
           umask 022
-          cargo nextest run --profile ci --status-level all --final-status-level all --archive-file "$RUNNER_TEMP/workspace-tests.tar.zst" --workspace-remap . -E "$WORKSPACE_TEST_FILTER" --partition count:2/2
+          cargo nextest run --profile ci --status-level all --final-status-level all --binaries-metadata target/nextest/binaries-metadata.json --cargo-metadata target/nextest/cargo-metadata.json -E "$WORKSPACE_TEST_FILTER" --partition count:2/2
       - name: Test isolated default Router port cutover
         if: matrix.shard == 2
         # Keep the same opt-in case, with a per-test elapsed status as well as
         # its uncaptured CLI proof. The default profile adds no CI deadline.
-        run: cargo nextest run --profile default --status-level all --final-status-level all --archive-file "$RUNNER_TEMP/workspace-tests.tar.zst" --workspace-remap . -E 'package(=codex-router-cli) & binary(=e2e)' --run-ignored only --no-capture
+        run: cargo nextest run --profile default --status-level all --final-status-level all --binaries-metadata target/nextest/binaries-metadata.json --cargo-metadata target/nextest/cargo-metadata.json -E 'package(=codex-router-cli) & binary(=e2e)' --run-ignored only --no-capture
       - name: Wait for tests
         wait-all:
       - name: Save pinned Rust tools
