@@ -228,6 +228,7 @@ mod fleet_mail_reports;
 
 #[cfg(feature = "conformance")]
 mod fleet_mail_revocation;
+mod fleet_mail_window;
 
 #[cfg(feature = "conformance")]
 mod fleet_mail_selector;

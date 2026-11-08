@@ -347,6 +347,54 @@
           "nullable": false
         }
       ]
+    },
+    {
+      "name": "update_socket_request_refused",
+      "sql": "sql/socket_requests/update_socket_request_refused.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "next_attempt_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "attempts",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "first_failed_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "last_error_class",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "last_error",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
     }
   ]
 }

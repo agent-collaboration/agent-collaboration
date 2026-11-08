@@ -19,6 +19,50 @@ pub(crate) struct RequestDestination {
     pub(crate) session: fleet_protocol::SessionId,
 }
 
+/// A retryable refusal (mailbox full, binding unavailable) of the in-flight
+/// send: the row stays in flight on its connection and session, holding its
+/// window slot as the Router's own ledger does, and the failure is counted.
+/// It is resent when the backoff passes, or given up after 24 h of failures
+/// (which ends the send and frees the slot).
+pub(crate) async fn refused_for_now<Scope: TransactionScope>(
+    scope: &mut Scope,
+    subject: Uuid,
+    kind: AttemptKind,
+    failure: &super::AttemptFailure,
+    now: SyncTime,
+) -> Result<super::AttemptOutcome, StoreError>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>:
+        Type<Scope::Database> + Decode<'value, Scope::Database> + Encode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    let Some(row) = super::attempt(scope, subject, kind).await? else {
+        return Ok(super::AttemptOutcome::GivenUp);
+    };
+    let attempts = row.attempts.saturating_add(1);
+    let first_failed_at = row.first_failed_at.unwrap_or(now);
+    if now >= first_failed_at.after(super::RETIRE_AFTER) {
+        return super::failed(scope, row.id, subject, kind, failure, now).await;
+    }
+    let at = now.after(super::backoff(attempts));
+    queries::update_socket_request_refused(
+        scope,
+        subject.to_string(),
+        kind.as_str().into(),
+        at.unix_millis().to_string(),
+        attempts.to_string(),
+        first_failed_at.unix_millis().to_string(),
+        failure.class.as_str().into(),
+        failure.message.clone(),
+        now.unix_millis().to_string(),
+    )
+    .await
+    .map_err(StoreError::backend)?;
+    Ok(super::AttemptOutcome::Retry { at })
+}
+
 /// What an answer's send id names: the owed row, and where it was sent.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct SentRequest {

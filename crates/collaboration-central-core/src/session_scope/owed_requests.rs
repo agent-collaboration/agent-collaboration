@@ -108,12 +108,33 @@ where
         let Some(row) = crate::work_attempts::attempt(self, subject, kind).await? else {
             return Ok(());
         };
-        // A row waiting with a retry time was refused for now (its failure is
-        // already counted); an in-flight row went unanswered: count it now.
+        // A refused row's failure is already counted: an in-flight row the
+        // Router refused for now, or a waiting row whose sender binding was
+        // unavailable at send. Any other in-flight row went unanswered: count it.
+        let refused = row.last_error.as_ref().is_some_and(|failure| {
+            failure.class == crate::work_attempts::ErrorClass::RetryableRefusal
+        });
         let at = match row.state {
             crate::work_attempts::AttemptState::Waiting {
                 next_attempt_at: Some(at),
             } => at,
+            // Already counted when refused: resend without counting again,
+            // unless its failures have lasted 24 h.
+            crate::work_attempts::AttemptState::InFlight {
+                next_attempt_at, ..
+            } if refused => {
+                if row
+                    .first_failed_at
+                    .is_some_and(|first| now >= first.after(crate::work_attempts::RETIRE_AFTER))
+                {
+                    if let Some(failure) = &row.last_error {
+                        crate::work_attempts::failed(self, row.id, subject, kind, failure, now)
+                            .await?;
+                    }
+                    return Ok(());
+                }
+                next_attempt_at
+            }
             crate::work_attempts::AttemptState::InFlight { .. } => {
                 let outcome = crate::work_attempts::failed(
                     self,

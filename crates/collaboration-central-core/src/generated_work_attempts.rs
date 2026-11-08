@@ -449,3 +449,36 @@ where
             .collect()
     }
 }
+pub(crate) fn update_socket_request_refused<S>(
+    scope: &mut S,
+    subject: String,
+    kind: String,
+    next_attempt_at: String,
+    attempts: String,
+    first_failed_at: String,
+    last_error_class: String,
+    last_error: String,
+    now: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/socket_requests/update_socket_request_refused.sql"
+        )))
+        .bind(subject)
+        .bind(kind)
+        .bind(next_attempt_at)
+        .bind(attempts)
+        .bind(first_failed_at)
+        .bind(last_error_class)
+        .bind(last_error)
+        .bind(now);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}

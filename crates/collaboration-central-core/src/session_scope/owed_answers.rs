@@ -197,16 +197,17 @@ where
         Ok(())
     }
 
-    /// Count a refusal for now; the due batch resends it after the backoff.
+    /// Count a refusal for now: the row stays in flight, holding its window
+    /// slot, and the due batch resends it after the backoff (owed-work design,
+    /// "How an answer finds its row": Retry).
     async fn refused_for_now(
         &mut self,
         sent: &SentRequest,
         message: &str,
         now: SyncTime,
     ) -> Result<(), StoreError> {
-        crate::work_attempts::failed(
+        socket_requests::refused_for_now(
             self,
-            Uuid::now_v7(),
             sent.subject,
             sent.kind,
             &AttemptFailure {

@@ -59,6 +59,7 @@
     "sql/socket_requests/read_owed_socket_requests.sql": "2e77a5e33783a28bb51e4a5107647c7459c79eed6183adc44ec8d8797f0e3b30",
     "sql/socket_requests/read_socket_request_by_send.sql": "e7aadccb6ec33a92e2e49f162781c61fae2301db0e5831d126ffc31f82d0bec4",
     "sql/socket_requests/reset_socket_request_waiting.sql": "1e099868e735766714bbd0702f454d22748d1959ca41eb0daeb9d3e138bb73ad",
+    "sql/socket_requests/update_socket_request_refused.sql": "c5135850fe7329fcee5ea46bd2d26bcec9d1c568c0dfabd406508b921d095c4e",
     "sql/work_attempts/delete_work_attempt.sql": "ddd9a1870613ecca05c59ef550af73514d26a458bb5e3713b38aa19760d2a677",
     "sql/work_attempts/insert_work_attempt_failure.sql": "858371fe97a4cd10093cf9db4e7391507e8d072a887839ec71cc1f1e22524beb",
     "sql/work_attempts/insert_work_attempt_owed.sql": "d3bfaa558808ff789ab91a1008440bf289691aa54829b4fb5965e3455ef84da2",
@@ -66,11 +67,11 @@
     "sql/work_attempts/read_next_work_retry.sql": "a9a59ac30501393410c32188700fd6d56c7ffd23ac4226be56518b8cfaf1488b",
     "sql/work_attempts/read_work_attempt.sql": "77d2c8f285c17d94058a1567ce01aac12fac83abf26184c6aedac832a8a39e3c",
     "sql/work_attempts/update_work_attempt_failure.sql": "d5f7a6192d35745ee6de01982f90779697df2e57511819db8824313e636e9854",
-    "src/generated_work_attempts.rs": "810cdf027e3eace97b054648011f54a7f6e6ee79e3d35d3856c78b28ed92bf72",
-    "work-attempt-queries.json": "36505437f94ab72851f531305b5883faac1a1f0da53024b9da54a7e97a3b4f3f",
+    "src/generated_work_attempts.rs": "8b506fc0d41e53a252d2e37cbc6ea8ffde1beee0e6b554cef2442c5261d21ef8",
+    "work-attempt-queries.json": "58332d0469be2d11fc210837660112c926b0241f2b647921d412aee09385bb8e",
     "work_migrations/0001_central_work_attempts.sql": "03247f9ed521e69d17b6c49dd1e8f7e8c458be0abc8f4d73e1f7379fb69477e9"
   },
-  "queries_digest": "2f6ead8c9454cfb754d01432c56621400fc1538a2d3bced887a6e25d22c7c4aa",
+  "queries_digest": "383a38ea84d6e7e65cfcfbdfcdcdc056aea45b7a660a23989d6ff3c9d164aaeb",
   "queries": [
     {
       "name": "read_work_attempt",
@@ -359,6 +360,11 @@
           "type_source": "driver"
         }
       ]
+    },
+    {
+      "name": "update_socket_request_refused",
+      "bind_slots": 8,
+      "columns": []
     }
   ]
 }
