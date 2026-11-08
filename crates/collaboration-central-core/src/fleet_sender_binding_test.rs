@@ -367,3 +367,47 @@ async fn confirmed_binding_rollback_is_retryable_and_retains_custody_and_origina
     ));
     fixture.close().await
 }
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare sender resolutions while fixture errors propagate."
+)]
+async fn the_sign_in_service_id_resolves_to_no_sender() -> TestResult {
+    // Wrong build caught: a sender resolved from anything but an enrollment,
+    // so the sign-in service's ServiceId (the installation stamped on an
+    // admin-written workspace) would act as a machine. Resolution reads only
+    // machine_enrollments, and enrollment refuses that ServiceId, so nothing
+    // resolves under it; the legitimate machine still resolves as itself.
+    const SIGN_IN_SERVICE: &str = "019f0000-0000-7000-8000-00000000e501";
+    let fixture = FleetStorageFixture::open().await?;
+    let machine = PeerId::new(durable_steps::Uuid::now_v7())?;
+    fixture.enroll(machine, SERVICE_A).await?;
+
+    let as_sign_in = lookup(
+        &fixture,
+        MailSender::HumanUser {
+            installation: SIGN_IN_SERVICE.to_owned().try_into()?,
+        },
+    )
+    .await?;
+    let as_session = lookup(
+        &fixture,
+        serde_json::from_value::<MailSender>(
+            json!({"kind":"session","endpoint":{"serviceId":SIGN_IN_SERVICE,"endpointId":"codex-local"},"sessionId":"impostor"}),
+        )?,
+    )
+    .await?;
+    let as_machine = lookup(
+        &fixture,
+        MailSender::HumanUser {
+            installation: SERVICE_A.to_owned().try_into()?,
+        },
+    )
+    .await?;
+
+    assert_eq!(as_sign_in, Err(SenderBindingFailure::Unknown));
+    assert_eq!(as_session, Err(SenderBindingFailure::Unknown));
+    assert_eq!(as_machine, Ok(Submitter::Machine(machine)));
+    fixture.close().await
+}
