@@ -81,3 +81,9 @@ required-features = ["test-support", "test-fault"]
 name = "delivery_node"
 path = "tests/support/consumer/delivery_node_main.rs"
 required-features = ["test-support", "test-fault"]
+
+[[example]]
+name = "fleet-consumer-fit"
+test = true
+path = "examples/fleet_consumer_fit/main.rs"
+required-features = ["test-support", "test-fault"]
