@@ -27,6 +27,13 @@ function frame(value: unknown, masked = false, opcode = 2, finished = true): Buf
 function opened(): WindowByteAudit {
   const audit = new WindowByteAudit();
   audit.opened("a");
+  for (let index = 1; index <= 33; index += 1)
+    audit.bindOwedSend("a", {
+      attempt: identity(index + 10000),
+      subject: identity(index),
+      sendId: identity(index),
+      kind: "push",
+    });
   audit.client("a", Buffer.from("GET /v1/session HTTP/1.1\r\nHost: fixture\r\n\r\n"));
   audit.server("a", Buffer.from("HTTP/1.1 101 Switching Protocols\r\n\r\n"));
   audit.client(
@@ -106,6 +113,16 @@ test("a same-session Hello/Welcome replay retains every pending slot", (): void 
   assert.equal(audit.snapshot().window.connections[0]?.current, 2);
 });
 
+test("bytes after a recorded physical end cannot disappear from the audit", (): void => {
+  for (const direction of ["client", "server"] as const) {
+    const audit = opened();
+    audit.server("a", frame(batch(1)));
+    audit.ended("a");
+    assert.throws((): void => audit[direction]("a", frame(batch(32))), /ended/);
+    assert.throws((): void => audit.ended("a"), /ended/);
+  }
+});
+
 test("a partial fragmented batch cannot qualify while live or after disconnect", (): void => {
   const audit = opened();
   const bytes = Buffer.from(encode(batch(32)));
@@ -152,6 +169,16 @@ test("the standalone reader consumes its actual private JSONL byte format and ne
   });
   const rows = [
     { kind: "opened", connection: "a" },
+    {
+      kind: "owedSend",
+      connection: "a",
+      binding: {
+        attempt: identity(10001),
+        subject: identity(1),
+        sendId: identity(1),
+        kind: "push",
+      },
+    },
     recordBytes("client", Buffer.from("GET /v1/session HTTP/1.1\r\nHost: fixture\r\n\r\n")),
     recordBytes("server", Buffer.from("HTTP/1.1 101 Switching Protocols\r\n\r\n")),
     recordBytes(

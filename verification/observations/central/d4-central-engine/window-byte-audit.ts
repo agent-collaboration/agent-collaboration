@@ -1,6 +1,10 @@
 /** Qualify D4 window measurements against both original byte streams, never a sampled count. */
 import { SessionAudit, type SessionSnapshot } from "../../../access/session-audit.ts";
-import { SocketWindowObservation, type SocketWindowSnapshot } from "./window-observation.ts";
+import {
+  SocketWindowObservation,
+  type SocketWindowSnapshot,
+  type OwedSendBinding,
+} from "./window-observation.ts";
 
 interface ConnectionAudit {
   readonly server: SessionAudit;
@@ -47,8 +51,9 @@ export class WindowByteAudit {
     const audit = this.connection(connection);
     audit.client.receive(audit.clientConnection, bytes);
   }
-  bindPublicationSubject(connection: string, sendId: string, subject: string): void {
-    this.window.bindPublicationSubject(connection, sendId, subject);
+  bindOwedSend(connection: string, binding: OwedSendBinding): void {
+    this.connection(connection);
+    this.window.bindOwedSend(connection, binding);
   }
   ended(connection: string): void {
     const audit = this.connection(connection);
@@ -59,6 +64,7 @@ export class WindowByteAudit {
   private connection(connection: string): ConnectionAudit {
     const audit = this.connections.get(connection);
     if (audit === undefined) throw new Error("unobserved D4 physical socket");
+    if (audit.server.snapshot().active === 0) throw new Error("physical socket already ended");
     return audit;
   }
   snapshot(): WindowByteSnapshot {

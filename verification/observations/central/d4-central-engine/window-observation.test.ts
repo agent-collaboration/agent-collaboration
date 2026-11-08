@@ -30,6 +30,20 @@ function open(observation: SocketWindowObservation, connection = "socket-a"): vo
     value: { sessionId: identity(900), databases: [] },
   });
 }
+function bindPush(
+  observation: SocketWindowObservation,
+  index: number,
+  send = index,
+  connection = "socket-a",
+  attempt = index + 10000,
+): void {
+  observation.bindOwedSend(connection, {
+    attempt: identity(attempt),
+    subject: identity(index),
+    sendId: identity(send),
+    kind: "push",
+  });
+}
 function sendSingle(
   observation: SocketWindowObservation,
   index: number,
@@ -37,6 +51,7 @@ function sendSingle(
   connection = "socket-a",
 ): void {
   const item = push(index, send);
+  bindPush(observation, index, send, connection);
   // The single frame echoes `frame`; only batch items use `sendId`.
   if (typeof item !== "object" || item === null || !("body" in item)) throw new Error("fixture");
   observation.server(connection, {
@@ -48,6 +63,7 @@ function sendSingle(
 test("33 outstanding items in two legal batches exceed the window even though there are only two frames", (): void => {
   const observation = new SocketWindowObservation();
   open(observation);
+  for (let index = 1; index <= 33; index += 1) bindPush(observation, index);
   observation.server("socket-a", {
     kind: "requestBatch",
     value: Array.from({ length: 32 }, (_, index): unknown => push(index + 1)),
@@ -107,8 +123,18 @@ test("status versions share a slot and a superseded version's answer is stale", 
       },
     },
   });
-  observation.bindPublicationSubject("socket-a", identity(1), identity(901));
-  observation.bindPublicationSubject("socket-a", identity(2), identity(901));
+  observation.bindOwedSend("socket-a", {
+    attempt: identity(1901),
+    sendId: identity(1),
+    subject: identity(901),
+    kind: "status",
+  });
+  observation.bindOwedSend("socket-a", {
+    attempt: identity(1901),
+    sendId: identity(2),
+    subject: identity(901),
+    kind: "status",
+  });
   observation.server("socket-a", status(1, 9007199254740993n));
   observation.server("socket-a", status(2, 9007199254740994n));
   const published = (send: number): unknown => ({
@@ -129,7 +155,12 @@ test("two status destinations for the same item require distinct durable subject
   const observation = new SocketWindowObservation();
   open(observation);
   for (const send of [1, 2]) {
-    observation.bindPublicationSubject("socket-a", identity(send), identity(900 + send));
+    observation.bindOwedSend("socket-a", {
+      attempt: identity(1900 + send),
+      sendId: identity(send),
+      subject: identity(900 + send),
+      kind: "status",
+    });
     observation.server("socket-a", {
       kind: "request",
       value: {
@@ -162,7 +193,7 @@ test("two status destinations for the same item require distinct durable subject
           },
         },
       }),
-    /durable owed subject/,
+    /stable attempt binding/,
   );
   assert.throws((): void => missing.requireWindow(), /invalid/);
 });
@@ -244,4 +275,20 @@ test("a changed Welcome session cannot reset or relabel outstanding slots", (): 
   );
   assert.equal(observation.snapshot().connections[0]?.current, 1);
   assert.throws((): void => observation.requireWindow(), /invalid/);
+});
+
+test("distinct attempts cannot collapse into one slot merely because they share a subject", (): void => {
+  const observation = new SocketWindowObservation();
+  open(observation);
+  for (const send of [1, 2]) {
+    bindPush(observation, 1, send, "socket-a", 20000 + send);
+    const item = push(1, send);
+    if (typeof item !== "object" || item === null || !("body" in item)) throw new Error("fixture");
+    observation.server("socket-a", {
+      kind: "request",
+      value: { frame: identity(send), body: item.body },
+    });
+  }
+  assert.equal(observation.snapshot().connections[0]?.current, 2);
+  assert.equal(observation.snapshot().peak, 2);
 });

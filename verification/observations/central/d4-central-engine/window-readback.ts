@@ -3,6 +3,7 @@ import { lstat, readFile } from "node:fs/promises";
 import { z } from "zod";
 import { decode, encode } from "../../../exact-json.ts";
 import { WindowByteAudit, type WindowByteSnapshot } from "./window-byte-audit.ts";
+import { owedSendBindingSchema } from "./window-observation.ts";
 
 const connection = z.string().min(1).max(256);
 export const windowTraceRecordSchema = z.discriminatedUnion("kind", [
@@ -10,10 +11,9 @@ export const windowTraceRecordSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("ended"), connection }).strict(),
   z
     .object({
-      kind: z.literal("publicationSubject"),
+      kind: z.literal("owedSend"),
       connection,
-      sendId: z.uuidv7(),
-      subject: z.uuidv7(),
+      binding: owedSendBindingSchema,
     })
     .strict(),
   z.object({ kind: z.literal("server"), connection, bytes: z.string().min(1) }).strict(),
@@ -40,8 +40,8 @@ export function replayWindowBytes(contents: string): WindowByteSnapshot {
       case "ended":
         audit.ended(record.connection);
         break;
-      case "publicationSubject":
-        audit.bindPublicationSubject(record.connection, record.sendId, record.subject);
+      case "owedSend":
+        audit.bindOwedSend(record.connection, record.binding);
         break;
       case "server":
       case "client": {
@@ -65,7 +65,7 @@ async function main(): Promise<void> {
   const arguments_ = process.argv.slice(2);
   if (arguments_.length === 1 && arguments_[0] === "--help") {
     process.stdout.write(
-      "D4 window byte reader\nUsage: node verification/observations/central/d4-central-engine/window-readback.ts TRACE.jsonl\nReads an owner-private original byte transcript, preserving per-physical-socket order.\nRows: {kind:opened|ended,connection} or {kind:server|client,connection,bytes:canonical-base64}.\nStatus sends also require a preceding {kind:publicationSubject,connection,sendId:UUIDv7,subject:UUIDv7} from actual conformance evidence.\nRequires real Hello/Welcome, complete valid bytes both ways and a nonempty owed-request observation; rejects a peak above 32.\nOutput is a retained-byte measurement only. It supplies no source/build binding, durable-row comparison, runtime journey, hour/wake or product sensitivity credit.\nNo processes, network, model inputs or state writes.\n",
+      "D4 window byte reader\nUsage: node verification/observations/central/d4-central-engine/window-readback.ts TRACE.jsonl\nReads an owner-private original byte transcript, preserving per-physical-socket order.\nRows: {kind:opened|ended,connection} or {kind:server|client,connection,bytes:canonical-base64}.\nEach Push/status send also requires a preceding {kind:owedSend,connection,binding:{attempt:UUIDv7,subject:UUIDv7,sendId:UUIDv7,kind:push|status}} from actual S1 evidence.\nUse wire-event-readback.ts to join late S1 records to original unbound wire bytes.\nRequires real Hello/Welcome, complete valid bytes both ways and a nonempty owed-request observation; rejects a peak above 32.\nOutput is a retained-byte measurement only. It supplies no source/build binding, durable-row comparison, runtime journey, hour/wake or product sensitivity credit.\nNo processes, network, model inputs or state writes.\n",
     );
     return;
   }

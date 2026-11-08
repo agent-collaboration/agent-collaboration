@@ -16,6 +16,15 @@ const statusIdentity = z.object({
   publication: z.object({ item: z.uuidv7(), version: z.bigint().nonnegative() }),
 });
 const refusal = z.object({ reason: z.object({ kind: z.string().min(1) }) });
+export const owedSendBindingSchema = z
+  .object({
+    attempt: z.uuidv7(),
+    subject: z.uuidv7(),
+    sendId: z.uuidv7(),
+    kind: z.enum(["push", "status"]),
+  })
+  .strict();
+export type OwedSendBinding = z.infer<typeof owedSendBindingSchema>;
 
 interface WindowRequest {
   readonly subject: string;
@@ -29,7 +38,7 @@ interface ConnectionWindow {
   sent: number;
   readonly requests: Map<string, WindowRequest>;
   readonly sends: Map<string, string>;
-  readonly publicationSubjects: Map<string, string>;
+  readonly bindings: Map<string, OwedSendBinding>;
 }
 export interface SocketWindowSnapshot {
   readonly peak: number;
@@ -61,7 +70,7 @@ export class SocketWindowObservation {
       sent: 0,
       requests: new Map(),
       sends: new Map(),
-      publicationSubjects: new Map(),
+      bindings: new Map(),
     });
   }
   ended(connection: string): void {
@@ -76,13 +85,12 @@ export class SocketWindowObservation {
   client(connection: string, raw: unknown): void {
     this.observe(connection, raw, "client");
   }
-  bindPublicationSubject(connection: string, sendId: string, subject: string): void {
+  bindOwedSend(connection: string, value: OwedSendBinding): void {
     const window = this.connection(connection);
-    const parsedSend = z.uuidv7().parse(sendId);
-    const parsedSubject = z.uuidv7().parse(subject);
-    if (window.publicationSubjects.has(parsedSend) || window.sends.has(parsedSend))
-      this.reject("publication subject binding duplicated or arrived after send");
-    window.publicationSubjects.set(parsedSend, parsedSubject);
+    const binding = owedSendBindingSchema.parse(value);
+    if (window.bindings.has(binding.sendId) || window.sends.has(binding.sendId))
+      this.reject("owed send binding duplicated or arrived after send");
+    window.bindings.set(binding.sendId, binding);
   }
   private observe(connection: string, raw: unknown, direction: "server" | "client"): void {
     try {
@@ -147,20 +155,26 @@ export class SocketWindowObservation {
     if (request.kind !== "crate") throw new Error("unmapped server request owner");
     if (["release", "withdrawRelease"].includes(call.kind)) return;
     let kind: WindowRequest["kind"];
-    let subject: string;
+    const binding = window.bindings.get(sendId);
+    if (binding === undefined) throw new Error("owed window requires its stable attempt binding");
     if (call.kind === "push") {
       kind = "push";
-      subject = pushIdentity.parse(call.value).item.value.id;
+      if (
+        binding.kind !== "push" ||
+        binding.subject !== pushIdentity.parse(call.value).item.value.id
+      )
+        throw new Error("Push does not match its owed send binding");
     } else if (call.kind === "publishStatus") {
       kind = "publishStatus";
       statusIdentity.parse(call.value);
-      const bound = window.publicationSubjects.get(sendId);
-      if (bound === undefined)
-        throw new Error("publication window requires its durable owed subject binding");
-      subject = bound;
+      if (binding.kind !== "status")
+        throw new Error("publication does not match its owed send binding");
     } else throw new Error(`unmapped owed request ${call.kind}`);
-    const key = `${kind}:${subject}`;
-    window.requests.set(key, { subject, kind, sendId });
+    const key = binding.attempt;
+    const previous = window.requests.get(key);
+    if (previous !== undefined && (previous.subject !== binding.subject || previous.kind !== kind))
+      throw new Error("attempt identity changed its subject or kind");
+    window.requests.set(key, { subject: binding.subject, kind, sendId });
     window.sends.set(sendId, key);
     window.sent += 1;
     window.peak = Math.max(window.peak, window.requests.size);
