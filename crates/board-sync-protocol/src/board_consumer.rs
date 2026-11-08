@@ -17,6 +17,28 @@ impl ConsumerProtocol for BoardConsumerProtocol {
     type ClientAnswer = BoardClientAnswer;
     type Notice = PositionedBoardNotice;
     type Annotation = BoardAnnotation;
+
+    fn same_request_kind(left: &Self::Request, right: &Self::Request) -> bool {
+        match (left, right) {
+            (
+                BoardConsumerRequest::Read { scope: left, .. },
+                BoardConsumerRequest::Read { scope: right, .. },
+            ) => std::mem::discriminant(left) == std::mem::discriminant(right),
+            (
+                BoardConsumerRequest::ForwardedPost { post: left, .. },
+                BoardConsumerRequest::ForwardedPost { post: right, .. },
+            ) => left.kind == right.kind,
+            _ => std::mem::discriminant(left) == std::mem::discriminant(right),
+        }
+    }
+
+    fn same_server_request_kind(left: &Self::ServerRequest, right: &Self::ServerRequest) -> bool {
+        match (left, right) {
+            (BoardServerRequest::ForwardedPost(left), BoardServerRequest::ForwardedPost(right)) => {
+                left.post.kind == right.post.kind
+            }
+        }
+    }
 }
 
 #[derive(Serialize)]

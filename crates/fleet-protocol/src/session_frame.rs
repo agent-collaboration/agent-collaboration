@@ -10,6 +10,15 @@ pub trait ConsumerProtocol: Send + Sync + 'static {
     type ClientAnswer: Serialize + DeserializeOwned + Send + Sync;
     type Notice: Serialize + DeserializeOwned + Send + Sync;
     type Annotation: Serialize + DeserializeOwned + Send + Sync;
+
+    /// Consumers with nested operation envelopes override this at their typed owner.
+    fn same_request_kind(left: &Self::Request, right: &Self::Request) -> bool {
+        std::mem::discriminant(left) == std::mem::discriminant(right)
+    }
+
+    fn same_server_request_kind(left: &Self::ServerRequest, right: &Self::ServerRequest) -> bool {
+        std::mem::discriminant(left) == std::mem::discriminant(right)
+    }
 }
 
 /// A protocol with no application payload, useful to replication-only consumers.
@@ -192,6 +201,7 @@ pub enum ReplicationAnswer {
     bound = ""
 )]
 pub enum OperationRequest<P: ConsumerProtocol = NoConsumer> {
+    NoticesApplied { through: NoticePosition },
     Replication(ReplicationRequest<P::Annotation>),
     Lease(LeaseRequest),
     Delivery(DeliveryRequest<P::Delivery>),
@@ -208,6 +218,7 @@ pub enum OperationRequest<P: ConsumerProtocol = NoConsumer> {
     bound = ""
 )]
 pub enum OperationAnswer<P: ConsumerProtocol = NoConsumer> {
+    NoticesApplied { through: NoticePosition },
     InvalidShape { field: String },
     Replication(ReplicationAnswer),
     Lease(LeaseAnswer),
@@ -267,7 +278,11 @@ pub enum ClientFrame<P: ConsumerProtocol = NoConsumer> {
     Hello {
         session_id: SessionId,
         schema_support: SchemaSupport,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        capabilities: Option<FrameCapabilities>,
     },
+    RequestBatch(RequestBatch<OperationRequest<P>>),
+    AnswerBatch(AnswerBatch<ClientAnswer<P>>),
     Request {
         frame: FrameId,
         body: OperationRequest<P>,
@@ -291,7 +306,11 @@ pub enum ServerFrame<P: ConsumerProtocol = NoConsumer> {
     Welcome {
         session_id: SessionId,
         databases: Vec<DatabaseStatus>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        capabilities: Option<FrameCapabilities>,
     },
+    RequestBatch(RequestBatch<ServerRequest<P>>),
+    AnswerBatch(AnswerBatch<OperationAnswer<P>>),
     Answer {
         frame: FrameId,
         body: OperationAnswer<P>,
