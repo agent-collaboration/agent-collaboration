@@ -314,3 +314,11 @@ pub(crate) async fn link_post_with(
     }
     Ok((status, payload))
 }
+
+/// Public paths later B2 work names, each with the method it will use. Today
+/// neither host serves them; both hosts probe each with its own method and
+/// compare it with an unserved path under the same method and authority.
+pub const B2_PUBLIC_PATHS_NOT_SERVED: &[(&str, &str)] = &[
+    ("GET", "/fleet/v1/session"),
+    ("POST", "/fleet/admin/v1/workspaces"),
+];

@@ -13,7 +13,8 @@ use collaboration_central_conformance::{
     sign_assertion,
 };
 use organization_stamps::{
-    self as stamps, ADMIN_AUDIENCE, ISSUER, NOW_SECONDS, PUBLIC_ORIGIN, ProofKey, SignInKeys,
+    self as stamps, ADMIN_AUDIENCE, B2_PUBLIC_PATHS_NOT_SERVED, ISSUER, NOW_SECONDS, PUBLIC_ORIGIN,
+    ProofKey, SignInKeys,
 };
 use serde_json::{Value, json};
 use std::{path::PathBuf, process::Stdio};
@@ -142,7 +143,21 @@ impl Caller {
     /// binding carries no Access assertion (the private entry must not need
     /// one); "/public" observer reads carry the owner's.
     async fn post(&self, path: &str, body: &Value) -> ConformanceResult<(u16, String, Value)> {
-        let mut request = self.http.post(format!("{}{path}", self.base)).json(body);
+        self.send("POST", path, body).await
+    }
+    /// GET carries no body; any other method carries `body` as JSON.
+    async fn send(
+        &self,
+        method: &str,
+        path: &str,
+        body: &Value,
+    ) -> ConformanceResult<(u16, String, Value)> {
+        let url = format!("{}{path}", self.base);
+        let mut request = if method == "GET" {
+            self.http.get(url)
+        } else {
+            self.http.post(url).json(body)
+        };
         if path.starts_with("/public/") {
             request = request.header("Cf-Access-Jwt-Assertion", &self.owner);
         }
@@ -444,16 +459,17 @@ async fn main() -> ConformanceResult<()> {
             "B2 link routes on an unstamped legacy or non-legacy store refuse and reveal nothing",
             &unstamped_b2,
         )?;
-        let unserved = caller.post("/public/no-such-route", &json!({})).await?;
         let mut b2_public = Vec::new();
-        for path in ["/public/fleet/v1/session", "/public/fleet/admin/v1/workspaces"] {
-            let answer = caller.post(path, &json!({})).await?;
-            b2_public.push((answer.0, answer.2));
+        for (method, path) in B2_PUBLIC_PATHS_NOT_SERVED {
+            let unserved = caller.send(method, "/public/no-such-route", &json!({})).await?;
+            let answer = caller.send(method, &format!("/public{path}"), &json!({})).await?;
+            b2_public.push((*method, *path, (answer.0, answer.2), (unserved.0, unserved.2)));
         }
         require(
-            b2_public.iter().all(|answer| answer == &(unserved.0, unserved.2.clone())),
-            "B2 public paths answer exactly like any unserved path",
-            &(b2_public, unserved),
+            b2_public.len() == 2
+                && b2_public.iter().all(|(_, _, answer, unserved)| answer == unserved),
+            "each B2 public path answers exactly like an unserved path with its own method",
+            &b2_public,
         )?;
         let answers = vec![
             caller.provision(legacy, &legacy_statement).await?,

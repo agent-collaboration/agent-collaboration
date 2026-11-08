@@ -44,6 +44,34 @@ notes in this folder where they disagree:
   setup retry over it is refused (409) so sign-in never marks it ready, and
   only a replacement naming it is accepted.
 
+- **Admin wire.** The three request bodies, `OrganizationAdminResult`
+  (`applied | found | records | refused`) and five JCS intent vectors are
+  published under `contracts/`. An unauthenticated request is a bare 401 and
+  never a result body, so `Unauthenticated` lives only in the Fleet's
+  internal answer. A workspace name must already be canonical (the Fleet's
+  `ResourceName` rules, refused rather than trimmed) so the signed intent
+  hashes exactly the stored name.
+- **Unstamped stores (Lead ruling, 8 Nov).** B2's link routes (admin and
+  push) answer 503 on any unstamped store, legacy or not, before any
+  verification, revealing nothing. B2 serves no public route yet; the paths
+  later work names (`B2_PUBLIC_PATHS_NOT_SERVED`, one list for both hosts)
+  answer exactly like an unserved path with the same method. The Access-era
+  routes (`ACCESS_ERA_ROUTES` in the Tokio test, the list Program Design
+  step 2 deletes) keep serving the legacy store until the switch; every
+  caller they build is bound to the legacy organization, and both encoders
+  and the decoder refuse a call that crosses organizations.
+- **Floor observation.** The conformance-only organization-records read also
+  returns the retained organization floor, so an aborted floor apply can be
+  observed absent on workerd before any retry; Tokio reads the store file
+  while the server is stopped.
+- **Lost-answer cut.** `DropNextOrganizationAnswer` (conformance only, the
+  same family as `FailNextOrganizationRecord`) lets the Fleet commit an admin
+  change and then return a lost answer. The existing object-reply drops sit
+  on object-to-object calls; the edge's call into the Fleet bypasses them on
+  Tokio, and on Cloudflare the caller is the `central-link` Worker, which
+  carries no conformance faults. The cut therefore sits at the Fleet's own
+  reply boundary on both hosts.
+
 ## The private link
 
 - **Tokio:** the link router is served on its own owner-only Unix socket;

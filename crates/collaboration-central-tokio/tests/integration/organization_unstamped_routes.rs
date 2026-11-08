@@ -5,8 +5,8 @@
 #![cfg(feature = "conformance")]
 use crate::configuration;
 use crate::organization_stamps::{
-    self as stamps, ADMIN_AUDIENCE, AUDIENCE, ISSUER, NOW_SECONDS, PUBLIC_ORIGIN, ProofKey,
-    SignInKeys, link_post, link_post_with,
+    self as stamps, ADMIN_AUDIENCE, AUDIENCE, B2_PUBLIC_PATHS_NOT_SERVED, ISSUER, NOW_SECONDS,
+    PUBLIC_ORIGIN, ProofKey, SignInKeys, link_post, link_post_with,
 };
 use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, JwksFixtureServer, RuntimeControl, RuntimeControlRequest,
@@ -47,15 +47,11 @@ const ACCESS_ERA_ROUTES: &[(&str, &str)] = &[
 ];
 
 /// B2's own routes: the private link's admin and push calls. B2 serves no
-/// public route; the public paths later B2 work names are not served yet.
+/// public route yet (see `B2_PUBLIC_PATHS_NOT_SERVED`).
 const B2_LINK_ADMIN_ROUTES: &[&str] = &[
     "/organization-admin/v1/create-workspace",
     "/organization-admin/v1/workspace-lookup",
     "/organization-admin/v1/change-records",
-];
-const B2_PUBLIC_PATHS_NOT_SERVED: &[(&str, &str)] = &[
-    ("GET", "/fleet/v1/session"),
-    ("POST", "/fleet/admin/v1/workspaces"),
 ];
 
 fn legacy() -> String {
@@ -276,10 +272,15 @@ async fn b2_routes_refuse_on_unstamped_stores_and_reveal_nothing() -> Conformanc
         .await?;
         link_answers.push((organization.to_owned(), PUSH.to_owned(), push));
     }
-    let unserved = public(&base, "POST", "/no-such-route", true).await?;
     let mut b2_public = Vec::new();
     for (method, path) in B2_PUBLIC_PATHS_NOT_SERVED {
-        b2_public.push(public(&base, method, path, true).await?);
+        let unserved = public(&base, method, "/no-such-route", true).await?;
+        b2_public.push((
+            *method,
+            *path,
+            public(&base, method, path, true).await?,
+            unserved,
+        ));
     }
     let mut link_on_public = Vec::new();
     for path in B2_LINK_ADMIN_ROUTES.iter().copied().chain([
@@ -301,10 +302,13 @@ async fn b2_routes_refuse_on_unstamped_stores_and_reveal_nothing() -> Conformanc
         );
     }
     assert_eq!(link_answers.len(), 8);
-    assert!(
-        b2_public.iter().all(|answer| answer == &unserved),
-        "B2 public paths answer exactly like any unserved path: {b2_public:?} vs {unserved:?}"
-    );
+    for (method, path, answer, unserved) in &b2_public {
+        assert_eq!(
+            answer, unserved,
+            "{method} {path} answers exactly like an unserved {method} under the same authority"
+        );
+    }
+    assert_eq!(b2_public.len(), 2);
     assert_eq!(
         link_on_public,
         vec![404; 6],
