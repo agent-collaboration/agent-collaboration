@@ -1,7 +1,7 @@
 # D3 local wire compatibility
 
-**Draft until its declared real-target pass.** Run only when commissioned for
-central-execution-model D3. This journey uses two signed debug builds of the
+Run only when commissioned for central-execution-model D3, with a fresh declared
+target. This local route uses two signed debug builds of the
 exact pre-D3 0.1.134 source at `247570818` against the declared branch's local Tokio central.
 It launches no production Router, uses no SSH or Keychain, and sends no model
 input. Label evidence **pre-D3 0.1.134 source, debug build**. It does not prove
