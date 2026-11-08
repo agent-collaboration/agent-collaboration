@@ -10,6 +10,16 @@ const clientFrameSchema = z.object({
   kind: z.enum(["hello", "request", "answer"]),
   value: z.unknown(),
 });
+const batchServerFrameSchema = frameSchema.extend({
+  kind: z.enum(["welcome", "answer", "request", "notice", "closed", "requestBatch", "answerBatch"]),
+});
+const batchClientFrameSchema = clientFrameSchema.extend({
+  kind: z.enum(["hello", "request", "answer", "requestBatch", "answerBatch"]),
+});
+const batchValueSchema = z
+  .array(z.object({ sendId: z.uuidv7(), body: z.unknown() }))
+  .min(1)
+  .max(32);
 // fleet-sync-protocol 7b69ca0: ServerFrame::Request -> ServerRequest::Crate -> ServerCall::Push.
 const crateRequestSchema = z.object({
   body: z.object({
@@ -44,9 +54,15 @@ export interface SessionSnapshot {
 export class SessionAudit {
   private readonly observeFrame: ((value: unknown) => void) | undefined;
   private readonly direction: "server" | "client";
-  constructor(observeFrame?: (value: unknown) => void, direction: "server" | "client" = "server") {
+  private readonly protocol: "single" | "batches";
+  constructor(
+    observeFrame?: (value: unknown) => void,
+    direction: "server" | "client" = "server",
+    protocol: "single" | "batches" = "single",
+  ) {
     this.observeFrame = observeFrame;
     this.direction = direction;
+    this.protocol = protocol;
   }
   private connections = 0;
   private welcomes = 0;
@@ -69,6 +85,13 @@ export class SessionAudit {
     return this.connections;
   }
   ended(connection: number): void {
+    const state = this.active.get(connection);
+    if (
+      state !== undefined &&
+      state !== "invalid" &&
+      (state.pending.length > 0 || state.fragmented || state.fragments.length > 0)
+    )
+      this.invalidConnections += 1;
     this.active.delete(connection);
   }
   receive(connection: number, contents: Buffer): void {
@@ -154,7 +177,20 @@ export class SessionAudit {
     return true;
   }
   private observe(value: unknown, state: FrameBuffer): void {
-    const message = (this.direction === "server" ? frameSchema : clientFrameSchema).parse(value);
+    const message =
+      this.protocol === "single"
+        ? this.direction === "server"
+          ? frameSchema.parse(value)
+          : clientFrameSchema.parse(value)
+        : this.direction === "server"
+          ? batchServerFrameSchema.parse(value)
+          : batchClientFrameSchema.parse(value);
+    if (message.kind === "requestBatch" || message.kind === "answerBatch") {
+      if (state.fragments.length > 1024 * 1024) throw new Error("batch byte bound");
+      const items = batchValueSchema.parse(message.value);
+      if (new Set(items.map((item): string => item.sendId)).size !== items.length)
+        throw new Error("duplicate batch send id");
+    }
     this.observeFrame?.(value);
     this.frames[message.kind] = (this.frames[message.kind] ?? 0) + 1;
     if (message.kind === "welcome") {
@@ -162,12 +198,15 @@ export class SessionAudit {
       state.welcomed = true;
     }
     if (message.kind === "closed") state.welcomed = false;
-    if (message.kind === "request") {
-      const request = crateRequestSchema.safeParse(message.value);
-      if (request.success && request.data.body.value.kind === "push") {
-        const { item } = pushSchema.parse(request.data.body.value.value);
-        this.pushedItemIds[item.kind === "item" ? "items" : "controls"].push(item.value.id);
-      }
+    if (message.kind === "request") this.observePush(message.value);
+    if (message.kind === "requestBatch")
+      for (const item of batchValueSchema.parse(message.value)) this.observePush(item);
+  }
+  private observePush(value: unknown): void {
+    const request = crateRequestSchema.safeParse(value);
+    if (request.success && request.data.body.value.kind === "push") {
+      const { item } = pushSchema.parse(request.data.body.value.value);
+      this.pushedItemIds[item.kind === "item" ? "items" : "controls"].push(item.value.id);
     }
   }
   snapshot(): SessionSnapshot {
@@ -189,5 +228,17 @@ export class SessionAudit {
       },
       invalidConnections: this.invalidConnections,
     };
+  }
+  requireComplete(): void {
+    if (this.invalidConnections > 0) throw new Error("invalid Session byte audit");
+    for (const state of this.active.values())
+      if (
+        state === "invalid" ||
+        state.upgradePending ||
+        state.pending.length > 0 ||
+        state.fragmented ||
+        state.fragments.length > 0
+      )
+        throw new Error("incomplete Session byte audit");
   }
 }

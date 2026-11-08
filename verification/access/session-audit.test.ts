@@ -154,3 +154,11 @@ test("Session snapshots expose no retired mail-waiting counter", (): void => {
   send(audit, connection, { kind: "notice", value: {} });
   assert.equal(Object.hasOwn(audit.snapshot(), "mailWaiting"), false);
 });
+
+test("a connection ending with an incomplete binary message remains invalid evidence", (): void => {
+  const { audit, connection } = openedAudit();
+  const bytes = Buffer.from(JSON.stringify(pushFrame()));
+  audit.receive(connection, websocketFrame(bytes.subarray(0, 73), 2, false));
+  audit.ended(connection);
+  assert.equal(audit.snapshot().invalidConnections, 1);
+});
