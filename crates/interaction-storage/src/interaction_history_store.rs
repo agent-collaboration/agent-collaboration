@@ -5,7 +5,7 @@ use super::{
     QuestionHistoryState, QuestionRequest, QuestionResponse, RefusedTypedApproval, SessionRef,
     validate_question_response_record,
 };
-use chrono::{DateTime, Months, Utc};
+use chrono::{DateTime, Utc};
 use std::{
     collections::BTreeMap,
     ops::{Deref, DerefMut},
@@ -520,6 +520,30 @@ impl InteractionHistoryStore {
         .await
     }
 
+    /// The first moment the retention rule allows deleting a settled record held now, or
+    /// `None` when none could ever go. A record still pending is not counted; settling it
+    /// commits and wakes the worker.
+    pub async fn prune_due(&self, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
+        let state = self.data.lock().await;
+        let data = &state.cache;
+        data.created_at
+            .iter()
+            .filter(|(request_id, _)| {
+                data.records
+                    .get(*request_id)
+                    .is_some_and(is_settled_history_record)
+            })
+            .map(|(_, created_at)| *created_at)
+            .min()
+            .and_then(|oldest| {
+                sqlite_storage_maintenance::first_deletable_at(
+                    oldest,
+                    crate::INTERACTION_RETENTION_MONTHS,
+                    now,
+                )
+            })
+    }
+
     pub async fn prune_expired(
         &self,
         now: DateTime<Utc>,
@@ -528,9 +552,9 @@ impl InteractionHistoryStore {
         if !(1..=500).contains(&batch_size) {
             return Err(InteractionHistoryError::Unavailable);
         }
-        let cutoff = now
-            .checked_sub_months(Months::new(crate::INTERACTION_RETENTION_MONTHS))
-            .ok_or(InteractionHistoryError::Unavailable)?;
+        let cutoff =
+            sqlite_storage_maintenance::months_before(now, crate::INTERACTION_RETENTION_MONTHS)
+                .ok_or(InteractionHistoryError::Unavailable)?;
         self.mutate_history(|data| {
             let mut expired = data
                 .created_at

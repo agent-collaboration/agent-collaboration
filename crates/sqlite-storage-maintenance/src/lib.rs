@@ -1,5 +1,7 @@
 //! Shared incremental auto-vacuum preparation and commit signalling for Router-owned SQLite files.
 
+mod calendar_retention;
+pub use calendar_retention::{first_deletable_at, months_before};
 mod commit_signal;
 #[cfg(feature = "test-support")]
 pub use commit_signal::CommitPause;

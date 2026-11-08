@@ -18,25 +18,12 @@ impl CollaborationRuntime {
         inputs: CollaborationRuntimeInputs,
         provider_launches: Vec<crate::ExternalProviderStartup>,
     ) -> io::Result<Self> {
-        let (_relation_sender, relation_receiver) =
-            tokio::sync::watch::channel(RouterExecutableRelation::Match);
-        Self::start_with_external_providers_and_router_relation(
-            inputs,
-            provider_launches,
-            relation_receiver,
-        )
-        .await
-    }
-
-    pub async fn start_with_external_providers_and_router_relation(
-        inputs: CollaborationRuntimeInputs,
-        provider_launches: Vec<crate::ExternalProviderStartup>,
-        relation_receiver: tokio::sync::watch::Receiver<RouterExecutableRelation>,
-    ) -> io::Result<Self> {
         Box::pin(Self::start_with_optional_router_proxy_endpoint(
             inputs,
             provider_launches,
-            relation_receiver,
+            std::sync::Arc::new(collaboration_mcp::FixedRouterExecutableRelation(
+                RouterExecutableRelation::Match,
+            )),
             None,
             None,
             None,
@@ -47,7 +34,7 @@ impl CollaborationRuntime {
     pub(crate) async fn start_for_host_with_router_proxy_endpoint(
         host_inputs: HostCollaborationInputs,
         provider_launches: Vec<crate::ExternalProviderStartup>,
-        relation_receiver: tokio::sync::watch::Receiver<RouterExecutableRelation>,
+        router_executable_check: std::sync::Arc<dyn collaboration_mcp::RouterExecutableCheck>,
     ) -> io::Result<Self> {
         let prepared_exposure = crate::tailscale_exposure::PreparedTailscaleExposure::prepare(
             host_inputs.remote_access,
@@ -56,7 +43,7 @@ impl CollaborationRuntime {
         Box::pin(Self::start_with_optional_router_proxy_endpoint(
             host_inputs.collaboration_runtime,
             provider_launches,
-            relation_receiver,
+            router_executable_check,
             Some(host_inputs.router_proxy_endpoint),
             prepared_exposure,
             Some(host_inputs.enrollment_reset_directory),
@@ -67,7 +54,7 @@ impl CollaborationRuntime {
     pub(super) async fn start_with_optional_router_proxy_endpoint(
         inputs: CollaborationRuntimeInputs,
         provider_launches: Vec<crate::ExternalProviderStartup>,
-        relation_receiver: tokio::sync::watch::Receiver<RouterExecutableRelation>,
+        router_executable_check: std::sync::Arc<dyn collaboration_mcp::RouterExecutableCheck>,
         router_proxy_endpoint: Option<SocketAddr>,
         prepared_exposure: Option<crate::tailscale_exposure::PreparedTailscaleExposure>,
         enrollment_reset_directory: Option<std::path::PathBuf>,
@@ -783,7 +770,7 @@ impl CollaborationRuntime {
                 application,
                 service_directory: inputs.directory.clone(),
                 native_definitions,
-                router_executable_relation: relation_receiver,
+                router_executable_check,
                 concurrent_requests: collaboration_mcp::DEFAULT_CONCURRENT_REQUESTS,
                 shutdown: shutdown.clone(),
             });

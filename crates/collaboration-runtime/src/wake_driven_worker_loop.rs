@@ -6,9 +6,10 @@
 //! and sleeps on the sources plus one timer at that time; with no due time it holds no
 //! timer. A pass whose read or unit fails retries from 1 s, doubling to 30 s, logs once
 //! per run of failures, and the next pass that succeeds clears the retry.
+use crate::FailedPassBackoff;
 use crate::wake_driven_worker_observation::WorkerObservation;
 use futures_util::future::select_all;
-use runtime_primitives::{Backoff, Clock, SyncTime};
+use runtime_primitives::{Clock, SyncTime};
 use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
@@ -69,13 +70,6 @@ pub trait WorkerPass: Send {
     ) -> impl Future<Output = Result<Option<SyncTime>, Self::Error>> + Send;
 }
 
-/// The failed-pass retry: 1 s doubling to 30 s, one log line per run of failures.
-const FAILED_PASS_BACKOFF: Backoff = Backoff {
-    initial: Duration::from_secs(1),
-    max: Duration::from_secs(30),
-    factor: 2,
-};
-
 pub struct WakeDrivenWorkerLoop {
     worker: &'static str,
     clock: Arc<dyn Clock>,
@@ -117,7 +111,7 @@ impl WakeDrivenWorkerLoop {
     /// Runs passes until `shutdown`. Startup is the first pass: it drains whatever an
     /// earlier process or `agent-router-update` committed.
     pub async fn run<TPass: WorkerPass>(mut self, pass: &mut TPass, shutdown: CancellationToken) {
-        let mut consecutive_failures: u32 = 0;
+        let mut failures = FailedPassBackoff::default();
         loop {
             // Shutdown is checked between units of work: a pass never starts after it, and
             // a batch already running finishes its transactions first.
@@ -133,20 +127,19 @@ impl WakeDrivenWorkerLoop {
             let deadline = match result {
                 Ok(PassEnd::ShutDown) => return,
                 Ok(PassEnd::Drained { next_due }) => {
-                    consecutive_failures = 0;
+                    failures.record_success();
                     next_due
                 }
                 Err(error) => {
-                    if consecutive_failures == 0 {
+                    let retry = failures.record_failure();
+                    if retry.starts_run {
                         tracing::warn!(
                             worker = self.worker,
                             %error,
                             "worker pass failed; it retries with backoff"
                         );
                     }
-                    let retry_at = now.after(FAILED_PASS_BACKOFF.delay(consecutive_failures));
-                    consecutive_failures = consecutive_failures.saturating_add(1);
-                    Some(retry_at)
+                    Some(now.after(retry.delay))
                 }
             };
             if self.sources.iter().any(|source| source.has_changed()) {

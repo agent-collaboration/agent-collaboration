@@ -18,8 +18,7 @@ pub(super) struct CollaborationLifecycle {
     external_provider_startups: Vec<crate::ExternalProviderStartup>,
     provider_operation_retention_days: Option<std::num::NonZeroU32>,
     remote_control_server_name: Option<RemoteControlServerName>,
-    router_executable_relation:
-        tokio::sync::watch::Receiver<collaboration_protocol::RouterExecutableRelation>,
+    router_executable_check: std::sync::Arc<dyn collaboration_mcp::RouterExecutableCheck>,
     runtime: Option<CollaborationRuntime>,
     published_child: Option<u32>,
     schema_digest: Option<[u8; 32]>,
@@ -30,9 +29,7 @@ impl CollaborationLifecycle {
         instance: &HostInstance,
         child: &AppServerChild,
         remote_control_server_name: Option<RemoteControlServerName>,
-        router_executable_relation: tokio::sync::watch::Receiver<
-            collaboration_protocol::RouterExecutableRelation,
-        >,
+        router_executable_check: std::sync::Arc<dyn collaboration_mcp::RouterExecutableCheck>,
     ) -> io::Result<Option<Self>> {
         let Some(directory) = config.collaboration_directory() else {
             return Ok(None);
@@ -72,7 +69,7 @@ impl CollaborationLifecycle {
             external_provider_startups,
             provider_operation_retention_days: config.provider_operation_retention_days(),
             remote_control_server_name,
-            router_executable_relation,
+            router_executable_check,
             runtime: None,
             published_child: None,
             schema_digest: None,
@@ -169,7 +166,7 @@ impl CollaborationLifecycle {
                     remote_access: self.remote_access,
                 },
                 self.external_provider_startups.clone(),
-                self.router_executable_relation.clone(),
+                std::sync::Arc::clone(&self.router_executable_check),
             )
             .await?;
             crate::record_debug_readiness_timing(

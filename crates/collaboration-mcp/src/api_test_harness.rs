@@ -50,12 +50,13 @@ pub(crate) fn api_config(
     application: CollaborationApplication,
     service_directory: &Path,
 ) -> CollaborationApiConfig {
-    let (_sender, relation) = tokio::sync::watch::channel(RouterExecutableRelation::Match);
     CollaborationApiConfig {
         application,
         service_directory: service_directory.to_owned(),
         native_definitions: None,
-        router_executable_relation: relation,
+        router_executable_check: std::sync::Arc::new(crate::FixedRouterExecutableRelation(
+            RouterExecutableRelation::Match,
+        )),
         concurrent_requests: DEFAULT_CONCURRENT_REQUESTS,
         shutdown: CancellationToken::new(),
     }

@@ -101,6 +101,8 @@ pub struct MailDeliveryRuntime {
     service: message_board::ServiceId,
     clock: Arc<dyn SubscriptionClock>,
     session: Option<MailDeliverySession>,
+    /// Reports the remote-wake wait's reads and sleeps; production keeps nothing.
+    remote_wake_wait: collaboration_runtime::WorkerObservation,
 }
 
 impl MailDeliveryRuntime {
@@ -346,6 +348,7 @@ impl MailDeliveryRuntime {
             service,
             clock,
             session,
+            remote_wake_wait: collaboration_runtime::WorkerObservation::default(),
         })
     }
 

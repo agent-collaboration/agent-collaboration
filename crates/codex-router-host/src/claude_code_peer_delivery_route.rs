@@ -18,6 +18,7 @@ use collaboration_contracts::NativeObservedOutcome;
 use collaboration_contracts::NativeRefusalCode;
 use collaboration_contracts::NativeRouteClaim;
 use collaboration_contracts::RoutePresence;
+use collaboration_contracts::RouteUnavailableReason;
 use collaboration_contracts::SessionDeliveryRoute;
 use collaboration_contracts::UnsentCause;
 use collaboration_protocol::{
@@ -55,6 +56,38 @@ pub(crate) enum PeerLookupFailure {
 
 const AMBIGUOUS_PEER_CLAIM_REASON: &str =
     "multiple live Claude Code registry records claim this session";
+
+/// The Router can't start a Claude Code terminal, so mail to one that isn't running fails.
+const PEER_NOT_RUNNING_REASON: &str = "target is not running";
+const PEER_NOT_RUNNING_FIX: &str = "open the Claude Code session, then send again";
+
+/// Unavailable rather than rejected: a provider route that can load the same session still wins.
+fn peer_not_running_claim() -> NativeRouteClaim {
+    NativeRouteClaim::unavailable(
+        RouteUnavailableReason {
+            reason: PEER_NOT_RUNNING_REASON.to_owned(),
+            fix: PEER_NOT_RUNNING_FIX.to_owned(),
+        },
+        false,
+        UnsentCause::for_rejection(DeliveryRejectionReason::EndpointUnavailable),
+    )
+}
+
+/// The same refusal when the peer exits between the claim and the write.
+fn peer_not_running_rejection() -> NativeDeliveryResult {
+    NativeDeliveryResult::rejected(
+        DeliveryRejection {
+            reason: DeliveryRejectionReason::EndpointUnavailable,
+            next_action: DeliveryNextAction::RetryLater,
+            client_code: None,
+            detail: Some(format!("{PEER_NOT_RUNNING_REASON}; {PEER_NOT_RUNNING_FIX}")),
+            claims: None,
+            native_failure: None,
+        },
+        UnsentCause::for_rejection(DeliveryRejectionReason::EndpointUnavailable),
+    )
+    .with_reachability(SessionReachability::ClaudeCodePeer)
+}
 
 impl ClaudeCodePeerDeliveryRoute {
     #[must_use]
@@ -137,16 +170,9 @@ impl ClaudeCodePeerDeliveryRoute {
             )));
         }
         Ok(match self.lookup(target).await {
-            Ok(PeerSessionLookup::Absent) => PeerDeliveryPreparation::finished(
-                NativeDeliveryResult::not_submitted(
-                    "Claude Code session is no longer live",
-                    true,
-                    UnsentCause::Holdable {
-                        otherwise: NativeRefusalCode::PeerUnavailable,
-                    },
-                )
-                .with_reachability(SessionReachability::ClaudeCodePeer),
-            ),
+            Ok(PeerSessionLookup::Absent) => {
+                PeerDeliveryPreparation::finished(peer_not_running_rejection())
+            }
             Ok(PeerSessionLookup::LiveUnsupported { reason }) => {
                 PeerDeliveryPreparation::finished(peer_rejection(
                     DeliveryRejectionReason::LiveElsewhere,
@@ -326,7 +352,7 @@ impl SessionDeliveryRoute for ClaudeCodePeerDeliveryRoute {
                 return Ok(NativeRouteClaim::not_mine());
             }
             Ok(match self.lookup(&target).await {
-                Ok(PeerSessionLookup::Absent) => NativeRouteClaim::not_mine(),
+                Ok(PeerSessionLookup::Absent) => peer_not_running_claim(),
                 Ok(PeerSessionLookup::Writable(_)) => NativeRouteClaim::holds(),
                 Ok(PeerSessionLookup::LiveUnsupported { reason }) => {
                     NativeRouteClaim::live_elsewhere(

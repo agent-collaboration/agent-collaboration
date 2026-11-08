@@ -173,7 +173,7 @@ async fn ending_one_scope_preserves_a_held_batch_with_another_active_root() {
 
 // This is an explicit post-copy CreationAge snapshot. SDK admission and the D4 copy
 // are outside these cleanup cases; public native writes establish only their input.
-async fn copied_held_snapshot(
+pub(super) async fn copied_held_snapshot(
     fixture: &OwnerFixture,
     positions: Vec<(ThreadId, FeedCursor)>,
 ) -> PushId {
@@ -245,7 +245,7 @@ async fn copied_held_snapshot(
     push_id
 }
 
-async fn assert_copied_snapshot_state(
+pub(super) async fn assert_copied_snapshot_state(
     fixture: &OwnerFixture,
     push_id: &PushId,
     expected: PushDeliveryState,

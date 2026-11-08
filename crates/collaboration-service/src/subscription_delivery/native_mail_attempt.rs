@@ -51,7 +51,11 @@ impl SubscriptionPushStore {
         }
         if matches!(kind, PushKind::DirectMessage | PushKind::BoardNotification) {
             let no_route = matches!(&delivery.receipt().outcome,DeliveryOutcome::Rejected(rejection) if rejection.reason==DeliveryRejectionReason::NoRoute);
-            if no_route && !self.delivery.supports_delivery_mode(&target, mode) {
+            // A Claude Code terminal that isn't running is refused as unavailable; Queue to
+            // one is still named as unsupported, which stays true once it runs.
+            let unreachable = no_route
+                || matches!(&delivery.receipt().outcome,DeliveryOutcome::Rejected(rejection) if rejection.reason==DeliveryRejectionReason::EndpointUnavailable);
+            if unreachable && !self.delivery.supports_delivery_mode(&target, mode) {
                 delivery = NativeDeliveryResult::rejected(
                     DeliveryRejection {
                         native_failure: None,

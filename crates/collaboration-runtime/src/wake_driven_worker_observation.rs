@@ -61,6 +61,22 @@ impl WorkerObservation {
         let _ = deadline;
         std::future::ready(())
     }
+
+    /// A waiter calls this after the read that found nothing and before it waits, with the
+    /// time its timer will fire: it records that time, counts the sleep and holds at the gate.
+    #[cfg(any(test, feature = "test-support"))]
+    pub async fn read_found_nothing(&self, wakes_at: tokio::time::Instant) {
+        self.observed
+            .update(|snapshot| snapshot.waiter_wakes_at = Some(wakes_at));
+        self.observed.slept(None).await;
+    }
+
+    /// A waiter calls this after the read that found nothing and before it waits.
+    #[cfg(not(any(test, feature = "test-support")))]
+    pub fn read_found_nothing(&self, wakes_at: tokio::time::Instant) -> std::future::Ready<()> {
+        let _ = wakes_at;
+        std::future::ready(())
+    }
 }
 
 #[cfg(any(test, feature = "test-support"))]
@@ -84,10 +100,12 @@ mod observed {
         pub closed_sources: u64,
         /// The deadline armed before the latest sleep; `None` means no timer.
         pub armed_deadline: Option<SyncTime>,
-        /// The loop is waiting now, not running a pass.
+        /// The loop or waiter is waiting now, not running a pass or a read.
         pub asleep: bool,
         /// The worker's tasks that have not reported yet.
         pub tasks_running: usize,
+        /// When a waiter's timer fires, as it reported before its latest sleep.
+        pub waiter_wakes_at: Option<tokio::time::Instant>,
     }
 
     struct HeldSleep {
@@ -122,7 +140,11 @@ mod observed {
         }
 
         pub(super) fn record_read(&self, read: &'static str) {
-            self.update(|snapshot| snapshot.reads.push(read));
+            self.update(|snapshot| {
+                snapshot.reads.push(read);
+                // A waiter reads after it wakes; a loop reads only during a pass.
+                snapshot.asleep = false;
+            });
         }
 
         pub(super) fn pass_started(&self) {
@@ -142,6 +164,12 @@ mod observed {
         }
 
         pub(super) async fn armed(&self, deadline: Option<SyncTime>) {
+            self.slept(Some(deadline)).await;
+        }
+
+        /// Holds at the gate if one is set, then counts the sleep. `armed` is the deadline
+        /// a loop armed; a waiter passes `None` and leaves it unchanged.
+        pub(super) async fn slept(&self, armed: Option<Option<SyncTime>>) {
             let held = self.held.lock().ok().and_then(|mut held| held.take());
             if let Some(held) = held {
                 let _ = held.reached.send(());
@@ -150,7 +178,9 @@ mod observed {
             let mut sleeps = 0;
             self.update(|snapshot| {
                 snapshot.sleeps += 1;
-                snapshot.armed_deadline = deadline;
+                if let Some(deadline) = armed {
+                    snapshot.armed_deadline = deadline;
+                }
                 snapshot.asleep = true;
                 sleeps = snapshot.sleeps;
             });

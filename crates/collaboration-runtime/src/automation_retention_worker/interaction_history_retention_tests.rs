@@ -19,7 +19,7 @@ use sqlx_turso::{TursoConnectOptions, TursoConnection};
 use std::{collections::BTreeMap, path::Path, sync::Arc};
 use tokio::sync::Mutex;
 
-type TestResult<TValue = ()> = Result<TValue, Box<dyn std::error::Error + Send + Sync>>;
+pub(super) type TestResult<TValue = ()> = Result<TValue, Box<dyn std::error::Error + Send + Sync>>;
 const SERVICE_ID: &str = "018f47d2-24d5-7a68-b9ec-6f759c39458f";
 const INITIAL_REQUEST: &str = "initial-interaction";
 
@@ -31,7 +31,7 @@ fn ensure(condition: bool, detail: &'static str) -> TestResult {
     }
 }
 
-fn session(session_id: &str) -> TestResult<SessionRef> {
+pub(super) fn session(session_id: &str) -> TestResult<SessionRef> {
     Ok(SessionRef {
         endpoint: EndpointRef {
             service_id: UuidIdentity::try_from(SERVICE_ID.to_owned())?,
@@ -41,7 +41,7 @@ fn session(session_id: &str) -> TestResult<SessionRef> {
     })
 }
 
-fn history_value(
+pub(super) fn history_value(
     request_id: &str,
     body: &str,
     created_at: Option<DateTime<Utc>>,
@@ -104,7 +104,7 @@ fn creation_stamp(history: &BTreeMap<String, Value>) -> TestResult<String> {
         .to_owned())
 }
 
-async fn load_broker(
+pub(super) async fn load_broker(
     directory: &Path,
     gate: &NativeGenerationGate,
 ) -> TestResult<Arc<ServiceInteractionBroker>> {

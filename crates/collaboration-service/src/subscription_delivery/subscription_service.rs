@@ -97,6 +97,9 @@ struct ServiceInner {
     reconcile_queued: tokio::sync::Notify,
     #[cfg(test)]
     startup_passes: tokio::sync::broadcast::Sender<Vec<ProjectId>>,
+    /// Each deadline the startup recovery task arms before its next attempt.
+    #[cfg(test)]
+    startup_retry_deadlines: tokio::sync::broadcast::Sender<tokio::time::Instant>,
 }
 
 #[derive(Clone)]
@@ -151,6 +154,8 @@ impl SubscriptionDeliveryService {
                 reconcile_queued: tokio::sync::Notify::new(),
                 #[cfg(test)]
                 startup_passes: tokio::sync::broadcast::channel(32).0,
+                #[cfg(test)]
+                startup_retry_deadlines: tokio::sync::broadcast::channel(32).0,
             }),
         }
     }
@@ -577,6 +582,20 @@ impl SubscriptionDeliveryService {
             );
             return Ok(sender);
         }
+    }
+
+    #[cfg(test)]
+    pub(super) fn observe_startup_passes(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<Vec<ProjectId>> {
+        self.inner.startup_passes.subscribe()
+    }
+
+    #[cfg(test)]
+    pub(super) fn observe_startup_retry_deadlines(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<tokio::time::Instant> {
+        self.inner.startup_retry_deadlines.subscribe()
     }
 
     #[cfg(test)]

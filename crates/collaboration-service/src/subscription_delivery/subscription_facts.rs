@@ -4,8 +4,6 @@ use message_board::{ProjectId, SubscriptionMode, SubscriptionScope, ThreadId};
 use std::{collections::HashMap, time::Duration};
 use tokio::time::Instant;
 
-pub(super) const STORAGE_RETRY_INTERVAL: Duration = Duration::from_secs(1);
-
 pub(super) const PRESENCE_INTERVAL: Duration = Duration::from_secs(30);
 
 pub(super) struct RootSubscriptionFacts {

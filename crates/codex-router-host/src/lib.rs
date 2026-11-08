@@ -188,7 +188,9 @@ pub use process_group_child::ProcessGroupError;
 pub use router_compatibility::RouterProbeError;
 pub use router_compatibility::RouterProbeResult;
 pub use router_compatibility::probe_router;
-pub use router_executable_observation::{RouterExecutableObserver, RouterExecutableRelation};
+pub use router_executable_observation::{
+    RouterExecutableObserver, RouterExecutableRelation, SharedRouterExecutableCheck,
+};
 mod backend_publication;
 pub use backend_publication::BackendPublication;
 mod collaboration_runtime;
