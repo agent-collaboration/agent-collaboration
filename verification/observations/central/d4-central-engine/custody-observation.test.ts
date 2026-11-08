@@ -5,12 +5,32 @@ import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { decode } from "../../../exact-json.ts";
 import { readD1Stores } from "../d1-sqlite-readback.ts";
-import { custodyManifestFromSender, observeHeldCustody } from "./custody-observation.ts";
+import {
+  custodyManifestFromSender,
+  observeHeldCustody,
+  requireSubmittedHeldMessage,
+} from "./custody-observation.ts";
 
 const digest = "a".repeat(64);
 const itemId = (index: number): string =>
   `019f0000-0000-7000-8000-${String(index).padStart(12, "0")}`;
 const createdAt = 1782411427840n;
+
+test("right custody ID and state cannot hide a missing or changed public message body", (): void => {
+  const submitted = { itemId: itemId(1), body: "Original synthetic queue body" };
+  const record = { pushId: submitted.itemId, deliveryState: "held", body: submitted.body };
+  requireSubmittedHeldMessage({ submitted, readback: { record } });
+  for (const change of [
+    { body: "Changed" },
+    { body: null },
+    { body: undefined },
+    { pushId: itemId(2) },
+    { deliveryState: "delivered" },
+  ])
+    assert.throws(() =>
+      requireSubmittedHeldMessage({ submitted, readback: { record: { ...record, ...change } } }),
+    );
+});
 
 function fixture(count = 10): Parameters<typeof observeHeldCustody>[0] {
   const items = Array.from({ length: count }, (_, index) => itemId(index + 1));

@@ -37,6 +37,25 @@ const senderViewSchema = z.object({
 });
 export type ExpectedCustodyItem = z.infer<typeof expectedItemSchema>;
 
+export interface SubmittedCustodyMessage {
+  readonly itemId: string;
+  readonly body: string;
+}
+
+/** Match the public projection to the independently retained original queue request. */
+export function requireSubmittedHeldMessage(input: {
+  readonly submitted: SubmittedCustodyMessage;
+  readonly readback: unknown;
+}): void {
+  z.object({
+    record: z.object({
+      pushId: z.literal(z.uuidv7().parse(input.submitted.itemId)),
+      deliveryState: z.literal("held"),
+      body: z.literal(z.string().min(1).parse(input.submitted.body)),
+    }),
+  }).parse(input.readback);
+}
+
 export interface HeldCustodyObservation {
   readonly journey: "J6" | "J6b";
   readonly items: readonly string[];

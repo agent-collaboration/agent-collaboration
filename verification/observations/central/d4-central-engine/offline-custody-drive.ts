@@ -6,6 +6,10 @@ import { boardIdentity } from "../../../clients/board-requests.ts";
 import { requireNoD1Turns, senderStage, unloadD1Recipient } from "../d1-mail-stages.ts";
 import { ReceiverCustodyBarrier } from "./receiver-custody-barrier.ts";
 import { requireWindowSnapshotAgreement, type D4Snapshot } from "./snapshot-observation.ts";
+import {
+  requireSubmittedHeldMessage,
+  type SubmittedCustodyMessage,
+} from "./custody-observation.ts";
 
 export interface OfflineHeldReadbacks {
   readonly items: readonly string[];
@@ -25,7 +29,7 @@ export interface HeldWindowReadback {
 
 async function queueItem(
   input: CustodyActors & { readonly phase: string; readonly status: "sent" | "held" },
-): Promise<string> {
+): Promise<SubmittedCustodyMessage> {
   const item = boardIdentity();
   const request = {
     itemId: item,
@@ -52,17 +56,18 @@ async function queueItem(
     mail: z.object({ item: z.literal(item), status: z.object({ kind: z.literal(input.status) }) }),
   }).parse(stage);
   await requireNoD1Turns([input.sender, input.recipient], input.receipt);
-  return item;
+  return { itemId: item, body: request.message.text };
 }
 
 async function heldItems(
   input: CustodyActors & {
-    readonly items: readonly string[];
+    readonly submitted: readonly SubmittedCustodyMessage[];
   },
 ): Promise<OfflineHeldReadbacks> {
   const recipientViews: unknown[] = [],
     senderViews: unknown[] = [];
-  for (const [index, item] of input.items.entries()) {
+  for (const [index, original] of input.submitted.entries()) {
+    const item = original.itemId;
     const senderView = await senderStage({
       sender: input.sender,
       item,
@@ -77,15 +82,13 @@ async function heldItems(
       caller: input.recipient.recipient,
       reference: item,
     });
-    z.object({
-      record: z.object({ pushId: z.literal(item), deliveryState: z.literal("held") }),
-    }).parse(recipientView);
+    requireSubmittedHeldMessage({ submitted: original, readback: recipientView });
     await input.receipt.save(`d4-held-${index}-recipient.json`, recipientView);
     senderViews.push(senderView);
     recipientViews.push(recipientView);
     await requireNoD1Turns([input.sender, input.recipient], input.receipt);
   }
-  return { items: [...input.items], recipientViews, senderViews };
+  return { items: input.submitted.map((original) => original.itemId), recipientViews, senderViews };
 }
 
 /** B must reopen only after all ten Fleet admissions; this function never opens a recipient thread. */
@@ -95,12 +98,15 @@ export async function driveOfflineTen(input: CustodyActors): Promise<OfflineHeld
   await unloadD1Recipient(input.recipient, input.receipt);
   await requireNoD1Turns([input.sender, input.recipient], input.receipt);
   await input.recipient.stopForRestart();
-  const items: string[] = [];
+  const submitted: SubmittedCustodyMessage[] = [];
   for (let index = 0; index < 10; index += 1)
-    items.push(await queueItem({ ...input, phase: `d4-offline-${index}`, status: "sent" }));
-  await input.receipt.save("d4-offline-items.json", { items });
+    submitted.push(await queueItem({ ...input, phase: `d4-offline-${index}`, status: "sent" }));
+  await input.receipt.save("d4-offline-items.json", {
+    items: submitted.map((original) => original.itemId),
+    submitted,
+  });
   await input.recipient.reopen();
-  return heldItems({ ...input, items });
+  return heldItems({ ...input, submitted });
 }
 
 async function collateralChat(
@@ -121,7 +127,11 @@ async function collateralChat(
     status: "held",
   });
   await requireNoD1Turns([input.sender, input.recipient, input.collateral], input.receipt);
-  await input.receipt.record("d4CollateralCustody", { phase: input.phase, fromC, fromA });
+  await input.receipt.record("d4CollateralCustody", {
+    phase: input.phase,
+    fromC: fromC.itemId,
+    fromA: fromA.itemId,
+  });
 }
 
 async function heldWindow(input: {
@@ -196,14 +206,17 @@ export async function driveBacklogWithCollateral(
   await requireNoD1Turns(machines, input.receipt);
   for (const machine of machines) await unloadD1Recipient(machine, input.receipt);
   await input.recipient.stopForRestart();
-  const items: string[] = [];
+  const submitted: SubmittedCustodyMessage[] = [];
   try {
     for (let index = 0; index < 1000; index += 1) {
-      items.push(await queueItem({ ...input, phase: `d4-offline-${index}`, status: "sent" }));
+      submitted.push(await queueItem({ ...input, phase: `d4-offline-${index}`, status: "sent" }));
       if ((index + 1) % 100 === 0)
         await collateralChat({ ...input, phase: `d4-offline-chat-${index + 1}` });
     }
-    await input.receipt.save("d4-offline-items.json", { items: [...items] });
+    await input.receipt.save("d4-offline-items.json", {
+      items: submitted.map((original) => original.itemId),
+      submitted: [...submitted],
+    });
     await input.recipient.reopen();
     await input.barrier.waitForReached(1);
     await heldWindow({
@@ -211,8 +224,11 @@ export async function driveBacklogWithCollateral(
       receipt: input.receipt,
       phase: "before-last-item",
     });
-    items.push(await queueItem({ ...input, phase: "d4-after-welcome-1001", status: "sent" }));
-    await input.receipt.save("d4-backlog-items.json", { items });
+    submitted.push(await queueItem({ ...input, phase: "d4-after-welcome-1001", status: "sent" }));
+    await input.receipt.save("d4-backlog-items.json", {
+      items: submitted.map((original) => original.itemId),
+      submitted,
+    });
     await collateralChat({ ...input, phase: "d4-full-window-chat" });
     await heldWindow({
       read: input.readHeldWindow,
@@ -222,9 +238,9 @@ export async function driveBacklogWithCollateral(
     const held = input.barrier.snapshot();
     if (held.phase !== "holding" || held.held < 1)
       throw new Error("receiver commit cut was lost before release");
-    await input.receipt.record("d4ReceiverControlledDrain", { held, items: items.length });
-    await drainWithCollateral({ ...input, total: items.length });
-    const result = await heldItems({ ...input, items });
+    await input.receipt.record("d4ReceiverControlledDrain", { held, items: submitted.length });
+    await drainWithCollateral({ ...input, total: submitted.length });
+    const result = await heldItems({ ...input, submitted });
     await requireNoD1Turns(machines, input.receipt);
     return result;
   } finally {
