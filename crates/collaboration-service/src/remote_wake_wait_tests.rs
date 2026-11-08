@@ -145,12 +145,14 @@ async fn a_remote_wake_wait_with_nothing_committed_reads_once_then_once_at_its_d
     let runtime = Arc::new(source.local_mail_runtime());
     let observation = runtime.remote_wake_wait_observation();
     let mut gate = observation.hold_before_next_sleep();
+    let before_wait = tokio::time::Instant::now();
     let waiter = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.await_remote_wake_answer(id, deadline_ms).await }
     });
     gate.reached().await;
     tokio::time::pause();
+    let at_gate = observation.snapshot();
     let parked_at = tokio::time::Instant::now();
     // The wall clock reaches the deadline as Tokio's timer does.
     source
@@ -166,10 +168,11 @@ async fn a_remote_wake_wait_with_nothing_committed_reads_once_then_once_at_its_d
         matches!(waited, Err(RemoteWakeRefusal::DeadlineExpired)),
         "{waited:?}"
     );
-    let slept = tokio::time::Instant::now().duration_since(parked_at);
-    assert!(
-        slept > Duration::from_secs(29) && slept < Duration::from_secs(31),
-        "the wait slept until its deadline: {slept:?}"
+    crate::collaboration_application::wake_operations::tests::assert_waited_for_the_caller_deadline(
+        &at_gate,
+        before_wait,
+        parked_at,
+        "remote_wake.outbox_status",
     );
     let snapshot = observation.snapshot();
     assert_eq!(

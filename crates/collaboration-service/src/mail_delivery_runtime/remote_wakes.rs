@@ -228,10 +228,10 @@ impl MailDeliveryRuntime {
             if remaining_ms == 0 {
                 return Err(RemoteWakeRefusal::DeadlineExpired);
             }
-            let timer = self.clock.sleep_until(
-                self.clock.monotonic_now() + std::time::Duration::from_millis(remaining_ms),
-            );
-            self.remote_wake_wait.read_found_nothing().await;
+            let wakes_at =
+                self.clock.monotonic_now() + std::time::Duration::from_millis(remaining_ms);
+            let timer = self.clock.sleep_until(wakes_at);
+            self.remote_wake_wait.read_found_nothing(wakes_at).await;
             let ended = collaboration_runtime::wait_for_commit_or_timer(&mut commits, timer).await;
             if ended == collaboration_runtime::CommitWaitEnd::StoreClosed {
                 return Err(RemoteWakeRefusal::RemoteUnavailable);

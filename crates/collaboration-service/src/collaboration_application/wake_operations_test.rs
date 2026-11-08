@@ -107,9 +107,11 @@ async fn a_first_fire_wait_with_nothing_committed_reads_once_then_once_at_its_de
     let wake = wakes.wake_send_local(hour_away_wake()).await.unwrap();
     let observation = wakes.wait_observation();
     let mut gate = observation.hold_before_next_sleep();
+    let before_wait = tokio::time::Instant::now();
     let waiter = spawn_wait(&wakes, wake.definition.wakeup_id.clone(), 30);
     gate.reached().await;
     tokio::time::pause();
+    let at_gate = observation.snapshot();
     let parked_at = tokio::time::Instant::now();
 
     gate.release();
@@ -120,10 +122,11 @@ async fn a_first_fire_wait_with_nothing_committed_reads_once_then_once_at_its_de
         "{:?}",
         waited.outcome
     );
-    let slept = tokio::time::Instant::now().duration_since(parked_at);
-    assert!(
-        slept > Duration::from_secs(29) && slept < Duration::from_secs(31),
-        "the wait slept until its deadline: {slept:?}"
+    assert_waited_for_the_caller_deadline(
+        &at_gate,
+        before_wait,
+        parked_at,
+        "wake_wait.next_changes",
     );
     let snapshot = observation.snapshot();
     assert_eq!(
@@ -132,4 +135,34 @@ async fn a_first_fire_wait_with_nothing_committed_reads_once_then_once_at_its_de
         "one read before the wait and one at the deadline, none in between"
     );
     assert_eq!(snapshot.sleeps, 1);
+}
+
+/// The waiter armed its timer for the caller's 30 s bound, which began before its setup:
+/// no earlier than 30 s after the call and no later than 30 s after it parked. Only the
+/// paused clock then moved, straight to that time, and it had read once before parking.
+pub(crate) fn assert_waited_for_the_caller_deadline(
+    at_gate: &collaboration_runtime::LoopSnapshot,
+    before_wait: tokio::time::Instant,
+    parked_at: tokio::time::Instant,
+    read: &'static str,
+) {
+    let bound = Duration::from_secs(30);
+    let wakes_at = at_gate
+        .waiter_wakes_at
+        .expect("the waiter reported its timer");
+    assert!(
+        wakes_at >= before_wait + bound && wakes_at <= parked_at + bound,
+        "the waiter armed {:?} after the call, not the caller's {bound:?} bound",
+        wakes_at.duration_since(before_wait)
+    );
+    assert_eq!(
+        at_gate.reads,
+        vec![read],
+        "one read before the waiter parked"
+    );
+    let woke_at = tokio::time::Instant::now();
+    assert!(
+        woke_at >= wakes_at && woke_at.duration_since(wakes_at) < Duration::from_millis(2),
+        "the paused clock moved straight to the armed time, not past it"
+    );
 }

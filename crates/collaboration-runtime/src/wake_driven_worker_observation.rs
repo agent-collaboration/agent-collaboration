@@ -44,16 +44,19 @@ impl WorkerObservation {
         std::future::ready(())
     }
 
-    /// A waiter calls this right after the read that found nothing, before anything else:
-    /// it counts the coming sleep and holds at the gate, and leaves the armed deadline alone.
+    /// A waiter calls this after the read that found nothing and before it waits, with the
+    /// time its timer will fire: it records that time, counts the sleep and holds at the gate.
     #[cfg(any(test, feature = "test-support"))]
-    pub async fn read_found_nothing(&self) {
+    pub async fn read_found_nothing(&self, wakes_at: tokio::time::Instant) {
+        self.observed
+            .update(|snapshot| snapshot.waiter_wakes_at = Some(wakes_at));
         self.observed.slept(None).await;
     }
 
-    /// A waiter calls this right after the read that found nothing.
+    /// A waiter calls this after the read that found nothing and before it waits.
     #[cfg(not(any(test, feature = "test-support")))]
-    pub fn read_found_nothing(&self) -> std::future::Ready<()> {
+    pub fn read_found_nothing(&self, wakes_at: tokio::time::Instant) -> std::future::Ready<()> {
+        let _ = wakes_at;
         std::future::ready(())
     }
 }
@@ -79,6 +82,8 @@ mod observed {
         pub closed_sources: u64,
         /// The deadline armed before the latest sleep; `None` means no timer.
         pub armed_deadline: Option<SyncTime>,
+        /// When a waiter's timer fires, as it reported before its latest sleep.
+        pub waiter_wakes_at: Option<tokio::time::Instant>,
     }
 
     struct HeldSleep {

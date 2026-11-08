@@ -526,7 +526,7 @@ impl WakeOperations {
                     .map_err(|_| WakeWaitFailure::unavailable(wakeup_id.clone()))?;
                 return Ok(timed_out(wakeup_id, cursor));
             }
-            self.wait_observation.read_found_nothing().await;
+            self.wait_observation.read_found_nothing(deadline).await;
             let ended = collaboration_runtime::wait_for_commit_or_timer(
                 &mut commits,
                 tokio::time::sleep_until(deadline),
@@ -570,4 +570,4 @@ fn settled_outcome(snapshot: &WakeSnapshot) -> Option<WakeWaitOutcome> {
 
 #[cfg(test)]
 #[path = "wake_operations_test.rs"]
-mod tests;
+pub(crate) mod tests;
