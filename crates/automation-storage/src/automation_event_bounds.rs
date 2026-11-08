@@ -21,10 +21,19 @@ pub(crate) fn calendar_months_before(now_ms: i64, months: u32) -> Result<i64, St
         .ok_or(StorageError::InvalidRecord)
 }
 
-/// The first millisecond at which a row stamped `stamped_ms` falls before the cutoff.
-pub(crate) fn first_deletable_ms(stamped_ms: i64, months: u32) -> Result<i64, StorageError> {
-    chrono::DateTime::<chrono::Utc>::from_timestamp_millis(stamped_ms)
-        .and_then(|stamped| sqlite_storage_maintenance::first_deletable_at(stamped, months))
+/// The first millisecond at or after `now_ms` at which a row stamped `stamped_ms` falls
+/// before the cutoff.
+pub(crate) fn first_deletable_ms(
+    stamped_ms: i64,
+    months: u32,
+    now_ms: i64,
+) -> Result<i64, StorageError> {
+    let moment = chrono::DateTime::<chrono::Utc>::from_timestamp_millis;
+    moment(stamped_ms)
+        .zip(moment(now_ms))
+        .and_then(|(stamped, now)| {
+            sqlite_storage_maintenance::first_deletable_at(stamped, months, now)
+        })
         .map(|due| due.timestamp_millis())
         .ok_or(StorageError::InvalidRecord)
 }

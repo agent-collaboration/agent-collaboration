@@ -196,10 +196,15 @@ impl AutomationRetentionClass {
         Ok(result.rows_affected())
     }
 
-    /// The first moment this class's rule allows deleting a row the store holds now, or
-    /// `None` when no row could ever go. A protected row is not counted; removing its
-    /// protection commits.
-    pub async fn due_ms(self, store: &mut AutomationStore) -> Result<Option<i64>, StorageError> {
+    /// The first moment at or after `now_ms` this class's rule allows deleting a row the
+    /// store holds now, or `None` when no row could ever go. Only the oldest stamp matters:
+    /// whenever any row is past the cutoff, the oldest is too. A protected row is not
+    /// counted; removing its protection commits.
+    pub async fn due_ms(
+        self,
+        store: &mut AutomationStore,
+        now_ms: i64,
+    ) -> Result<Option<i64>, StorageError> {
         let oldest: Option<i64> = sqlx::query_scalar(self.statements().oldest)
             .fetch_one(&mut store.connection)
             .await?;
@@ -208,6 +213,7 @@ impl AutomationRetentionClass {
                 crate::automation_event_bounds::first_deletable_ms(
                     stamped_ms,
                     AUTOMATION_RETENTION_MONTHS,
+                    now_ms,
                 )
             })
             .transpose()

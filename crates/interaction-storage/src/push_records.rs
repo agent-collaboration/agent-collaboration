@@ -344,10 +344,13 @@ impl InteractionStore {
         interaction_retention::prune(self, now, batch_size).await
     }
 
-    /// The first moment the interaction-record retention rule allows deleting a record held
-    /// now, or `None` when none could ever go.
-    pub async fn push_records_prune_due(&self) -> Result<Option<DateTime<Utc>>, StorageError> {
-        interaction_retention::prune_due(self).await
+    /// The first moment at or after `now` the interaction-record retention rule allows
+    /// deleting a record held now, or `None` when none could ever go.
+    pub async fn push_records_prune_due(
+        &self,
+        now: DateTime<Utc>,
+    ) -> Result<Option<DateTime<Utc>>, StorageError> {
+        interaction_retention::prune_due(self, now).await
     }
 }
 

@@ -26,6 +26,7 @@ macro_rules! settled_push_eligible {
 /// still protected is not counted; removing its protection commits and wakes the worker.
 pub(super) async fn prune_due(
     store: &InteractionStore,
+    now: DateTime<Utc>,
 ) -> Result<Option<DateTime<Utc>>, StorageError> {
     let mut connection = store.writer.lock().await;
     let stamp_ms = |millis: Option<i64>| {
@@ -61,7 +62,11 @@ pub(super) async fn prune_due(
     .flatten()
     .min();
     Ok(oldest.and_then(|stamped| {
-        sqlite_storage_maintenance::first_deletable_at(stamped, crate::INTERACTION_RETENTION_MONTHS)
+        sqlite_storage_maintenance::first_deletable_at(
+            stamped,
+            crate::INTERACTION_RETENTION_MONTHS,
+            now,
+        )
     }))
 }
 

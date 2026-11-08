@@ -60,6 +60,18 @@ impl AutomationRetentionWorker {
         if let Some(store) = &self.native_push_store {
             worker_loop = worker_loop.wake_on(store.subscribe_commits());
         }
+        // Settling a pending interaction commits on the broker's own store; watch it too
+        // unless it is the push store already watched.
+        if let Some(broker) = &self.interaction_broker {
+            let history_store = broker.interaction_store();
+            let already_watched = self
+                .native_push_store
+                .as_ref()
+                .is_some_and(|store| Arc::ptr_eq(store, &history_store));
+            if !already_watched {
+                worker_loop = worker_loop.wake_on(history_store.subscribe_commits());
+            }
+        }
         (worker_loop, self.retention_pass())
     }
 
@@ -255,7 +267,7 @@ impl RetentionPass {
         observation: &WorkerObservation,
     ) -> Result<ClassPass, String> {
         observation.record_read(class.due_read());
-        let due_ms = self.read_due(class).await?;
+        let due_ms = self.read_due(class, now_ms).await?;
         if !due_ms.is_some_and(|due_ms| due_ms <= now_ms) {
             return Ok(ClassPass { pruned: 0, due_ms });
         }
@@ -275,15 +287,17 @@ impl RetentionPass {
         })
     }
 
-    async fn read_due(&self, class: RetentionClass) -> Result<Option<i64>, String> {
+    async fn read_due(&self, class: RetentionClass, now_ms: i64) -> Result<Option<i64>, String> {
+        let now = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)
+            .ok_or_else(|| "retention clock is outside the supported range".to_owned())?;
         match class {
             RetentionClass::Automation(class) => class
-                .due_ms(&mut *self.store.lock().await)
+                .due_ms(&mut *self.store.lock().await, now_ms)
                 .await
                 .map_err(|error| error.to_string()),
             RetentionClass::InteractionRecords => match &self.native_push_store {
                 Some(store) => store
-                    .push_records_prune_due()
+                    .push_records_prune_due(now)
                     .await
                     .map(|due| due.map(|due| due.timestamp_millis()))
                     .map_err(|error| error.to_string()),
@@ -291,7 +305,7 @@ impl RetentionPass {
             },
             RetentionClass::InteractionHistory => match &self.interaction_broker {
                 Some(broker) => Ok(broker
-                    .interaction_history_prune_due()
+                    .interaction_history_prune_due(now)
                     .await
                     .map(|due| due.timestamp_millis())),
                 None => Ok(None),
@@ -368,5 +382,13 @@ mod tests;
 mod interaction_history_retention_tests;
 
 #[cfg(test)]
+#[path = "automation_retention_worker/retention_test_harness.rs"]
+mod retention_test_harness;
+
+#[cfg(test)]
 #[path = "automation_retention_worker/retention_schedule_tests.rs"]
 mod retention_schedule_tests;
+
+#[cfg(test)]
+#[path = "automation_retention_worker/retention_fault_tests.rs"]
+mod retention_fault_tests;

@@ -523,7 +523,7 @@ impl InteractionHistoryStore {
     /// The first moment the retention rule allows deleting a settled record held now, or
     /// `None` when none could ever go. A record still pending is not counted; settling it
     /// commits and wakes the worker.
-    pub async fn prune_due(&self) -> Option<DateTime<Utc>> {
+    pub async fn prune_due(&self, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
         let state = self.data.lock().await;
         let data = &state.cache;
         data.created_at
@@ -539,6 +539,7 @@ impl InteractionHistoryStore {
                 sqlite_storage_maintenance::first_deletable_at(
                     oldest,
                     crate::INTERACTION_RETENTION_MONTHS,
+                    now,
                 )
             })
     }
