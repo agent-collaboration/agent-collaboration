@@ -113,6 +113,34 @@ test("missing/invalid stored state, in-flight binding or retired deadline is nev
   });
 });
 
+test("inactive attempts have no current send binding, while waiting retry deadlines remain legal", (): void => {
+  const inactive = {
+    ...attempt(),
+    state: "waiting",
+    sendId: null,
+    connectionId: null,
+    sessionId: null,
+    sentVersion: null,
+    nextAttemptAt: 1792281660000n,
+  };
+  const waiting = parse({ ...snapshot(), attempts: [inactive], windows: [] });
+  assert.equal(waiting.attempts[0]?.nextAttemptAt, 1792281660000n);
+  requireWindowSnapshotAgreement(waiting, new Map());
+  for (const state of ["waiting", "given_up"])
+    for (const binding of [
+      { sendId: identity(3) },
+      { connectionId: identity(4) },
+      { sessionId: identity(5) },
+      { sentVersion: 9007199254740993n },
+    ])
+      assert.throws((): void => {
+        parse({
+          ...snapshot(),
+          attempts: [{ ...inactive, state, nextAttemptAt: null, ...binding }],
+        });
+      }, /inactive attempt/);
+});
+
 test("duplicate rows and current socket aliases cannot silently shrink or inflate the window", (): void => {
   const value = snapshot();
   assert.throws((): void => {

@@ -27,6 +27,16 @@ const attemptSchema = z
   })
   .strict()
   .superRefine((row, context): void => {
+    if (
+      row.state !== "in_flight" &&
+      [row.sendId, row.connectionId, row.sessionId, row.sentVersion].some(
+        (value): boolean => value !== null,
+      )
+    )
+      context.addIssue({
+        code: "custom",
+        message: "inactive attempt carries a current send binding",
+      });
     if (row.state === "given_up" && row.nextAttemptAt !== null)
       context.addIssue({ code: "custom", message: "given_up attempt is still scheduled" });
     if (
