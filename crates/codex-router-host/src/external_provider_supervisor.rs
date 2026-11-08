@@ -65,6 +65,9 @@ struct SupervisorInner {
     bindings: HashMap<EndpointRef, RuntimeBinding>,
     store: Arc<Mutex<ProviderOperationStore>>,
     live_operations: StdMutex<LiveOperations>,
+    /// Moves each time a live operation publishes its result, so schedulers and
+    /// provider retention wake on an ACP completion that writes no row.
+    completions: tokio::sync::watch::Sender<u64>,
     queued_operations: ProviderQueueOperationRegistry,
     hub: Option<Arc<collaboration_runtime::ProviderSessionEventHub>>,
     history_unavailable: Mutex<HashSet<SessionRef>>,
@@ -119,6 +122,13 @@ impl ExternalProviderSupervisor {
             .bindings
             .get(endpoint)
             .map(|entry| Arc::clone(&entry.runtime))
+    }
+
+    /// A receiver that wakes after each live operation publishes its result. Subscribe
+    /// before checking an operation, so a completion in between is not missed.
+    #[must_use]
+    pub fn subscribe_completions(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.inner.completions.subscribe()
     }
 
     #[must_use]
@@ -191,6 +201,7 @@ impl ExternalProviderSupervisor {
                 bindings: runtimes,
                 store,
                 live_operations: StdMutex::new(LiveOperations::default()),
+                completions: tokio::sync::watch::channel(0).0,
                 queued_operations: ProviderQueueOperationRegistry::default(),
                 hub,
                 history_unavailable: Mutex::new(HashSet::new()),
@@ -563,6 +574,8 @@ impl SupervisorInner {
         };
         *live.result.lock().await = Some(result);
         live.changed.notify_waiters();
+        self.completions
+            .send_modify(|revision| *revision = revision.wrapping_add(1));
         let mut operations = self
             .live_operations
             .lock()

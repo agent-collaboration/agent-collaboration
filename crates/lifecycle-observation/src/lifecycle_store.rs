@@ -92,6 +92,12 @@ impl LifecycleStore {
         self.signal_commit();
         Ok(row)
     }
+    /// A receiver that wakes after each journal append or maintenance that removed rows,
+    /// including a native `turn/completed` observation.
+    #[must_use]
+    pub fn subscribe_commits(&self) -> watch::Receiver<u64> {
+        self.commits.subscribe()
+    }
     fn signal_commit(&self) {
         self.commits
             .send_modify(|revision| *revision = revision.wrapping_add(1));

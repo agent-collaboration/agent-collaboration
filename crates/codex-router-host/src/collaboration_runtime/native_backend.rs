@@ -74,49 +74,56 @@ impl CollaborationRuntime {
             generation: Some(admission.generation().clone()),
             observer_id: new_service_uuid()?,
         };
+        let rechecks = self.observation_rechecks.clone();
         self.observer_task = Some(tokio::spawn(async move {
             let retired = admission.retirement();
-            let connection = tokio::select! {
-                _ = retired.cancelled() => return,
-                connection = codex_native_integration::NativeProtocolConnection::connect(admission.backend_path()) => connection,
-            };
-            match connection {
-                Ok(connection) => {
+            let attempt = |retry: super::observation_recheck::ObserverRetry| {
+                let admission = &admission;
+                let (store, scope, schemas) = (&store, &scope, &schemas);
+                let (rechecks, retired) = (&rechecks, retired.clone());
+                async move {
+                    use super::observation_recheck::ObserverAttempt;
+                    let connection = codex_native_integration::NativeProtocolConnection::connect(
+                        admission.backend_path(),
+                    )
+                    .await;
+                    if retry.is_retry {
+                        // Whatever completed while observation was down is found now.
+                        rechecks.recheck();
+                    }
+                    let Ok(connection) = connection else {
+                        if retry.failures_so_far == 0 {
+                            record_coverage_lost(store, scope).await;
+                            tracing::warn!(
+                                "native lifecycle observation connection unavailable; it retries with backoff"
+                            );
+                        }
+                        return ObserverAttempt::ConnectFailed;
+                    };
                     match lifecycle_observation::NativeObservationStream::new(
                         lifecycle_observation::NativeObservationInputs {
                             connection,
-                            store,
-                            scope,
-                            schemas,
+                            store: std::sync::Arc::clone(store),
+                            scope: scope.clone(),
+                            schemas: std::sync::Arc::clone(schemas),
                         },
                     ) {
                         Ok(observer) => {
                             if observer.run(retired).await.is_err() {
-                                tracing::warn!("native lifecycle observation stopped");
+                                tracing::warn!(
+                                    "native lifecycle observation stopped; it restarts with backoff"
+                                );
                             }
+                            ObserverAttempt::Ran
                         }
-                        Err(_) => tracing::warn!("native lifecycle observer scope rejected"),
+                        Err(_) => {
+                            tracing::warn!("native lifecycle observer scope rejected");
+                            ObserverAttempt::Rejected
+                        }
                     }
                 }
-                Err(_) => {
-                    let observed_at = chrono::Utc::now()
-                        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
-                        .try_into();
-                    if let Ok(observed_at) = observed_at {
-                        let observation = collaboration_protocol::LifecycleObservation {
-                            observed_at,
-                            source: collaboration_protocol::ObservationSource::ObserverLifecycle,
-                            scope,
-                            subject: collaboration_protocol::LifecycleSubject::Backend,
-                            change: collaboration_protocol::LifecycleChange::CoverageLost,
-                        };
-                        let _recorded = store
-                            .append(&observation, chrono::Utc::now().timestamp())
-                            .await;
-                    }
-                    tracing::warn!("native lifecycle observation connection unavailable");
-                }
-            }
+            };
+            super::observation_recheck::observe_with_restart(retired.clone(), attempt).await;
         }));
         Ok(())
     }
@@ -200,5 +207,27 @@ impl CollaborationRuntime {
             .await
             .map_err(io::Error::other)?;
         Ok(())
+    }
+}
+
+/// Records once per run of failed connections that native coverage is lost.
+async fn record_coverage_lost(
+    store: &lifecycle_observation::LifecycleStore,
+    scope: &collaboration_protocol::ObservationScope,
+) {
+    let observed_at = chrono::Utc::now()
+        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+        .try_into();
+    if let Ok(observed_at) = observed_at {
+        let observation = collaboration_protocol::LifecycleObservation {
+            observed_at,
+            source: collaboration_protocol::ObservationSource::ObserverLifecycle,
+            scope: scope.clone(),
+            subject: collaboration_protocol::LifecycleSubject::Backend,
+            change: collaboration_protocol::LifecycleChange::CoverageLost,
+        };
+        let _recorded = store
+            .append(&observation, chrono::Utc::now().timestamp())
+            .await;
     }
 }

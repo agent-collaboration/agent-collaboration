@@ -13,6 +13,8 @@ mod follow_attachment_tests;
 #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
 #[path = "startup_mail_retention_test.rs"]
 mod mail_retention;
+#[path = "startup_contract_tests/observation_recheck_tests.rs"]
+mod observation_recheck_tests;
 #[path = "../../tests/support/registered_route_project.rs"]
 mod registered_route_project;
 #[path = "../../tests/support/session_follow_fixture.rs"]

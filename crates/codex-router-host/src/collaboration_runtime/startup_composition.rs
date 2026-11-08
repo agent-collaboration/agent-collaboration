@@ -437,8 +437,9 @@ impl CollaborationRuntime {
         let push_handoff_worker = automation_store.as_ref().map(|store| {
             collaboration_runtime::PushHandoffWorker::new(store.clone(), interactions.clone())
         });
+        let observation_rechecks = super::observation_recheck::ObservationRechecks::new();
         let schedule_worker = automation_store.as_ref().map(|store| {
-            collaboration_runtime::ScheduleTimingWorker::new(
+            let worker = collaboration_runtime::ScheduleTimingWorker::new(
                 store.clone(),
                 interactions.clone(),
                 scheduled_run_execution.clone(),
@@ -446,7 +447,17 @@ impl CollaborationRuntime {
                 configuration.clone(),
                 machine_identity.clone(),
                 std::sync::Arc::clone(&worker_clock),
-            )
+            );
+            // Subscribed here, before the scheduler starts, so no completion is missed.
+            let worker = worker.wake_on_completions(observation_rechecks.subscribe());
+            let worker = match &journal {
+                Some(journal) => worker.wake_on_completions(journal.subscribe_commits()),
+                None => worker,
+            };
+            match &external_provider_supervisor {
+                Some(supervisor) => worker.wake_on_completions(supervisor.subscribe_completions()),
+                None => worker,
+            }
         });
         let retention_worker = automation_store.as_ref().map(|store| {
             collaboration_runtime::AutomationRetentionWorker::new(
@@ -819,6 +830,14 @@ impl CollaborationRuntime {
                 directory.publish(description)
             });
         }
+        let journal_unavailable_rechecks = journal.is_none().then(|| {
+            tokio::spawn(
+                super::observation_recheck::recheck_while_journal_unavailable(
+                    observation_rechecks.clone(),
+                    shutdown.clone(),
+                ),
+            )
+        });
         let maintenance = journal.as_ref().map(|journal| {
             let maintenance_store = std::sync::Arc::clone(journal);
             let maintenance_stop = shutdown.clone();
@@ -869,6 +888,8 @@ impl CollaborationRuntime {
             fleet_outbox_maintenance,
             current_generation: None,
             observer_task: None,
+            observation_rechecks,
+            journal_unavailable_rechecks,
             collaboration_api,
             tailscale_exposure: None,
         };
