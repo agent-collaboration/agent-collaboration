@@ -80,6 +80,26 @@ async fn signed_router_binary() -> GuardResult<PathBuf> {
     if !signed.status.success() || stderr.contains("stays linker-signed") {
         return Err(format!("codex-router could not be signed: {stderr}").into());
     }
+    // On a Mac the binary must carry the team identity right before it runs; Linux CI
+    // has no codesign, and the runner leaves builds linker-signed there.
+    #[cfg(target_os = "macos")]
+    {
+        let identity = tokio::process::Command::new("codesign")
+            .arg("-dv")
+            .arg(&binary)
+            .output()
+            .await?;
+        if !String::from_utf8_lossy(&identity.stderr)
+            .lines()
+            .any(|line| line == "TeamIdentifier=974QD84WVC")
+        {
+            return Err(format!(
+                "refusing to run {}: it does not carry TeamIdentifier=974QD84WVC",
+                binary.display()
+            )
+            .into());
+        }
+    }
     Ok(binary)
 }
 
