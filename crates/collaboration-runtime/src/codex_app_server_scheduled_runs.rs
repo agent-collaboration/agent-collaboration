@@ -166,8 +166,14 @@ impl CodexAppServerScheduledRuns {
                 crate::scheduled_native_observation::read_turn_and_choice(&admission, target, turn_id),
             ) => observed,
         };
-        let Ok(Ok(Some(observed_turn))) = observed else {
-            return Ok(RunSettlement::Pending);
+        let observed_turn = match observed {
+            Ok(Ok(Some(observed_turn))) => observed_turn,
+            // The whole history was read and the recorded turn is not in it: an observed
+            // absence, not a failed read. The Run's deadline still acts on it.
+            Ok(Ok(None)) => return Ok(RunSettlement::Pending),
+            // A timed-out or failed read observed nothing. Reporting it as running would
+            // leave the Run unchecked; the scheduler retries an unreachable client instead.
+            Ok(Err(_)) | Err(_) => return Err(DeliveryContractError::ClientOperation),
         };
         if observed_turn.effort.as_deref()
             != context.inputs.execution_configuration.effort.as_deref()
@@ -660,6 +666,10 @@ impl ScheduledRunRoute for CodexAppServerScheduledRuns {
         endpoint == &self.backend.endpoint
     }
 }
+
+#[cfg(test)]
+#[path = "codex_app_server_observation_test.rs"]
+mod observation_tests;
 
 #[cfg(test)]
 mod tests {

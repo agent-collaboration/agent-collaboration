@@ -239,47 +239,6 @@ async fn due_work_runs_at_its_due_time_on_one_timer_and_does_not_fire_again() {
     worker.stop().await;
 }
 
-/// Collects the WARN events the loop emits, with their worker and error fields.
-#[derive(Clone, Default)]
-struct CapturedWarnings(Arc<Mutex<Vec<(String, String)>>>);
-
-impl<TSubscriber: tracing::Subscriber> tracing_subscriber::Layer<TSubscriber> for CapturedWarnings {
-    fn on_event(
-        &self,
-        event: &tracing::Event<'_>,
-        _: tracing_subscriber::layer::Context<'_, TSubscriber>,
-    ) {
-        if *event.metadata().level() != tracing::Level::WARN {
-            return;
-        }
-        let mut fields = WarningFields::default();
-        event.record(&mut fields);
-        self.0.lock().unwrap().push((fields.worker, fields.error));
-    }
-}
-
-#[derive(Default)]
-struct WarningFields {
-    worker: String,
-    error: String,
-}
-
-impl tracing::field::Visit for WarningFields {
-    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-        if field.name() == "worker" {
-            self.worker = value.to_owned();
-        }
-    }
-
-    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-        match field.name() {
-            "worker" => self.worker = format!("{value:?}").trim_matches('"').to_owned(),
-            "error" => self.error = format!("{value:?}"),
-            _ => {}
-        }
-    }
-}
-
 /// The armed retry delays, in seconds, for `sleeps` sleeps starting at sleep `first`.
 async fn retry_delays(
     worker: &RunningLoop,
@@ -300,12 +259,8 @@ async fn retry_delays(
 
 #[tokio::test(start_paused = true)]
 async fn a_failed_pass_retries_at_one_two_four_seconds_up_to_thirty_and_logs_once_per_run() {
-    let warnings = CapturedWarnings::default();
-    let _subscriber =
-        tracing::subscriber::set_default(tracing_subscriber::layer::SubscriberExt::with(
-            tracing_subscriber::registry(),
-            warnings.clone(),
-        ));
+    let (warnings, _subscriber) =
+        crate::captured_warnings_test_support::CapturedWarnings::install();
     let worker = RunningLoop::start(FakeWork {
         failing_passes: 7,
         ..FakeWork::default()
@@ -314,7 +269,11 @@ async fn a_failed_pass_retries_at_one_two_four_seconds_up_to_thirty_and_logs_onc
     let first_run = retry_delays(&worker, 1, 7, at(Duration::ZERO)).await;
     worker.observation.asleep_at_least(8).await;
     let recovered = worker.observation.snapshot();
-    let warnings_after_first_run = warnings.0.lock().unwrap().clone();
+    let warnings_after_first_run: Vec<_> = warnings
+        .events()
+        .into_iter()
+        .map(|warning| (warning.worker, warning.error))
+        .collect();
     worker.work.lock().unwrap().failing_passes = 2;
     worker.commit_batch("after recovery");
     let second_started = worker.clock_now();
@@ -333,7 +292,7 @@ async fn a_failed_pass_retries_at_one_two_four_seconds_up_to_thirty_and_logs_onc
     );
     assert_eq!(second_run, [1, 2], "the backoff restarts after recovery");
     assert_eq!(
-        warnings.0.lock().unwrap().len(),
+        warnings.events().len(),
         2,
         "a second run of failures logs once more"
     );

@@ -52,6 +52,22 @@ struct ControlledRoute {
     stop_requests: std::sync::Mutex<Vec<SyncTime>>,
     clock: Arc<PausedWallClock>,
     initial_evidence_fails: AtomicBool,
+    /// How many settlement reads still answer that the client is unreachable.
+    unreachable_settlements: AtomicUsize,
+    /// How many stop requests still answer that the client is unreachable.
+    unreachable_stops: AtomicUsize,
+    /// A stop that reaches the client records its intent, as a real route does; otherwise
+    /// the fixture answers that stopping is unsupported.
+    stop_records_intent: AtomicBool,
+}
+
+/// Uses one of `remaining` unreachable answers, if any are left.
+fn take_unreachable(remaining: &AtomicUsize) -> bool {
+    remaining
+        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |left| {
+            left.checked_sub(1)
+        })
+        .is_ok()
 }
 
 impl ScheduledRunExecution for ControlledRoute {
@@ -106,8 +122,12 @@ impl ScheduledRunExecution for ControlledRoute {
 
     fn observe_settlement(&self, _: RunObservationContext) -> DeliveryFuture<'_, RunSettlement> {
         self.settlement_reads.fetch_add(1, Ordering::AcqRel);
+        let unreachable = take_unreachable(&self.unreachable_settlements);
         let completed = self.turn_completed.load(Ordering::Acquire);
         Box::pin(async move {
+            if unreachable {
+                return Err(DeliveryContractError::ClientOperation);
+            }
             Ok(if completed {
                 RunSettlement::Completed {
                     summary_source: None,
@@ -131,7 +151,16 @@ impl ScheduledRunExecution for ControlledRoute {
         sink: &'a dyn RunEvidenceSink,
     ) -> DeliveryFuture<'a, StopRequestOutcome> {
         self.stop_requests.lock().unwrap().push(self.clock.now());
-        self.inner.request_stop(context, sink)
+        if take_unreachable(&self.unreachable_stops) {
+            return Box::pin(async { Err(DeliveryContractError::ClientOperation) });
+        }
+        if !self.stop_records_intent.load(Ordering::Acquire) {
+            return self.inner.request_stop(context, sink);
+        }
+        Box::pin(async move {
+            sink.record_stop_intent().await?;
+            Ok(StopRequestOutcome::Requested)
+        })
     }
 
     fn reconcile_run(
@@ -178,6 +207,13 @@ struct SchedulerFixture {
 impl SchedulerFixture {
     /// One enabled schedule, first due at base + one interval, on the fixture route.
     async fn with_one_schedule() -> TestResult<Self> {
+        let fixture = Self::empty().await?;
+        fixture.create_schedule().await?;
+        Ok(fixture)
+    }
+
+    /// A real automation store with no schedules and no Runs.
+    async fn empty() -> TestResult<Self> {
         let no_auto_advance = NoAutoAdvance::hold();
         let root = tempfile::tempdir()?;
         let store = Arc::new(Mutex::new(
@@ -206,7 +242,7 @@ impl SchedulerFixture {
         let route = Arc::new(ControlledRoute {
             inner: FakeScheduledExecution {
                 kind: FakeRouteKind::Provider,
-                target: target.clone(),
+                target,
                 interactions: Arc::clone(&interactions),
                 observed_push_ids: Arc::default(),
                 generation: serde_json::from_value(json!({"serviceEpoch":service,"generation":1}))?,
@@ -220,39 +256,10 @@ impl SchedulerFixture {
             stop_requests: std::sync::Mutex::default(),
             clock: Arc::clone(&clock),
             initial_evidence_fails: AtomicBool::new(false),
+            unreachable_settlements: AtomicUsize::new(0),
+            unreachable_stops: AtomicUsize::new(0),
+            stop_records_intent: AtomicBool::new(false),
         });
-        let instruction = store
-            .lock()
-            .await
-            .create_instruction(
-                &OperationId::generate(),
-                &InstructionText::try_from("Check job".to_owned())?,
-                BASE_MS,
-            )
-            .await?;
-        store
-            .lock()
-            .await
-            .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
-                operation_id: OperationId::generate(),
-                definition: ScheduleDefinition {
-                    instruction_id: instruction.instruction_id,
-                    timing: TimingRule::Interval {
-                        seconds: INTERVAL_SECONDS,
-                    },
-                    enabled: true,
-                    destination: ExecutionDestination::OwnedThread {
-                        target,
-                        cwd: root.path().to_string_lossy().into_owned(),
-                    },
-                    execution_timeout_seconds: Some(TIMEOUT_SECONDS),
-                    model: Some("fixture-model".into()),
-                    effort: Some("medium".into()),
-                },
-                imported_continuity: ContinuityInput::None,
-                now_ms: BASE_MS,
-            })
-            .await?;
         Ok(Self {
             _no_auto_advance: no_auto_advance,
             root,
@@ -264,7 +271,54 @@ impl SchedulerFixture {
         })
     }
 
+    async fn create_schedule(&self) -> TestResult<()> {
+        let instruction = self
+            .store
+            .lock()
+            .await
+            .create_instruction(
+                &OperationId::generate(),
+                &InstructionText::try_from("Check job".to_owned())?,
+                BASE_MS,
+            )
+            .await?;
+        self.store
+            .lock()
+            .await
+            .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
+                operation_id: OperationId::generate(),
+                definition: ScheduleDefinition {
+                    instruction_id: instruction.instruction_id,
+                    timing: TimingRule::Interval {
+                        seconds: INTERVAL_SECONDS,
+                    },
+                    enabled: true,
+                    destination: ExecutionDestination::OwnedThread {
+                        target: self.route.inner.target.clone(),
+                        cwd: self.root.path().to_string_lossy().into_owned(),
+                    },
+                    execution_timeout_seconds: Some(TIMEOUT_SECONDS),
+                    model: Some("fixture-model".into()),
+                    effort: Some("medium".into()),
+                },
+                imported_continuity: ContinuityInput::None,
+                now_ms: BASE_MS,
+            })
+            .await?;
+        Ok(())
+    }
+
     fn start(&self) -> TestResult<RunningScheduler> {
+        self.start_with(None)
+    }
+
+    /// Starts the scheduler with every step task held after it reported, until `gate`
+    /// is released.
+    fn start_holding_step_exits(&self, gate: Arc<Mutex<()>>) -> TestResult<RunningScheduler> {
+        self.start_with(Some(gate))
+    }
+
+    fn start_with(&self, step_exit_gate: Option<Arc<Mutex<()>>>) -> TestResult<RunningScheduler> {
         let worker = ScheduleTimingWorker::new(
             Arc::clone(&self.store),
             Arc::clone(&self.interactions),
@@ -280,6 +334,10 @@ impl SchedulerFixture {
             Arc::clone(&self.clock) as Arc<dyn Clock>,
         )
         .wake_on_completions(self.journal.subscribe_commits());
+        let worker = match step_exit_gate {
+            Some(gate) => worker.hold_step_exits(gate),
+            None => worker,
+        };
         let observation = worker.observation();
         let shutdown = CancellationToken::new();
         let task = tokio::spawn(worker.run(shutdown.clone()));
@@ -634,6 +692,282 @@ async fn a_failed_read_retries_on_the_backoff_and_recovers_when_the_fault_is_fix
         Some(at(Duration::from_secs(u64::from(INTERVAL_SECONDS)))),
         "the recovered pass arms the schedule again"
     );
+    scheduler.stop().await;
+    Ok(())
+}
+
+/// Appends a native observation for the fixture thread, as the observer would.
+async fn observe(fixture: &SchedulerFixture, change: serde_json::Value) -> TestResult<()> {
+    fixture
+        .journal
+        .append(&thread_observation(change)?, BASE_MS / 1_000)
+        .await?;
+    Ok(())
+}
+
+fn turn_completed() -> serde_json::Value {
+    json!({"kind":"turnTerminal","turnId":"fixture-turn","status":"completed"})
+}
+
+/// The scheduler's own per-Run failed-step warnings among the captured ones.
+fn step_warnings(warnings: &crate::captured_warnings_test_support::CapturedWarnings) -> usize {
+    warnings
+        .events()
+        .iter()
+        .filter(|warning| warning.message.contains("scheduled Run step unavailable"))
+        .count()
+}
+
+#[tokio::test(start_paused = true)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
+async fn an_empty_scheduler_holds_no_timer_and_reads_nothing_for_an_hour() -> TestResult<()> {
+    let fixture = SchedulerFixture::empty().await?;
+    let scheduler = fixture.start()?;
+    settled(&scheduler).await?;
+    let asleep = scheduler.observation.snapshot();
+
+    advance(Duration::from_secs(3_600)).await;
+
+    assert_eq!(asleep.passes, 1, "only the start-up pass ran");
+    assert_eq!(
+        asleep.reads,
+        [
+            "due schedules",
+            "waiting schedules",
+            "observable runs",
+            "scheduler next due"
+        ]
+    );
+    assert_eq!(asleep.armed_deadline, None, "nothing due, so no timer");
+    assert_eq!(
+        scheduler.observation.snapshot(),
+        asleep,
+        "an idle hour reads nothing"
+    );
+    scheduler.stop().await;
+    Ok(())
+}
+
+#[tokio::test(start_paused = true)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
+async fn a_run_deadline_stores_the_stop_at_its_time_and_does_not_act_again() -> TestResult<()> {
+    let fixture = SchedulerFixture::with_one_schedule().await?;
+    fixture
+        .route
+        .stop_records_intent
+        .store(true, Ordering::Release);
+    let scheduler = fixture.start()?;
+    settled(&scheduler).await?;
+    let interval = Duration::from_secs(u64::from(INTERVAL_SECONDS));
+    let deadline = interval + Duration::from_secs(u64::from(TIMEOUT_SECONDS));
+
+    advance(interval).await;
+    let run = fixture.executing_and_asleep(&scheduler).await?;
+    advance(Duration::from_secs(u64::from(TIMEOUT_SECONDS) - 1)).await;
+    settled(&scheduler).await?;
+    let phase_before_deadline = fixture.read_phase(&run).await?;
+    advance(Duration::from_secs(1)).await;
+    settled(&scheduler).await?;
+    let phase_at_deadline = fixture.read_phase(&run).await?;
+    advance(Duration::from_secs(600)).await;
+    settled(&scheduler).await?;
+
+    assert_eq!(phase_before_deadline, RunPhase::Executing);
+    assert_eq!(
+        phase_at_deadline,
+        RunPhase::Stopping,
+        "the stop intent is stored at the deadline"
+    );
+    assert_eq!(
+        *fixture.route.stop_requests.lock().unwrap(),
+        [at(deadline)],
+        "one stop, at its time"
+    );
+    assert_eq!(fixture.read_phase(&run).await?, RunPhase::Stopping);
+    scheduler.stop().await;
+    Ok(())
+}
+
+#[tokio::test(start_paused = true)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
+async fn an_unreachable_client_is_retried_on_the_backoff_and_the_run_settles() -> TestResult<()> {
+    let fixture = SchedulerFixture::with_one_schedule().await?;
+    let scheduler = fixture.start()?;
+    settled(&scheduler).await?;
+    advance(Duration::from_secs(u64::from(INTERVAL_SECONDS))).await;
+    let run = fixture.executing_and_asleep(&scheduler).await?;
+    let completed_at = fixture.clock.now();
+
+    // The turn completes, but the first two reads cannot reach the client.
+    fixture.route.turn_completed.store(true, Ordering::Release);
+    fixture
+        .route
+        .unreachable_settlements
+        .store(2, Ordering::Release);
+    observe(&fixture, turn_completed()).await?;
+    settled(&scheduler).await?;
+    let first_retry = scheduler.observation.snapshot().armed_deadline;
+    advance(Duration::from_secs(1)).await;
+    settled(&scheduler).await?;
+    let second_retry = scheduler.observation.snapshot().armed_deadline;
+    let phase_before_recovery = fixture.read_phase(&run).await?;
+    advance(Duration::from_secs(2)).await;
+    settled(&scheduler).await?;
+
+    assert_eq!(
+        first_retry,
+        Some(completed_at.after(Duration::from_secs(1)))
+    );
+    assert_eq!(
+        second_retry,
+        Some(completed_at.after(Duration::from_secs(3)))
+    );
+    assert_eq!(phase_before_recovery, RunPhase::Executing);
+    assert_eq!(
+        fixture.read_phase(&run).await?,
+        RunPhase::Finished,
+        "the retry reached the client and settled the Run"
+    );
+    scheduler.stop().await;
+    Ok(())
+}
+
+#[tokio::test(start_paused = true)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
+async fn a_stop_that_cannot_reach_its_client_is_retried_after_the_deadline() -> TestResult<()> {
+    let fixture = SchedulerFixture::with_one_schedule().await?;
+    fixture
+        .route
+        .stop_records_intent
+        .store(true, Ordering::Release);
+    fixture.route.unreachable_stops.store(1, Ordering::Release);
+    let scheduler = fixture.start()?;
+    settled(&scheduler).await?;
+    let interval = Duration::from_secs(u64::from(INTERVAL_SECONDS));
+    let deadline = interval + Duration::from_secs(u64::from(TIMEOUT_SECONDS));
+
+    advance(interval).await;
+    let run = fixture.executing_and_asleep(&scheduler).await?;
+    advance(Duration::from_secs(u64::from(TIMEOUT_SECONDS))).await;
+    settled(&scheduler).await?;
+    let retry = scheduler.observation.snapshot().armed_deadline;
+    let phase_after_failed_stop = fixture.read_phase(&run).await?;
+    advance(Duration::from_secs(1)).await;
+    settled(&scheduler).await?;
+
+    assert_eq!(retry, Some(at(deadline + Duration::from_secs(1))));
+    assert_eq!(phase_after_failed_stop, RunPhase::Executing);
+    assert_eq!(
+        fixture.read_phase(&run).await?,
+        RunPhase::Stopping,
+        "the retried stop reached the client"
+    );
+    assert_eq!(
+        *fixture.route.stop_requests.lock().unwrap(),
+        [at(deadline), at(deadline + Duration::from_secs(1))]
+    );
+    scheduler.stop().await;
+    Ok(())
+}
+
+#[tokio::test(start_paused = true)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
+async fn each_run_of_failed_steps_logs_one_warning() -> TestResult<()> {
+    let (warnings, _subscriber) =
+        crate::captured_warnings_test_support::CapturedWarnings::install();
+    let fixture = SchedulerFixture::with_one_schedule().await?;
+    fixture
+        .route
+        .initial_evidence_fails
+        .store(true, Ordering::Release);
+    let scheduler = fixture.start()?;
+    settled(&scheduler).await?;
+
+    advance(Duration::from_secs(u64::from(INTERVAL_SECONDS))).await;
+    settled(&scheduler).await?;
+    advance(Duration::from_secs(1)).await;
+    settled(&scheduler).await?;
+    let warnings_in_first_run = step_warnings(&warnings);
+    fixture
+        .route
+        .initial_evidence_fails
+        .store(false, Ordering::Release);
+    advance(Duration::from_secs(2)).await;
+    fixture.executing_and_asleep(&scheduler).await?;
+    let warnings_after_recovery = step_warnings(&warnings);
+    fixture
+        .route
+        .unreachable_settlements
+        .store(2, Ordering::Release);
+    observe(&fixture, turn_completed()).await?;
+    settled(&scheduler).await?;
+    advance(Duration::from_secs(1)).await;
+    settled(&scheduler).await?;
+    advance(Duration::from_secs(2)).await;
+    settled(&scheduler).await?;
+
+    assert_eq!(warnings_in_first_run, 1, "two failures, one warning");
+    assert_eq!(warnings_after_recovery, 1, "recovery logs nothing");
+    assert_eq!(
+        step_warnings(&warnings),
+        2,
+        "a second run of failures logs once more"
+    );
+    scheduler.stop().await;
+    Ok(())
+}
+
+#[tokio::test(start_paused = true)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
+async fn a_step_that_reports_before_its_task_ends_still_arms_its_retry() -> TestResult<()> {
+    let fixture = SchedulerFixture::with_one_schedule().await?;
+    fixture
+        .route
+        .initial_evidence_fails
+        .store(true, Ordering::Release);
+    let gate = Arc::new(Mutex::new(()));
+    let held = Arc::clone(&gate).lock_owned().await;
+    let scheduler = fixture.start_holding_step_exits(gate)?;
+    settled(&scheduler).await?;
+    let interval = Duration::from_secs(u64::from(INTERVAL_SECONDS));
+
+    // The failed step reports and wakes the loop, then its task stays unfinished while
+    // the scheduler runs its pass and goes back to sleep.
+    advance(interval).await;
+    settled(&scheduler).await?;
+    let armed_while_task_held = scheduler.observation.snapshot().armed_deadline;
+    drop(held);
+    fixture
+        .route
+        .initial_evidence_fails
+        .store(false, Ordering::Release);
+    advance(Duration::from_secs(1)).await;
+    let run = fixture.executing_and_asleep(&scheduler).await?;
+
+    assert_eq!(
+        armed_while_task_held,
+        Some(at(interval + Duration::from_secs(1))),
+        "the retry is armed from the report, not from the task's completion"
+    );
+    assert_eq!(fixture.read_phase(&run).await?, RunPhase::Executing);
     scheduler.stop().await;
     Ok(())
 }
