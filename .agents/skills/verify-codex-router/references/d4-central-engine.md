@@ -4,6 +4,8 @@ Observe central's real event-to-storage-to-effect path on the declared Tokio or 
 
 **Drafted from approved intent; product behavior not yet evaluated.** The original-byte window reader below is executable apparatus. The S1–S11 product controls, complete local scenario controller and isolated wrong-product artifacts still need their declared implementation. Return each missing piece as a gap; the reader's success supplies no whole-journey credit.
 
+The draft S1/control adapters are `event-observation.ts` and `control-client.ts` in the same driver directory. They consume the Implementer's seam contract v3/v3.1, which binds only when its product slice is declared. The HTTP fixture tests establish apparatus serialization and lossless decoding; they do not run the real central. The control client refuses unqualified passivity, separately refuses the legacy clock wake path, and confines Tokio-only controls to Tokio. Never automatically replay an uncertain control mutation.
+
 ## Oracle and target
 
 The commissioning packet supplies the central-execution-model design directory and revision: `verification.html`, especially `#d4-notes`, plus `plan.html#d4`, `program-design.html` and `owed-work.html`. Read those actual files before driving. Take expected outcomes from them, including the settled distinctions below, rather than from current test output.
@@ -13,6 +15,8 @@ The commissioning packet supplies the central-execution-model design directory a
 - J14 first runs on local workerd; hosted J14/J15 need a separate staging slot and deployed artifact declaration. J15 keeps its real-hour requirement.
 - J17 lost-close means the platform socket inventory no longer contains the socket, without a close callback. A socket still reported open is the separate silent-peer backoff case.
 - Holder answers are stored and then resume `drive_one`. Rebuild only after the send event has finished, with no active event or call.
+
+J14 still needs a signal bound to the actual JavaScript Durable Object construction. The contract's Cloudflare `isolate` is minted in Rust `DurableObject::new`, which can run after an SDK Rust-state reset while the JS object survives. The Rust counter alone cannot close J14. Keep that gap open until the Lead supplies a qualified signal or an adopted proof change.
 
 Before a product observation, obtain the Lead's immutable slice declaration: full source, signed artifact and bundle hashes, configuration, conformance features, real client, deadline and allocated private stores/ports. Confirm these immediately before and after the run. Build only after the shared Cargo owner releases its slot, in the normal worktree target. Native Rust runs use `scripts/cargo_debug_signing_runner.sh`; sign directly launched binaries with `--sign-only` before hashing. An unavailable signature is a setup gap; this route grants no Keychain prompt, production access or unsigned fallback.
 
@@ -89,6 +93,8 @@ For J22 use the exact old-source/artifact/readiness and no-model qualifications 
 ## Control qualification and wrong builds
 
 Before a quiet case, prove arm/read/clear bypass `on_event` and cannot repair/recompute, manufacture an alarm or release a batch. Legacy `SetTime` explicitly wakes; the D4 replacement may notify the timer to re-evaluate a stored deadline, but must not create a new deadline. No target polling occurs during the quiet observation. Collect cause/constructor records externally; an inspection that wakes the object cannot prove it hibernated.
+
+S1 sequences start at zero for each `(object, construction)`; the ring cursor is a separate monotonic position across rebuilds. The event reader rejects missing constructions, duplicate event IDs, sequence gaps and truncated ring pages. Each Alarm object call must identify its originating due unit by kind and subject. Preserve those causal bindings; being logged during an Alarm alone is insufficient. The `beforeClaim` barrier sits outside the atomic claim and never inserts an await between its check and set.
 
 Each journey needs its own named wrong-product artifact in an isolated source copy: record original source, exact owner-local change and restored source, build/signing/tool receipts and the same case selection. The seed must reach and fail the journey's semantic assertion while its fixture/control reaches the requested fault. Import/setup/zero-match/time-limit failures do not establish sensitivity. Seeds stay outside the shared Implementer tree. Concrete owner-local seed patches await those product modules; no command here edits them or claims they ran. The byte-reader's encoded 33-item/incomplete-stream controls establish apparatus sensitivity only.
 
