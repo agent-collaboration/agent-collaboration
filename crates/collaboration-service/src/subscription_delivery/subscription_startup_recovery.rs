@@ -162,9 +162,9 @@ impl SubscriptionDeliveryService {
             let mut pending_backoff = FailureBackoff::default();
             let mut delay = pending_backoff.record_failure().delay;
             while !projects.is_empty() {
-                #[cfg(test)]
-                let _ = service.inner.startup_retry_delays.send(delay);
                 let deadline = service.inner.clock.monotonic_now() + delay;
+                #[cfg(test)]
+                let _ = service.inner.startup_retry_deadlines.send(deadline);
                 let pending_before = projects.len();
                 let restored = tokio::select! {
                     biased;

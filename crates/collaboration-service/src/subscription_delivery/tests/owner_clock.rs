@@ -46,6 +46,9 @@ pub struct TestClock {
     wall: StdMutex<DateTime<Utc>>,
     monotonic: StdMutex<Instant>,
     advanced: tokio::sync::Notify,
+    /// Each (deadline, monotonic time of the check) a sleeper found not yet due.
+    not_due_checks: StdMutex<Vec<(Instant, Instant)>>,
+    not_due_checked: tokio::sync::Notify,
 }
 impl TestClock {
     pub fn new(now: DateTime<Utc>) -> Self {
@@ -53,11 +56,42 @@ impl TestClock {
             wall: StdMutex::new(now),
             monotonic: StdMutex::new(Instant::now()),
             advanced: tokio::sync::Notify::new(),
+            not_due_checks: StdMutex::new(Vec::new()),
+            not_due_checked: tokio::sync::Notify::new(),
         }
     }
     fn advance_wall_and_monotonic(&self, seconds: u64) {
-        *self.wall.lock().unwrap() += chrono::Duration::seconds(i64::try_from(seconds).unwrap());
-        *self.monotonic.lock().unwrap() += std::time::Duration::from_secs(seconds);
+        self.advance_wall_and_monotonic_by(std::time::Duration::from_secs(seconds));
+    }
+    fn advance_wall_and_monotonic_by(&self, step: std::time::Duration) {
+        *self.wall.lock().unwrap() += chrono::Duration::from_std(step).unwrap();
+        *self.monotonic.lock().unwrap() += step;
+    }
+
+    /// Advances both clocks by any step, including part of a second, without Tokio time.
+    pub fn advance_by_without_tokio_time(&self, step: std::time::Duration) {
+        self.advance_wall_and_monotonic_by(step);
+        self.advanced.notify_waiters();
+    }
+
+    /// Resolves once a sleeper waiting for `deadline` has looked at the clock as it reads
+    /// now and found the deadline not yet due: proof it saw this time and kept waiting.
+    pub async fn not_due_check_now(&self, deadline: Instant) {
+        let now = self.monotonic_now();
+        loop {
+            let checked = self.not_due_checked.notified();
+            tokio::pin!(checked);
+            checked.as_mut().enable();
+            if self
+                .not_due_checks
+                .lock()
+                .unwrap()
+                .contains(&(deadline, now))
+            {
+                return;
+            }
+            checked.await;
+        }
     }
 
     pub async fn advance(&self, seconds: u64) {
@@ -87,9 +121,12 @@ impl SubscriptionClock for TestClock {
                 let advanced = self.advanced.notified();
                 tokio::pin!(advanced);
                 advanced.as_mut().enable();
-                if self.monotonic_now() >= deadline {
+                let now = self.monotonic_now();
+                if now >= deadline {
                     return;
                 }
+                self.not_due_checks.lock().unwrap().push((deadline, now));
+                self.not_due_checked.notify_waiters();
                 advanced.await;
             }
         })

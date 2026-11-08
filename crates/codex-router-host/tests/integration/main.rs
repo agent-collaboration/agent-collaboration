@@ -58,6 +58,7 @@ mod provider_native_skills;
 mod provider_pending_hub_races;
 mod provider_startup_isolation;
 mod remote_wake;
+mod router_executable_status;
 mod router_settings;
 mod runtime_lifecycle;
 mod runtime_restart;
