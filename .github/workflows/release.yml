@@ -123,7 +123,8 @@ jobs:
         with:
           workspaces: release-source -> target
           shared-key: release-arm64-background
-          # ci.yml seeds this exact cache on main; releases only restore it.
+          # Nothing seeds this cache since CI went Linux-only; releases restore
+          # the last main-seeded copy while GitHub keeps it, and never save.
           save-if: false
 
       # Prepare small consumers serially: concurrent Cargo compiles would wait

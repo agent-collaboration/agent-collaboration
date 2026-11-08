@@ -97,8 +97,8 @@ export GH_CALLS="$fixture_root/calls" GH_FIXTURE="$fixture_root/inventory.json"
 printf '%s\n' '{"createdAt":"2026-10-26T01:00:00Z","jobs":[
   {"name":"Prune superseded main caches","startedAt":"2026-10-27T02:00:00Z","conclusion":null},
   {"name":"Static validation","startedAt":"2026-10-27T01:00:00Z","conclusion":"success"},
-  {"name":"Test Rust workspace","startedAt":"2026-10-27T01:00:03Z","conclusion":"failure"},
-  {"name":"Warm Apple Silicon release dependencies","startedAt":"0001-01-01T00:00:00Z","conclusion":"skipped"}
+  {"name":"Test Rust workspace (1/2)","startedAt":"2026-10-27T01:00:03Z","conclusion":"failure"},
+  {"name":"Test Rust workspace (2/2)","startedAt":"0001-01-01T00:00:00Z","conclusion":"skipped"}
 ]}' > "$fixture_root/jobs.json"
 export GH_JOB_FIXTURE="$fixture_root/jobs.json" GITHUB_RUN_ID=1 GITHUB_RUN_ATTEMPT=1
 export PATH="$fixture_root:$PATH"
