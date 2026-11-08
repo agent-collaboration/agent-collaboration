@@ -86,21 +86,21 @@ pub struct VerifiedPersonRequest {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct TokenHeader {
-    alg: String,
-    kid: String,
-    typ: Option<String>,
+pub(crate) struct TokenHeader {
+    pub(crate) alg: String,
+    pub(crate) kid: String,
+    pub(crate) typ: Option<String>,
 }
 
 /// RFC 7519 allows one audience string or an array of them.
 #[derive(Deserialize)]
 #[serde(untagged)]
-enum Audience {
+pub(crate) enum Audience {
     One(String),
     Many(Vec<String>),
 }
 impl Audience {
-    fn names(&self, expected: &str) -> bool {
+    pub(crate) fn names(&self, expected: &str) -> bool {
         match self {
             Self::One(one) => one == expected,
             Self::Many(many) => many.iter().any(|one| one == expected),

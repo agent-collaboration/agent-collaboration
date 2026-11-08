@@ -27,10 +27,12 @@ pub use fleet_statement_wire::OrganizationStatementDigest;
 pub use identity::{OrganizationIdentity, OrganizationIdentityRefusal, ProvisioningStampAction};
 pub use machine_login::{
     AllowanceRow, CloseMachineConnection, Decided, DecisionTime, EnrollmentChange, EnrollmentFacts,
-    EnrollmentGeneration, EnrollmentQuery, FormerServiceFacts, InstallationRow, MachineClaim,
-    MachineEnrollmentFailure, MachineEnrollmentPort, MachineLoginSettings, MachineRevocation,
-    RevocationBy, SD8_MILLIS, StoredEnrollment, StoredEnrollmentState, admit_machine_connection,
-    decide_device_login, decide_machine_token, revoke_machine_enrollment,
+    EnrollmentGeneration, EnrollmentQuery, FormerServiceFacts, ISSUER_CLOCK_SKEW_SECONDS,
+    InstallationRow, MachineClaim, MachineEnrollmentFailure, MachineEnrollmentPort,
+    MachineLoginSettings, MachineRevocation, MachineTokenAdmission, MachineTokenCheckRefusal,
+    MachineTokenPolicy, MachineTokenVerifier, RevocationBy, SD8_MILLIS, StoredEnrollment,
+    StoredEnrollmentState, VerifiedMachineToken, admit_machine_connection, admit_machine_token,
+    decide_device_login, decide_machine_token, renew_machine_token, revoke_machine_enrollment,
 };
 pub(crate) use organization_stamp_store::read as read_stored_stamp;
 #[cfg(feature = "conformance")]

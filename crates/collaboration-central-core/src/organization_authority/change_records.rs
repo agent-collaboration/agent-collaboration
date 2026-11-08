@@ -286,3 +286,7 @@ fn corrupt(field: &str, message: impl std::fmt::Display) -> StoreError {
         message: message.to_string(),
     }
 }
+
+#[cfg(test)]
+#[path = "change_records_test.rs"]
+mod tests;

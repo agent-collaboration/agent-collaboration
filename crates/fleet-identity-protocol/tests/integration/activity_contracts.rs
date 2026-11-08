@@ -2,8 +2,9 @@
 #[cfg(test)]
 use crate::contract_artifacts;
 use fleet_identity_protocol::{
-    Activity, ActivityRefusal, Heartbeat, MachineCapability, RenewMachineToken,
-    ReportSessionActivity, ReportSessionActivityResult, SessionActivityEntry,
+    Activity, ActivityRefusal, Heartbeat, MachineCapability, MachineTokenRenewal,
+    MachineTokenRenewalRefusal, RenewMachineToken, ReportSessionActivity,
+    ReportSessionActivityResult, SessionActivityEntry,
 };
 use serde_json::json;
 
@@ -88,6 +89,37 @@ fn renew_machine_token_wire_contract() {
     contract_artifacts::assert_contract::<RenewMachineToken>(
         "RenewMachineToken",
         vec![json!({"token":"structural-token-not-a-credential"})],
+        false,
+    );
+}
+
+#[test]
+fn machine_token_renewal_wire_contract() {
+    contract_artifacts::assert_contract::<MachineTokenRenewal>(
+        "MachineTokenRenewal",
+        vec![
+            json!({"result":"renewed"}),
+            json!({"result":"refused","reason":{"kind":"tokenInvalid"}}),
+            json!({"result":"refused","reason":{"kind":"tokenExpired"}}),
+            json!({"result":"refused","reason":{"kind":"wrongClient"}}),
+            json!({"result":"refused","reason":{"kind":"wrongInstallation"}}),
+            json!({"result":"refused","reason":{"kind":"enrollmentNotActive"}}),
+        ],
+        false,
+    );
+}
+
+#[test]
+fn machine_token_renewal_refusal_wire_contract() {
+    contract_artifacts::assert_contract::<MachineTokenRenewalRefusal>(
+        "MachineTokenRenewalRefusal",
+        vec![
+            json!({"kind":"tokenInvalid"}),
+            json!({"kind":"tokenExpired"}),
+            json!({"kind":"wrongClient"}),
+            json!({"kind":"wrongInstallation"}),
+            json!({"kind":"enrollmentNotActive"}),
+        ],
         false,
     );
 }

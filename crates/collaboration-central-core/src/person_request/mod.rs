@@ -12,6 +12,7 @@ pub use admin_operations::{
     AdminOperation, AdminOperationId, AdminRoute, CreateWorkspaceRequest, ReadChangeRecordsRequest,
     RecordPageLimit, WorkspaceLookupRequest, WorkspaceName,
 };
+pub(crate) use compact_jwt::{CompactJwt, from_json};
 pub(crate) use floor_delivery::{FloorDelivery, deliver as deliver_floor};
 pub use refusal::PersonRequestRefusal;
 pub(crate) use request_admission::admit as admit_person_request;
@@ -21,6 +22,7 @@ pub use request_admission::{
     AdmissionRefusal, AdmittedRequest, FloorRevision, OrganizationFloor, OrganizationFloorState,
     PersonFloor, PersonFloorState, SECOND_FACTOR_WINDOW_SECONDS,
 };
+pub(crate) use request_verifier::{Audience, TokenHeader};
 pub use request_verifier::{
     Es256Verification, PersonRequestInput, PersonRequestPolicy, PersonRequestVerifier, ProofJwk,
     VerifiedPersonRequest,

@@ -1,0 +1,458 @@
+//! C9 with real Ed25519 signatures, B2's key cache, resolution and verifier,
+//! a counting key source and a controlled clock. Each case changes one claim
+//! or header from a valid token and holds every other bound valid.
+use super::super::super::fleet_statement_test_support::RealEd25519;
+use super::super::in_memory_enrollments::{EnrollmentStore, InMemoryEnrollments};
+use super::super::test_fixtures::{
+    MACHINE, NOW_MS, NOW_S, TestClock, client, empty_store, enrollment, installation, settings,
+    uuid7, with_enrolled,
+};
+use super::{
+    ISSUER_CLOCK_SKEW_SECONDS, MachineTokenAdmission, MachineTokenCheckRefusal, MachineTokenPolicy,
+    MachineTokenVerifier, admit_machine_token, renew_machine_token,
+};
+use crate::identity_contract::{
+    AdmittedMachine, MachineConnectionAdmission, MachineConnectionRefusal, PresentedMachine,
+};
+use crate::{IssuerKeyCache, IssuerKeySource, IssuerSignatureVerifier, KeyFetchFailure, RawJwks};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use fleet_identity_protocol::{MachineTokenRenewal, MachineTokenRenewalRefusal, UnixSeconds};
+use fleet_sync_protocol::PeerId;
+use ring::signature::{Ed25519KeyPair, KeyPair};
+use serde_json::{Value, json};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+
+const WORKING: u64 = 0x40;
+const ISSUER: &str = "https://sign-in.example.invalid";
+const AUDIENCE: &str = "https://central.example.invalid/machine";
+const KID: &str = "machine-fixture";
+
+/// Public test fixtures only: never a deployment signing key.
+fn signing_key(seed: u8) -> Ed25519KeyPair {
+    Ed25519KeyPair::from_seed_unchecked(&[seed; 32]).unwrap()
+}
+
+/// The issuer's published keys: `kid → seed`. Counts fetches; can fail; can
+/// run a hook during a fetch (a slow key source).
+struct TestKeys {
+    published: Mutex<Vec<(&'static str, u8)>>,
+    fetches: AtomicUsize,
+    unreachable: bool,
+    during_fetch: Mutex<Option<Box<dyn FnOnce() + Send>>>,
+}
+impl TestKeys {
+    fn publishing(published: Vec<(&'static str, u8)>) -> Arc<Self> {
+        Arc::new(Self {
+            published: Mutex::new(published),
+            fetches: AtomicUsize::new(0),
+            unreachable: false,
+            during_fetch: Mutex::new(None),
+        })
+    }
+}
+impl IssuerKeySource for Arc<TestKeys> {
+    fn configured_source(&self) -> &str {
+        "https://sign-in.example.invalid/api/auth/jwks"
+    }
+    async fn fetch_issuer_keys(&self) -> Result<RawJwks, KeyFetchFailure> {
+        self.fetches.fetch_add(1, Ordering::SeqCst);
+        if let Some(hook) = self.during_fetch.lock().unwrap().take() {
+            hook();
+        }
+        if self.unreachable {
+            return Err(KeyFetchFailure::Unreachable);
+        }
+        let keys = self
+            .published
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(kid, seed)| {
+                json!({"kid":kid,"kty":"OKP","crv":"Ed25519","alg":"EdDSA",
+                    "x":URL_SAFE_NO_PAD.encode(signing_key(*seed).public_key().as_ref())})
+            })
+            .collect::<Vec<_>>();
+        Ok(RawJwks {
+            body: serde_json::to_vec(&json!({ "keys": keys })).unwrap(),
+            cache_control: None,
+        })
+    }
+}
+
+fn verifier(
+    keys: &Arc<TestKeys>,
+    clock: &Arc<TestClock>,
+) -> MachineTokenVerifier<RealEd25519, Arc<TestKeys>> {
+    let clock: Arc<dyn runtime_primitives::Clock> = clock.clone();
+    MachineTokenVerifier::new(
+        IssuerSignatureVerifier::new(
+            RealEd25519,
+            keys.clone(),
+            Arc::new(IssuerKeyCache::default()),
+            clock.clone(),
+        ),
+        clock,
+        MachineTokenPolicy {
+            issuer: ISSUER.to_owned(),
+            machine_audience: AUDIENCE.to_owned(),
+        },
+    )
+}
+
+fn header() -> Value {
+    json!({"alg":"EdDSA","kid":KID,"typ":"JWT"})
+}
+
+/// A valid token for the working enrollment of `MACHINE`, with the provider's
+/// other registered claims beside the machine ones.
+fn claims() -> Value {
+    json!({
+        "iss": ISSUER, "sub": uuid7(0x02), "aud": AUDIENCE,
+        "iat": NOW_S, "exp": NOW_S + 3600, "jti": uuid7(0x60),
+        "client_id": uuid7(WORKING), "azp": uuid7(WORKING), "scope": "offline_access",
+        "principal": {"kind":"machine","installation_id":uuid7(MACHINE),"enrollment_id":uuid7(WORKING)},
+        "organization_id": uuid7(0x01),
+        "grant_expires_at": NOW_S + 1800,
+    })
+}
+
+fn sign(header: &Value, claims: &Value, seed: u8) -> String {
+    let signed = format!(
+        "{}.{}",
+        URL_SAFE_NO_PAD.encode(serde_json::to_vec(header).unwrap()),
+        URL_SAFE_NO_PAD.encode(serde_json::to_vec(claims).unwrap())
+    );
+    format!(
+        "{signed}.{}",
+        URL_SAFE_NO_PAD.encode(signing_key(seed).sign(signed.as_bytes()).as_ref())
+    )
+}
+
+fn token_with(change: impl FnOnce(&mut Value)) -> String {
+    let mut body = claims();
+    change(&mut body);
+    sign(&header(), &body, 7)
+}
+
+fn presented() -> PresentedMachine {
+    PresentedMachine {
+        installation: installation(MACHINE),
+        peer: PeerId::try_from(uuid7(MACHINE)).unwrap(),
+    }
+}
+
+fn working() -> EnrollmentStore {
+    with_enrolled(empty_store(), MACHINE, WORKING, 1, NOW_S - 60)
+}
+
+/// Checks `token` at `now_ms` against a fresh cache publishing seed 7 as `KID`.
+async fn check_at(token: &str, now_ms: i64) -> Result<(), MachineTokenCheckRefusal> {
+    let keys = TestKeys::publishing(vec![(KID, 7)]);
+    let clock = TestClock::at(now_ms);
+    verifier(&keys, &clock).verify(token).await.map(|_| ())
+}
+
+async fn check(token: &str) -> Result<(), MachineTokenCheckRefusal> {
+    check_at(token, NOW_MS).await
+}
+
+#[tokio::test]
+async fn a_valid_machine_token_with_unread_registered_claims_is_admitted() {
+    let keys = TestKeys::publishing(vec![(KID, 7)]);
+    let clock = TestClock::at(NOW_MS);
+    let port = InMemoryEnrollments::with(working());
+
+    let admission = admit_machine_token(
+        &verifier(&keys, &clock),
+        &port,
+        &token_with(|_| {}),
+        presented(),
+        settings(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        admission,
+        MachineTokenAdmission::Admission(MachineConnectionAdmission::Admitted {
+            machine: AdmittedMachine {
+                installation: installation(MACHINE),
+                peer: PeerId::try_from(uuid7(MACHINE)).unwrap(),
+                organization_id: uuid7(0x01).try_into().unwrap(),
+                enrollment_id: enrollment(WORKING),
+                token_expires_at: UnixSeconds(NOW_S + 3600),
+            },
+        })
+    );
+}
+
+#[tokio::test]
+async fn only_an_eddsa_header_naming_a_key_is_allowed() {
+    let body = claims();
+    for header in [
+        json!({"alg":"ES256","kid":KID}),
+        json!({"alg":"none","kid":KID}),
+        json!({"alg":"EdDSA","kid":""}),
+        json!({"alg":"EdDSA","kid":KID,"typ":"dpop+jwt"}),
+    ] {
+        assert_eq!(
+            check(&sign(&header, &body, 7)).await,
+            Err(MachineTokenCheckRefusal::UnsupportedHeader),
+            "{header}"
+        );
+    }
+    assert_eq!(
+        check("not.a-token").await,
+        Err(MachineTokenCheckRefusal::Malformed)
+    );
+}
+
+#[tokio::test]
+async fn a_token_from_another_issuer_is_refused_before_its_signature() {
+    let keys = TestKeys::publishing(vec![(KID, 7)]);
+    let clock = TestClock::at(NOW_MS);
+    let token = token_with(|claims| claims["iss"] = json!("https://elsewhere.example.invalid"));
+
+    assert_eq!(
+        verifier(&keys, &clock).verify(&token).await,
+        Err(MachineTokenCheckRefusal::Issuer)
+    );
+    assert_eq!(keys.fetches.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn a_bad_signature_and_an_unreachable_key_source_are_different_refusals() {
+    // Signed by a key the issuer never published under this kid.
+    let forged = sign(&header(), &claims(), 9);
+    assert_eq!(
+        check(&forged).await,
+        Err(MachineTokenCheckRefusal::Signature)
+    );
+
+    let unreachable = Arc::new(TestKeys {
+        published: Mutex::new(vec![(KID, 7)]),
+        fetches: AtomicUsize::new(0),
+        unreachable: true,
+        during_fetch: Mutex::new(None),
+    });
+    let clock = TestClock::at(NOW_MS);
+    assert_eq!(
+        verifier(&unreachable, &clock)
+            .verify(&token_with(|_| {}))
+            .await,
+        Err(MachineTokenCheckRefusal::VerificationUnavailable)
+    );
+}
+
+/// A warm cache answers a known key without fetching; an unknown kid causes
+/// exactly one refetch, which finds a key rotated in since.
+#[tokio::test]
+async fn a_rotated_key_is_found_with_one_refetch_of_a_warm_cache() {
+    let keys = TestKeys::publishing(vec![(KID, 7)]);
+    let clock = TestClock::at(NOW_MS);
+    let checker = verifier(&keys, &clock);
+    checker.verify(&token_with(|_| {})).await.unwrap();
+    checker.verify(&token_with(|_| {})).await.unwrap();
+    assert_eq!(keys.fetches.load(Ordering::SeqCst), 1);
+
+    keys.published.lock().unwrap().push(("rotated", 8));
+    let rotated = sign(&json!({"alg":"EdDSA","kid":"rotated"}), &claims(), 8);
+    checker.verify(&rotated).await.unwrap();
+
+    assert_eq!(keys.fetches.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn the_token_must_name_centrals_machine_address() {
+    let other = token_with(|claims| claims["aud"] = json!("https://central.example.invalid/admin"));
+    assert_eq!(check(&other).await, Err(MachineTokenCheckRefusal::Audience));
+    let named = token_with(|claims| {
+        claims["aud"] = json!(["https://central.example.invalid/admin", AUDIENCE]);
+    });
+    assert_eq!(check(&named).await, Ok(()));
+}
+
+#[tokio::test]
+async fn exp_allows_sixty_seconds_of_skew_and_no_more() {
+    let exp = NOW_S + 3600;
+    let token = token_with(|claims| claims["grant_expires_at"] = json!(exp + 600));
+    let deadline_ms = (exp + ISSUER_CLOCK_SKEW_SECONDS) * 1000;
+    assert_eq!(check_at(&token, deadline_ms - 1).await, Ok(()));
+    assert_eq!(
+        check_at(&token, deadline_ms).await,
+        Err(MachineTokenCheckRefusal::Expired)
+    );
+}
+
+#[tokio::test]
+async fn iat_may_be_at_most_sixty_seconds_ahead() {
+    let at_skew = token_with(|claims| claims["iat"] = json!(NOW_S + ISSUER_CLOCK_SKEW_SECONDS));
+    assert_eq!(check(&at_skew).await, Ok(()));
+    let beyond = token_with(|claims| claims["iat"] = json!(NOW_S + ISSUER_CLOCK_SKEW_SECONDS + 1));
+    assert_eq!(
+        check(&beyond).await,
+        Err(MachineTokenCheckRefusal::IssuedInFuture)
+    );
+}
+
+#[tokio::test]
+async fn the_grant_expiry_has_no_leeway() {
+    let token = token_with(|_| {});
+    let grant_ms = (NOW_S + 1800) * 1000;
+    assert_eq!(check_at(&token, grant_ms - 1).await, Ok(()));
+    assert_eq!(
+        check_at(&token, grant_ms).await,
+        Err(MachineTokenCheckRefusal::GrantExpired)
+    );
+}
+
+/// The clock is read after the key fetch: a slow fetch that crosses the
+/// token's expiry refuses it.
+#[tokio::test]
+async fn time_is_checked_on_the_clock_read_after_the_key_fetch() {
+    let keys = TestKeys::publishing(vec![(KID, 7)]);
+    let clock = TestClock::at(NOW_MS);
+    let during = clock.clone();
+    *keys.during_fetch.lock().unwrap() = Some(Box::new(move || during.set((NOW_S + 1800) * 1000)));
+
+    assert_eq!(
+        verifier(&keys, &clock).verify(&token_with(|_| {})).await,
+        Err(MachineTokenCheckRefusal::GrantExpired)
+    );
+}
+
+#[tokio::test]
+async fn the_machine_claims_stay_typed() {
+    for change in [
+        |claims: &mut Value| claims["principal"]["kind"] = json!("person"),
+        |claims: &mut Value| claims["principal"]["extra"] = json!(true),
+        |claims: &mut Value| claims["organization_id"] = json!("not-an-id"),
+        |claims: &mut Value| {
+            if let Some(fields) = claims.as_object_mut() {
+                fields.remove("client_id");
+            }
+        },
+    ] {
+        assert_eq!(
+            check(&token_with(change)).await,
+            Err(MachineTokenCheckRefusal::Claims)
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_valid_token_for_a_client_the_enrollment_never_recorded_is_refused_at_admission() {
+    let keys = TestKeys::publishing(vec![(KID, 7)]);
+    let clock = TestClock::at(NOW_MS);
+    let port = InMemoryEnrollments::with(working());
+    let token = token_with(|claims| claims["client_id"] = json!(uuid7(0x99)));
+
+    let admission = admit_machine_token(
+        &verifier(&keys, &clock),
+        &port,
+        &token,
+        presented(),
+        settings(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        admission,
+        MachineTokenAdmission::Admission(MachineConnectionAdmission::Refused {
+            reason: MachineConnectionRefusal::WrongClient {},
+        })
+    );
+}
+
+fn open_connection() -> AdmittedMachine {
+    AdmittedMachine {
+        installation: installation(MACHINE),
+        peer: PeerId::try_from(uuid7(MACHINE)).unwrap(),
+        organization_id: uuid7(0x01).try_into().unwrap(),
+        enrollment_id: enrollment(WORKING),
+        token_expires_at: UnixSeconds(NOW_S + 60),
+    }
+}
+
+async fn renew(store: EnrollmentStore, token: &str) -> MachineTokenRenewal {
+    let keys = TestKeys::publishing(vec![(KID, 7)]);
+    let clock = TestClock::at(NOW_MS);
+    let port = InMemoryEnrollments::with(store);
+    renew_machine_token(
+        &verifier(&keys, &clock),
+        &port,
+        token,
+        &open_connection(),
+        settings(),
+    )
+    .await
+    .unwrap()
+}
+
+fn renewal_refused(reason: MachineTokenRenewalRefusal) -> MachineTokenRenewal {
+    MachineTokenRenewal::Refused { reason }
+}
+
+#[tokio::test]
+async fn a_fresh_token_for_the_connections_own_enrollment_renews_it() {
+    assert_eq!(
+        renew(working(), &token_with(|_| {})).await,
+        MachineTokenRenewal::Renewed {}
+    );
+}
+
+#[tokio::test]
+async fn a_fresh_token_for_another_machine_or_enrollment_does_not_renew_this_connection() {
+    let other_machine = token_with(|claims| {
+        // Another machine's own valid token: its installation, enrollment and client.
+        claims["principal"]["installation_id"] = json!(uuid7(0x11));
+        claims["principal"]["enrollment_id"] = json!(uuid7(0x45));
+        claims["client_id"] = json!(uuid7(0x45));
+    });
+    assert_eq!(
+        renew(working(), &other_machine).await,
+        renewal_refused(MachineTokenRenewalRefusal::WrongInstallation {})
+    );
+    let other_enrollment = token_with(|claims| {
+        claims["principal"]["enrollment_id"] = json!(uuid7(0x41));
+        claims["client_id"] = json!(uuid7(0x41));
+    });
+    assert_eq!(
+        renew(working(), &other_enrollment).await,
+        renewal_refused(MachineTokenRenewalRefusal::EnrollmentNotActive {})
+    );
+}
+
+#[tokio::test]
+async fn renewal_answers_each_token_and_enrollment_refusal_in_its_own_kind() {
+    let expired = token_with(|claims| claims["grant_expires_at"] = json!(NOW_S));
+    assert_eq!(
+        renew(working(), &expired).await,
+        renewal_refused(MachineTokenRenewalRefusal::TokenExpired {})
+    );
+    assert_eq!(
+        renew(working(), &sign(&header(), &claims(), 9)).await,
+        renewal_refused(MachineTokenRenewalRefusal::TokenInvalid {})
+    );
+    let wrong_client = token_with(|claims| claims["client_id"] = json!(uuid7(0x99)));
+    assert_eq!(
+        renew(working(), &wrong_client).await,
+        renewal_refused(MachineTokenRenewalRefusal::WrongClient {})
+    );
+    let mut revoked = working();
+    if let Some(row) = revoked.enrollments.get_mut(&enrollment(WORKING)) {
+        row.state = super::super::enrollment_records::StoredEnrollmentState::Revoked {
+            machine_client_id: client(WORKING),
+            reason: crate::identity_contract::EnrollmentRevocationReason::Owner {},
+        };
+    }
+    if let Some(row) = revoked.installations.get_mut(&installation(MACHINE)) {
+        row.active = None;
+    }
+    assert_eq!(
+        renew(revoked, &token_with(|_| {})).await,
+        renewal_refused(MachineTokenRenewalRefusal::EnrollmentNotActive {})
+    );
+}

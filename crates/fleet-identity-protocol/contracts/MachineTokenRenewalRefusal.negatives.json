@@ -1,0 +1,9 @@
+[
+null,
+{"kind":"enrollmentNotActive","unexpectedField":true},
+{"kind":"tokenExpired","unexpectedField":true},
+{"kind":"tokenInvalid","unexpectedField":true},
+{"kind":"unrecognizedVariant"},
+{"kind":"wrongClient","unexpectedField":true},
+{"kind":"wrongInstallation","unexpectedField":true}
+]
