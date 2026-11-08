@@ -267,6 +267,30 @@ pub(crate) async fn organization_records(mut request: Request, env: Env) -> Resu
     .await
 }
 
+/// Overwrite an organization's stored statement in its owning Fleet object.
+pub(crate) async fn organization_statement_tamper(
+    mut request: Request,
+    env: Env,
+) -> Result<Response> {
+    if !owner_allowed(&request, &env).await? {
+        return Response::error("owner required", 401);
+    }
+    let input: collaboration_central_core::OrganizationStatementTamper = match request.json().await
+    {
+        Ok(input) => input,
+        Err(_) => return Response::error("invalid tamper request", 400),
+    };
+    crate::composed_control::forward(
+        &env,
+        &collaboration_central_core::ObjectAddress::Fleet {
+            organization: input.organization,
+        },
+        "/test/organization-statement-tamper",
+        Some(serde_json::to_string(&input.statement)?),
+    )
+    .await
+}
+
 pub(crate) async fn fleet_mail_custody(mut request: Request, env: Env) -> Result<Response> {
     if !owner_allowed(&request, &env).await? {
         return Response::error("owner required", 401);

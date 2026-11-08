@@ -326,6 +326,23 @@ where
             })
             .await
     }
+    /// Conformance only: overwrite the stored statement without any check.
+    #[cfg(feature = "conformance")]
+    pub async fn conformance_tamper_organization_statement(
+        &self,
+        statement: String,
+    ) -> Result<(), StoreError> {
+        let ObjectWork::Fleet { host, .. } = &self.work else {
+            return Err(wrong_face());
+        };
+        host.store()
+            .transaction(move |scope| {
+                Box::pin(async move {
+                    crate::organization_authority::tamper_stored_statement(scope, &statement).await
+                })
+            })
+            .await
+    }
     #[cfg(feature = "conformance")]
     pub async fn conformance_mail_custody(
         &self,

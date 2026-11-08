@@ -112,6 +112,24 @@ where
     .map_err(StoreError::backend)
 }
 
+/// Conformance only: replace whatever statement is stored, unverified.
+#[cfg(feature = "conformance")]
+pub(crate) async fn tamper<S: TransactionScope>(
+    scope: &mut S,
+    statement: &str,
+) -> Result<(), StoreError>
+where
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'v> String: Type<S::Database> + Encode<'v, S::Database>,
+    for<'v> Option<String>: Type<S::Database> + Decode<'v, S::Database>,
+    for<'r> &'r str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    let StoredStampRead::Stamped(stored) = read(scope).await? else {
+        return Err(StoreError::backend("no stored statement to tamper with"));
+    };
+    replace(scope, &stored, statement, 0).await
+}
+
 fn text(value: Option<String>, class: Option<String>, field: &str) -> Result<String, StoreError> {
     if fleet_row_codec::required(class, field)? != "text" {
         return Err(corrupt(field, "column is not TEXT"));

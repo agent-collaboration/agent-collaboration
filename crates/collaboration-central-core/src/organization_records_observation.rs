@@ -5,6 +5,16 @@ use fleet_identity_protocol::OrganizationId;
 use serde::{Deserialize, Serialize};
 
 pub const ORGANIZATION_RECORDS_PATH: &str = "/admin/v1/conformance/organization-records";
+/// Conformance only: overwrite the stored statement in place, as damage on disk would.
+pub const ORGANIZATION_STATEMENT_TAMPER_PATH: &str =
+    "/admin/v1/conformance/organization-statement-tamper";
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OrganizationStatementTamper {
+    pub organization: OrganizationId,
+    pub statement: String,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

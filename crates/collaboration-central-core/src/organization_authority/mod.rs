@@ -25,6 +25,8 @@ pub use fleet_statement_refusal::FleetOrganizationStatementRefusal;
 pub use fleet_statement_wire::OrganizationStatementDigest;
 pub use identity::{OrganizationIdentity, OrganizationIdentityRefusal, ProvisioningStampAction};
 pub(crate) use organization_stamp_store::read as read_stored_stamp;
+#[cfg(feature = "conformance")]
+pub(crate) use organization_stamp_store::tamper as tamper_stored_statement;
 pub use organization_stamp_store::{StoredOrganizationStamp, StoredStampRead};
 pub use project_ownership::{ProjectOwnershipRefusal, require_project_ownership};
 pub use provisioning::ProvisioningApplied;

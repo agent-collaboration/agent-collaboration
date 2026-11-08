@@ -23,6 +23,52 @@ use tokio::{
 };
 
 const OTHER: &str = "019f0000-0000-7000-8000-00000000b2c1";
+const THIRD: &str = "019f0000-0000-7000-8000-00000000b2c2";
+const LEGACY_MACHINE: &str = "550e8400-e29b-41d4-a716-44665544b2a8";
+
+/// The stamp-profile refusals, each a correctly signed statement but for one field.
+fn profile_negatives(organization: &str) -> ConformanceResult<Vec<(&'static str, String)>> {
+    let with = |field: &str, value: Value| -> ConformanceResult<String> {
+        let mut claims = stamps::claims(organization);
+        stamps::set_claim(&mut claims, field, value)?;
+        stamps::sign(&stamps::stamp_header(), &claims, 7)
+    };
+    Ok(vec![
+        (
+            "edited signature",
+            stamps::tamper_signature(&stamps::stamp(organization)?)?,
+        ),
+        ("wrong purpose", with("purpose", json!("fleet-person"))?),
+        (
+            "wrong audience",
+            with("aud", json!("https://other.invalid"))?,
+        ),
+        ("wrong issuer", with("iss", json!("https://other.invalid"))?),
+        (
+            "longer than 120 days",
+            with(
+                "exp",
+                json!(NOW_SECONDS - 60 + stamps::LIFETIME_SECONDS + 1),
+            )?,
+        ),
+        (
+            "wrong type",
+            stamps::sign(
+                &json!({"typ":"at+jwt","alg":"EdDSA","kid":"stamp-a"}),
+                &stamps::claims(organization),
+                7,
+            )?,
+        ),
+        (
+            "unpublished key",
+            stamps::sign(
+                &json!({"typ":"fleet-organization-stamp+jwt","alg":"EdDSA","kid":"stamp-z"}),
+                &stamps::claims(organization),
+                9,
+            )?,
+        ),
+    ])
+}
 const ADMIN_OWNER: &str = "019f0000-0000-7000-8000-00000000b2e1";
 const ADMIN_SUBJECT: &str = "019f0000-0000-7000-8000-00000000b2e2";
 const ADMIN_MEMBER: &str = "019f0000-0000-7000-8000-00000000b2e3";
@@ -292,6 +338,22 @@ async fn main() -> ConformanceResult<()> {
 
     let harness = LinkHarness::start(&harness_arguments).await?;
     let first = async {
+        // Today's data in the legacy store before it is stamped: a machine.
+        let seeded = caller
+            .post(
+                "/public/admin/v1/machines/enroll",
+                &json!({"kind":"enrollMachine","value":{
+                    "label":"legacy machine","installation":LEGACY_MACHINE,
+                    "peer":"019f0000-0000-7000-8000-00000000b2a8",
+                    "access_client_id":collaboration_central_conformance::access_client_id("legacy-machine")?,
+                    "credential_hash":stamps::digest("legacy-machine"),"expires_at":"2033-05-18T03:33:20Z"}}),
+            )
+            .await?;
+        require(
+            seeded.2.pointer("/kind") == Some(&json!("machineEnrolled")),
+            "the legacy store holds today's data before provisioning",
+            &seeded,
+        )?;
         let unstamped = caller.digest(legacy).await?;
         require(
             unstamped.0 == 404,
@@ -330,6 +392,39 @@ async fn main() -> ConformanceResult<()> {
                 && summary(&other_rows).len() == 1,
             "a non-legacy organization's object holds only its own stamp",
             &other_rows,
+        )?;
+        // The full stamp profile is checked on Cloudflare too, before any write.
+        let mut negatives = Vec::new();
+        for (case, statement) in profile_negatives(THIRD)? {
+            negatives.push((case, caller.provision(THIRD, &statement).await?));
+        }
+        let third_rows = caller.records(THIRD).await?;
+        require(
+            negatives.iter().all(|(_, status)| *status == 422)
+                && third_rows.get("statement") == Some(&Value::Null),
+            "every profile negative is refused before a write",
+            &(negatives, third_rows),
+        )?;
+        // Stamp and record commit together: a fault after the record write
+        // leaves no stamp, and the retry commits both.
+        caller
+            .post(
+                "/public/admin/v1/conformance/runtime",
+                &json!({"address":{"kind":"fleet","value":{"organization":THIRD}},
+                    "command":{"kind":"failNextOrganizationRecord"}}),
+            )
+            .await?;
+        let faulted = caller.provision(THIRD, &stamps::stamp(THIRD)?).await?;
+        let after_fault = caller.digest(THIRD).await?;
+        let retried_third = caller.provision(THIRD, &stamps::stamp(THIRD)?).await?;
+        let third_after = caller.records(THIRD).await?;
+        require(
+            faulted == 503
+                && after_fault.0 == 404
+                && retried_third == 200
+                && summary(&third_after).len() == 1,
+            "a faulted record leaves no stamp and the retry commits both",
+            &(faulted, after_fault, retried_third, third_after),
         )?;
         let renewed = vec![
             caller.provision(legacy, &renewal).await?,
@@ -501,6 +596,14 @@ async fn main() -> ConformanceResult<()> {
             "central-link refuses a path outside its six closed routes",
             &link_unknown,
         )?;
+        // Damage OTHER's stored statement in place; the restart must refuse it.
+        let tampered = caller
+            .post(
+                "/public/admin/v1/conformance/organization-statement-tamper",
+                &json!({"organization":OTHER,"statement":stamps::tamper_signature(&other_statement)?}),
+            )
+            .await?;
+        require(tampered.0 == 200, "the stored statement was overwritten", &tampered)?;
         caller.records(legacy).await
     }
     .await;

@@ -60,6 +60,17 @@ impl ShellActor {
             )
             .map(Some);
         }
+        if request.path() == "/test/organization-statement-tamper" {
+            let RuntimeFace::Fleet(runtime) = runtime else {
+                return Err(error("statement tamper requires the Fleet owner"));
+            };
+            let statement: String = request.json().await?;
+            runtime
+                .conformance_tamper_organization_statement(statement)
+                .await
+                .map_err(error)?;
+            return Response::from_json(&serde_json::json!({"tampered":true})).map(Some);
+        }
         if request.path() == "/test/organization-records" {
             let RuntimeFace::Fleet(runtime) = runtime else {
                 return Err(error("organization records require the Fleet owner"));
