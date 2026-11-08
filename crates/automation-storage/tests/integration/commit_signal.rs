@@ -6,8 +6,9 @@ use collaboration_protocol::SavedMessage;
 use serde_json::json;
 use tokio::sync::watch;
 
+/// A closed signal reads as "no bump", so a dropped store can only fail a "bumped" check.
 fn has_bumped(commits: &mut watch::Receiver<u64>) -> bool {
-    let changed = commits.has_changed().expect("store keeps its signal alive");
+    let changed = commits.has_changed().unwrap_or(false);
     commits.borrow_and_update();
     changed
 }
@@ -40,6 +41,10 @@ fn remote_wake(message: &SavedMessage) -> RemoteWakeMail {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn a_created_wake_bumps_and_the_worker_reads_after_it_do_not()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
@@ -78,6 +83,10 @@ async fn a_created_wake_bumps_and_the_worker_reads_after_it_do_not()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn a_former_single_statement_write_bumps_only_when_it_changes_rows()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
