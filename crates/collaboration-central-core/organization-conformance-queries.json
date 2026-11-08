@@ -1,0 +1,50 @@
+{
+  "migrations": [
+    "core_migrations",
+    "organization_migrations"
+  ],
+  "output": "src/generated_organization_conformance.rs",
+  "metadata": "organization-conformance-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_conformance_person_floors",
+      "sql": "organization_conformance_sql/read_person_floors.sql",
+      "row": "ObservedPersonFloorRow",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "organization_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_conformance_used_requests",
+      "sql": "organization_conformance_sql/read_used_requests.sql",
+      "row": "ObservedUsedRequestRow",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "organization_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_conformance_workspaces",
+      "sql": "organization_conformance_sql/read_workspaces.sql",
+      "row": "ObservedWorkspaceRow",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "read_conformance_decisions",
+      "sql": "organization_conformance_sql/read_decisions.sql",
+      "row": "ObservedDecisionRow",
+      "result": "many",
+      "parameters": []
+    }
+  ]
+}

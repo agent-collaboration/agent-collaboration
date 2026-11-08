@@ -122,6 +122,7 @@ mod organization_admin_origin;
 mod organization_provisioning_expiry;
 mod organization_provisioning_link;
 mod organization_provisioning_races;
+mod organization_records_observer;
 mod organization_retired_key;
 mod organization_unstamped_routes;
 mod owner_admin_sessions;

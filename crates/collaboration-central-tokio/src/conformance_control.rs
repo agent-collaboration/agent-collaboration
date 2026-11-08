@@ -35,6 +35,10 @@ pub(crate) fn mount(
                 collaboration_central_core::FLEET_MAIL_CUSTODY_PATH,
                 post(mail_custody),
             )
+            .route(
+                collaboration_central_core::ORGANIZATION_RECORDS_PATH,
+                post(organization_records),
+            )
             .route("/__conformance/admission", post(admission))
             .route(
                 collaboration_central_core::FORWARD_STATE_PATH,
@@ -70,6 +74,37 @@ async fn mail_custody(
     match controls
         .platform
         .conformance_mail_custody(request.item)
+        .await
+    {
+        Ok(observed) => Json(observed).into_response(),
+        Err(error) => (StatusCode::CONFLICT, Json(error.to_string())).into_response(),
+    }
+}
+
+/// Owner only: everything B2 keeps for one organization, read without writing.
+async fn organization_records(
+    State(controls): State<Arc<Controls>>,
+    headers: HeaderMap,
+    Json(request): Json<collaboration_central_core::OrganizationRecordsRequest>,
+) -> Response {
+    let assertion = headers
+        .get("Cf-Access-Jwt-Assertion")
+        .and_then(|value| value.to_str().ok());
+    match controls
+        .application
+        .verify_access(
+            assertion,
+            collaboration_central_core::ORGANIZATION_RECORDS_PATH,
+        )
+        .await
+    {
+        Ok(AccessCaller::Owner { .. }) => {}
+        Ok(_) => return StatusCode::UNAUTHORIZED.into_response(),
+        Err(refusal) => return (StatusCode::UNAUTHORIZED, Json(refusal)).into_response(),
+    }
+    match controls
+        .platform
+        .conformance_organization_records(request.organization)
         .await
     {
         Ok(observed) => Json(observed).into_response(),

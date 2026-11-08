@@ -616,6 +616,28 @@ impl NativeObjects {
         }
     }
 
+    /// Everything B2 keeps for one organization, read from its live Fleet
+    /// owner. Startup opens every existing store, so no slot means no store;
+    /// observation never creates or migrates one.
+    #[cfg(feature = "conformance")]
+    pub(crate) async fn organization_records(
+        &self,
+        organization: fleet_identity_protocol::OrganizationId,
+    ) -> Result<collaboration_central_core::OrganizationRecordsObservation, StoreError> {
+        let key = address_key(&ObjectAddress::Fleet { organization }, &self.locations)?;
+        let Some(slot) = self.slots.lock().await.get(&key).cloned() else {
+            return Ok(
+                collaboration_central_core::OrganizationRecordsObservation::nothing_stored(),
+            );
+        };
+        match slot.runtime.get().map(Arc::as_ref) {
+            Some(RuntimeFace::Fleet(runtime)) => runtime.conformance_organization_records().await,
+            _ => Err(StoreError::Aborted {
+                reason: "Fleet owner is still opening".into(),
+            }),
+        }
+    }
+
     #[cfg(feature = "conformance")]
     pub(crate) async fn mail_custody(
         &self,

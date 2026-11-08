@@ -305,35 +305,28 @@ where
             })
             .await
     }
-    /// Conformance only: the stamp and change records exactly as the owning
-    /// Fleet object's store holds them.
+    /// Conformance only: everything B2 keeps for this Fleet object's
+    /// organization, exactly as its store holds it, read in one transaction
+    /// that writes nothing.
     #[cfg(feature = "conformance")]
     pub async fn conformance_organization_records(
         &self,
     ) -> Result<crate::OrganizationRecordsObservation, StoreError> {
-        let ObjectWork::Fleet { host, .. } = &self.work else {
+        let ObjectWork::Fleet {
+            host, organization, ..
+        } = &self.work
+        else {
             return Err(wrong_face());
         };
+        let organization = organization.clone();
         host.store()
-            .transaction(|scope| {
+            .transaction(move |scope| {
                 Box::pin(async move {
-                    let stamp = crate::organization_authority::read_stored_stamp(scope).await?;
-                    let records =
-                        crate::organization_authority::read_change_record_page(scope, None, 100)
-                            .await?;
-                    let floor = match &stamp {
-                        crate::organization_authority::StoredStampRead::Stamped(stamped) => {
-                            crate::person_request::read_organization_floor(
-                                scope,
-                                stamped.organization_id().as_str(),
-                            )
-                            .await?
-                        }
-                        crate::organization_authority::StoredStampRead::Unprovisioned => None,
-                    };
-                    Ok(crate::OrganizationRecordsObservation::new(
-                        stamp, records, floor,
-                    ))
+                    crate::organization_records_observation::read_organization_records(
+                        scope,
+                        &organization,
+                    )
+                    .await
                 })
             })
             .await

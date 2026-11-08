@@ -99,6 +99,10 @@ required-features = ["conformance"]
 name = "organization_link_workerd"
 required-features = ["conformance"]
 
+[[example]]
+name = "central_sign_in_launcher"
+required-features = ["conformance"]
+
 [[test]]
 name = "integration"
 path = "tests/integration/main.rs"

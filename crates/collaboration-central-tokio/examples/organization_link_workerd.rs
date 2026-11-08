@@ -22,7 +22,7 @@ use link_client::{AdminPerson, Caller, LinkHarness};
 use organization_stamps::{
     self as stamps, B2_PUBLIC_PATHS_NOT_SERVED, NOW_SECONDS, ProofKey, SignInKeys,
 };
-use record_checks::{created_records, origins_closed, require, summary};
+use record_checks::{created_records, observation_whole, origins_closed, require, summary};
 use serde_json::{Value, json};
 
 const OTHER: &str = "019f0000-0000-7000-8000-00000000b2c1";
@@ -666,6 +666,11 @@ async fn main() -> ConformanceResult<()> {
                     .iter()
                     .any(|(_, kind, _)| kind == "workspaceCreated"),
             "setup records name only the sign-in service and the admin record its person, read back from central",
+            &final_rows,
+        )?;
+        require(
+            observation_whole(&final_rows),
+            "the observer reads the whole organization from its Fleet object: stamp facts, person floors, used requests, workspaces and decisions",
             &final_rows,
         )?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(final_rows)

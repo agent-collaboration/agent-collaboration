@@ -221,6 +221,16 @@ impl TokioCentralPlatform {
         self.objects.forward_state(service).await
     }
 
+    /// Read-only observation of everything B2 keeps for one organization.
+    #[cfg(feature = "conformance")]
+    pub async fn conformance_organization_records(
+        &self,
+        organization: fleet_identity_protocol::OrganizationId,
+    ) -> Result<collaboration_central_core::OrganizationRecordsObservation, durable_steps::StoreError>
+    {
+        self.objects.organization_records(organization).await
+    }
+
     /// Read-only observation of one committed mail row in the Fleet owner.
     #[cfg(feature = "conformance")]
     pub async fn conformance_mail_custody(

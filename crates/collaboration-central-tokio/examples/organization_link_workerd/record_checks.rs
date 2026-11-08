@@ -73,3 +73,26 @@ pub(crate) fn origins_closed(records: &Value) -> bool {
             uuid_v7 && record.get("origin") == Some(&expected)
         })
 }
+
+/// The observer read the whole organization through its Fleet object: the
+/// stamp facts match the stored bytes, and every B2 table it keeps is listed.
+pub(crate) fn observation_whole(records: &Value) -> bool {
+    let listed = |name: &str| records.get(name).and_then(Value::as_array).map(Vec::len);
+    let statement = records
+        .get("statement")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    records.get("complete") == Some(&json!(true))
+        && records.pointer("/stamp/digest")
+            == Some(&json!(crate::organization_stamps::digest(statement)))
+        && records
+            .pointer("/stamp/keyId")
+            .is_some_and(Value::is_string)
+        && records
+            .pointer("/stamp/expiresAt")
+            .is_some_and(Value::is_i64)
+        && listed("personFloors").is_some_and(|count| count >= 1)
+        && listed("usedRequests").is_some_and(|count| count >= 1)
+        && listed("workspaces").is_some_and(|count| count >= 1)
+        && listed("decisions").is_some_and(|count| count >= 1)
+}
