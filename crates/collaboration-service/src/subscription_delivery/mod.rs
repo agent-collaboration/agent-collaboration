@@ -1,5 +1,7 @@
 mod board_availability;
 mod direct_message_push;
+mod held_mail_signals;
+pub use held_mail_signals::HeldMailSignals;
 mod native_mail_attempt;
 mod reader_delivery_owner;
 mod reader_scan_scope;

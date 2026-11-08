@@ -234,6 +234,7 @@ impl OwnerFixture {
             root,
             clock,
             presence,
+            held_mail,
         } = self;
         drop(store);
         if let Some(native) = native {
@@ -269,6 +270,7 @@ impl OwnerFixture {
             root,
             clock,
             presence,
+            held_mail,
         }
     }
 }

@@ -20,7 +20,7 @@ mod application_fixture;
 pub use application_fixture::ApplicationFixture;
 mod subscription_delivery;
 pub use subscription_delivery::{
-    BoardAvailability, SubscriptionClock, SubscriptionDeliveryService,
+    BoardAvailability, HeldMailSignals, SubscriptionClock, SubscriptionDeliveryService,
     SubscriptionDeliveryServiceProps, SubscriptionStartupRestoration, SubscriptionWaitFilter,
     SubscriptionWaitResult, SubscriptionWindowStore, SystemSubscriptionClock,
 };

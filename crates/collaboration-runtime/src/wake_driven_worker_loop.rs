@@ -122,6 +122,7 @@ impl WakeDrivenWorkerLoop {
                 source.mark_seen();
             }
             self.observation.pass_started();
+            tracing::debug!(target: "worker_loop", worker = self.worker, "pass started");
             let now = self.clock.now();
             let result = drain_and_read_next_due(pass, now, &self.observation, &shutdown).await;
             let deadline = match result {
@@ -145,6 +146,12 @@ impl WakeDrivenWorkerLoop {
             if self.sources.iter().any(|source| source.has_changed()) {
                 continue;
             }
+            tracing::debug!(
+                target: "worker_loop",
+                worker = self.worker,
+                armed = ?deadline.map(SyncTime::unix_millis),
+                "sleeping"
+            );
             self.observation.armed(deadline).await;
             if !self.sleep_until_woken(deadline, &shutdown).await {
                 return;

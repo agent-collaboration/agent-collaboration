@@ -408,6 +408,12 @@ async fn presence_for_reader(
         Ok(Ok(collaboration_contracts::TargetPresence::Unreachable { reason })) => {
             ThreadSubscriptionPresence::Unreachable { reason }
         }
+        // The wire projection has no separate state; the reason says it.
+        Ok(Ok(collaboration_contracts::TargetPresence::NotRunning)) => {
+            ThreadSubscriptionPresence::Unreachable {
+                reason: "target is not running".to_owned(),
+            }
+        }
         Ok(Err(error)) => {
             tracing::warn!(error=%error,"subscription target presence probe failed");
             ThreadSubscriptionPresence::Unreachable {

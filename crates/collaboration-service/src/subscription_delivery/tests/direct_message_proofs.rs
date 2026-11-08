@@ -171,7 +171,7 @@ async fn new_auto_to_unloaded_target_attempts_once_with_permission_to_load() {
 }
 
 #[tokio::test]
-async fn unavailable_board_holds_dm_and_rechecks_presence_at_thirty_seconds() {
+async fn unavailable_board_holds_dm_until_a_load_signal_with_no_presence_timer() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime_without_board().await;
@@ -190,11 +190,25 @@ async fn unavailable_board_holds_dm_and_rechecks_presence_at_thirty_seconds() {
         .unwrap();
     assert_eq!(held.delivery_state, PushDeliveryState::Held);
     runtime.owner_barrier(&fixture.reader).await;
+    // The target runs now, but nothing has said so: an hour later the DM is still held,
+    // with no presence read and no request.
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-    fixture.clock.advance_without_tokio_time(29);
-    runtime.owner_barrier(&fixture.reader).await;
+    let checks_while_held = fixture.presence.checks();
+    fixture.clock.advance_without_tokio_time(3_600);
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        runtime.owner_barrier(&fixture.reader),
+    )
+    .await
+    .unwrap();
     assert!(runtime.requests.lock().await.try_recv().is_err());
-    fixture.clock.advance_without_tokio_time(1);
+    assert_eq!(
+        fixture.presence.checks(),
+        checks_while_held,
+        "no presence timer"
+    );
+    // A signal that the target may have loaded is one check, which delivers it.
+    fixture.held_mail.observation_retried();
     assert_eq!(request(&runtime).await.mode, MessageDelivery::Queue);
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
     bounded_observe(&runtime, |event| {

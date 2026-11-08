@@ -105,6 +105,16 @@ async fn start_host_with_providers(
     }
 }
 
+/// A Codex session: with no native backend in this Host its follow batches are held by
+/// choice, unlike a closed Claude Code peer's, which are refused.
+fn codex_target(runtime: &CollaborationRuntime, session: &str) -> SessionRef {
+    serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":runtime.service_id(),"endpointId":"codex-local"},
+        "sessionId":session
+    }))
+    .expect("local Codex target")
+}
+
 fn target(runtime: &CollaborationRuntime, session: &str) -> SessionRef {
     serde_json::from_value(serde_json::json!({
         "endpoint":{"serviceId":runtime.service_id(),"endpointId":"claude-local"},

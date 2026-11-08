@@ -315,6 +315,8 @@ impl CollaborationRuntime {
             .as_ref()
             .map_or(subscription_clock, |control| control.clock());
         let interactions = approval_broker.interaction_store();
+        // Created before the readers and the scheduler that subscribe to it.
+        let observation_rechecks = super::observation_recheck::ObservationRechecks::new();
         let subscription_delivery = automation_store.as_ref().map(|_| {
             let board_availability = match project_admission.as_ref() {
                 Some(admission) => collaboration_service::BoardAvailability::Available(
@@ -335,6 +337,20 @@ impl CollaborationRuntime {
                 },
             )
         });
+        if let Some(service) = &subscription_delivery {
+            // Held mail is checked again when its target may have loaded: a Codex thread
+            // load in the journal, an ACP load through the supervisor, or an observation
+            // retry while observation is unavailable.
+            service
+                .attach_held_mail_signals(collaboration_service::HeldMailSignals {
+                    journal: journal.clone(),
+                    provider_completions: external_provider_supervisor
+                        .as_ref()
+                        .map(|supervisor| supervisor.subscribe_completions()),
+                    observation_rechecks: Some(observation_rechecks.subscribe()),
+                })
+                .map_err(io::Error::other)?;
+        }
         if let Some(supervisor) = &external_provider_supervisor {
             supervisor
                 .install_approval_broker(std::sync::Arc::clone(&approval_broker))
@@ -424,7 +440,6 @@ impl CollaborationRuntime {
         let push_handoff_worker = automation_store.as_ref().map(|store| {
             collaboration_runtime::PushHandoffWorker::new(store.clone(), interactions.clone())
         });
-        let observation_rechecks = super::observation_recheck::ObservationRechecks::new();
         let schedule_worker = automation_store.as_ref().map(|store| {
             let worker = collaboration_runtime::ScheduleTimingWorker::new(
                 store.clone(),

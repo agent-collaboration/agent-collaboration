@@ -504,7 +504,8 @@ async fn peer_reconciliation_rejects_evidence_for_another_session() {
             .presence(&target())
             .await
             .expect("absent peer presence"),
-        RoutePresence::NotMine
+        RoutePresence::NotRunning,
+        "a served session with no open terminal is not running"
     );
     let recorded = RouteEffectEvidence::ClaudeCodePeer(ClaudeCodePeerEffectEvidence {
         session_id: PeerSessionReference::try_from("another-session".to_owned())

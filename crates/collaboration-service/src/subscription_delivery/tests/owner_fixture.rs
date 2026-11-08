@@ -39,6 +39,48 @@ pub struct OwnerFixture {
     pub root: ThreadId,
     pub clock: Arc<TestClock>,
     pub presence: Arc<ScriptedPresence>,
+    /// The signals every runtime's readers wake on while they hold mail.
+    pub held_mail: HeldMailTestSignals,
+}
+
+/// What a test sends to say a held message's target may have loaded.
+pub struct HeldMailTestSignals {
+    pub provider_completions: tokio::sync::watch::Sender<u64>,
+    pub observation_rechecks: tokio::sync::watch::Sender<u64>,
+    /// A real lifecycle journal, for tests that record a Codex thread load.
+    pub journal: StdMutex<Option<Arc<lifecycle_observation::LifecycleStore>>>,
+}
+
+impl Default for HeldMailTestSignals {
+    fn default() -> Self {
+        Self {
+            provider_completions: tokio::sync::watch::channel(0).0,
+            observation_rechecks: tokio::sync::watch::channel(0).0,
+            journal: StdMutex::new(None),
+        }
+    }
+}
+
+impl HeldMailTestSignals {
+    /// The provider supervisor published an operation's result, such as a load.
+    pub fn provider_completed(&self) {
+        self.provider_completions
+            .send_modify(|revision| *revision = revision.wrapping_add(1));
+    }
+
+    /// Lifecycle observation retried while it is unavailable.
+    pub fn observation_retried(&self) {
+        self.observation_rechecks
+            .send_modify(|revision| *revision = revision.wrapping_add(1));
+    }
+
+    fn signals(&self) -> crate::HeldMailSignals {
+        crate::HeldMailSignals {
+            journal: self.journal.lock().unwrap().clone(),
+            provider_completions: Some(self.provider_completions.subscribe()),
+            observation_rechecks: Some(self.observation_rechecks.subscribe()),
+        }
+    }
 }
 #[path = "owner_setup.rs"]
 mod owner_setup;
@@ -339,6 +381,9 @@ impl OwnerFixture {
             )
             .unwrap(),
         });
+        service
+            .attach_held_mail_signals(self.held_mail.signals())
+            .unwrap();
         let observations = service.observe_owners();
         let publisher = Arc::new(crate::NotificationPublisher::new(
             self.admission.clone(),
@@ -492,11 +537,45 @@ impl OwnerRuntime {
     }
 }
 
-pub struct ScriptedPresence(pub StdMutex<TargetPresence>);
+/// The presence a test sets, how many checks read it, and an optional pause: the next
+/// check tells the test it read, then waits for the test to let it answer.
+pub struct ScriptedPresence(
+    pub StdMutex<TargetPresence>,
+    pub std::sync::atomic::AtomicUsize,
+    pub StdMutex<Option<PresencePause>>,
+);
+
+pub struct PresencePause {
+    pub read: oneshot::Sender<()>,
+    pub answer: oneshot::Receiver<()>,
+}
+
+impl ScriptedPresence {
+    pub fn new(presence: TargetPresence) -> Self {
+        Self(
+            StdMutex::new(presence),
+            std::sync::atomic::AtomicUsize::new(0),
+            StdMutex::new(None),
+        )
+    }
+
+    pub fn checks(&self) -> usize {
+        self.1.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
 impl TargetPresenceProbe for ScriptedPresence {
     fn presence(&self, _: &SessionRef) -> DeliveryFuture<'_, TargetPresence> {
+        self.1.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let presence = self.0.lock().unwrap().clone();
-        Box::pin(async move { Ok(presence) })
+        let pause = self.2.lock().unwrap().take();
+        Box::pin(async move {
+            if let Some(pause) = pause {
+                let _ = pause.read.send(());
+                let _ = pause.answer.await;
+            }
+            Ok(presence)
+        })
     }
 }
 

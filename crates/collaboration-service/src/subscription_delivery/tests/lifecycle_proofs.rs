@@ -31,11 +31,12 @@ async fn hold_keeps_each_arrival_in_a_frozen_item_and_delivers_it_once_on_runnin
         3
     );
     assert!(runtime.requests.lock().await.try_recv().is_err());
+    // The reader runs now; held items wait for a signal that it loaded, not a timer.
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-    fixture.clock.advance_without_tokio_time(29);
+    fixture.clock.advance_without_tokio_time(30);
     runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
-    fixture.clock.advance_without_tokio_time(1);
+    fixture.held_mail.observation_retried();
     let mut received = std::collections::BTreeSet::new();
     let mut covered = Vec::new();
     for _ in 0..3 {

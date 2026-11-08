@@ -381,7 +381,8 @@ impl SessionDeliveryRoute for ClaudeCodePeerDeliveryRoute {
                 return Ok(RoutePresence::NotMine);
             }
             Ok(match self.lookup(&target).await {
-                Ok(PeerSessionLookup::Absent) => RoutePresence::NotMine,
+                // A Claude Code session this route serves, with no open terminal.
+                Ok(PeerSessionLookup::Absent) => RoutePresence::NotRunning,
                 Ok(PeerSessionLookup::Writable(_)) => RoutePresence::Running,
                 Ok(PeerSessionLookup::LiveUnsupported { reason }) => RoutePresence::LiveElsewhere {
                     detail: Some(reason),

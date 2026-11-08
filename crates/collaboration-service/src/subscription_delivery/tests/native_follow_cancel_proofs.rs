@@ -78,6 +78,8 @@ async fn a_resolved_membership_keeps_its_held_item_and_drains_the_unallocated_ra
         .unwrap();
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     fixture.clock.advance_without_tokio_time(30);
+    // Held mail waits for a signal that its target loaded, not for the clock.
+    fixture.held_mail.observation_retried();
     let mut received = std::collections::BTreeSet::new();
     let mut timed_out = false;
     for completed in 1..=2 {

@@ -117,7 +117,8 @@ impl OwnerFixture {
                 project,
                 root: ThreadId::generate(),
                 clock,
-                presence: Arc::new(ScriptedPresence(StdMutex::new(TargetPresence::Running))),
+                presence: Arc::new(ScriptedPresence::new(TargetPresence::Running)),
+                held_mail: HeldMailTestSignals::default(),
             };
             fixture
                 .create_root(&fixture.root, human("board-owner"))

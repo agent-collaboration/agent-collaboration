@@ -224,6 +224,8 @@ async fn a_held_local_intent_keeps_its_frozen_item_and_link_until_the_reader_run
     assert!(runtime.requests.lock().await.try_recv().is_err());
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     fixture.clock.advance_without_tokio_time(30);
+    // Held mail waits for a signal that its target loaded, not for the clock.
+    fixture.held_mail.observation_retried();
     let request = tokio::time::timeout(Duration::from_secs(10), async {
         runtime.requests.lock().await.recv().await.unwrap()
     })

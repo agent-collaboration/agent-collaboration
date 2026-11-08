@@ -57,15 +57,26 @@ pub enum RoutePresence {
     NotMine,
     Running,
     Wakeable,
-    LiveElsewhere { detail: Option<String> },
-    Unreachable { reason: String },
+    /// The route knows this session and cannot start it, such as a Claude Code terminal
+    /// that isn't open: mail to it fails rather than waits.
+    NotRunning,
+    LiveElsewhere {
+        detail: Option<String>,
+    },
+    Unreachable {
+        reason: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TargetPresence {
     Running,
     Wakeable,
-    Unreachable { reason: String },
+    /// No route runs or can load the session, and its own route cannot start it.
+    NotRunning,
+    Unreachable {
+        reason: String,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

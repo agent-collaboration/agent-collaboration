@@ -33,7 +33,7 @@ async fn wait_held(native: &NativeMailOwner, fixture: &OwnerFixture, expected: u
 }
 
 #[tokio::test]
-async fn resumed_reader_keeps_separate_membership_items_with_staggered_presence_checks() {
+async fn resumed_reader_keeps_separate_membership_items_until_a_load_signal() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     let second_root = fixture.add_root().await;
     let poll_root = fixture.add_root().await;
@@ -54,7 +54,7 @@ async fn resumed_reader_keeps_separate_membership_items_with_staggered_presence_
         .post(&poll_root, "poll activity remains pending")
         .await;
     runtime.owner_barrier(&fixture.reader).await;
-    // Writable entry must preserve this live reader's staggered presence checks.
+    // Writable entry must preserve this live reader's held items.
     runtime
         .service
         .start_inherited_project_readers(&fixture.project)
@@ -118,9 +118,10 @@ async fn resumed_reader_keeps_separate_membership_items_with_staggered_presence_
         [fixture.root.clone(), second_root].into_iter().collect()
     );
 
-    // The first item's existing presence deadline elapses one second before the second's.
+    // The reader runs now; one signal that it loaded is one check for all its held items.
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     fixture.clock.advance_without_tokio_time(29);
+    fixture.held_mail.observation_retried();
     let mut received = std::collections::BTreeSet::new();
     let mut timed_out = false;
     for completed in 1..=2 {

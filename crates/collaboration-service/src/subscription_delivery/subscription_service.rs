@@ -67,7 +67,15 @@ pub(super) enum OwnerObservation {
     MailAttemptQueued(PushId),
     PollCancellationDeferred(fleet_sync_protocol::ItemId),
     PollPublisherUnavailable(fleet_sync_protocol::ItemId),
-    NativeHeldChecked { item: PushId, running: bool },
+    NativeHeldChecked {
+        item: PushId,
+        running: bool,
+    },
+    /// The reader took a signal that its held mail's target may have loaded, and
+    /// whether it owed another presence check.
+    HeldMailSignalTaken {
+        owed: bool,
+    },
     DirectMessageHeld,
     DirectMessageSettled,
     HeldSubscriptionPushesSettled(u64),
@@ -81,6 +89,9 @@ struct ServiceInner {
     #[cfg(test)]
     poll_handover_probe: PollHandoverProbeSlot,
     native_mail: NativeMailReadiness,
+    /// Set by the Host before start; readers created without it check held mail only
+    /// when they first see it.
+    held_mail_signals: std::sync::OnceLock<super::HeldMailSignals>,
     follow_admission: FollowAdmissionSlot,
     board_availability: BoardAvailability,
     push: Arc<SubscriptionPushStore>,
@@ -115,6 +126,15 @@ pub struct SubscriptionDeliveryService {
 }
 
 impl SubscriptionDeliveryService {
+    /// Gives readers the signals that a held message's target may have loaded. Set once,
+    /// before start.
+    pub fn attach_held_mail_signals(&self, signals: super::HeldMailSignals) -> Result<(), String> {
+        self.inner
+            .held_mail_signals
+            .set(signals)
+            .map_err(|_| "reader held-mail signals are already attached".to_owned())
+    }
+
     #[must_use]
     pub fn subscription_clock(&self) -> Arc<dyn SubscriptionClock> {
         Arc::clone(&self.inner.clock)
@@ -139,6 +159,7 @@ impl SubscriptionDeliveryService {
                 #[cfg(test)]
                 poll_handover_probe: Arc::new(std::sync::Mutex::new(None)),
                 native_mail: Arc::new(std::sync::OnceLock::new()),
+                held_mail_signals: std::sync::OnceLock::new(),
                 follow_admission: Arc::new(std::sync::RwLock::new(None)),
                 board_availability: props.board_availability,
                 push,
@@ -561,6 +582,14 @@ impl SubscriptionDeliveryService {
                 shutdown: self.inner.shutdown.clone(),
                 commands,
                 activity,
+                held_mail: super::held_mail_signals::HeldMailWatch::new(
+                    &self
+                        .inner
+                        .held_mail_signals
+                        .get()
+                        .cloned()
+                        .unwrap_or_default(),
+                ),
                 #[cfg(test)]
                 observations: self.inner.observations.clone(),
             });

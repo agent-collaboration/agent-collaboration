@@ -236,6 +236,8 @@ async fn two_prevented_generations_keep_a_resolved_drain_above_frontier_until_fi
     read.finish().await.unwrap();
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     fixture.clock.advance_without_tokio_time(30);
+    // Held mail waits for a signal that its target loaded, not for the clock.
+    fixture.held_mail.observation_retried();
     let request = tokio::time::timeout(Duration::from_secs(6), async {
         runtime.requests.lock().await.recv().await.unwrap()
     })
@@ -355,6 +357,8 @@ async fn quiet_local_delivery_releases_acknowledged_frontier_without_erasing_ret
     // No board mutation, ACK, Welcome or explicit publisher prompt follows this completion.
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     fixture.clock.advance_without_tokio_time(30);
+    // Held mail waits for a signal that its target loaded, not for the clock.
+    fixture.held_mail.observation_retried();
     let request = tokio::time::timeout(Duration::from_secs(6), async {
         runtime.requests.lock().await.recv().await.unwrap()
     })

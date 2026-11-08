@@ -1,7 +1,6 @@
 //! DM presence, submission and response handling inside the target's single delivery actor.
 use super::{
-    BoardError, LoadPolicy, PRESENCE_INTERVAL, PushRecord, ReaderDeliveryOwner, TargetPresence,
-    target_session,
+    BoardError, LoadPolicy, PushRecord, ReaderDeliveryOwner, TargetPresence, target_session,
 };
 #[cfg(test)]
 use crate::subscription_delivery::subscription_service::OwnerObservation;
@@ -14,20 +13,16 @@ impl ReaderDeliveryOwner {
         };
         let native_pending = self.resume_native_held_mail(&target).await?;
         let records = self.push.direct_messages(&target).await?;
-        self.dm_checked_presence
-            .retain(|push_id, _| records.iter().any(|record| &record.push_id == push_id));
+        self.dm_checked
+            .retain(|push_id| records.iter().any(|record| &record.push_id == push_id));
         for record in &records {
-            let due = self
-                .dm_checked_presence
-                .get(&record.push_id)
-                .is_none_or(|checked| {
-                    self.clock.monotonic_now().duration_since(*checked) >= PRESENCE_INTERVAL
-                });
-            if !due {
+            // A held DM is checked once, then again only after a signal that its target
+            // may have loaded.
+            if self.dm_checked.contains(&record.push_id) {
                 continue;
             }
-            self.dm_checked_presence
-                .insert(record.push_id.clone(), self.clock.monotonic_now());
+            self.dm_checked.insert(record.push_id.clone());
+            self.held_mail.record_position().await;
             // Wakeable establishes unloaded presence. Unreachable is ambiguous:
             // Layer 0 must still classify live-elsewhere and permanent route failures.
             let known_unloaded = matches!(
@@ -53,7 +48,7 @@ impl ReaderDeliveryOwner {
                 OwnerObservation::DirectMessageSettled
             });
             if settled.delivery_state != PushDeliveryState::Held {
-                self.dm_checked_presence.remove(&record.push_id);
+                self.dm_checked.remove(&record.push_id);
             }
             self.answer_direct_message(&settled);
         }
