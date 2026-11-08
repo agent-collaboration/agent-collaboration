@@ -16,16 +16,7 @@ async fn shared_offline_fleet_mail_alarm_oracle() -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
     let server = grants::start(root.path(), &jwks).await?;
-    let service = message_board::ServiceId::try_from(
-        fleet_mail_expiry_scenarios::RECIPIENT_SERVICE.to_owned(),
-    )?;
-    let result = fleet_mail_expiry_scenarios::run(server.base_url(), || async {
-        Ok(server
-            .conformance_platform()
-            .conformance_holder_frames(&service)
-            .await?)
-    })
-    .await;
+    let result = fleet_mail_expiry_scenarios::run(server.base_url()).await;
     server.shutdown().await?;
     jwks.shutdown().await?;
     result

@@ -20,8 +20,6 @@ impl<Io: ObjectIo> CoreHost<Io> {
                 caller: CallerContext::for_object(database),
                 database,
             },
-            publication: None,
-            push: None,
             local_calls: Default::default(),
             authoritative_receiver: receiver,
             #[cfg(feature = "conformance")]

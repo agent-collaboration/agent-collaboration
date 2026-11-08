@@ -109,9 +109,16 @@ where
         self.handle_fleet_event(event).await
     }
 
-    async fn finish_event(&self, appended: std::collections::BTreeSet<fleet_protocol::PeerId>) {
+    async fn finish_event(&self, owed: crate::EventOwed) {
         // Notices the event committed go out now, after all its transactions.
-        self.push_notices(appended).await;
+        // A machine whose connection just attached is caught up on its owed
+        // requests too; read before the notice push clears its catch-up mark.
+        let mut requests = owed.requests;
+        if let ObjectWork::Fleet { notice_cursors, .. } = &self.work {
+            requests.extend(notice_cursors.catching_up());
+        }
+        self.send_owed_requests(requests).await;
+        self.push_notices(owed.notices).await;
     }
 
     async fn run_due_sources(&self, now: SyncTime) {
@@ -223,7 +230,7 @@ where
         }
     }
 
-    async fn finish_event(&self, _appended: std::collections::BTreeSet<fleet_protocol::PeerId>) {}
+    async fn finish_event(&self, _owed: crate::EventOwed) {}
 
     async fn recompute(
         &self,

@@ -204,7 +204,10 @@ where
         Ok(Some(crate::ResolvedPush { submitter, item }))
     }
 
-    pub(crate) async fn finish_push_at_deadline<W>(
+    /// The item's validity ended before its push was handed off: an item never
+    /// (possibly) reached expires now; one that may have reached waits for the
+    /// recipient's truthful report. Owes the sender its status publication.
+    pub async fn finish_push_at_deadline<W>(
         &mut self,
         item: ItemId,
         reach: durable_steps::storage::CallReach,

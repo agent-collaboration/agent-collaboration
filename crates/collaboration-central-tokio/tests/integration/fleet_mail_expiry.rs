@@ -111,9 +111,9 @@ async fn push_wait_deadline_survives_fleet_reopen_before_due_without_any_recipie
     let fixture = Fixture::open(&fleet_path, NOW + 1_001).await?;
     let inbox =
         RecipientInbox::open(&inbox_path, fixture.io.clone(), B.to_owned().try_into()?).await?;
-    // Drive the real recovered runtime before a query or either socket opens.
-    let report = fixture.runtime.conformance_drive_operations().await?;
-    assert!(report.failed.is_empty(), "{report:?}");
+    // The recovered runtime's first alarm runs push expiry (a due source since
+    // slice 4b) before a query or either socket opens.
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     assert_eq!(
         custody(&fixture, expired.id()).await?,
         ("expired".into(), false)

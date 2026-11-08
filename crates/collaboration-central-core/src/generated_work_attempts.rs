@@ -261,3 +261,191 @@ where
             .collect()
     }
 }
+pub(crate) fn insert_socket_request_waiting<S>(
+    scope: &mut S,
+    id: String,
+    subject: String,
+    kind: String,
+    now: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/socket_requests/insert_socket_request_waiting.sql"
+        )))
+        .bind(id)
+        .bind(subject)
+        .bind(kind)
+        .bind(now);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn reset_socket_request_waiting<S>(
+    scope: &mut S,
+    subject: String,
+    kind: String,
+    now: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/socket_requests/reset_socket_request_waiting.sql"
+        )))
+        .bind(subject)
+        .bind(kind)
+        .bind(now);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn mark_socket_request_sent<S>(
+    scope: &mut S,
+    subject: String,
+    kind: String,
+    send_id: String,
+    connection_id: String,
+    session_id: String,
+    sent_version: Option<String>,
+    next_attempt_at: String,
+    now: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/socket_requests/mark_socket_request_sent.sql"
+        )))
+        .bind(subject)
+        .bind(kind)
+        .bind(send_id)
+        .bind(connection_id)
+        .bind(session_id)
+        .bind(sent_version)
+        .bind(next_attempt_at)
+        .bind(now);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct StoredSocketRequestSend {
+    pub subject: Option<String>,
+    pub kind: Option<String>,
+    pub connection_id: Option<String>,
+    pub sent_version: Option<String>,
+    pub sent_version_class: Option<String>,
+}
+pub(crate) fn read_socket_request_by_send<S>(
+    scope: &mut S,
+    send_id: String,
+) -> impl std::future::Future<Output = Result<Option<StoredSocketRequestSend>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/socket_requests/read_socket_request_by_send.sql"
+        )))
+        .bind(send_id);
+        let row = statement.fetch_optional(scope.executor()).await?;
+        row.as_ref()
+            .map(|row| {
+                Ok(StoredSocketRequestSend {
+                    subject: row.try_get("subject")?,
+                    kind: row.try_get("kind")?,
+                    connection_id: row.try_get("connection_id")?,
+                    sent_version: row.try_get("sent_version")?,
+                    sent_version_class: row.try_get("sent_version_class")?,
+                })
+            })
+            .transpose()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct StoredSocketRequestCount {
+    pub in_flight: Option<String>,
+}
+pub(crate) fn count_socket_requests_in_flight<S>(
+    scope: &mut S,
+    connection_id: String,
+) -> impl std::future::Future<Output = Result<StoredSocketRequestCount, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/socket_requests/count_socket_requests_in_flight.sql"
+        )))
+        .bind(connection_id);
+        let row = statement.fetch_one(scope.executor()).await?;
+        Ok(StoredSocketRequestCount {
+            in_flight: row.try_get("in_flight")?,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct StoredOwedSubject {
+    pub subject: Option<String>,
+}
+pub(crate) fn read_owed_socket_requests<S>(
+    scope: &mut S,
+    kind: String,
+    connection_id: String,
+    after: String,
+    limit: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredOwedSubject>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/socket_requests/read_owed_socket_requests.sql"
+        )))
+        .bind(kind)
+        .bind(connection_id)
+        .bind(after)
+        .bind(limit);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredOwedSubject {
+                    subject: row.try_get("subject")?,
+                })
+            })
+            .collect()
+    }
+}

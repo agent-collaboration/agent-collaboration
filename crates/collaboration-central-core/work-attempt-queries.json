@@ -194,6 +194,159 @@
           "nullable": false
         }
       ]
+    },
+    {
+      "name": "insert_socket_request_waiting",
+      "sql": "sql/socket_requests/insert_socket_request_waiting.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "reset_socket_request_waiting",
+      "sql": "sql/socket_requests/reset_socket_request_waiting.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "mark_socket_request_sent",
+      "sql": "sql/socket_requests/mark_socket_request_sent.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "send_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "connection_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "session_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "sent_version",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "next_attempt_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_socket_request_by_send",
+      "sql": "sql/socket_requests/read_socket_request_by_send.sql",
+      "row": "StoredSocketRequestSend",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "send_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "count_socket_requests_in_flight",
+      "sql": "sql/socket_requests/count_socket_requests_in_flight.sql",
+      "row": "StoredSocketRequestCount",
+      "result": "one",
+      "parameters": [
+        {
+          "name": "connection_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_owed_socket_requests",
+      "sql": "sql/socket_requests/read_owed_socket_requests.sql",
+      "row": "StoredOwedSubject",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "connection_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "after",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
     }
   ]
 }

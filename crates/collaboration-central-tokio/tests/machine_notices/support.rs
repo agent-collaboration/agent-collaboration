@@ -60,34 +60,82 @@ pub fn snapshot_closed_owner(
     assert!(destination.join("fleet.db").is_file());
     Ok(())
 }
-pub fn notice(position: u64) -> Result<BoardNotice, TestError> {
-    Ok(BoardNotice::LeaseGranted {
-        project: "019f0000-0000-7000-8000-000000000003"
-            .to_owned()
-            .try_into()?,
-        epoch: fleet_protocol::Epoch::new(position)?,
-    })
+/// The hint a Fleet metadata mutation appends to a feed reader's machine.
+/// Positions are the stream's own; `position` names the one a caller expects.
+pub fn notice(_position: u64) -> Result<BoardNotice, TestError> {
+    Ok(BoardNotice::ProjectListChanged {})
 }
-pub fn invocation(kind: &BoardNotice) -> Result<Vec<u8>, TestError> {
+
+const READER: &str = "019f0000-0000-7000-8000-000000000001";
+
+fn fleet_call(kind: &str, request: serde_json::Value) -> Result<Vec<u8>, TestError> {
     Ok(serde_json::to_vec(&serde_json::json!({
-        "source":{"kind":"fleet"},"sourceFace":"fleet","authority":{"kind":"object"},
-        "destination":{"kind":"fleet"},"destinationFace":"delivery",
-        "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"deliver_machine_notice"},
-        "kind":"central.machine-notice","target":{"installation":"019f0000-0000-7000-8000-000000000001"},"request":kind
+        "source":{"kind":"fleet"},"sourceFace":"session",
+        "authority":{"kind":"machine","value":{"installation":READER}},
+        "destination":{"kind":"fleet"},"destinationFace":"fleet",
+        "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"component_call"},
+        "kind":kind,"target":null,"request":request
     }))?)
 }
+
+/// A Fleet metadata mutation: the real producer of a feed reader's notice.
+/// The kind is ignored; every mutation appends a project-list hint.
+pub fn invocation(_kind: &BoardNotice) -> Result<Vec<u8>, TestError> {
+    let request = fleet_admission::FleetRequest {
+        request_id: message_board::RequestId::generate(),
+        // A fresh workspace and name each time: every create is a new committed change.
+        workspace: durable_steps::Uuid::now_v7().to_string().try_into()?,
+        actor: message_board::RecordedActor::Human {
+            human_id: "notice producer".to_owned().try_into()?,
+        },
+        acting_for: None,
+        protocol_version: message_board::ProtocolVersion::CURRENT,
+        operation: fleet_admission::FleetOperation::WorkspaceCreate {
+            name: format!("notice {}", durable_steps::Uuid::now_v7()).try_into()?,
+            description: "appends one project-list hint".to_owned().try_into()?,
+        },
+    };
+    fleet_call(
+        "central.fleet-metadata",
+        serde_json::json!({"origin":{"installation":READER,"machine":"notice fixture"},"request":request}),
+    )
+}
+
+async fn call_event(fixture: &Fixture, bytes: Vec<u8>) -> Result<Vec<u8>, TestError> {
+    match collaboration_central_core::ObjectKernel::new(&fixture.runtime)
+        .on_event(collaboration_central_core::ObjectEvent::Call {
+            body: bytes,
+            storage_bytes: None,
+        })
+        .await
+    {
+        collaboration_central_core::EventReply::CallAnswer(answer) => Ok(answer),
+        other => Err(format!("Fleet call answered {other:?}").into()),
+    }
+}
+
+/// Append through the real producer, as a kernel event, so the event's
+/// post-event push sends the hint. The reader's installation registers as a
+/// feed reader first (idempotent).
 pub async fn deliver(fixture: &Fixture, bytes: &[u8]) -> Result<(), TestError> {
+    call_event(
+        fixture,
+        fleet_call(
+            "central.fleet-read",
+            serde_json::json!({"kind":"feed","value":{"after":0}}),
+        )?,
+    )
+    .await?;
+    let answer: fleet_admission::FleetRequestResult =
+        serde_json::from_slice(&call_event(fixture, bytes.to_vec()).await?)?;
     assert!(
         matches!(
-            fixture.runtime.delivery()?.on_call(bytes.to_vec()).await,
-            Err(durable_steps::CallFailure::AnswerLost)
+            &answer,
+            fleet_admission::FleetRequestResult::Decided(
+                message_board::RequestDecision::Accepted { .. }
+            )
         ),
-        "a newly admitted operation cannot acknowledge before its append commits"
-    );
-    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
-    assert_eq!(
-        fixture.runtime.delivery()?.on_call(bytes.to_vec()).await?,
-        b"null"
+        "the notice-producing mutation was not accepted: {answer:?}"
     );
     Ok(())
 }

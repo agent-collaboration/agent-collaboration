@@ -33,12 +33,9 @@ pub trait KernelFace: Send + Sync {
     fn run_deadline_sources(&self, now: SyncTime) -> impl Future<Output = ()> + Send;
     /// The long-operation engine, run last and outside the batch claim.
     fn drive_long_operations(&self) -> impl Future<Output = ()> + Send;
-    /// Sends that follow everything this event committed (Fleet: notices),
-    /// given the machines whose notice streams this event appended to.
-    fn finish_event(
-        &self,
-        appended: std::collections::BTreeSet<fleet_protocol::PeerId>,
-    ) -> impl Future<Output = ()> + Send;
+    /// Sends that follow everything this event committed (Fleet: notices and
+    /// owed socket requests), given the machines the event owes a send to.
+    fn finish_event(&self, owed: crate::EventOwed) -> impl Future<Output = ()> + Send;
     /// Read every due source and set the alarm exactly.
     fn recompute(
         &self,
@@ -95,7 +92,7 @@ impl<Face: KernelFace> ObjectKernel<Face> {
         }
         #[cfg(not(feature = "conformance"))]
         {
-            crate::notice_appends::scoped(self.run(event, Probe::off())).await
+            crate::event_owed::scoped(self.run(event, Probe::off())).await
         }
     }
 
@@ -108,7 +105,7 @@ impl<Face: KernelFace> ObjectKernel<Face> {
     ) -> EventReply {
         use crate::event_trace::{EventBounds, EventTrace, scoped};
         let Some(observer) = self.observer.clone() else {
-            return crate::notice_appends::scoped(self.run(event, Probe::off())).await;
+            return crate::event_owed::scoped(self.run(event, Probe::off())).await;
         };
         let trace = std::sync::Arc::new(EventTrace::new(observer, event_class(&event)));
         let entered_at = self.face.now();
@@ -116,7 +113,7 @@ impl<Face: KernelFace> ObjectKernel<Face> {
         let kind = event_kind_record(&event, context);
         let reply = scoped(
             trace.clone(),
-            crate::notice_appends::scoped(self.run(event, Probe::on(trace.clone()))),
+            crate::event_owed::scoped(self.run(event, Probe::on(trace.clone()))),
         )
         .await;
         let alarm_after = self.face.stored_alarm().await.ok().flatten();
@@ -161,7 +158,7 @@ impl<Face: KernelFace> ObjectKernel<Face> {
             self.run_due_batch(&probe).await;
         }
         // Sends that follow everything the event committed.
-        Box::pin(self.face.finish_event(crate::notice_appends::take())).await;
+        Box::pin(self.face.finish_event(crate::event_owed::take())).await;
         // 4. Recompute.
         probe.step(PipelineStep::Recompute);
         probe.barrier(BarrierPoint::BeforeRecomputeTx, None).await;
@@ -321,11 +318,8 @@ macro_rules! delegate_kernel_face {
             fn drive_long_operations(&self) -> impl Future<Output = ()> + Send {
                 (**self).drive_long_operations()
             }
-            fn finish_event(
-                &self,
-                appended: std::collections::BTreeSet<fleet_protocol::PeerId>,
-            ) -> impl Future<Output = ()> + Send {
-                (**self).finish_event(appended)
+            fn finish_event(&self, owed: crate::EventOwed) -> impl Future<Output = ()> + Send {
+                (**self).finish_event(owed)
             }
             fn recompute(
                 &self,

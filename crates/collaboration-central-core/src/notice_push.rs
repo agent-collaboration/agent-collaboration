@@ -12,7 +12,7 @@ use std::sync::{
 };
 
 /// At most this many notices go to one machine in one event.
-pub(crate) const PUSH_LIMIT: usize = 32;
+pub const PUSH_LIMIT: usize = 32;
 
 /// Where a machine's next push starts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -62,6 +62,17 @@ impl NoticeCursors {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .insert(peer, NoticeCursor::CatchUp(connection));
+    }
+
+    /// Machines with a connection waiting for its catch-up.
+    pub(crate) fn catching_up(&self) -> BTreeSet<PeerId> {
+        self.cursors
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .filter(|(_, cursor)| matches!(cursor, NoticeCursor::CatchUp(_)))
+            .map(|(peer, _)| *peer)
+            .collect()
     }
 
     /// Machines with unfinished pushes: a connection waiting for its catch-up,

@@ -42,25 +42,62 @@ async fn closed_socket_cleanup_does_not_require_a_live_admission_and_other_sessi
         .send_failure
         .lock()
         .map_err(|_| "send failure mutex poisoned")? = Some(dead.connection);
+    // Both installations read the Fleet feed; one metadata mutation then
+    // appends a project-list notice to each machine in its own transaction.
+    // The kernel event's post-event push sends both, and A's send fails.
+    let kernel = collaboration_central_core::ObjectKernel::new(&fixture.runtime);
+    let fleet_call = |installation: &str, kind: &str, request: serde_json::Value| {
+        serde_json::to_vec(&serde_json::json!({
+            "source":{"kind":"fleet"},"sourceFace":"session",
+            "authority":{"kind":"machine","value":{"installation":installation}},
+            "destination":{"kind":"fleet"},"destinationFace":"fleet",
+            "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"component_call"},
+            "kind":kind,"target":null,"request":request
+        }))
+    };
     for installation in [
         "019f0000-0000-7000-8000-000000000001",
         healthy_installation.as_str(),
     ] {
-        let call = serde_json::to_vec(&serde_json::json!({
-            "source":{"kind":"fleet"},"sourceFace":"fleet","authority":{"kind":"object"},
-            "destination":{"kind":"fleet"},"destinationFace":"delivery",
-            "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"fanout_notice"},
-            "kind":"central.machine-notice","target":{"installation":installation},
-            "request":{"kind":"projectListChanged","value":{}}
-        }))?;
+        let read = fleet_call(
+            installation,
+            "central.fleet-read",
+            serde_json::json!({"kind":"feed","value":{"after":0}}),
+        )?;
         assert!(matches!(
-            fixture.runtime.delivery()?.on_call(call).await,
-            Err(durable_steps::CallFailure::AnswerLost)
+            kernel
+                .on_event(collaboration_central_core::ObjectEvent::Call {
+                    body: read,
+                    storage_bytes: None
+                })
+                .await,
+            collaboration_central_core::EventReply::CallAnswer(_)
         ));
     }
-    // The notice appends run in the kernel's long-operation phase, and the
-    // event's post-event push sends them, as the shells deliver events.
-    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
+    let mutation = fleet_call(
+        "019f0000-0000-7000-8000-000000000001",
+        "central.fleet-metadata",
+        serde_json::json!({"origin":{"installation":"019f0000-0000-7000-8000-000000000001","machine":"publication fixture"},"request":fleet_admission::FleetRequest {
+            request_id: message_board::RequestId::generate(),
+            workspace: durable_steps::Uuid::now_v7().to_string().try_into()?,
+            actor: message_board::RecordedActor::Human { human_id: "publication owner".to_owned().try_into()? },
+            acting_for: None,
+            protocol_version: message_board::ProtocolVersion::CURRENT,
+            operation: fleet_admission::FleetOperation::WorkspaceCreate {
+                name: "publication notice".to_owned().try_into()?,
+                description: "one notice per reader".to_owned().try_into()?,
+            },
+        }}),
+    )?;
+    assert!(matches!(
+        kernel
+            .on_event(collaboration_central_core::ObjectEvent::Call {
+                body: mutation,
+                storage_bytes: None
+            })
+            .await,
+        collaboration_central_core::EventReply::CallAnswer(_)
+    ));
     assert!(
         fixture
             .host

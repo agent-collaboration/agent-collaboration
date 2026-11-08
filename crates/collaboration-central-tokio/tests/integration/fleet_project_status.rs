@@ -1,122 +1,126 @@
-//! Direct status input, actual lease authority, native peer selection and injected deadlines.
-//! No positive recipient ACK is fabricated; receiving-store acceptance remains a higher gate.
+//! A Project's status publication goes to the Project's current Held holder.
+//!
+//! The real producer: the holder submits a Project item, and the recipient's
+//! receipt owes the Project its status publication. The row names the Project,
+//! never a machine, so each send resolves the holder afresh. No positive
+//! holder answer is fabricated; receiving-store acceptance remains a higher gate.
 use super::{
     composed_fleet_fixture::*,
     fleet_claim_adapter_fixture::prepare_fleet,
-    fleet_mail_dispatch::{CAP, Socket},
+    fleet_mail_dispatch::{Socket, custody, envelope},
 };
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
-use collaboration_central_core::CoreHost;
-use durable_steps::{
-    AtomicStore, CallId, OperationId, StoreError, Task,
-    storage::{CallReach, JournalStorage, OperationExecution, StepState},
-};
-use fleet_mail_delivery::{PublicationRef, PublicationTarget, PublishStatus, StatusStream};
+use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
 use fleet_protocol::{
-    ClientFrame, DeliveryAnswer, DeliveryRequest, DeliveryStatus, FrameId, ItemId, OperationAnswer,
-    OperationRequest, ServerCall, ServerFrame, ServerRequest, StatusCursor, StatusPublication,
-    StatusVersion, Submitter,
+    CallId, ClientFrame, DeliveryAnswer, DeliveryEnvelope, DeliveryItem, DeliveryRequest, FrameId,
+    OperationAnswer, OperationRequest, PushResult, ServerCall, ServerFrame, ServerRequest,
+    StatusCursor, StatusPublication,
 };
-use fleet_tokio_objects::TokioObject;
 use runtime_primitives::Clock;
-use serde_json::json;
+use serde_json::{Value, json};
+use sqlx_core::{query::query, row::Row};
 
-type Publisher = PublishStatus<TokioObject<CoreHost<Io>>, sqlx_turso::Turso, BoardDeliveryTypes>;
 type Acceptance = <BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Acceptance;
 type Publication = StatusPublication<Acceptance>;
 
-async fn admit(fixture: &Fixture) -> TestResult<(OperationId, Publication)> {
-    let publication = Publication {
-        item: ItemId::new(durable_steps::Uuid::now_v7())?,
-        status: DeliveryStatus::Sent,
-        version: StatusVersion::new(1),
-        cancel: None,
+/// A Project item from the holder `A` at epoch 1, addressed to `C`.
+async fn submit_project_item(
+    fixture: &Fixture,
+) -> TestResult<DeliveryEnvelope<BoardDeliveryTypes>> {
+    let DeliveryEnvelope::Item(source) = envelope(C, SERVICE_C)? else {
+        return Err("item fixture returned a cancel".into());
     };
-    let input = publication.clone();
-    let now = fixture.io.now();
-    let operation = fixture
-        .store
-        .transaction(move |scope| {
-            Box::pin(async move {
-                StatusStream::<_, BoardDeliveryTypes>::new(
-                    scope,
-                    Submitter::Project(PROJECT.to_owned().try_into().map_err(StoreError::backend)?),
-                    SERVICE_A
-                        .to_owned()
-                        .try_into()
-                        .map_err(StoreError::backend)?,
-                )
-                .append_and_admit::<Publisher>(&input, now)
-                .await
-                .map_err(fleet_mail_delivery::delivery_rollback)?;
-                let mut publications = Vec::new();
-                for id in scope.due(now).await? {
-                    let record = scope
-                        .operation(id)
-                        .await?
-                        .ok_or(StoreError::MissingOperation { id })?;
-                    if record.kind == Publisher::KIND {
-                        publications.push(id);
-                    }
-                }
-                let [id] = publications.as_slice() else {
-                    return Err(StoreError::backend(
-                        "expected exactly one admitted publication",
-                    ));
-                };
-                Ok(*id)
-            })
-        })
+    let item = DeliveryEnvelope::Item(DeliveryItem::new(
+        source.id(),
+        serde_json::from_value(json!({"kind":"project","project":PROJECT}))?,
+        source.recipient().clone(),
+        None,
+        // A Project sends notifications only.
+        serde_json::from_value(
+            json!({"kind":"notification","excerpt":"Project status proof",
+            "pointer":{"project":PROJECT,"subject":{"kind":"task","id":source.id()},"position":{"epoch":1,"position":1}},
+            "source":{"kind":"intent","intent":durable_steps::Uuid::now_v7()}}),
+        )?,
+    )?);
+    let answer = fixture
+        .call(
+            "session",
+            "central.mail-submit",
+            Value::Null,
+            json!({
+                "session":{"peer":A,"sessionId":durable_steps::Uuid::now_v7()},
+                "origin":{"installation":SERVICE_A,"machine":"Project status fixture"},
+                "item":item,"originEpoch":1,
+            }),
+        )
         .await?;
-    Ok((operation, publication))
+    if answer.pointer("/value/value/kind") != Some(&json!("accepted")) {
+        return Err(format!("the Project item was not admitted: {answer}").into());
+    }
+    Ok(item)
 }
 
-async fn require_pending(
+/// `C` takes custody: its receipt owes the Project a status publication.
+async fn recipient_accepts(
     fixture: &Fixture,
-    operation: OperationId,
-    reach: CallReach,
-    reason: Option<&str>,
+    recipient: &mut Socket,
+    item: &DeliveryEnvelope<BoardDeliveryTypes>,
 ) -> TestResult {
-    let (reference, step) = fixture
+    let frame = recipient.push(item.id()).await?;
+    recipient
+        .answer(
+            fixture,
+            frame,
+            PushResult::Accepted {
+                accepted_at: fixture.io.now(),
+            },
+        )
+        .await?;
+    if custody(fixture, item.id()).await?.0 != "atRecipient" {
+        return Err("the recipient's receipt did not advance custody".into());
+    }
+    Ok(())
+}
+
+/// The owed status rows: (state, connection the last send went on).
+async fn status_rows(fixture: &Fixture) -> TestResult<Vec<(String, Option<String>)>> {
+    Ok(fixture
         .store
-        .transaction(move |scope| {
+        .transaction(|scope| {
             Box::pin(async move {
-                let record = scope
-                    .operation(operation)
-                    .await?
-                    .ok_or(StoreError::MissingOperation { id: operation })?;
-                let OperationExecution::Running { input, .. } = record.execution else {
-                    return Err(StoreError::backend(
-                        "unanswered Project publication became terminal",
-                    ));
-                };
-                let reference: PublicationRef<message_board::ServiceId> =
-                    serde_json::from_slice(&input).map_err(StoreError::backend)?;
-                // SDK's named local read precedes its named publish call.
-                let step = scope
-                    .step(operation, 1)
-                    .await?
-                    .ok_or_else(|| StoreError::backend("publish call disappeared"))?;
-                Ok((reference, step))
+                let rows = query::<sqlx_turso::Turso>(
+                    "SELECT state, connection_id FROM central_work_attempts WHERE kind='status' ORDER BY subject",
+                )
+                .fetch_all(scope.executor())
+                .await
+                .map_err(StoreError::backend)?;
+                rows.iter()
+                    .map(|row| {
+                        Ok((
+                            row.try_get("state").map_err(StoreError::backend)?,
+                            row.try_get("connection_id").map_err(StoreError::backend)?,
+                        ))
+                    })
+                    .collect()
             })
         })
-        .await?;
-    assert!(
-        matches!(reference.target,PublicationTarget::Project {project,..} if project.to_string()==PROJECT),
-        "journal cached a machine instead of the Project target"
-    );
-    assert_eq!(step.name.as_str(), "publish");
-    let StepState::CallPending { attempt, .. } = step.state else {
-        return Err("unanswered publication did not retain its pending call".into());
-    };
-    assert_eq!(attempt.reach, reach);
-    assert_eq!(
-        attempt
-            .retry_reason
-            .as_ref()
-            .map(|retry| retry.code.as_str()),
-        reason
-    );
+        .await?)
+}
+
+/// Every queued frame on `socket`, failing on any status publication.
+async fn only_notices(socket: &mut Socket) -> TestResult {
+    while socket.queued_commands() > 0 {
+        match socket.next().await? {
+            ServerFrame::Notice { .. } => {}
+            other => {
+                return Err(format!(
+                    "a machine without Held authority received: {}",
+                    serde_json::to_string(&other)?
+                )
+                .into());
+            }
+        }
+    }
     Ok(())
 }
 
@@ -141,23 +145,34 @@ async fn publication(socket: &mut Socket) -> TestResult<(CallId, Publication)> {
 
 async fn machine_fetch_is_empty(fixture: &Fixture, socket: &mut Socket) -> TestResult {
     let frame = FrameId::new(durable_steps::Uuid::now_v7())?;
-    fixture.runtime.on_frame(socket.binding,serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Request {
-        frame,body:OperationRequest::Delivery(DeliveryRequest::StatusFetch {
-            call:serde_json::from_value(json!({"operation":durable_steps::Uuid::now_v7(),"step":"machine_only_status"}))?,after:StatusCursor::new(0),limit:10,
+    let request = ClientFrame::<BoardConsumerProtocol>::Request {
+        frame,
+        body: OperationRequest::Delivery(DeliveryRequest::StatusFetch {
+            call: serde_json::from_value(
+                json!({"operation":durable_steps::Uuid::now_v7(),"step":"machine_only_status"}),
+            )?,
+            after: StatusCursor::new(0),
+            limit: 10,
         }),
-    })?).await?;
+    };
+    collaboration_central_core::ObjectKernel::new(&fixture.runtime)
+        .on_event(collaboration_central_core::ObjectEvent::Frame {
+            binding: socket.binding,
+            frame: serde_json::to_vec(&request)?,
+        })
+        .await;
     loop {
         match socket.next().await? {
             ServerFrame::Answer {
                 frame: actual,
                 body: OperationAnswer::Delivery(DeliveryAnswer::StatusFetch(page)),
             } => {
-                assert_eq!(actual, frame);
-                assert_eq!(page.through, StatusCursor::new(0));
-                assert!(
-                    page.events.is_empty(),
-                    "Machine fetch leaked the Project stream"
-                );
+                if actual != frame {
+                    return Err("the fetch answered another frame".into());
+                }
+                if page.through != StatusCursor::new(0) || !page.events.is_empty() {
+                    return Err("Machine fetch leaked the Project stream".into());
+                }
                 return Ok(());
             }
             ServerFrame::Notice { .. } => {}
@@ -172,119 +187,70 @@ async fn machine_fetch_is_empty(fixture: &Fixture, socket: &mut Socket) -> TestR
     }
 }
 
-#[derive(Clone, Copy)]
-enum UnavailableLease {
-    Missing,
-    Expired,
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Expired authority must keep the publication owed without routing it to the former holder or exposing Project events through Machine fetch."
+)]
+async fn an_expired_project_holder_keeps_the_publication_owed_without_a_frame() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let fixture = prepare_fleet(root.path(), false).await?;
+    let mut former = Socket::open(&fixture, A, SERVICE_A).await?;
+    let mut recipient = Socket::open(&fixture, C, SERVICE_C).await?;
+    let item = submit_project_item(&fixture).await?;
+    // A's lease expires before C's receipt owes the Project its status.
+    fixture.io.advance(60_000);
+    recipient_accepts(&fixture, &mut recipient, &item).await?;
+    assert_eq!(status_rows(&fixture).await?, vec![("waiting".into(), None)]);
+    only_notices(&mut former).await?;
+    // A due batch finds no Held holder either.
+    fixture.io.advance(31_000);
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
+    assert_eq!(status_rows(&fixture).await?, vec![("waiting".into(), None)]);
+    only_notices(&mut former).await?;
+    machine_fetch_is_empty(&fixture, &mut former).await?;
+    fixture.close().await
 }
 
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Missing or expired authority must remain retryable without routing to a captured service or exposing Project events through Machine fetch."
+    reason = "An unanswered Project publication stays owed; its resend must resolve the successor afresh under the same call."
 )]
-async fn absent_or_expired_project_holder_keeps_durable_publication_pending_without_a_frame()
--> TestResult {
-    for unavailable in [UnavailableLease::Missing, UnavailableLease::Expired] {
-        let root = tempfile::tempdir()?;
-        let fixture = match unavailable {
-            UnavailableLease::Missing => Fixture::open(root.path(), NOW).await?,
-            UnavailableLease::Expired => prepare_fleet(root.path(), false).await?,
-        };
-        let mut machine = Socket::open(&fixture, A, SERVICE_A).await?;
-        if matches!(unavailable, UnavailableLease::Expired) {
-            fixture.io.advance(60_000);
-        }
-        let (operation, _) = admit(&fixture).await?;
-        let report =
-            tokio::time::timeout(CAP, fixture.runtime.conformance_drive_operations()).await??;
-        assert!(report.failed.is_empty(), "{report:?}");
-        assert!(report.retried.contains(&operation));
-        assert_eq!(
-            machine.queued_commands(),
-            0,
-            "Project publication fell back to a machine without Held authority"
-        );
-        require_pending(
-            &fixture,
-            operation,
-            CallReach::NoEffect,
-            Some("projectHolderUnavailable"),
-        )
-        .await?;
-        machine_fetch_is_empty(&fixture, &mut machine).await?;
-        fixture.close().await?;
-    }
-    Ok(())
-}
-
-#[tokio::test]
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "An unanswered Project publication cannot finish; its exact original call must select a successor afresh on retry."
-)]
-async fn silent_project_holder_retries_the_original_call_to_the_real_successor_without_caching_a_peer()
--> TestResult {
+async fn a_silent_project_holder_is_resent_to_the_successor_under_the_same_call() -> TestResult {
     let root = tempfile::tempdir()?;
     let fixture = prepare_fleet(root.path(), false).await?;
     let mut first = Socket::open(&fixture, A, SERVICE_A).await?;
     let mut successor = Socket::open(&fixture, B, SERVICE_B).await?;
-    let (operation, expected) = admit(&fixture).await?;
-    let mut deadlines = fixture.io.reply_deadlines.subscribe();
-    let first_deadline = *deadlines.borrow() + 1;
-    let (report, original) = Box::pin(tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.conformance_drive_operations(), async {
-            let (call, sent) = publication(&mut first).await.map_err(StoreError::backend)?;
-            assert_eq!(sent, expected);
-            assert_eq!(call.operation, operation);
-            assert_eq!(call.step.as_str(), "publish");
-            tokio::time::timeout(CAP, deadlines.wait_for(|count| *count >= first_deadline))
-                .await
-                .map_err(StoreError::backend)?
-                .map_err(StoreError::backend)?;
-            fixture.io.advance(2_000);
-            Ok::<_, StoreError>(call)
-        })
-    }))
-    .await??;
-    assert!(report.failed.is_empty(), "{report:?}");
-    assert!(report.retried.contains(&operation));
-    require_pending(&fixture, operation, CallReach::MayHaveReached, None).await?;
+    let mut recipient = Socket::open(&fixture, C, SERVICE_C).await?;
+    let item = submit_project_item(&fixture).await?;
+    recipient_accepts(&fixture, &mut recipient, &item).await?;
+    // The receipt's event sends the publication to the current holder, A.
+    let (original, expected) = publication(&mut first).await?;
+    assert_eq!(expected.item, item.id());
+    assert!(original.step.as_str().starts_with("status-v"));
+    only_notices(&mut successor).await?;
+
     let preview = fixture.owner(json!({"kind":"preview"})).await?;
     let preview = preview
         .pointer("/value/value/preview")
         .cloned()
         .ok_or("actual takeover preview absent")?;
-    let answer=fixture.owner(json!({"kind":"takeover","value":{
-        "transferId":durable_steps::Uuid::now_v7(),"toInstallation":SERVICE_B,"reason":"Project status retry changes its current holder","preview":preview
-    }})).await?;
+    let answer = fixture
+        .owner(json!({"kind":"takeover","value":{
+            "transferId":durable_steps::Uuid::now_v7(),"toInstallation":SERVICE_B,
+            "reason":"Project status retry changes its current holder","preview":preview
+        }}))
+        .await?;
     assert_eq!(answer.pointer("/value/kind"), Some(&json!("granted")));
-    fixture.io.advance(10_000);
-    let second_deadline = *deadlines.borrow() + 1;
-    let (report, ()) = Box::pin(tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.conformance_drive_operations(), async {
-            let (call, sent) = publication(&mut successor)
-                .await
-                .map_err(StoreError::backend)?;
-            assert_eq!(call, original);
-            assert_eq!(sent, expected);
-            tokio::time::timeout(CAP, deadlines.wait_for(|count| *count >= second_deadline))
-                .await
-                .map_err(StoreError::backend)?
-                .map_err(StoreError::backend)?;
-            fixture.io.advance(2_000);
-            Ok::<_, StoreError>(())
-        })
-    }))
-    .await??;
-    assert!(report.failed.is_empty(), "{report:?}");
-    assert!(report.retried.contains(&operation));
-    require_pending(&fixture, operation, CallReach::MayHaveReached, None).await?;
-    while first.queued_commands() > 0 {
-        assert!(
-            matches!(first.next().await?, ServerFrame::Notice { .. }),
-            "a retry selected the previous holder after the successor barrier"
-        );
-    }
+
+    // A never answers. Past the first retry time the due batch resends it,
+    // resolving the holder afresh.
+    fixture.io.advance(31_000);
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
+    let (call, sent) = publication(&mut successor).await?;
+    assert_eq!(call, original);
+    assert_eq!(sent, expected);
+    only_notices(&mut first).await?;
     fixture.close().await
 }

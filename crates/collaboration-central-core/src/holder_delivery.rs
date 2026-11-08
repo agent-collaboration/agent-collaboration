@@ -208,9 +208,6 @@ where
         ) {
             return self.receive_forward_call(invocation).await;
         }
-        if invocation.kind == crate::machine_notice_delivery::DeliverMachineNotice::KIND {
-            return self.receive_machine_notice(invocation).await;
-        }
         if !matches!(invocation.authority, CallAuthority::Object)
             || invocation.source != ObjectAddress::Fleet
             || invocation.source_face != CallerKind::Registry

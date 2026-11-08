@@ -74,7 +74,6 @@ pub use copy_receiver_rules::{CopyDirectorySummary, CopyReceiverRules};
 mod delivery_config;
 pub use delivery_config::DeliveryConfig;
 mod effect_driver;
-mod fleet_mail_tasks;
 mod fleet_sender_binding;
 mod mail_sender_authority;
 #[cfg(feature = "conformance")]
@@ -136,9 +135,7 @@ mod holder_reply_hub;
 mod installation_peer_reads;
 mod machine_enrollment;
 mod machine_enrollment_record;
-mod mail_push_dispatch;
 mod mail_sender_calls;
-mod mail_status_dispatch;
 mod mail_submit_admission;
 mod mail_submit_calls;
 mod migration_bookkeeping;
@@ -299,16 +296,20 @@ mod fleet_workspace_store;
     reason = "generated positional SQL bindings mirror the typed storage columns"
 )]
 mod generated_machine_notices;
-mod machine_notice_contract;
-mod machine_notice_delivery;
-mod machine_notice_outbox;
 /// How far each machine's Router has applied its notices.
 mod machine_notice_progress;
 mod machine_notice_store;
 pub use event_scope_store::EventScopeStore;
-mod notice_appends;
+mod central_mail_sink;
+mod event_owed;
+pub use event_owed::EventOwed;
 mod notice_push;
 pub use notice_push::CENTRAL_FRAME_CAPABILITIES;
+/// The most notices one event sends one machine; a shell sizes its send queue by it.
+pub use notice_push::PUSH_LIMIT as NOTICE_PUSH_LIMIT;
+/// The most unanswered socket requests one connection has in flight; a shell
+/// sizes its send queue by it.
+pub use session_scope::owed_requests::WINDOW as OWED_REQUEST_WINDOW;
 mod registration_refusal;
 #[cfg(feature = "conformance")]
 pub use fleet_record_observer::{

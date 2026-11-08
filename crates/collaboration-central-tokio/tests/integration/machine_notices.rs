@@ -108,15 +108,11 @@ async fn fleet_floor_98_prunes_99_through_110_and_drives_due_work() -> Result<()
         },
     )
     .await?;
-    let call = invocation(&notice(121)?)?;
-    assert!(matches!(
-        fixture.runtime.delivery()?.on_call(call.clone()).await,
-        Err(durable_steps::CallFailure::AnswerLost)
-    ));
+    // A real producer appends 121 in its own transaction, as a kernel event.
+    deliver(&fixture, &invocation(&notice(121)?)?).await?;
 
     crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
 
-    assert_eq!(fixture.runtime.delivery()?.on_call(call).await?, b"null");
     assert_eq!(
         retained_stream(&fixture, peer).await?,
         (110, (111..=121).collect())
@@ -127,7 +123,7 @@ async fn fleet_floor_98_prunes_99_through_110_and_drives_due_work() -> Result<()
 
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "A corrupt stream must not roll back a healthy machine or strand its admitted work."
+    reason = "A corrupt stream must not roll back a healthy machine or stop the wake for its own retry."
 )]
 #[tokio::test]
 async fn one_machine_hole_does_not_block_other_retention_jobs_or_future_wakes()
@@ -155,18 +151,8 @@ async fn one_machine_hole_does_not_block_other_retention_jobs_or_future_wakes()
         },
     )
     .await?;
-    fixture.io.clock.set_offset(5_000);
-    let future = invocation(&notice(122)?)?;
-    assert!(matches!(
-        fixture.runtime.delivery()?.on_call(future.clone()).await,
-        Err(durable_steps::CallFailure::AnswerLost)
-    ));
-    fixture.io.clock.set_offset(0);
-    let due = invocation(&notice(121)?)?;
-    assert!(matches!(
-        fixture.runtime.delivery()?.on_call(due.clone()).await,
-        Err(durable_steps::CallFailure::AnswerLost)
-    ));
+    // A real producer appends 121 to the healthy machine, as a kernel event.
+    deliver(&fixture, &invocation(&notice(121)?)?).await?;
     fixture
         .io
         .wakes
@@ -182,11 +168,6 @@ async fn one_machine_hole_does_not_block_other_retention_jobs_or_future_wakes()
         result.is_ok(),
         "one stream's corruption must not fail the alarm"
     );
-    assert_eq!(fixture.runtime.delivery()?.on_call(due).await?, b"null");
-    assert!(matches!(
-        fixture.runtime.delivery()?.on_call(future).await,
-        Err(durable_steps::CallFailure::AnswerLost)
-    ));
     assert_eq!(
         retained_stream(&fixture, healthy).await?,
         (110, (111..=121).collect())
@@ -216,7 +197,7 @@ async fn one_machine_hole_does_not_block_other_retention_jobs_or_future_wakes()
             .lock()
             .map_err(|_| "wake lock poisoned")?
             .iter()
-            .any(|at| at.unix_millis() == 1_792_281_605_000)
+            .any(|at| at.unix_millis() == retry_at)
     );
     fixture.objects.close().await?;
     Ok(())
@@ -313,12 +294,10 @@ async fn machine_notices_survive_missing_admission_disconnect_and_replacement_wi
     deliver(&fixture, &second_call).await?;
     assert_hint(next(&mut socket).await?, 1, 2, &second);
     assert_eq!(rows(&fixture).await?, 2);
-    let acknowledged = fixture
-        .runtime
-        .delivery()?
-        .on_call(second_call.clone())
-        .await?;
-    assert_eq!(acknowledged, b"null");
+    // Replaying the same mutation answers from its recorded decision and
+    // appends no second notice.
+    deliver(&fixture, &second_call).await?;
+    assert_eq!(rows(&fixture).await?, 2);
     assert_page(
         read(&fixture, binding, &mut socket, None).await?,
         &[(1, first.clone()), (2, second.clone())],
@@ -346,10 +325,7 @@ async fn machine_notices_survive_missing_admission_disconnect_and_replacement_wi
     );
 
     let (replacement, _, mut replacement_socket) = admit(&fixture, peer).await?;
-    assert_eq!(
-        fixture.runtime.delivery()?.on_call(second_call).await?,
-        b"null"
-    );
+    deliver(&fixture, &second_call).await?;
     assert_eq!(rows(&fixture).await?, 3);
     assert_page(
         read(&fixture, replacement, &mut replacement_socket, None).await?,

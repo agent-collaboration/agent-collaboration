@@ -62,7 +62,10 @@ pub use outbox_record::{
     OutboxAdmission, OutboxStatus, OutboxStatusState, ResolvedPush, ResolvedSubmit, SubmitInput,
 };
 pub use outbox_rules::Outbox;
-pub use status_publication::{admit_publications, resolve_publication, retire_publication};
+pub use status_publication::{
+    admit_publications, publication_by_subject, publication_subject, resolve_publication,
+    retire_publication,
+};
 pub use status_stream::{PublicationRef, PublicationTarget, StatusStream};
 
 pub use delivery_calls::*;
@@ -89,7 +92,8 @@ mod relay_sender_authority;
 pub use outbox_record::PushInput;
 pub use record_retention::{
     DELIVERY_RETENTION_MILLIS, RemoveDeliveryRecord, admit_existing_record_removals,
-    admit_record_removal, item_is_too_old, removal_deadline,
+    admit_record_removal, item_is_too_old, next_relay_record_removal, removal_deadline,
+    remove_expired_relay_records,
 };
 pub use relay_schema::retire_relay_host_tables;
 

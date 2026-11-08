@@ -53,6 +53,14 @@ fleet_mail_delivery::minimum_settlement_allowance::<BoardDeliveryTypes>()?,)?;
             let refused=inbox.accept_with_limits(actual,offered,no_room).await?;
             if !matches!(refused,PushResult::Refused {reason:DeliveryRefusal::MailboxFull})||inbox.count().await?!=0 {return Err("full real Inbox took custody".into());}
             pushed(&mut recipient.socket,frame,refused).await?;
+            // A full mailbox is refused for now: the push stays owed and is
+            // resent after its 30 s backoff (owed-work design), so move the
+            // server's clock past it and let the due alarm run.
+            reqwest::Client::new().post(format!("{}/admin/v1/conformance/runtime",server.base_url()))
+                .header("Cf-Access-Jwt-Assertion",collaboration_central_conformance::owner_assertion()?)
+                .timeout(Duration::from_secs(5))
+                .json(&collaboration_central_conformance::RuntimeControlRequest {address:collaboration_central_core::ObjectAddress::Fleet,command:collaboration_central_conformance::RuntimeControl::SettleClock {now:collaboration_central_core::RegistryTime(chrono::Utc::now()+chrono::TimeDelta::seconds(31))}})
+                .send().await?.error_for_status()?;
             let (frame,retry)=next_push(&mut recipient.socket).await?;
             if serde_json::to_vec(&retry)?!=first_bytes {return Err("capacity retry changed its CallId/sender/body".into());}
             let ServerCall::Push {submitter:actual,item:offered,..}=retry else {return Err("expected retry Push".into());};

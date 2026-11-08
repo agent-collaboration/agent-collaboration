@@ -6,6 +6,8 @@
 //! table only says when a failing subject may be tried again and why it failed.
 //! Domain deadlines stay on their own rows.
 
+pub(crate) mod socket_requests;
+
 use crate::generated_work_attempts as queries;
 use durable_steps::{StoreError, Uuid, storage::TransactionScope};
 use runtime_primitives::SyncTime;
@@ -34,6 +36,8 @@ pub(crate) enum AttemptKind {
     NoticeDelivery,
     NoticeExpiry,
     MailRetention,
+    /// Owed pushes whose item's validity ended (expired or left to its report).
+    PushExpiry,
     FeedRetention,
     PartExpiry,
     ForwardExpiry,
@@ -45,7 +49,7 @@ pub(crate) enum AttemptKind {
 }
 
 impl AttemptKind {
-    const ALL: [Self; 16] = [
+    const ALL: [Self; 17] = [
         Self::Push,
         Self::Status,
         Self::SummaryCall,
@@ -54,6 +58,7 @@ impl AttemptKind {
         Self::NoticeDelivery,
         Self::NoticeExpiry,
         Self::MailRetention,
+        Self::PushExpiry,
         Self::FeedRetention,
         Self::PartExpiry,
         Self::ForwardExpiry,
@@ -74,6 +79,7 @@ impl AttemptKind {
             Self::NoticeDelivery => "notice_delivery",
             Self::NoticeExpiry => "notice_expiry",
             Self::MailRetention => "mail_retention",
+            Self::PushExpiry => "push_expiry",
             Self::FeedRetention => "feed_retention",
             Self::PartExpiry => "part_expiry",
             Self::ForwardExpiry => "forward_expiry",
@@ -102,6 +108,9 @@ pub(crate) enum ErrorClass {
     Storage,
     /// An owed answer did not arrive before its retry time (a resend went out).
     Unanswered,
+    /// The receiver refused for now (mailbox full, sender binding unavailable);
+    /// the request is resent on the backoff.
+    RetryableRefusal,
 }
 
 impl ErrorClass {
@@ -110,6 +119,7 @@ impl ErrorClass {
             Self::CorruptRow => "corrupt_row",
             Self::Storage => "storage",
             Self::Unanswered => "unanswered",
+            Self::RetryableRefusal => "retryable_refusal",
         }
     }
 
@@ -118,6 +128,7 @@ impl ErrorClass {
             "corrupt_row" => Ok(Self::CorruptRow),
             "storage" => Ok(Self::Storage),
             "unanswered" => Ok(Self::Unanswered),
+            "retryable_refusal" => Ok(Self::RetryableRefusal),
             other => Err(corrupt(
                 "last_error_class",
                 format!("unknown error class {other:?}"),
@@ -195,7 +206,8 @@ pub(crate) fn backoff(failures: u32) -> Duration {
         .min(LONGEST_RETRY)
 }
 
-/// Record one failed attempt of `kind` on `subject`, in the caller's
+/// Record one failed attempt of `kind` on `subject` (ending any send it had
+/// in flight), in the caller's
 /// transaction (never the failing work's own, which rolled back). `id` is the
 /// new row's UUIDv7 if no row exists yet.
 pub(crate) async fn failed<Scope: TransactionScope>(

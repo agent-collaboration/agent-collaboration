@@ -263,6 +263,42 @@
       "result": "many",
       "parameters": [],
       "row": "StoredPublicationRow"
+    },
+    {
+      "name": "read_publication_by_id",
+      "sql": "sql/read_publication_by_id.sql",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        }
+      ],
+      "row": "StoredPublicationRow"
+    },
+    {
+      "name": "read_publications_applied_through",
+      "sql": "sql/read_publications_applied_through.sql",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "submitter_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "submitter_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "through",
+          "kind": "text",
+          "nullable": false
+        }
+      ],
+      "row": "StoredAppliedPublication"
     }
   ]
 }

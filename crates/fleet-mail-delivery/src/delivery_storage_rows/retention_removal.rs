@@ -84,3 +84,61 @@ where
             .collect()
     }
 }
+
+#[derive(Debug)]
+pub(crate) struct StoredRelayRecord {
+    pub item_id: Option<String>,
+}
+pub(crate) fn read_earliest_relay_record<S>(
+    scope: &mut S,
+) -> impl std::future::Future<Output = Result<Option<StoredRelayRecord>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/read_earliest_relay_record.sql"
+        )));
+        let row = statement.fetch_optional(scope.executor()).await?;
+        row.as_ref()
+            .map(|row| {
+                Ok(StoredRelayRecord {
+                    item_id: row.try_get("item_id")?,
+                })
+            })
+            .transpose()
+    }
+}
+pub(crate) fn read_relay_records_before<S>(
+    scope: &mut S,
+    bound: String,
+    limit: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredRelayRecord>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/read_relay_records_before.sql"
+        )))
+        .bind(bound)
+        .bind(limit);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredRelayRecord {
+                    item_id: row.try_get("item_id")?,
+                })
+            })
+            .collect()
+    }
+}

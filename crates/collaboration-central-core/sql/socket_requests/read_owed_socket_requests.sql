@@ -1,0 +1,1 @@
+SELECT subject FROM central_work_attempts WHERE kind=?1 AND ((state='waiting' AND next_attempt_at IS NULL) OR (state='in_flight' AND (connection_id IS NULL OR connection_id<>?2))) AND subject>?3 ORDER BY subject LIMIT CAST(?4 AS INTEGER);

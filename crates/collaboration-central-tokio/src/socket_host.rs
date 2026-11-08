@@ -1,11 +1,25 @@
 //! Socket handles and transport registrations, never session policy.
 
 use collaboration_central_core::{
-    AdmissionOrigin, RegistrationEdits, RegistrationSnapshot, SocketFailure,
+    AdmissionOrigin, NOTICE_PUSH_LIMIT, OWED_REQUEST_WINDOW, RegistrationEdits,
+    RegistrationSnapshot, SocketFailure,
 };
 use fleet_protocol::{CloseReason, ConnectionId};
 use fleet_session::{Bytes, ConnectionBinding, ConnectionRegistration};
 use std::collections::BTreeMap;
+
+/// Frames one connection's queue holds before its reader counts as stopped.
+///
+/// One event stages at most, for one connection, a window of owed requests
+/// ([`OWED_REQUEST_WINDOW`], 32), one notice step ([`NOTICE_PUSH_LIMIT`], 32),
+/// the answer to its own frame and a Welcome: 66 frames. Twice that leaves room
+/// for a healthy reader still draining the previous event, so only a reader that
+/// stopped reading overflows. Cloudflare's `WebSocket.send` buffers instead of
+/// refusing, so overflow there is the platform's own behavior.
+const SEND_QUEUE_FRAMES: usize = 2 * (OWED_REQUEST_WINDOW as usize + NOTICE_PUSH_LIMIT + 2);
+
+/// One more slot, kept for the Close that tells a dropped reader why.
+const SEND_QUEUE_CAPACITY: usize = SEND_QUEUE_FRAMES + 1;
 use tokio::sync::{Mutex, mpsc};
 
 pub enum SocketCommand {
@@ -30,7 +44,7 @@ impl TokioSockets {
         binding: ConnectionBinding,
         admission_origin: AdmissionOrigin,
     ) -> mpsc::Receiver<SocketCommand> {
-        let (commands, receiver) = mpsc::channel(64);
+        let (commands, receiver) = mpsc::channel(SEND_QUEUE_CAPACITY);
         self.0.lock().await.insert(
             binding.connection,
             SocketState {
@@ -122,6 +136,9 @@ impl TokioSockets {
         }
     }
 
+    /// Queue `command` without waiting: no event waits on one reader. A frame
+    /// that finds the queue full refuses as `Closed`, and the caller drops that
+    /// connection; its in-flight requests are owed again after it reconnects.
     pub(crate) async fn send(
         &self,
         connection: ConnectionId,
@@ -137,9 +154,10 @@ impl TokioSockets {
             }
             socket.commands.clone()
         };
-        tokio::time::timeout(std::time::Duration::from_secs(10), sender.send(command))
-            .await
-            .map_err(|_| SocketFailure::Closed)?
-            .map_err(|_| SocketFailure::Closed)
+        // Frames leave the last slot to a Close.
+        if matches!(&command, SocketCommand::Frame(_)) && sender.capacity() <= 1 {
+            return Err(SocketFailure::Closed);
+        }
+        sender.try_send(command).map_err(|_| SocketFailure::Closed)
     }
 }

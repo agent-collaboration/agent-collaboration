@@ -30,6 +30,31 @@
       "result": "many",
       "row": "StoredExistingCustodyRow",
       "parameters": []
+    },
+    {
+      "name": "read_earliest_relay_record",
+      "sql": "sql/read_earliest_relay_record.sql",
+      "result": "optional",
+      "parameters": [],
+      "row": "StoredRelayRecord"
+    },
+    {
+      "name": "read_relay_records_before",
+      "sql": "sql/read_relay_records_before.sql",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "bound",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ],
+      "row": "StoredRelayRecord"
     }
   ]
 }

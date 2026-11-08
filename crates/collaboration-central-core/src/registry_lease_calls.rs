@@ -138,7 +138,6 @@ where
                 let policy = config.lease;
                 let hook = crate::fleet_lease_projection_step::FleetLeaseChangeHook::<
                     crate::session_store::CoreSessionStore<Host>,
-                    crate::machine_notice_delivery::MachineNoticeTask<Host>,
                 >::new(io.clone());
                 let (store, _) = self.session_store().map_err(|_| CallFailure::AnswerLost)?;
                 let reply = store

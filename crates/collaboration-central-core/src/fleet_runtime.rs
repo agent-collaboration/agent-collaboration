@@ -1,43 +1,33 @@
 //! The Fleet face owns central's nonreplicated application state.
 mod notice_push;
+mod request_send;
 use crate::object_event::{EventReply, ObjectEvent};
 use runtime_primitives::{Clock as _, IdSource as _};
 
 use crate::{
-    CallerKind, CoreHost, EngineSchema, FleetKind, ObjectAddress, ObjectBootstrap, ObjectIo,
-    ObjectPlatform, ObjectRuntime,
+    CallerKind, CoreHost, EngineSchema, FleetKind, ObjectAddress, ObjectBootstrap, ObjectPlatform,
+    ObjectRuntime,
     caller_context::CallAuthority,
     fleet_effects_read::ReadFleetEffects,
-    holder_reply_hub::HolderReplyHub,
-    mail_push_dispatch::PushDispatcher,
     object_call_envelope::{ObjectCallEnvelope, encode_refusal},
     object_runtime::ObjectWork,
-    step_driver::{StepCallback, StepDriver, StepResult},
+    step_driver::StepDriver,
 };
 use crate::{
     mail_sender_calls::{AdmitSenderMail, SenderFleetMail, SenderMailRequest, SenderRoute},
     mail_submit_admission::AdmitMailSubmit,
     mail_submit_calls::{FleetMailSubmit, MailSubmitRequest},
 };
-use board_sync_protocol::BoardDeliveryTypes;
 use durable_steps::{
-    AtomicStore, BoxFuture, CallFailure, CallTarget, NotSentReason, StoreError,
-    storage::TransactionScope,
+    AtomicStore, CallFailure, CallTarget, NotSentReason, StoreError, storage::TransactionScope,
 };
-use fleet_mail_delivery::{DeliveryLimits, Outbox};
-use fleet_protocol::{DeliveryItemRef, ServerCall};
 use message_board::RequestEffectsRequest;
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
 };
-use std::{
-    convert::Infallible,
-    marker::PhantomData,
-    sync::{Arc, Weak},
-    time::Duration,
-};
+use std::{marker::PhantomData, sync::Arc};
 
 #[derive(Serialize, Deserialize)]
 pub(crate) struct FleetRequestEffects;
@@ -79,38 +69,19 @@ where
         let io = host.io().clone();
         let replies = Arc::new(crate::holder_reply_hub::HolderReplyHub::default());
         let notice_cursors = Arc::new(crate::notice_push::NoticeCursors::default());
-        let mail_limits = crate::fleet_outbox_limits().map_err(StoreError::backend)?;
-        let publication = crate::mail_status_dispatch::bind(
-            Arc::downgrade(&host),
+        let shared_host = Arc::new(CoreHost::registry(
             io.clone(),
-            replies.clone(),
-            holder_answer_timeout,
-        );
-        let shared_host = Arc::new(
-            CoreHost::registry(
-                io.clone(),
-                config.authoritative_receiver,
-                crate::registry_peer_lookup::bind(Arc::downgrade(&host)),
-                Some(crate::registry_lease_store::bind(Arc::downgrade(&host))),
-            )
-            .with_publication(publication)
-            .with_push(bind_mail_push(
-                Arc::downgrade(&host),
-                io.clone(),
-                replies.clone(),
-                mail_limits,
-                holder_answer_timeout,
-            )),
-        );
+            config.authoritative_receiver,
+            crate::registry_peer_lookup::bind(Arc::downgrade(&host)),
+            Some(crate::registry_lease_store::bind(Arc::downgrade(&host))),
+        ));
         let store = Arc::new(crate::session_store::CoreSessionStore::new(
             host.clone(),
             shared_host.clone(),
             replies.clone(),
         ));
-        type NoticeTask<Host> = crate::machine_notice_delivery::MachineNoticeTask<Host>;
         type LeaseHook<Host> = crate::fleet_lease_projection_step::FleetLeaseChangeHook<
             crate::session_store::CoreSessionStore<Host>,
-            NoticeTask<Host>,
         >;
         let hook = Arc::new(LeaseHook::<Host>::new(io.clone()));
         let mut engine = crate::shared_task_registry::registry_engine::<_, Host::Database, _, _>(
@@ -119,12 +90,6 @@ where
             config,
             hook,
         )?;
-        engine.register(crate::machine_notice_outbox::FleetNoticeTask::<
-            crate::session_store::CoreSessionStore<Host>,
-        >(PhantomData))?;
-        engine.register(crate::machine_notice_delivery::MachineNoticeTask::<Host>(
-            PhantomData,
-        ))?;
         engine.register(fleet_session::PublishSchemaSupport::<
             crate::session_store::CoreSessionStore<Host>,
             Host::Database,
@@ -132,22 +97,6 @@ where
         engine.register(crate::session_revocation::EndSessionsTask::<Host>(
             PhantomData,
         ))?;
-        engine.register(crate::fleet_mail_tasks::FleetStatusTask::<
-            crate::session_store::CoreSessionStore<Host>,
-            Host::Database,
-        >::new())?;
-        engine.register(crate::fleet_mail_tasks::FleetPushTask::<
-            crate::session_store::CoreSessionStore<Host>,
-            Host::Database,
-        >::new(
-            mail_limits,
-            shared_host.clone(),
-            Arc::new(crate::fleet_sender_binding::FleetSenderBinding),
-        ))?;
-        engine.register(crate::fleet_mail_tasks::FleetMailRemoval::<
-            crate::session_store::CoreSessionStore<Host>,
-            Host::Database,
-        >::new(fleet_mail_delivery::DeliveryHostRole::Relay))?;
         let engine =
             crate::fleet_task_engine::own_engine::<_, _, Host::Database, LeaseHook<Host>>(engine);
         let weak_host = Arc::downgrade(&host);
@@ -232,7 +181,10 @@ where
     /// Every Fleet due source except long operations, each failing alone.
     pub(crate) async fn run_fleet_due_sources(&self, now: runtime_primitives::SyncTime) {
         self.run_feed_retention(now).await;
+        self.run_mail_retention(now).await;
+        self.run_push_expiry(now).await;
         self.resend_notices(now).await;
+        self.resend_due_requests(now).await;
         let ObjectWork::Fleet { io, .. } = &self.work else {
             return;
         };
@@ -289,6 +241,39 @@ where
                 attempt_id: io.new_id(),
             },
             move |scope| Box::pin(crate::fleet_feed_store::prune(scope, cutoff_clock)),
+        )
+        .await;
+    }
+
+    /// Mail records whose 60-day retention ended are removed, at most 100 per
+    /// batch; a full batch leaves a past deadline, so the next batch follows.
+    async fn run_mail_retention(&self, now: runtime_primitives::SyncTime) {
+        let ObjectWork::Fleet { host, io, .. } = &self.work else {
+            return;
+        };
+        let subject = match self.fleet_subject().await {
+            Ok(subject) => subject,
+            Err(failure) => {
+                eprintln!("Fleet mail retention has no subject: {failure}");
+                return;
+            }
+        };
+        crate::due_unit::run_due_unit(
+            host.store().as_ref(),
+            crate::due_unit::DueItem {
+                subject,
+                kind: crate::work_attempts::AttemptKind::MailRetention,
+                now,
+                attempt_id: io.new_id(),
+            },
+            move |scope| {
+                Box::pin(async move {
+                    fleet_mail_delivery::remove_expired_relay_records(scope, now, 100)
+                        .await
+                        .map(|_| ())
+                        .map_err(StoreError::backend)
+                })
+            },
         )
         .await;
     }
@@ -623,136 +608,5 @@ fn wrong_face() -> StoreError {
 fn refused() -> CallFailure {
     CallFailure::NotSent {
         reason: NotSentReason::Unreachable { last_seen: None },
-    }
-}
-
-fn bind_mail_push<Host>(
-    host: Weak<Host>,
-    io: Arc<Host::Io>,
-    replies: Arc<HolderReplyHub>,
-    limits: DeliveryLimits,
-    timeout: Duration,
-) -> PushDispatcher
-where
-    Host: ObjectPlatform,
-    for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
-        TransactionScope<Database = Host::Database>,
-    <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
-    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
-        + sqlx_core::encode::Encode<'scalar, Host::Database>
-        + sqlx_core::decode::Decode<'scalar, Host::Database>,
-    for<'blob> Vec<u8>: sqlx_core::types::Type<Host::Database>
-        + sqlx_core::encode::Encode<'blob, Host::Database>
-        + sqlx_core::decode::Decode<'blob, Host::Database>,
-    for<'blob> Option<Vec<u8>>:
-        sqlx_core::types::Type<Host::Database> + sqlx_core::decode::Decode<'blob, Host::Database>,
-    for<'scalar> Option<i64>:
-        sqlx_core::types::Type<Host::Database> + sqlx_core::decode::Decode<'scalar, Host::Database>,
-    for<'value> String:
-        Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
-    for<'value> Option<String>:
-        Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
-    for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
-{
-    Arc::new(move |target, reference, call| {
-        let host = host.clone();
-        let io = io.clone();
-        let replies = replies.clone();
-        Box::pin(async move {
-            let host = host.upgrade().ok_or(CallFailure::AnswerLost)?;
-            let (resolved, _) = StepDriver::new(host.clone())
-                .run(ResolvePush {
-                    reference,
-                    limits,
-                    clock: io.clone(),
-                })
-                .await
-                .map_err(crate::mail_push_dispatch::store_failure)?;
-            // No peer request has started. An absent, expired or gated item
-            // cannot truthfully turn this attempt into possible recipient reach.
-            let resolved = resolved.ok_or(CallFailure::NotSent {
-                reason: NotSentReason::Unreachable { last_seen: None },
-            })?;
-            let item = resolved.item;
-            if item.recipient().peer != target.recipient {
-                return Err(CallFailure::AnswerLost);
-            }
-            let deadline_io = io.clone();
-            let waiter = crate::peer_request::begin_peer_request(
-                host,
-                io.clone(),
-                replies,
-                target.recipient,
-                ServerCall::Push {
-                    call,
-                    submitter: resolved.submitter,
-                    item,
-                },
-                timeout,
-                move |remaining| async move { deadline_io.event_deadline(remaining).await },
-            )
-            .await?;
-            let remaining = Duration::from_millis(
-                u64::try_from(
-                    waiter
-                        .deadline()
-                        .unix_millis()
-                        .saturating_sub(io.now().unix_millis()),
-                )
-                .unwrap_or(0),
-            );
-            crate::mail_push_dispatch::bounded_answer(waiter.answer(), io.event_deadline(remaining))
-                .await
-        })
-    })
-}
-
-struct ResolvePush {
-    reference: DeliveryItemRef,
-    limits: DeliveryLimits,
-    clock: Arc<dyn runtime_primitives::Clock>,
-}
-impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for ResolvePush
-where
-    for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
-    Driver::Arguments: IntoArguments<Driver>,
-    for<'blob> Vec<u8>: sqlx_core::types::Type<Driver>
-        + sqlx_core::encode::Encode<'blob, Driver>
-        + sqlx_core::decode::Decode<'blob, Driver>,
-    for<'blob> Option<Vec<u8>>:
-        sqlx_core::types::Type<Driver> + sqlx_core::decode::Decode<'blob, Driver>,
-    for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
-    for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
-    for<'row> &'row str: ColumnIndex<Driver::Row>,
-{
-    type Output = Option<fleet_mail_delivery::ResolvedPush<BoardDeliveryTypes>>;
-    type Effect = Infallible;
-    fn run<'scope, 'transaction>(
-        self,
-        scope: &'scope mut Store::Scope<'transaction>,
-    ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
-        Box::pin(async move {
-            let now = self.clock.now();
-            let item = Outbox::<_, BoardDeliveryTypes, _>::new(
-                scope,
-                self.limits,
-                &crate::fleet_sender_binding::FleetSenderBinding,
-            )
-            .resolve_push(&self.reference, now)
-            .await
-            .map_err(fleet_mail_delivery::delivery_rollback)?;
-            if let Some(item) = &item {
-                let recipient = item.item.recipient().peer;
-                if crate::machine_enrollment::admission::read_current_enrolled_machine(
-                    scope, recipient, now,
-                )
-                .await?
-                .is_none()
-                {
-                    return Ok((None, Vec::new()));
-                }
-            }
-            Ok((item, Vec::new()))
-        })
     }
 }

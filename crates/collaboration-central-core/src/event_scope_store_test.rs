@@ -1,6 +1,6 @@
 use super::EventScopeStore;
+use crate::event_owed::{scoped, take};
 use crate::fleet_storage_fixture::{FleetStorageFixture, NOW, TestError};
-use crate::notice_appends::{scoped, take};
 use board_sync_protocol::BoardNotice;
 use durable_steps::{AtomicStore, BoxFuture, StoreError};
 use fleet_protocol::PeerId;
@@ -55,7 +55,7 @@ where
                 })
             })
             .await?;
-        Ok(take())
+        Ok(take().notices)
     })
     .await
 }

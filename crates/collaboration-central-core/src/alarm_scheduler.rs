@@ -133,6 +133,23 @@ where
                             crate::fleet_feed_store::next_retention_at(scope),
                         )
                         .await,
+                        read_source("push_expiry", async {
+                            fleet_mail_delivery::Outbox::<_, board_sync_protocol::BoardDeliveryTypes, _>::new(
+                                scope,
+                                crate::fleet_outbox_limits().map_err(StoreError::backend)?,
+                                &crate::fleet_sender_binding::FleetSenderBinding,
+                            )
+                            .next_push_expiry()
+                            .await
+                            .map_err(StoreError::backend)
+                        })
+                        .await,
+                        read_source("mail_retention", async {
+                            fleet_mail_delivery::next_relay_record_removal(scope)
+                                .await
+                                .map_err(StoreError::backend)
+                        })
+                        .await,
                     ],
                     DueSources::Copy { .. } => vec![
                         read_source(

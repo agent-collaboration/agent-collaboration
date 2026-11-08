@@ -2,7 +2,7 @@
 //!
 //! Producers only append to a machine's stream. After each Fleet event this
 //! step compares the in-memory cursor of each machine the event appended to
-//! (see `notice_appends`), or whose push is unfinished, with what is committed
+//! (see `event_owed`), or whose push is unfinished, with what is committed
 //! and sends the gap, at most 32 notices per machine per event. A connection that just opened
 //! is caught up once its Hello has attached a session: from what its Router
 //! acknowledged, or from the retained floor for a released Router. A Router

@@ -26,6 +26,8 @@ mod forwards;
 mod notice_acknowledgment;
 mod notice_publication;
 mod operations;
+mod owed_answers;
+pub(crate) mod owed_requests;
 
 pub(crate) struct CoreSessionScope<'transaction, Host: ObjectPlatform>
 where
@@ -178,12 +180,11 @@ where
                         limits,
                         &crate::fleet_sender_binding::FleetSenderBinding,
                     )
-                    .recipient_report::<fleet_mail_delivery::JournaledStatus<
-                        crate::fleet_mail_tasks::FleetStatusTask<
-                            crate::session_store::CoreSessionStore<Host>,
-                            Host::Database,
-                        >,
-                    >>(session.peer, report, now)
+                    .recipient_report::<crate::central_mail_sink::CentralMailSink>(
+                        session.peer,
+                        report,
+                        now,
+                    )
                     .await
                     .map_err(fleet_mail_delivery::delivery_rollback)?;
                     self.stage_operation_answer(
@@ -198,14 +199,24 @@ where
                     operation:
                         OperationRequest::Delivery(DeliveryRequest::StatusAck { through, .. }),
                 } => {
-                    let result = fleet_mail_delivery::StatusStream::<_, BoardDeliveryTypes>::new(
-                        self,
-                        fleet_protocol::Submitter::Machine(session.peer),
-                        installation.clone(),
-                    )
-                    .acknowledge(through, now)
-                    .await
-                    .map_err(StoreError::backend)?;
+                    let mut stream =
+                        fleet_mail_delivery::StatusStream::<_, BoardDeliveryTypes>::new(
+                            self,
+                            fleet_protocol::Submitter::Machine(session.peer),
+                            installation.clone(),
+                        );
+                    // Read before acknowledging: the acknowledgment drops the events.
+                    let applied = stream
+                        .publications_applied_through(through)
+                        .await
+                        .map_err(StoreError::backend)?;
+                    let result = stream
+                        .acknowledge(through, now)
+                        .await
+                        .map_err(StoreError::backend)?;
+                    if matches!(result, fleet_protocol::StatusAckResult::Acknowledged { .. }) {
+                        self.close_applied_statuses(applied).await?;
+                    }
                     let bytes = serde_json::to_vec(&ServerFrame::<BoardConsumerProtocol>::Answer {
                         frame,
                         body: OperationAnswer::Delivery(DeliveryAnswer::StatusAck(result)),
@@ -275,6 +286,25 @@ where
                 } => {
                     self.stage_forward_answer(session, frame, reply, now)
                         .await?;
+                }
+                SessionEffect::RouteAnswer {
+                    session,
+                    frame,
+                    answer: fleet_protocol::ClientAnswer::Crate(answer),
+                } => {
+                    if !self
+                        .route_owed_answer(connection, session, frame, &answer, now)
+                        .await?
+                    {
+                        self.stage_transport(
+                            vec![SessionEffect::RouteAnswer {
+                                session,
+                                frame,
+                                answer: fleet_protocol::ClientAnswer::Crate(answer),
+                            }],
+                            Some(connection),
+                        )?;
+                    }
                 }
                 other => self.stage_transport(vec![other], Some(connection))?,
             }

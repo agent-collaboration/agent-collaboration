@@ -396,6 +396,73 @@ where
         .await
         .map_err(sql_error)
     }
+    /// When the earliest still-owed push reaches its item's `valid_until`.
+    pub async fn next_push_expiry(&mut self) -> Result<Option<SyncTime>, DeliveryError> {
+        let row = queries::read_next_push_expiry(self.scope)
+            .await
+            .map_err(sql_error)?;
+        match row.next_class.as_deref() {
+            Some("null") => Ok(None),
+            _ => {
+                let millis = integer(row.next_expiry, row.next_class, "outbox push expiry")?;
+                let millis = i64::try_from(millis).map_err(|_| DeliveryError::Corrupt {
+                    field: "outbox push expiry",
+                })?;
+                Ok(Some(SyncTime::from_unix_millis(millis)))
+            }
+        }
+    }
+
+    /// Items whose push is still owed but whose `valid_until` has passed,
+    /// earliest first, at most `limit`.
+    pub async fn expired_pushes(
+        &mut self,
+        now: SyncTime,
+        limit: u32,
+    ) -> Result<Vec<ItemId>, DeliveryError> {
+        queries::read_expired_pushes(self.scope, now.unix_millis().to_string(), limit.to_string())
+            .await
+            .map_err(sql_error)?
+            .into_iter()
+            .map(|row| {
+                row.item_id
+                    .and_then(|value| ItemId::try_from(value).ok())
+                    .ok_or(DeliveryError::Corrupt {
+                        field: "expired push item id",
+                    })
+            })
+            .collect()
+    }
+
+    /// The recipient's push this item is still owed, or `None` once it is
+    /// terminal, handed off, expired or gone.
+    pub async fn owed_push(
+        &mut self,
+        item: ItemId,
+        now: SyncTime,
+    ) -> Result<Option<crate::PushInput>, DeliveryError> {
+        let Some(crate::outbox_record::OutboxHeaderState::Item(header)) =
+            self.header_state(item).await?
+        else {
+            return Ok(None);
+        };
+        if header.status.is_terminal()
+            || header.handed_off_at.is_some()
+            || header.valid_until.is_some_and(|until| now >= until)
+        {
+            return Ok(None);
+        }
+        let digest = ItemDigest::try_from(header.digest).map_err(|_| DeliveryError::Corrupt {
+            field: "outbox digest",
+        })?;
+        Ok(Some(crate::PushInput {
+            reference: DeliveryItemRef {
+                item: header.id,
+                digest,
+            },
+            recipient: header.recipient,
+        }))
+    }
     pub(crate) async fn header_state(
         &mut self,
         item: ItemId,

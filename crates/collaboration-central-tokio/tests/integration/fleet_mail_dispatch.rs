@@ -50,21 +50,24 @@ impl Socket {
                 },
             )
             .await;
-        fixture.runtime.on_socket_opened(binding).await?;
+        // Socket events arrive through the kernel, as the shells deliver them.
+        let kernel = collaboration_central_core::ObjectKernel::new(&fixture.runtime);
+        kernel
+            .on_event(collaboration_central_core::ObjectEvent::SocketOpened { binding })
+            .await;
         let session_id = SessionId::new(durable_steps::Uuid::now_v7())?;
-        fixture
-            .runtime
-            .on_frame(
+        kernel
+            .on_event(collaboration_central_core::ObjectEvent::Frame {
                 binding,
-                serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {
+                frame: serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {
                     capabilities: None,
                     session_id,
                     schema_support: SchemaSupport { max_version: 7 },
                 })?,
-            )
-            .await?;
-        let report = fixture.runtime.conformance_drive_operations().await?;
-        assert!(report.failed.is_empty(), "session setup: {report:?}");
+            })
+            .await;
+        // The schema publication that precedes Welcome runs in an alarm.
+        crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
         let mut socket = Self {
             binding,
             session_id,
@@ -85,16 +88,24 @@ impl Socket {
             session_id: self.session_id,
             databases: Vec::new(),
         })?;
-        for _ in 0..self.frames.capacity() {
-            fixture
+        // Fill until the host refuses a frame; the one slot left is its Close's.
+        for _ in 0..self.frames.max_capacity() {
+            if fixture
                 .host
                 .send_frame(self.binding.connection, frame.clone().into())
-                .await?;
+                .await
+                .is_err()
+            {
+                break;
+            }
         }
-        if self.frames.capacity() != 0 {
-            return Err("native send queue was not filled".into());
+        if self.frames.capacity() != 1 {
+            return Err("native send queue was not filled to its Close slot".into());
         }
         Ok(())
+    }
+    pub(super) fn frames_is_empty(&mut self) -> bool {
+        self.frames.try_recv().is_err()
     }
     pub(super) async fn next(&mut self) -> TestResult<ServerFrame<BoardConsumerProtocol>> {
         match self.next_command().await? {
@@ -141,16 +152,15 @@ impl Socket {
         frame: FrameId,
         answer: PushResult<<BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Acceptance>,
     ) -> TestResult {
-        fixture
-            .runtime
-            .on_frame(
-                self.binding,
-                serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Answer {
+        collaboration_central_core::ObjectKernel::new(&fixture.runtime)
+            .on_event(collaboration_central_core::ObjectEvent::Frame {
+                binding: self.binding,
+                frame: serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Answer {
                     frame,
                     body: ClientAnswer::Crate(ServerCallAnswer::Pushed(answer)),
                 })?,
-            )
-            .await?;
+            })
+            .await;
         Ok(())
     }
 }
@@ -236,53 +246,41 @@ async fn silent_recipient_retries_at_injected_deadline_while_another_recipient_c
     let second = envelope(C, SERVICE_C)?;
     submit(&fixture, &first).await?;
     submit(&fixture, &second).await?;
-    let proof = async {
-        let silent_frame = silent.push(first.id()).await?;
-        // Adversarial input: C's claimed acceptance for B's frame must be
-        // ignored. This is not a positive custody receipt.
-        responsive
-            .answer(
-                &fixture,
-                silent_frame,
-                PushResult::Accepted {
-                    accepted_at: fixture.io.now(),
-                },
-            )
-            .await?;
-        let pushed = responsive.push_envelope(second.id()).await?;
-        let receipt = responsive_inbox
-            .accept(
-                pushed.submitter,
-                pushed.item,
-                collaboration_central_core::fleet_outbox_limits()?,
-            )
-            .await?;
-        assert!(matches!(receipt, PushResult::Accepted { .. }));
-        assert_eq!(responsive_inbox.count().await?, 1);
-        responsive.answer(&fixture, pushed.frame, receipt).await?;
-        let mut deadlines = fixture.io.reply_deadlines.subscribe();
-        tokio::time::timeout(CAP, deadlines.wait_for(|count| *count >= 2)).await??;
-        tokio::time::timeout(CAP, async {
-            loop {
-                if custody(&fixture, second.id()).await? == ("atRecipient".into(), false) {
-                    return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
-                }
-                tokio::task::yield_now().await;
-            }
-        })
-        .await??;
-        assert_eq!(custody(&fixture, first.id()).await?, ("sent".into(), true));
-        fixture.io.advance(2_000);
-        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
-    };
-    let (report, ()) = Box::pin(tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.conformance_drive_operations(), async {
-            proof.await.map_err(StoreError::backend)
-        })
-    }))
-    .await??;
-    assert!(report.failed.is_empty(), "{report:?}");
-    assert_eq!(report.retried.len(), 1, "{report:?}");
+    // Each submit's own event sends the push to its connected recipient.
+    let silent_frame = silent.push(first.id()).await?;
+    // Adversarial input: C's claimed acceptance for B's frame arrives on the
+    // wrong connection and is refused. It is not a custody receipt.
+    responsive
+        .answer(
+            &fixture,
+            silent_frame,
+            PushResult::Accepted {
+                accepted_at: fixture.io.now(),
+            },
+        )
+        .await?;
+    let pushed = responsive.push_envelope(second.id()).await?;
+    let receipt = responsive_inbox
+        .accept(
+            pushed.submitter,
+            pushed.item,
+            collaboration_central_core::fleet_outbox_limits()?,
+        )
+        .await?;
+    assert!(matches!(receipt, PushResult::Accepted { .. }));
+    assert_eq!(responsive_inbox.count().await?, 1);
+    responsive.answer(&fixture, pushed.frame, receipt).await?;
+    assert_eq!(
+        custody(&fixture, second.id()).await?,
+        ("atRecipient".into(), false)
+    );
+    assert_eq!(custody(&fixture, first.id()).await?, ("sent".into(), true));
+    // B never answers: past its retry time the push is sent again, same item,
+    // under a new send id.
+    fixture.io.advance(31_000);
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
+    let resent = silent.push(first.id()).await?;
+    assert_ne!(resent, silent_frame, "the retry reused its old send id");
     assert_eq!(custody(&fixture, first.id()).await?, ("sent".into(), true));
     assert_eq!(
         custody(&fixture, second.id()).await?,
@@ -317,59 +315,61 @@ async fn no_capacity_keeps_content_and_retries_the_same_item_after_capacity_retu
     )?;
     let item = envelope(B, SERVICE_B)?;
     submit(&fixture, &item).await?;
-    let (report, ()) = tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.conformance_drive_operations(), async {
-            let pushed = recipient
-                .push_envelope(item.id())
-                .await
-                .map_err(StoreError::backend)?;
-            let answer = inbox
-                .accept(pushed.submitter, pushed.item, no_room)
-                .await
-                .map_err(StoreError::backend)?;
-            assert!(matches!(
-                answer,
-                PushResult::Refused {
-                    reason: DeliveryRefusal::MailboxFull
-                }
-            ));
-            recipient
-                .answer(&fixture, pushed.frame, answer)
-                .await
-                .map_err(StoreError::backend)
-        })
-    })
-    .await??;
-    assert!(report.failed.is_empty(), "{report:?}");
-    assert_eq!(report.retried.len(), 1, "{report:?}");
+    // The submit's own event sends the push to the connected recipient.
+    let pushed = recipient.push_envelope(item.id()).await?;
+    let answer = inbox.accept(pushed.submitter, pushed.item, no_room).await?;
+    assert!(matches!(
+        answer,
+        PushResult::Refused {
+            reason: DeliveryRefusal::MailboxFull
+        }
+    ));
+    recipient.answer(&fixture, pushed.frame, answer).await?;
+    // Refused for now: the content stays and nothing is resent before the
+    // 30 s backoff (owed-work design).
     assert_eq!(custody(&fixture, item.id()).await?, ("sent".into(), true));
     assert_eq!(inbox.count().await?, 0);
+    assert!(
+        recipient.frames_is_empty(),
+        "a refused push was resent at once"
+    );
     fixture.io.advance(60_000);
-    let (report, ()) = tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.conformance_drive_operations(), async {
-            let pushed = recipient
-                .push_envelope(item.id())
-                .await
-                .map_err(StoreError::backend)?;
-            let answer = inbox
-                .accept(pushed.submitter, pushed.item, full_limits)
-                .await
-                .map_err(StoreError::backend)?;
-            assert!(matches!(answer, PushResult::Accepted { .. }));
-            recipient
-                .answer(&fixture, pushed.frame, answer)
-                .await
-                .map_err(StoreError::backend)
-        })
-    })
-    .await??;
-    assert!(report.failed.is_empty(), "{report:?}");
-    assert!(report.retried.is_empty(), "{report:?}");
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
+    let pushed = recipient.push_envelope(item.id()).await?;
+    let answer = inbox
+        .accept(pushed.submitter, pushed.item, full_limits)
+        .await?;
+    assert!(matches!(answer, PushResult::Accepted { .. }));
+    recipient.answer(&fixture, pushed.frame, answer).await?;
     assert_eq!(
         custody(&fixture, item.id()).await?,
         ("atRecipient".into(), false)
     );
     assert_eq!(inbox.count().await?, 1);
     inbox.close().await?;
+    fixture.close().await
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The live recipient's push must be sent even behind more owed rows than one read returns."
+)]
+#[tokio::test]
+async fn a_live_recipient_gets_its_push_behind_more_than_500_older_pushes_to_an_offline_one()
+-> TestResult {
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path(), NOW).await?;
+    // B never connects, so all 501 of its pushes stay owed, ahead of C's in
+    // creation order: more than one 500-row read of owed subjects.
+    for _ in 0..501 {
+        submit(&fixture, &envelope(B, SERVICE_B)?).await?;
+    }
+    let mut live = Socket::open(&fixture, C, SERVICE_C).await?;
+    let later = envelope(C, SERVICE_C)?;
+    submit(&fixture, &later).await?;
+    // The submit's own event sends it: eligibility is per destination, not a
+    // prefix of the oldest owed rows.
+    let frame = live.push(later.id()).await?;
+    assert_ne!(frame.as_uuid(), later.id().as_uuid());
     fixture.close().await
 }

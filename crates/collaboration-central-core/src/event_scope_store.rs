@@ -1,7 +1,7 @@
 //! A store that keeps the running event's scope across its transactions.
 //!
 //! Work an event does names itself to the event's scope (see
-//! `notice_appends`), which is set around each poll of the event's future. A
+//! `event_owed`), which is set around each poll of the event's future. A
 //! store whose transaction polls the callback as a separate task loses that
 //! scope: workerd's `Storage::transaction` runs the callback as its own promise
 //! (`worker` wraps it in `future_to_promise`). This store captures the scope
@@ -39,10 +39,10 @@ impl<Store: AtomicStore> AtomicStore for EventScopeStore<Store> {
             + Send
             + 'static,
     {
-        let scope = crate::notice_appends::current();
+        let scope = crate::event_owed::current();
         self.inner
             .transaction(move |transaction| {
-                Box::pin(crate::notice_appends::within(scope, callback(transaction)))
+                Box::pin(crate::event_owed::within(scope, callback(transaction)))
             })
             .await
     }

@@ -99,11 +99,11 @@ pub(crate) fn checked_row_id(
 }
 
 /// Lease facts, directory metadata and both ownership notices share the lease transaction.
-pub(crate) struct FleetLeaseChangeHook<Store, NoticeTask> {
+pub(crate) struct FleetLeaseChangeHook<Store> {
     ids: std::sync::Arc<dyn runtime_primitives::IdSource>,
-    marker: std::marker::PhantomData<fn() -> (Store, NoticeTask)>,
+    marker: std::marker::PhantomData<fn() -> Store>,
 }
-impl<Store, NoticeTask> FleetLeaseChangeHook<Store, NoticeTask> {
+impl<Store> FleetLeaseChangeHook<Store> {
     pub(crate) fn new(ids: std::sync::Arc<dyn runtime_primitives::IdSource>) -> Self {
         Self {
             ids,
@@ -111,8 +111,8 @@ impl<Store, NoticeTask> FleetLeaseChangeHook<Store, NoticeTask> {
         }
     }
 }
-impl<Store, Driver, NoticeTask, Scope> fleet_project_lease::LeaseChangeHook<Scope>
-    for FleetLeaseChangeHook<Store, NoticeTask>
+impl<Store, Driver, Scope> fleet_project_lease::LeaseChangeHook<Scope>
+    for FleetLeaseChangeHook<Store>
 where
     Store: AtomicStore,
     Scope: TransactionScope<Database = Driver> + durable_steps::JournalScope,
@@ -121,7 +121,6 @@ where
     for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'row> &'row str: ColumnIndex<Driver::Row>,
-    NoticeTask: durable_steps::Task<Input = crate::machine_notice_contract::MachineNoticeAppend>,
 {
     async fn on_lease_change(
         &self,

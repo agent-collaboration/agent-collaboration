@@ -1,0 +1,1 @@
+SELECT CAST(o.id AS TEXT) AS id FROM _fleet_sync_status_owed o JOIN _fleet_sync_status_events e ON e.submitter_kind=o.submitter_kind AND e.submitter_id=o.submitter_id AND e.item_id=o.item_id AND e.version=o.version WHERE o.submitter_kind=?1 AND o.submitter_id=?2 AND o.target_kind='peer' AND e.cursor<=CAST(?3 AS INTEGER) ORDER BY o.id;

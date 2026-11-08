@@ -302,11 +302,18 @@ impl Fixture {
         let bytes = serde_json::to_vec(
             &json!({"source":{"kind":"fleet"},"sourceFace":face,"authority":authority,"destination":{"kind":"fleet"},"destinationFace":if matches!(kind,"central.owner-registry" | "central.session-lease") {"registry"} else {"fleet"},"identity":{"operation":durable_steps::Uuid::now_v7(),"step":"component_call"},"kind":kind,"target":target,"request":request}),
         )?;
-        let answer = self
-            .runtime
-            .on_call(bytes)
+        // Calls arrive as kernel events, as the shells deliver them, so the
+        // event's post-event sends (notices, owed requests) run.
+        let answer = match collaboration_central_core::ObjectKernel::new(&self.runtime)
+            .on_event(collaboration_central_core::ObjectEvent::Call {
+                body: bytes,
+                storage_bytes: None,
+            })
             .await
-            .map_err(|failure| format!("{kind}: {failure:?}"))?;
+        {
+            collaboration_central_core::EventReply::CallAnswer(answer) => answer,
+            other => return Err(format!("{kind}: {other:?}").into()),
+        };
         Ok(serde_json::from_slice(&answer)?)
     }
     pub async fn metadata(&self, operation: fleet_admission::FleetOperation) -> TestResult<Value> {

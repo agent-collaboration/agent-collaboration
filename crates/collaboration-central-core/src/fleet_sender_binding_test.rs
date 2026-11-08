@@ -1,6 +1,6 @@
 //! Independent enrollment rows, real SDK custody and confirmed transaction rollback.
 use super::*;
-use crate::fleet_storage_fixture::{FixtureIo, FleetStorageFixture, NOW, TestError};
+use crate::fleet_storage_fixture::{FleetStorageFixture, NOW, TestError};
 use board_sync_protocol::BoardDeliveryBody;
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
 use fleet_mail_delivery::{CustodyRow, DeliveryTransactionFailure, Outbox};
@@ -8,15 +8,11 @@ use fleet_protocol::{
     DeliveryEnvelope, DeliveryItem, DeliveryItemRef, DeliveryStatus, ItemId, PeerId, Recipient,
     SubmitResult,
 };
-use fleet_tokio_objects::TokioObject;
 use serde_json::{Value, json};
 use sqlx_core::{query::query, row::Row};
 
 const SERVICE_A: &str = "019f0000-0000-7000-8000-000000008741";
 const SERVICE_B: &str = "019f0000-0000-7000-8000-000000008742";
-type Store = TokioObject<crate::CoreHost<FixtureIo>>;
-type Push = crate::fleet_mail_tasks::FleetPushTask<Store, sqlx_turso::Turso>;
-type Removal = crate::fleet_mail_tasks::FleetMailRemoval<Store, sqlx_turso::Turso>;
 type TestResult<T = ()> = Result<T, TestError>;
 
 async fn lookup(
@@ -86,7 +82,7 @@ async fn submit(
                     crate::fleet_outbox_limits().map_err(StoreError::backend)?,
                     &FleetSenderBinding,
                 )
-                .submit_relay::<fleet_mail_delivery::JournaledWork<Push, Removal>>(
+                .submit_relay::<crate::central_mail_sink::CentralMailSink>(
                     submitter,
                     item,
                     "019f0000-0000-7000-8000-000000005240"
@@ -109,7 +105,7 @@ async fn submit(
 
 async fn counts(fixture: &FleetStorageFixture) -> TestResult<(i64, i64)> {
     Ok(fixture.object.transaction(|scope|Box::pin(async move {
-        let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM _fleet_sync_outbox_items) AS custody,(SELECT count(*) FROM _fleet_sync_operations) AS tasks")
+        let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM _fleet_sync_outbox_items) AS custody,(SELECT count(*) FROM central_work_attempts) AS tasks")
             .fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
         Ok((row.try_get("custody").map_err(StoreError::backend)?,row.try_get("tasks").map_err(StoreError::backend)?))
     })).await?)
@@ -267,7 +263,8 @@ async fn admission_compares_independent_binding_and_claim_before_any_custody_or_
         .ok_or("real queued Push disappeared")?;
     assert_eq!(resolved.submitter, Submitter::Machine(sender));
     assert_eq!(serde_json::to_vec(&resolved.item)?, original);
-    assert_eq!(counts(&fixture).await?, (1, 2));
+    // One custody row, and the one owed push the queued item's recipient is sent.
+    assert_eq!(counts(&fixture).await?, (1, 1));
     fixture.close().await
 }
 
@@ -326,10 +323,6 @@ async fn confirmed_binding_rollback_is_retryable_and_retains_custody_and_origina
         matches!(fleet_mail_delivery::classify_delivery_store_error(rolled_back_read(&fixture,id).await),
         DeliveryTransactionFailure::BindingUnavailable {row:CustodyRow::Outbox(actual),reason:SenderBindingFailure::Unavailable} if actual==id)
     );
-    let failure = crate::mail_push_dispatch::store_failure(rolled_back_read(&fixture, id).await);
-    assert!(
-        matches!(failure,durable_steps::CallFailure::Retryable {reason} if reason.code=="senderBindingUnavailable")
-    );
     assert_eq!(
         lookup(
             &fixture,
@@ -359,11 +352,5 @@ async fn confirmed_binding_rollback_is_retryable_and_retains_custody_and_origina
         .ok_or("binding rollback lost queued content")?;
     assert_eq!(resolved.submitter, Submitter::Machine(sender));
     assert_eq!(serde_json::to_vec(&resolved.item)?, original);
-    assert!(matches!(
-        crate::mail_push_dispatch::store_failure(StoreError::backend(
-            "unconfirmed transaction outcome"
-        )),
-        durable_steps::CallFailure::AnswerLost
-    ));
     fixture.close().await
 }
