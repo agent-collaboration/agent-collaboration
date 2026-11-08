@@ -282,17 +282,19 @@ async fn settling_an_old_push_wakes_the_worker_through_the_interaction_store_and
             .unwrap(),
     );
     let wall = at("2026-06-15T12:00:00.000Z");
-    // Long past retention, but still pending, so protected.
+    // Long past retention, but attempted and not yet settled, so protected. The attempt is
+    // written before the worker starts, so settling is the only commit that follows.
     let push = aging_push(at("2026-01-10T00:00:00.000Z"));
     let push_id = push.push_id.clone();
     interactions.insert_push_record(push).await.unwrap();
+    interactions.mark_push_attempted(&push_id).await.unwrap();
     let worker = RunningWorker::start_with(&store, Some(interactions.clone()), wall).await;
     let parked = worker.snapshot();
-    assert_eq!(armed(&parked), None, "a pending push holds no timer");
+    assert_eq!(armed(&parked), None, "an unsettled push holds no timer");
     assert!(prunes(&parked).is_empty());
 
     // Settling it is an interaction-store commit; nothing touches the automation store.
-    interactions.mark_push_attempted(&push_id).await.unwrap();
+    let before_settlement = worker.snapshot().sleeps;
     interactions
         .settle_push_record(
             &push_id,
@@ -307,10 +309,10 @@ async fn settling_an_old_push_wakes_the_worker_through_the_interaction_store_and
         .unwrap();
     tokio::time::timeout(
         COMMIT_WAKE_GUARD,
-        worker.observation.asleep_at_least(parked.sleeps + 1),
+        worker.observation.asleep_at_least(before_settlement + 1),
     )
     .await
-    .expect("the interaction commit woke the worker");
+    .expect("the settlement commit woke the worker");
 
     let woke = worker.snapshot();
     assert_eq!(
