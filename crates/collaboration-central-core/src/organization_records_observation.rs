@@ -1,6 +1,8 @@
-//! Conformance only: read an organization's stamp and change records back
-//! through the Fleet object that owns them, on any host.
+//! Conformance only: read an organization's stamp, change records and
+//! retained organization floor back through the Fleet object that owns them,
+//! on any host.
 use crate::organization_authority::{OrganizationChangeRecord, StoredStampRead};
+use crate::person_request::{OrganizationFloor, OrganizationFloorState};
 use fleet_identity_protocol::OrganizationId;
 use serde::{Deserialize, Serialize};
 
@@ -29,10 +31,39 @@ pub struct OrganizationRecordsObservation {
     pub statement: Option<String>,
     pub stamped_organization: Option<OrganizationId>,
     pub records: Vec<OrganizationChangeRecord>,
+    /// The organization floor the same transaction retains, if any.
+    pub organization_floor: Option<ObservedOrganizationFloor>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObservedOrganizationFloor {
+    pub revision: i64,
+    pub state: String,
+    pub policy_digest: String,
+}
+
+impl From<OrganizationFloor> for ObservedOrganizationFloor {
+    fn from(floor: OrganizationFloor) -> Self {
+        let state = match floor.state {
+            OrganizationFloorState::Active => "active",
+            OrganizationFloorState::Stopped => "stopped",
+            OrganizationFloorState::Deleted => "deleted",
+        };
+        Self {
+            revision: floor.revision.get(),
+            state: state.into(),
+            policy_digest: floor.policy_digest,
+        }
+    }
 }
 
 impl OrganizationRecordsObservation {
-    pub(crate) fn new(stamp: StoredStampRead, records: Vec<OrganizationChangeRecord>) -> Self {
+    pub(crate) fn new(
+        stamp: StoredStampRead,
+        records: Vec<OrganizationChangeRecord>,
+        organization_floor: Option<OrganizationFloor>,
+    ) -> Self {
         let (statement, stamped_organization) = match stamp {
             StoredStampRead::Unprovisioned => (None, None),
             StoredStampRead::Stamped(stamp) => (
@@ -44,6 +75,7 @@ impl OrganizationRecordsObservation {
             statement,
             stamped_organization,
             records,
+            organization_floor: organization_floor.map(Into::into),
         }
     }
 }

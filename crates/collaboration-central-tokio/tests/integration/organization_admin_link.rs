@@ -484,6 +484,21 @@ fn person_push(revision: i64, state: &str, subject: &str) -> Value {
         "revision":revision,"state":state})
 }
 
+/// The person floors on disk; read only while the server is stopped.
+async fn person_floors(root: &std::path::Path) -> ConformanceResult<Vec<(String, i64)>> {
+    let mut store = sqlx_turso::TursoConnectOptions::new()
+        .filename(root.join(format!("fleet-{ORGANIZATION}.db")))
+        .connect()
+        .await?;
+    let floors = sqlx_core::query_as::query_as(
+        "SELECT person_id, minimum_revision FROM person_organization_authorization_floors",
+    )
+    .fetch_all(&mut store)
+    .await?;
+    store.close().await?;
+    Ok(floors)
+}
+
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Assertions compare each push answer and the retained floors while fixture errors propagate."
@@ -492,12 +507,12 @@ fn person_push(revision: i64, state: &str, subject: &str) -> Value {
 async fn organization_floor_push_acknowledges_only_what_commits() -> ConformanceResult<()> {
     // Wrong builds caught: a floor applied to an unstamped Fleet; a person
     // floor before its organization; an older push lowering a floor; a
-    // conflicting payload accepted; an ACK for a rolled-back apply.
+    // conflicting payload accepted; an ACK for a rolled-back apply; a write that
+    // commits behind a 503.
     let root = tempfile::tempdir()?;
     let access = JwksFixtureServer::start().await?;
     let keys = SignInKeys::start().await?;
     let (server, socket) = start(root.path(), &access, &keys).await?;
-    let base = server.base_url().to_owned();
     let unstamped = link_post(&socket, PUSH, &organization_push(3, "active")).await?;
     let provisioned = link_post(
         &socket,
@@ -512,7 +527,10 @@ async fn organization_floor_push_acknowledges_only_what_commits() -> Conformance
     reqwest::Client::builder()
         .no_proxy()
         .build()?
-        .post(format!("{base}/admin/v1/conformance/runtime"))
+        .post(format!(
+            "{}/admin/v1/conformance/runtime",
+            server.base_url()
+        ))
         .header(
             "Cf-Access-Jwt-Assertion",
             collaboration_central_conformance::owner_assertion()?,
@@ -527,6 +545,12 @@ async fn organization_floor_push_acknowledges_only_what_commits() -> Conformance
         .await?
         .error_for_status()?;
     let faulted = link_post(&socket, PUSH, &person_push(4, "active", OWNER_SUBJECT)).await?;
+    // Observe the store before any retry: an idempotent retry would hide a
+    // write that committed behind the 503.
+    server.shutdown().await?;
+    let after_fault = person_floors(root.path()).await?;
+    let (server, socket) = start(root.path(), &access, &keys).await?;
+    let base = server.base_url().to_owned();
     let person = link_post(&socket, PUSH, &person_push(4, "active", OWNER_SUBJECT)).await?;
     let other_subject = link_post(
         &socket,
@@ -568,6 +592,11 @@ async fn organization_floor_push_acknowledges_only_what_commits() -> Conformance
     assert_eq!(older, (200, br#"{"acknowledgedRevision":3}"#.to_vec()));
     assert_eq!(conflicting.0, 409);
     assert_eq!(faulted.0, 503, "a rolled-back apply never acknowledges");
+    assert_eq!(
+        after_fault,
+        Vec::<(String, i64)>::new(),
+        "the faulted apply left no person floor behind"
+    );
     assert_eq!(person, (200, br#"{"acknowledgedRevision":4}"#.to_vec()));
     assert_eq!(other_subject.0, 409);
     assert_eq!(public, 404);

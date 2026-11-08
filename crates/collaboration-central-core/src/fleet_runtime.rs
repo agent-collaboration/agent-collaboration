@@ -321,7 +321,19 @@ where
                     let records =
                         crate::organization_authority::read_change_record_page(scope, None, 100)
                             .await?;
-                    Ok(crate::OrganizationRecordsObservation::new(stamp, records))
+                    let floor = match &stamp {
+                        crate::organization_authority::StoredStampRead::Stamped(stamped) => {
+                            crate::person_request::read_organization_floor(
+                                scope,
+                                stamped.organization_id().as_str(),
+                            )
+                            .await?
+                        }
+                        crate::organization_authority::StoredStampRead::Unprovisioned => None,
+                    };
+                    Ok(crate::OrganizationRecordsObservation::new(
+                        stamp, records, floor,
+                    ))
                 })
             })
             .await

@@ -12,8 +12,8 @@ mod fleet_organization_authority;
 mod organization_records_observation;
 #[cfg(feature = "conformance")]
 pub use organization_records_observation::{
-    ORGANIZATION_RECORDS_PATH, ORGANIZATION_STATEMENT_TAMPER_PATH, OrganizationRecordsObservation,
-    OrganizationRecordsRequest, OrganizationStatementTamper,
+    ORGANIZATION_RECORDS_PATH, ORGANIZATION_STATEMENT_TAMPER_PATH, ObservedOrganizationFloor,
+    OrganizationRecordsObservation, OrganizationRecordsRequest, OrganizationStatementTamper,
 };
 mod organization_admin_calls;
 pub use organization_admin_calls::{

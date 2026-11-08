@@ -573,6 +573,32 @@ async fn main() -> ConformanceResult<()> {
             "a member reads the workspace",
             &looked_up,
         )?;
+        // A floor apply aborted after its write: no ACK, and the store still
+        // holds the prior floor before any retry (an idempotent retry would
+        // hide a write that committed behind the 503).
+        caller
+            .post(
+                "/public/admin/v1/conformance/runtime",
+                &json!({"address":{"kind":"fleet","value":{"organization":legacy}},
+                    "command":{"kind":"failNextOrganizationRecord"}}),
+            )
+            .await?;
+        let raised_floor = json!({"kind":"organization","organizationId":legacy,"revision":2,
+            "state":"active","permissionPolicyDigest":ADMIN_POLICY});
+        let faulted_floor = caller
+            .post("/link/internal/organization-authorization-revisions", &raised_floor)
+            .await?;
+        let floor_after_fault = caller.records(legacy).await?;
+        let retried_floor = caller
+            .post("/link/internal/organization-authorization-revisions", &raised_floor)
+            .await?;
+        require(
+            faulted_floor.0 == 503
+                && floor_after_fault.pointer("/organizationFloor/revision") == Some(&json!(1))
+                && retried_floor.2 == json!({"acknowledgedRevision":2}),
+            "an aborted floor apply leaves the prior floor and never acknowledges",
+            &(faulted_floor, floor_after_fault, retried_floor),
+        )?;
         let collision = caller
             .post(
                 "/public/admin/v1/machines/enroll",

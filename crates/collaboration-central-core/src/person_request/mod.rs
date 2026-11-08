@@ -15,6 +15,8 @@ pub use admin_operations::{
 pub(crate) use floor_delivery::{FloorDelivery, deliver as deliver_floor};
 pub use refusal::PersonRequestRefusal;
 pub(crate) use request_admission::admit as admit_person_request;
+#[cfg(feature = "conformance")]
+pub(crate) use request_admission::read_organization_floor;
 pub use request_admission::{
     AdmissionRefusal, AdmittedRequest, FloorRevision, OrganizationFloor, OrganizationFloorState,
     PersonFloor, PersonFloorState, SECOND_FACTOR_WINDOW_SECONDS,
