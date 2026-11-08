@@ -322,3 +322,114 @@ async fn a_root_that_never_opened_its_fleet_database_but_has_old_settings_is_ref
     );
     assert_settings_carried(&root, &old, "never-connected root").await
 }
+
+/// `settings.jsonc` with these two sections, as an owner could leave it.
+fn settings_with(providers: &str, ports: &str) -> String {
+    format!(
+        "{{\n  \"providers\": {},\n  \"ports\": {}\n}}\n",
+        providers.trim(),
+        ports.trim()
+    )
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
+#[tokio::test]
+async fn a_resumed_carry_whose_settings_file_is_gone_or_changed_refuses_and_keeps_the_old_files()
+-> UpdateResult {
+    let changed_ports = "{\"router\": 29741, \"mcp\": 28742, \"tailscaleHttps\": 28743}";
+    for case in ["removed", "changed"] {
+        // Arrange: the update wrote settings.jsonc and recorded it, then was killed;
+        // before the rerun the file goes, or its ports section changes.
+        let (_directory, root) = populated_root()?;
+        let old = write_old_settings(&root)?;
+        run_update_killed_at(&root, "step-0007:recorded-written").await?;
+        let settings = router_settings_path(&root);
+        // The first old file whose values settings.jsonc no longer holds is named.
+        let unconfirmed = if case == "removed" {
+            std::fs::remove_file(&settings)?;
+            &old.providers
+        } else {
+            std::fs::write(&settings, settings_with(OLD_PROVIDERS, changed_ports))?;
+            &old.ports
+        };
+        let before = snapshot(&root)?;
+
+        // Act
+        let output = run_update(&root_argument(&root)).await?;
+
+        // Assert
+        assert_ne!(output.status.code(), Some(0), "{case}");
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            error.contains(&settings.display().to_string()),
+            "{case}: {error}"
+        );
+        assert!(
+            error.contains(&unconfirmed.display().to_string()),
+            "{case}: {error}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&old.providers)?,
+            OLD_PROVIDERS,
+            "{case}"
+        );
+        assert_eq!(std::fs::read_to_string(&old.ports)?, OLD_PORTS, "{case}");
+        assert_eq!(
+            snapshot(&root)?,
+            before,
+            "{case}: a refused update changes nothing"
+        );
+    }
+    Ok(())
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
+#[tokio::test]
+async fn after_one_old_file_went_only_the_surviving_files_section_must_still_match() -> UpdateResult
+{
+    let edited_providers = OLD_PROVIDERS.replace("\"enabled\": false", "\"enabled\": true");
+    let changed_ports = "{\"router\": 29741, \"mcp\": 28742, \"tailscaleHttps\": 28743}";
+    for (case, providers, ports, finishes) in [
+        (
+            "providers edited after its file went",
+            edited_providers.as_str(),
+            OLD_PORTS,
+            true,
+        ),
+        (
+            "ports changed while its file is left",
+            OLD_PROVIDERS,
+            changed_ports,
+            false,
+        ),
+    ] {
+        // Arrange: killed after providers.json was removed; ports.json is left.
+        let (_directory, root) = populated_root()?;
+        let old = write_old_settings(&root)?;
+        run_update_killed_at(&root, "step-0007:old-file-removed:providers.json").await?;
+        assert!(!old.providers.exists() && old.ports.exists(), "{case}");
+        std::fs::write(router_settings_path(&root), settings_with(providers, ports))?;
+
+        // Act
+        let output = run_update(&root_argument(&root)).await?;
+
+        // Assert
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code() == Some(0), finishes, "{case}: {error}");
+        assert_eq!(old.ports.exists(), !finishes, "{case}");
+        if !finishes {
+            assert_eq!(std::fs::read_to_string(&old.ports)?, OLD_PORTS, "{case}");
+            assert!(
+                error.contains(&old.ports.display().to_string()),
+                "{case}: {error}"
+            );
+        }
+    }
+    Ok(())
+}

@@ -100,6 +100,16 @@ pub(crate) fn read_router_settings_section<T: DeserializeOwned>(
     })
 }
 
+/// One section as JSON, read and checked the way the Host reads it; `None` when
+/// the file or the section is absent. `agent-router-update` compares a carried
+/// file with it before removing that file.
+pub fn read_router_settings_section_json(
+    router_root: &Path,
+    section: RouterSettingsSection,
+) -> Result<Option<serde_json::Value>, RouterSettingsError> {
+    Ok(read_router_settings_section::<serde_json::Value>(router_root, section)?.value)
+}
+
 /// Loads the `providers` section, creating the settings file with provider
 /// defaults when it does not exist yet.
 pub fn load_or_create_provider_settings(

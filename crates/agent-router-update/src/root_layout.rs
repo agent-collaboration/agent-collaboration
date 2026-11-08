@@ -51,6 +51,10 @@ pub enum RouterUpdateError {
     )]
     SettingsConflict { settings: PathBuf, older: PathBuf },
     #[error(
+        "{older} was carried into {settings}, but {settings} no longer holds its settings (it is missing or was changed since); {older} is kept: put back the {settings} this update wrote, or copy {older}'s settings into its section, then run agent-router-update again"
+    )]
+    CarriedSettingsMissing { settings: PathBuf, older: PathBuf },
+    #[error(
         "{path} is not valid settings JSON ({message}); fix or move it aside, then run agent-router-update again"
     )]
     MalformedSettingsFile { path: PathBuf, message: String },

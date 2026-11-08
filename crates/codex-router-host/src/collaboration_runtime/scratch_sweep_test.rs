@@ -314,11 +314,16 @@ async fn a_shared_thread_folder_stays_while_any_session_is_open_and_is_removed_3
 }
 
 #[tokio::test]
-async fn no_pass_runs_between_due_moments() {
+async fn the_timer_fires_at_the_earliest_due_moment_and_never_later_than_29_days_while_a_scope_is_open()
+ {
+    // Arrange: one folder due in two days, and one a session holds open.
     let mut fixture = Fixture::start(|scratch, now| {
         seed_scope(scratch, "due-in-two-days", now, 28 * DAY);
+        seed_scope(scratch, "held-open", now, 40 * DAY);
     })
     .await;
+    let held = fixture.folder("held-open");
+    fixture.runtime.open_scratch_scopes.opened(&held);
     let mut checks = fixture.clock.timer_checks();
     fixture.start_sweep();
     let first = fixture.next_pass().await;
@@ -326,37 +331,178 @@ async fn no_pass_runs_between_due_moments() {
     let started = first.ran_at.unwrap_or_else(|| panic!("ran at"));
     let until_due = due.duration_since(started).unwrap_or_default();
     assert!(until_due > DAY && until_due <= 2 * DAY + Duration::from_secs(1));
-
-    // The one timer the sweep arms is for the due moment, not a fixed tick.
-    let armed = next_check(&mut checks).await;
     assert_eq!(
-        armed,
+        next_check(&mut checks).await,
         TimerCheck {
             deadline: due,
             seen_at: started,
             fired: false
+        },
+        "the one timer is armed for the earliest due moment"
+    );
+
+    // Act 1: the due moment comes; the due folder goes and only the open scope is left.
+    fixture.clock.advance(until_due);
+    assert!(next_check(&mut checks).await.fired);
+    let second = fixture.next_pass().await;
+    let second_ran = second.ran_at.unwrap_or_else(|| panic!("ran at"));
+    let restamp_due = second_ran + 29 * DAY;
+
+    // Assert 1: the next pass is 29 days away, a day before the open scope's
+    // freshly recorded use could make it eligible.
+    assert_eq!(second.removed, vec!["due-in-two-days".to_owned()]);
+    assert_eq!(second.kept_open, vec!["held-open".to_owned()]);
+    assert_eq!(
+        last_used(&held),
+        second_ran,
+        "use recorded at the sweep's time"
+    );
+    assert_eq!(second.next_pass_at, Some(restamp_due));
+    assert_eq!(
+        next_check(&mut checks).await,
+        TimerCheck {
+            deadline: restamp_due,
+            seen_at: second_ran,
+            fired: false
         }
     );
-    // Just before the due moment the timer looks again and keeps waiting.
-    fixture.clock.advance(until_due - Duration::from_secs(60));
+
+    // Act 2: a minute short of 29 days the timer keeps waiting; at 29 days it fires.
+    fixture.clock.advance(29 * DAY - Duration::from_secs(60));
     let early = next_check(&mut checks).await;
-    assert_eq!((early.deadline, early.fired), (due, false));
-    // At the due moment it fires, and exactly one pass runs then.
     fixture.clock.advance(Duration::from_secs(60));
     let at_due = next_check(&mut checks).await;
-    assert_eq!(
-        (at_due.deadline, at_due.seen_at, at_due.fired),
-        (due, due, true)
-    );
-    let second = fixture.next_pass().await;
+    let third = fixture.next_pass().await;
 
-    assert_eq!(
-        second.ran_at,
-        Some(due),
-        "the timer fires only at the due moment"
-    );
-    assert_eq!(second.removed, vec!["due-in-two-days".to_owned()]);
+    // Assert 2: the pass re-records the open scope's use then.
+    assert_eq!((early.deadline, early.fired), (restamp_due, false));
+    assert_eq!((at_due.deadline, at_due.fired), (restamp_due, true));
+    assert_eq!(third.ran_at, Some(restamp_due));
+    assert_eq!(third.kept_open, vec!["held-open".to_owned()]);
+    assert_eq!(last_used(&held), restamp_due);
+    assert_eq!(third.next_pass_at, Some(restamp_due + 29 * DAY));
     fixture.stop().await;
+}
+
+#[tokio::test]
+async fn after_a_pass_with_nothing_open_the_timer_waits_at_most_29_days_and_records_a_scope_opened_since()
+ {
+    // Arrange: the first pass finds no folders and nothing open.
+    let mut fixture = Fixture::start(|_, _| {}).await;
+    let mut checks = fixture.clock.timer_checks();
+    fixture.start_sweep();
+    let empty = fixture.next_pass().await;
+    let empty_ran = empty.ran_at.unwrap_or_else(|| panic!("ran at"));
+    let armed = next_check(&mut checks).await;
+    // A session opens a scope after that pass and leaves it quiet.
+    let folder = fixture.folder("opened-later");
+    fixture.runtime.open_scratch_scopes.opened(&folder);
+    std::fs::write(folder.join("notes.md"), b"scratch")
+        .unwrap_or_else(|error| panic!("note: {error}"));
+
+    // Act: the clock reaches the armed deadline.
+    fixture
+        .clock
+        .advance(armed.deadline.duration_since(empty_ran).unwrap_or_default());
+    let fired = next_check(&mut checks).await;
+    let next = fixture.next_pass().await;
+
+    // Assert: the timer waited no longer than 29 days, and that pass recorded the
+    // later scope's use at its own time.
+    assert!(
+        empty.removed.is_empty() && empty.kept_open.is_empty(),
+        "{empty:?}"
+    );
+    assert!(!armed.fired, "{armed:?}");
+    assert!(
+        armed.deadline <= empty_ran + 29 * DAY,
+        "an empty pass must not wait longer than 29 days: armed {:?} after {:?}",
+        armed.deadline.duration_since(empty_ran),
+        empty_ran
+    );
+    assert!(fired.fired, "{fired:?}");
+    assert_eq!(next.ran_at, Some(armed.deadline));
+    assert_eq!(next.kept_open, vec!["opened-later".to_owned()]);
+    assert_eq!(last_used(&folder), armed.deadline);
+    assert!(folder.join("notes.md").is_file());
+    fixture.stop().await;
+}
+
+/// Starts `runtime`'s sweep on `clock`; each finished pass arrives on the receiver.
+fn start_observed_sweep(
+    runtime: &mut CollaborationRuntime,
+    clock: &Arc<ManualClock>,
+) -> mpsc::UnboundedReceiver<ScratchSweepReport> {
+    let (sender, passes) = mpsc::unbounded_channel();
+    runtime
+        .start_scratch_sweep(
+            Arc::clone(clock) as Arc<dyn ScratchSweepClock>,
+            Arc::new(ObservedEvents {
+                passes: sender,
+                hold_after_recheck: Mutex::new(None),
+            }),
+        )
+        .unwrap_or_else(|error| panic!("sweep: {error}"));
+    passes
+}
+
+async fn next_report(
+    passes: &mut mpsc::UnboundedReceiver<ScratchSweepReport>,
+) -> ScratchSweepReport {
+    tokio::time::timeout(Duration::from_secs(10), passes.recv())
+        .await
+        .unwrap_or_else(|_| panic!("no sweep pass reported"))
+        .unwrap_or_else(|| panic!("sweep stopped"))
+}
+
+#[tokio::test]
+async fn an_open_scope_whose_use_was_recorded_before_a_crash_stays_after_a_restart_past_30_days() {
+    // Arrange: a quiet session holds a folder open from day 0; the pass on day 29
+    // records its use.
+    let root = tempfile::tempdir().unwrap_or_else(|error| panic!("root: {error}"));
+    private(root.path());
+    let scratch = root.path().join("scratch");
+    private(&scratch);
+    let clock = ManualClock::starting_now();
+    let day_0 = clock.now();
+    seed_scope(&scratch, "quiet-open", day_0, 40 * DAY);
+    let folder = scratch.join("quiet-open");
+    let mut before_crash = start_runtime(root.path()).await;
+    before_crash.open_scratch_scopes.opened(&folder);
+    let mut passes = start_observed_sweep(&mut before_crash, &clock);
+    let opened_pass = next_report(&mut passes).await;
+    clock.advance(29 * DAY);
+    let restamp_pass = next_report(&mut passes).await;
+    let day_29 = day_0 + 29 * DAY;
+    let recorded_before_crash = last_used(&folder);
+    // The Host stops before the session closes: its register of open scopes is gone.
+    before_crash
+        .shutdown()
+        .await
+        .unwrap_or_else(|error| panic!("shutdown: {error}"));
+
+    // Act: the Host restarts on day 31, before the session is opened again.
+    let mut after_restart = start_runtime(root.path()).await;
+    let restart_clock = ManualClock::starting_now();
+    restart_clock.advance(31 * DAY);
+    let mut restart_passes = start_observed_sweep(&mut after_restart, &restart_clock);
+    let after = next_report(&mut restart_passes).await;
+
+    // Assert
+    assert_eq!(opened_pass.kept_open, vec!["quiet-open".to_owned()]);
+    assert_eq!(restamp_pass.ran_at, Some(day_29), "a pass ran on day 29");
+    assert_eq!(restamp_pass.kept_open, vec!["quiet-open".to_owned()]);
+    assert_eq!(
+        recorded_before_crash, day_29,
+        "its use was recorded on day 29"
+    );
+    assert!(after.removed.is_empty(), "{:?}", after.removed);
+    assert_eq!(after.kept_recent, vec!["quiet-open".to_owned()]);
+    assert!(folder.join("notes.md").is_file(), "its contents are kept");
+    after_restart
+        .shutdown()
+        .await
+        .unwrap_or_else(|error| panic!("shutdown: {error}"));
 }
 
 #[tokio::test]

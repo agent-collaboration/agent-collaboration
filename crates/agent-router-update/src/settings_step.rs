@@ -17,7 +17,9 @@ use crate::{
     root_layout::{RootLayout, RouterUpdateError, exists},
     update_barrier::{UpdateBarrier, wait_at},
 };
-use codex_router_host::router_settings_path;
+use codex_router_host::{
+    RouterSettingsSection, read_router_settings_section_json, router_settings_path,
+};
 use message_board_storage::{
     RouterUpdateStep, StoredUpdateLedger, UpdateLedger, UpdateSourceProgress, UpdateStepProgress,
 };
@@ -28,8 +30,10 @@ use std::{
 };
 
 /// The two files whose content becomes `settings.jsonc`, in section order.
-const SETTINGS_SOURCES: [(&str, &str); 2] =
-    [("providers.json", "providers"), ("ports.json", "ports")];
+const SETTINGS_SOURCES: [(&str, RouterSettingsSection); 2] = [
+    ("providers.json", RouterSettingsSection::Providers),
+    ("ports.json", RouterSettingsSection::Ports),
+];
 /// The ledger names the written `settings.jsonc` by its file name.
 const SETTINGS_LEDGER_SOURCE: &str = "settings.jsonc";
 const LEGACY_MACHINE_LIST: &str = "routers.jsonc";
@@ -113,7 +117,11 @@ pub(crate) fn plan_settings_step(
     ) == Some(UpdateSourceProgress::Written);
     let settings = if written {
         // Carried already: finish any removal left, and record it, even when a kill
-        // came after the last old file went but before its `removed` row.
+        // came after the last old file went but before its `removed` row. Each old
+        // file left goes only while settings.jsonc still holds its values.
+        for older in &from {
+            confirm_carried(root, older)?;
+        }
         SettingsFileChange::RemoveCarried { into, from }
     } else if from.is_empty() {
         SettingsFileChange::Nothing
@@ -207,21 +215,8 @@ fn render_settings(root: &Path) -> Result<String, RouterUpdateError> {
         if !exists(&path)? {
             continue;
         }
-        let bytes = std::fs::read(&path).map_err(|source| RouterUpdateError::File {
-            path: path.clone(),
-            source,
-        })?;
-        let malformed = |message: String| RouterUpdateError::MalformedSettingsFile {
-            path: path.clone(),
-            message,
-        };
-        let text = String::from_utf8(bytes).map_err(|error| malformed(error.to_string()))?;
-        match serde_json::from_str::<serde_json::Value>(&text) {
-            Ok(serde_json::Value::Object(_)) => {}
-            Ok(_) => return Err(malformed("the file is not a JSON object".to_owned())),
-            Err(error) => return Err(malformed(error.to_string())),
-        }
-        sections.push(format!("  \"{section}\": {}", text.trim()));
+        let (text, _) = read_old_settings_file(&path)?;
+        sections.push(format!("  {section}: {}", text.trim()));
     }
     Ok(format!(
         "// Router settings, carried unchanged from providers.json and ports.json by\n\
@@ -229,6 +224,45 @@ fn render_settings(root: &Path) -> Result<String, RouterUpdateError> {
          {{\n{}\n}}\n",
         sections.join(",\n")
     ))
+}
+
+/// An old settings file's text and value, checked to be one JSON object.
+fn read_old_settings_file(path: &Path) -> Result<(String, serde_json::Value), RouterUpdateError> {
+    let bytes = std::fs::read(path).map_err(|source| RouterUpdateError::File {
+        path: path.to_owned(),
+        source,
+    })?;
+    let malformed = |message: String| RouterUpdateError::MalformedSettingsFile {
+        path: path.to_owned(),
+        message,
+    };
+    let text = String::from_utf8(bytes).map_err(|error| malformed(error.to_string()))?;
+    match serde_json::from_str::<serde_json::Value>(&text) {
+        Ok(value @ serde_json::Value::Object(_)) => Ok((text, value)),
+        Ok(_) => Err(malformed("the file is not a JSON object".to_owned())),
+        Err(error) => Err(malformed(error.to_string())),
+    }
+}
+
+/// Refuses unless `settings.jsonc` exists and its section, read the way the Host
+/// reads it, holds exactly `older`'s values. A progress row only says the file was
+/// written once; this checks the copy is still there before the source goes.
+fn confirm_carried(root: &Path, older: &Path) -> Result<(), RouterUpdateError> {
+    let settings = router_settings_path(root);
+    let not_carried = || RouterUpdateError::CarriedSettingsMissing {
+        settings: settings.clone(),
+        older: older.to_owned(),
+    };
+    let section = SETTINGS_SOURCES
+        .iter()
+        .find(|(file, _)| older.file_name().and_then(|name| name.to_str()) == Some(*file))
+        .map(|(_, section)| *section)
+        .ok_or_else(not_carried)?;
+    let (_, expected) = read_old_settings_file(older)?;
+    match read_router_settings_section_json(root, section) {
+        Ok(Some(carried)) if carried == expected => Ok(()),
+        Ok(_) | Err(_) => Err(not_carried()),
+    }
 }
 
 /// Writes `contents` to `path` whole: a private temporary file beside it, synced, then

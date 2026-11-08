@@ -31,17 +31,23 @@ pub fn router_scratch_root(router_root: &Path) -> PathBuf {
     router_root.join(SCRATCH_DIRECTORY_NAME)
 }
 
-/// Creates the scope folder if it is missing (owner-private) and records a use,
-/// holding the scope's lock shared so a sweep can never remove it midway. A
+/// Creates the scope folder if it is missing (owner-private) and records a use
+/// now, holding the scope's lock shared so a sweep can never remove it midway. A
 /// sweep that already renamed the folder away leaves a fresh one to be created.
 pub fn prepare_scratch_scope(scope_folder: &Path) -> io::Result<()> {
+    prepare_scratch_scope_used_at(scope_folder, SystemTime::now())
+}
+
+/// [`prepare_scratch_scope`], recording the use at `used_at`: the Host's sweep
+/// records an open session's use at the time its own clock judged the folder by.
+pub fn prepare_scratch_scope_used_at(scope_folder: &Path, used_at: SystemTime) -> io::Result<()> {
     let (scratch_root, scope) = scope_parts(scope_folder)?;
     let lock = open_scope_lock(scratch_root, scope)?;
     lock.lock_shared()?;
     #[cfg(feature = "test-support")]
     crate::scratch_scope_test_support::creator_holds_scope_lock(scope_folder);
     create_private_folder(scope_folder)?;
-    record_scope_use(scope_folder)
+    record_scope_use(scope_folder, used_at)
 }
 
 /// The exclusive hold a sweep takes on one scope; released on drop.
@@ -79,14 +85,14 @@ pub fn scratch_scope_last_change(scope_folder: &Path) -> io::Result<SystemTime> 
     Ok(newest)
 }
 
-fn record_scope_use(scope_folder: &Path) -> io::Result<()> {
+fn record_scope_use(scope_folder: &Path, used_at: SystemTime) -> io::Result<()> {
     let marker = OpenOptions::new()
         .create(true)
         .truncate(false)
         .write(true)
         .mode(0o600)
         .open(scope_folder.join(SCRATCH_LAST_USED_FILE_NAME))?;
-    marker.set_modified(SystemTime::now())
+    marker.set_modified(used_at)
 }
 
 fn open_scope_lock(scratch_root: &Path, scope: &str) -> io::Result<File> {

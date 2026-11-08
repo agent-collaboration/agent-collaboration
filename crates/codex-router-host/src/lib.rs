@@ -92,7 +92,7 @@ pub use provider_settings_section::{ProviderConfigurationEntries, ProviderConfig
 mod router_settings;
 pub use router_settings::{
     ROUTER_SETTINGS_FILE_NAME, RouterSettingsError, RouterSettingsSection,
-    load_or_create_provider_settings, router_settings_path,
+    load_or_create_provider_settings, read_router_settings_section_json, router_settings_path,
 };
 mod provider_startup_composition;
 pub use provider_startup_composition::ExternalProviderStartup;
