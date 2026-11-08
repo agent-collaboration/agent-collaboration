@@ -195,13 +195,16 @@ impl SourceApiFixture {
             .unwrap();
         let address = listener.local_addr().unwrap();
         let shutdown = CancellationToken::new();
-        let (_sender, relation) = tokio::sync::watch::channel(RouterExecutableRelation::Match);
         let api = collaboration_mcp::collaboration_api_router(
             &collaboration_mcp::CollaborationApiConfig {
                 application: (identity).build(),
                 service_directory: directory,
                 native_definitions: None,
-                router_executable_relation: relation,
+                router_executable_check: std::sync::Arc::new(
+                    collaboration_mcp::FixedRouterExecutableRelation(
+                        RouterExecutableRelation::Match,
+                    ),
+                ),
                 concurrent_requests: collaboration_mcp::DEFAULT_CONCURRENT_REQUESTS,
                 shutdown: shutdown.clone(),
             },

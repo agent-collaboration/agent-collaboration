@@ -20,9 +20,8 @@ use super::subscription_service::OwnerObservation;
 use super::subscription_windows::{ProjectSubscriptionRecord, ReaderSubscriptionSnapshot};
 use super::{
     BoardAvailability, SubscriptionClock,
-    subscription_facts::{
-        PRESENCE_INTERVAL, RootSubscriptionFacts, STORAGE_RETRY_INTERVAL, root_facts, wall_deadline,
-    },
+    failure_backoff::FailureBackoff,
+    subscription_facts::{PRESENCE_INTERVAL, RootSubscriptionFacts, root_facts, wall_deadline},
     subscription_push::{SubscriptionPushStore, target_session},
     subscription_wait::{PollWaiter, SubscriptionWaitFilter, SubscriptionWaitResult},
 };
@@ -95,6 +94,28 @@ pub(super) enum ReaderDeliveryCommand {
     },
 }
 
+/// The step of an owner pass whose failure armed the retry.
+#[derive(Clone, Copy)]
+enum FailedPassStage {
+    MembershipExpiry,
+    DirectMessages,
+    SubscriptionRecords,
+    SubscriptionPush,
+    WaitSelection,
+}
+
+impl FailedPassStage {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::MembershipExpiry => "membership_expiry",
+            Self::DirectMessages => "direct_messages",
+            Self::SubscriptionRecords => "subscription_records",
+            Self::SubscriptionPush => "subscription_push",
+            Self::WaitSelection => "wait_selection",
+        }
+    }
+}
+
 pub(super) struct ReaderDeliveryOwnerProps {
     #[cfg(test)]
     pub poll_handover_probe: super::subscription_service::PollHandoverProbeSlot,
@@ -136,10 +157,15 @@ pub(super) struct ReaderDeliveryOwner {
     pass_preventions: Vec<crate::notification_publisher::GenerationPreventedFollow>,
     pending_waiters: VecDeque<PollWaiter>,
     pending_ended_push_cleanup: Option<String>,
+    /// When a failed clean-up of ended subscriptions is next retried, on its own backoff.
+    held_cleanup_retry_at: Option<Instant>,
+    held_cleanup_backoff: FailureBackoff,
     rescan: bool,
     reconcile_replies: Vec<ReconcileReply>,
     dm_checked_presence: HashMap<PushId, Instant>,
     dm_replies: HashMap<PushId, Vec<DirectMessageReply>>,
+    /// A failed pass retries on this backoff; the next pass that completes clears it.
+    failed_pass_backoff: FailureBackoff,
     #[cfg(test)]
     barriers: Vec<oneshot::Sender<()>>,
     #[cfg(test)]
@@ -188,10 +214,13 @@ impl ReaderDeliveryOwner {
             pass_preventions: Vec::new(),
             pending_waiters: VecDeque::new(),
             pending_ended_push_cleanup: None,
+            held_cleanup_retry_at: None,
+            held_cleanup_backoff: FailureBackoff::default(),
             rescan: true,
             reconcile_replies: Vec::new(),
             dm_checked_presence: HashMap::new(),
             dm_replies: HashMap::new(),
+            failed_pass_backoff: FailureBackoff::default(),
             #[cfg(test)]
             barriers: Vec::new(),
             #[cfg(test)]
@@ -208,9 +237,10 @@ impl ReaderDeliveryOwner {
                 self.handle_command(command).await;
             }
             if let Err(error) = self.expire_due_follow_memberships().await {
+                let retry = self.failed_pass_retry(FailedPassStage::MembershipExpiry, &error);
                 self.answer_reconcile_requests(&Err(error));
                 self.refuse_expired_pending_waiters();
-                if !self.wait_for_input(Some(self.retry_deadline())).await {
+                if !self.wait_for_input(Some(retry)).await {
                     break;
                 }
                 continue;
@@ -219,10 +249,10 @@ impl ReaderDeliveryOwner {
             let pending_dms = match self.deliver_direct_messages().await {
                 Ok(pending) => pending,
                 Err(error) => {
-                    tracing::warn!(%error, "direct-message reload or delivery failed");
+                    let retry = self.failed_pass_retry(FailedPassStage::DirectMessages, &error);
                     self.answer_reconcile_requests(&Err(error));
                     self.refuse_expired_pending_waiters();
-                    if !self.wait_for_input(Some(self.retry_deadline())).await {
+                    if !self.wait_for_input(Some(retry)).await {
                         break;
                     }
                     continue;
@@ -234,9 +264,11 @@ impl ReaderDeliveryOwner {
             let current = match self.refresh_subscription_records().await {
                 Ok(records) => records,
                 Err(error) => {
+                    let retry =
+                        self.failed_pass_retry(FailedPassStage::SubscriptionRecords, &error);
                     self.answer_reconcile_requests(&Err(error));
                     self.refuse_expired_pending_waiters();
-                    if !self.wait_for_input(Some(self.retry_deadline())).await {
+                    if !self.wait_for_input(Some(retry)).await {
                         break;
                     }
                     continue;
@@ -310,8 +342,8 @@ impl ReaderDeliveryOwner {
                 Ok(true) => continue,
                 Ok(false) => {}
                 Err(error) => {
-                    tracing::warn!(%error, "subscription push failed before effect");
-                    if !self.wait_for_input(Some(self.retry_deadline())).await {
+                    let retry = self.failed_pass_retry(FailedPassStage::SubscriptionPush, &error);
+                    if !self.wait_for_input(Some(retry)).await {
                         break;
                     }
                     continue;
@@ -321,12 +353,18 @@ impl ReaderDeliveryOwner {
                 Ok(true) => continue,
                 Ok(false) => {}
                 Err(error) => {
-                    tracing::warn!(%error, "subscription wait selection failed");
-                    if !self.wait_for_input(Some(self.retry_deadline())).await {
+                    let retry = self.failed_pass_retry(FailedPassStage::WaitSelection, &error);
+                    if !self.wait_for_input(Some(retry)).await {
                         break;
                     }
                     continue;
                 }
+            }
+            if self.failed_pass_backoff.record_success() {
+                tracing::info!(
+                    subscription_owner_retry = "recovered",
+                    "subscription owner pass recovered"
+                );
             }
             let deadline = self.next_deadline(&records, &facts);
             let dm_deadline = self
@@ -402,10 +440,9 @@ impl ReaderDeliveryOwner {
                     .map(|record| wall_deadline(record.expires_at(), now, monotonic)),
             )
             .min();
-        if self.pending_ended_push_cleanup.is_some() {
-            let cleanup_deadline = monotonic
-                .checked_add(PRESENCE_INTERVAL)
-                .unwrap_or(monotonic);
+        if self.pending_ended_push_cleanup.is_some()
+            && let Some(cleanup_deadline) = self.held_cleanup_retry_at
+        {
             next_deadline = Some(
                 next_deadline.map_or(cleanup_deadline, |current| current.min(cleanup_deadline)),
             );
@@ -612,11 +649,19 @@ impl ReaderDeliveryOwner {
         self.board_availability.require_store()
     }
 
-    fn retry_deadline(&self) -> Instant {
-        self.clock
-            .monotonic_now()
-            .checked_add(STORAGE_RETRY_INTERVAL)
-            .unwrap_or_else(|| self.clock.monotonic_now())
+    /// Arms the failed pass's retry on the backoff, logging only the failure that starts a run.
+    fn failed_pass_retry(&mut self, stage: FailedPassStage, error: &BoardError) -> Instant {
+        let retry = self.failed_pass_backoff.record_failure();
+        if retry.starts_run {
+            tracing::warn!(
+                %error,
+                stage = stage.as_str(),
+                subscription_owner_retry = "failing",
+                "subscription owner pass failed; retrying with backoff"
+            );
+        }
+        let now = self.clock.monotonic_now();
+        now.checked_add(retry.delay).unwrap_or(now)
     }
     #[cfg(test)]
     fn observe(&self, observation: OwnerObservation) {

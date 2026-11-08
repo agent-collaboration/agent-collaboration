@@ -23,9 +23,8 @@ use collaboration_protocol::{
     ProviderSessionInspectResult, ProviderSessionListParams, ProviderSessionListResult,
     ProviderSettingsAcceptRequest, ProviderSettingsFailure, ProviderSettingsResult,
     ProviderSettingsSetRequest, PushDeliveryState, PushMessageSendResult, PushRecordHistoryParams,
-    PushRecordListParams, PushRecordListResult, RouterExecutableRelation,
-    SessionMessageReplyResult, ThreadSubscriptionWaitRequest, ThreadSubscriptionWaitResult,
-    router_build_warning,
+    PushRecordListParams, PushRecordListResult, SessionMessageReplyResult,
+    ThreadSubscriptionWaitRequest, ThreadSubscriptionWaitResult, router_build_warning,
 };
 use collaboration_service::CollaborationApplication;
 use collaboration_service::collaboration_application::API_RESULT_BUDGET;
@@ -35,7 +34,8 @@ use rmcp::{
     handler::server::{router::tool::ToolRouter, tool::ToolCallContext, wrapper::Parameters},
     model::{
         CacheScope, CallToolRequestParams, CallToolResponse, CallToolResult, Implementation,
-        ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerConfig, Tool,
+        InitializeRequestParams, InitializeResult, ListToolsResult, PaginatedRequestParams,
+        ServerCapabilities, ServerConfig, Tool,
     },
     schemars, tool, tool_router,
 };
@@ -127,7 +127,7 @@ pub(crate) struct CollaborationMcpServer {
     /// How the carrier tools reach the Router: in process, with carrier sockets in this
     /// service directory.
     carrier_access: collaboration_client::CollaborationAccess,
-    router_executable_relation: tokio::sync::watch::Receiver<RouterExecutableRelation>,
+    router_executable_check: Arc<dyn crate::RouterExecutableCheck>,
     /// The listener's running calls, which its shutdown aborts and joins.
     tool_calls: crate::tool_call_registry::ToolCallRegistry,
 }
@@ -142,7 +142,7 @@ impl CollaborationMcpServer {
             surface,
             application: config.application.clone(),
             carrier_access: carrier_access(&config.application, &config.service_directory),
-            router_executable_relation: config.router_executable_relation.clone(),
+            router_executable_check: Arc::clone(&config.router_executable_check),
             tool_calls,
         }
     }
@@ -152,12 +152,13 @@ impl CollaborationMcpServer {
         application: CollaborationApplication,
         service_directory: std::path::PathBuf,
     ) -> Self {
-        let (_sender, relation) = tokio::sync::watch::channel(RouterExecutableRelation::Match);
         Self {
             surface: Arc::new(ToolSurface::new(None)),
             carrier_access: carrier_access(&application, &service_directory),
             application,
-            router_executable_relation: relation,
+            router_executable_check: Arc::new(crate::FixedRouterExecutableRelation(
+                collaboration_protocol::RouterExecutableRelation::Match,
+            )),
             tool_calls: crate::tool_call_registry::ToolCallRegistry::new(
                 tokio_util::sync::CancellationToken::new(),
             ),
@@ -176,15 +177,6 @@ impl CollaborationMcpServer {
     #[cfg(test)]
     pub(crate) fn resolved_tools(&self) -> Vec<Tool> {
         self.surface.tools.clone()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn with_router_relation(
-        mut self,
-        relation: tokio::sync::watch::Receiver<RouterExecutableRelation>,
-    ) -> Self {
-        self.router_executable_relation = relation;
-        self
     }
 }
 
@@ -303,16 +295,25 @@ fn normalize_schema_or_schema_array(schema: &mut serde_json::Value) {
 
 impl ServerHandler for CollaborationMcpServer {
     fn get_info(&self) -> ServerConfig {
-        let mut config = ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(Implementation::new(
-                "codex-router-collaboration",
-                env!("CARGO_PKG_VERSION"),
-            ));
-        let relation = self.router_executable_relation.borrow().clone();
-        if let Some(warning) = router_build_warning(&relation) {
-            config = config.with_instructions(warning);
-        }
-        config
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_server_info(
+            Implementation::new("codex-router-collaboration", env!("CARGO_PKG_VERSION")),
+        )
+    }
+
+    /// Works out staleness on demand: each client's initialize asks the Host's check, the
+    /// same observation `host status` makes, so no timer keeps it current.
+    async fn initialize(
+        &self,
+        request: InitializeRequestParams,
+        context: rmcp::service::RequestContext<rmcp::service::RoleServer>,
+    ) -> Result<InitializeResult, rmcp::ErrorData> {
+        context.peer.set_peer_info(request.clone());
+        let relation = self.router_executable_check.observe().await;
+        let initialized = self.negotiate_initialize(&request)?;
+        Ok(match router_build_warning(&relation) {
+            Some(warning) => initialized.with_instructions(warning),
+            None => initialized,
+        })
     }
 
     async fn call_tool(

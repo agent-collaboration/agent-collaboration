@@ -239,8 +239,10 @@ async fn terminal_project_removal_survives_a_later_shared_failure_across_retry_p
     release_project_readers(held_broken).await;
     release_project_readers(held_healthy).await;
     let mut pending = Vec::new();
-    for _ in 0..3 {
-        fixture.clock.advance_without_tokio_time(1);
+    // Removing the terminal project is progress, so the wait restarts at 1 s and
+    // then backs off while the shared failure persists.
+    for wait_seconds in [1, 1, 2] {
+        fixture.clock.advance_without_tokio_time(wait_seconds);
         pending.push(
             tokio::time::timeout(Duration::from_secs(5), passes.recv())
                 .await
@@ -276,7 +278,7 @@ async fn terminal_project_removal_survives_a_later_shared_failure_across_retry_p
         .await
         .unwrap();
     automation.close().await.unwrap();
-    fixture.clock.advance_without_tokio_time(1);
+    fixture.clock.advance_without_tokio_time(4);
     let notice = activity(&fixture, &runtime).await;
     assert_eq!(
         notice.ranges,

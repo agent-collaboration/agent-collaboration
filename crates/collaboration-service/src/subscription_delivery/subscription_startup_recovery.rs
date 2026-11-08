@@ -1,6 +1,6 @@
 //! Persisted reader discovery restores startup and starts missing writable-project owners.
 use super::super::{
-    ProjectSubscriptionRecord, SubscriptionWindowStore, subscription_facts::STORAGE_RETRY_INTERVAL,
+    ProjectSubscriptionRecord, SubscriptionWindowStore, failure_backoff::FailureBackoff,
     subscription_windows::StartupProjectDiscovery,
 };
 use super::{
@@ -157,8 +157,15 @@ impl SubscriptionDeliveryService {
         self.inner.tasks.spawn(async move {
             tracing::debug!(startup_recovery="waiting", "startup discovery retry task retained");
             let mut shared_failure = false;
+            // Each attempt that leaves a project pending backs off; one that settles
+            // a project starts the next wait again at the first delay.
+            let mut pending_backoff = FailureBackoff::default();
+            let mut delay = pending_backoff.record_failure().delay;
             while !projects.is_empty() {
-                let deadline = service.inner.clock.monotonic_now() + STORAGE_RETRY_INTERVAL;
+                #[cfg(test)]
+                let _ = service.inner.startup_retry_delays.send(delay);
+                let deadline = service.inner.clock.monotonic_now() + delay;
+                let pending_before = projects.len();
                 let restored = tokio::select! {
                     biased;
                     () = service.inner.shutdown.cancelled() => break,
@@ -178,6 +185,10 @@ impl SubscriptionDeliveryService {
                     }
                     _ => {}
                 }
+                if projects.len() < pending_before {
+                    pending_backoff.record_success();
+                }
+                delay = pending_backoff.record_failure().delay;
                 #[cfg(test)]
                 let _ = service.inner.startup_passes.send(projects.clone());
             }

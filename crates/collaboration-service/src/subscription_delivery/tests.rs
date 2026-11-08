@@ -2,6 +2,7 @@ mod activity_scope_proofs;
 mod control_view_proofs;
 mod direct_message_proofs;
 mod f6_held_record_proofs;
+mod failed_pass_backoff_proofs;
 mod flight_proofs;
 mod lifecycle_proofs;
 mod local_mail_proofs;

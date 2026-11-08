@@ -231,3 +231,7 @@ fn remote_control_status(
         RemoteControlIdentity::new(server_name.clone(), environment_id.clone()),
     )
 }
+
+#[cfg(test)]
+#[path = "status_observation_test.rs"]
+mod tests;

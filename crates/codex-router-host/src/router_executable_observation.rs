@@ -8,7 +8,7 @@ use tokio::sync::watch;
 
 const INSTALLED_VERSION_TIMEOUT: Duration = Duration::from_secs(2);
 
-/// Shared observer retained by the Host and refreshed on status or periodic checks.
+/// Shared observer retained by the Host and refreshed whenever status or a client asks.
 pub struct RouterExecutableObserver {
     launch_path: Option<PathBuf>,
     running_version: String,
@@ -102,14 +102,24 @@ impl RouterExecutableObserver {
         self.relation_sender.borrow().clone()
     }
 
-    /// Subscribes to the latest relation and every subsequent Host observation.
-    pub fn subscribe(&self) -> watch::Receiver<RouterExecutableRelation> {
-        self.relation_sender.subscribe()
-    }
-
     fn publish_relation(&self, relation: RouterExecutableRelation) -> RouterExecutableRelation {
         self.relation_sender.send_replace(relation.clone());
         relation
+    }
+}
+
+/// The observer as the MCP server's check: each initialize makes the observation
+/// `host status` makes, so the "Router Host is stale" warning needs no timer.
+pub struct SharedRouterExecutableCheck(
+    pub std::sync::Arc<tokio::sync::Mutex<RouterExecutableObserver>>,
+);
+
+impl collaboration_mcp::RouterExecutableCheck for SharedRouterExecutableCheck {
+    fn observe(
+        &self,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = RouterExecutableRelation> + Send + '_>>
+    {
+        Box::pin(async move { self.0.lock().await.observe().await })
     }
 }
 

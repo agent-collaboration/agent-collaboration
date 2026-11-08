@@ -1,15 +1,17 @@
 #[cfg(any(test, feature = "test-support"))]
 use super::current_unix_seconds;
 use super::{
-    Arc, AsyncProviderCredentialResolver, AtomicBool, Duration, Instant, JoinHandle, Ordering,
-    PathBuf, QuotaRefreshObservationContext, QuotaRefreshProvider, QuotaRefreshSchedule,
-    QuotaServiceError, WebSocketQuotaFloorNotifier, WeeklyQuotaFloorIntentObserver,
+    Arc, AsyncProviderCredentialResolver, Duration, Instant, JoinHandle, PathBuf,
+    QuotaRefreshObservationContext, QuotaRefreshProvider, QuotaRefreshSchedule, QuotaServiceError,
+    WebSocketQuotaFloorNotifier, WeeklyQuotaFloorIntentObserver,
     refresh_quota_store_paths_with_dependencies_and_floor_notifier, thread,
 };
+use std::sync::mpsc;
 
 /// Stoppable background quota refresh worker.
 pub struct BackgroundQuotaRefreshWorker {
-    stop: Arc<AtomicBool>,
+    /// Dropping it disconnects the worker's wait between cycles, which ends the thread at once.
+    stop: Option<mpsc::Sender<()>>,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -18,6 +20,10 @@ pub struct BackgroundQuotaRefreshRuntime<C, D> {
     diagnostic_reporter: D,
     interval: Duration,
     quota_floor_notifier: Option<Arc<dyn WeeklyQuotaFloorIntentObserver>>,
+    /// Signalled each time the thread enters its wait between cycles; the thread owns it,
+    /// so the receiver sees it disconnect when the thread exits.
+    #[cfg(test)]
+    stop_wait_probe: Option<mpsc::Sender<()>>,
 }
 
 impl<C, D> BackgroundQuotaRefreshRuntime<C, D> {
@@ -27,7 +33,15 @@ impl<C, D> BackgroundQuotaRefreshRuntime<C, D> {
             diagnostic_reporter,
             interval,
             quota_floor_notifier: None,
+            #[cfg(test)]
+            stop_wait_probe: None,
         }
+    }
+
+    #[cfg(test)]
+    fn with_stop_wait_probe(mut self, probe: mpsc::Sender<()>) -> Self {
+        self.stop_wait_probe = Some(probe);
+        self
     }
 
     pub fn with_quota_floor_notifier(
@@ -41,7 +55,7 @@ impl<C, D> BackgroundQuotaRefreshRuntime<C, D> {
 
 impl Drop for BackgroundQuotaRefreshWorker {
     fn drop(&mut self) {
-        self.stop.store(true, Ordering::SeqCst);
+        drop(self.stop.take());
         if let Some(thread) = self.thread.take() {
             let _result = thread.join();
         }
@@ -116,9 +130,10 @@ where
         mut diagnostic_reporter,
         interval,
         quota_floor_notifier,
+        #[cfg(test)]
+        stop_wait_probe,
     } = runtime;
-    let stop = Arc::new(AtomicBool::new(false));
-    let stop_for_thread = Arc::clone(&stop);
+    let (stop, stop_requested) = mpsc::channel::<()>();
     let thread = thread::spawn(move || {
         loop {
             let cycle_started_at = Instant::now();
@@ -157,15 +172,25 @@ where
             if let Err(error) = result {
                 diagnostic_reporter(format!("background quota refresh failed: {error}"));
             }
+            if interval.is_zero() {
+                break;
+            }
             let delay = refresh_cycle_delay(interval, cycle_started_at.elapsed());
-            if interval.is_zero() || !sleep_interruptibly(&stop_for_thread, delay) {
+            #[cfg(test)]
+            if let Some(probe) = &stop_wait_probe {
+                let _ = probe.send(());
+            }
+            if !matches!(
+                stop_requested.recv_timeout(delay),
+                Err(mpsc::RecvTimeoutError::Timeout)
+            ) {
                 break;
             }
         }
     });
 
     BackgroundQuotaRefreshWorker {
-        stop,
+        stop: Some(stop),
         thread: Some(thread),
     }
 }
@@ -174,16 +199,6 @@ pub fn refresh_cycle_delay(interval: Duration, elapsed: Duration) -> Duration {
     interval.saturating_sub(elapsed)
 }
 
-fn sleep_interruptibly(stop: &AtomicBool, interval: Duration) -> bool {
-    let mut remaining = interval;
-    while !stop.load(Ordering::SeqCst) {
-        if remaining.is_zero() {
-            return true;
-        }
-        let step = remaining.min(Duration::from_millis(50));
-        thread::sleep(step);
-        remaining = remaining.saturating_sub(step);
-    }
-
-    false
-}
+#[cfg(test)]
+#[path = "quota_background_refresh_worker_test.rs"]
+mod tests;

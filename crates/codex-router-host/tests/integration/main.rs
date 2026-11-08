@@ -26,7 +26,7 @@ mod backend_publication;
 mod board_failure_isolation;
 mod claude_code_peer_delivery_route;
 mod claude_code_peer_scheduled_runs;
-mod claude_peer_held_dm;
+mod claude_peer_not_running_dm;
 mod claude_peer_subscription_resume;
 mod collaboration_runtime;
 mod configuration_effect_receipt;
