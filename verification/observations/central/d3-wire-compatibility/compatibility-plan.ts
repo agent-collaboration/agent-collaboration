@@ -3,13 +3,14 @@ import { lstat, readFile, realpath } from "node:fs/promises";
 import { z } from "zod";
 import { artifactSchema, fileSchema } from "../../../declaration.ts";
 
-export const releasedSourceHead = "cbf56bad640ae981900c646ff2ae0b64aaaebd3b";
+export const releasedSourceHead = "247570818a922535043bd935f3eb3d93f3ec5a67";
 const absolutePath = z.string().startsWith("/");
 export const compatibilityPlanSchema = z
   .object({
     suite: z.literal("d3-wire-compatibility"),
     repository: absolutePath,
     sourceHead: z.string().regex(/^[a-f0-9]{40}$/),
+    productHead: z.string().regex(/^[a-f0-9]{40}$/),
     oldSourceHead: z.literal(releasedSourceHead),
     oldSourceDirectory: absolutePath,
     oldSourceArchive: fileSchema,

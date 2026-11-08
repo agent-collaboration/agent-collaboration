@@ -193,7 +193,7 @@ export async function driveCompatibilityJourneys(input: {
   await observeCompatibilityPair(input, "j11-completion");
   await receipt.save("j11.json", {
     conclusion: "supported",
-    target: "released 0.1.125 source, debug build",
+    target: "released 0.1.134 source, debug build",
     scope:
       "real Hello/Welcome, board write/replication/read and mail both directions to actual inbox custody",
     notCovered:
@@ -277,8 +277,16 @@ export async function observeCompatibilityPair(
   stage: string,
 ): Promise<void> {
   const evidence = {
-    a: { wire: input.a.wire.snapshot(), audit: input.a.gate?.audit.snapshot() },
-    b: { wire: input.b.wire.snapshot(), audit: input.b.gate?.audit.snapshot() },
+    a: {
+      wire: input.a.wire.snapshot(),
+      audit: input.a.gate?.audit.snapshot(),
+      outgoingAudit: input.a.gate?.outgoingAudit.snapshot(),
+    },
+    b: {
+      wire: input.b.wire.snapshot(),
+      audit: input.b.gate?.audit.snapshot(),
+      outgoingAudit: input.b.gate?.outgoingAudit.snapshot(),
+    },
   };
   await input.receipt.record("d3PairCompletionEvidence", { stage, evidence });
   requireCompatiblePair(evidence);

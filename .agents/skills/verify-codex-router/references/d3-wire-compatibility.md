@@ -2,9 +2,9 @@
 
 **Draft until its declared real-target pass.** Run only when commissioned for
 central-execution-model D3. This journey uses two signed debug builds of the
-exact released v0.1.125 source against the declared branch's local Tokio central.
+exact pre-D3 0.1.134 source at `247570818` against the declared branch's local Tokio central.
 It launches no production Router, uses no SSH or Keychain, and sends no model
-input. Label evidence **released 0.1.125 source, debug build**. It does not prove
+input. Label evidence **pre-D3 0.1.134 source, debug build**. It does not prove
 the release-profile artifact or hosted staging.
 
 Oracle: central-execution-model `plan.html#d3`, `verification.html#j11/#j22`,
@@ -13,6 +13,11 @@ with the Lead's D3 target/scoping corrections: local compatibility, actual
 The ≤32 unanswered window, absence of notice resends/wakes during one real hour,
 and conformance alarm-wake-by-cause observation are **observed from D4/D5**.
 They remain obligations; D3 does not execute or claim them.
+
+The retired 0.1.125 target is incompatible with the owner-approved D1 hard
+cutover; it has no ProjectListChanged or Push/Pushed vocabulary. The Lead's
+2026-11-08 disposition corrected J11/J22 to the release before D3. Preserve old
+failed observations as retired-target evidence; do not add a legacy shim.
 
 ## Bind the sources and signed artifacts
 
@@ -25,8 +30,8 @@ node verification/run.ts --d3-wire "$D3_PLAN"
 
 `verification/observations/central/d3-wire-compatibility/compatibility-plan.ts`
 owns the strict owner-private JSON declaration. It names the repository and full
-final central source commit, exact old source tag
-`cbf56bad640ae981900c646ff2ae0b64aaaebd3b`, old source directory and Git archive
+controller source commit and frozen `productHead` used for the central build,
+exact old source commit `247570818a922535043bd935f3eb3d93f3ec5a67`, old source directory and Git archive
 path/hash, old Router/CLI, native executable and central driver artifacts
 (path/hash/identifier/team), fresh evidence directory under repository `tmp/`,
 and UTC deadline. Source/build equivalence and the build/signing receipt belong
@@ -34,8 +39,9 @@ in that evidence. The driver verifies the archive's embedded commit; the caller
 must also preserve its clean source/build custody. A label alone cannot prove
 the executable was built from it.
 
-Prepare v0.1.125 outside the current checkout. Never cargo-install it. Use its
-normal `target/debug`, the tag's signing runner, and one package per compiling
+Use the assigned `codex-router.feat-fleet-link-health` worktree at `247570818`.
+Keep its preexisting dirty files untouched; commit nothing there. Never
+cargo-install it. Use its normal `target/debug`, its signing runner, and one package per compiling
 window. Coordinate the slot with the Implementer and stop below the commissioned
 disk floor. Build its `codex-router-cli` and `agent-collaboration` packages
 separately; the current branch supplies
@@ -70,7 +76,7 @@ auth; the real central admits the machine and the SessionGate forwards real
 WebSocket bytes. The old Host then connects normally. Native initialize and
 metadata-only thread creation/unload provide an actual recipient address.
 
-Require release-source version 0.1.125 health, service publication, actual native
+Require pre-D3 source version 0.1.134 health, service publication, actual native
 endpoint readiness, distinct installation identities and observed Welcome on
 each central edge. No paid prompt is sent. Queue messages must reach actual held
 inbox records with matching sender status; model delivery remains outside scope.
@@ -92,10 +98,14 @@ An unexpected turn fails this no-input run.
   fabricate notice counts. A missing retained page is a failure, not a skipped
   assertion.
 
-`SessionAudit`'s optional callback observes complete original server payloads
-without changing forwarding. The evaluator counts literal notice positions and
-request Push identities. Focused tests reject unknown/new fields, duplicate or
-missing backlog items and incomplete fragmented payloads. Those tests qualify
+`SessionAudit` observes complete original server and masked client payloads
+without changing forwarding. Every deciding boundary checks valid raw audits
+for both Hosts, including after cleanup. The evaluator counts literal notice
+positions and Push identities, and correlates answers to exact outgoing request
+bodies by frame UUID. InvalidShape is a refusal, never ignored. Retain original
+raw failures. Focused tests reject actual encoded unknown frames (including
+A-only corruption), unknown/new fields, duplicate or missing backlog items and
+incomplete fragmented payloads. Those tests qualify
 the apparatus and never substitute for the actual two-Host drive.
 
 ## Evidence and cleanup

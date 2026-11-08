@@ -26,6 +26,29 @@ function encodedAudit(): {
   return { audit, wire, send };
 }
 
+test("masked outgoing bytes correlate InvalidShape with the exact request body", (): void => {
+  const wire = new CompatibilityWireObservation();
+  const audit = new SessionAudit((value): void => wire.observeClient(value), "client");
+  const connection = audit.opened();
+  audit.receive(connection, Buffer.from("GET /v1/session HTTP/1.1\r\nHost: fixture\r\n\r\n"));
+  const frame = "019eef00-0000-7000-8000-000000000004";
+  const body = { kind: "consumer", value: null };
+  const bytes = Buffer.from(JSON.stringify({ kind: "request", value: { frame, body } }));
+  assert.ok(bytes.length < 126);
+  const mask = Buffer.from([1, 2, 3, 4]);
+  const payload = Buffer.from(bytes);
+  for (let index = 0; index < payload.length; index += 1)
+    payload[index] = bytes.readUInt8(index) ^ mask.readUInt8(index % 4);
+  const encoded = Buffer.concat([Buffer.from([130, 128 | bytes.length]), mask, payload]);
+  for (const byte of encoded) audit.receive(connection, Buffer.from([byte]));
+  assert.equal(audit.snapshot().invalidConnections, 0);
+  wire.observe({ kind: "welcome", value: {} });
+  const answer = { kind: "invalidShape", value: { field: "body" } };
+  wire.observe({ kind: "answer", value: { frame, body: answer } });
+  assert.deepEqual(wire.correlations(), [{ frame, request: body, answer }]);
+  assert.throws((): void => requireCompatibleWire(wire.snapshot()), /legacy wire/);
+});
+
 test("the shared completion gate rejects a real unsupported encoded frame when only A is corrupted", (): void => {
   const a = encodedAudit(),
     b = encodedAudit();

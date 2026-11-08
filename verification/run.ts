@@ -112,7 +112,7 @@ function printPreparation(): boolean {
         "node verification/run.ts --d1-readback PRIVATE_DECLARATION.json\n" +
         "Read exact stopped task stores after consumer checks.\n" +
         "node verification/run.ts --d3-wire PRIVATE_DECLARATION.json\n" +
-        "Local released 0.1.125 source/debug-build compatibility against declared Tokio central; no Keychain or model input.\n" +
+        "Local released 0.1.134 source/debug-build compatibility against declared Tokio central; no Keychain or model input.\n" +
         "D1 full outcome credit requires declared controls/target; staging is never executed here.\n",
     );
     return true;

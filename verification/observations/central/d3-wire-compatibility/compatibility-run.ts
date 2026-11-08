@@ -29,6 +29,7 @@ async function prepareCompatibility(plan: CompatibilityPlan): Promise<{
   const source = await command("/usr/bin/git", ["rev-parse", "HEAD"], { cwd: plan.repository });
   if (source.exit !== 0 || source.stdout.trim() !== plan.sourceHead)
     throw new Error("central source pin changed");
+  await requireFrozenProduct(plan);
   if ((await fingerprint(plan.oldSourceArchive.path)) !== plan.oldSourceArchive.sha256)
     throw new Error("old-source archive hash mismatch");
   const archiveDescriptor = openSync(plan.oldSourceArchive.path, "r");
@@ -123,6 +124,7 @@ export async function runCompatibility(plan: CompatibilityPlan): Promise<void> {
     const final = await command("/usr/bin/git", ["rev-parse", "HEAD"], { cwd: plan.repository });
     if (final.stdout.trim() !== plan.sourceHead)
       throw new Error("target changed during observation");
+    await requireFrozenProduct(plan);
   } catch (error: unknown) {
     failure = error;
     await receipt.save("failure.json", {
@@ -134,7 +136,7 @@ export async function runCompatibility(plan: CompatibilityPlan): Promise<void> {
     if (failure === undefined) failure = await finalCompatibilityFailure({ machines, receipt });
     await receipt.save("result.json", {
       passed: failure === undefined && cleanupFailures.length === 0,
-      buildLabel: "released 0.1.125 source, debug build",
+      buildLabel: "released 0.1.134 source, debug build",
       executed: true,
       cleanupFailures,
       retainedRuntime: runtime,
@@ -149,6 +151,25 @@ export async function runCompatibility(plan: CompatibilityPlan): Promise<void> {
   }
   if (failure !== undefined || cleanupFailures.length > 0)
     throw new Error("D3 compatibility incomplete; inspect retained result/failure");
+}
+
+async function requireFrozenProduct(plan: CompatibilityPlan): Promise<void> {
+  const checked = await command(
+    "/usr/bin/git",
+    [
+      "diff",
+      "--exit-code",
+      plan.productHead,
+      "--",
+      "crates",
+      "Cargo.toml",
+      "Cargo.lock",
+      ".cargo",
+      "scripts/tooling",
+    ],
+    { cwd: plan.repository },
+  );
+  if (checked.exit !== 0) throw new Error("product closure differs from declared build source");
 }
 
 async function finalCompatibilityFailure(input: {
@@ -182,7 +203,10 @@ async function closeCompatibility(input: {
     await input.receipt.save(`wire-${machine.input.name}.json`, {
       snapshot: machine.wire.snapshot(),
       frames: machine.wire.observations(),
+      outgoingFrames: machine.wire.outgoing(),
+      correlations: machine.wire.correlations(),
       audit: machine.gate?.audit.snapshot(),
+      outgoingAudit: machine.gate?.outgoingAudit.snapshot(),
     });
   }
   if (input.central !== undefined) {

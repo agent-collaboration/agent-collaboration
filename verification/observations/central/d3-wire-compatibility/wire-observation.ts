@@ -29,6 +29,26 @@ export class CompatibilityWireObservation {
   private readonly operationKinds = new Set<string>();
   private readonly refusals: string[] = [];
   private readonly rawFrames: unknown[] = [];
+  private readonly clientFrames: unknown[] = [];
+  private readonly requests = new Map<string, unknown>();
+  private readonly answeredRequests: { frame: string; request: unknown; answer: unknown }[] = [];
+
+  observeClient(value: unknown): void {
+    if (this.clientFrames.length >= 16384) throw new Error("outgoing evidence bound exceeded");
+    this.clientFrames.push(value);
+    const hello = z
+      .object({ kind: z.literal("hello"), value: z.record(z.string(), z.unknown()) })
+      .safeParse(value);
+    if (hello.success && Object.hasOwn(hello.data.value, "capabilities"))
+      this.unsupportedFrames += 1;
+    const request = z
+      .object({
+        kind: z.literal("request"),
+        value: z.object({ frame: z.uuidv7(), body: z.unknown() }),
+      })
+      .safeParse(value);
+    if (request.success) this.requests.set(request.data.value.frame, request.data.value.body);
+  }
 
   observe(value: unknown): void {
     if (this.rawFrames.length >= 16384)
@@ -41,6 +61,11 @@ export class CompatibilityWireObservation {
       return;
     }
     const frame = parsed.data;
+    if (frame.kind === "answer" && typeof frame.value.frame === "string") {
+      const request = this.requests.get(frame.value.frame);
+      this.answeredRequests.push({ frame: frame.value.frame, request, answer: frame.value.body });
+      this.requests.delete(frame.value.frame);
+    }
     if (frame.kind === "welcome") {
       this.welcomes += 1;
       if (Object.hasOwn(frame.value, "capabilities")) this.unsupportedFrames += 1;
@@ -82,6 +107,12 @@ export class CompatibilityWireObservation {
   observations(): readonly unknown[] {
     return [...this.rawFrames];
   }
+  outgoing(): readonly unknown[] {
+    return [...this.clientFrames];
+  }
+  correlations(): readonly unknown[] {
+    return [...this.answeredRequests];
+  }
 }
 
 export function requireCompatibleWire(snapshot: CompatibilityWireSnapshot): void {
@@ -96,6 +127,7 @@ export function requireCompatibleWire(snapshot: CompatibilityWireSnapshot): void
 export interface CompatibilityEndpointEvidence {
   readonly wire: CompatibilityWireSnapshot;
   readonly audit: SessionSnapshot | undefined;
+  readonly outgoingAudit?: SessionSnapshot | undefined;
 }
 
 export function requireCompatiblePair(endpoints: {
@@ -109,6 +141,12 @@ export function requireCompatiblePair(endpoints: {
       endpoint.audit.welcomes === 0
     )
       throw new Error(`incomplete or invalid ${name} raw Session audit`);
+    if (
+      endpoint.outgoingAudit !== undefined &&
+      (endpoint.outgoingAudit.invalidConnections !== 0 ||
+        (endpoint.outgoingAudit.frames.hello ?? 0) === 0)
+    )
+      throw new Error(`invalid ${name} outgoing Session audit`);
     requireCompatibleWire(endpoint.wire);
   }
 }

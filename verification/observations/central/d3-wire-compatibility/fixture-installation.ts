@@ -1,4 +1,4 @@
-/** Actual v0.1.125-source Host, isolated native home and plaintext debug enrollment. */
+/** Actual v0.1.134-source Host, isolated native home and plaintext debug enrollment. */
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { setTimeout } from "node:timers/promises";
@@ -111,7 +111,7 @@ export class FixtureInstallation {
     await qualifyArtifact({ ...plan.native, path: stagedNative });
     const config = `model = "gpt-6-luna"\nmodel_provider = "codex-router-debug"\ncli_auth_credentials_store = "ephemeral"\n[features]\nenable_request_compression = false\n[model_providers.codex-router-debug]\nname = "OpenAI"\nbase_url = "http://127.0.0.1:${port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\nsupports_websockets = true\n`;
     await writeFile(`${this.home}/config.toml`, config, { mode: 0o600, flag: "wx" });
-    // v0.1.125's Host projection accepts provider/model settings only. The
+    // v0.1.134's Host projection accepts provider/model settings only. The
     // native home's ephemeral credential policy stays in its own config.
     await writeFile(
       `${this.home}/codex-router-debug.config.toml`,
@@ -145,8 +145,10 @@ export class FixtureInstallation {
       accessId,
       accessSecret,
     });
-    this.gate = await SessionGate.start(`${this.edge.origin}/v1/session`, (frame): void =>
-      this.wire.observe(frame),
+    this.gate = await SessionGate.start(
+      `${this.edge.origin}/v1/session`,
+      (frame): void => this.wire.observe(frame),
+      (frame): void => this.wire.observeClient(frame),
     );
     const secretFile = `${this.root}/fixture-access-secret`;
     await writeFile(secretFile, accessSecret, { mode: 0o600, flag: "wx" });
@@ -221,10 +223,10 @@ export class FixtureInstallation {
         const response = await fetch(`http://127.0.0.1:${port}/healthz`, {
           signal: AbortSignal.timeout(2000),
         });
-        z.object({ binary_version: z.literal("0.1.125") }).parse(await response.json());
+        z.object({ binary_version: z.literal("0.1.134") }).parse(await response.json());
         const manifest = z
           .object({
-            serviceVersion: z.literal("0.1.125"),
+            serviceVersion: z.literal("0.1.134"),
             serviceId: z.string(),
             mcp: z.object({ url: z.url() }),
           })
@@ -266,7 +268,7 @@ export class FixtureInstallation {
           machine: name,
           pid: this.host.pid,
           recipient: this.recipient,
-          source: "released 0.1.125 source, debug build",
+          source: "released 0.1.134 source, debug build",
         });
         return;
       } catch (error: unknown) {
