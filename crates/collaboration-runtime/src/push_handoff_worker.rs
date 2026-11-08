@@ -2,7 +2,7 @@
 use automation_storage::{AutomationStore, OwedPushOperation, PushOperation, PushOperationId};
 use collaboration_protocol::PushId;
 use interaction_storage::InteractionStore;
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
@@ -29,6 +29,7 @@ pub enum PushHandoffError {
 pub struct PushHandoffWorker {
     automation: Arc<Mutex<AutomationStore>>,
     interactions: Arc<InteractionStore>,
+    observation: crate::WorkerObservation,
 }
 
 impl PushHandoffWorker {
@@ -39,30 +40,26 @@ impl PushHandoffWorker {
         Self {
             automation,
             interactions,
+            observation: crate::WorkerObservation::default(),
         }
     }
 
-    /// One Host-owned instance runs after exclusive startup and drains on shutdown.
-    pub async fn run(mut self, shutdown: CancellationToken) {
-        let mut interval = tokio::time::interval(Duration::from_millis(250));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        let mut reported_failure = false;
-        loop {
-            tokio::select! {
-                biased;
-                _ = shutdown.cancelled() => return,
-                _ = interval.tick() => {},
-            }
-            match self.apply_pending().await {
-                Ok(_) => reported_failure = false,
-                Err(error) => {
-                    if !reported_failure {
-                        tracing::warn!(%error, "automation push operation remains owed; no native input is dispatched by this worker");
-                    }
-                    reported_failure = true;
-                }
-            }
-        }
+    /// What the hand-off's loop reports; under test-support a test reads it.
+    #[must_use]
+    pub fn observation(&self) -> crate::WorkerObservation {
+        self.observation.clone()
+    }
+
+    /// One Host-owned instance runs after exclusive startup and drains on shutdown. It
+    /// sleeps until automation commits: owed push operations are due at once, so there
+    /// is no timer except the failed-pass retry.
+    pub async fn run(self, clock: Arc<dyn runtime_primitives::Clock>, shutdown: CancellationToken) {
+        let commits = self.automation.lock().await.subscribe_commits();
+        let worker = crate::WakeDrivenWorkerLoop::new("push hand-off", clock)
+            .with_observation(self.observation.clone())
+            .wake_on(commits);
+        let mut pass = HandoffPass { worker: self };
+        worker.run(&mut pass, shutdown).await;
     }
 
     pub async fn apply_pending(&mut self) -> Result<usize, PushHandoffError> {
@@ -148,3 +145,36 @@ impl PushHandoffWorker {
         Ok(())
     }
 }
+
+/// The hand-off as the worker loop drives it: one batch of owed operations per call.
+struct HandoffPass {
+    worker: PushHandoffWorker,
+}
+
+impl crate::WorkerPass for HandoffPass {
+    type Error = PushHandoffError;
+
+    /// Applies one batch. Each acknowledgement commits, so a full batch wakes the loop
+    /// for the next one; a pass that finds nothing owed writes nothing.
+    async fn drain_batch(
+        &mut self,
+        _now: runtime_primitives::SyncTime,
+        observation: &crate::WorkerObservation,
+    ) -> Result<crate::BatchOutcome, PushHandoffError> {
+        observation.record_read("owed push operations");
+        self.worker.apply_pending().await?;
+        Ok(crate::BatchOutcome::Drained)
+    }
+
+    async fn next_due(
+        &mut self,
+        _now: runtime_primitives::SyncTime,
+        _observation: &crate::WorkerObservation,
+    ) -> Result<Option<runtime_primitives::SyncTime>, PushHandoffError> {
+        Ok(None)
+    }
+}
+
+#[cfg(test)]
+#[path = "push_handoff_worker_test.rs"]
+mod tests;

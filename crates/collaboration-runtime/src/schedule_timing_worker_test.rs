@@ -5,6 +5,9 @@
 //! its next timer. Each fixture holds a blocking task, which stops Tokio's auto-advance, so
 //! time moves only when a test advances it.
 use super::ScheduleTimingWorker;
+use crate::paused_worker_test_support::{
+    self, CollectionLimit, NoAutoAdvance, advance, settled_holding, wait_until,
+};
 use crate::{
     paused_wall_clock::PausedWallClock,
     scheduled_route_fixture::{
@@ -52,6 +55,18 @@ struct ControlledRoute {
     stop_requests: std::sync::Mutex<Vec<SyncTime>>,
     clock: Arc<PausedWallClock>,
     initial_evidence_fails: AtomicBool,
+    /// Preparation cannot reach the client: the step changes nothing and stays quiet.
+    initial_evidence_unreachable: AtomicBool,
+    /// When each preparation step asked for its route evidence.
+    preparations: std::sync::Mutex<Vec<SyncTime>>,
+    /// The Run each settlement read was for.
+    observed_runs: std::sync::Mutex<Vec<agent_automation::RunId>>,
+    /// How many target preparations still fail to reach the client, recording nothing.
+    unreachable_targets: AtomicUsize,
+    /// Fresh-session submissions, answered by the preparation tests.
+    fresh: preparation_tests::FreshSubmissions,
+    /// Per-Run answers and records of the capacity tests.
+    per_run: capacity_tests::PerRunScript,
     /// How many settlement reads still answer that the client is unreachable.
     unreachable_settlements: AtomicUsize,
     /// How many stop requests still answer that the client is unreachable.
@@ -84,6 +99,10 @@ impl ScheduledRunExecution for ControlledRoute {
         destination: &ScheduleDestination,
     ) -> DeliveryFuture<'_, agent_automation::RouteEffectEvidence<SessionRef, CodexGeneration>>
     {
+        self.preparations.lock().unwrap().push(self.clock.now());
+        if self.initial_evidence_unreachable.load(Ordering::Acquire) {
+            return Box::pin(async { Err(DeliveryContractError::ClientOperation) });
+        }
         if self.initial_evidence_fails.load(Ordering::Acquire) {
             return Box::pin(async { Err(DeliveryContractError::InvalidEvidence) });
         }
@@ -104,6 +123,9 @@ impl ScheduledRunExecution for ControlledRoute {
         declared_cwd: &str,
         sink: &'a dyn RunEvidenceSink,
     ) -> DeliveryFuture<'a, PreparedTarget> {
+        if take_unreachable(&self.unreachable_targets) {
+            return Box::pin(async { Err(DeliveryContractError::ClientOperation) });
+        }
         self.inner
             .prepare_existing_target(target, declared_cwd, sink)
     }
@@ -121,13 +143,24 @@ impl ScheduledRunExecution for ControlledRoute {
         run: ScheduledRunSubmission,
         sink: &'a dyn RunEvidenceSink,
     ) -> DeliveryFuture<'a, RunSubmission> {
+        if matches!(
+            run.payload,
+            collaboration_contracts::ScheduledRunPayload::Fresh { .. }
+        ) {
+            return self.fresh.submit(self.clock.now());
+        }
         self.inner.submit_run(run, sink)
     }
 
-    fn observe_settlement(&self, _: RunObservationContext) -> DeliveryFuture<'_, RunSettlement> {
+    fn observe_settlement(
+        &self,
+        context: RunObservationContext,
+    ) -> DeliveryFuture<'_, RunSettlement> {
         self.settlement_reads.fetch_add(1, Ordering::AcqRel);
+        let completed =
+            self.turn_completed.load(Ordering::Acquire) || self.per_run.completed(&context.run_id);
+        self.observed_runs.lock().unwrap().push(context.run_id);
         let unreachable = take_unreachable(&self.unreachable_settlements);
-        let completed = self.turn_completed.load(Ordering::Acquire);
         Box::pin(async move {
             if unreachable {
                 return Err(DeliveryContractError::ClientOperation);
@@ -155,6 +188,7 @@ impl ScheduledRunExecution for ControlledRoute {
         sink: &'a dyn RunEvidenceSink,
     ) -> DeliveryFuture<'a, StopRequestOutcome> {
         self.stop_requests.lock().unwrap().push(self.clock.now());
+        self.per_run.stop_requested(&context.run_id);
         if take_unreachable(&self.unreachable_stops) {
             return Box::pin(async { Err(DeliveryContractError::ClientOperation) });
         }
@@ -181,29 +215,6 @@ impl ScheduledRunExecution for ControlledRoute {
         context: RunObservationContext,
     ) -> DeliveryFuture<'_, RunReconciliation> {
         self.inner.reconcile_run(context)
-    }
-}
-
-/// While this blocking task runs, Tokio's paused clock does not auto-advance.
-struct NoAutoAdvance {
-    release: Option<std::sync::mpsc::Sender<()>>,
-}
-
-impl NoAutoAdvance {
-    fn hold() -> Self {
-        let (release, released) = std::sync::mpsc::channel::<()>();
-        drop(tokio::task::spawn_blocking(move || {
-            let _ = released.recv();
-        }));
-        Self {
-            release: Some(release),
-        }
-    }
-}
-
-impl Drop for NoAutoAdvance {
-    fn drop(&mut self) {
-        drop(self.release.take());
     }
 }
 
@@ -269,6 +280,12 @@ impl SchedulerFixture {
             stop_requests: std::sync::Mutex::default(),
             clock: Arc::clone(&clock),
             initial_evidence_fails: AtomicBool::new(false),
+            initial_evidence_unreachable: AtomicBool::new(false),
+            preparations: std::sync::Mutex::default(),
+            observed_runs: std::sync::Mutex::default(),
+            unreachable_targets: AtomicUsize::new(0),
+            fresh: preparation_tests::FreshSubmissions::default(),
+            per_run: capacity_tests::PerRunScript::default(),
             unreachable_settlements: AtomicUsize::new(0),
             unreachable_stops: AtomicUsize::new(0),
             stop_records_intent: AtomicBool::new(false),
@@ -337,11 +354,20 @@ impl SchedulerFixture {
         &self,
         configure: impl FnOnce(ScheduleTimingWorker) -> ScheduleTimingWorker,
     ) -> TestResult<RunningScheduler> {
+        self.start_on(None, configure)
+    }
+
+    /// Starts the scheduler with a native control backend, which summary steps use.
+    fn start_on(
+        &self,
+        backend: Option<crate::NativeControlBackend>,
+        configure: impl FnOnce(ScheduleTimingWorker) -> ScheduleTimingWorker,
+    ) -> TestResult<RunningScheduler> {
         let worker = ScheduleTimingWorker::new(
             Arc::clone(&self.store),
             Arc::clone(&self.interactions),
             Arc::clone(&self.route) as Arc<dyn ScheduledRunExecution>,
-            None,
+            backend,
             crate::AutomationConfigurationHandle::default(),
             collaboration_contracts::MachineIdentity::new(
                 "00000000-0000-4000-8000-000000000001"
@@ -399,7 +425,8 @@ impl SchedulerFixture {
         let mut handoff =
             crate::PushHandoffWorker::new(Arc::clone(&self.store), Arc::clone(&self.interactions));
         let mut target_went_idle = false;
-        for _ in 0..WAIT_LIMIT {
+        let limit = CollectionLimit::start("the Run was executing and checked");
+        loop {
             handoff.apply_pending().await?;
             if !target_went_idle
                 && self.route.inner.submissions.load(Ordering::Acquire) == 1
@@ -417,9 +444,8 @@ impl SchedulerFixture {
             {
                 return Ok(id);
             }
-            tokio::task::yield_now().await;
+            limit.next().await?;
         }
-        Err("the Run never reached a checked, executing state".into())
     }
 }
 
@@ -452,44 +478,26 @@ impl RunningScheduler {
     }
 }
 
-/// How many times a test waits on a condition before failing instead of hanging.
-const WAIT_LIMIT: usize = 5_000;
-
-/// Waits, without moving the clock, until the loop is asleep and stays so.
+/// Waits, without moving the clock, until the scheduler is asleep and stays so.
 async fn settled(scheduler: &RunningScheduler) -> TestResult<()> {
-    for _ in 0..WAIT_LIMIT / 100 {
-        if settle(scheduler).await {
-            return Ok(());
-        }
-    }
-    Err("the scheduler never settled".into())
+    paused_worker_test_support::settled(&scheduler.observation).await
 }
 
-/// Lets in-flight steps finish without moving the paused clock, then reports whether the
-/// loop is asleep with nothing new since.
 async fn settle(scheduler: &RunningScheduler) -> bool {
-    let before = scheduler.observation.snapshot();
-    for _ in 0..20 {
-        for _ in 0..100 {
-            tokio::task::yield_now().await;
-        }
-        if scheduler.observation.snapshot() != before {
-            return false;
-        }
-    }
-    before.sleeps >= 1
-}
-
-/// Moves both clocks with no work in flight.
-async fn advance(by: Duration) {
-    tokio::time::advance(by).await;
-    for _ in 0..2_000 {
-        tokio::task::yield_now().await;
-    }
+    paused_worker_test_support::settle(&scheduler.observation).await
 }
 
 #[path = "schedule_timing_worker_ordering_test.rs"]
 mod ordering_tests;
+
+#[path = "schedule_timing_worker_capacity_test.rs"]
+mod capacity_tests;
+
+#[path = "schedule_timing_worker_preparation_test.rs"]
+mod preparation_tests;
+
+#[path = "schedule_timing_worker_summary_test.rs"]
+mod summary_tests;
 
 #[tokio::test(start_paused = true)]
 #[expect(
@@ -598,11 +606,9 @@ async fn a_running_turn_is_checked_once_and_its_completion_settles_the_run_with_
         .journal
         .append(&turn_completed, BASE_MS / 1_000)
         .await?;
-    for _ in 0..WAIT_LIMIT {
-        if fixture.read_phase(&run).await? != RunPhase::Executing {
-            break;
-        }
-        tokio::task::yield_now().await;
+    let limit = CollectionLimit::start("the completed Run settled");
+    while fixture.read_phase(&run).await? == RunPhase::Executing {
+        limit.next().await?;
     }
 
     assert_eq!(

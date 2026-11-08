@@ -19,6 +19,8 @@ mod observation_recheck_tests;
 mod registered_route_project;
 #[path = "../../tests/support/session_follow_fixture.rs"]
 mod route_fixture;
+#[path = "startup_contract_tests/scheduler_completion_tests.rs"]
+mod scheduler_completion_tests;
 #[path = "startup_contract_tests/wake_capacity_tests.rs"]
 mod wake_capacity_tests;
 
@@ -37,6 +39,15 @@ async fn start_host(enrolled: bool) -> StartupFixture {
 }
 
 async fn start_host_in(enrolled: bool, directory: tempfile::TempDir) -> StartupFixture {
+    start_host_with_providers(enrolled, directory, Vec::new()).await
+}
+
+/// Starts the Host with these provider entries; an unavailable one launches nothing.
+async fn start_host_with_providers(
+    enrolled: bool,
+    directory: tempfile::TempDir,
+    provider_launches: Vec<crate::ExternalProviderStartup>,
+) -> StartupFixture {
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private permissions");
     std::fs::create_dir(directory.path().join("peers")).expect("peer registry");
@@ -69,19 +80,22 @@ async fn start_host_in(enrolled: bool, directory: tempfile::TempDir) -> StartupF
     } else {
         None
     };
-    let runtime = Box::pin(CollaborationRuntime::start(CollaborationRuntimeInputs {
-        board_session: central
-            .as_ref()
-            .map(|central| central.session_inputs().expect("session")),
-        owner_human_id: None,
-        directory: directory.path().to_owned(),
-        codex_home: directory.path().to_owned(),
-        backend_socket: directory.path().join("missing-native.sock"),
-        mcp_bind: ([127, 0, 0, 1], 0).into(),
-        native_schema: None,
-        peer_registry_directory: Some(directory.path().join("peers")),
-        remote_control_server_name: None,
-    }))
+    let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
+        CollaborationRuntimeInputs {
+            board_session: central
+                .as_ref()
+                .map(|central| central.session_inputs().expect("session")),
+            owner_human_id: None,
+            directory: directory.path().to_owned(),
+            codex_home: directory.path().to_owned(),
+            backend_socket: directory.path().join("missing-native.sock"),
+            mcp_bind: ([127, 0, 0, 1], 0).into(),
+            native_schema: None,
+            peer_registry_directory: Some(directory.path().join("peers")),
+            remote_control_server_name: None,
+        },
+        provider_launches,
+    ))
     .await
     .expect("actual Host construction");
     StartupFixture {

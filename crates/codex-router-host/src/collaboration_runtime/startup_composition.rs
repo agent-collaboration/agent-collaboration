@@ -446,6 +446,10 @@ impl CollaborationRuntime {
                 None => worker,
             }
         });
+        #[cfg(test)]
+        let schedule_observation = schedule_worker
+            .as_ref()
+            .map(collaboration_runtime::ScheduleTimingWorker::observation);
         let retention_worker = automation_store.as_ref().map(|store| {
             collaboration_runtime::AutomationRetentionWorker::new(
                 store.clone(),
@@ -788,8 +792,9 @@ impl CollaborationRuntime {
         }
         if let Some(worker) = push_handoff_worker {
             let handoff_shutdown = shutdown.clone();
+            let clock = std::sync::Arc::clone(&worker_clock);
             tasks.spawn(async move {
-                worker.run(handoff_shutdown).await;
+                worker.run(clock, handoff_shutdown).await;
                 Ok(())
             });
         }
@@ -877,6 +882,8 @@ impl CollaborationRuntime {
             observer_task: None,
             observation_rechecks,
             journal_unavailable_rechecks,
+            #[cfg(test)]
+            schedule_observation,
             collaboration_api,
             tailscale_exposure: None,
         };

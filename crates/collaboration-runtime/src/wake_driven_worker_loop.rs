@@ -149,6 +149,7 @@ impl WakeDrivenWorkerLoop {
             if !self.sleep_until_woken(deadline, &shutdown).await {
                 return;
             }
+            self.observation.woke();
         }
     }
 

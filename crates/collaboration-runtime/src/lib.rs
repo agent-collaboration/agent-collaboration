@@ -124,6 +124,9 @@ pub(crate) use interaction_storage_failure::map_interaction_storage_error;
 #[cfg(test)]
 mod captured_warnings_test_support;
 mod commit_or_timer_wait;
+mod keyed_worker_tasks;
+#[cfg(test)]
+mod paused_worker_test_support;
 mod push_handoff_worker;
 pub use commit_or_timer_wait::{CommitWaitEnd, wait_for_commit_or_timer};
 mod wake_driven_worker_loop;

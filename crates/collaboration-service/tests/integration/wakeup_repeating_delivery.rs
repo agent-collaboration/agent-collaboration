@@ -239,7 +239,10 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         identity
             .push_handoff_worker()
             .expect("push handoff worker is available")
-            .run(shutdown.clone()),
+            .run(
+                std::sync::Arc::new(runtime_primitives::SystemClock),
+                shutdown.clone(),
+            ),
     );
     let worker = tokio::spawn(wake_worker.run(shutdown.clone()));
     drop(identity);

@@ -1,5 +1,6 @@
 //! Read-only Luna summaries are independent native threads, with their own captured deadline.
 use crate::NativeAdmission;
+use crate::scheduled_run_worker::StepProgress;
 use agent_automation::{
     CessationEvidence, PreparationEffect, RunPhase, RunRecord, SubmissionEffect, SummaryAttempt,
     SummaryPhase,
@@ -37,7 +38,10 @@ pub(crate) enum SummaryWork {
     Advance,
     ObserveOnly,
 }
-pub(crate) async fn step(input: SummaryStep<'_>) -> Result<(), StorageError> {
+/// One step of a summary. A summary whose client cannot be reached, or whose stopped turn
+/// is not observed yet, says so; the scheduler retries it on its backoff, since nothing
+/// else would step it again.
+pub(crate) async fn step(input: SummaryStep<'_>) -> Result<StepProgress, StorageError> {
     let id = input.record.run_id.clone();
     if input.work == SummaryWork::ObserveOnly
         && !matches!(
@@ -45,7 +49,7 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<(), StorageError> {
             RunPhase::SummaryRunning | RunPhase::SummaryBlocked
         )
     {
-        return Ok(());
+        return Ok(StepProgress::Stepped);
     }
     if input.record.phase == RunPhase::SummaryRequired {
         input
@@ -60,7 +64,7 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<(), StorageError> {
                 },
             )
             .await?;
-        return Ok(());
+        return Ok(StepProgress::Stepped);
     }
     let Some(mut attempt) = input.record.summary_attempt else {
         return Err(StorageError::InvalidRecord);
@@ -69,29 +73,41 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<(), StorageError> {
         attempt.phase,
         SummaryPhase::Completed | SummaryPhase::Failed | SummaryPhase::Skipped
     ) {
-        return Ok(());
+        return Ok(StepProgress::Stepped);
     }
     let Some(_schemas) = input.admission.schemas() else {
-        return Ok(());
+        return Ok(StepProgress::Stepped);
     };
     if matches!(
         attempt.phase,
         SummaryPhase::Running | SummaryPhase::Stopping | SummaryPhase::Uncertain
     ) {
         let (Some(target), Some(turn_id)) = (&attempt.target, &attempt.native_turn_id) else {
-            return Ok(());
+            return Ok(StepProgress::Stepped);
         };
         let retired = input.admission.retirement();
         let observed = tokio::select! {
             biased;
-            _ = retired.cancelled() => return Ok(()),
+            _ = retired.cancelled() => return Ok(StepProgress::Stepped),
             observed = tokio::time::timeout(std::time::Duration::from_secs(20), crate::scheduled_native_observation::read_turn(input.admission, target, turn_id)) => observed,
         };
-        // Missing history is not evidence of cessation and must not suppress the deadline.
-        let turn = observed.ok().and_then(Result::ok).flatten();
         if retired.is_cancelled() {
-            return Ok(());
+            return Ok(StepProgress::Stepped);
         }
+        // Missing history is not evidence of cessation and must not suppress the deadline.
+        // A step that observed nothing and acts on nothing says so, to be retried: a read
+        // that timed out or failed never reached the turn, and a stopped summary absent
+        // from its history has no deadline left to step it again.
+        let (turn, unobserved) = match observed {
+            Ok(Ok(turn)) => {
+                let absent_after_stop = turn.is_none() && attempt.phase == SummaryPhase::Stopping;
+                (
+                    turn,
+                    absent_after_stop.then_some(StepProgress::SettlementNotObserved),
+                )
+            }
+            _ => (None, Some(StepProgress::ClientUnavailable)),
+        };
         let status = turn
             .as_ref()
             .and_then(|turn| turn.get("status"))
@@ -123,7 +139,7 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<(), StorageError> {
                         now_ms: input.clock.now().unix_millis(),
                     })
                     .await?;
-                return Ok(());
+                return Ok(StepProgress::Stepped);
             }
             attempt.effects.cessation = CessationEvidence::Confirmed;
             return block(
@@ -140,18 +156,18 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<(), StorageError> {
             return block(input.store,id,attempt,false,"Summary failed or exceeded its time budget; worker outcome is preserved. Retry or explicitly skip after inspection.").await;
         }
         if input.work == SummaryWork::ObserveOnly {
-            return Ok(());
+            return Ok(StepProgress::Stepped);
         }
         if attempt.deadline_at_ms <= input.clock.now().unix_millis()
             && attempt.phase != SummaryPhase::Stopping
         {
             let target = target.clone();
             let turn_id = turn_id.clone();
-            // Connection failure precedes interrupt submission and remains retryable.
+            // Connection failure precedes interrupt submission and retries on the backoff.
             let Ok(mut connection) =
                 NativeProtocolConnection::connect(input.admission.backend_path()).await
             else {
-                return Ok(());
+                return Ok(StepProgress::ClientUnavailable);
             };
             attempt.phase = SummaryPhase::Stopping;
             attempt.effects.cessation = CessationEvidence::Unconfirmed;
@@ -167,12 +183,13 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<(), StorageError> {
                 .await;
                 #[cfg(test)]
                 summary_deadline_tests::crash_checkpoint("interrupt-response");
+                return Ok(StepProgress::Stepped);
             }
         }
-        return Ok(());
+        return Ok(unobserved.unwrap_or(StepProgress::Stepped));
     }
     if input.work == SummaryWork::ObserveOnly {
-        return Ok(());
+        return Ok(StepProgress::Stepped);
     }
     if attempt.deadline_at_ms <= input.clock.now().unix_millis() {
         let unknown = attempt.effects.allocation == PreparationEffect::Unknown
@@ -208,7 +225,7 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<(), StorageError> {
         attempt.effects.generation = Some(input.admission.generation().clone());
         attempt.effects.allocation = PreparationEffect::Unknown;
         if !persist(input.store, &id, &attempt).await? {
-            return Ok(());
+            return Ok(StepProgress::Stepped);
         }
         let connection = NativeProtocolConnection::connect(input.admission.backend_path()).await;
         let Ok(mut connection) = connection else {
@@ -290,7 +307,7 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<(), StorageError> {
             })
             .await?;
         persist(input.store, &id, &attempt).await?;
-        return Ok(());
+        return Ok(StepProgress::Stepped);
     };
     let text = match input.source {
         Some(collaboration_contracts::RunSummarySource::NativeTurn { turn }) => {
@@ -338,7 +355,7 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<(), StorageError> {
     attempt.effects.client_user_message_id = Some(attempt.attempt_id.as_str().into());
     attempt.effects.cessation = CessationEvidence::Unconfirmed;
     if !persist(input.store, &id, &attempt).await? {
-        return Ok(());
+        return Ok(StepProgress::Stepped);
     }
     let connection = NativeProtocolConnection::connect(input.admission.backend_path()).await;
     let Ok(mut connection) = connection else {
@@ -403,7 +420,7 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<(), StorageError> {
             .await;
         }
     }
-    Ok(())
+    Ok(StepProgress::Stepped)
 }
 async fn persist(
     store: &Arc<Mutex<AutomationStore>>,
@@ -430,7 +447,7 @@ async fn block(
     mut attempt: SummaryAttempt<SessionRef, CodexGeneration>,
     unknown: bool,
     explanation: &str,
-) -> Result<(), StorageError> {
+) -> Result<StepProgress, StorageError> {
     attempt.phase = if unknown {
         SummaryPhase::Uncertain
     } else {
@@ -438,7 +455,7 @@ async fn block(
     };
     attempt.explanation = Some(explanation.into());
     persist(store, &id, &attempt).await?;
-    Ok(())
+    Ok(StepProgress::Stepped)
 }
 
 async fn validated_call(
