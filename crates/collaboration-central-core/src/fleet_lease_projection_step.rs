@@ -128,7 +128,6 @@ where
         scope: &mut Scope,
         change: &fleet_project_lease::LeaseChange,
     ) -> Result<(), fleet_project_lease::LeaseError> {
-        use crate::machine_notice_contract::MachineNoticeAppend;
         let applied = async {
             let now = change.after.changed_at;
             let clock = chrono::DateTime::from_timestamp_millis(now.unix_millis())
@@ -240,33 +239,22 @@ where
                         },
                     ));
                 }
+                // Appended here; the Fleet's notice push sends them after commit.
                 for (peer, notice) in notices {
                     let id = row_ids.next()?;
-                    let (notice, _) = crate::machine_notice_store::append(
-                        scope,
-                        peer,
-                        id.to_string(),
-                        notice,
-                        now,
-                    )
-                    .await?;
-                    let key = durable_steps::RequestKey::new(format!("machine-control-hint:{id}"))
-                        .map_err(StoreError::backend)?;
-                    scope
-                        .admit::<NoticeTask>(&key, &MachineNoticeAppend::Hint { peer, notice })
-                        .await
-                        .map_err(StoreError::backend)?;
-                    scope.ensure_wake(now).await?;
+                    crate::machine_notice_store::append(scope, peer, id.to_string(), notice, now)
+                        .await?;
                 }
             }
             let project = message_board::ProjectId::try_from(change.after.database.to_string())
                 .map_err(StoreError::backend)?;
             crate::fleet_archive_completion::complete_project(scope, &project, clock, &mut row_ids)
                 .await?;
-            crate::fleet_notice_admission::admit_mutation_notices::<Store, Driver, _>(
+            crate::fleet_notice_admission::admit_mutation_notices::<Driver, _>(
                 scope,
                 previous_feed,
                 now,
+                &mut row_ids,
             )
             .await?;
             Ok::<_, StoreError>(())

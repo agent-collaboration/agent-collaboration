@@ -2,6 +2,8 @@
 #![cfg(feature = "conformance")]
 
 use crate::session_publication_fixture as session_fixture;
+#[path = "../machine_notices/acknowledgment.rs"]
+mod acknowledgment;
 #[path = "../machine_notices/support.rs"]
 mod support;
 use board_sync_protocol::*;

@@ -7,7 +7,7 @@ use crate::{
     object_runtime::ObjectWork,
     session_store::CoreSessionStore,
 };
-use board_sync_protocol::{BoardConsumerProtocol, BoardNotice};
+use board_sync_protocol::BoardNotice;
 use durable_steps::{
     AtomicStore, CallFailure, CallTarget, JournalScope, OperationContext, OperationFailure,
     ReborrowScope, RequestKey, StoreError, Task,
@@ -80,31 +80,14 @@ where
                 })?,
                 move |scope| {
                     Box::pin(async move {
-                        let (notice, peer) = match input {
-                            MachineNoticeAppend::Append { peer, notice } => {
-                                crate::machine_notice_store::append(
-                                    scope, peer, notice_id, notice, now,
-                                )
-                                .await?
-                            }
-                            MachineNoticeAppend::Hint { peer, notice } => (notice, Some(peer)),
-                        };
-                        if let Some(peer) = peer {
-                            let effects =
-                                fleet_session::publish_notice_to_peer::<_, BoardConsumerProtocol>(
-                                    scope,
-                                    &peer,
-                                    fleet_protocol::Notice::Consumer(notice),
-                                    now,
-                                )
-                                .await
-                                .map_err(StoreError::backend)?;
-                            scope.stage_transport(effects, None)?;
-                            if let Some(at) =
-                                crate::machine_notice_store::next_expiry(scope, peer).await?
-                            {
-                                scope.ensure_wake(at).await?;
-                            }
+                        // Append only: the Fleet's notice push sends it after commit
+                        // (slice 4a). A Hint was a live send of an appended notice, so
+                        // the push covers it too.
+                        if let MachineNoticeAppend::Append { peer, notice } = input {
+                            crate::machine_notice_store::append(
+                                scope, peer, notice_id, notice, now,
+                            )
+                            .await?;
                         }
                         Ok(())
                     })

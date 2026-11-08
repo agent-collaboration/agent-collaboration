@@ -32,6 +32,8 @@ pub(crate) enum ObjectWork<Host: ObjectPlatform> {
         delivery: crate::DeliveryConfig,
         holder_answer_timeout: std::time::Duration,
         honored_capabilities: fleet_protocol::FrameCapabilities,
+        /// Which notices each connection was already sent (a hint, in memory).
+        notice_cursors: Arc<crate::notice_push::NoticeCursors>,
     },
     Copy {
         host: Arc<Host>,
@@ -91,33 +93,25 @@ where
     }
 
     async fn handle(&self, event: ObjectEvent) -> EventReply {
-        match event {
-            ObjectEvent::SocketOpened { binding } => match self.on_socket_opened(binding).await {
-                Ok(()) => EventReply::None,
-                Err(failure) => {
-                    eprintln!("Fleet socket open failed: {failure}");
-                    EventReply::SocketFailed
+        if let ObjectWork::Fleet { notice_cursors, .. } = &self.work {
+            match &event {
+                // A closed socket keeps its cursor: the library keeps the session,
+                // and notices published meanwhile wait in its transport log.
+                ObjectEvent::SocketOpened { binding } => {
+                    notice_cursors.opened(binding.peer, binding.connection)
                 }
-            },
-            ObjectEvent::Frame { binding, frame } => match self.on_frame(binding, frame).await {
-                Ok(()) => EventReply::None,
-                Err(failure) => {
-                    eprintln!("Fleet frame failed: {failure}");
-                    EventReply::SocketFailed
-                }
-            },
-            ObjectEvent::SocketClosed { binding } => {
-                if let Err(failure) = self.on_socket_closed(binding).await {
-                    eprintln!("Fleet socket close failed: {failure}");
-                }
-                EventReply::None
+                ObjectEvent::SocketClosed { .. }
+                | ObjectEvent::Frame { .. }
+                | ObjectEvent::Call { .. }
+                | ObjectEvent::Alarm => {}
             }
-            ObjectEvent::Call { body, .. } => match self.on_call(body).await {
-                Ok(answer) => EventReply::CallAnswer(answer),
-                Err(failure) => EventReply::CallFailure(failure),
-            },
-            ObjectEvent::Alarm => EventReply::AlarmDone,
         }
+        self.handle_fleet_event(event).await
+    }
+
+    async fn finish_event(&self) {
+        // Notices the event committed go out now, after all its transactions.
+        self.push_notices().await;
     }
 
     async fn run_due_sources(&self, now: SyncTime) {
@@ -228,6 +222,8 @@ where
             eprintln!("Copy follow-up drive failed: {failure}");
         }
     }
+
+    async fn finish_event(&self) {}
 
     async fn recompute(
         &self,

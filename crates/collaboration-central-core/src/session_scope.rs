@@ -23,6 +23,8 @@ use std::marker::PhantomData;
 mod enrollment_gate;
 mod fleet_reads;
 mod forwards;
+mod notice_acknowledgment;
+mod notice_publication;
 mod operations;
 
 pub(crate) struct CoreSessionScope<'transaction, Host: ObjectPlatform>
@@ -154,10 +156,16 @@ where
                 continue;
             }
             match effect {
-                SessionEffect::RequestBatch { .. }
-                | SessionEffect::AnswerBatch { .. }
-                | SessionEffect::NoticesApplied { .. } => {
-                    // D3 admits typed vocabulary only. D4 owns execution and replies.
+                SessionEffect::RequestBatch { .. } | SessionEffect::AnswerBatch { .. } => {
+                    // D3 admits typed vocabulary only. Batches are slice 4d.
+                }
+                SessionEffect::NoticesApplied {
+                    session,
+                    frame,
+                    through,
+                } => {
+                    self.acknowledge_notices(connection, session, frame, through, now)
+                        .await?;
                 }
                 SessionEffect::Route {
                     session,

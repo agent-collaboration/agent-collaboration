@@ -1,4 +1,6 @@
 //! The Fleet face owns central's nonreplicated application state.
+mod notice_push;
+use crate::object_event::{EventReply, ObjectEvent};
 use runtime_primitives::{Clock as _, IdSource as _};
 
 use crate::{
@@ -76,6 +78,7 @@ where
     ) -> Result<Self, StoreError> {
         let io = host.io().clone();
         let replies = Arc::new(crate::holder_reply_hub::HolderReplyHub::default());
+        let notice_cursors = Arc::new(crate::notice_push::NoticeCursors::default());
         let mail_limits = crate::fleet_outbox_limits().map_err(StoreError::backend)?;
         let publication = crate::mail_status_dispatch::bind(
             Arc::downgrade(&host),
@@ -152,12 +155,14 @@ where
         let weak_engine = Arc::downgrade(&engine);
         let local_io = io.clone();
         let local_replies = replies.clone();
+        let local_cursors = notice_cursors.clone();
         shared_host.install_local_calls(Arc::new(move |bytes| {
             let host = weak_host.clone();
             let shared = weak_shared.clone();
             let engine = weak_engine.clone();
             let io = local_io.clone();
             let replies = local_replies.clone();
+            let notice_cursors = local_cursors.clone();
             Box::pin(async move {
                 let runtime = ObjectRuntime::<FleetKind, Host> {
                     work: ObjectWork::Fleet {
@@ -170,6 +175,7 @@ where
                         delivery,
                         holder_answer_timeout,
                         honored_capabilities,
+                        notice_cursors,
                     },
                     face: PhantomData,
                 };
@@ -187,13 +193,46 @@ where
                 delivery,
                 holder_answer_timeout,
                 honored_capabilities,
+                notice_cursors,
             },
             face: PhantomData,
         })
     }
+    /// The event's own handling, before its notices are pushed.
+    pub(crate) async fn handle_fleet_event(&self, event: ObjectEvent) -> EventReply {
+        match event {
+            ObjectEvent::SocketOpened { binding } => match self.on_socket_opened(binding).await {
+                Ok(()) => EventReply::None,
+                Err(failure) => {
+                    eprintln!("Fleet socket open failed: {failure}");
+                    EventReply::SocketFailed
+                }
+            },
+            ObjectEvent::Frame { binding, frame } => match self.on_frame(binding, frame).await {
+                Ok(()) => EventReply::None,
+                Err(failure) => {
+                    eprintln!("Fleet frame failed: {failure}");
+                    EventReply::SocketFailed
+                }
+            },
+            ObjectEvent::SocketClosed { binding } => {
+                if let Err(failure) = self.on_socket_closed(binding).await {
+                    eprintln!("Fleet socket close failed: {failure}");
+                }
+                EventReply::None
+            }
+            ObjectEvent::Call { body, .. } => match self.on_call(body).await {
+                Ok(answer) => EventReply::CallAnswer(answer),
+                Err(failure) => EventReply::CallFailure(failure),
+            },
+            ObjectEvent::Alarm => EventReply::AlarmDone,
+        }
+    }
+
     /// Every Fleet due source except long operations, each failing alone.
     pub(crate) async fn run_fleet_due_sources(&self, now: runtime_primitives::SyncTime) {
         self.run_feed_retention(now).await;
+        self.resend_notices(now).await;
         let ObjectWork::Fleet { io, .. } = &self.work else {
             return;
         };
@@ -379,6 +418,9 @@ where
                 now,
             })
             .await?;
+        // After migrations, before any event work: what was issued until now
+        // is not this runtime's to push.
+        self.seed_notice_cursors().await;
         Ok(applied)
     }
     #[cfg(feature = "conformance")]

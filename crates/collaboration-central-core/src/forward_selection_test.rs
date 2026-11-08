@@ -71,6 +71,7 @@ async fn run(revoked: bool, replay: bool) -> Result<(), TestError> {
             config,
             delivery: crate::DeliveryConfig { relay_peer: peer },
             holder_answer_timeout: std::time::Duration::from_secs(2),
+            notice_cursors: Arc::default(),
         },
         face: PhantomData,
     };

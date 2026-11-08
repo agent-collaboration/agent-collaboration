@@ -200,3 +200,64 @@ where
             .collect()
     }
 }
+pub(crate) fn insert_work_attempt_owed<S>(
+    scope: &mut S,
+    id: String,
+    subject: String,
+    kind: String,
+    next_attempt_at: String,
+    now: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/work_attempts/insert_work_attempt_owed.sql"
+        )))
+        .bind(id)
+        .bind(subject)
+        .bind(kind)
+        .bind(next_attempt_at)
+        .bind(now);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct StoredDueWorkAttempt {
+    pub subject: Option<String>,
+}
+pub(crate) fn read_due_work_attempts<S>(
+    scope: &mut S,
+    kind: String,
+    now: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredDueWorkAttempt>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/work_attempts/read_due_work_attempts.sql"
+        )))
+        .bind(kind)
+        .bind(now);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredDueWorkAttempt {
+                    subject: row.try_get("subject")?,
+                })
+            })
+            .collect()
+    }
+}

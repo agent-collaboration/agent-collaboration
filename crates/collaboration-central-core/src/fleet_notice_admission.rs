@@ -1,10 +1,8 @@
-//! Notice jobs commit with the mutation; no delivery is performed in this scope.
-use crate::{
-    fleet_feed_readers, fleet_feed_store,
-    machine_notice_outbox::{FleetNoticeTask, MachineNoticeInput},
-};
+//! A mutation's notices are appended in the mutation's own transaction; the
+//! Fleet's notice push sends them after it commits (no engine job).
+use crate::{fleet_feed_readers, fleet_feed_store};
 use board_sync_protocol::BoardNotice;
-use durable_steps::{AtomicStore, JournalScope, RequestKey, StoreError, storage::TransactionScope};
+use durable_steps::{StoreError, storage::TransactionScope};
 use message_board::FleetPosition;
 use runtime_primitives::SyncTime;
 use sqlx_core::{
@@ -13,18 +11,18 @@ use sqlx_core::{
 };
 
 pub(crate) async fn admit_mutation_notices<
-    Store: AtomicStore,
     Driver: Database,
-    Scope: TransactionScope<Database = Driver> + JournalScope,
+    Scope: TransactionScope<Database = Driver>,
 >(
     scope: &mut Scope,
     previous: FleetPosition,
     now: SyncTime,
+    row_ids: &mut crate::fleet_row_ids::FleetRowIds,
 ) -> Result<(), StoreError>
 where
     Driver::Arguments: IntoArguments<Driver>,
     for<'value> String: Type<Driver> + Encode<'value, Driver>,
-    for<'value> Option<String>: Type<Driver> + Decode<'value, Driver>,
+    for<'value> Option<String>: Type<Driver> + Decode<'value, Driver> + Encode<'value, Driver>,
     for<'row> &'row str: ColumnIndex<Driver::Row>,
 {
     let head = fleet_feed_store::high_water(scope).await?;
@@ -45,62 +43,63 @@ where
             continue;
         }
         for installation in holder_installations(scope, &board.board_id, now).await? {
-            admit::<Store, _>(
-                scope,
-                format!(
-                    "fleet-archive-notice:{}:{}:{}",
-                    entry.position.get(),
-                    board.board_id.as_str(),
-                    installation.as_str()
-                ),
-                MachineNoticeInput {
-                    installation,
-                    notice: BoardNotice::ProjectListChanged {},
-                },
-                now,
-            )
-            .await?;
+            append_for(scope, &installation, now, row_ids).await?;
         }
     }
     for reader in fleet_feed_readers::readers(scope, head).await? {
         if reader.applied >= head {
             continue;
         }
-        let key = RequestKey::new(format!(
-            "fleet-feed-notice:{}:{}",
-            head.get(),
-            reader.installation.as_str()
-        ))
-        .map_err(StoreError::backend)?;
-        scope
-            .admit::<FleetNoticeTask<Store>>(
-                &key,
-                &MachineNoticeInput {
-                    installation: reader.installation,
-                    notice: BoardNotice::ProjectListChanged {},
-                },
-            )
-            .await
-            .map_err(StoreError::backend)?;
-        scope.ensure_wake(now).await?;
+        append_for(scope, &reader.installation, now, row_ids).await?;
     }
     Ok(())
 }
 
-async fn admit<Store: AtomicStore, Scope: JournalScope>(
+/// Append a project-list notice to the stream of the machine enrolled for
+/// `installation`. An installation with no single enrollment gets no notice.
+async fn append_for<Scope: TransactionScope>(
     scope: &mut Scope,
-    key: String,
-    input: MachineNoticeInput,
+    installation: &message_board::ServiceId,
     now: SyncTime,
-) -> Result<(), StoreError> {
-    scope
-        .admit::<FleetNoticeTask<Store>>(
-            &RequestKey::new(key).map_err(StoreError::backend)?,
-            &input,
-        )
-        .await
-        .map_err(StoreError::backend)?;
-    scope.ensure_wake(now).await
+    row_ids: &mut crate::fleet_row_ids::FleetRowIds,
+) -> Result<(), StoreError>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>:
+        Type<Scope::Database> + Decode<'value, Scope::Database> + Encode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    let mut enrolled = crate::generated_enrollment::read_enrollments(
+        scope,
+        Some(installation.as_str().to_owned()),
+        None,
+        None,
+        None,
+    )
+    .await
+    .map_err(StoreError::backend)?;
+    if enrolled.len() != 1 {
+        eprintln!(
+            "Fleet notice skipped: installation {} has no single enrollment",
+            installation.as_str()
+        );
+        return Ok(());
+    }
+    let identity = crate::machine_enrollment_record::identity_from_stored_enrollment(
+        enrolled
+            .pop()
+            .ok_or_else(|| StoreError::backend("missing notice recipient"))?,
+    )?;
+    crate::machine_notice_store::append(
+        scope,
+        identity.peer,
+        row_ids.next()?.to_string(),
+        BoardNotice::ProjectListChanged {},
+        now,
+    )
+    .await
+    .map(|_| ())
 }
 
 async fn holder_installations<Scope: TransactionScope>(
@@ -111,7 +110,8 @@ async fn holder_installations<Scope: TransactionScope>(
 where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
     for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
-    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'value> Option<String>:
+        Type<Scope::Database> + Decode<'value, Scope::Database> + Encode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
     use crate::fleet_record_codec::{corrupt, required};

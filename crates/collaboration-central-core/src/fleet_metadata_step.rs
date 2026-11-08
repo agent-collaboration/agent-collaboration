@@ -50,10 +50,11 @@ where
             let decision = fleet_admission::decide_import(&self.bundle, &snapshot)
                 .map_err(StoreError::backend)?;
             fleet_scope_apply::import(scope, &decision, self.now, &mut self.row_ids).await?;
-            crate::fleet_notice_admission::admit_mutation_notices::<Store, Driver, _>(
+            crate::fleet_notice_admission::admit_mutation_notices::<Driver, _>(
                 scope,
                 previous_feed,
                 runtime_primitives::SyncTime::from_unix_millis(self.now.timestamp_millis()),
+                &mut self.row_ids,
             )
             .await?;
             Ok((decision.result, Vec::new()))
@@ -102,10 +103,11 @@ where
                 )
                 .await?;
             }
-            crate::fleet_notice_admission::admit_mutation_notices::<Store, Driver, _>(
+            crate::fleet_notice_admission::admit_mutation_notices::<Driver, _>(
                 scope,
                 previous_feed,
                 runtime_primitives::SyncTime::from_unix_millis(self.now.timestamp_millis()),
+                &mut self.row_ids,
             )
             .await?;
             Ok((result, Vec::new()))

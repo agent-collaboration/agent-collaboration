@@ -133,10 +133,11 @@ where
                 &mut self.row_ids,
             )
             .await?;
-            crate::fleet_notice_admission::admit_mutation_notices::<Store, Driver, _>(
+            crate::fleet_notice_admission::admit_mutation_notices::<Driver, _>(
                 scope,
                 previous_feed,
                 runtime_primitives::SyncTime::from_unix_millis(self.now.timestamp_millis()),
+                &mut self.row_ids,
             )
             .await?;
             Ok((result, Vec::new()))

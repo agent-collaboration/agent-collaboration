@@ -232,6 +232,24 @@ where
     Ok(())
 }
 
+/// Every machine that has a notice stream.
+pub(crate) async fn peers<Scope: TransactionScope>(
+    scope: &mut Scope,
+) -> Result<Vec<PeerId>, StoreError>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    queries::read_machine_notice_peers(scope)
+        .await
+        .map_err(StoreError::backend)?
+        .into_iter()
+        .map(|row| machine(row.machine_id))
+        .collect()
+}
+
 fn machine(machine_id: Option<String>) -> Result<PeerId, StoreError> {
     let machine_id = required(machine_id, "machine_control_project_progress.machine_id")?;
     check_private_id(&machine_id, "machine_control_project_progress.machine_id")?;

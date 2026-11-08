@@ -33,6 +33,8 @@ pub trait KernelFace: Send + Sync {
     fn run_deadline_sources(&self, now: SyncTime) -> impl Future<Output = ()> + Send;
     /// The long-operation engine, run last and outside the batch claim.
     fn drive_long_operations(&self) -> impl Future<Output = ()> + Send;
+    /// Sends that follow everything this event committed (Fleet: notices).
+    fn finish_event(&self) -> impl Future<Output = ()> + Send;
     /// Read every due source and set the alarm exactly.
     fn recompute(
         &self,
@@ -150,6 +152,8 @@ impl<Face: KernelFace> ObjectKernel<Face> {
         if runs_due_batch {
             self.run_due_batch(&probe).await;
         }
+        // Sends that follow everything the event committed.
+        Box::pin(self.face.finish_event()).await;
         // 4. Recompute.
         probe.step(PipelineStep::Recompute);
         probe.barrier(BarrierPoint::BeforeRecomputeTx, None).await;
@@ -308,6 +312,9 @@ macro_rules! delegate_kernel_face {
             }
             fn drive_long_operations(&self) -> impl Future<Output = ()> + Send {
                 (**self).drive_long_operations()
+            }
+            fn finish_event(&self) -> impl Future<Output = ()> + Send {
+                (**self).finish_event()
             }
             fn recompute(
                 &self,

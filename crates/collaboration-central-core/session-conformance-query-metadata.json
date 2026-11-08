@@ -58,6 +58,7 @@
     "session-conformance-queries.json": "8c03e962d7fb6d9f02a0304530020ceba3b6c6b2e38b4e0a9e4e8def475f6f61",
     "session_migrations/0011_machine_notices.sql": "e29ffcc32b8db2a71355256e7abb49990f5c1a06d33997df0fd86998616f7565",
     "session_migrations/0012_forward_correlations.sql": "9977ffcdc8d42e005fe7b3d1d80f8a3d0bf219c4f5ea87f94d9f34a012b1c8ef",
+    "session_migrations/0013_notice_applied_through.sql": "bbb0b41e702b026c1d3de9bec2cef0b0c57ab0b403b1b8220416ddf7e89f6bb2",
     "sql/session_conformance/read_changes.sql": "8d9f2d55bcfcc855bb6c5cc72df0b66b289355b758df0522fe9b1dd8b714904f",
     "sql/session_conformance/sql_failure.sql": "7a459ec5ffd744af242811ad8fba9d768ef2badcaa5ac5960ef6fe415622f088",
     "src/generated_session_conformance.rs": "596bf172bb6071c73b899665a9f52b5a77dda0509ff54c6ad47dab286c4ada4a"

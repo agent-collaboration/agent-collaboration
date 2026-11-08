@@ -7,8 +7,8 @@ use crate::configuration;
 #[path = "../process_restart/copy_staged_parts.rs"]
 mod copy_staged_parts;
 use crate::creation_scenarios;
-#[path = "../process_restart/fleet_notice_outbox.rs"]
-mod fleet_notice_outbox;
+#[path = "../process_restart/archive_notices.rs"]
+mod archive_notices;
 use crate::{imported_board_fixture, imported_claim_scenarios, native_fleet};
 #[path = "../process_restart/registration.rs"]
 mod registration;
@@ -23,7 +23,6 @@ mod session_resume;
 mod support;
 
 use board_sync_protocol::*;
-use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, DispatchFaultObservation, JwksFixtureServer,
     RuntimeControl, enroll_admitted_peer, fixture_policy,
@@ -74,19 +73,12 @@ async fn native_central_process() -> ConformanceResult<()> {
     Ok(())
 }
 
-fn notice_key() -> DispatchKey {
-    DispatchKey::new(
-        ObjectAddress::Fleet,
-        collaboration_central_conformance::DispatchCallSelector::FleetMachineNotice,
-    )
-}
-
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatch()
+async fn fleet_notice_committed_with_its_mutation_reaches_the_reader_after_process_death()
 -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
@@ -120,12 +112,6 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
         matches!(page,OperationAnswer::Consumer(BoardConsumerAnswer::Read(
         BoardReadPage::FleetFeed(FleetFeedRead::Page {head,..}))) if head.get()==0)
     );
-    control(
-        &first.base,
-        ObjectAddress::Fleet,
-        RuntimeControl::HoldNextDispatch { key: notice_key() },
-    )
-    .await?;
     let request = FleetRequest {
         request_id: message_board::RequestId::generate(),
         workspace: WorkspaceId::generate(),
@@ -147,28 +133,21 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
             ..
         })
     ));
-    let held = control(
-        &first.base,
-        ObjectAddress::Fleet,
-        RuntimeControl::AwaitHeldDispatch { key: notice_key() },
-    )
-    .await?;
-    let DispatchFaultObservation::Held { request: bytes, .. } = held.dispatch(&notice_key()) else {
-        return Err("Fleet did not reach its post-commit dispatch barrier".into());
-    };
-    let call: Value = serde_json::from_slice(&bytes)?;
-    let operation_id = call
-        .pointer("/identity/operation")
-        .ok_or("notice call omitted its durable identity")?
-        .clone();
+    // Slice 4a: the notice commits with the mutation. Whatever the push did
+    // before the process dies, the stored notice is what the restart serves.
     let fleet_path = root.path().join("fleet.db");
-    let before = operation(&fleet_path, &operation_id).await?;
-    assert_eq!(before.0, "running");
-    assert_eq!(before.2, 1);
     assert_eq!(
         read_count(
             &fleet_path,
             "SELECT COUNT(*) AS count FROM machine_control_project_notices"
+        )
+        .await?,
+        1
+    );
+    assert_eq!(
+        read_count(
+            &fleet_path,
+            "SELECT COUNT(*) AS count FROM _fleet_sync_operations WHERE kind='central.fleet-notice'"
         )
         .await?,
         0
@@ -187,8 +166,8 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
         &Uuid::now_v7().to_string(),
     )
     .await?;
-    // No Fleet request, explicit alarm, or retry triggers recovery here. Only
-    // the child's startup drive can rearm the persisted Fleet operation.
+    // No Fleet request, explicit alarm, or retry runs here. The reconnecting
+    // reader's Welcome catch-up serves the stored notice.
     tokio::time::timeout(RECOVERY_BOUND, async {
         loop {
             let message = reader
@@ -214,7 +193,7 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
         }
     })
     .await
-    .map_err(|_| "startup did not recover the owed Fleet notice")??;
+    .map_err(|_| "the reconnected reader was not caught up with the stored notice")??;
     let page = creation_scenarios::operation_answer(
         &mut reader.socket,
         OperationRequest::Consumer(BoardConsumerRequest::Read {
@@ -235,21 +214,18 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
     )
     .await?;
     assert_eq!(decide(&mut writer.socket, &request).await?, expected);
-    // Orderly stop drains the alarm which acknowledged the already observed
-    // append. The independent readback then checks terminal work and counts.
+    // The replay answered from the recorded decision; the readback checks it
+    // appended nothing and no notice job exists.
     drop(reader);
     drop(writer);
     second.stop().await?;
-    let after = operation(&fleet_path, &operation_id).await?;
-    assert_eq!(after.0, "completed");
-    assert_eq!(after.2, 0, "terminal journal completion compacts its steps");
     assert_eq!(
         read_count(
             &fleet_path,
             "SELECT COUNT(*) AS count FROM _fleet_sync_operations WHERE kind='central.fleet-notice'"
         )
         .await?,
-        1
+        0
     );
     assert_eq!(
         read_count(

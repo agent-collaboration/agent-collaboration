@@ -55,14 +55,16 @@
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
     "sql/work_attempts/delete_work_attempt.sql": "ddd9a1870613ecca05c59ef550af73514d26a458bb5e3713b38aa19760d2a677",
     "sql/work_attempts/insert_work_attempt_failure.sql": "858371fe97a4cd10093cf9db4e7391507e8d072a887839ec71cc1f1e22524beb",
+    "sql/work_attempts/insert_work_attempt_owed.sql": "d3bfaa558808ff789ab91a1008440bf289691aa54829b4fb5965e3455ef84da2",
+    "sql/work_attempts/read_due_work_attempts.sql": "e43e3f4ec5530fb9490063f9742d99423a7e5c9e36ca165607d6ee03df6a8b35",
     "sql/work_attempts/read_next_work_retry.sql": "a9a59ac30501393410c32188700fd6d56c7ffd23ac4226be56518b8cfaf1488b",
     "sql/work_attempts/read_work_attempt.sql": "77d2c8f285c17d94058a1567ce01aac12fac83abf26184c6aedac832a8a39e3c",
     "sql/work_attempts/update_work_attempt_failure.sql": "2cad6ab82377b943f3c06ee5e9ebece4990f9ba058d9102e6cffd5043ee238a7",
-    "src/generated_work_attempts.rs": "3e831a549436786760f3ceb2594bb304bcb0688d584018f34112630f414af09b",
-    "work-attempt-queries.json": "cf09519622742a3cefdb9ef210a05d330793fb1e579496ea0c68b1580fabbd3c",
+    "src/generated_work_attempts.rs": "c2327b642d6fa0cc33b5a4c85e4ccec74d460f3485a813daec8d8c32e2bb2e12",
+    "work-attempt-queries.json": "bb82973e9e8e6cac869ecc250b7131769d9c9656882bb883d9e9a98ea526e629",
     "work_migrations/0001_central_work_attempts.sql": "03247f9ed521e69d17b6c49dd1e8f7e8c458be0abc8f4d73e1f7379fb69477e9"
   },
-  "queries_digest": "c6cff69df3aba2a62e32cd8013c2c4dec598431eb8ae31aa9f6e54f802f1a6ca",
+  "queries_digest": "9fdc581ae0fbc8545ba82fc49ab3cdfc19a965bad2214e07ed98c8e98125dcec",
   "queries": [
     {
       "name": "read_work_attempt",
@@ -249,6 +251,24 @@
           "rust_type": "Option<String>",
           "nullable": null,
           "type_source": "typeof"
+        }
+      ]
+    },
+    {
+      "name": "insert_work_attempt_owed",
+      "bind_slots": 5,
+      "columns": []
+    },
+    {
+      "name": "read_due_work_attempts",
+      "bind_slots": 2,
+      "columns": [
+        {
+          "name": "subject",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
         }
       ]
     }

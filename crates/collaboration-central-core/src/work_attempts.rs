@@ -100,6 +100,8 @@ pub(crate) enum ErrorClass {
     CorruptRow,
     /// Storage refused or failed the work.
     Storage,
+    /// An owed answer did not arrive before its retry time (a resend went out).
+    Unanswered,
 }
 
 impl ErrorClass {
@@ -107,6 +109,7 @@ impl ErrorClass {
         match self {
             Self::CorruptRow => "corrupt_row",
             Self::Storage => "storage",
+            Self::Unanswered => "unanswered",
         }
     }
 
@@ -114,6 +117,7 @@ impl ErrorClass {
         match stored {
             "corrupt_row" => Ok(Self::CorruptRow),
             "storage" => Ok(Self::Storage),
+            "unanswered" => Ok(Self::Unanswered),
             other => Err(corrupt(
                 "last_error_class",
                 format!("unknown error class {other:?}"),
@@ -253,6 +257,58 @@ where
     .await
     .map_err(StoreError::backend)?;
     Ok(outcome)
+}
+
+/// Central owes `subject` work that is answered from outside (a Router's
+/// acknowledgment): keep a waiting row due at `at`, with no failure recorded.
+/// An existing row is left as it is.
+pub(crate) async fn owe<Scope: TransactionScope>(
+    scope: &mut Scope,
+    id: Uuid,
+    subject: Uuid,
+    kind: AttemptKind,
+    at: SyncTime,
+    now: SyncTime,
+) -> Result<(), StoreError>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    if attempt(scope, subject, kind).await?.is_some() {
+        return Ok(());
+    }
+    queries::insert_work_attempt_owed(
+        scope,
+        id.to_string(),
+        subject.to_string(),
+        kind.as_str().into(),
+        at.unix_millis().to_string(),
+        now.unix_millis().to_string(),
+    )
+    .await
+    .map_err(StoreError::backend)
+}
+
+/// Subjects of `kind` due at `now` (not given up), oldest first, at most 500.
+pub(crate) async fn due_subjects<Scope: TransactionScope>(
+    scope: &mut Scope,
+    kind: AttemptKind,
+    now: SyncTime,
+) -> Result<Vec<Uuid>, StoreError>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    queries::read_due_work_attempts(scope, kind.as_str().into(), now.unix_millis().to_string())
+        .await
+        .map_err(StoreError::backend)?
+        .into_iter()
+        .map(|row| private_id(row.subject, "subject"))
+        .collect()
 }
 
 /// The work finished: forget its row, in the transaction that finished it.

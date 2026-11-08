@@ -291,7 +291,7 @@ impl ShellActor {
                     serde_json::from_str(
                         &self.env.var("CENTRAL_HOLDER_ANSWER_TIMEOUT")?.to_string(),
                     )?,
-                    fleet_protocol::FrameCapabilities::default(),
+                    collaboration_central_core::CENTRAL_FRAME_CAPABILITIES,
                 )
                 .map_err(error)?,
                 #[cfg(feature = "conformance")]

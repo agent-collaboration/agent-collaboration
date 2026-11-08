@@ -1,0 +1,1 @@
+SELECT CAST(applied_through AS TEXT) AS applied_through, typeof(applied_through) AS applied_class, CAST(last_issued_position AS TEXT) AS last_issued_position, typeof(last_issued_position) AS issued_class FROM machine_control_project_progress WHERE machine_id=?;

@@ -7,6 +7,7 @@ use durable_steps::{
     AtomicStore, BoxFuture, CallFailure, NotSentReason, ReborrowScope, StoreError,
     storage::TransactionScope,
 };
+use fleet_protocol::FrameCapabilities;
 use fleet_protocol::{
     ClientFrame, CloseReason, ConnectionId, NoConsumer, PeerId, ReceiverId, SchemaSupport,
     SessionId,
@@ -354,17 +355,36 @@ pub struct Fixture {
 }
 impl Fixture {
     pub async fn open(path: &std::path::Path) -> Result<Self, TestError> {
-        Self::open_with(path, true, Self::default_installation()?).await
+        Self::open_with(
+            path,
+            true,
+            Self::default_installation()?,
+            FrameCapabilities::default(),
+        )
+        .await
     }
     pub async fn reopen(path: &std::path::Path) -> Result<Self, TestError> {
-        Self::open_with(path, false, Self::default_installation()?).await
+        Self::open_with(
+            path,
+            false,
+            Self::default_installation()?,
+            FrameCapabilities::default(),
+        )
+        .await
     }
 
     pub async fn open_for_installation(
         path: &std::path::Path,
         installation: message_board::ServiceId,
     ) -> Result<Self, TestError> {
-        Self::open_with(path, true, installation).await
+        Self::open_with(path, true, installation, FrameCapabilities::default()).await
+    }
+    /// A Fleet that honors `honored` frame capabilities, as a deployed central does.
+    pub async fn open_honoring(
+        path: &std::path::Path,
+        honored: FrameCapabilities,
+    ) -> Result<Self, TestError> {
+        Self::open_with(path, true, Self::default_installation()?, honored).await
     }
     fn default_installation() -> Result<message_board::ServiceId, TestError> {
         Ok(message_board::ServiceId::try_from(
@@ -375,6 +395,7 @@ impl Fixture {
         path: &std::path::Path,
         initialize: bool,
         installation: message_board::ServiceId,
+        honored: FrameCapabilities,
     ) -> Result<Self, TestError> {
         let io = Transport::default();
         let receiver = ReceiverId::new(durable_steps::Uuid::now_v7())?;
@@ -417,7 +438,7 @@ impl Fixture {
                     .try_into()?,
             },
             std::time::Duration::from_secs(2),
-            fleet_protocol::FrameCapabilities::default(),
+            honored,
         )?);
         if initialize {
             runtime.initialize().await?;

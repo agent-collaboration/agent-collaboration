@@ -356,6 +356,14 @@ static SESSION_MIGRATIONS: std::sync::LazyLock<Vec<sqlx_core::migrate::Migration
                 include_str!("../session_migrations/0012_forward_correlations.sql").into_sql_str(),
                 false,
             ),
+            Migration::new(
+                13,
+                "notice applied through".into(),
+                MigrationType::Simple,
+                include_str!("../session_migrations/0013_notice_applied_through.sql")
+                    .into_sql_str(),
+                false,
+            ),
         ]
     });
 

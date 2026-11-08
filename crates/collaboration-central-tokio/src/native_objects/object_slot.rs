@@ -90,7 +90,7 @@ impl KernelRecipe {
                     self.config,
                     self.delivery,
                     self.holder_answer_timeout,
-                    fleet_protocol::FrameCapabilities::default(),
+                    collaboration_central_core::CENTRAL_FRAME_CAPABILITIES,
                 )?,
                 #[cfg(feature = "conformance")]
                 observer,

@@ -11,8 +11,16 @@
       "row": "StoredWorkAttempt",
       "result": "many",
       "parameters": [
-        { "name": "subject", "kind": "text", "nullable": false },
-        { "name": "kind", "kind": "text", "nullable": false }
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        }
       ]
     },
     {
@@ -21,14 +29,46 @@
       "row": null,
       "result": "execute",
       "parameters": [
-        { "name": "id", "kind": "text", "nullable": false },
-        { "name": "subject", "kind": "text", "nullable": false },
-        { "name": "kind", "kind": "text", "nullable": false },
-        { "name": "state", "kind": "text", "nullable": false },
-        { "name": "next_attempt_at", "kind": "text", "nullable": true },
-        { "name": "now", "kind": "text", "nullable": false },
-        { "name": "last_error_class", "kind": "text", "nullable": false },
-        { "name": "last_error", "kind": "text", "nullable": false }
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "state",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "next_attempt_at",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "last_error_class",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "last_error",
+          "kind": "text",
+          "nullable": false
+        }
       ]
     },
     {
@@ -37,14 +77,46 @@
       "row": null,
       "result": "execute",
       "parameters": [
-        { "name": "id", "kind": "text", "nullable": false },
-        { "name": "state", "kind": "text", "nullable": false },
-        { "name": "next_attempt_at", "kind": "text", "nullable": true },
-        { "name": "attempts", "kind": "text", "nullable": false },
-        { "name": "first_failed_at", "kind": "text", "nullable": false },
-        { "name": "last_error_class", "kind": "text", "nullable": false },
-        { "name": "last_error", "kind": "text", "nullable": false },
-        { "name": "now", "kind": "text", "nullable": false }
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "state",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "next_attempt_at",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "attempts",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "first_failed_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "last_error_class",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "last_error",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
       ]
     },
     {
@@ -53,8 +125,16 @@
       "row": null,
       "result": "execute",
       "parameters": [
-        { "name": "subject", "kind": "text", "nullable": false },
-        { "name": "kind", "kind": "text", "nullable": false }
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        }
       ]
     },
     {
@@ -63,6 +143,57 @@
       "row": "StoredNextWorkRetry",
       "result": "many",
       "parameters": []
+    },
+    {
+      "name": "insert_work_attempt_owed",
+      "sql": "sql/work_attempts/insert_work_attempt_owed.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "next_attempt_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_due_work_attempts",
+      "sql": "sql/work_attempts/read_due_work_attempts.sql",
+      "row": "StoredDueWorkAttempt",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
     }
   ]
 }

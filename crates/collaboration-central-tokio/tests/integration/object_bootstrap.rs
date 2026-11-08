@@ -108,7 +108,7 @@ async fn exported_engine_corpora_initialize_once_and_reopen_without_reapplying_t
         (EngineSchema::Registry, 8),
         // Copy and Fleet each also carry the one central-work migration.
         (EngineSchema::Copy, 5),
-        (EngineSchema::Session, 5),
+        (EngineSchema::Session, 6),
         (EngineSchema::Delivery, 11),
         (EngineSchema::Fleet, 11),
     ] {

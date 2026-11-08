@@ -1,4 +1,4 @@
-//! Notice debt, receiving append and feed cursors share the actual Fleet owner.
+//! A mutation appends its notices in its own transaction on the actual Fleet owner; feed cursors live beside them.
 use super::composed_fleet_fixture::*;
 use board_sync_protocol::{BoardReadPage, FleetFeedRead};
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
@@ -79,6 +79,13 @@ fn calls(fixture: &Fixture) -> TestResult<Vec<Value>> {
         .map_err(|_| "notice call log poisoned")?
         .clone())
 }
+/// Workspaces, feed entries, notice rows and notice engine jobs.
+async fn ledger_counts(fixture: &Fixture) -> TestResult<(i64, i64, i64, i64)> {
+    Ok(fixture.store.transaction(|scope|Box::pin(async move {
+        let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM fleet_workspaces) AS workspaces,(SELECT count(*) FROM fleet_feed) AS feed,(SELECT count(*) FROM machine_control_project_notices) AS notices,(SELECT count(*) FROM _fleet_sync_operations WHERE kind='central.fleet-notice') AS jobs").fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
+        Ok((row.try_get::<i64,_>("workspaces").map_err(StoreError::backend)?,row.try_get::<i64,_>("feed").map_err(StoreError::backend)?,row.try_get::<i64,_>("notices").map_err(StoreError::backend)?,row.try_get::<i64,_>("jobs").map_err(StoreError::backend)?))
+    })).await?)
+}
 async fn reader(fixture: &Fixture) -> TestResult<(String, i64)> {
     Ok(fixture.store.transaction(|scope|Box::pin(async move {
         let row=query::<sqlx_turso::Turso>("SELECT reader_id,last_read_position FROM fleet_feed_readers WHERE installation=?").bind(SERVICE_A).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
@@ -88,100 +95,50 @@ async fn reader(fixture: &Fixture) -> TestResult<(String, i64)> {
 
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "The assertions observe persisted debt and an idempotent append across the same Fleet store reopening."
+    reason = "The assertions observe one appended notice across a Fleet reopen and an idempotent replay."
 )]
 #[tokio::test]
-async fn rejected_local_dispatch_recovers_after_fleet_reopen_without_changing_the_notice_call()
+async fn mutation_appends_one_notice_that_survives_reopen_and_a_replayed_request_adds_none()
 -> TestResult {
     let root = tempfile::tempdir()?;
     let fixture = Fixture::open(root.path(), NOW).await?;
     feed(&fixture, 0).await?;
     let create = request(true)?;
     let answer = decide(&fixture, &create).await?;
-    assert!(
-        calls(&fixture)?.is_empty(),
-        "inbound mutation dispatched notice work"
-    );
-    assert!(notices(&fixture).await?.is_empty());
-    fixture.io.reject_next_notice.store(true, Ordering::SeqCst);
-    assert_eq!(
-        fixture
-            .runtime
-            .conformance_drive_operations()
-            .await?
-            .retried
-            .len(),
-        1
-    );
-    let frozen = calls(&fixture)?;
-    assert_eq!(frozen.len(), 1);
-    assert_eq!(
-        frozen[0]["request"]["kind"], "projectListChanged",
-        "directory changes must produce the shared project-list hint"
-    );
-    assert!(notices(&fixture).await?.is_empty());
-    fixture.close().await?;
-
-    let reopened = Fixture::open(root.path(), NOW + 10_000).await?;
-    assert_eq!(
-        reopened
-            .runtime
-            .conformance_drive_operations()
-            .await?
-            .retried
-            .len(),
-        1
-    );
-    assert_eq!(calls(&reopened)?, frozen);
-    assert!(notices(&reopened).await?.is_empty());
-    assert_eq!(
-        reopened
-            .runtime
-            .conformance_drive_operations()
-            .await?
-            .completed
-            .len(),
-        1
-    );
-    let committed = notices(&reopened).await?;
+    // Slice 4a: the notice is appended in the mutation's own transaction, so
+    // it exists before any engine drive and no object call carries it.
+    let committed = notices(&fixture).await?;
     assert_eq!(committed.len(), 1);
     assert_eq!(committed[0].1, 1);
-    assert!(
-        matches!(feed(&reopened, 0).await?, BoardReadPage::FleetFeed(FleetFeedRead::Page { through, head, records, .. }) if through.get() == 2 && head.get() == 2 && records.len() == 2)
-    );
     assert!(runtime_primitives::uuid_v7(durable_steps::Uuid::parse_str(
         &committed[0].0
     )?));
-    reopened.io.advance(10_000);
-    assert_eq!(
-        reopened
-            .runtime
-            .conformance_drive_operations()
-            .await?
-            .completed
-            .len(),
-        1
-    );
-    assert_eq!(
-        calls(&reopened)?,
-        vec![frozen[0].clone(), frozen[0].clone()]
-    );
-    assert_eq!(notices(&reopened).await?, committed);
-    assert_eq!(decide(&reopened, &create).await?, answer);
+    let drive = fixture.runtime.conformance_drive_operations().await?;
     assert!(
-        reopened
-            .runtime
-            .conformance_drive_operations()
-            .await?
-            .completed
-            .is_empty()
+        drive.retried.is_empty() && drive.completed.is_empty(),
+        "{drive:?}"
     );
+    assert!(
+        calls(&fixture)?.is_empty(),
+        "a notice went through an object call"
+    );
+    fixture.close().await?;
+
+    let reopened = Fixture::open(root.path(), NOW + 10_000).await?;
+    assert_eq!(notices(&reopened).await?, committed);
+    assert!(
+        matches!(feed(&reopened, 0).await?, BoardReadPage::FleetFeed(FleetFeedRead::Page { through, head, records, .. }) if through.get() == 2 && head.get() == 2 && records.len() == 2)
+    );
+    // A replayed request answers from its recorded decision and appends nothing.
+    assert_eq!(decide(&reopened, &create).await?, answer);
+    assert_eq!(notices(&reopened).await?, committed);
+    assert!(calls(&reopened)?.is_empty());
     reopened.close().await
 }
 
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "A real post-callback uniqueness failure must roll back mutation, notice debt and wake intent together."
+    reason = "A real post-callback uniqueness failure must roll back the mutation and its notice together; a successful one appends its notice in the same transaction."
 )]
 #[tokio::test]
 async fn post_callback_sql_failure_rolls_back_metadata_feed_notice_debt_and_wake_intent()
@@ -194,86 +151,19 @@ async fn post_callback_sql_failure_rolls_back_metadata_feed_notice_debt_and_wake
     let create = request(true)?;
     assert!(decide(&fixture, &create).await.is_err());
     assert!(fixture.faults.injected.load(Ordering::SeqCst));
-    let counts=fixture.store.transaction(|scope|Box::pin(async move {
-        let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM fleet_workspaces) AS workspaces,(SELECT count(*) FROM fleet_feed) AS feed,(SELECT count(*) FROM _fleet_sync_operations WHERE kind='central.fleet-notice') AS notices").fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
-        Ok((row.try_get::<i64,_>("workspaces").map_err(StoreError::backend)?,row.try_get::<i64,_>("feed").map_err(StoreError::backend)?,row.try_get::<i64,_>("notices").map_err(StoreError::backend)?))
-    })).await?;
-    assert_eq!(counts, (0, 0, 0));
+    // The failed mutation rolled back its records, feed entry and notice together.
+    assert_eq!(ledger_counts(&fixture).await?, (0, 0, 0, 0));
     assert_eq!(fixture.io.wakes()?, before);
     assert!(calls(&fixture)?.is_empty());
-    assert!(notices(&fixture).await?.is_empty());
     decide(&fixture, &create).await?;
-    assert_eq!(
-        fixture
-            .runtime
-            .conformance_drive_operations()
-            .await?
-            .retried
-            .len(),
-        1
-    );
-    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
-    fixture.io.advance(10_000);
-    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
+    // Slice 4a: the notice is appended in the mutation's own transaction. No
+    // notice job is admitted and no object call carries it.
+    let (workspaces, feed_entries, notice_rows, jobs) = ledger_counts(&fixture).await?;
+    assert_eq!((workspaces, notice_rows, jobs), (1, 1, 0));
+    assert!(feed_entries > 0);
+    assert!(calls(&fixture)?.is_empty());
     assert_eq!(notices(&fixture).await?.len(), 1);
     fixture.close().await
-}
-
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "A lost reply after the receiving append commits must replay the same call and preserve exactly one row."
-)]
-#[tokio::test]
-async fn lost_local_receipt_after_append_survives_fleet_reopen_without_a_second_notice()
--> TestResult {
-    let root = tempfile::tempdir()?;
-    let fixture = Fixture::open(root.path(), NOW).await?;
-    feed(&fixture, 0).await?;
-    decide(&fixture, &request(true)?).await?;
-    assert_eq!(
-        fixture
-            .runtime
-            .conformance_drive_operations()
-            .await?
-            .retried
-            .len(),
-        1
-    );
-    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
-    let committed = notices(&fixture).await?;
-    assert_eq!(committed.len(), 1);
-    fixture
-        .io
-        .lose_next_notice_reply
-        .store(true, Ordering::SeqCst);
-    fixture.io.advance(10_000);
-    assert_eq!(
-        fixture
-            .runtime
-            .conformance_drive_operations()
-            .await?
-            .retried
-            .len(),
-        1
-    );
-    assert!(!fixture.io.lose_next_notice_reply.load(Ordering::SeqCst));
-    let frozen = calls(&fixture)?;
-    assert_eq!(frozen.len(), 2);
-    assert_eq!(frozen[0], frozen[1]);
-    fixture.close().await?;
-    let reopened = Fixture::open(root.path(), NOW + 20_000).await?;
-    assert_eq!(
-        reopened
-            .runtime
-            .conformance_drive_operations()
-            .await?
-            .completed
-            .len(),
-        1
-    );
-    assert_eq!(calls(&reopened)?, vec![frozen[0].clone()]);
-    assert_eq!(notices(&reopened).await?, committed);
-    reopened.close().await
 }
 
 #[expect(
@@ -311,11 +201,10 @@ async fn lost_offered_page_keeps_its_applied_cursor_and_a_later_append_still_hin
 
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Each alarm's real SQL must match independently observed dispatches and committed notice appends, including a duplicate-lookup negative control."
+    reason = "Engine drives after a mutation must do no notice work: the mutation appended it, with a lookup negative control."
 )]
 #[tokio::test]
-async fn each_fleet_alarm_pays_eight_sql_per_append_and_one_lookup_per_dispatched_task()
--> TestResult {
+async fn engine_drives_after_a_mutation_do_no_notice_work() -> TestResult {
     use super::{
         fleet_alarm_sql::{AlarmSql, validate_alarm},
         fleet_mail_dispatch::Socket,
@@ -325,39 +214,32 @@ async fn each_fleet_alarm_pays_eight_sql_per_append_and_one_lookup_per_dispatche
     let _sender = Socket::open(&fixture, A, SERVICE_A).await?;
     feed(&fixture, 0).await?;
     decide(&fixture, &request(true)?).await?;
-    // The receiving task is admitted by the first real dispatch. A later alarm
-    // appends; the final replay answers the original sender without appending.
-    for (index, expected) in [(0, (1, 0)), (1, (0, 1)), (2, (1, 0)), (3, (0, 0))] {
-        if index == 2 {
+    let appended = notices(&fixture).await?;
+    assert_eq!(appended.len(), 1, "the mutation did not append its notice");
+    for index in 0..3 {
+        if index == 1 {
             fixture.io.advance(10_000);
         }
-        let before = (calls(&fixture)?.len(), notices(&fixture).await?.len());
         let trace = AlarmSql::default();
         let report = trace
             .observe(fixture.runtime.conformance_drive_operations())
             .await?;
         assert!(report.failed.is_empty(), "{report:?}");
-        let observed = (
-            calls(&fixture)?.len() - before.0,
-            notices(&fixture).await?.len() - before.1,
+        assert!(
+            calls(&fixture)?.is_empty(),
+            "drive {index} dispatched notice work"
         );
-        assert_eq!(
-            observed, expected,
-            "alarm {index} must execute its actual work"
-        );
+        assert_eq!(notices(&fixture).await?, appended, "drive {index} appended");
         let statements = trace.statements()?;
-        validate_alarm(&statements, observed.0, observed.1)?;
-        if observed.0 > 0 {
-            let mut duplicate_lookup = statements;
-            duplicate_lookup.push(
-                include_str!("../../../collaboration-central-core/sql/read_enrollments.sql")
-                    .to_owned(),
-            );
-            assert!(
-                validate_alarm(&duplicate_lookup, observed.0, observed.1).is_err(),
-                "a second lookup for the same actual task escaped its per-callback cost bound"
-            );
-        }
+        validate_alarm(&statements, 0, 0)?;
+        let mut stray_lookup = statements;
+        stray_lookup.push(
+            include_str!("../../../collaboration-central-core/sql/read_enrollments.sql").to_owned(),
+        );
+        assert!(
+            validate_alarm(&stray_lookup, 0, 0).is_err(),
+            "a recipient lookup escaped the drive's notice-free bound"
+        );
     }
     fixture.close().await
 }

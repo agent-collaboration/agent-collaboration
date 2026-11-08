@@ -37,6 +37,23 @@ async fn task_states(fixture: &Fixture, state: &'static str) -> TestResult<BTree
         })
         .await?)
 }
+async fn project_list_notices(fixture: &Fixture) -> TestResult<i64> {
+    Ok(fixture
+        .store
+        .transaction(|scope| {
+            Box::pin(async move {
+                query::<sqlx_turso::Turso>(
+                    "SELECT count(*) AS notices FROM machine_control_project_notices WHERE kind='project_list_changed'",
+                )
+                .fetch_one(scope.executor())
+                .await
+                .map_err(StoreError::backend)?
+                .try_get("notices")
+                .map_err(StoreError::backend)
+            })
+        })
+        .await?)
+}
 
 #[expect(
     clippy::panic_in_result_fn,
@@ -114,7 +131,8 @@ async fn one_fleet_dispatcher_recovers_holder_change_feed_notice_and_schema_supp
     fixture.sql("CREATE TRIGGER reject_new_holder_notice BEFORE INSERT ON machine_control_project_notices WHEN NEW.kind='lease_granted' AND NEW.epoch=2 BEGIN SELECT RAISE(ABORT,'injected mixed restart boundary'); END").await?;
     fixture.owner(request.clone()).await?;
     fixture.sql("DROP TRIGGER reject_new_holder_notice").await?;
-    // Register an actual Fleet reader, then a metadata write owes it a feed notice.
+    // Register an actual Fleet reader; the metadata write appends its feed notice
+    // in its own transaction (slice 4a), so no notice job is journaled.
     fixture
         .call(
             "session",
@@ -167,7 +185,8 @@ async fn one_fleet_dispatcher_recovers_holder_change_feed_notice_and_schema_supp
     );
     let before = task_states(&fixture, "running").await?;
     assert!(before.contains("fleet-sync.holder-change"), "{before:?}");
-    assert!(before.contains("central.fleet-notice"), "{before:?}");
+    assert!(!before.contains("central.fleet-notice"), "{before:?}");
+    assert_eq!(project_list_notices(&fixture).await?, 1);
     assert!(
         before.contains("fleet-sync.publish-schema-support"),
         "{before:?}"
@@ -191,9 +210,7 @@ async fn one_fleet_dispatcher_recovers_holder_change_feed_notice_and_schema_supp
     let completed = task_states(&reopened, "completed").await?;
     for kind in [
         "fleet-sync.holder-change",
-        "central.fleet-notice",
         "fleet-sync.publish-schema-support",
-        "central.machine-notice-append",
     ] {
         assert!(
             completed.contains(kind),
@@ -203,6 +220,11 @@ async fn one_fleet_dispatcher_recovers_holder_change_feed_notice_and_schema_supp
     assert_eq!(
         reopened.owner(request).await?.pointer("/value/kind"),
         Some(&json!("granted"))
+    );
+    assert_eq!(
+        project_list_notices(&reopened).await?,
+        1,
+        "the appended feed notice must survive reopen exactly once"
     );
     let committed = reopened.lease_and_notices().await?;
     assert_eq!(committed.0.pointer("/grant/holder"), Some(&json!(B)));

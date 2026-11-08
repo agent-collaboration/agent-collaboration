@@ -280,6 +280,7 @@ mod fleet_adr_store;
 mod fleet_board_codec;
 mod fleet_board_store;
 mod fleet_column_codec;
+/// Notices go out after the transaction that issued them commits.
 mod fleet_record_store;
 mod fleet_repository_store;
 mod fleet_retirement_gate;
@@ -299,7 +300,12 @@ mod generated_machine_notices;
 mod machine_notice_contract;
 mod machine_notice_delivery;
 mod machine_notice_outbox;
+/// How far each machine's Router has applied its notices.
+mod machine_notice_progress;
 mod machine_notice_store;
+/// Which notices each connection was already sent.
+mod notice_push;
+pub use notice_push::CENTRAL_FRAME_CAPABILITIES;
 mod registration_refusal;
 #[cfg(feature = "conformance")]
 pub use fleet_record_observer::{
