@@ -131,6 +131,7 @@ async fn fixture_connection(path: &Path) -> SqliteConnection {
 
 struct RunningRetention {
     observation: Arc<RetentionObservation>,
+    clock: Arc<PausedWallClock>,
     shutdown: CancellationToken,
     task: tokio::task::JoinHandle<()>,
 }
@@ -138,23 +139,25 @@ struct RunningRetention {
 impl RunningRetention {
     /// Starts the loop at `wall` and returns once its first pass has gone to sleep.
     async fn start(journal: &Journal, wall: &str) -> Self {
-        let clock = PausedWallClock {
+        let clock = Arc::new(PausedWallClock {
             base: SyncTime::from_unix_millis(at(wall).timestamp_millis()),
             started: tokio::time::Instant::now(),
-        };
+        });
         let observation = Arc::new(RetentionObservation::default());
         let shutdown = CancellationToken::new();
         let task = tokio::spawn({
             let store = journal.store.clone();
             let observation = observation.clone();
             let shutdown = shutdown.clone();
-            async move { store.run_retention(&clock, &shutdown, &observation).await }
+            let clock = clock.clone();
+            async move { store.run_retention(&*clock, &shutdown, &observation).await }
         });
         tokio::time::timeout(SLEEP_GUARD, observation.observed.asleep_at_least(1))
             .await
             .expect("the first pass goes to sleep");
         Self {
             observation,
+            clock,
             shutdown,
             task,
         }
@@ -168,6 +171,17 @@ impl RunningRetention {
         self.snapshot()
             .armed
             .and_then(|deadline| DateTime::from_timestamp_millis(deadline.unix_millis()))
+    }
+
+    /// Asserts the latest expiry began at `due`, as the pass read its clock on waking, up
+    /// to the paused timer's 2 ms rounding: a timer that fires late fails this.
+    fn assert_last_expiry_entered_at(&self, due: DateTime<Utc>) {
+        let entered = self.snapshot().last_expiry_entered_at.unwrap();
+        let late = entered.unix_millis() - due.timestamp_millis();
+        assert!(
+            (0..=2).contains(&late),
+            "the expiry began {late} ms after {due}"
+        );
     }
 
     /// Lets the paused clock reach the loop's timer and returns once that pass has slept.
@@ -184,8 +198,8 @@ impl RunningRetention {
     }
 }
 
-/// Bounds a wait the test expects a pass to end in sleep; it only stops a hang.
-const SLEEP_GUARD: std::time::Duration = std::time::Duration::from_secs(10);
+/// Bounds, in real time, a wait for a pass the test expects; it only stops a hang.
+const SLEEP_GUARD: std::time::Duration = std::time::Duration::from_secs(30);
 
 #[tokio::test]
 async fn a_record_is_armed_at_the_first_whole_second_the_rule_allows_and_expired_only_then() {
@@ -212,6 +226,7 @@ async fn a_record_is_armed_at_the_first_whole_second_the_rule_allows_and_expired
 
         worker.run_to_the_armed_time().await;
 
+        worker.assert_last_expiry_entered_at(at(first_expiry));
         assert_eq!(journal.count("lifecycle_records").await, 0, "{stamped}");
         assert_eq!(
             worker.snapshot().expiries,
@@ -243,6 +258,7 @@ async fn a_checkpointed_address_is_armed_from_its_last_millisecond_and_pruned_th
 
     worker.run_to_the_armed_time().await;
 
+    worker.assert_last_expiry_entered_at(at("2026-05-10T00:00:01Z"));
     assert_eq!(journal.count("checkpoint_addresses").await, 0);
     assert_eq!(journal.count("thread_addresses").await, 0);
     assert_eq!(worker.snapshot().expiries, 2);
@@ -359,11 +375,13 @@ async fn a_failed_expiry_retries_at_one_two_four_seconds_and_recovers_with_no_ne
     let worker = RunningRetention::start(&journal, "2026-06-15T12:00:00Z").await;
 
     let mut previous = worker.armed().unwrap();
-    let first_step = (previous - wall).num_milliseconds();
-    // The pass starts at the wall time or up to a few milliseconds of real time after it.
+    let parked_wall =
+        DateTime::<Utc>::from_timestamp_millis(worker.clock.now().unix_millis()).unwrap();
+    // The failed pass ran between the start wall time and the moment the loop parked.
     assert!(
-        (1_000..=1_050).contains(&first_step),
-        "the first retry is one second after the failure: {first_step}"
+        previous >= wall + chrono::Duration::seconds(1)
+            && previous <= parked_wall + chrono::Duration::seconds(1),
+        "the first retry is one second after the failure: {previous}"
     );
     for expected in [2_000, 4_000] {
         worker.run_to_the_armed_time().await;
@@ -380,8 +398,10 @@ async fn a_failed_expiry_retries_at_one_two_four_seconds_and_recovers_with_no_ne
     assert_eq!(journal.count("lifecycle_records").await, 1);
 
     set_expiry_fault(&journal.path, false).await;
+    let retry_at = worker.armed().unwrap();
     worker.run_to_the_armed_time().await;
 
+    worker.assert_last_expiry_entered_at(retry_at);
     assert_eq!(
         journal.count("lifecycle_records").await,
         0,

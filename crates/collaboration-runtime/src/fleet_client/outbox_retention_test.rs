@@ -96,6 +96,7 @@ async fn settle_protected_creation(outbox: &FleetOutbox, settled: DateTime<Utc>)
 struct RunningOutboxWorker {
     observation: WorkerObservation,
     clock: Arc<PausedWallClock>,
+    prunes_entered_at: Arc<StdMutex<Vec<SyncTime>>>,
     shutdown: CancellationToken,
     task: tokio::task::JoinHandle<()>,
 }
@@ -107,16 +108,20 @@ impl RunningOutboxWorker {
             wall.timestamp_millis(),
         )));
         let (worker_loop, mut pass) = outbox_retention_loop(outbox, clock.clone());
+        let prunes_entered_at = pass.prunes_entered_at.clone();
         let observation = worker_loop.observation();
         let shutdown = CancellationToken::new();
         let task = tokio::spawn({
             let shutdown = shutdown.clone();
             async move { worker_loop.run(&mut pass, shutdown).await }
         });
-        observation.asleep_at_least(1).await;
+        tokio::time::timeout(WAKE_GUARD, observation.asleep_at_least(1))
+            .await
+            .expect("the first pass goes to sleep");
         Self {
             observation,
             clock,
+            prunes_entered_at,
             shutdown,
             task,
         }
@@ -140,6 +145,17 @@ impl RunningOutboxWorker {
             .count()
     }
 
+    /// Asserts the latest prune began at `due`, as the pass read its clock on waking, up
+    /// to the paused timer's 2 ms rounding: a timer that fires late fails this.
+    fn assert_last_prune_entered_at(&self, due: DateTime<Utc>) {
+        let entered = *self.prunes_entered_at.lock().unwrap().last().unwrap();
+        let late = entered.unix_millis() - due.timestamp_millis();
+        assert!(
+            (0..=2).contains(&late),
+            "the prune began {late} ms after {due}"
+        );
+    }
+
     /// Lets the paused clock reach the worker's timer and returns once that pass has slept.
     async fn run_to_the_armed_time(&self) {
         let sleeps = self.snapshot().sleeps;
@@ -154,8 +170,8 @@ impl RunningOutboxWorker {
     }
 }
 
-/// Bounds a wait the test expects a commit to end; it only stops a hang.
-const COMMIT_WAKE_GUARD: std::time::Duration = std::time::Duration::from_secs(10);
+/// Bounds, in real time, a wait for a pass the test expects; it only stops a hang.
+const WAKE_GUARD: std::time::Duration = std::time::Duration::from_secs(30);
 
 async fn open_outbox(directory: &Path) -> (FleetStore, FleetOutbox) {
     let store = FleetStore::open(&directory.join("fleet.sqlite"))
@@ -185,6 +201,7 @@ async fn the_worker_arms_the_first_moment_the_rule_allows_and_deletes_only_then(
 
         worker.run_to_the_armed_time().await;
 
+        worker.assert_last_prune_entered_at(at(first_deletable));
         assert!(
             outbox.request(&request).await.unwrap().is_none(),
             "{settled}"
@@ -216,12 +233,9 @@ async fn a_protected_oldest_request_does_not_fire_and_completing_its_input_delet
 
     let sleeps = worker.snapshot().sleeps;
     outbox.complete_creation_input(&protected).await.unwrap();
-    tokio::time::timeout(
-        COMMIT_WAKE_GUARD,
-        worker.observation.asleep_at_least(sleeps + 1),
-    )
-    .await
-    .expect("completing the input wakes the worker");
+    tokio::time::timeout(WAKE_GUARD, worker.observation.asleep_at_least(sleeps + 1))
+        .await
+        .expect("completing the input wakes the worker");
 
     assert!(outbox.request(&protected).await.unwrap().is_none());
     assert_eq!(worker.prunes(), 1);
@@ -322,8 +336,10 @@ async fn a_failed_prune_retries_at_one_two_four_seconds_and_recovers_with_no_new
     assert!(outbox.request(&request).await.unwrap().is_some());
 
     set_delete_fault(directory.path(), false).await;
+    let retry_at = worker.armed().unwrap();
     worker.run_to_the_armed_time().await;
 
+    worker.assert_last_prune_entered_at(retry_at);
     assert!(
         outbox.request(&request).await.unwrap().is_none(),
         "the retry needed only its time"
@@ -343,12 +359,9 @@ async fn protection_removed_before_the_due_time_arms_it_and_deletes_the_request_
 
     let sleeps = worker.snapshot().sleeps;
     outbox.complete_creation_input(&protected).await.unwrap();
-    tokio::time::timeout(
-        COMMIT_WAKE_GUARD,
-        worker.observation.asleep_at_least(sleeps + 1),
-    )
-    .await
-    .expect("completing the input wakes the worker");
+    tokio::time::timeout(WAKE_GUARD, worker.observation.asleep_at_least(sleeps + 1))
+        .await
+        .expect("completing the input wakes the worker");
 
     assert_eq!(worker.armed(), Some(at("2026-03-15T10:00:00.001Z")));
     assert_eq!(worker.prunes(), 0, "not yet due");
@@ -356,6 +369,7 @@ async fn protection_removed_before_the_due_time_arms_it_and_deletes_the_request_
 
     worker.run_to_the_armed_time().await;
 
+    worker.assert_last_prune_entered_at(at("2026-03-15T10:00:00.001Z"));
     assert!(outbox.request(&protected).await.unwrap().is_none());
     assert_eq!(worker.prunes(), 1);
     assert_eq!(worker.armed(), None);
@@ -368,6 +382,10 @@ async fn a_commit_that_leaves_nothing_due_reads_the_due_time_and_deletes_nothing
     let directory = tempfile::tempdir().unwrap();
     let (store, outbox) = open_outbox(directory.path()).await;
     let older = settle_rejected(&outbox, at("2026-01-15T10:00:00.000Z")).await;
+    // Enqueued before the worker parks, so the settlement below is the only commit after.
+    let (_, pending) = creation();
+    outbox.enqueue(&pending).await.unwrap();
+    let newer = pending.request_id;
     let worker = RunningOutboxWorker::start(&outbox, at("2026-02-01T00:00:00.000Z")).await;
     let before = worker.snapshot();
     let due_reads = |snapshot: &LoopSnapshot| {
@@ -378,9 +396,18 @@ async fn a_commit_that_leaves_nothing_due_reads_the_due_time_and_deletes_nothing
             .count()
     };
 
-    let newer = settle_rejected(&outbox, at("2026-01-20T00:00:00.000Z")).await;
+    outbox
+        .mark_decided(
+            &newer,
+            &RequestDecision::Rejected {
+                reasons: Vec::new(),
+            },
+            at("2026-01-20T00:00:00.000Z").timestamp_millis(),
+        )
+        .await
+        .unwrap();
     tokio::time::timeout(
-        COMMIT_WAKE_GUARD,
+        WAKE_GUARD,
         worker.observation.asleep_at_least(before.sleeps + 1),
     )
     .await

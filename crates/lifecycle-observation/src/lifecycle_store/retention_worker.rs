@@ -121,7 +121,7 @@ impl LifecycleStore {
                 Some(due_ms) if due_ms <= now_ms => {}
                 later => return Ok(later.map(SyncTime::from_unix_millis)),
             }
-            observation.expiry();
+            observation.expiry(now);
             if !self
                 .expire_history_reporting_removal(now_ms.div_euclid(1_000))
                 .await?
@@ -146,9 +146,15 @@ impl RetentionObservation {
         self.observed.update(|snapshot| snapshot.due_reads += 1);
     }
 
-    fn expiry(&self) {
+    /// The pass enters an expiry at `now`, its own time as read on waking.
+    fn expiry(&self, now: SyncTime) {
         #[cfg(test)]
-        self.observed.update(|snapshot| snapshot.expiries += 1);
+        self.observed.update(|snapshot| {
+            snapshot.expiries += 1;
+            snapshot.last_expiry_entered_at = Some(now);
+        });
+        #[cfg(not(test))]
+        let _ = now;
     }
 
     fn armed(&self, deadline: Option<SyncTime>) {
@@ -171,6 +177,8 @@ mod observed {
     pub(super) struct RetentionSnapshot {
         pub(super) due_reads: u64,
         pub(super) expiries: u64,
+        /// The pass's own time when it entered the latest expiry.
+        pub(super) last_expiry_entered_at: Option<SyncTime>,
         pub(super) sleeps: u64,
         /// The deadline armed before the latest sleep.
         pub(super) armed: Option<SyncTime>,

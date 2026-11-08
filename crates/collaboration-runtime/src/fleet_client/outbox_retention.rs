@@ -27,6 +27,8 @@ pub(crate) fn outbox_retention_loop(
     let pass = OutboxRetentionPass {
         outbox: outbox.clone(),
         due_ms: None,
+        #[cfg(test)]
+        prunes_entered_at: Arc::default(),
     };
     (worker_loop, pass)
 }
@@ -35,6 +37,9 @@ pub(crate) struct OutboxRetentionPass {
     outbox: FleetOutbox,
     /// The due time the last read found still ahead.
     due_ms: Option<i64>,
+    /// The pass's own time at each prune it entered, as the loop read it on waking.
+    #[cfg(test)]
+    prunes_entered_at: Arc<std::sync::Mutex<Vec<SyncTime>>>,
 }
 
 impl WorkerPass for OutboxRetentionPass {
@@ -56,6 +61,10 @@ impl WorkerPass for OutboxRetentionPass {
             return Ok(BatchOutcome::Drained);
         }
         observation.record_read("fleet_outbox_retention.prune");
+        #[cfg(test)]
+        if let Ok(mut entered) = self.prunes_entered_at.lock() {
+            entered.push(now);
+        }
         if self
             .outbox
             .prune_expired(now_ms, OUTBOX_PRUNE_BATCH)
