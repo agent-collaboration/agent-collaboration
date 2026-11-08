@@ -52,6 +52,8 @@ The reader validates UUIDv7 values, both byte streams, actual Hello/Welcome, com
 
 The common SessionAudit defaults to single-frame grammar for released-peer compatibility. D4 opts into batch grammar explicitly. Ending an incomplete message stays invalid evidence; a disconnected observer cannot silently turn a partial frame into a pass.
 
+For a declared local fixture, the existing `SessionGate.start` accepts an optional fourth argument `{protocol: "batches", observeBytes}`. Feed its records into `D4WireCapture.observe` and retain `transcript()` as the original trace. The gate assigns a unique physical label per Session connection, records the exact central-facing HTTP request after its existing Host rewrite and all original WebSocket bytes in both directions, and records physical close. Enrollment is outside this capture. It neither decodes/re-encodes forwarded payloads nor supplies the platform/session binding: obtain that separately from actual fixture and S1 evidence. A capture overflow or callback error stays fatal evidence; call both `gate.requireObservation()` and `capture.requireHealthy()` before using a transcript. These observers do not stop forwarding. `gate.close()` waits for its owned socket close callbacks so the retained close boundary is settled. The TCP fixture tests qualify apparatus forwarding and capture only.
+
 ## Local journey coverage to earn
 
 All rows below remain unobserved until their real scenario is driven on a declared product target. The named seam is the prerequisite, not a substitute observation. Use the actual product controls as they land; do not fabricate a successful answer, alarm or effect in the driver.
