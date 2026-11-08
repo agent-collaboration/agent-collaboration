@@ -16,3 +16,4 @@ mod lifecycle_wire;
 mod parsed_schema_admission;
 mod real_frame_values;
 mod recipient_refusals;
+mod session_frame_golden;
