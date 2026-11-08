@@ -1,4 +1,4 @@
-/** S8/S10 views from draft contract v3.2; raw responses remain the authoritative evidence. */
+/** S8 v3.6 and S10 views; raw responses remain the authoritative evidence. */
 import { z } from "zod";
 import {
   epochMillisecondsSchema,
@@ -7,6 +7,19 @@ import {
 } from "./event-observation.ts";
 
 const label = z.string().min(1);
+const sessionSchema = z
+  .object({
+    session: z.uuidv7().nullable(),
+    peer: z.uuidv7(),
+    connection: z.uuidv7(),
+    registration: z.enum(["opening", "attaching", "attached", "closed"]),
+  })
+  .strict()
+  .superRefine((row, context): void => {
+    const hasSession = ["attaching", "attached"].includes(row.registration);
+    if (hasSession !== (row.session !== null))
+      context.addIssue({ code: "custom", message: "registration and session disagree" });
+  });
 const attemptSchema = z
   .object({
     id: z.uuidv7(),
@@ -74,16 +87,7 @@ export const d4SnapshotResponseSchema = z
     value: z
       .object({
         attempts: z.array(attemptSchema),
-        sessions: z.array(
-          z
-            .object({
-              session: z.uuidv7(),
-              peer: z.uuidv7(),
-              connection: z.uuidv7(),
-              registration: z.enum(["opening", "attaching", "attached", "closed"]),
-            })
-            .strict(),
-        ),
+        sessions: z.array(sessionSchema),
         inventory: z.array(z.uuidv7()),
         windows: z.array(z.object({ connection: z.uuidv7(), inFlight: unsigned64Schema }).strict()),
         noticeProgress: z.array(
@@ -99,7 +103,9 @@ export const d4SnapshotResponseSchema = z
         feed: feedSchema.nullable(),
         owners: z
           .object({
-            outbox: z.array(z.object({ item: z.uuidv7(), custody: label }).strict()),
+            outbox: z.array(
+              z.object({ item: z.uuidv7(), recordKind: label, custody: label.nullable() }).strict(),
+            ),
             statusOwed: z.array(
               z.object({ id: z.uuidv7(), item: z.uuidv7(), version: unsigned64Schema }).strict(),
             ),
@@ -121,12 +127,23 @@ export const d4SnapshotResponseSchema = z
             snapshot.windows.length
         )
           context.addIssue({ code: "custom", message: "duplicate inventory or window connection" });
+        if (
+          new Set(snapshot.sessions.map((row) => row.connection)).size !== snapshot.sessions.length
+        )
+          context.addIssue({ code: "custom", message: "duplicate session connection" });
         const current = snapshot.sessions.filter(
           (session): boolean =>
             session.registration === "attached" && snapshot.inventory.includes(session.connection),
         );
-        if (new Set(current.map((session): string => session.connection)).size !== current.length)
-          context.addIssue({ code: "custom", message: "current socket has ambiguous sessions" });
+        const connections = new Set(current.map((session) => session.connection));
+        if (
+          snapshot.windows.length !== connections.size ||
+          snapshot.windows.some((window) => !connections.has(window.connection))
+        )
+          context.addIssue({
+            code: "custom",
+            message: "windows do not cover exactly the current attached inventory",
+          });
       }),
   })
   .strict();
@@ -155,12 +172,13 @@ export function requireWindowSnapshotAgreement(
   wireCurrent: ReadonlyMap<string, bigint>,
 ): void {
   const current = new Map(
-    snapshot.sessions
-      .filter(
-        (session): boolean =>
-          session.registration === "attached" && snapshot.inventory.includes(session.connection),
-      )
-      .map((session): [string, string] => [session.connection, session.session]),
+    snapshot.sessions.flatMap((session): [string, string][] =>
+      session.registration === "attached" &&
+      session.session !== null &&
+      snapshot.inventory.includes(session.connection)
+        ? [[session.connection, session.session]]
+        : [],
+    ),
   );
   const expected = new Map<string, bigint>();
   for (const row of snapshot.attempts) {

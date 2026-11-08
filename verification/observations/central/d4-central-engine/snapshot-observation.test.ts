@@ -50,7 +50,7 @@ function snapshot(): D4Snapshot {
     ],
     feed: { head: 120n, retainedThrough: 98n, effectiveFloor: 110n },
     owners: {
-      outbox: [{ item: identity(2), custody: "relay_held" }],
+      outbox: [{ item: identity(2), recordKind: "item", custody: "sent" }],
       statusOwed: [{ id: identity(2), item: identity(7), version: 9007199254740993n }],
     },
   };
@@ -58,6 +58,76 @@ function snapshot(): D4Snapshot {
 function parse(value: unknown): D4Snapshot {
   return d4SnapshotResponseSchema.parse(decode(encode({ kind: "snapshot", value }))).value;
 }
+
+test("v3.6 retains every registration and owner row with honest nullable fields", (): void => {
+  const value = snapshot();
+  const decoded = parse({
+    ...value,
+    sessions: [
+      ...value.sessions,
+      { session: null, peer: identity(8), connection: identity(9), registration: "opening" },
+      { session: null, peer: identity(10), connection: identity(11), registration: "closed" },
+      {
+        session: identity(12),
+        peer: identity(13),
+        connection: identity(14),
+        registration: "attaching",
+      },
+    ],
+    inventory: [identity(4), identity(9), identity(11), identity(14)],
+    owners: {
+      ...value.owners,
+      outbox: [
+        { item: identity(2), recordKind: "item", custody: "sent" },
+        { item: identity(20), recordKind: "recovered", custody: null },
+        { item: identity(21), recordKind: "unresolvable", custody: null },
+      ],
+    },
+  });
+  assert.equal(decoded.sessions.length, 4);
+  assert.equal(decoded.sessions[1]?.session, null);
+  assert.equal(decoded.sessions[2]?.session, null);
+  assert.deepEqual(
+    decoded.owners.outbox.map((row) => row.custody),
+    ["sent", null, null],
+  );
+  requireWindowSnapshotAgreement(decoded, new Map([[identity(4), 1n]]));
+});
+
+test("v3.6 refuses impossible registration tuples and omitted owner fields", (): void => {
+  const value = snapshot();
+  for (const [registration, session] of [
+    ["attached", null],
+    ["attaching", null],
+    ["opening", identity(5)],
+    ["closed", identity(5)],
+  ])
+    assert.throws(() =>
+      parse({
+        ...value,
+        sessions: [{ peer: identity(6), connection: identity(4), registration, session }],
+      }),
+    );
+  for (const row of [
+    { item: identity(2), custody: "sent" },
+    { item: identity(2), recordKind: "item" },
+  ])
+    assert.throws(() => parse({ ...value, owners: { ...value.owners, outbox: [row] } }));
+});
+
+test("v3.6 windows cover exactly the current attached inventory, including zero slots", (): void => {
+  const idle = {
+    ...snapshot(),
+    attempts: [],
+    windows: [{ connection: identity(4), inFlight: 0n }],
+  };
+  requireWindowSnapshotAgreement(parse(idle), new Map());
+  assert.throws(() => parse({ ...idle, windows: [] }), /window/);
+  assert.throws(
+    () => parse({ ...idle, windows: [...idle.windows, { connection: identity(8), inFlight: 0n }] }),
+    /window/,
+  );
+});
 
 test("literal snake_case attempt states, explicit null and exact versions survive wire decoding", (): void => {
   const value = snapshot();
@@ -123,7 +193,11 @@ test("inactive attempts have no current send binding, while waiting retry deadli
     sentVersion: null,
     nextAttemptAt: 1792281660000n,
   };
-  const waiting = parse({ ...snapshot(), attempts: [inactive], windows: [] });
+  const waiting = parse({
+    ...snapshot(),
+    attempts: [inactive],
+    windows: [{ connection: identity(4), inFlight: 0n }],
+  });
   assert.equal(waiting.attempts[0]?.nextAttemptAt, 1792281660000n);
   requireWindowSnapshotAgreement(waiting, new Map());
   for (const state of ["waiting", "given_up"])
@@ -183,7 +257,7 @@ test("reported counts must agree with real current-session rows and observed wir
   const ended = parse({
     ...value,
     inventory: [],
-    windows: [{ connection: identity(4), inFlight: 0n }],
+    windows: [],
   });
   requireWindowSnapshotAgreement(ended, new Map());
 });

@@ -4,6 +4,18 @@ import assert from "node:assert/strict";
 import { D4ControlClient, D4ControlFailure } from "./control-client.ts";
 
 const subject = "01900000-0000-7000-8000-000000000001";
+const emptySnapshot = {
+  kind: "snapshot",
+  value: {
+    attempts: [],
+    sessions: [],
+    inventory: [],
+    windows: [],
+    noticeProgress: [],
+    feed: { head: 0n, retainedThrough: 0n, effectiveFloor: 0n },
+    owners: { outbox: [], statusOwed: [] },
+  },
+};
 function client(
   input: ControlFixture,
   changes: Partial<ConstructorParameters<typeof D4ControlClient>[0]> = {},
@@ -17,6 +29,74 @@ function client(
     ...changes,
   });
 }
+
+test("v3.6 retries only a confirmed unstable read and retains the stable snapshot", async (): Promise<void> => {
+  const input = await fixture([new Response('"snapshotUnstable"', { status: 409 }), emptySnapshot]);
+  try {
+    assert.equal((await client(input).snapshot()).feed?.head, 0n);
+    assert.equal(input.requests.length, 2);
+  } finally {
+    await input.close();
+  }
+});
+
+test("v3.6 snapshot retry is bounded and notOpen or corrupt refusals remain immediate", async (): Promise<void> => {
+  const input = await fixture(() => new Response('"snapshotUnstable"', { status: 409 }));
+  try {
+    await assert.rejects(
+      client(input).snapshot(),
+      (error: unknown): boolean =>
+        error instanceof D4ControlFailure && error.failure === "snapshotUnstable",
+    );
+    assert.equal(input.requests.length, 3);
+  } finally {
+    await input.close();
+  }
+  for (const failure of ["notOpen", "storageFailed"]) {
+    const refused = await fixture([new Response(JSON.stringify(failure), { status: 409 })]);
+    try {
+      await assert.rejects(
+        client(refused).snapshot(),
+        (error: unknown): boolean => error instanceof D4ControlFailure && error.failure === failure,
+      );
+      assert.equal(refused.requests.length, 1);
+    } finally {
+      await refused.close();
+    }
+  }
+});
+
+test("structured corruption keeps the table, row key and field without retry or coercion", async (): Promise<void> => {
+  const corruptRow = { table: "central_work_attempts", key: subject, field: "state" };
+  const input = await fixture([new Response(JSON.stringify({ corruptRow }), { status: 409 })]);
+  try {
+    await assert.rejects(client(input).snapshot(), (error: unknown): boolean => {
+      assert.ok(error instanceof D4ControlFailure);
+      assert.equal(error.failure, "corruptRow");
+      assert.deepEqual(error.corruptRow, corruptRow);
+      return true;
+    });
+    assert.equal(input.requests.length, 1);
+  } finally {
+    await input.close();
+  }
+  for (const reply of [
+    { corruptRow: { table: "central_work_attempts", key: 7, field: "state" } },
+    { corruptRow: { table: "central_work_attempts", key: subject } },
+    "corruptRow",
+  ]) {
+    const malformed = await fixture([new Response(JSON.stringify(reply), { status: 409 })]);
+    try {
+      await assert.rejects(
+        client(malformed).snapshot(),
+        (error: unknown): boolean => !(error instanceof D4ControlFailure),
+      );
+      assert.equal(malformed.requests.length, 1);
+    } finally {
+      await malformed.close();
+    }
+  }
+});
 
 test("literal draft control requests cross the real owner HTTP serializer and preserve exact integer replies", async (): Promise<void> => {
   const input = await fixture([

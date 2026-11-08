@@ -2,6 +2,7 @@
  * Construct only for a declared local target. Passivity must be observed separately before use.
  */
 import { z } from "zod";
+import { setTimeout } from "node:timers/promises";
 import { CentralOwner } from "../../../clients/central-owner.ts";
 import {
   parseD4Snapshot,
@@ -103,12 +104,24 @@ const barrierPointSchema = z.enum([
   "beforeClaim",
 ]);
 export type D4BarrierPoint = z.infer<typeof barrierPointSchema>;
+const corruptRowSchema = z
+  .object({
+    table: z.string().min(1).max(256),
+    key: z.string().min(1).max(256),
+    field: z.string().min(1).max(256),
+  })
+  .strict();
+export type D4CorruptRow = z.infer<typeof corruptRowSchema>;
 
 export class D4ControlFailure extends Error {
   readonly failure: string;
-  constructor(failure: string) {
-    super(`D4 control refused: ${failure}`);
+  readonly corruptRow: D4CorruptRow | undefined;
+  constructor(failure: string, corruptRow?: D4CorruptRow) {
+    super(
+      `D4 control refused: ${failure}${corruptRow === undefined ? "" : ` (${corruptRow.table}.${corruptRow.field} of ${corruptRow.key})`}`,
+    );
     this.failure = failure;
+    this.corruptRow = corruptRow === undefined ? undefined : { ...corruptRow };
   }
 }
 
@@ -151,8 +164,16 @@ export class D4ControlClient {
       // named 409 response instead of aborting before it can reach this caller.
       timeoutMilliseconds: 35_000,
     });
-    if (response.status === 409)
-      throw new D4ControlFailure(z.string().min(1).max(256).parse(response.body));
+    if (response.status === 409) {
+      if (typeof response.body === "string") {
+        const failure = z.string().min(1).max(256).parse(response.body);
+        if (failure === "corruptRow")
+          throw new Error("corruptRow refusal lacks table, key and field");
+        throw new D4ControlFailure(failure);
+      }
+      const refusal = z.object({ corruptRow: corruptRowSchema }).strict().parse(response.body);
+      throw new D4ControlFailure("corruptRow", refusal.corruptRow);
+    }
     if (response.status !== 200) throw new Error(`D4 control HTTP status ${response.status}`);
     return response.body;
   }
@@ -250,7 +271,20 @@ export class D4ControlClient {
     );
   }
   async snapshot(): Promise<D4Snapshot> {
-    return parseD4Snapshot(this.address, await this.control({ kind: "snapshot" }));
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return parseD4Snapshot(this.address, await this.control({ kind: "snapshot" }));
+      } catch (error: unknown) {
+        if (
+          !(error instanceof D4ControlFailure) ||
+          error.failure !== "snapshotUnstable" ||
+          attempt >= 2
+        )
+          throw error;
+        // This confirmed read-only refusal is the sole retry authorized by v3.6.
+        await setTimeout(25);
+      }
+    }
   }
   async readLongOperations(): Promise<D4LongOperations> {
     return d4LongOperationsResponseSchema.parse(await this.control({ kind: "readLongOperations" }))
