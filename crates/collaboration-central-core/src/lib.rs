@@ -275,6 +275,8 @@ mod generated_fleet_reasons;
 pub use forward_observer::{
     FORWARD_STATE_PATH, ForwardStateObservation, ForwardStateRequest, ForwardStoredRecord,
 };
+/// Which notices each connection was already sent.
+mod event_scope_store;
 mod fleet_adr_codec;
 mod fleet_adr_store;
 mod fleet_board_codec;
@@ -303,7 +305,7 @@ mod machine_notice_outbox;
 /// How far each machine's Router has applied its notices.
 mod machine_notice_progress;
 mod machine_notice_store;
-/// Which notices each connection was already sent.
+pub use event_scope_store::EventScopeStore;
 mod notice_appends;
 mod notice_push;
 pub use notice_push::CENTRAL_FRAME_CAPABILITIES;

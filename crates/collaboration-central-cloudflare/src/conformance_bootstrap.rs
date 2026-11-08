@@ -190,7 +190,7 @@ impl DurableObject for BootstrapObject {
             .map_err(|error| Error::RustError(error.to_string()))?;
         if let Some(Fault::LoseRollbackReply) = body.fault {
             #[cfg(feature = "conformance-faults")]
-            host.store().inner().lose_next_rollback_reply();
+            host.store().inner().inner().lose_next_rollback_reply();
             #[cfg(not(feature = "conformance-faults"))]
             return Response::error("store faults unavailable", 404);
         }
@@ -231,7 +231,7 @@ impl DurableObject for BootstrapObject {
                 }),
         };
         #[cfg(feature = "conformance-faults")]
-        let observed = host.store().inner().reply_loss_observed();
+        let observed = host.store().inner().inner().reply_loss_observed();
         #[cfg(not(feature = "conformance-faults"))]
         let observed = false;
         Response::from_json(&serde_json::json!({"result":result,"replyLossObserved":observed}))

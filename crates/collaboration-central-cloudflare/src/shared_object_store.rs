@@ -39,10 +39,14 @@ type SharedStore<Io> = crate::conformance_scope_faults::ScopeFaultStore<CoreHost
 #[cfg(not(feature = "conformance"))]
 type SharedStore<Io> = DurableObjectStore<CoreHost<Io>>;
 
+// The DO store polls each transaction callback as its own promise, so the
+// event's scope is carried across every transaction (EventScopeStore).
 #[cfg(feature = "conformance")]
-type RuntimeStore<Io> = collaboration_central_core::DriveTokenObserver<SharedStore<Io>>;
+type RuntimeStore<Io> = collaboration_central_core::EventScopeStore<
+    collaboration_central_core::DriveTokenObserver<SharedStore<Io>>,
+>;
 #[cfg(not(feature = "conformance"))]
-type RuntimeStore<Io> = SharedStore<Io>;
+type RuntimeStore<Io> = collaboration_central_core::EventScopeStore<SharedStore<Io>>;
 
 pub struct CloudflareStorageHost<Io: ObjectIo> {
     store: Arc<RuntimeStore<Io>>,
@@ -77,6 +81,7 @@ impl<Io: ObjectIo> CloudflareStorageHost<Io> {
         let store = Arc::new(store);
         #[cfg(feature = "conformance")]
         let store = Arc::new(collaboration_central_core::DriveTokenObserver::new(store));
+        let store = Arc::new(collaboration_central_core::EventScopeStore::new(store));
         Self {
             store,
             alarm: CloudflareObjectAlarm::new(wake, state.clone()),
@@ -106,6 +111,7 @@ impl<Io: ObjectIo> CloudflareStorageHost<Io> {
             crate::conformance_scope_faults::ScopeFaultStore::with_faults(store, faults.clone()),
         );
         let store = Arc::new(collaboration_central_core::DriveTokenObserver::new(store));
+        let store = Arc::new(collaboration_central_core::EventScopeStore::new(store));
         Self {
             store,
             alarm: CloudflareObjectAlarm::new(wake, state.clone()),
@@ -119,11 +125,11 @@ impl<Io: ObjectIo> CloudflareStorageHost<Io> {
     pub async fn migrate_store(&self) -> Result<(), durable_steps::StoreError> {
         #[cfg(feature = "conformance")]
         {
-            self.store.inner().migrate().await
+            self.store.inner().inner().migrate().await
         }
         #[cfg(not(feature = "conformance"))]
         {
-            self.store.migrate().await
+            self.store.inner().migrate().await
         }
     }
 
@@ -243,7 +249,7 @@ impl<Io: ObjectIo> ObjectPlatform for CloudflareStorageHost<Io> {
     fn stale_drive_rejections(
         &self,
     ) -> Result<Vec<durable_steps::OperationId>, durable_steps::StoreError> {
-        self.store.rejected_operations()
+        self.store.inner().rejected_operations()
     }
     fn alarm(&self) -> &CloudflareObjectAlarm {
         &self.alarm

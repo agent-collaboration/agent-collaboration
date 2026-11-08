@@ -1,7 +1,6 @@
 //! Private conformance controls on the actual object and platform capabilities.
 use super::{
-    ObjectPlatform, Request, Response, Result, RuntimeFace, ShellActor, StoreHost, SyncTime,
-    WakeScheduler, error,
+    ObjectPlatform, Request, Response, Result, RuntimeFace, ShellActor, StoreHost, SyncTime, error,
 };
 
 impl ShellActor {
@@ -97,6 +96,7 @@ impl ShellActor {
     ) -> Result<Option<Response>> {
         #[cfg(feature = "conformance-faults")]
         if request.path() == "/test/request-session-wake" {
+            use super::WakeScheduler;
             use durable_steps::{AtomicStore, JournalScope};
             let (connection, at): (
                 fleet_protocol::ConnectionId,

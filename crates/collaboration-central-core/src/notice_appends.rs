@@ -4,6 +4,9 @@
 //! the event's future; a notice append names its machine to that scope, and the
 //! event's post-event push reads only those machines. An object call served
 //! inline runs its own event inside its own scope, so its appends are its own.
+//! A store whose transaction callback is polled as a separate task (workerd's
+//! storage transaction runs it as its own promise) carries the scope across
+//! with [`within`]; see `EventScopeStore`.
 //! A rolled-back append still names its machine, which costs that push one read.
 //! An append outside any event (a test driving the runtime directly) names no
 //! machine; its notice is pushed on the machine's next catch-up.
@@ -18,7 +21,8 @@ use std::{
     task::{Context, Poll},
 };
 
-type Appended = Arc<Mutex<BTreeSet<PeerId>>>;
+/// The running event's appended machines; cloned to carry the scope elsewhere.
+pub(crate) type Appended = Arc<Mutex<BTreeSet<PeerId>>>;
 
 thread_local! {
     static CURRENT: RefCell<Option<Appended>> = const { RefCell::new(None) };
@@ -26,8 +30,18 @@ thread_local! {
 
 /// Run `inner` as one event: appends made while it is polled are its own.
 pub(crate) fn scoped<F: Future>(inner: F) -> Scoped<F> {
+    within(Some(Appended::default()), inner)
+}
+
+/// The running event's scope, to carry into work polled outside its polls.
+pub(crate) fn current() -> Option<Appended> {
+    CURRENT.with(|current| current.borrow().clone())
+}
+
+/// Run `inner` inside a scope captured with [`current`].
+pub(crate) fn within<F: Future>(appended: Option<Appended>, inner: F) -> Scoped<F> {
     Scoped {
-        appended: Appended::default(),
+        appended,
         inner: Box::pin(inner),
     }
 }
@@ -58,7 +72,7 @@ pub(crate) fn take() -> BTreeSet<PeerId> {
 }
 
 pub(crate) struct Scoped<F> {
-    appended: Appended,
+    appended: Option<Appended>,
     inner: Pin<Box<F>>,
 }
 
@@ -67,7 +81,7 @@ impl<F: Future> Future for Scoped<F> {
 
     fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();
-        let previous = CURRENT.with(|current| current.replace(Some(this.appended.clone())));
+        let previous = CURRENT.with(|current| current.replace(this.appended.clone()));
         let _restore = RestoreOuter(previous);
         this.inner.as_mut().poll(context)
     }
