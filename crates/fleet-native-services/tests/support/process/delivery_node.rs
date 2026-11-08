@@ -17,7 +17,11 @@ pub struct DeliveryNode {
 }
 impl DeliveryNode {
     pub async fn start(path: &Path, peer: u128) -> TestResult<Self> {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_delivery_node"))
+        let node_executable = option_env!("CARGO_BIN_EXE_delivery_node")
+            .map(std::ffi::OsString::from)
+            .or_else(|| std::env::var_os("CARGO_BIN_EXE_delivery_node"))
+            .ok_or("missing fixture executable: set CARGO_BIN_EXE_delivery_node")?;
+        let mut child = Command::new(node_executable)
             .arg(path)
             .arg(peer.to_string())
             .stdin(Stdio::piped())

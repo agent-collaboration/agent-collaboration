@@ -57,7 +57,11 @@ impl ServiceProcess {
         move_renewal_ms: u64,
         clock: Option<SyncTime>,
     ) -> TestResult<Self> {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_fleet-sync-test-consumer"));
+        let consumer_executable = option_env!("CARGO_BIN_EXE_fleet-sync-test-consumer")
+            .map(std::ffi::OsString::from)
+            .or_else(|| std::env::var_os("CARGO_BIN_EXE_fleet-sync-test-consumer"))
+            .ok_or("missing fixture executable: set CARGO_BIN_EXE_fleet-sync-test-consumer")?;
+        let mut command = Command::new(consumer_executable);
         if let Some(clock) = clock {
             command.env("FLEET_SYNC_TEST_CLOCK", clock.unix_millis().to_string());
         }
