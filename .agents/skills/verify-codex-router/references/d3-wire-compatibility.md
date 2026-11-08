@@ -120,9 +120,9 @@ without changing forwarding. Every deciding boundary checks valid raw audits
 for both Hosts, including after cleanup. The evaluator counts literal notice
 positions and Push identities, and correlates answers to exact outgoing request
 bodies by frame UUID. InvalidShape is a refusal, never ignored. Retain original
-raw failures. Focused tests reject actual encoded unknown frames (including
-A-only corruption), unknown/new fields, duplicate or missing backlog items and
-incomplete fragmented payloads. Those tests qualify
+raw failures. Focused tests reject leaked capabilities, actual encoded unknown
+frame kinds (including A-only corruption), and duplicate or missing backlog items.
+They also verify that callbacks wait for complete fragmented payloads. Those tests qualify
 the apparatus and never substitute for the actual two-Host drive.
 
 ## Evidence and cleanup
