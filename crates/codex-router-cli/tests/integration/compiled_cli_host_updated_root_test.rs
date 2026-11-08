@@ -3,7 +3,7 @@
 //! starts on that root and reports itself ready.
 use super::{
     TestDirectory, check, install_debug_profile, install_launchctl_fixture,
-    install_managed_fixture, reserve_loopback_port, sign_debug_binary,
+    install_managed_fixture, reserve_loopback_port, sign_debug_binary, write_providers_disabled,
 };
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::path::Path;
@@ -113,6 +113,7 @@ async fn a_host_starts_ready_on_a_never_connected_root_after_the_update() -> Tes
     agent_router_update::run_router_update(&router_root).await?;
     let collaboration = router_root.join("agent-communication");
     let mode = std::fs::metadata(&collaboration)?.permissions().mode();
+    write_providers_disabled(&router_root)?;
     let host_stderr = directory.path().join("host-stderr.log");
     let mut host = tokio::process::Command::new(&binary)
         .args(["host", "--require-debug-isolation", "--router-root"])
