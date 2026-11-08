@@ -1,5 +1,7 @@
 //! Conformance-only commands address the same physical object as normal traffic.
 
+use crate::object_seam_controls::ObjectSeamControl;
+use collaboration_central_core::event_trace::BarrierPoint;
 use collaboration_central_core::{ObjectAddress, RegistryTime};
 use fleet_protocol::{ConnectionId, FrameId, ItemId, PeerId};
 use serde::{Deserialize, Serialize};
@@ -61,7 +63,17 @@ impl RuntimeControlRequest {
                 | RuntimeControl::DropNextSelectedObjectReply { .. }
                 | RuntimeControl::DropHeldDispatchReply { .. }
                 | RuntimeControl::AwaitDroppedObjectReply
-                | RuntimeControl::Observe,
+                | RuntimeControl::Observe
+                | RuntimeControl::ReadAlarm
+                | RuntimeControl::AlarmDelivery { .. }
+                | RuntimeControl::DuplicateAlarm
+                | RuntimeControl::SettleClock { .. }
+                | RuntimeControl::ReadEvents { .. }
+                | RuntimeControl::RebuildAtQuiescence { .. }
+                | RuntimeControl::ReadPending
+                | RuntimeControl::Barrier { .. }
+                | RuntimeControl::AwaitBarrier { .. }
+                | RuntimeControl::ReleaseBarrier { .. },
                 _,
             ) => Ok(()),
             _ => Err(RuntimeControlFailure::WrongObjectKind),
@@ -120,6 +132,54 @@ pub enum RuntimeControl {
     },
     AwaitDroppedObjectReply,
     Observe,
+    // D4 seams: served by the shell outside the object's event pipeline. See
+    // `ObjectSeamControl` for what each one does.
+    ReadAlarm,
+    AlarmDelivery {
+        enabled: bool,
+    },
+    DuplicateAlarm,
+    SettleClock {
+        now: RegistryTime,
+    },
+    ReadEvents {
+        after: u64,
+    },
+    RebuildAtQuiescence {
+        enabled: bool,
+    },
+    ReadPending,
+    Barrier {
+        point: BarrierPoint,
+        unit_kind: Option<String>,
+    },
+    AwaitBarrier {
+        barrier_id: durable_steps::Uuid,
+    },
+    ReleaseBarrier {
+        barrier_id: durable_steps::Uuid,
+    },
+}
+
+impl RuntimeControl {
+    /// Separates the D4 seam controls, which never reach the fault state.
+    pub fn into_seam(self) -> Result<ObjectSeamControl, Self> {
+        Ok(match self {
+            Self::ReadAlarm => ObjectSeamControl::ReadAlarm,
+            Self::AlarmDelivery { enabled } => ObjectSeamControl::AlarmDelivery { enabled },
+            Self::DuplicateAlarm => ObjectSeamControl::DuplicateAlarm,
+            Self::SettleClock { now } => ObjectSeamControl::SettleClock { now },
+            Self::ReadEvents { after } => ObjectSeamControl::ReadEvents { after },
+            Self::RebuildAtQuiescence { enabled } => {
+                ObjectSeamControl::RebuildAtQuiescence { enabled }
+            }
+            Self::ReadPending => ObjectSeamControl::ReadPending,
+            Self::Barrier { point, unit_kind } => ObjectSeamControl::Barrier { point, unit_kind },
+            Self::AwaitBarrier { barrier_id } => ObjectSeamControl::AwaitBarrier { barrier_id },
+            Self::ReleaseBarrier { barrier_id } => ObjectSeamControl::ReleaseBarrier { barrier_id },
+            other => return Err(other),
+        })
+    }
 }
 
 /// Select an invocation kind or one Fleet submit's authenticated peer and item.
@@ -283,6 +343,13 @@ pub enum RuntimeControlFailure {
     DifferentFrame,
     TooManyDispatchKeys,
     AmbiguousDispatchKey,
+    /// A D4 seam control reached the fault state; the shell serves those itself.
+    SeamControl,
+    /// This shell does not offer the control (for example a Tokio-only seam on Cloudflare).
+    Unsupported,
+    UnknownBarrier,
+    /// A bounded seam wait ended before its causal signal.
+    WaitBoundExceeded,
 }
 impl std::fmt::Display for RuntimeControlFailure {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -316,4 +383,13 @@ impl OutboundFrameIdentity {
             OutboundFrameClass::Other => None,
         }
     }
+}
+
+/// What the runtime control route answers: the fault observation for the
+/// existing controls, a seam answer for the D4 ones.
+#[derive(Clone, Debug, Serialize)]
+#[serde(untagged)]
+pub enum RuntimeControlResponse {
+    Faults(RuntimeFaultObservation),
+    Seam(crate::RuntimeControlAnswer),
 }

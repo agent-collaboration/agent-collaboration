@@ -294,9 +294,14 @@ impl<Io: ObjectIo> ObjectPlatform for CloudflareStorageHost<Io> {
             if !Self::is_open(&socket) || self.is_quarantined(to) {
                 return Err(SocketFailure::Closed);
             }
+            #[cfg(feature = "conformance")]
+            let sent = frame.clone();
             socket
                 .send_with_bytes(frame)
-                .map_err(|_| SocketFailure::Closed)
+                .map_err(|_| SocketFailure::Closed)?;
+            #[cfg(feature = "conformance")]
+            collaboration_central_core::event_trace::record_send(to, &sent);
+            Ok(())
         })())
     }
     fn close_connection(

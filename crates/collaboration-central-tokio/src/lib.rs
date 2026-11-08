@@ -178,7 +178,12 @@ impl<Io: ObjectIo, SharedHost: Host, Alarm: ObjectAlarm> ObjectPlatform
         {
             return Ok(());
         }
-        self.sockets.send(to, SocketCommand::Frame(frame)).await
+        #[cfg(feature = "conformance")]
+        let sent = frame.clone();
+        self.sockets.send(to, SocketCommand::Frame(frame)).await?;
+        #[cfg(feature = "conformance")]
+        collaboration_central_core::event_trace::record_send(to, &sent);
+        Ok(())
     }
     async fn close_connection(
         &self,

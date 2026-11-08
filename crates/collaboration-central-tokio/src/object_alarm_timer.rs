@@ -24,6 +24,17 @@ pub struct ObjectAlarmTimer {
     clock: Arc<dyn Clock>,
     pending: Mutex<Option<PendingAlarm>>,
     changed: Notify,
+    #[cfg(feature = "conformance")]
+    settle: ClockSettle,
+}
+
+/// Conformance only: lets a clock move wait until the alarm loop has acted on it.
+#[cfg(feature = "conformance")]
+struct ClockSettle {
+    /// Bumped by each `clock_changed`, after the new trigger is stored.
+    epoch: std::sync::atomic::AtomicU64,
+    /// The newest epoch the waiting loop evaluated and found nothing due for.
+    settled: tokio::sync::watch::Sender<u64>,
 }
 
 impl ObjectAlarmTimer {
@@ -32,6 +43,11 @@ impl ObjectAlarmTimer {
             clock,
             pending: Mutex::new(None),
             changed: Notify::new(),
+            #[cfg(feature = "conformance")]
+            settle: ClockSettle {
+                epoch: std::sync::atomic::AtomicU64::new(0),
+                settled: tokio::sync::watch::channel(0).0,
+            },
         }
     }
 
@@ -43,7 +59,15 @@ impl ObjectAlarmTimer {
             // Register before reading, so a write between the read and the wait
             // still wakes this loop.
             notified.as_mut().enable();
+            // Read the epoch before the alarm: an epoch this loop sees was
+            // bumped after its trigger was stored, so the read below is current.
+            #[cfg(feature = "conformance")]
+            let epoch = self.settle.epoch.load(std::sync::atomic::Ordering::SeqCst);
             let pending = *self.pending.lock().await;
+            #[cfg(feature = "conformance")]
+            if pending.is_none_or(|expected| expected.trigger > Instant::now()) {
+                self.settle.settled.send_replace(epoch);
+            }
             match pending {
                 None => notified.await,
                 Some(expected) => {
@@ -66,16 +90,35 @@ impl ObjectAlarmTimer {
     /// time is unchanged, so this never manufactures or postpones an alarm.
     pub async fn clock_changed(&self) -> Result<(), WakeFailure> {
         let mut pending = self.pending.lock().await;
-        let Some(current) = *pending else {
-            return Ok(());
-        };
-        *pending = Some(PendingAlarm {
-            at: current.at,
-            trigger: self.trigger_for(current.at)?,
-        });
+        if let Some(current) = *pending {
+            *pending = Some(PendingAlarm {
+                at: current.at,
+                trigger: self.trigger_for(current.at)?,
+            });
+        }
         drop(pending);
+        #[cfg(feature = "conformance")]
+        self.settle
+            .epoch
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         self.changed.notify_waiters();
         Ok(())
+    }
+
+    /// The epoch the next `settled_through` waits for: the latest clock change.
+    #[cfg(feature = "conformance")]
+    pub(crate) fn clock_epoch(&self) -> u64 {
+        self.settle.epoch.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Resolves once the waiting loop has evaluated the stored alarm after the
+    /// clock change `epoch` and found nothing due. An alarm the change made due
+    /// is delivered, and its event completes, before that.
+    #[cfg(feature = "conformance")]
+    pub(crate) async fn settled_through(&self, epoch: u64) {
+        let mut settled = self.settle.settled.subscribe();
+        // The sender lives as long as the timer, so the wait can't fail.
+        let _ = settled.wait_for(|settled| *settled >= epoch).await;
     }
 
     fn trigger_for(&self, at: SyncTime) -> Result<Instant, WakeFailure> {
@@ -92,6 +135,15 @@ impl ObjectAlarmTimer {
 
 impl WakeScheduler for ObjectAlarmTimer {
     async fn wake_at(&self, at: SyncTime) -> Result<(), WakeFailure> {
+        self.lower(at).await?;
+        #[cfg(feature = "conformance")]
+        collaboration_central_core::event_trace::record_lower(at).await;
+        Ok(())
+    }
+}
+
+impl ObjectAlarmTimer {
+    async fn lower(&self, at: SyncTime) -> Result<(), WakeFailure> {
         let mut pending = self.pending.lock().await;
         let trigger = self.trigger_for(at)?;
         let next = match *pending {

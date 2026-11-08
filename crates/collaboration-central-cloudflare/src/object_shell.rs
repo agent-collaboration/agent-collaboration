@@ -21,6 +21,9 @@ use worker::{
 #[cfg(feature = "conformance")]
 #[path = "object_shell/conformance_routes.rs"]
 mod conformance_routes;
+#[cfg(feature = "conformance")]
+#[path = "object_shell/event_lines.rs"]
+pub(crate) mod event_lines;
 
 pub(crate) struct CloudflareObjectIo {
     env: Arc<SendWrapper<Env>>,
@@ -47,7 +50,13 @@ impl WakeScheduler for CloudflareObjectIo {
         &self,
         at: SyncTime,
     ) -> impl Future<Output = std::result::Result<(), WakeFailure>> + Send {
-        self.wake.wake_at(at)
+        let lowered = self.wake.wake_at(at);
+        async move {
+            lowered.await?;
+            #[cfg(feature = "conformance")]
+            collaboration_central_core::event_trace::record_lower(at).await;
+            Ok(())
+        }
     }
 }
 impl ObjectIo for CloudflareObjectIo {
@@ -86,6 +95,14 @@ impl ObjectIo for CloudflareObjectIo {
             let original_destination = address.clone();
             #[cfg(feature = "conformance")]
             let original_request = body.clone();
+            #[cfg(feature = "conformance")]
+            let answer = collaboration_central_core::event_trace::traced_call(
+                &original_destination,
+                &original_request,
+                cloudflare_transport::call(&self.env, address, body),
+            )
+            .await?;
+            #[cfg(not(feature = "conformance"))]
             let answer = cloudflare_transport::call(&self.env, address, body).await?;
             #[cfg(feature = "conformance")]
             if self
@@ -157,6 +174,9 @@ struct ShellActor {
     runtime: OnceCell<Arc<RuntimeFace>>,
     #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
+    /// Minted in this Rust `DurableObject::new`; not proof of a new JS instance.
+    #[cfg(feature = "conformance")]
+    isolate: durable_steps::Uuid,
 }
 impl ShellActor {
     fn new(state: State, env: Env, kind: PhysicalKind) -> Self {
@@ -168,6 +188,8 @@ impl ShellActor {
             runtime: OnceCell::new(),
             #[cfg(feature = "conformance")]
             faults: Arc::default(),
+            #[cfg(feature = "conformance")]
+            isolate: durable_steps::Uuid::now_v7(),
         }
     }
     fn config(&self) -> Result<RegistryConfig> {
@@ -248,16 +270,20 @@ impl ShellActor {
         if let Some(runtime) = self.runtime.get() {
             return Ok((host, runtime.clone()));
         }
+        #[cfg(feature = "conformance")]
+        let observer = event_lines::observer(address.clone(), self.isolate);
         let runtime = match address {
-            ObjectAddress::Copy(project) => {
-                RuntimeFace::Copy(ObjectKernel::new(ObjectRuntime::copy(
+            ObjectAddress::Copy(project) => RuntimeFace::Copy(kernel(
+                ObjectRuntime::copy(
                     host.clone(),
                     config.authoritative_receiver,
                     project,
                     serde_json::from_str(&self.env.var("CENTRAL_COPY_ACK_WAIT")?.to_string())?,
-                )))
-            }
-            ObjectAddress::Fleet => RuntimeFace::Fleet(ObjectKernel::new(
+                ),
+                #[cfg(feature = "conformance")]
+                observer,
+            )),
+            ObjectAddress::Fleet => RuntimeFace::Fleet(kernel(
                 ObjectRuntime::fleet(
                     host.clone(),
                     config,
@@ -268,6 +294,8 @@ impl ShellActor {
                     fleet_protocol::FrameCapabilities::default(),
                 )
                 .map_err(error)?,
+                #[cfg(feature = "conformance")]
+                observer,
             )),
         };
         let runtime = Arc::new(runtime);
@@ -474,6 +502,10 @@ impl ShellActor {
     }
     async fn alarm(&self) -> Result<Response> {
         let address = self.address(None).await?;
+        #[cfg(feature = "conformance")]
+        if !self.alarm_delivery(&address).await? {
+            return Response::ok("alarm dropped");
+        }
         let (_, runtime) = self.runtime(address).await?;
         match runtime.on_event(ObjectEvent::Alarm).await {
             // Cloudflare redelivers a failed alarm event up to 6 times from 2 s.
@@ -487,6 +519,21 @@ fn socket_outcome(reply: EventReply) -> Result<()> {
     match reply {
         EventReply::SocketFailed => Err(error("socket event failed")),
         _ => Ok(()),
+    }
+}
+fn kernel<Face: collaboration_central_core::KernelFace>(
+    face: Face,
+    #[cfg(feature = "conformance")] observer: Arc<
+        dyn collaboration_central_core::event_trace::KernelObserver,
+    >,
+) -> ObjectKernel<Face> {
+    #[cfg(feature = "conformance")]
+    {
+        ObjectKernel::observed(face, observer)
+    }
+    #[cfg(not(feature = "conformance"))]
+    {
+        ObjectKernel::new(face)
     }
 }
 fn error(error: impl std::fmt::Display) -> Error {

@@ -235,3 +235,157 @@ async fn a_stale_stored_alarm_is_recomputed_before_the_event_is_handled() {
         ]
     );
 }
+
+#[cfg(feature = "conformance")]
+mod observed {
+    use super::{RecordingFace, call};
+    use crate::ObjectAddress;
+    use crate::event_trace::{
+        AlarmWriteOp, BarrierPoint, EventKindRecord, EventRecord, KernelObserver, ReplyRecord,
+        UnitOutcomeRecord,
+    };
+    use crate::object_event::ObjectEvent;
+    use crate::object_kernel::ObjectKernel;
+    use durable_steps::{BoxFuture, Uuid};
+    use std::sync::{Arc, Mutex, PoisonError};
+    use tokio::sync::{Notify, oneshot};
+
+    /// Collects records; optionally holds the first event that reaches `hold_at`.
+    #[derive(Default)]
+    struct Observer {
+        records: Mutex<Vec<EventRecord>>,
+        hold_at: Option<BarrierPoint>,
+        release: Mutex<Option<oneshot::Receiver<()>>>,
+        reached: Notify,
+    }
+
+    impl KernelObserver for Observer {
+        fn object(&self) -> ObjectAddress {
+            ObjectAddress::Fleet
+        }
+        fn construction(&self) -> Uuid {
+            Uuid::nil()
+        }
+        fn emit(&self, record: EventRecord) {
+            self.records
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push(record);
+        }
+        fn barrier(
+            &self,
+            point: BarrierPoint,
+            _unit_kind: Option<&'static str>,
+            _event: Uuid,
+        ) -> BoxFuture<'static, ()> {
+            let release = if self.hold_at == Some(point) {
+                self.release
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .take()
+            } else {
+                None
+            };
+            let Some(release) = release else {
+                return Box::pin(std::future::ready(()));
+            };
+            self.reached.notify_one();
+            Box::pin(async move {
+                let _ = release.await;
+            })
+        }
+    }
+
+    fn records(observer: &Observer) -> Vec<EventRecord> {
+        observer
+            .records
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    #[tokio::test]
+    async fn each_event_emits_one_record_numbered_as_it_completes() {
+        // Arrange
+        let observer = Arc::new(Observer::default());
+        let kernel = ObjectKernel::observed(RecordingFace::default(), observer.clone());
+        kernel.face().at(100);
+
+        // Act: an alarm that claims the batch, one inside the cadence, then a call.
+        kernel.on_event(ObjectEvent::Alarm).await;
+        kernel.face().at(110);
+        kernel.on_event(ObjectEvent::Alarm).await;
+        kernel.on_event(call()).await;
+
+        // Assert
+        let records = records(&observer);
+        let sequences: Vec<_> = records.iter().map(|record| record.sequence).collect();
+        assert_eq!(sequences, [0, 1, 2]);
+        let first = &records[0];
+        assert_eq!(first.event, EventKindRecord::Alarm { redelivery: None });
+        assert_eq!(first.reply, ReplyRecord::AlarmDone);
+        assert_eq!(first.entered_at, 100_000);
+        let batch = first
+            .batch
+            .as_ref()
+            .map(|batch| (batch.claimed, batch.started_at));
+        assert_eq!(batch, Some((true, Some(100_000))));
+        assert_eq!(first.units[0].unit_kind, "handler");
+        assert_eq!(first.units[0].outcome, UnitOutcomeRecord::Done);
+        assert_eq!(first.alarm.writes.len(), 1);
+        assert_eq!(first.alarm.writes[0].op, AlarmWriteOp::Exact);
+        assert_eq!(
+            first.alarm.writes[0].unit_kind.as_deref(),
+            Some("recompute")
+        );
+        // The second alarm's claim attempt lost to the cadence.
+        assert_eq!(
+            records[1].batch.as_ref().map(|batch| batch.claimed),
+            Some(false)
+        );
+        // A call never attempts the batch, and is recorded with its envelope kind (none here).
+        assert_eq!(records[2].batch, None);
+        assert_eq!(records[2].event, EventKindRecord::Call { call_kind: None });
+        assert_ne!(records[0].event_id, records[1].event_id);
+    }
+
+    #[tokio::test]
+    async fn a_before_claim_barrier_holds_the_event_until_it_is_released() {
+        // Arrange
+        let (release, released) = oneshot::channel();
+        let observer = Arc::new(Observer {
+            hold_at: Some(BarrierPoint::BeforeClaim),
+            release: Mutex::new(Some(released)),
+            ..Observer::default()
+        });
+        let kernel = Arc::new(ObjectKernel::observed(
+            RecordingFace::default(),
+            observer.clone(),
+        ));
+        kernel.face().at(100);
+        let reached = observer.reached.notified();
+
+        // Act
+        let running = tokio::spawn({
+            let kernel = kernel.clone();
+            async move { kernel.on_event(ObjectEvent::Alarm).await }
+        });
+        reached.await;
+        let while_held = kernel.face().take_steps();
+        let _ = release.send(());
+        let _ = running.await;
+
+        // Assert: held after its handler, before any due source; resumes once released.
+        assert_eq!(while_held, ["open", "handle:alarm"]);
+        assert_eq!(
+            kernel.face().take_steps(),
+            [
+                "due@100",
+                "deadlines@100",
+                "long-operations",
+                "recompute(next_batch=Some(130))"
+            ]
+        );
+        assert_eq!(records(&observer).len(), 1);
+    }
+}

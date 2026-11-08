@@ -10,8 +10,7 @@ impl NativeObjects {
     ) -> Result<fleet_protocol::ReplicationPosition, StoreError> {
         let slot = self.slot(ObjectAddress::Fleet).await?;
         let runtime = slot
-            .runtime
-            .get()
+            .current_runtime()
             .ok_or_else(|| StoreError::backend("Registry missing"))?;
         match runtime.as_ref() {
             RuntimeFace::Fleet(kernel) => {

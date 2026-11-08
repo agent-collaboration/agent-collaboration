@@ -5,6 +5,77 @@ use super::{
 };
 
 impl ShellActor {
+    /// The D4 seams Cloudflare offers; the Tokio-only ones answer `unsupported`.
+    async fn seam_control(
+        &self,
+        host: &StoreHost,
+        control: collaboration_central_conformance::ObjectSeamControl,
+    ) -> Result<Response> {
+        use collaboration_central_conformance::{
+            ObjectSeamControl, RuntimeControlAnswer, RuntimeControlFailure,
+        };
+        use collaboration_central_core::ObjectAlarm;
+        let answer = match control {
+            ObjectSeamControl::ReadAlarm => Ok(RuntimeControlAnswer::Alarm {
+                stored: host
+                    .alarm()
+                    .stored()
+                    .await
+                    .map_err(error)?
+                    .map(SyncTime::unix_millis),
+            }),
+            ObjectSeamControl::AlarmDelivery { enabled } => {
+                self.state
+                    .storage()
+                    .put(super::event_lines::ALARM_DELIVERY_KEY, enabled)
+                    .await?;
+                Ok(RuntimeControlAnswer::Done)
+            }
+            ObjectSeamControl::DuplicateAlarm
+            | ObjectSeamControl::SettleClock { .. }
+            | ObjectSeamControl::ReadEvents { .. }
+            | ObjectSeamControl::RebuildAtQuiescence { .. }
+            | ObjectSeamControl::ReadPending
+            | ObjectSeamControl::Barrier { .. }
+            | ObjectSeamControl::AwaitBarrier { .. }
+            | ObjectSeamControl::ReleaseBarrier { .. } => Err(RuntimeControlFailure::Unsupported),
+        };
+        match answer {
+            Ok(answer) => Response::from_json(&answer),
+            Err(failure) => Ok(Response::from_json(&failure)?.with_status(409)),
+        }
+    }
+
+    /// Whether `alarmDelivery` allows this alarm; a dropped one emits its line.
+    pub(super) async fn alarm_delivery(
+        &self,
+        address: &collaboration_central_core::ObjectAddress,
+    ) -> Result<bool> {
+        use collaboration_central_core::event_trace::{AlarmDroppedLine, ConformanceLine};
+        let enabled = self
+            .state
+            .storage()
+            .get::<bool>(super::event_lines::ALARM_DELIVERY_KEY)
+            .await?
+            .unwrap_or(true);
+        if !enabled {
+            // The object's business time: the persisted conformance clock when set.
+            let at = self
+                .state
+                .storage()
+                .get::<collaboration_central_core::RegistryTime>(crate::composed_control::CLOCK_KEY)
+                .await?
+                .map_or_else(chrono::Utc::now, |now| now.0)
+                .timestamp_millis();
+            ConformanceLine::CentralAlarmDropped(&AlarmDroppedLine {
+                object: address.clone(),
+                at,
+            })
+            .emit();
+        }
+        Ok(enabled)
+    }
+
     pub(super) async fn conformance_fetch(
         &self,
         request: &mut Request,
@@ -71,6 +142,10 @@ impl ShellActor {
         }
         if request.path() == crate::composed_control::OBJECT_PATH {
             let command: collaboration_central_conformance::RuntimeControl = request.json().await?;
+            let command = match command.into_seam() {
+                Ok(seam) => return self.seam_control(host, seam).await.map(Some),
+                Err(command) => command,
+            };
             if matches!(
                 command,
                 collaboration_central_conformance::RuntimeControl::ProjectUnavailable
@@ -95,13 +170,8 @@ impl ShellActor {
                     .storage()
                     .put(crate::composed_control::CLOCK_KEY, now)
                     .await?;
+                // Passive: the persisted clock moves; nothing is woken (S3).
                 self.faults.restore_clock(Some(*now)).map_err(error)?;
-                host.alarm()
-                    .wake_at(SyncTime::from_unix_millis(
-                        chrono::Utc::now().timestamp_millis(),
-                    ))
-                    .await
-                    .map_err(error)?;
             }
             return crate::composed_control::observation(self.faults.control(command).await)
                 .map(Some);

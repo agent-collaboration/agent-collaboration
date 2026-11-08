@@ -37,6 +37,8 @@ pub use conformance_access::{AccessCallerClass, AccessVerificationOutcome};
 mod connection_admission;
 pub use connection_admission::AdmissionOrigin;
 mod alarm_scheduler;
+/// One record per event, in conformance builds.
+pub mod event_trace;
 mod object_alarm;
 mod object_kernel;
 pub use object_alarm::ObjectAlarm;

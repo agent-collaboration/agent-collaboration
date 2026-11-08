@@ -54,7 +54,7 @@ impl TokioCentralPlatform {
     pub(crate) async fn runtime_control(
         &self,
         request: collaboration_central_conformance::RuntimeControlRequest,
-    ) -> Result<collaboration_central_conformance::RuntimeFaultObservation, durable_steps::StoreError>
+    ) -> Result<collaboration_central_conformance::RuntimeControlResponse, durable_steps::StoreError>
     {
         self.objects.runtime_control(request).await
     }

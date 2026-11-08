@@ -35,7 +35,13 @@ impl CloudflareObjectAlarm {
 
 impl WakeScheduler for CloudflareObjectAlarm {
     fn wake_at(&self, at: SyncTime) -> impl Future<Output = Result<(), WakeFailure>> + Send {
-        self.owner.wake_at(at)
+        let lowered = self.owner.wake_at(at);
+        async move {
+            lowered.await?;
+            #[cfg(feature = "conformance")]
+            collaboration_central_core::event_trace::record_lower(at).await;
+            Ok(())
+        }
     }
 }
 

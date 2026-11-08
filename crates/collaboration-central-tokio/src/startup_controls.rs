@@ -27,7 +27,17 @@ impl PreparedRuntimeControls {
                 | RuntimeControl::ResumeDispatchAndHoldNext { .. }
                 | RuntimeControl::AwaitDroppedObjectReply
                 | RuntimeControl::DropHeldDispatchReply { .. }
-                | RuntimeControl::Observe => {
+                | RuntimeControl::Observe
+                | RuntimeControl::ReadAlarm
+                | RuntimeControl::AlarmDelivery { .. }
+                | RuntimeControl::DuplicateAlarm
+                | RuntimeControl::SettleClock { .. }
+                | RuntimeControl::ReadEvents { .. }
+                | RuntimeControl::RebuildAtQuiescence { .. }
+                | RuntimeControl::ReadPending
+                | RuntimeControl::Barrier { .. }
+                | RuntimeControl::AwaitBarrier { .. }
+                | RuntimeControl::ReleaseBarrier { .. } => {
                     return Err(StoreError::backend(
                         "native conformance startup controls must only arm faults",
                     ));

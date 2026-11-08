@@ -11,8 +11,7 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
-#[path = "../../tests/native_http/support.rs"]
-mod configuration;
+use super::super::test_configuration as configuration;
 async fn open(root: &Path) -> TestResult<Arc<NativeObjects>> {
     open_with_clock(root, Arc::new(runtime_primitives::SystemClock)).await
 }
@@ -67,7 +66,7 @@ async fn copy_ack_wait_ends_at_its_event_deadline_and_arms_no_alarm() -> TestRes
     let receiver = objects.config.authoritative_receiver;
     let slot = objects.slot(ObjectAddress::Copy(database)).await?;
     ready(&slot).await?;
-    let runtime = slot.runtime.get().ok_or("copy runtime missing")?.clone();
+    let runtime = slot.current_runtime().ok_or("copy runtime missing")?;
     let RuntimeFace::Copy(copy_kernel) = runtime.as_ref() else {
         return Err("wrong Copy face".into());
     };
@@ -231,8 +230,8 @@ async fn registry_consumed_wake_recovers_its_saved_operation_after_two_begin_fai
     assert_eq!(observed.request_key, key);
     assert_eq!(host.observed.inner().begin_failures(), 2);
     let copy_slot = objects.slot(ObjectAddress::Copy(database)).await?;
-    let RuntimeFace::Copy(copy_kernel) = copy_slot.runtime.get().ok_or("copy missing")?.as_ref()
-    else {
+    let copy_runtime = copy_slot.current_runtime().ok_or("copy missing")?;
+    let RuntimeFace::Copy(copy_kernel) = copy_runtime.as_ref() else {
         return Err("wrong face".into());
     };
     let copy = copy_kernel.face();

@@ -25,7 +25,7 @@ use crate::{SocketCommand, TokioStorageHost};
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
 use collaboration_central_core::{
     AdmissionOrigin, CopyKind, CoreHost, EventReply, FleetKind, ObjectAddress, ObjectEvent,
-    ObjectIo, ObjectKernel, ObjectRuntime,
+    ObjectIo, ObjectRuntime,
 };
 use durable_steps::{BoxFuture, CallFailure, NotSentReason, StoreError};
 use fleet_project_lease::RegistryConfig;
@@ -52,23 +52,39 @@ impl Clock for SharedClock {
     }
 }
 
+/// The object's business time: the platform clock, or in conformance builds
+/// the injected clock once a control sets one. The object's alarm runs on it.
+#[derive(Clone)]
+struct ObjectClock {
+    platform: SharedClock,
+    #[cfg(feature = "conformance")]
+    faults: Arc<collaboration_central_conformance::RuntimeFaults>,
+}
+impl Clock for ObjectClock {
+    fn now(&self) -> SyncTime {
+        #[cfg(feature = "conformance")]
+        if let Some(now) = self.faults.clock() {
+            return SyncTime::from_unix_millis(now.0.timestamp_millis());
+        }
+        self.platform.now()
+    }
+}
+
 #[derive(Clone)]
 pub struct TokioObjectIo {
     objects: Weak<NativeObjects>,
-    clock: SharedClock,
+    clock: ObjectClock,
     wake: Arc<ObjectAlarmTimer>,
     #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
     /// Signalled when a conformance control moves the injected clock.
     #[cfg(feature = "conformance")]
     clock_moved: Arc<tokio::sync::watch::Sender<()>>,
+    #[cfg(feature = "conformance")]
+    seams: Arc<event_seams::ObjectSeams>,
 }
 impl Clock for TokioObjectIo {
     fn now(&self) -> SyncTime {
-        #[cfg(feature = "conformance")]
-        if let Some(now) = self.faults.clock() {
-            return SyncTime::from_unix_millis(now.0.timestamp_millis());
-        }
         self.clock.now()
     }
 }
@@ -98,7 +114,9 @@ impl ObjectIo for TokioObjectIo {
             let io = self.clone();
             let until = self.now().after(remaining);
             let mut moved = self.clock_moved.subscribe();
+            let live = self.seams.deadline_started();
             async move {
+                let _live = live;
                 let injected = async {
                     while io.now() < until {
                         if moved.changed().await.is_err() {
@@ -142,6 +160,16 @@ impl ObjectIo for TokioObjectIo {
         let original_destination = address.clone();
         #[cfg(feature = "conformance")]
         let original_request = body.clone();
+        #[cfg(feature = "conformance")]
+        let _waiting = self.seams.call_started();
+        #[cfg(feature = "conformance")]
+        let answer = collaboration_central_core::event_trace::traced_call(
+            &original_destination,
+            &original_request,
+            objects.call(address, body),
+        )
+        .await?;
+        #[cfg(not(feature = "conformance"))]
         let answer = objects.call(address, body).await?;
         #[cfg(feature = "conformance")]
         if self
@@ -155,31 +183,6 @@ impl ObjectIo for TokioObjectIo {
     }
 }
 
-enum RuntimeFace {
-    Fleet(ObjectKernel<FleetRuntime>),
-    Copy(ObjectKernel<CopyRuntime>),
-}
-impl RuntimeFace {
-    async fn initialize(&self) -> Result<(), StoreError> {
-        match self {
-            Self::Fleet(kernel) => kernel.face().initialize().await.map(|_| ()),
-            // Copy's core call/alarm prelude runs after Health classification.
-            Self::Copy(_) => Ok(()),
-        }
-    }
-    // Keep each event's SQL and dispatched effects in one observable scope.
-    #[tracing::instrument(level = "trace", name = "central_event", skip_all, fields(object_kind = match self {
-        Self::Fleet(_) => "fleet",
-        Self::Copy(_) => "copy",
-    }))]
-    async fn on_event(&self, event: ObjectEvent) -> EventReply {
-        match self {
-            Self::Fleet(kernel) => kernel.on_event(event).await,
-            Self::Copy(kernel) => kernel.on_event(event).await,
-        }
-    }
-}
-
 fn call_answer(reply: EventReply) -> Result<Vec<u8>, CallFailure> {
     match reply {
         EventReply::CallAnswer(answer) => Ok(answer),
@@ -189,15 +192,6 @@ fn call_answer(reply: EventReply) -> Result<Vec<u8>, CallFailure> {
         | EventReply::AlarmDone
         | EventReply::AlarmRetry => Err(CallFailure::AnswerLost),
     }
-}
-
-struct ObjectSlot {
-    io: TokioObjectIo,
-    host: OnceCell<Arc<NativeHost>>,
-    runtime: OnceCell<Arc<RuntimeFace>>,
-    alarm_task: OnceLock<()>,
-    #[cfg(test)]
-    alarm_owner_generation: tokio::sync::watch::Sender<u64>,
 }
 
 pub(crate) struct NativeObjects {
@@ -216,32 +210,35 @@ pub(crate) struct NativeObjects {
     health_samples: Mutex<BTreeMap<fleet_protocol::DatabaseId, Vec<HealthFileSample>>>,
 }
 impl NativeObjects {
+    /// Every control is served from the slot without initializing it (S3).
     #[cfg(feature = "conformance")]
     pub(crate) async fn runtime_control(
         self: &Arc<Self>,
         request: collaboration_central_conformance::RuntimeControlRequest,
-    ) -> Result<collaboration_central_conformance::RuntimeFaultObservation, StoreError> {
+    ) -> Result<collaboration_central_conformance::RuntimeControlResponse, StoreError> {
+        use collaboration_central_conformance::{RuntimeControl, RuntimeControlResponse};
         request.validate().map_err(StoreError::backend)?;
-        let advances_clock = matches!(
-            request.command,
-            collaboration_central_conformance::RuntimeControl::SetTime { .. }
-        );
-        let slot = self.slot(request.address).await?;
-        let observed = slot
-            .io
-            .faults
-            .control(request.command)
-            .await
-            .map_err(StoreError::backend)?;
-        if advances_clock {
-            slot.io.clock_moved.send_replace(());
-            slot.io
-                .wake
-                .wake_at(self.clock.now())
+        let slot = self.slot_entry(&request.address).await?;
+        match request.command.into_seam() {
+            Ok(seam) => self
+                .seam_control(&slot, seam)
                 .await
-                .map_err(StoreError::backend)?;
+                .map(RuntimeControlResponse::Seam)
+                .map_err(StoreError::backend),
+            Err(command) => {
+                let moves_clock = matches!(command, RuntimeControl::SetTime { .. });
+                let observed = slot
+                    .io
+                    .faults
+                    .control(command)
+                    .await
+                    .map_err(StoreError::backend)?;
+                if moves_clock {
+                    slot.io.clock_changed().await.map_err(StoreError::backend)?;
+                }
+                Ok(RuntimeControlResponse::Faults(observed))
+            }
         }
-        Ok(observed)
     }
     #[cfg(not(feature = "conformance"))]
     pub(crate) async fn open(
@@ -339,32 +336,49 @@ impl NativeObjects {
         Ok(objects)
     }
 
+    /// The object's slot, created in memory only: no store, kernel or alarm loop.
+    async fn slot_entry(
+        self: &Arc<Self>,
+        address: &ObjectAddress,
+    ) -> Result<Arc<ObjectSlot>, StoreError> {
+        let key = address_key(address)?;
+        let mut slots = self.slots.lock().await;
+        Ok(slots
+            .entry(key.clone())
+            .or_insert_with(|| {
+                #[cfg(feature = "conformance")]
+                let faults = self.startup_controls.faults_for(&key);
+                let clock = ObjectClock {
+                    platform: self.clock.clone(),
+                    #[cfg(feature = "conformance")]
+                    faults: faults.clone(),
+                };
+                Arc::new(ObjectSlot {
+                    io: TokioObjectIo {
+                        objects: Arc::downgrade(self),
+                        wake: Arc::new(ObjectAlarmTimer::new(Arc::new(clock.clone()))),
+                        clock,
+                        #[cfg(feature = "conformance")]
+                        faults,
+                        #[cfg(feature = "conformance")]
+                        clock_moved: Arc::new(tokio::sync::watch::channel(()).0),
+                        #[cfg(feature = "conformance")]
+                        seams: Arc::new(event_seams::ObjectSeams::new(address.clone())),
+                    },
+                    host: OnceCell::new(),
+                    kernel: OnceCell::new(),
+                    alarm_task: OnceLock::new(),
+                    #[cfg(test)]
+                    alarm_owner_generation: tokio::sync::watch::channel(0_u64).0,
+                })
+            })
+            .clone())
+    }
+
+    /// The object's slot with its store opened, its kernel built and its alarm loop running.
     async fn slot(self: &Arc<Self>, address: ObjectAddress) -> Result<Arc<ObjectSlot>, StoreError> {
         let key = address_key(&address)?;
-        let slot = {
-            let mut slots = self.slots.lock().await;
-            slots
-                .entry(key.clone())
-                .or_insert_with(|| {
-                    Arc::new(ObjectSlot {
-                        io: TokioObjectIo {
-                            objects: Arc::downgrade(self),
-                            clock: self.clock.clone(),
-                            wake: Arc::new(ObjectAlarmTimer::new(self.clock.0.clone())),
-                            #[cfg(feature = "conformance")]
-                            faults: self.startup_controls.faults_for(&key),
-                            #[cfg(feature = "conformance")]
-                            clock_moved: Arc::new(tokio::sync::watch::channel(()).0),
-                        },
-                        host: OnceCell::new(),
-                        runtime: OnceCell::new(),
-                        alarm_task: OnceLock::new(),
-                        #[cfg(test)]
-                        alarm_owner_generation: tokio::sync::watch::channel(0_u64).0,
-                    })
-                })
-                .clone()
-        };
+        let slot = self.slot_entry(&address).await?;
         // The slot and its timer exist before initialization can yield. Retry
         // after a cancelled initializer therefore reuses the same wake owner.
         let host = slot
@@ -397,47 +411,33 @@ impl NativeObjects {
             })
             .await?
             .clone();
-        let runtime = slot
-            .runtime
+        slot.kernel
             .get_or_try_init(|| async {
-                let runtime = match &address {
-                    ObjectAddress::Copy(project) => {
-                        RuntimeFace::Copy(ObjectKernel::new(ObjectRuntime::copy(
-                            host,
-                            self.config.authoritative_receiver,
-                            *project,
-                            self.copy_ack_wait,
-                        )))
-                    }
-                    ObjectAddress::Fleet => {
-                        RuntimeFace::Fleet(ObjectKernel::new(ObjectRuntime::fleet(
-                            host,
-                            self.config,
-                            self.delivery,
-                            self.holder_answer_timeout,
-                            fleet_protocol::FrameCapabilities::default(),
-                        )?))
-                    }
+                let recipe = object_slot::KernelRecipe {
+                    address: address.clone(),
+                    host,
+                    config: self.config,
+                    delivery: self.delivery,
+                    holder_answer_timeout: self.holder_answer_timeout,
+                    copy_ack_wait: self.copy_ack_wait,
                 };
+                let runtime = recipe.build(
+                    #[cfg(feature = "conformance")]
+                    &slot.io,
+                    #[cfg(feature = "conformance")]
+                    collaboration_central_core::event_trace::ConstructionCause::Start,
+                )?;
                 runtime.initialize().await?;
-                Ok::<_, StoreError>(Arc::new(runtime))
+                Ok::<_, StoreError>(object_slot::KernelCell::new(
+                    runtime,
+                    #[cfg(feature = "conformance")]
+                    recipe,
+                ))
             })
-            .await?
-            .clone();
+            .await?;
         slot.alarm_task.get_or_init(|| {
-            let wake = slot.io.wake.clone();
-            let clock = self.clock.clone();
             let stop = self.stop.clone();
-            #[cfg(test)]
-            let ready = slot.alarm_owner_generation.clone();
-            self.tasks.spawn(alarm_owner::run(
-                runtime,
-                wake,
-                clock,
-                stop,
-                #[cfg(test)]
-                ready,
-            ));
+            self.tasks.spawn(alarm_owner::run(slot.clone(), stop));
         });
         Ok(slot)
     }
@@ -461,7 +461,7 @@ impl NativeObjects {
             {
                 return Err(no_route());
             }
-            let runtime = slot.runtime.get().cloned().ok_or_else(no_route)?;
+            let runtime = slot.current_runtime().ok_or_else(no_route)?;
             let storage_bytes = match runtime.as_ref() {
                 RuntimeFace::Copy(kernel) => match kernel.face().copy_call_class(&body)? {
                     collaboration_central_core::CopyCallClass::Health => Some(
@@ -477,13 +477,18 @@ impl NativeObjects {
                 },
                 RuntimeFace::Fleet(_) => None,
             };
+            drop(runtime);
             call_answer(
-                runtime
-                    .on_event(ObjectEvent::Call {
+                slot.on_event(
+                    ObjectEvent::Call {
                         body,
                         storage_bytes,
-                    })
-                    .await,
+                    },
+                    #[cfg(feature = "conformance")]
+                    Default::default(),
+                )
+                .await
+                .ok_or_else(no_route)?,
             )
         })
     }
@@ -503,20 +508,23 @@ impl NativeObjects {
         let Some(host) = slot.host.get() else {
             return;
         };
-        let Some(runtime_handle) = slot.runtime.get().cloned() else {
-            return;
-        };
-        if !matches!(runtime_handle.as_ref(), RuntimeFace::Fleet(_)) {
+        if !matches!(
+            slot.current_runtime().as_deref(),
+            Some(RuntimeFace::Fleet(_))
+        ) {
             return;
         }
         let mut outgoing = host.attach_socket(binding, origin).await;
         let mut socket = socket;
         let mut requests = tokio::task::JoinSet::new();
         if matches!(
-            runtime_handle
-                .on_event(ObjectEvent::SocketOpened { binding })
-                .await,
-            EventReply::None
+            slot.on_event(
+                ObjectEvent::SocketOpened { binding },
+                #[cfg(feature = "conformance")]
+                Default::default(),
+            )
+            .await,
+            Some(EventReply::None)
         ) {
             loop {
                 tokio::select! {
@@ -536,12 +544,10 @@ impl NativeObjects {
                     },
                     message = socket.recv() => match message {
                         Some(Ok(Message::Binary(bytes))) => {
-                            let runtime = runtime_handle.clone();
-                            requests.spawn(async move { frame_outcome(runtime.on_event(ObjectEvent::Frame { binding, frame: bytes.to_vec() }).await) });
+                            requests.spawn(frame_event(slot.clone(), binding, bytes.to_vec()));
                         },
                         Some(Ok(Message::Text(text))) => {
-                            let runtime = runtime_handle.clone();
-                            requests.spawn(async move { frame_outcome(runtime.on_event(ObjectEvent::Frame { binding, frame: text.as_bytes().to_vec() }).await) });
+                            requests.spawn(frame_event(slot.clone(), binding, text.as_bytes().to_vec()));
                         },
                         Some(Ok(Message::Ping(_) | Message::Pong(_))) => {},
                         Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
@@ -551,8 +557,12 @@ impl NativeObjects {
         }
         requests.abort_all();
         while requests.join_next().await.is_some() {}
-        let _ = runtime_handle
-            .on_event(ObjectEvent::SocketClosed { binding })
+        let _ = slot
+            .on_event(
+                ObjectEvent::SocketClosed { binding },
+                #[cfg(feature = "conformance")]
+                Default::default(),
+            )
             .await;
         host.detach_socket(binding.connection).await;
     }
@@ -572,8 +582,8 @@ impl NativeObjects {
         let slot = self.slots.lock().await.get("fleet").cloned();
         match slot
             .as_ref()
-            .and_then(|slot| slot.runtime.get())
-            .map(Arc::as_ref)
+            .and_then(|slot| slot.current_runtime())
+            .as_deref()
         {
             Some(RuntimeFace::Fleet(kernel)) => kernel.face().conformance_forward_state().await,
             _ => Err(StoreError::Aborted {
@@ -590,8 +600,8 @@ impl NativeObjects {
         let slot = self.slots.lock().await.get("fleet").cloned();
         match slot
             .as_ref()
-            .and_then(|slot| slot.runtime.get())
-            .map(Arc::as_ref)
+            .and_then(|slot| slot.current_runtime())
+            .as_deref()
         {
             Some(RuntimeFace::Fleet(kernel)) => kernel.face().conformance_holder_frames(),
             _ => Err(StoreError::Aborted {
@@ -609,8 +619,8 @@ impl NativeObjects {
         let slot = self.slots.lock().await.get("fleet").cloned();
         match slot
             .as_ref()
-            .and_then(|slot| slot.runtime.get())
-            .map(Arc::as_ref)
+            .and_then(|slot| slot.current_runtime())
+            .as_deref()
         {
             Some(RuntimeFace::Fleet(kernel)) => kernel.face().conformance_mail_custody(item).await,
             _ => Err(StoreError::Aborted {
@@ -697,7 +707,7 @@ impl NativeObjects {
         peer: fleet_protocol::PeerId,
     ) -> Result<Option<fleet_protocol::ReportSchemaSupport>, StoreError> {
         let slot = self.slot(ObjectAddress::Fleet).await?;
-        match slot.runtime.get().map(Arc::as_ref) {
+        match slot.current_runtime().as_deref() {
             Some(RuntimeFace::Fleet(kernel)) => kernel.face().conformance_schema_report(peer).await,
             _ => Err(StoreError::Aborted {
                 reason: "registry runtime missing".into(),
@@ -731,13 +741,24 @@ impl Drop for NativeObjects {
     }
 }
 
-/// A failed frame ends the socket loop, which closes the connection.
-fn frame_outcome(reply: EventReply) -> Result<(), StoreError> {
-    match reply {
-        EventReply::SocketFailed => Err(StoreError::Aborted {
+/// One frame's event. A failed frame ends the socket loop, which closes the connection.
+async fn frame_event(
+    slot: Arc<ObjectSlot>,
+    binding: ConnectionBinding,
+    frame: Vec<u8>,
+) -> Result<(), StoreError> {
+    match slot
+        .on_event(
+            ObjectEvent::Frame { binding, frame },
+            #[cfg(feature = "conformance")]
+            Default::default(),
+        )
+        .await
+    {
+        Some(EventReply::SocketFailed) | None => Err(StoreError::Aborted {
             reason: "frame failed".into(),
         }),
-        _ => Ok(()),
+        Some(_) => Ok(()),
     }
 }
 
@@ -750,5 +771,18 @@ fn no_route() -> CallFailure {
 #[path = "native_objects/alarm_owner.rs"]
 mod alarm_owner;
 #[cfg(feature = "conformance")]
+#[path = "native_objects/event_seams.rs"]
+mod event_seams;
+#[path = "native_objects/object_slot.rs"]
+mod object_slot;
+/// The native test registry configuration, shared by this module's unit tests.
+#[cfg(all(test, feature = "conformance"))]
+#[path = "../tests/native_http/support.rs"]
+mod test_configuration;
+use object_slot::{ObjectSlot, RuntimeFace};
+#[cfg(feature = "conformance")]
 #[path = "conformance_board_import.rs"]
 mod conformance_board_import;
+#[cfg(feature = "conformance")]
+#[path = "native_objects/seam_controls.rs"]
+mod seam_controls;
