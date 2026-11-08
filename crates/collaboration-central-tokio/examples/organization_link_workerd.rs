@@ -29,6 +29,8 @@ const THIRD: &str = "019f0000-0000-7000-8000-00000000b2c2";
 const UNSTAMPED: &str = "019f0000-0000-7000-8000-00000000b2c3";
 /// Provisioned only by the barrier-forced races.
 const RACE: &str = "019f0000-0000-7000-8000-00000000b2c4";
+/// Provisioned only by the byte-identical first-provision race.
+const RACE_SAME: &str = "019f0000-0000-7000-8000-00000000b2c5";
 const LEGACY_MACHINE: &str = "550e8400-e29b-41d4-a716-44665544b2a8";
 
 /// The stamp-profile refusals, each a correctly signed statement but for one field.
@@ -366,8 +368,18 @@ async fn main() -> ConformanceResult<()> {
                 && after_first.get("statement") == Some(&json!(first_racing))
                 && summary(&after_first).len() == 1
                 && origins_closed(&after_first),
-            "two first provisions at once: one stamp (the one that committed first) and one setup record",
+            "two different first provisions at once: both Provisioned, the first committed is stored, one setup record",
             &(first_race, after_first),
+        )?;
+        let same = stamps::stamp(RACE_SAME)?;
+        let same_race = race(&caller, RACE_SAME, same.clone(), same.clone()).await?;
+        let after_same = caller.records(RACE_SAME).await?;
+        require(
+            same_race == (200, 200)
+                && after_same.get("statement") == Some(&json!(same))
+                && summary(&after_same).len() == 1,
+            "two byte-identical first provisions at once: both Provisioned, one stamp, one record",
+            &(same_race, after_same),
         )?;
         let renewal_held = stamps::renewal(RACE, &first_racing, 10)?;
         let renewal_racing = stamps::renewal(RACE, &first_racing, 11)?;

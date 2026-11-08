@@ -67,7 +67,9 @@ async fn race(
 async fn two_first_provisions_at_once_end_with_one_stamp() -> ConformanceResult<()> {
     // Wrong build caught: a held first provision that applies on what it saw
     // when it verified (no stamp), writing a second identity or record, or
-    // replacing the stamp that committed in between.
+    // replacing the stamp that committed in between. A setup statement with
+    // no predecessor over a stored stamp answers Provisioned and changes
+    // nothing, whatever its bytes.
     let root = tempfile::tempdir()?;
     let access = JwksFixtureServer::start().await?;
     let keys = SignInKeys::start().await?;
@@ -83,7 +85,7 @@ async fn two_first_provisions_at_once_end_with_one_stamp() -> ConformanceResult<
     assert_eq!(racing_answer.0, 200, "the racing provision commits");
     assert_eq!(
         held_answer.0, 200,
-        "the held setup finds a stamp and answers Provisioned"
+        "the held setup finds a stamp and answers Provisioned, changing nothing"
     );
     assert_eq!(
         identity.iter().map(|row| row.1.clone()).collect::<Vec<_>>(),
@@ -98,6 +100,37 @@ async fn two_first_provisions_at_once_end_with_one_stamp() -> ConformanceResult<
             .map(|row| row.1.clone())
             .unwrap_or_default()
     );
+    keys.shutdown().await?;
+    access.shutdown().await?;
+    Ok(())
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare both answers and the cold-read store while fixture errors propagate."
+)]
+#[tokio::test]
+async fn two_identical_first_provisions_at_once_answer_provisioned_with_one_record()
+-> ConformanceResult<()> {
+    // Wrong build caught: a held byte-identical setup that writes a second
+    // identity or record, or refuses a replay of what is stored.
+    let root = tempfile::tempdir()?;
+    let access = JwksFixtureServer::start().await?;
+    let keys = SignInKeys::start().await?;
+    let central = start(root.path(), &access, &keys, NOW_SECONDS).await?;
+    let base = central.server.base_url().to_owned();
+    let statement = stamps::stamp(ORGANIZATION_A)?;
+    let (held_answer, racing_answer) =
+        race(&base, &central.socket, statement.clone(), statement.clone()).await?;
+    central.server.shutdown().await?;
+    let (identity, records) = stored(root.path(), ORGANIZATION_A).await?;
+
+    assert_eq!((held_answer.0, racing_answer.0), (200, 200));
+    assert_eq!(
+        identity.iter().map(|row| row.1.clone()).collect::<Vec<_>>(),
+        vec![statement]
+    );
+    assert_eq!(records.len(), 1, "one setup record");
     keys.shutdown().await?;
     access.shutdown().await?;
     Ok(())
