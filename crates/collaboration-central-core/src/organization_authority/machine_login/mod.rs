@@ -9,6 +9,7 @@ mod enrollment_port;
 mod enrollment_records;
 #[cfg(test)]
 mod in_memory_enrollments;
+mod machine_connection;
 mod machine_token_decision;
 #[cfg(test)]
 mod test_fixtures;
@@ -21,5 +22,9 @@ pub use enrollment_port::{
 pub use enrollment_records::{
     AllowanceRow, EnrollmentChange, EnrollmentGeneration, FormerServiceFacts, InstallationRow,
     MachineClaim, StoredEnrollment, StoredEnrollmentState,
+};
+pub use machine_connection::{
+    CloseMachineConnection, MachineRevocation, RevocationBy, admit_machine_connection,
+    revoke_machine_enrollment,
 };
 pub use machine_token_decision::decide_machine_token;
