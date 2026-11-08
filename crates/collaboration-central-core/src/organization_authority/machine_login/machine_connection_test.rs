@@ -17,7 +17,9 @@ use crate::identity_contract::{
     MachineConnectionRefusal, MachineTokenDecision, MachineTokenRefusal, PersonId,
     PresentedMachine, RevokeMachineEnrollment, RevokeMachineEnrollmentResult,
 };
-use crate::organization_authority::{ChangeRequestId, OrganizationChangeKind};
+use crate::organization_authority::{
+    ChangeRequestId, OrganizationChangeKind, OrganizationChangeOrigin,
+};
 use fleet_identity_protocol::{OrganizationId, UnixSeconds};
 use fleet_sync_protocol::PeerId;
 
@@ -293,21 +295,29 @@ async fn revocation_ends_the_enrollment_bumps_the_generation_and_withdraws_its_a
                 record.kind,
                 record.target_id.clone(),
                 record.request_id.as_str().to_owned(),
+                record.origin.clone(),
             )
         })
         .collect::<Vec<_>>();
+    // Every record is attributed to the revoker, with machine:revoke.
+    let revoker = OrganizationChangeOrigin::Person {
+        person_id: uuid7(OWNER),
+        permission_checked: "machine:revoke".to_owned(),
+    };
     assert_eq!(
         records,
         vec![
             (
                 OrganizationChangeKind::MachineRevoked,
                 uuid7(WORKING),
-                uuid7(0x50)
+                uuid7(0x50),
+                revoker.clone()
             ),
             (
                 OrganizationChangeKind::AllowanceChanged,
                 after.allowances[0].id.to_string(),
-                uuid7(0x50)
+                uuid7(0x50),
+                revoker
             ),
         ]
     );

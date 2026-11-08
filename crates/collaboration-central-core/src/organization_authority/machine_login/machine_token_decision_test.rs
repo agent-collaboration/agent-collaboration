@@ -7,15 +7,15 @@ use super::super::enrollment_records::{
 };
 use super::super::in_memory_enrollments::{EnrollmentStore, InMemoryEnrollments};
 use super::super::test_fixtures::{
-    CountingIds, MACHINE, NOW_MS, NOW_S, TestClock, client, empty_store, enrollment, installation,
-    settings, uuid7, with_approved, with_enrolled,
+    APPROVER, CountingIds, MACHINE, NOW_MS, NOW_S, TestClock, client, empty_store, enrollment,
+    installation, settings, uuid7, with_approved, with_enrolled,
 };
 use super::decide_machine_token;
 use crate::identity_contract::{
     AllowanceState, DecideMachineToken, EndedMachineClient, EnrollmentRevocationReason,
     MachineTokenDecision, MachineTokenRefusal,
 };
-use crate::organization_authority::OrganizationChangeKind;
+use crate::organization_authority::{OrganizationChangeKind, OrganizationChangeOrigin};
 use fleet_identity_protocol::{OrganizationId, UnixSeconds};
 
 const WORKING: u64 = 0x40;
@@ -159,13 +159,22 @@ async fn a_first_grant_activates_supersedes_the_working_enrollment_and_bumps_the
     let records = after
         .records
         .iter()
-        .map(|record| (record.kind, record.target_id.clone()))
+        .map(|record| (record.kind, record.target_id.clone(), record.origin.clone()))
         .collect::<Vec<_>>();
+    // Both records are attributed to the approval: its approver, with machine:enroll.
+    let approver = OrganizationChangeOrigin::Person {
+        person_id: uuid7(APPROVER),
+        permission_checked: "machine:enroll".to_owned(),
+    };
     assert_eq!(
         records,
         vec![
-            (OrganizationChangeKind::MachineRevoked, uuid7(WORKING)),
-            (OrganizationChangeKind::MachineEnrolled, uuid7(A)),
+            (
+                OrganizationChangeKind::MachineRevoked,
+                uuid7(WORKING),
+                approver.clone()
+            ),
+            (OrganizationChangeKind::MachineEnrolled, uuid7(A), approver),
         ]
     );
 }
