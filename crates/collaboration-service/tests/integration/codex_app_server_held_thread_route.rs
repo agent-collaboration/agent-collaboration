@@ -704,7 +704,16 @@ async fn exercise_held_empty_thread(
         )
         || holder.contains("empty-thread")
     {
-        return Err("first message did not start through the held connection".into());
+        let backend_state = if backend.is_finished() {
+            format!("{:?}", backend.await)
+        } else {
+            "native fixture is still running".to_owned()
+        };
+        return Err(format!(
+            "first message did not start through the held connection: receipt={}; held={}; backend={backend_state}",
+            serde_json::to_string(&started.receipt)?,
+            holder.contains("empty-thread"),
+        ).into());
     }
     assert_eq!(
         serde_json::to_value(&started.receipt)?.pointer("/client/permissionDifferences"),

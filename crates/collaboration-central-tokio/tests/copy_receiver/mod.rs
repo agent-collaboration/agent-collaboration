@@ -151,6 +151,7 @@ impl Fixture {
                     .try_into()?,
             },
             std::time::Duration::from_secs(2),
+            fleet_protocol::FrameCapabilities::default(),
         )?);
         fleet_runtime.initialize().await?;
         io.fleet

@@ -1,5 +1,6 @@
 use crate::{FrameId, encoded_size::encoded_json_size};
 use serde::{Deserialize, Deserializer, Serialize, de::DeserializeOwned};
+use std::collections::BTreeSet;
 
 pub const MAX_BATCH_ITEMS: usize = 32;
 pub const MAX_BATCH_BYTES: usize = 1024 * 1024;
@@ -26,6 +27,8 @@ pub enum BatchValidationError {
     TooManyBytes,
     #[error("a request batch mixes operation types")]
     MixedRequestKinds,
+    #[error("a batch repeats a send id")]
+    DuplicateSendId,
     #[error("cannot encode a batch")]
     Encoding(#[from] serde_json::Error),
 }
@@ -55,6 +58,10 @@ fn validate_size<Body: Serialize>(
     }
     if items.len() > MAX_BATCH_ITEMS {
         return Err(BatchValidationError::TooManyItems);
+    }
+    let mut send_ids = BTreeSet::new();
+    if items.iter().any(|item| !send_ids.insert(item.send_id)) {
+        return Err(BatchValidationError::DuplicateSendId);
     }
     if encoded_json_size(&BatchEnvelope { kind, value: items })? > MAX_BATCH_BYTES {
         return Err(BatchValidationError::TooManyBytes);

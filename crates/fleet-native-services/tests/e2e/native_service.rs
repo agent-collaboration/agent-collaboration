@@ -410,6 +410,7 @@ async fn opening_revocation_blocks_late_hello_and_nonholder_cannot_start_seed() 
     ));
     control_request(&mut control, ControlRequest::Revoke { peer: opening_peer }).await?;
     let late: ClientFrame<SampleProtocol> = ClientFrame::Hello {
+        capabilities: None,
         session_id: SessionId::new(durable_steps::Uuid::now_v7())?,
         schema_support: SchemaSupport { max_version: 100 },
     };

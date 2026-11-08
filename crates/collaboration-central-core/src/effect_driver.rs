@@ -368,9 +368,7 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
                     match serde_json::to_vec(&ServerFrame::<BoardConsumerProtocol>::Welcome {
                         session_id,
                         databases,
-                        capabilities: capabilities.map(|offered| {
-                            offered.intersection(fleet_protocol::FrameCapabilities::SUPPORTED)
-                        }),
+                        capabilities,
                     }) {
                         Ok(bytes) => self.host.send_frame(connection, bytes.into()).await.is_ok(),
                         Err(_) => false,

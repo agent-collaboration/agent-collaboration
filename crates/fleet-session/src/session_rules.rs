@@ -65,6 +65,7 @@ pub async fn frame_received<S, P: ConsumerProtocol>(
     binding: &ConnectionBinding,
     frame: &[u8],
     now: SyncTime,
+    honored_capabilities: FrameCapabilities,
 ) -> Result<Vec<SessionEffect<P>>, SessionError>
 where
     S: SessionScope,
@@ -122,6 +123,7 @@ where
         capabilities,
     } = frame
     {
+        let capabilities = FrameCapabilities::negotiate(capabilities, honored_capabilities);
         return attach_session(
             scope,
             binding,

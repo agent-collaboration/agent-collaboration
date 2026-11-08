@@ -5,6 +5,22 @@ use serde_json::json;
 const SEND_ID: &str = "019eef00-0000-7000-8000-000000000001";
 
 #[test]
+fn request_and_answer_batches_refuse_duplicate_send_ids() {
+    for kind in ["requestBatch", "answerBatch"] {
+        let item = json!({"sendId":SEND_ID,"body":{"kind":"consumer","value":null}});
+        let wire = json!({"kind":kind,"value":[item.clone(),item]});
+        assert!(
+            serde_json::from_value::<ClientFrame>(wire.clone()).is_err(),
+            "{wire}"
+        );
+        assert!(
+            serde_json::from_value::<ServerFrame>(wire.clone()).is_err(),
+            "{wire}"
+        );
+    }
+}
+
+#[test]
 fn new_batch_and_acknowledgment_vocabulary_decodes_in_both_directions() {
     for kind in ["requestBatch", "answerBatch"] {
         let wire = json!({"kind":kind,"value":[{

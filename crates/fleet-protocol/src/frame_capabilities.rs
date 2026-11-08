@@ -24,4 +24,17 @@ impl FrameCapabilities {
     pub const fn contains(self, other: Self) -> bool {
         (!other.batches || self.batches) && (!other.notices_applied || self.notices_applied)
     }
+
+    /// Advertise only additions this receiver actually honors, after an offer.
+    pub const fn negotiate(offered: Option<Self>, honored: Self) -> Option<Self> {
+        let Some(offered) = offered else {
+            return None;
+        };
+        let negotiated = offered.intersection(honored);
+        if negotiated.batches || negotiated.notices_applied {
+            Some(negotiated)
+        } else {
+            None
+        }
+    }
 }

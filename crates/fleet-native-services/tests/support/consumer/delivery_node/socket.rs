@@ -103,6 +103,7 @@ async fn connect(port: u16, owner: PeerId) -> TestResult<(WebSocketConnection, S
     socket
         .send(
             serde_json::to_vec(&ClientFrame::<SampleProtocol>::Hello {
+                capabilities: None,
                 session_id: session,
                 schema_support: SchemaSupport { max_version: 100 },
             })?

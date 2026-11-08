@@ -5,6 +5,33 @@ use fleet_session::TransportConnection;
 use fleet_websocket_transport::WebSocketConnection;
 use std::time::Duration;
 
+#[tokio::test]
+async fn default_native_welcome_omits_dormant_capabilities_even_when_offered() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let service = ServiceProcess::start(&root.path().join("service")).await?;
+    let mut control = service
+        .connect("control", "Bearer consumer-control")
+        .await?;
+    let session_id = SessionId::new(durable_steps::Uuid::now_v7())?;
+    let mut socket = service.connect("session", "Bearer peer-4").await?;
+    socket
+        .send(
+            serde_json::to_vec(&ClientFrame::<SampleProtocol>::Hello {
+                session_id,
+                schema_support: SchemaSupport { max_version: 1 },
+                capabilities: Some(FrameCapabilities::SUPPORTED),
+            })?
+            .into(),
+        )
+        .await?;
+    assert!(
+        matches!(server_frame(&mut socket).await?, ServerFrame::Welcome {
+        session_id: actual, capabilities: None, ..
+    } if actual == session_id)
+    );
+    service.stop(&mut control).await
+}
+
 fn claimant() -> TestResult<PeerId> {
     Ok(PeerId::new(durable_steps::Uuid::from_u128(
         0x019eef00000070008000000000000004,
@@ -19,6 +46,7 @@ async fn attach(
     socket
         .send(
             serde_json::to_vec(&ClientFrame::<SampleProtocol>::Hello {
+                capabilities: None,
                 session_id: session,
                 schema_support: SchemaSupport {
                     max_version: maximum,

@@ -65,6 +65,7 @@ fn runtime(fixture: &Fixture, clock: &PresenceIo) -> TestResult<PresenceRuntime>
             )?,
         },
         std::time::Duration::from_secs(2),
+        fleet_protocol::FrameCapabilities::default(),
     )?)
 }
 async fn observed(fixture: &Fixture) -> TestResult<Option<String>> {

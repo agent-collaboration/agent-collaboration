@@ -108,6 +108,7 @@ fn registry(
             .map_err(|error| worker::Error::RustError(error.to_string()))?,
         },
         Duration::from_secs(20),
+        fleet_protocol::FrameCapabilities::default(),
     )
     .map_err(|e| Error::RustError(e.to_string()))
 }

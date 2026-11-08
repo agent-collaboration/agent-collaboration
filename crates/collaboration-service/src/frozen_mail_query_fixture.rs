@@ -163,6 +163,12 @@ impl FrozenMailQuery {
                         },
                     },
                     ClientFrame::Answer { .. } => continue,
+                    ClientFrame::RequestBatch(_) => {
+                        panic!("FrozenMailQuery received an unnegotiated RequestBatch frame");
+                    }
+                    ClientFrame::AnswerBatch(_) => {
+                        panic!("FrozenMailQuery received an unnegotiated AnswerBatch frame");
+                    }
                 };
                 socket
                     .send(tokio_tungstenite::tungstenite::Message::Binary(

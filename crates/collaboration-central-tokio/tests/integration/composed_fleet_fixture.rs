@@ -233,6 +233,7 @@ impl Fixture {
                     .try_into()?,
             },
             Duration::from_secs(2),
+            fleet_protocol::FrameCapabilities::default(),
         )?);
         runtime.initialize().await?;
         let database = DatabaseId::try_from(PROJECT.to_owned())?;

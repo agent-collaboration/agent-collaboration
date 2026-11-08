@@ -79,12 +79,14 @@ pub enum ConnectionRegistration {
         session_id: SessionId,
         schema_support: SchemaSupport,
         attach_seq: AttachSequence,
+        /// The offer intersected with the host's honored set at Hello.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         capabilities: Option<FrameCapabilities>,
     },
     Attached {
         session_id: SessionId,
         schema_support: SchemaSupport,
+        /// Admission and Welcome both use this negotiated value unchanged.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         capabilities: Option<FrameCapabilities>,
     },

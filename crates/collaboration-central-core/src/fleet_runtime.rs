@@ -73,6 +73,7 @@ where
         config: fleet_project_lease::RegistryConfig,
         delivery: crate::DeliveryConfig,
         holder_answer_timeout: std::time::Duration,
+        honored_capabilities: fleet_protocol::FrameCapabilities,
     ) -> Result<Self, StoreError> {
         let io = Arc::new(io);
         let replies = Arc::new(crate::holder_reply_hub::HolderReplyHub::default());
@@ -170,6 +171,7 @@ where
                         config,
                         delivery,
                         holder_answer_timeout,
+                        honored_capabilities,
                     },
                     face: PhantomData,
                 };
@@ -186,6 +188,7 @@ where
                 config,
                 delivery,
                 holder_answer_timeout,
+                honored_capabilities,
             },
             face: PhantomData,
         })

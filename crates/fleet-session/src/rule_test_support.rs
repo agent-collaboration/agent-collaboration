@@ -129,9 +129,15 @@ pub async fn attach(
     connection_opened::<_, NoConsumer>(scope, binding, now(1))
         .await
         .unwrap();
-    let mut effects = frame_received(scope, binding, &hello(id, 1), now(1))
-        .await
-        .unwrap();
+    let mut effects = frame_received(
+        scope,
+        binding,
+        &hello(id, 1),
+        now(1),
+        fleet_protocol::FrameCapabilities::default(),
+    )
+    .await
+    .unwrap();
     // Rule-only fixture: an acknowledged report stands in for the external registry.
     // Native SessionHost tests keep the publication task and its adapter real.
     for input in std::mem::take(&mut scope.publications) {

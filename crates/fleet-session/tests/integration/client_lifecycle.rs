@@ -122,6 +122,28 @@ async fn send_server(sender: &mpsc::Sender<Bytes>, frame: ServerFrame) {
 type Client = SessionClient<ChannelTransport, MemoryClientStore>;
 
 #[tokio::test]
+async fn default_client_hello_does_not_advertise_dormant_capabilities() {
+    let host = TestHost::default();
+    let (connection, _inbound, mut outbound) = channel();
+    let mut client = Client::load(
+        ChannelTransport(Mutex::new(VecDeque::from([connection]))),
+        MemoryClientStore::default(),
+        &host,
+        SchemaSupport { max_version: 1 },
+        backoff(),
+    )
+    .await
+    .unwrap();
+    client
+        .connect(&endpoint(), &credential(), &host)
+        .await
+        .unwrap();
+    let hello: serde_json::Value =
+        serde_json::from_slice(&read_bytes(&mut outbound).await).unwrap();
+    assert!(hello["value"].get("capabilities").is_none());
+}
+
+#[tokio::test]
 async fn terminal_connection_replacement_has_no_retry_deadline_or_scheduled_wake() {
     for selected in [
         None,
@@ -211,6 +233,9 @@ async fn batch_receive_requires_welcome_capability_and_preserves_typed_items() {
         )
         .await
         .unwrap();
+        client
+            .set_frame_capabilities(Some(FrameCapabilities::SUPPORTED))
+            .unwrap();
         client
             .connect(&endpoint(), &credential(), &host)
             .await
@@ -308,6 +333,9 @@ async fn notice_ack_send_requires_remote_advertisement_and_uses_the_existing_fra
         .await
         .unwrap();
         client
+            .set_frame_capabilities(Some(FrameCapabilities::SUPPORTED))
+            .unwrap();
+        client
             .connect(&endpoint(), &credential(), &host)
             .await
             .unwrap();
@@ -364,6 +392,9 @@ async fn reconnect_to_a_legacy_welcome_discards_the_previous_batch_negotiation()
     .await
     .unwrap();
     let session_id = client.state().session_id;
+    client
+        .set_frame_capabilities(Some(FrameCapabilities::SUPPORTED))
+        .unwrap();
     client
         .connect(&endpoint(), &credential(), &host)
         .await

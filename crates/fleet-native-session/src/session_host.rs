@@ -69,6 +69,7 @@ pub struct SessionHost<
     pub(crate) store: Arc<SessionStore<P, A, D, H>>,
     pub(crate) engine: Arc<SessionEngine<P, A, D, H>>,
     pub(crate) send_timeout: Duration,
+    pub(crate) honored_capabilities: FrameCapabilities,
     pub(crate) admission_owner: Arc<()>,
     #[cfg(feature = "test-support")]
     pub(crate) registration_changes: watch::Sender<()>,
@@ -131,6 +132,7 @@ impl<
         authenticator: Arc<A>,
         handler: Arc<D>,
         send_timeout: Duration,
+        honored_capabilities: FrameCapabilities,
     ) -> Result<Self, SessionHostError> {
         object
             .transaction(|scope| {
@@ -167,6 +169,7 @@ impl<
             store,
             engine: Arc::new(engine),
             send_timeout,
+            honored_capabilities,
             admission_owner: Arc::new(()),
             #[cfg(feature = "test-support")]
             registration_changes: watch::channel(()).0,
@@ -236,6 +239,7 @@ impl<
             .collect::<Vec<_>>();
         let now = self.object.host().now();
         let host = self.object.host();
+        let honored_capabilities = self.honored_capabilities;
         let result=self.object.transaction(move |inner| Box::pin(async move {
             let mut scope=SessionTransaction::<P,A,D,H>::new(inner.executor(), host.as_ref(), registrations);
             let mut effects=match input {
@@ -245,7 +249,7 @@ impl<
                     Ok(vec![SessionEffect::Close {connection:binding.connection,reason:CloseReason::CredentialRejected(AuthRefusal::Revoked)}])
                 }
                 SessionInput::Opened=>connection_opened::<_,P>(&mut scope,&binding,now).await,
-                SessionInput::Frame(bytes)=>frame_received::<_,P>(&mut scope,&binding,&bytes,now).await,
+                SessionInput::Frame(bytes)=>frame_received::<_,P>(&mut scope,&binding,&bytes,now,honored_capabilities).await,
                 SessionInput::Closed(cause)=>connection_closed::<_,P>(&mut scope,&binding,cause,now).await,
             }.map_err(StoreError::backend)?;
             if revoke {
@@ -353,8 +357,7 @@ impl<
                                     *capabilities
                                 }
                                 _ => None,
-                            })
-                            .map(|offer| offer.intersection(FrameCapabilities::SUPPORTED));
+                            });
                         self.send(
                             connection,
                             ServerFrame::Welcome {

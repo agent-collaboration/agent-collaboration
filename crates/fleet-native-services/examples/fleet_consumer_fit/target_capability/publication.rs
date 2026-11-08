@@ -64,6 +64,7 @@ async fn barrier(root: &Path, observations: &mut Observations) -> TestResult {
                     *id == connection
                         && *r
                             == ConnectionRegistration::Attached {
+                                capabilities: None,
                                 session_id: session,
                                 schema_support: SchemaSupport { max_version: 4 },
                             }
@@ -319,6 +320,7 @@ async fn rollback(root: &Path, observations: &mut Observations) -> TestResult {
                     *id == connection
                         && *r
                             == ConnectionRegistration::Attached {
+                                capabilities: None,
                                 session_id: session,
                                 schema_support: SchemaSupport { max_version: 5 },
                             }

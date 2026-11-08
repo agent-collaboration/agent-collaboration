@@ -111,7 +111,16 @@ impl FixtureHost {
                 },
             ],
             RuleInput::Opened => connection_opened(&mut scope, &binding, now).await?,
-            RuleInput::Frame(frame) => frame_received(&mut scope, &binding, &frame, now).await?,
+            RuleInput::Frame(frame) => {
+                frame_received(
+                    &mut scope,
+                    &binding,
+                    &frame,
+                    now,
+                    fleet_protocol::FrameCapabilities::default(),
+                )
+                .await?
+            }
             RuleInput::Closed(cause) => connection_closed(&mut scope, &binding, cause, now).await?,
             RuleInput::Revoke => {
                 scope.state.revoked = true;

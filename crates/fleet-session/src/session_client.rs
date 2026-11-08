@@ -167,7 +167,7 @@ impl<T: SessionTransport, S: SessionClientStore, P: ConsumerProtocol> SessionCli
             store,
             state,
             schema_support,
-            advertised_capabilities: Some(FrameCapabilities::SUPPORTED),
+            advertised_capabilities: None,
             negotiated_capabilities: None,
             backoff,
             attempt: 0,

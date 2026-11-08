@@ -255,6 +255,7 @@ impl ShellActor {
                     serde_json::from_str(
                         &self.env.var("CENTRAL_HOLDER_ANSWER_TIMEOUT")?.to_string(),
                     )?,
+                    fleet_protocol::FrameCapabilities::default(),
                 )
                 .map_err(error)?,
             ),

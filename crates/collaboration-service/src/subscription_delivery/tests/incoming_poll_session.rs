@@ -85,6 +85,12 @@ impl IncomingPollSession {
                         },
                     },
                     ClientFrame::Answer { .. } => continue,
+                    ClientFrame::RequestBatch(_) => {
+                        panic!("IncomingPollSession received an unnegotiated RequestBatch frame");
+                    }
+                    ClientFrame::AnswerBatch(_) => {
+                        panic!("IncomingPollSession received an unnegotiated AnswerBatch frame");
+                    }
                 };
                 socket
                     .send(tokio_tungstenite::tungstenite::Message::Binary(

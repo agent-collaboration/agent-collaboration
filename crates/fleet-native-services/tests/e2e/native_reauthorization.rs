@@ -8,6 +8,7 @@ async fn hello(connection: &mut impl TransportConnection, session: SessionId) ->
     connection
         .send(
             serde_json::to_vec(&ClientFrame::<SampleProtocol>::Hello {
+                capabilities: None,
                 session_id: session,
                 schema_support: SchemaSupport { max_version: 100 },
             })?

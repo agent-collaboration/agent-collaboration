@@ -23,6 +23,7 @@ pub async fn attach_peer(
         .await?;
     let session_id = SessionId::new(durable_steps::Uuid::now_v7())?;
     let hello: ClientFrame<SampleProtocol> = ClientFrame::Hello {
+        capabilities: None,
         session_id,
         schema_support: SchemaSupport {
             max_version: support,
