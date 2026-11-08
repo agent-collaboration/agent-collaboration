@@ -142,3 +142,41 @@ impl runtime_primitives::Clock for TestClock {
         runtime_primitives::SyncTime::from_unix_millis(self.0.load(Ordering::SeqCst))
     }
 }
+
+/// Adds an approved, never-granted enrollment `id` of machine `machine`,
+/// approved at `base` and at `approved_at_ms`. Creates the installation's row
+/// at `base` if the machine has none.
+pub(super) fn with_approved(
+    mut store: EnrollmentStore,
+    machine: u64,
+    id: u64,
+    base: u64,
+    approved_at_ms: i64,
+) -> EnrollmentStore {
+    store.enrollments.insert(
+        enrollment(id),
+        StoredEnrollment {
+            id: enrollment(id),
+            installation: installation(machine),
+            approval: approval(id + 0x100, machine, &[WORKSPACE_A]),
+            base_generation: EnrollmentGeneration(base),
+            approved_at_ms,
+            state: StoredEnrollmentState::Approved,
+        },
+    );
+    store
+        .installations
+        .entry(installation(machine))
+        .or_insert_with(|| InstallationRow {
+            installation: installation(machine),
+            generation: EnrollmentGeneration(base),
+            active: None,
+        });
+    store
+}
+
+pub(super) fn settings() -> super::decision_support::MachineLoginSettings {
+    super::decision_support::MachineLoginSettings::new(
+        crate::identity_contract::TokenLifetimeSeconds::try_from(900).unwrap(),
+    )
+}

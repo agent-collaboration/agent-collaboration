@@ -1,6 +1,7 @@
 //! What every machine-login decision shares: its clock reading, its injected
 //! UUIDv7 source and the change records it writes.
 use super::enrollment_port::MachineEnrollmentFailure;
+use crate::identity_contract::TokenLifetimeSeconds;
 use crate::organization_authority::{
     ChangeRequestId, OrganizationChangeKind, OrganizationChangeOrigin, OrganizationChangeRecord,
 };
@@ -58,5 +59,30 @@ impl DecisionIds<'_> {
             target_id: target,
             created_at_millis: time.now_ms,
         })
+    }
+}
+
+/// Central's machine-login settings. `grant_lifetime` stands in for the
+/// organization's `SetTokenLifetime` value until that command has a home.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MachineLoginSettings {
+    pub grant_lifetime: TokenLifetimeSeconds,
+    /// An approval lapses this long after central approved it (PD:1292's ten-minute code).
+    pub device_code_lifetime_ms: i64,
+    /// An enrollment expires this long after its last Grant (R40).
+    pub idle_expiry_seconds: i64,
+}
+
+impl MachineLoginSettings {
+    pub const DEVICE_CODE_LIFETIME_MS: i64 = 10 * 60 * 1000;
+    pub const IDLE_EXPIRY_SECONDS: i64 = 30 * 24 * 60 * 60;
+
+    #[must_use]
+    pub const fn new(grant_lifetime: TokenLifetimeSeconds) -> Self {
+        Self {
+            grant_lifetime,
+            device_code_lifetime_ms: Self::DEVICE_CODE_LIFETIME_MS,
+            idle_expiry_seconds: Self::IDLE_EXPIRY_SECONDS,
+        }
     }
 }

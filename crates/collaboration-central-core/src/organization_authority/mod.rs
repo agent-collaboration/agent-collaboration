@@ -28,8 +28,8 @@ pub use identity::{OrganizationIdentity, OrganizationIdentityRefusal, Provisioni
 pub use machine_login::{
     AllowanceRow, Decided, DecisionTime, EnrollmentChange, EnrollmentFacts, EnrollmentGeneration,
     EnrollmentQuery, FormerServiceFacts, InstallationRow, MachineClaim, MachineEnrollmentFailure,
-    MachineEnrollmentPort, SD8_MILLIS, StoredEnrollment, StoredEnrollmentState,
-    decide_device_login,
+    MachineEnrollmentPort, MachineLoginSettings, SD8_MILLIS, StoredEnrollment,
+    StoredEnrollmentState, decide_device_login, decide_machine_token,
 };
 pub(crate) use organization_stamp_store::read as read_stored_stamp;
 #[cfg(feature = "conformance")]

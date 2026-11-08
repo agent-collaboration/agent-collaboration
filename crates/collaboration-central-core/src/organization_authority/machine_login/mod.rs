@@ -4,14 +4,16 @@
 //! the clock and the ID source.
 mod decision_support;
 mod device_login_decision;
+mod enrollment_liveness;
 mod enrollment_port;
 mod enrollment_records;
 #[cfg(test)]
 mod in_memory_enrollments;
+mod machine_token_decision;
 #[cfg(test)]
 mod test_fixtures;
 
-pub use decision_support::DecisionTime;
+pub use decision_support::{DecisionTime, MachineLoginSettings};
 pub use device_login_decision::{SD8_MILLIS, decide_device_login};
 pub use enrollment_port::{
     Decided, EnrollmentFacts, EnrollmentQuery, MachineEnrollmentFailure, MachineEnrollmentPort,
@@ -20,3 +22,4 @@ pub use enrollment_records::{
     AllowanceRow, EnrollmentChange, EnrollmentGeneration, FormerServiceFacts, InstallationRow,
     MachineClaim, StoredEnrollment, StoredEnrollmentState,
 };
+pub use machine_token_decision::decide_machine_token;
