@@ -1,7 +1,7 @@
 /** A real first Luna turn establishes the recipient before a separate mail observation. */
 import { setTimeout } from "node:timers/promises";
 import { z } from "zod";
-import type { D1Machine, D1HarnessDeclaration } from "./d1-harness.ts";
+import type { D1Machine, D1HarnessDeclaration } from "./d1-harness-plan.ts";
 import type { Receipt } from "../../receipt.ts";
 import { boardIdentity } from "../../clients/board-requests.ts";
 import { field } from "../../exact-json.ts";

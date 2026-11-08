@@ -1,6 +1,6 @@
 /** Real public queue mail while the recipient Host is stopped, then held. No model turn. */
 import { z } from "zod";
-import type { D1Machine } from "./d1-harness.ts";
+import type { D1Machine } from "./d1-harness-plan.ts";
 import type { Receipt } from "../../receipt.ts";
 import { boardIdentity } from "../../clients/board-requests.ts";
 import { field } from "../../exact-json.ts";

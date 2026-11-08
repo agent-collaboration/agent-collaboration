@@ -1,7 +1,7 @@
 /** Twenty real online queue items, measured from the recipient's settled inbox rows. */
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
-import type { D1Machine } from "./d1-harness.ts";
+import type { D1Machine } from "./d1-harness-plan.ts";
 import type { Receipt } from "../../receipt.ts";
 import { boardIdentity } from "../../clients/board-requests.ts";
 import { decode } from "../../exact-json.ts";

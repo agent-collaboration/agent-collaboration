@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { d1HarnessSchema } from "./d1-harness.ts";
+import { d1HarnessSchema } from "./d1-harness-plan.ts";
+import { runD1Harness } from "./d1-harness.ts";
+import type { D1HarnessJourney } from "./d1-harness-plan.ts";
 
 const artifact = {
   path: "/declared/executable",
@@ -74,4 +76,39 @@ test("materialization cannot release twenty queued messages or select a differen
     { ...valid, twoProjects: true },
   ])
     assert.equal(d1HarnessSchema.safeParse(invalid).success, false);
+});
+
+test("a custom no-model journey refuses legacy selectors before evidence IO or launch", async (): Promise<void> => {
+  // These paths do not exist: a late selector check would attempt realpath first.
+  const uncalled = (): never => {
+    throw new Error("journey callback must not run");
+  };
+  const journey: D1HarnessJourney = {
+    declaration: {},
+    centralStarted: uncalled,
+    sessionObservation: uncalled,
+    connectionReady: uncalled,
+    recipientStarted: uncalled,
+    drive: uncalled,
+    ownersStopped: uncalled,
+  };
+  const cases = [
+    { ...declaration, queueScenario: "online-held" },
+    { ...declaration, twoProjects: true },
+    {
+      ...declaration,
+      queueScenario: "online-timing",
+      debugProxyOrigin: "http://127.0.0.1:43127",
+      materialization: {
+        kind: "materialized-luna-recipient",
+        budgetFile: "/absent/budget.json",
+        reloadHeld: false,
+      },
+    },
+  ];
+  for (const candidate of cases)
+    await assert.rejects(
+      runD1Harness(d1HarnessSchema.parse(candidate), journey),
+      /cannot combine legacy/,
+    );
 });

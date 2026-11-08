@@ -1,6 +1,6 @@
 /** Two real synthetic projects created and read through the public Host tools. */
 import { z } from "zod";
-import type { D1Machine } from "./d1-harness.ts";
+import type { D1Machine } from "./d1-harness-plan.ts";
 import type { Receipt } from "../../receipt.ts";
 import { acceptedWrite, boardIdentity, writeHeader } from "../../clients/board-requests.ts";
 import { field } from "../../exact-json.ts";

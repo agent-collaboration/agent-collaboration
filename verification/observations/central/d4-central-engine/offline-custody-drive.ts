@@ -1,6 +1,6 @@
 /** Real public queue workloads; receiver launch, source qualification and store readback remain caller-owned. */
 import { z } from "zod";
-import type { D1Machine } from "../d1-harness.ts";
+import type { D1Machine } from "../d1-harness-plan.ts";
 import type { Receipt } from "../../../receipt.ts";
 import { boardIdentity } from "../../../clients/board-requests.ts";
 import { requireNoD1Turns, senderStage, unloadD1Recipient } from "../d1-mail-stages.ts";
