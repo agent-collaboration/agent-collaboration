@@ -616,6 +616,28 @@ impl NativeObjects {
         }
     }
 
+    /// After the injected Fleet clock moves, every live Fleet re-evaluates its
+    /// due work at the new time; the same nudge `SetTime` gives one object.
+    #[cfg(feature = "conformance")]
+    pub(crate) async fn wake_fleets(&self) -> Result<usize, StoreError> {
+        let slots: Vec<_> = self
+            .slots
+            .lock()
+            .await
+            .iter()
+            .filter(|(key, _)| key.as_str() == "fleet" || key.starts_with("fleet-"))
+            .map(|(_, slot)| slot.clone())
+            .collect();
+        for slot in &slots {
+            slot.io
+                .wake
+                .wake_at(self.clock.now())
+                .await
+                .map_err(StoreError::backend)?;
+        }
+        Ok(slots.len())
+    }
+
     /// Everything B2 keeps for one organization, read from its live Fleet
     /// owner. Startup opens every existing store, so no slot means no store;
     /// observation never creates or migrates one.

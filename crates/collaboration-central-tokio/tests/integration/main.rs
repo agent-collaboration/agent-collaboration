@@ -27,6 +27,9 @@ mod directory_session_fixture;
 #[path = "../support/fleet_cache_source.rs"]
 mod fleet_cache_source;
 #[cfg(feature = "conformance")]
+#[path = "../support/fleet_clock.rs"]
+mod fleet_clock;
+#[cfg(feature = "conformance")]
 #[path = "../support/holder_writer_retry.rs"]
 mod holder_writer_retry;
 #[cfg(feature = "conformance")]
@@ -119,6 +122,7 @@ mod object_identity;
 mod organization_admin_link;
 mod organization_admin_lost_answer;
 mod organization_admin_origin;
+mod organization_fleet_clock;
 mod organization_provisioning_expiry;
 mod organization_provisioning_link;
 mod organization_provisioning_races;

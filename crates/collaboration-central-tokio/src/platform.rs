@@ -80,6 +80,8 @@ impl TokioCentralPlatform {
         holder_answer_timeout: Duration,
         copy_ack_wait: Duration,
     ) -> Result<Self, TokioPlatformError> {
+        #[cfg(feature = "conformance")]
+        let fleet_clock = clock.clone();
         Self::new_configured(
             key_source,
             clock,
@@ -92,6 +94,8 @@ impl TokioCentralPlatform {
             copy_ack_wait,
             #[cfg(feature = "conformance")]
             Vec::new(),
+            #[cfg(feature = "conformance")]
+            fleet_clock,
         )
         .await
     }
@@ -112,6 +116,7 @@ impl TokioCentralPlatform {
         holder_answer_timeout: Duration,
         copy_ack_wait: Duration,
         controls: Vec<collaboration_central_conformance::RuntimeControlRequest>,
+        fleet_clock: Arc<dyn Clock>,
     ) -> Result<Self, TokioPlatformError> {
         Self::new_configured(
             key_source,
@@ -124,6 +129,7 @@ impl TokioCentralPlatform {
             holder_answer_timeout,
             copy_ack_wait,
             controls,
+            fleet_clock,
         )
         .await
     }
@@ -145,6 +151,7 @@ impl TokioCentralPlatform {
         #[cfg(feature = "conformance")] controls: Vec<
             collaboration_central_conformance::RuntimeControlRequest,
         >,
+        #[cfg(feature = "conformance")] fleet_clock: Arc<dyn Clock>,
     ) -> Result<Self, TokioPlatformError> {
         let key_source =
             reqwest::Url::parse(key_source).map_err(|_| TokioPlatformError::InvalidKeySource)?;
@@ -173,7 +180,7 @@ impl TokioCentralPlatform {
         #[cfg(feature = "conformance")]
         let objects = crate::native_objects::NativeObjects::open_with_controls(
             root,
-            clock.clone(),
+            fleet_clock,
             ids.clone(),
             collaboration_central_core::FleetLocationPolicy::new(legacy_organization.clone()),
             registry,
@@ -219,6 +226,12 @@ impl TokioCentralPlatform {
     ) -> Result<collaboration_central_core::ForwardStateObservation, durable_steps::StoreError>
     {
         self.objects.forward_state(service).await
+    }
+
+    /// Conformance only: wake every live Fleet after its injected clock moved.
+    #[cfg(feature = "conformance")]
+    pub async fn conformance_wake_fleets(&self) -> Result<usize, durable_steps::StoreError> {
+        self.objects.wake_fleets().await
     }
 
     /// Read-only observation of everything B2 keeps for one organization.

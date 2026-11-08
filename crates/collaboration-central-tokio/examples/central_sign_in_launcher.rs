@@ -4,28 +4,33 @@
 //! Settings come from flags, or from `CENTRAL_LAUNCHER_<FLAG>` environment
 //! variables (upper case, `-` as `_`): `--root`, `--socket`, `--issuer`,
 //! `--audience`, `--admin-audience`, `--public-origin`, `--jwks-url`,
-//! `--service-id`, `--legacy-organization`, `--fixed-time-ms`, and
-//! `--organization` (repeatable; the legacy organization is always pinned).
+//! `--service-id`, `--legacy-organization` and `--fixed-time-ms`.
+//!
+//! Every Fleet object reads one launcher clock, starting at `--fixed-time-ms`:
+//! the legacy organization and any organization first created later by a
+//! provisioning. Access keeps the system clock.
 //!
 //! stdout carries exactly one line, at readiness:
 //! `{"baseUrl":…,"socket":…}`. Everything else goes to stderr.
 //!
 //! stdin takes one JSON command per line; each is answered by one JSON line on
 //! stderr carrying `"answer"`:
-//! - `{"setTimeMs":N,"organizations":["<org>",…]}` moves each organization's
-//!   Fleet clock through central's own conformance runtime route;
+//! - `{"setTimeMs":N}` moves the launcher clock for every Fleet and wakes
+//!   each live one;
 //! - `{"observe":"<org>"}` reads the owner-only, read-only organization
 //!   observer.
 //!
 //! Access is the conformance fixture, started in this process, so the caller
 //! never mints an assertion. SIGTERM or SIGINT shuts down and removes the
 //! socket.
+#[path = "../tests/support/fleet_clock.rs"]
+mod fleet_clock;
 use collaboration_central_conformance::{
-    ConformanceResult, JwksFixtureServer, RuntimeControl, RuntimeControlRequest, fixture_policy,
-    owner_assertion,
+    ConformanceResult, JwksFixtureServer, fixture_policy, owner_assertion,
 };
-use collaboration_central_core::{ORGANIZATION_RECORDS_PATH, ObjectAddress, RegistryTime};
+use collaboration_central_core::ORGANIZATION_RECORDS_PATH;
 use collaboration_central_tokio::{DeliveryConfig, SignInLinkSettings, TokioServer, TokioSettings};
+use fleet_clock::FleetClock;
 use fleet_identity_protocol::OrganizationId;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -46,13 +51,11 @@ const SINGLE: [&str; 10] = [
 
 struct LauncherArguments {
     single: BTreeMap<&'static str, String>,
-    organizations: Vec<String>,
 }
 
 impl LauncherArguments {
     fn parse() -> ConformanceResult<Self> {
         let mut single = BTreeMap::new();
-        let mut organizations = Vec::new();
         let mut arguments = std::env::args().skip(1);
         while let Some(flag) = arguments.next() {
             let name = flag
@@ -61,16 +64,12 @@ impl LauncherArguments {
             let value = arguments
                 .next()
                 .ok_or_else(|| format!("--{name} needs a value"))?;
-            if name == "organization" {
-                organizations.push(value);
-            } else {
-                let known = SINGLE
-                    .iter()
-                    .find(|known| **known == name)
-                    .ok_or_else(|| format!("unknown flag --{name}"))?;
-                if single.insert(*known, value).is_some() {
-                    return Err(format!("--{name} given twice").into());
-                }
+            let known = SINGLE
+                .iter()
+                .find(|known| **known == name)
+                .ok_or_else(|| format!("unknown flag --{name}"))?;
+            if single.insert(*known, value).is_some() {
+                return Err(format!("--{name} given twice").into());
             }
         }
         for name in SINGLE {
@@ -82,15 +81,7 @@ impl LauncherArguments {
                 }
             }
         }
-        if organizations.is_empty()
-            && let Ok(value) = std::env::var("CENTRAL_LAUNCHER_ORGANIZATIONS")
-        {
-            organizations = value.split(',').map(str::to_owned).collect();
-        }
-        Ok(Self {
-            single,
-            organizations,
-        })
+        Ok(Self { single })
     }
 
     fn get(&self, name: &str) -> ConformanceResult<String> {
@@ -101,56 +92,49 @@ impl LauncherArguments {
     }
 }
 
-fn set_time(organization: OrganizationId, millis: i64) -> ConformanceResult<RuntimeControlRequest> {
-    Ok(RuntimeControlRequest {
-        address: ObjectAddress::Fleet { organization },
-        command: RuntimeControl::SetTime {
-            now: RegistryTime(
-                chrono::DateTime::from_timestamp_millis(millis).ok_or("time out of range")?,
-            ),
-        },
-    })
-}
-
 #[derive(Deserialize)]
 #[serde(untagged, deny_unknown_fields)]
 enum LauncherCommand {
     #[serde(rename_all = "camelCase")]
     SetTime {
         set_time_ms: i64,
-        organizations: Vec<OrganizationId>,
     },
     Observe {
         observe: OrganizationId,
     },
 }
 
-/// Answer one stdin command through central's own owner-only routes.
-async fn answer(client: &reqwest::Client, base_url: &str, line: &str) -> Value {
+/// What a stdin command acts on: the launcher clock and central's own routes.
+struct Launched<'server> {
+    server: &'server TokioServer,
+    clock: FleetClock,
+    client: reqwest::Client,
+}
+
+/// Answer one stdin command.
+async fn answer(launched: &Launched<'_>, line: &str) -> Value {
     let command: LauncherCommand = match serde_json::from_str(line) {
         Ok(command) => command,
         Err(error) => return json!({"answer":"refused","error":error.to_string()}),
     };
     let result: ConformanceResult<Value> = async {
         match command {
-            LauncherCommand::SetTime {
-                set_time_ms,
-                organizations,
-            } => {
-                for organization in &organizations {
-                    client
-                        .post(format!("{base_url}/admin/v1/conformance/runtime"))
-                        .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
-                        .json(&set_time(organization.clone(), set_time_ms)?)
-                        .send()
-                        .await?
-                        .error_for_status()?;
-                }
-                Ok(json!({"answer":"timeSet","setTimeMs":set_time_ms,"organizations":organizations}))
+            LauncherCommand::SetTime { set_time_ms } => {
+                launched.clock.set(set_time_ms);
+                let woken = launched
+                    .server
+                    .conformance_platform()
+                    .conformance_wake_fleets()
+                    .await?;
+                Ok(json!({"answer":"timeSet","setTimeMs":set_time_ms,"liveFleets":woken}))
             }
             LauncherCommand::Observe { observe } => {
-                let response = client
-                    .post(format!("{base_url}{ORGANIZATION_RECORDS_PATH}"))
+                let response = launched
+                    .client
+                    .post(format!(
+                        "{}{ORGANIZATION_RECORDS_PATH}",
+                        launched.server.base_url()
+                    ))
                     .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
                     .json(&json!({"organization":observe}))
                     .send()
@@ -170,16 +154,10 @@ async fn main() -> ConformanceResult<()> {
     let arguments = LauncherArguments::parse()?;
     let legacy: OrganizationId = arguments.get("legacy-organization")?.try_into()?;
     let fixed_time: i64 = arguments.get("fixed-time-ms")?.parse()?;
-    let mut pinned: Vec<OrganizationId> = vec![legacy.clone()];
-    for organization in &arguments.organizations {
-        let organization: OrganizationId = organization.clone().try_into()?;
-        if !pinned.contains(&organization) {
-            pinned.push(organization);
-        }
-    }
+    let clock = FleetClock::at(fixed_time);
     let access = JwksFixtureServer::start().await?;
     let socket = PathBuf::from(arguments.get("socket")?);
-    let server = TokioServer::start_with_sign_in_and_controls(
+    let server = TokioServer::start_with_sign_in_controls_and_fleet_clock(
         TokioSettings {
             legacy_organization: legacy,
             root: arguments.get("root")?.into(),
@@ -213,20 +191,18 @@ async fn main() -> ConformanceResult<()> {
             socket: socket.clone(),
             service_id: arguments.get("service-id")?.try_into()?,
         },
-        pinned
-            .iter()
-            .map(|organization| set_time(organization.clone(), fixed_time))
-            .collect::<ConformanceResult<_>>()?,
+        Vec::new(),
+        clock.shared(),
     )
     .await?;
-    let base_url = server.base_url().to_owned();
-    println!("{}", json!({"baseUrl":base_url,"socket":socket}));
-    eprintln!(
-        "central launcher ready; pinned {} organizations",
-        pinned.len()
-    );
+    println!("{}", json!({"baseUrl":server.base_url(),"socket":socket}));
+    eprintln!("central launcher ready; every Fleet reads the launcher clock at {fixed_time}");
+    let launched = Launched {
+        server: &server,
+        clock,
+        client: reqwest::Client::builder().no_proxy().build()?,
+    };
 
-    let client = reqwest::Client::builder().no_proxy().build()?;
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     // Std stdin on its own thread: the workspace tokio has no `io-std`.
     let (line_sender, mut lines) = tokio::sync::mpsc::unbounded_channel::<String>();
@@ -245,12 +221,13 @@ async fn main() -> ConformanceResult<()> {
             _ = tokio::signal::ctrl_c() => break,
             line = lines.recv(), if stdin_open => match line {
                 Some(line) if line.trim().is_empty() => {}
-                Some(line) => eprintln!("{}", answer(&client, &base_url, &line).await),
+                Some(line) => eprintln!("{}", answer(&launched, &line).await),
                 // A closed stdin ends commands, not the server.
                 None => stdin_open = false,
             },
         }
     }
+    drop(launched);
     server.shutdown().await?;
     eprintln!("central launcher stopped; socket removed");
     Ok(())

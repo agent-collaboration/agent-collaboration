@@ -117,9 +117,10 @@ impl TokioServer {
         settings: TokioSettings,
         controls: Vec<collaboration_central_conformance::RuntimeControlRequest>,
     ) -> Result<Self, TokioServerError> {
+        let clock: Arc<dyn runtime_primitives::Clock> = Arc::new(SystemClock);
         let platform = TokioCentralPlatform::new_with_controls(
             &settings.jwks_url,
-            Arc::new(SystemClock),
+            clock.clone(),
             crate::native_logging::observe,
             &settings.root,
             settings.legacy_organization.clone(),
@@ -128,6 +129,7 @@ impl TokioServer {
             settings.holder_answer_timeout,
             settings.copy_ack_wait,
             controls,
+            clock,
         )
         .await?;
         Self::serve_platform(
@@ -146,6 +148,26 @@ impl TokioServer {
         sign_in: crate::SignInLinkSettings,
         controls: Vec<collaboration_central_conformance::RuntimeControlRequest>,
     ) -> Result<Self, TokioServerError> {
+        Self::start_with_sign_in_controls_and_fleet_clock(
+            settings,
+            sign_in,
+            controls,
+            Arc::new(SystemClock),
+        )
+        .await
+    }
+
+    /// Conformance only: every Fleet object, including one first created by a
+    /// later provisioning, reads `fleet_clock`; Access keeps the system clock.
+    /// After moving the clock, call `conformance_wake_fleets` so live Fleets
+    /// re-evaluate their due work at the new time.
+    #[cfg(feature = "conformance")]
+    pub async fn start_with_sign_in_controls_and_fleet_clock(
+        settings: TokioSettings,
+        sign_in: crate::SignInLinkSettings,
+        controls: Vec<collaboration_central_conformance::RuntimeControlRequest>,
+        fleet_clock: Arc<dyn runtime_primitives::Clock>,
+    ) -> Result<Self, TokioServerError> {
         let platform = TokioCentralPlatform::new_with_controls(
             &settings.jwks_url,
             Arc::new(SystemClock),
@@ -157,6 +179,7 @@ impl TokioServer {
             settings.holder_answer_timeout,
             settings.copy_ack_wait,
             controls,
+            fleet_clock,
         )
         .await?;
         Self::serve_platform(

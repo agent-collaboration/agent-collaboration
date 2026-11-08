@@ -35,7 +35,7 @@ pub(crate) const CREATE: &str = "/organization-admin/v1/create-workspace";
 const LOOKUP: &str = "/organization-admin/v1/workspace-lookup";
 const RECORDS: &str = "/organization-admin/v1/change-records";
 
-fn settings(root: &Path, jwks: &str) -> ConformanceResult<TokioSettings> {
+pub(crate) fn settings(root: &Path, jwks: &str) -> ConformanceResult<TokioSettings> {
     Ok(TokioSettings {
         legacy_organization: collaboration_central_conformance::legacy_organization(),
         root: root.into(),
