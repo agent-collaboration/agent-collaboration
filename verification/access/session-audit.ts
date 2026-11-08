@@ -38,6 +38,10 @@ export interface SessionSnapshot {
   readonly invalidConnections: number;
 }
 export class SessionAudit {
+  private readonly observeFrame: ((value: unknown) => void) | undefined;
+  constructor(observeFrame?: (value: unknown) => void) {
+    this.observeFrame = observeFrame;
+  }
   private connections = 0;
   private welcomes = 0;
   private invalidConnections = 0;
@@ -131,6 +135,7 @@ export class SessionAudit {
   }
   private observe(value: unknown, state: FrameBuffer): void {
     const message = frameSchema.parse(value);
+    this.observeFrame?.(value);
     this.frames[message.kind] = (this.frames[message.kind] ?? 0) + 1;
     if (message.kind === "welcome") {
       this.welcomes += 1;

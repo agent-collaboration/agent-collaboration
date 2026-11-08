@@ -5,16 +5,20 @@ import { SessionAudit, type SessionSnapshot } from "./session-audit.ts";
 
 export class SessionGate {
   readonly origin: string;
-  readonly audit = new SessionAudit();
+  readonly audit: SessionAudit;
   private readonly server: Server;
   private readonly sockets = new Set<Socket>();
   private paused = false;
   private stopped = false;
-  private constructor(origin: string, server: Server) {
+  private constructor(origin: string, server: Server, observeFrame?: (value: unknown) => void) {
     this.origin = origin;
     this.server = server;
+    this.audit = new SessionAudit(observeFrame);
   }
-  static async start(endpoint: string): Promise<SessionGate> {
+  static async start(
+    endpoint: string,
+    observeFrame?: (value: unknown) => void,
+  ): Promise<SessionGate> {
     const upstream = new URL(endpoint);
     if (
       !["http:", "https:", "ws:", "wss:"].includes(upstream.protocol) ||
@@ -40,7 +44,7 @@ export class SessionGate {
       server.close();
       throw new Error("invalid gate bind");
     }
-    const gate = new SessionGate(`http://127.0.0.1:${address.port}`, server);
+    const gate = new SessionGate(`http://127.0.0.1:${address.port}`, server, observeFrame);
     server.on("connection", (socket): void => {
       gate.accept(socket, upstream);
     });
