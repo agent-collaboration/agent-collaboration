@@ -12,12 +12,13 @@ use message_board_storage::{
     RouterLocalStorageError,
 };
 use serde::{Deserialize, Serialize};
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 #[path = "fleet_client/cache_refresh.rs"]
 mod cache_refresh;
+mod outbox_retention;
 mod synchronization;
 use synchronization::SynchronizationRequests;
 
@@ -149,36 +150,15 @@ impl FleetClient {
     }
 
     /// Keeps terminal fleet request replay history within the owner's retention window.
+    /// It sleeps until the Fleet database commits or the oldest settled request becomes
+    /// deletable; the first pass drains whatever is already due.
     pub async fn run_outbox_retention(
         &self,
         clock: Arc<dyn runtime_primitives::Clock>,
         shutdown: CancellationToken,
     ) {
-        let mut interval = tokio::time::interval(Duration::from_secs(60 * 60));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        loop {
-            tokio::select! {
-                biased;
-                () = shutdown.cancelled() => return,
-                _ = interval.tick() => {},
-            }
-            let now_ms = clock.now().unix_millis();
-            loop {
-                let result = tokio::select! {
-                    biased;
-                    () = shutdown.cancelled() => return,
-                    result = self.prune_outbox_batch(now_ms, 500) => result,
-                };
-                match result {
-                    Ok(0) => break,
-                    Ok(_) => tokio::task::yield_now().await,
-                    Err(error) => {
-                        tracing::warn!(error = %error, "fleet outbox retention failed; the next maintenance pass will retry");
-                        break;
-                    }
-                }
-            }
-        }
+        let (worker_loop, mut pass) = outbox_retention::outbox_retention_loop(&self.outbox, clock);
+        worker_loop.run(&mut pass, shutdown).await;
     }
 
     pub async fn recover_project_registrations(&self) -> Result<(), FleetClientError> {

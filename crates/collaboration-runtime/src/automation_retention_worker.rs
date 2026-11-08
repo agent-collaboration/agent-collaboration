@@ -3,9 +3,10 @@
 //! The worker sleeps until a store commits or the first moment a retention rule allows a
 //! row to go. Each pass reads every class's next due time, deletes only the classes that
 //! are due, and arms one timer at the earliest due time or failed-class retry.
-use crate::{BatchOutcome, FailedPassBackoff, WakeDrivenWorkerLoop, WorkerObservation, WorkerPass};
+use crate::{BatchOutcome, WakeDrivenWorkerLoop, WorkerObservation, WorkerPass};
 use automation_storage::{AutomationRetentionClass, AutomationStore};
 use runtime_primitives::SyncTime;
+use sqlite_storage_maintenance::FailedPassBackoff;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;

@@ -1,4 +1,4 @@
-//! The retry every converted worker and subscription retry uses after a failed attempt:
+//! The retry every store worker and subscription retry uses after a failed attempt:
 //! 1 s doubling to 30 s, with only the failure that starts a run logged.
 use runtime_primitives::Backoff;
 use std::time::Duration;

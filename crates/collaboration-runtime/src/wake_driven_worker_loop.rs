@@ -6,10 +6,10 @@
 //! and sleeps on the sources plus one timer at that time; with no due time it holds no
 //! timer. A pass whose read or unit fails retries from 1 s, doubling to 30 s, logs once
 //! per run of failures, and the next pass that succeeds clears the retry.
-use crate::FailedPassBackoff;
 use crate::wake_driven_worker_observation::WorkerObservation;
 use futures_util::future::select_all;
 use runtime_primitives::{Clock, SyncTime};
+use sqlite_storage_maintenance::FailedPassBackoff;
 use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;

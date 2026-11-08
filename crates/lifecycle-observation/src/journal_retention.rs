@@ -1,6 +1,6 @@
 //! Checkpoint-before-prefix expiry, atomically preserving remembered addresses.
 use crate::{JournalError, JournalPosition, ObservationJournal};
-use chrono::{DateTime, Months, Utc};
+use chrono::{DateTime, Utc};
 use collaboration_protocol::{
     AddressEntry, LifecycleObservation, LifecycleSubject, ObservationTimestamp,
 };
@@ -50,12 +50,89 @@ pub(crate) fn decode_checkpoint_address(
 
 fn retention_cutoff_millis(now_seconds: i64, months: u32) -> Result<i64, JournalError> {
     let now = DateTime::<Utc>::from_timestamp(now_seconds, 0).ok_or(JournalError::InvalidRecord)?;
-    now.checked_sub_months(Months::new(months))
+    sqlite_storage_maintenance::months_before(now, months)
         .map(|cutoff| cutoff.timestamp_millis())
         .ok_or(JournalError::InvalidRecord)
 }
 
+/// The first wall-clock millisecond at or after `now_ms` when expiry removes a row stamped
+/// `stamped_ms`, or `None` when the arithmetic overflows.
+///
+/// Expiry runs on whole seconds, never earlier than the stored retention clock: at wall
+/// time `t` it uses `max(retention_clock, floor(t / 1 s))`, and a row goes once that
+/// moment's cutoff is strictly after its stamp. A whole-second cutoff is strictly after
+/// the stamp exactly when it is strictly after the last millisecond of the stamp's second,
+/// so the calendar rule is asked about that millisecond; every moment it can then answer
+/// besides `not_before` itself is a whole second.
+fn first_expiry_ms(stamped_ms: i64, retention_clock: i64, now_ms: i64) -> Option<i64> {
+    let at_second = |seconds: i64| DateTime::<Utc>::from_timestamp(seconds, 0);
+    let last_millisecond_of_stamp =
+        DateTime::<Utc>::from_timestamp_millis(stamped_ms.div_euclid(1_000) * 1_000 + 999)?;
+    let clock_now = retention_clock.max(now_ms.div_euclid(1_000));
+    let due_now =
+        sqlite_storage_maintenance::months_before(at_second(clock_now)?, RETENTION_MONTHS)
+            .is_some_and(|cutoff| cutoff > last_millisecond_of_stamp);
+    if due_now {
+        return Some(now_ms);
+    }
+    // Until the wall clock passes the stored clock's second, expiry uses that clock, which
+    // was just found not due.
+    let not_before = now_ms.max(retention_clock.checked_add(1)?.checked_mul(1_000)?);
+    sqlite_storage_maintenance::first_deletable_at(
+        last_millisecond_of_stamp,
+        RETENTION_MONTHS,
+        DateTime::<Utc>::from_timestamp_millis(not_before)?,
+    )
+    .map(|due| due.timestamp_millis())
+}
+
+/// Lifecycle records and checkpointed addresses keep the same window.
+const RETENTION_MONTHS: u32 = {
+    assert!(LIFECYCLE_RECORD_RETENTION_MONTHS == CHECKPOINT_ADDRESS_RETENTION_MONTHS);
+    LIFECYCLE_RECORD_RETENTION_MONTHS
+};
+
 impl ObservationJournal {
+    /// The first moment at or after `now_ms` when [`Self::expire_history`] would remove a
+    /// lifecycle record or a checkpointed address the journal holds now, or `None` when it
+    /// holds neither.
+    ///
+    /// Expiry removes the record prefix through the last record stamped before the cutoff,
+    /// so it removes something as soon as the oldest stamp is before it. Append stamps each
+    /// record with the retention clock, which never goes backwards, so the first record by
+    /// sequence holds the oldest stamp and is read through the primary key.
+    pub(crate) async fn retention_due_ms(
+        &mut self,
+        now_ms: i64,
+    ) -> Result<Option<i64>, JournalError> {
+        if now_ms < 0 {
+            return Err(JournalError::InvalidRecord);
+        }
+        let (retention_clock, oldest_record_seconds, oldest_address_ms): (
+            i64,
+            Option<i64>,
+            Option<i64>,
+        ) = sqlx::query_as(
+            "SELECT (SELECT retention_clock FROM journal_metadata WHERE singleton=1),(SELECT retention_at FROM lifecycle_records ORDER BY sequence LIMIT 1),(SELECT MIN(last_seen_ms) FROM checkpoint_addresses)",
+        )
+        .fetch_one(&mut self.connection)
+        .await?;
+        let record_due = oldest_record_seconds
+            .map(|seconds| {
+                seconds
+                    .checked_mul(1_000)
+                    .and_then(|stamped_ms| first_expiry_ms(stamped_ms, retention_clock, now_ms))
+                    .ok_or(JournalError::InvalidStorage)
+            })
+            .transpose()?;
+        let address_due = oldest_address_ms
+            .map(|stamped_ms| {
+                first_expiry_ms(stamped_ms, retention_clock, now_ms)
+                    .ok_or(JournalError::InvalidStorage)
+            })
+            .transpose()?;
+        Ok(record_due.into_iter().chain(address_due).min())
+    }
     /// Applies rolling two-calendar-month expiry while retaining the address checkpoint.
     /// Returns the checkpoint sequence, including when no additional records expire.
     pub async fn expire_history(&mut self, now: i64) -> Result<u64, JournalError> {
