@@ -230,7 +230,7 @@ impl UpdateLedger {
         let rows = read_legacy_rows(source, path).await?;
         let _writer = self.database.writer.lock().await;
         let mut connection = self.database.pool.acquire().await?;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction_on(&mut connection).await?;
         let carried = async {
             carry_legacy_rows(&mut transaction, &rows).await?;
             write_ledger_row(
@@ -271,7 +271,7 @@ impl UpdateLedger {
     ) -> Result<(), RouterLocalStorageError> {
         let _writer = self.database.writer.lock().await;
         let mut connection = self.database.pool.acquire().await?;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction_on(&mut connection).await?;
         write_ledger_row(&mut transaction, step.number(), source, progress.as_str()).await?;
         transaction.commit().await?;
         Ok(())
@@ -284,7 +284,7 @@ impl UpdateLedger {
     ) -> Result<(), RouterLocalStorageError> {
         let _writer = self.database.writer.lock().await;
         let mut connection = self.database.pool.acquire().await?;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction_on(&mut connection).await?;
         write_ledger_row(
             &mut transaction,
             RouterUpdateStep::MergeFleetStores.number(),
@@ -327,7 +327,7 @@ async fn record_steps(
 ) -> Result<(), RouterLocalStorageError> {
     let _writer = database.writer.lock().await;
     let mut connection = database.pool.acquire().await?;
-    let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+    let mut transaction = database.write_transaction_on(&mut connection).await?;
     for step in steps {
         write_ledger_row(&mut transaction, *step, "", progress.as_str()).await?;
     }
@@ -424,7 +424,7 @@ mod tests;
 
 /// Writes one ledger row (a step's when `source` is empty) inside the caller's transaction.
 async fn write_ledger_row(
-    transaction: &mut sqlx::Transaction<'_, Turso>,
+    transaction: &mut crate::router_local_database::LocalTransaction<'_>,
     step: UpdateStepNumber,
     source: &str,
     state: &str,

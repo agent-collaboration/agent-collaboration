@@ -18,6 +18,7 @@ impl ScheduleTimingWorker {
         backend: Option<crate::NativeControlBackend>,
         configuration: crate::AutomationConfigurationHandle,
         machine_identity: collaboration_contracts::MachineIdentity,
+        clock: Arc<dyn runtime_primitives::Clock>,
     ) -> Self {
         Self {
             store: Arc::clone(&store),
@@ -28,6 +29,7 @@ impl ScheduleTimingWorker {
                 backend,
                 configuration,
                 machine_identity,
+                clock,
             },
         }
     }
@@ -106,7 +108,7 @@ impl ScheduleTimingWorker {
         }
     }
     async fn tick(&self, waiting_cursor: &mut Option<ScheduleId>) -> Result<(), StorageError> {
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = self.runner.clock.now().unix_millis();
         let due = self.store.lock().await.due_schedule_ids(now).await?;
         for id in due {
             self.store

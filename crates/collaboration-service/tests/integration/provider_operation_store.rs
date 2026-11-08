@@ -807,3 +807,40 @@ async fn codex_create_recorder_preserves_target_and_uncertain_dispatch() -> Test
     );
     Ok(())
 }
+
+fn commit_bumped(commits: &mut tokio::sync::watch::Receiver<u64>) -> bool {
+    let changed = commits.has_changed().unwrap_or(false);
+    commits.borrow_and_update();
+    changed
+}
+
+/// Q2 at the provider operation store: the former one-statement admission and
+/// transitions signal; a replayed admission, reads and an empty prune don't.
+#[tokio::test]
+async fn provider_writes_signal_their_commit_and_reads_do_not() -> TestResult {
+    let database = TestDatabase::new("commit-signal")?;
+    let mut store = ProviderOperationStore::open(&database.path).await?;
+    let mut commits = store.subscribe_commits();
+    let id = "018f1f62-6571-7ef0-8f0c-0011223344a1";
+
+    store.admit(admission(id, 1_000)?).await?;
+    let admit_bumped = commit_bumped(&mut commits);
+    store.admit(admission(id, 1_000)?).await?;
+    let replay_bumped = commit_bumped(&mut commits);
+    store.inspect(&operation_id(id)?).await?;
+    let pruned = store
+        .prune_terminal_before(i64::MAX, &HashSet::new())
+        .await?;
+    let reads_bumped = commit_bumped(&mut commits);
+    store
+        .mark_may_have_dispatched(&operation_id(id)?, 2_000)
+        .await?;
+    let transition_bumped = commit_bumped(&mut commits);
+
+    ensure_eq!(admit_bumped, true);
+    ensure_eq!(replay_bumped, false);
+    ensure_eq!(pruned, 0);
+    ensure_eq!(reads_bumped, false);
+    ensure_eq!(transition_bumped, true);
+    Ok(())
+}

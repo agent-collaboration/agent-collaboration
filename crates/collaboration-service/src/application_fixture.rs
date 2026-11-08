@@ -164,8 +164,12 @@ impl ApplicationFixture {
         &self,
     ) -> Option<collaboration_runtime::AutomationRetentionWorker> {
         self.automation.as_ref().map(|store| {
-            let worker =
-                collaboration_runtime::AutomationRetentionWorker::new(std::sync::Arc::clone(store));
+            let worker = collaboration_runtime::AutomationRetentionWorker::new(
+                std::sync::Arc::clone(store),
+                std::sync::Arc::new(crate::subscription_delivery::SubscriptionRuntimeClock(
+                    self.subscription_clock.clone(),
+                )),
+            );
             let worker = match self.interaction_store.as_ref() {
                 Some(store) => worker.with_native_push_store(std::sync::Arc::clone(store)),
                 None => worker,
@@ -199,6 +203,9 @@ impl ApplicationFixture {
                     self.native_backend.clone(),
                     self.configuration.clone(),
                     self.machine_identity.clone(),
+                    std::sync::Arc::new(crate::subscription_delivery::SubscriptionRuntimeClock(
+                        self.subscription_clock.clone(),
+                    )),
                 )
             })
     }

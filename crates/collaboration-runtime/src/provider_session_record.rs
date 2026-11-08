@@ -1,4 +1,5 @@
 //! Durable provider session metadata needed for load-on-demand and approvals.
+use crate::provider_operation_store::OneStatementWrite;
 use crate::{ProviderOperationStore, ProviderOperationStoreError};
 use collaboration_protocol::{
     ConversationBindingIdentity, EndpointRef, OperationId, ProviderIdentity,
@@ -6,7 +7,6 @@ use collaboration_protocol::{
     ProviderReconciliationState, ProviderRequestedPolicy, ProviderWorkingDirectory, SessionId,
     SessionRef,
 };
-use sqlx::Connection;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProviderSessionRecord {
@@ -64,7 +64,9 @@ impl ProviderOperationStore {
             .map_err(|_| ProviderOperationStoreError::InvalidRecord)?;
         let approver_json = serde_json::to_string(&record.approver)
             .map_err(|_| ProviderOperationStoreError::InvalidRecord)?;
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(sqlite_storage_maintenance::TransactionStart::Immediate)
+            .await?;
         let updated = sqlx::query!(
             "UPDATE provider_operations SET
                 target_service_id=?,target_endpoint_id=?,target_session_id=?,
@@ -161,7 +163,7 @@ impl ProviderOperationStore {
             approver_json,
             record.updated_at_ms,
         )
-        .execute(&mut self.connection)
+        .execute_as_transaction(self)
         .await?;
         Ok(())
     }

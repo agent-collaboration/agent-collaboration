@@ -408,6 +408,9 @@ impl CollaborationRuntime {
                 std::sync::Arc::downgrade(publisher),
             );
         }
+        // The one wall clock every Host worker compares due times against.
+        let worker_clock: std::sync::Arc<dyn runtime_primitives::Clock> =
+            std::sync::Arc::new(runtime_primitives::SystemClock);
         let wake_worker = automation_store.as_ref().map(|store| {
             collaboration_runtime::WakeTimingWorker::new(
                 store.clone(),
@@ -415,7 +418,7 @@ impl CollaborationRuntime {
                 configuration.clone(),
                 machine_identity.clone(),
                 interactions.clone(),
-                std::sync::Arc::new(runtime_primitives::SystemClock),
+                std::sync::Arc::clone(&worker_clock),
             )
         });
         let push_handoff_worker = automation_store.as_ref().map(|store| {
@@ -429,12 +432,16 @@ impl CollaborationRuntime {
                 Some(native_backend.clone()),
                 configuration.clone(),
                 machine_identity.clone(),
+                std::sync::Arc::clone(&worker_clock),
             )
         });
         let retention_worker = automation_store.as_ref().map(|store| {
-            collaboration_runtime::AutomationRetentionWorker::new(store.clone())
-                .with_native_push_store(interactions.clone())
-                .with_interaction_broker(approval_broker.clone())
+            collaboration_runtime::AutomationRetentionWorker::new(
+                store.clone(),
+                std::sync::Arc::clone(&worker_clock),
+            )
+            .with_native_push_store(interactions.clone())
+            .with_interaction_broker(approval_broker.clone())
         });
         let codex_recorder = crate::codex_conversation_recording_composition::recording_for_store(
             provider_store.as_ref(),
@@ -740,7 +747,8 @@ impl CollaborationRuntime {
             .and_then(board_composition::BoardComposition::fleet_client)
             .map(|fleet| {
                 let shutdown = shutdown.clone();
-                tokio::spawn(async move { fleet.run_outbox_retention(shutdown).await })
+                let clock = std::sync::Arc::clone(&worker_clock);
+                tokio::spawn(async move { fleet.run_outbox_retention(clock, shutdown).await })
             });
         let collaboration_api =
             collaboration_api.serve(&collaboration_mcp::CollaborationApiConfig {
@@ -801,7 +809,12 @@ impl CollaborationRuntime {
         let maintenance = journal.as_ref().map(|journal| {
             let maintenance_store = std::sync::Arc::clone(journal);
             let maintenance_stop = shutdown.clone();
-            tokio::spawn(async move { maintenance_store.run_maintenance(maintenance_stop).await })
+            let clock = std::sync::Arc::clone(&worker_clock);
+            tokio::spawn(async move {
+                maintenance_store
+                    .run_maintenance(clock, maintenance_stop)
+                    .await
+            })
         });
         let mut runtime = Self {
             #[cfg(test)]

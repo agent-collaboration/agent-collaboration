@@ -8,6 +8,7 @@ mod automation_event_history;
 mod automation_event_retention;
 mod automation_extended_retention;
 mod automation_retention;
+mod commit_signal;
 mod delivery_claim_concurrency;
 mod delivery_outcome_rules;
 mod delivery_partial_uncertainty;

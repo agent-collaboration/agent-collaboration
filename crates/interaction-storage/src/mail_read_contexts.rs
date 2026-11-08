@@ -3,8 +3,7 @@ use crate::{InteractionStore, StorageError, push_record_rows};
 use chrono::{DateTime, Utc};
 use collaboration_protocol::{MailItemId, MailReadContext, PushOrigin, SessionRef};
 use durable_steps::{Host, storage::TransactionScope, turso_store::TursoScope};
-use sqlx::Transaction;
-use sqlx_turso::{Turso, TursoConnection};
+use sqlx_turso::TursoConnection;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StoredMailReadContext {
@@ -76,7 +75,7 @@ async fn read_context(
 }
 
 pub(crate) async fn prune_old_mail_read_contexts(
-    transaction: &mut Transaction<'_, Turso>,
+    transaction: &mut sqlite_storage_maintenance::SignaledTransaction<'_, sqlx_turso::Turso>,
     cutoff: &str,
     batch_size: i64,
 ) -> Result<u64, StorageError> {

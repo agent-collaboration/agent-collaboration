@@ -1,7 +1,7 @@
 //! Closed collection selection provides bounded stable keys without accepting SQL from callers.
 use crate::{AutomationStore, StorageError};
 use agent_automation::{InstructionId, ScheduleId, WakeupId};
-use sqlx::{Connection, Row, SqliteConnection};
+use sqlx::{Row, SqliteConnection};
 
 pub enum AutomationCollection {
     Instructions,
@@ -53,7 +53,9 @@ impl AutomationStore {
         if let Some(position) = &position {
             position.validate_for(collection)?;
         }
-        let mut transaction = self.connection.begin().await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Deferred)
+            .await?;
         validate_parent(&mut transaction, collection).await?;
         let (base, filter) = match collection {
             AutomationCollection::Instructions => (

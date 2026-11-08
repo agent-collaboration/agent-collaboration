@@ -1,15 +1,14 @@
 //! Host-owned provider operation retention and its shutdown-bound maintenance task.
-use super::{CollaborationRuntime, io, unix_seconds};
+use super::{CollaborationRuntime, io};
 use collaboration_runtime::provider_operation_retention_cutoff_ms;
 
 impl CollaborationRuntime {
     pub async fn configure_provider_operation_retention(
         &mut self,
         retention_days: Option<std::num::NonZeroU32>,
+        clock: std::sync::Arc<dyn runtime_primitives::Clock>,
     ) -> io::Result<u64> {
-        let now_ms = unix_seconds()?
-            .checked_mul(1_000)
-            .ok_or_else(|| io::Error::other("provider-retention clock exceeded range"))?;
+        let now_ms = clock.now().unix_millis();
         let cutoff_ms = provider_operation_retention_cutoff_ms(now_ms, retention_days)
             .map_err(io::Error::other)?;
         let protected = self
@@ -44,7 +43,7 @@ impl CollaborationRuntime {
                 tokio::select! {
                     () = shutdown.cancelled() => break,
                     _ = interval.tick() => {
-                        let now_ms = chrono::Utc::now().timestamp_millis();
+                        let now_ms = clock.now().unix_millis();
                         let Ok(cutoff_ms) = provider_operation_retention_cutoff_ms(now_ms, retention_days) else {
                             tracing::warn!("provider-operation retention clock is outside the supported range");
                             continue;

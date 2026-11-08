@@ -5,7 +5,7 @@ use agent_automation::{
     WakeupId,
 };
 use serde::{Serialize, de::DeserializeOwned};
-use sqlx::{Connection, Row};
+use sqlx::Row;
 
 pub struct DeliveryClaim<TTarget, TContent, TGeneration> {
     pub delivery_id: DeliveryId,
@@ -30,7 +30,9 @@ impl AutomationStore {
         if now_ms < 0 {
             return Err(StorageError::InvalidRecord);
         }
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         let row=sqlx::query("SELECT d.*,w.wakeup_status FROM mailbox_deliveries d JOIN wakeup_definitions w ON w.wakeup_id=d.wakeup_id WHERE d.delivery_id=?")
         .bind(id.as_str()).fetch_optional(&mut *transaction).await?.ok_or(StorageError::InvalidRecord)?;
         let status: DeliveryStatus =

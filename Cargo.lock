@@ -2145,6 +2145,7 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 
@@ -3972,6 +3973,7 @@ dependencies = [
  "serde",
  "serde_json",
  "session-event-model",
+ "sqlite-storage-maintenance",
  "sqlx",
  "sqlx-turso",
  "tempfile",
@@ -4263,6 +4265,7 @@ dependencies = [
  "codex-native-integration",
  "collaboration-protocol",
  "futures-util",
+ "runtime-primitives",
  "serde",
  "serde_json",
  "sqlite-storage-maintenance",
@@ -4436,6 +4439,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sqlite-storage-maintenance",
  "sqlx",
  "sqlx-turso",
  "tempfile",

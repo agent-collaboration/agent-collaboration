@@ -179,6 +179,7 @@ async fn recover_and_observe(root: &Path) -> TestResult<()> {
             source: None,
             record,
             timeout_seconds: 999,
+            clock: &runtime_primitives::SystemClock,
         })
         .await?;
         let observed = store

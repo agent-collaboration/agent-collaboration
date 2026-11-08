@@ -4,7 +4,6 @@ use agent_automation::{
     RouteEffectEvidence, RouteSettlementState, RunId, SummaryAttempt, SummarySourceReference,
 };
 use serde::{Serialize, de::DeserializeOwned};
-use sqlx::Connection;
 pub struct SummaryAdmission {
     pub run_id: RunId,
     pub timeout_seconds: u32,
@@ -20,7 +19,9 @@ impl AutomationStore {
         &mut self,
         request: &SummaryAdmission,
     ) -> Result<SummaryAttempt<TTarget, TGeneration>, StorageError> {
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         let record =
             crate::run_inspection::read_current::<TTarget, TEndpoint, TGeneration, TReceipt>(
                 &mut transaction,

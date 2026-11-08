@@ -28,14 +28,21 @@ impl InteractionStore {
         through: HandoffSeq,
     ) -> Result<(), StorageError> {
         let mut connection = self.writer.lock().await;
-        if read_retirement_progress(&mut connection, project).await? > through {
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
+            )
+            .await?;
+        if read_retirement_progress(&mut transaction, project).await? > through {
             return Err(StorageError::InvalidStoredRecord);
         }
         let position = i64::try_from(through.get()).map_err(|_| StorageError::InvalidRecord)?;
         let changed = sqlx_turso::query!(
             "INSERT INTO mail_retirement_progress(project_id,retired_through) VALUES(?,?) ON CONFLICT(project_id) DO UPDATE SET retired_through=excluded.retired_through WHERE mail_retirement_progress.retired_through<=excluded.retired_through",
             project.as_str(), position
-        ).execute(&mut *connection).await?;
+        ).execute(&mut *transaction).await?;
+        transaction.commit().await?;
         if changed.rows_affected() != 1 {
             return Err(StorageError::InvalidStoredRecord);
         }

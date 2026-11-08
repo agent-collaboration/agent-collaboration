@@ -408,9 +408,12 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
     )
     .await?;
     let shared_store = Arc::new(Mutex::new(store));
-    let worker = AutomationRetentionWorker::new(shared_store.clone())
-        .with_interaction_broker(broker.clone())
-        .with_native_push_store(native.clone());
+    let worker = AutomationRetentionWorker::new(
+        shared_store.clone(),
+        std::sync::Arc::new(runtime_primitives::SystemClock),
+    )
+    .with_interaction_broker(broker.clone())
+    .with_native_push_store(native.clone());
     let first_maintenance_ms = DateTime::<Utc>::from_timestamp_millis(cutoff_ms)
         .ok_or("valid retained cutoff")?
         .checked_add_months(chrono::Months::new(2))

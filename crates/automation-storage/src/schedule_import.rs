@@ -3,7 +3,7 @@ use crate::local_operation_receipts::{self, CompletedLocalOperation, LocalOperat
 use crate::{AutomationStore, ScheduleInspection, StorageError};
 use agent_automation::OperationId;
 use serde::{Serialize, de::DeserializeOwned};
-use sqlx::{Connection, Row};
+use sqlx::Row;
 pub struct ScheduleImport<'a> {
     pub operation_id: OperationId,
     pub package_utf8: &'a str,
@@ -28,7 +28,9 @@ impl AutomationStore {
         package.definition.timing.next_due(now, None)?;
         let canonical = serde_json::to_vec(&(request.package_utf8, request.overwrite))
             .map_err(|_| StorageError::InvalidRecord)?;
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         if let Some(result) = local_operation_receipts::replay(
             &mut transaction,
             LocalOperation {

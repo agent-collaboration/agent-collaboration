@@ -3,7 +3,6 @@ use crate::{InteractionStore, StorageError, push_record_rows, push_records::MAX_
 use chrono::{DateTime, Months, Utc};
 use collaboration_protocol::{PushDeliveryState, PushId};
 use serde_json::Value;
-use sqlx::Connection;
 
 #[derive(sqlx::FromRow)]
 struct PushRetentionCandidate {
@@ -38,7 +37,12 @@ pub(super) async fn prune(
     let cutoff_ms = cutoff.timestamp_millis();
     let batch_size = i64::from(batch_size);
     let mut connection = store.writer.lock().await;
-    let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+    let mut transaction = store
+        .transaction(
+            &mut connection,
+            sqlite_storage_maintenance::TransactionStart::Immediate,
+        )
+        .await?;
     let pruned = async {
         let mut pruned = crate::message_send_answers::prune_settled_message_send_answers(
             &mut transaction,

@@ -6,7 +6,7 @@ use agent_automation::{
     ScheduleId, SummarySource,
 };
 use serde::{Serialize, de::DeserializeOwned};
-use sqlx::{Connection, Row, SqliteConnection};
+use sqlx::{Row, SqliteConnection};
 
 pub enum RunAdmission<TTarget, TEndpoint> {
     NoWaitingRun,
@@ -34,7 +34,9 @@ impl AutomationStore {
         if now_ms < 0 {
             return Err(StorageError::InvalidRecord);
         }
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         let schedule = sqlx::query("SELECT s.change_id,s.definition_json,s.imported_continuity_json,i.current_revision_id,i.instruction_text FROM schedule_definitions s JOIN instruction_documents i ON i.instruction_id=s.instruction_id WHERE s.schedule_id=?")
             .bind(schedule_id.as_str()).fetch_optional(&mut *transaction).await?.ok_or(StorageError::ScheduleNotFound)?;
         let inventory = crate::run_inventory::load(&mut transaction, schedule_id).await?;

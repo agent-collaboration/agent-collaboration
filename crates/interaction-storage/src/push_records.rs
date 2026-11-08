@@ -62,7 +62,19 @@ impl InteractionStore {
 
     async fn insert_push_record_once(&self, record: &PushRecord) -> Result<(), StorageError> {
         let mut connection = self.writer.lock().await;
-        insert_push_record_with_connection(&mut connection, record).await
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
+            )
+            .await?;
+        match insert_push_record_with_connection(&mut transaction, record).await {
+            Ok(()) => Ok(transaction.commit().await?),
+            Err(error) => {
+                transaction.rollback().await?;
+                Err(error)
+            }
+        }
     }
 
     pub async fn get_push_record(
@@ -183,6 +195,12 @@ impl InteractionStore {
         settled_at: DateTime<Utc>,
     ) -> Result<u64, StorageError> {
         let mut connection = self.writer.lock().await;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
+            )
+            .await?;
         let kind = push_record_rows::serialize_kind(PushKind::SubscriptionActivity)?;
         let outcome = DeliveryReceipt {
             outcome: DeliveryOutcome::NotSubmitted {
@@ -210,8 +228,9 @@ impl InteractionStore {
             created_before,
             created_before,
         )
-        .execute(&mut *connection)
+        .execute(&mut *transaction)
         .await?;
+        transaction.commit().await?;
         Ok(result.rows_affected())
     }
 
@@ -281,7 +300,13 @@ impl InteractionStore {
         read_at: DateTime<Utc>,
     ) -> Result<PushRecord, StorageError> {
         let mut connection = self.writer.lock().await;
-        let record = read_push_with_connection(&mut connection, push_id)
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
+            )
+            .await?;
+        let record = read_push_with_connection(&mut transaction, push_id)
             .await?
             .ok_or(StorageError::PushNotFound)?;
         if record.kind != PushKind::DirectMessage {
@@ -302,11 +327,13 @@ impl InteractionStore {
             read_at,
             push_id.as_str()
         )
-        .execute(&mut *connection)
+        .execute(&mut *transaction)
         .await?;
-        read_push_with_connection(&mut connection, push_id)
+        let record = read_push_with_connection(&mut transaction, push_id)
             .await?
-            .ok_or(StorageError::PushNotFound)
+            .ok_or(StorageError::PushNotFound)?;
+        transaction.commit().await?;
+        Ok(record)
     }
 
     pub async fn prune_push_records(

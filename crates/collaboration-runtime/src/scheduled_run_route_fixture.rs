@@ -136,6 +136,7 @@ pub async fn provider_worker_fixture_at(
         execution: fake,
         backend: None,
         configuration: crate::AutomationConfigurationHandle::default(),
+        clock: std::sync::Arc::new(runtime_primitives::SystemClock),
         machine_identity: collaboration_contracts::MachineIdentity::new(
             service.to_owned().try_into()?,
             Some("Schedule Fixture"),

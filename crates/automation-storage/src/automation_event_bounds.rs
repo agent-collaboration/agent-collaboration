@@ -1,4 +1,5 @@
 //! Retention boundaries use two calendar months, independent of whether cleanup has already run.
+use crate::automation_connection::OneStatementWrite;
 use crate::{AutomationStore, StorageError};
 
 /// Retains automation events for two calendar months.
@@ -16,7 +17,7 @@ impl AutomationStore {
         }
         let cutoff = calendar_months_before(now_ms, AUTOMATION_EVENT_RETENTION_MONTHS)?;
         let removed = sqlx::query("DELETE FROM automation_events WHERE event_sequence IN (SELECT event_sequence FROM automation_events WHERE recorded_at_ms < ? ORDER BY event_sequence LIMIT ?)")
-            .bind(cutoff).bind(batch_limit).execute(&mut self.connection).await?;
+            .bind(cutoff).bind(batch_limit).execute_as_transaction(self).await?;
         Ok(removed.rows_affected())
     }
     pub async fn automation_event_floor(

@@ -59,6 +59,14 @@ impl ObservationJournal {
     /// Applies rolling two-calendar-month expiry while retaining the address checkpoint.
     /// Returns the checkpoint sequence, including when no additional records expire.
     pub async fn expire_history(&mut self, now: i64) -> Result<u64, JournalError> {
+        Ok(self.expire_history_reporting_removal(now).await?.through)
+    }
+
+    /// Expires history like [`Self::expire_history`] and says whether it removed rows.
+    pub(crate) async fn expire_history_reporting_removal(
+        &mut self,
+        now: i64,
+    ) -> Result<HistoryExpiry, JournalError> {
         if now < 0 {
             return Err(JournalError::InvalidRecord);
         }
@@ -152,16 +160,29 @@ impl ObservationJournal {
             .bind(removed)
             .execute(&mut *transaction)
             .await?;
-        prune_stale_checkpoint_addresses(&mut transaction, address_cutoff).await?;
+        let pruned_addresses =
+            prune_stale_checkpoint_addresses(&mut transaction, address_cutoff).await?;
         transaction.commit().await?;
-        u64::try_from(end).map_err(|_| JournalError::InvalidStorage)
+        Ok(HistoryExpiry {
+            through: u64::try_from(end).map_err(|_| JournalError::InvalidStorage)?,
+            removed_rows: end > old || pruned_addresses > 0,
+        })
     }
+}
+
+/// What one expiry pass did.
+pub(crate) struct HistoryExpiry {
+    /// The journal checkpoint sequence after the pass.
+    pub(crate) through: u64,
+    /// Whether it deleted lifecycle records or stale addresses.
+    pub(crate) removed_rows: bool,
 }
 
 async fn prune_stale_checkpoint_addresses(
     transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     cutoff_ms: i64,
-) -> Result<(), JournalError> {
+) -> Result<u64, JournalError> {
+    let mut deleted = 0;
     let mut cursor = String::new();
     loop {
         let rows=sqlx::query("SELECT address_key,entry_json,last_seen_ms FROM checkpoint_addresses WHERE last_seen_ms<? AND address_key>? ORDER BY address_key LIMIT 100")
@@ -194,18 +215,22 @@ async fn prune_stale_checkpoint_addresses(
                     return Err(JournalError::InvalidStorage);
                 }
                 if observation_timestamp_millis(&current.last_observed_at)? < cutoff_ms {
-                    sqlx::query("DELETE FROM thread_addresses WHERE address_key=?")
+                    deleted += sqlx::query("DELETE FROM thread_addresses WHERE address_key=?")
                         .bind(&key)
                         .execute(&mut **transaction)
-                        .await?;
+                        .await?
+                        .rows_affected();
                 }
             }
-            sqlx::query("DELETE FROM checkpoint_addresses WHERE address_key=? AND last_seen_ms<?")
-                .bind(key)
-                .bind(cutoff_ms)
-                .execute(&mut **transaction)
-                .await?;
+            deleted += sqlx::query(
+                "DELETE FROM checkpoint_addresses WHERE address_key=? AND last_seen_ms<?",
+            )
+            .bind(key)
+            .bind(cutoff_ms)
+            .execute(&mut **transaction)
+            .await?
+            .rows_affected();
         }
     }
-    Ok(())
+    Ok(deleted)
 }

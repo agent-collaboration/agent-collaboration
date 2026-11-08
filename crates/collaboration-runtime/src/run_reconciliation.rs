@@ -76,6 +76,8 @@ pub async fn reconcile(
                 record,
                 timeout_seconds,
                 work: crate::summary_native_worker::SummaryWork::ObserveOnly,
+                // An operator reconcile observes only; it reaches no deadline or admission time.
+                clock: &runtime_primitives::SystemClock,
             })
             .await?;
         }

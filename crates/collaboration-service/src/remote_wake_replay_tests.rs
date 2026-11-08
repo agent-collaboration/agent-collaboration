@@ -281,10 +281,13 @@ async fn assert_late_pause_replay(retain_result: bool, retention_age: Option<chr
     publish_recorded_status(&source, &owner, frozen.clone(), result).await;
     after_deadline(&source, deadline).await;
     if let Some(age) = retention_age {
-        collaboration_runtime::AutomationRetentionWorker::new(source.automation.clone())
-            .prune_batch((deadline + age).timestamp_millis())
-            .await
-            .unwrap();
+        collaboration_runtime::AutomationRetentionWorker::new(
+            source.automation.clone(),
+            std::sync::Arc::new(runtime_primitives::SystemClock),
+        )
+        .prune_batch((deadline + age).timestamp_millis())
+        .await
+        .unwrap();
         let retained = source
             .automation
             .lock()
