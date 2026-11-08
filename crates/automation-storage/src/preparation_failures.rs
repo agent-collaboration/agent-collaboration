@@ -1,4 +1,5 @@
 //! Failed and uncertain preparation retain evidence; neither path silently repeats a native call.
+use crate::automation_connection::OneStatementWrite;
 use crate::{AutomationStore, StorageError};
 use agent_automation::{OperationId, ScheduleId};
 use serde::Serialize;
@@ -23,7 +24,7 @@ impl AutomationStore {
             PreparationFailureDisposition::Uncertain => "uncertain",
         };
         let rows=sqlx::query("UPDATE operation_receipts SET operation_status=?,effect_evidence_json=?,final_error_json=? WHERE operation_id=? AND resource_id=? AND method_name='schedule/prepare' AND operation_status IN ('admitted','inProgress','uncertain')")
-            .bind(status).bind(serde_json::to_string(&request.evidence).map_err(|_|StorageError::InvalidRecord)?).bind(serde_json::to_string(&request.error).map_err(|_|StorageError::InvalidRecord)?).bind(request.operation_id.as_str()).bind(request.schedule_id.as_str()).execute(&mut self.connection).await?.rows_affected();
+            .bind(status).bind(serde_json::to_string(&request.evidence).map_err(|_|StorageError::InvalidRecord)?).bind(serde_json::to_string(&request.error).map_err(|_|StorageError::InvalidRecord)?).bind(request.operation_id.as_str()).bind(request.schedule_id.as_str()).execute_as_transaction(self).await?.rows_affected();
         if rows == 1 {
             Ok(())
         } else {

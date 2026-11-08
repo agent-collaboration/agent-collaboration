@@ -1,4 +1,9 @@
-//! Shared incremental auto-vacuum preparation for Router-owned SQLite files.
+//! Shared incremental auto-vacuum preparation and commit signalling for Router-owned SQLite files.
+
+mod commit_signal;
+#[cfg(feature = "test-support")]
+pub use commit_signal::CommitPause;
+pub use commit_signal::{CommitPoint, CommitSignal, PendingCommit};
 
 use std::{
     ffi::OsString,

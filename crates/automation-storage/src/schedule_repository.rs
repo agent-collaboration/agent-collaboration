@@ -5,7 +5,7 @@ use agent_automation::{
     ScheduleId, ScheduleRecord,
 };
 use serde::{Serialize, de::DeserializeOwned};
-use sqlx::{Connection, Row};
+use sqlx::Row;
 
 pub struct ScheduleCreate<TTarget, TEndpoint> {
     pub operation_id: OperationId,
@@ -49,7 +49,9 @@ impl AutomationStore {
         }
         let canonical = serde_json::to_vec(&(&request.definition, &request.imported_continuity))
             .map_err(|_| StorageError::InvalidRecord)?;
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         if let Some(row)=sqlx::query("SELECT method_name,canonical_request,operation_status,final_result_json FROM operation_receipts WHERE operation_id=?").bind(request.operation_id.as_str()).fetch_optional(&mut *transaction).await? {
             if row.try_get::<String,_>("method_name")? != "schedule/create" || row.try_get::<Vec<u8>,_>("canonical_request")? != canonical { return Err(StorageError::OperationConflict); }
             if row.try_get::<String,_>("operation_status")? != "succeeded" { return Err(StorageError::InvalidRecord); }

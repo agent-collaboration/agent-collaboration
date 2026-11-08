@@ -2,7 +2,7 @@
 use crate::{AutomationStore, StorageError};
 use agent_automation::{EventId, RunId, ScheduleDefinition, ScheduleId};
 use serde::{Serialize, de::DeserializeOwned};
-use sqlx::{Connection, Row};
+use sqlx::Row;
 
 impl AutomationStore {
     pub async fn enqueue_due_run<TTarget, TEndpoint>(
@@ -19,7 +19,9 @@ impl AutomationStore {
         }
         let now = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)
             .ok_or(StorageError::InvalidRecord)?;
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         let row=sqlx::query("SELECT s.enabled,s.change_id,s.definition_json,t.applied_change_id,t.anchor_at_ms,t.next_due_at_ms FROM schedule_definitions s JOIN schedule_timing_state t ON t.schedule_id=s.schedule_id WHERE s.schedule_id=?")
             .bind(schedule_id.as_str()).fetch_optional(&mut *transaction).await?.ok_or(StorageError::ScheduleNotFound)?;
         if row.try_get::<String, _>("change_id")?

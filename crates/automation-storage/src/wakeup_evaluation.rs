@@ -5,7 +5,7 @@ use agent_automation::{
 };
 use collaboration_protocol::{PushKind, PushOrigin, PushRecordDraft, RouterOriginRef};
 use serde::de::DeserializeOwned;
-use sqlx::{Connection, Row, SqliteConnection};
+use sqlx::{Row, SqliteConnection};
 
 pub enum WakeEvaluation<TMessage> {
     Unchanged(WakeRecord<TMessage, collaboration_protocol::WakeCreator>),
@@ -55,7 +55,9 @@ impl AutomationStore {
         }
         let now = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)
             .ok_or(StorageError::InvalidRecord)?;
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         let current: WakeRecord<TMessage, collaboration_protocol::WakeCreator> =
             crate::wakeup_repository::read_current(&mut transaction, id).await?;
         if matches!(

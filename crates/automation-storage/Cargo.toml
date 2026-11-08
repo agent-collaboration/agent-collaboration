@@ -9,6 +9,10 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Lets another crate's tests hold an automation commit at a CommitPoint.
+test-support = ["sqlite-storage-maintenance/test-support"]
+
 [dependencies]
 collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.100" }
 uuid.workspace = true
@@ -26,6 +30,7 @@ sqlite-storage-maintenance = { path = "../sqlite-storage-maintenance", version =
 
 [dev-dependencies]
 tempfile = "3.27.0"
+sqlite-storage-maintenance = { path = "../sqlite-storage-maintenance", features = ["test-support"] }
 
 [[test]]
 name = "integration"

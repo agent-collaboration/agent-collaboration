@@ -4,7 +4,6 @@ use crate::wakeup_evaluation::{WakeEvent, append_event, discard_undispatched};
 use crate::{AutomationStore, StorageError};
 use agent_automation::{DeliveryId, OperationId, WakeRecord, WakeState, WakeupId};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use sqlx::Connection;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -45,7 +44,9 @@ impl AutomationStore {
         };
         let canonical =
             serde_json::to_vec(&request.wakeup_id).map_err(|_| StorageError::InvalidRecord)?;
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         if let Some(result) = local_operation_receipts::replay(
             &mut transaction,
             LocalOperation {

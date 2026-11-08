@@ -1,4 +1,5 @@
 //! Bounded retention for automation history that is not current state.
+use crate::automation_connection::OneStatementWrite;
 use crate::{AutomationStore, StorageError, automation_event_bounds::calendar_months_before};
 
 const MAX_AUTOMATION_PRUNE_BATCH: u32 = 500;
@@ -34,7 +35,7 @@ impl AutomationStore {
             cutoff_ms,
             i64::from(batch_size)
         )
-        .execute(&mut self.connection)
+        .execute_as_transaction(self)
         .await?;
         Ok(result.rows_affected())
     }
@@ -60,7 +61,7 @@ impl AutomationStore {
         )
         .bind(cutoff_ms)
         .bind(i64::from(batch_size))
-        .execute(&mut self.connection)
+        .execute_as_transaction(self)
         .await?;
         Ok(result.rows_affected())
     }
@@ -97,7 +98,7 @@ impl AutomationStore {
         )
         .bind(cutoff_ms)
         .bind(i64::from(batch_size))
-        .execute(&mut self.connection)
+        .execute_as_transaction(self)
         .await?;
         Ok(result.rows_affected())
     }
@@ -132,7 +133,7 @@ impl AutomationStore {
         )
         .bind(cutoff_ms)
         .bind(i64::from(batch_size))
-        .execute(&mut self.connection)
+        .execute_as_transaction(self)
         .await?;
         Ok(result.rows_affected())
     }
@@ -160,7 +161,7 @@ impl AutomationStore {
         )
         .bind(cutoff_ms)
         .bind(i64::from(batch_size))
-        .execute(&mut self.connection)
+        .execute_as_transaction(self)
         .await?;
         Ok(result.rows_affected())
     }

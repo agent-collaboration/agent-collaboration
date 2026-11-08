@@ -3,7 +3,6 @@ use crate::local_operation_receipts::{self, CompletedLocalOperation, LocalOperat
 use crate::{AutomationStore, StorageError};
 use agent_automation::{OperationId, RunId, RunRecord};
 use serde::{Serialize, de::DeserializeOwned};
-use sqlx::Connection;
 #[derive(Clone, Copy)]
 pub enum SummaryRecoveryAction {
     Retry { timeout_seconds: u32 },
@@ -36,7 +35,9 @@ impl AutomationStore {
         // Configured timeout is admission context, not caller payload; replay keeps its original budget.
         let canonical =
             serde_json::to_vec(&request.run_id).map_err(|_| StorageError::InvalidRecord)?;
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         if let Some(result) = local_operation_receipts::replay(
             &mut transaction,
             LocalOperation {

@@ -5,7 +5,7 @@ use agent_automation::{
     RouteEffectEvidence,
 };
 use serde::{Serialize, de::DeserializeOwned};
-use sqlx::{Connection, Row};
+use sqlx::Row;
 use std::hash::{Hash, Hasher};
 
 pub enum DeliveryResult<TReceipt> {
@@ -43,7 +43,9 @@ impl AutomationStore {
         if completion.now_ms < 0 {
             return Err(StorageError::InvalidRecord);
         }
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         let row=sqlx::query("SELECT delivery_status,latest_attempt_json,expires_at_ms FROM mailbox_deliveries WHERE delivery_id=?").bind(completion.delivery_id.as_str()).fetch_optional(&mut *transaction).await?.ok_or(StorageError::InvalidRecord)?;
         let status: String = row.try_get("delivery_status")?;
         if !matches!(status.as_str(), "dispatching" | "uncertain") {

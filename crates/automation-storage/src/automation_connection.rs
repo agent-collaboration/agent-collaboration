@@ -1,13 +1,17 @@
 //! Database connection lifecycle; schema setup precedes every repository operation.
 use sqlite_storage_maintenance::{
-    SqliteStorageMaintenanceError, configure_new_database_options, incremental_vacuum_step,
-    prepare_existing_database,
+    CommitPoint, CommitSignal, SqliteStorageMaintenanceError, configure_new_database_options,
+    incremental_vacuum_step, prepare_existing_database,
 };
 use sqlx::{
-    Connection, SqliteConnection,
+    Connection, Sqlite, SqliteConnection,
     sqlite::{SqliteConnectOptions, SqliteSynchronous},
 };
-use std::{path::Path, time::Duration};
+use std::{
+    ops::{Deref, DerefMut},
+    path::Path,
+    time::Duration,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
@@ -115,6 +119,88 @@ pub enum StorageError {
 
 pub struct AutomationStore {
     pub(crate) connection: SqliteConnection,
+    commits: CommitSignal,
+}
+
+/// How the store's one transaction function opens its transaction.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum TransactionStart {
+    /// `BEGIN IMMEDIATE`: takes the write lock first. Every mutating method uses it.
+    Immediate,
+    /// `BEGIN`: a consistent read snapshot.
+    Deferred,
+}
+
+/// One transaction on the automation database. Committing it is the only way a write
+/// becomes visible, and it signals subscribers only when rows changed.
+pub(crate) struct AutomationTransaction<'store> {
+    transaction: sqlx::Transaction<'store, Sqlite>,
+    changes_at_begin: i64,
+    commits: &'store CommitSignal,
+}
+
+impl AutomationTransaction<'_> {
+    /// Commits, then bumps the commit signal if this transaction changed rows.
+    pub(crate) async fn commit(mut self) -> Result<(), sqlx::Error> {
+        let changed_rows = total_changes(&mut self.transaction).await? != self.changes_at_begin;
+        let pending = self.commits.begin_commit(changed_rows);
+        pending.checkpoint(CommitPoint::BeforeCommitInvoked).await;
+        let committed = self.transaction.commit().await;
+        if committed.is_ok() {
+            pending.checkpoint(CommitPoint::AfterCommitReturned).await;
+        }
+        pending.settle(committed.is_ok());
+        committed
+    }
+
+    /// A known rollback; it never signals.
+    pub(crate) async fn rollback(self) -> Result<(), sqlx::Error> {
+        self.transaction.rollback().await
+    }
+}
+
+impl Deref for AutomationTransaction<'_> {
+    type Target = SqliteConnection;
+
+    fn deref(&self) -> &SqliteConnection {
+        &self.transaction
+    }
+}
+
+impl DerefMut for AutomationTransaction<'_> {
+    fn deref_mut(&mut self) -> &mut SqliteConnection {
+        &mut self.transaction
+    }
+}
+
+/// Runs one write statement as a one-statement transaction through
+/// [`AutomationStore::transaction`], so it signals like every other write.
+pub(crate) trait OneStatementWrite {
+    async fn execute_as_transaction(
+        self,
+        store: &mut AutomationStore,
+    ) -> Result<sqlx::sqlite::SqliteQueryResult, sqlx::Error>;
+}
+
+impl<'q, TArguments> OneStatementWrite for sqlx::query::Query<'q, Sqlite, TArguments>
+where
+    TArguments: sqlx::IntoArguments<Sqlite> + 'q,
+{
+    async fn execute_as_transaction(
+        self,
+        store: &mut AutomationStore,
+    ) -> Result<sqlx::sqlite::SqliteQueryResult, sqlx::Error> {
+        let mut transaction = store.transaction(TransactionStart::Immediate).await?;
+        let result = self.execute(&mut *transaction).await?;
+        transaction.commit().await?;
+        Ok(result)
+    }
+}
+
+async fn total_changes(connection: &mut SqliteConnection) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar("SELECT total_changes()")
+        .fetch_one(connection)
+        .await
 }
 impl AutomationStore {
     pub async fn open(path: &Path) -> Result<Self, StorageError> {
@@ -125,7 +211,40 @@ impl AutomationStore {
             .execute(&mut connection)
             .await?;
         prepare_existing_database(&mut connection, path).await?;
-        Ok(Self { connection })
+        Ok(Self {
+            connection,
+            commits: CommitSignal::new(),
+        })
+    }
+
+    /// The one transaction function: every read snapshot and every write goes through it.
+    pub(crate) async fn transaction(
+        &mut self,
+        start: TransactionStart,
+    ) -> Result<AutomationTransaction<'_>, sqlx::Error> {
+        let mut transaction = match start {
+            TransactionStart::Immediate => self.connection.begin_with("BEGIN IMMEDIATE").await?,
+            TransactionStart::Deferred => self.connection.begin().await?,
+        };
+        let changes_at_begin = total_changes(&mut transaction).await?;
+        Ok(AutomationTransaction {
+            transaction,
+            changes_at_begin,
+            commits: &self.commits,
+        })
+    }
+
+    /// A receiver that wakes after each committed transaction that changed rows.
+    #[must_use]
+    pub fn subscribe_commits(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.commits.subscribe()
+    }
+
+    /// The store's commit signal, for a test that holds a commit at a [`CommitPoint`].
+    #[cfg(any(test, feature = "test-support"))]
+    #[must_use]
+    pub fn commit_signal(&self) -> &CommitSignal {
+        &self.commits
     }
 
     /// Reclaims one bounded batch of free pages after an automation prune.
@@ -162,6 +281,10 @@ async fn connect(path: &Path, create_if_missing: bool) -> Result<SqliteConnectio
     let options = configure_new_database_options(options, path)?;
     Ok(SqliteConnection::connect_with(&options).await?)
 }
+
+#[cfg(test)]
+#[path = "automation_transaction_test.rs"]
+mod transaction_tests;
 
 #[cfg(test)]
 mod tests {
