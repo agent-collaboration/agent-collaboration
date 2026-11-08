@@ -94,8 +94,8 @@ mod router_scratch_scopes;
 pub mod scratch_scope_test_support;
 pub use router_scratch_scopes::{
     SCRATCH_DIRECTORY_NAME, SCRATCH_LAST_USED_FILE_NAME, ScratchScopeExclusiveLock,
-    prepare_scratch_scope, router_scratch_root, scratch_scope_last_change,
-    try_lock_scratch_scope_exclusively,
+    prepare_scratch_scope, prepare_scratch_scope_used_at, router_scratch_root,
+    scratch_scope_last_change, try_lock_scratch_scope_exclusively,
 };
 mod native_thread_operations;
 pub use native_input_submission::NativeInputSubmission;

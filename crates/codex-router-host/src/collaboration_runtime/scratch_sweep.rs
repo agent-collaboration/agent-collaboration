@@ -2,11 +2,15 @@
 //!
 //! The sweep runs once when the Host starts its runtime and then on one timer,
 //! set to the earliest moment any folder could become due: a folder's newest
-//! change plus 30 days, a retry one day after a failure, or 30 days from now
-//! for folders created after the pass. There is no fixed tick.
+//! change plus 30 days, or a retry one day after a failure. It never waits
+//! longer than 29 days, so a scope a session holds open, now or from any
+//! moment after this pass, has its use recorded again before 30 days pass.
+//! The register of open scopes is memory only: after a crash and restart a
+//! scope is judged by its last recorded use, which is never older than 29 days
+//! for a scope that was open when the Host stopped. There is no fixed tick.
 //!
 //! For each folder: one with a session open in this Host is skipped and its
-//! use recorded; one whose state can't be read is kept and retried the next
+//! use recorded at the sweep's clock time; one whose state can't be read is kept and retried the next
 //! day. A folder whose newest change is more than 30 days old is locked
 //! exclusively without waiting (a creator holding it means skip), rechecked
 //! under the lock, renamed to a hidden `.removing-` name, released and then
@@ -18,7 +22,7 @@
 //! folder's newest change only.
 
 use codex_native_integration::{
-    prepare_scratch_scope, scratch_scope_last_change, try_lock_scratch_scope_exclusively,
+    prepare_scratch_scope_used_at, scratch_scope_last_change, try_lock_scratch_scope_exclusively,
 };
 use collaboration_runtime::OpenScratchScopes;
 use std::{
@@ -34,6 +38,10 @@ use std::{
 pub const SCRATCH_UNUSED_RETENTION: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 /// A folder that could not be judged or removed is tried again after this.
 pub const SCRATCH_RETRY_DELAY: Duration = Duration::from_secs(24 * 60 * 60);
+/// The longest the sweep waits between passes: an open scope's use is recorded
+/// again at least this often, a day inside the retention period.
+pub const SCRATCH_OPEN_USE_INTERVAL: Duration =
+    SCRATCH_UNUSED_RETENTION.saturating_sub(SCRATCH_RETRY_DELAY);
 const REMOVING_PREFIX: &str = ".removing-";
 
 /// The time source the sweep decides and waits by.
@@ -119,7 +127,7 @@ pub fn sweep_scratch_scopes(
             ran_at: Some(now),
             ..ScratchSweepReport::default()
         },
-        next_pass_at: now + SCRATCH_UNUSED_RETENTION,
+        next_pass_at: now + SCRATCH_OPEN_USE_INTERVAL,
         now,
     };
     let entries = match std::fs::read_dir(scratch_root) {
@@ -229,7 +237,9 @@ impl SweepPass {
     }
 
     fn keep_open(&mut self, scope: &str, folder: &Path) {
-        if let Err(error) = prepare_scratch_scope(folder) {
+        // Recorded at the time this pass judges by, so the next pass, at most
+        // SCRATCH_OPEN_USE_INTERVAL later, records it again before it could be due.
+        if let Err(error) = prepare_scratch_scope_used_at(folder, self.now) {
             self.fail(scope, error);
             return;
         }
