@@ -6,6 +6,7 @@ mod fleet_statement_refusal;
 mod fleet_statement_test_support;
 mod fleet_statement_wire;
 mod identity;
+mod machine_login;
 mod organization_stamp_store;
 mod project_ownership;
 mod provisioning;
@@ -24,6 +25,12 @@ pub use fleet_statement::{
 pub use fleet_statement_refusal::FleetOrganizationStatementRefusal;
 pub use fleet_statement_wire::OrganizationStatementDigest;
 pub use identity::{OrganizationIdentity, OrganizationIdentityRefusal, ProvisioningStampAction};
+pub use machine_login::{
+    AllowanceRow, Decided, DecisionTime, EnrollmentChange, EnrollmentFacts, EnrollmentGeneration,
+    EnrollmentQuery, FormerServiceFacts, InstallationRow, MachineClaim, MachineEnrollmentFailure,
+    MachineEnrollmentPort, SD8_MILLIS, StoredEnrollment, StoredEnrollmentState,
+    decide_device_login,
+};
 pub(crate) use organization_stamp_store::read as read_stored_stamp;
 #[cfg(feature = "conformance")]
 pub(crate) use organization_stamp_store::tamper as tamper_stored_statement;

@@ -14,6 +14,9 @@ pub enum OrganizationChangeKind {
     OrganizationProvisioned,
     StampRenewed,
     WorkspaceCreated,
+    MachineEnrolled,
+    MachineRevoked,
+    AllowanceChanged,
 }
 
 impl OrganizationChangeKind {
@@ -22,6 +25,9 @@ impl OrganizationChangeKind {
             Self::OrganizationProvisioned => "organizationProvisioned",
             Self::StampRenewed => "stampRenewed",
             Self::WorkspaceCreated => "workspaceCreated",
+            Self::MachineEnrolled => "machineEnrolled",
+            Self::MachineRevoked => "machineRevoked",
+            Self::AllowanceChanged => "allowanceChanged",
         }
     }
     fn parse(value: &str) -> Result<Self, StoreError> {
@@ -29,6 +35,9 @@ impl OrganizationChangeKind {
             "organizationProvisioned" => Ok(Self::OrganizationProvisioned),
             "stampRenewed" => Ok(Self::StampRenewed),
             "workspaceCreated" => Ok(Self::WorkspaceCreated),
+            "machineEnrolled" => Ok(Self::MachineEnrolled),
+            "machineRevoked" => Ok(Self::MachineRevoked),
+            "allowanceChanged" => Ok(Self::AllowanceChanged),
             _ => Err(corrupt("kind", "unknown change kind")),
         }
     }
