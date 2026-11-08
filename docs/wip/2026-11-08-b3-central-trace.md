@@ -59,7 +59,7 @@ transaction, and IDs come from the injected source; a non-UUIDv7 ID is refused.
 
 - **The defect at 5826592fb:** the check ran before the port wait, and admission sampled its clock only for idle expiry. So a token verified 1 ms before its grant ended could be admitted or renewed after the wait.
 - **The fix:** `VerifiedMachineToken` carries `exp` and `grant_expires_at`. Admission and renewal recheck `now < exp + 60` and `now < grant_expires_at` on the clock read inside the admitting transaction. `AdmittedMachine.token_expires_at` is the earlier of `exp + 60` and the grant, as the host's timer value.
-- **Proof:** for both entries and both bounds, held through `before_next_decision`: 1 ms before the bound is admitted or renewed; equality and 1 ms after are refused as token expiry, with the store unchanged. The timer is tested with each bound ending first and with a tie.
+- **Proof:** for both entries and both bounds, held through `before_next_decision`: 1 ms before the bound is admitted or renewed; equality and 1 ms after are refused as token expiry, and the store compares equal to its state before (full typed `EnrollmentStore` equality). The timer is tested with each bound ending first and with a tie.
 - **Seeded reds:**
   - with only the in-transaction recheck bypassed, the equality case is admitted or renewed;
   - with a raw-exp timer, or one without the grant, the timer test fails.
