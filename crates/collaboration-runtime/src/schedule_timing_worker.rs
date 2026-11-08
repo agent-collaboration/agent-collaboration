@@ -41,7 +41,7 @@ pub struct ScheduleTimingWorker {
     completion_sources: Vec<watch::Receiver<u64>>,
     observation: WorkerObservation,
     #[cfg(test)]
-    step_exit_gate: Option<Arc<Mutex<()>>>,
+    step_gate: Option<StepGate>,
 }
 
 impl ScheduleTimingWorker {
@@ -68,7 +68,7 @@ impl ScheduleTimingWorker {
             completion_sources: Vec::new(),
             observation: WorkerObservation::default(),
             #[cfg(test)]
-            step_exit_gate: None,
+            step_gate: None,
         }
     }
 
@@ -87,7 +87,22 @@ impl ScheduleTimingWorker {
     #[cfg(test)]
     #[must_use]
     pub(crate) fn hold_step_exits(mut self, gate: Arc<Mutex<()>>) -> Self {
-        self.step_exit_gate = Some(gate);
+        self.step_gate = Some(StepGate {
+            point: StepGatePoint::AfterReport,
+            gate,
+        });
+        self
+    }
+
+    /// Holds every step task after its work, which may have committed, and before it
+    /// reports, until the test releases the gate.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn hold_step_reports(mut self, gate: Arc<Mutex<()>>) -> Self {
+        self.step_gate = Some(StepGate {
+            point: StepGatePoint::BeforeReport,
+            gate,
+        });
         self
     }
 
@@ -99,6 +114,7 @@ impl ScheduleTimingWorker {
 
     pub async fn run(self, shutdown: CancellationToken) {
         let commits = self.store.lock().await.subscribe_commits();
+        let step_commits = self.store.lock().await.subscribe_commits();
         let configuration = self.runner.configuration.subscribe_changes();
         let (step_outcomes, step_wakes) = watch::channel(0);
         let (step_reports, finished_steps) = tokio::sync::mpsc::unbounded_channel();
@@ -122,8 +138,9 @@ impl ScheduleTimingWorker {
             step_outcomes,
             capacity_exhausted: Arc::new(AtomicBool::new(false)),
             step_retries: HashMap::new(),
+            step_commits,
             #[cfg(test)]
-            step_exit_gate: self.step_exit_gate,
+            step_gate: self.step_gate,
         };
         worker.run(&mut pass, shutdown).await;
         pass.steps.abort_all();
@@ -153,30 +170,74 @@ struct SchedulePass {
     /// fail after the pass that started them, so these retries come back through
     /// `next_due`.
     step_retries: HashMap<RunId, StepRetry>,
-    /// Under test, holds each step task after it reported, before it returns.
+    /// Each step compares the automation commit counter before and after its work: a
+    /// step that changed rows has progress the loop must act on, even though the commit
+    /// woke it while the Run was still active.
+    step_commits: watch::Receiver<u64>,
+    /// Under test, holds each step task before or after it reports.
     #[cfg(test)]
-    step_exit_gate: Option<Arc<Mutex<()>>>,
+    step_gate: Option<StepGate>,
+}
+
+#[cfg(test)]
+struct StepGate {
+    point: StepGatePoint,
+    gate: Arc<Mutex<()>>,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StepGatePoint {
+    BeforeReport,
+    AfterReport,
+}
+
+#[cfg(test)]
+impl StepGate {
+    fn shared(&self) -> Self {
+        Self {
+            point: self.point,
+            gate: Arc::clone(&self.gate),
+        }
+    }
+
+    async fn pass_at(&self, point: StepGatePoint) {
+        if self.point == point {
+            drop(self.gate.lock().await);
+        }
+    }
+}
+
+/// What one finished step achieved, as the loop needs to know it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StepOutcome {
+    /// It changed rows: the loop runs another pass for the Run's next step.
+    Progress,
+    /// It changed nothing, such as a turn still running: nothing to wake for.
+    Pending,
+    /// It failed or could not reach its client: the Run retries on its backoff.
+    Failed,
 }
 
 /// What a finished step tells the pass.
 struct StepReport {
     run_id: RunId,
-    failed: bool,
+    outcome: StepOutcome,
 }
 
 /// Reports a step when dropped: as finished with its outcome, or as failed when the task
 /// panicked or was aborted first. The report is sent before the wake.
 struct StepReporter {
     run_id: Option<RunId>,
-    failed: bool,
+    outcome: StepOutcome,
     reports: tokio::sync::mpsc::UnboundedSender<StepReport>,
     outcomes: watch::Sender<u64>,
     capacity_exhausted: Arc<AtomicBool>,
 }
 
 impl StepReporter {
-    fn finished(mut self, failed: bool) {
-        self.failed = failed;
+    fn finished(mut self, outcome: StepOutcome) {
+        self.outcome = outcome;
     }
 }
 
@@ -187,11 +248,13 @@ impl Drop for StepReporter {
         };
         let _ = self.reports.send(StepReport {
             run_id,
-            failed: self.failed,
+            outcome: self.outcome,
         });
-        // "Still pending" writes nothing and wakes nothing; a failure or a freed slot
-        // that a Run waits for does.
-        if self.failed || self.capacity_exhausted.swap(false, Ordering::AcqRel) {
+        // "Still pending" writes nothing and wakes nothing; progress, a failure or a
+        // freed slot that a Run waits for does.
+        if self.outcome != StepOutcome::Pending
+            || self.capacity_exhausted.swap(false, Ordering::AcqRel)
+        {
             self.outcomes
                 .send_modify(|revision| *revision = revision.wrapping_add(1));
         }
@@ -209,9 +272,9 @@ impl SchedulePass {
     /// step that succeeds clears it.
     fn reap_finished_steps(&mut self, now: SyncTime) {
         while self.steps.try_join_next().is_some() {}
-        while let Ok(StepReport { run_id, failed }) = self.finished_steps.try_recv() {
+        while let Ok(StepReport { run_id, outcome }) = self.finished_steps.try_recv() {
             self.active.remove(&run_id);
-            if !failed {
+            if outcome != StepOutcome::Failed {
                 self.step_retries.remove(&run_id);
                 continue;
             }
@@ -317,26 +380,40 @@ impl SchedulePass {
         let runner = self.runner.clone();
         let reporter = StepReporter {
             run_id: Some(id.clone()),
-            failed: true,
+            outcome: StepOutcome::Failed,
             reports: self.step_reports.clone(),
             outcomes: self.step_outcomes.clone(),
             capacity_exhausted: Arc::clone(&self.capacity_exhausted),
         };
+        let mut commits = self.step_commits.clone();
+        commits.borrow_and_update();
         #[cfg(test)]
-        let exit_gate = self.step_exit_gate.clone();
+        let gate = self.step_gate.as_ref().map(StepGate::shared);
         self.active.insert(id.clone());
         self.steps.spawn(async move {
             let result =
                 tokio::time::timeout(STEP_TIMEOUT, Box::pin(runner.step_reporting_client(id)))
                     .await;
-            let failed = !matches!(
-                result,
-                Ok(Ok(crate::scheduled_run_worker::StepProgress::Stepped))
-            );
-            reporter.finished(failed);
+            let outcome = match result {
+                Ok(Ok(crate::scheduled_run_worker::StepProgress::Stepped)) => {
+                    // A commit by anyone during the step also counts; that costs at most
+                    // one extra pass.
+                    if commits.has_changed().unwrap_or(false) {
+                        StepOutcome::Progress
+                    } else {
+                        StepOutcome::Pending
+                    }
+                }
+                _ => StepOutcome::Failed,
+            };
             #[cfg(test)]
-            if let Some(gate) = exit_gate {
-                drop(gate.lock().await);
+            if let Some(gate) = &gate {
+                gate.pass_at(StepGatePoint::BeforeReport).await;
+            }
+            reporter.finished(outcome);
+            #[cfg(test)]
+            if let Some(gate) = &gate {
+                gate.pass_at(StepGatePoint::AfterReport).await;
             }
         });
     }

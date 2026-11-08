@@ -59,6 +59,10 @@ struct ControlledRoute {
     /// A stop that reaches the client records its intent, as a real route does; otherwise
     /// the fixture answers that stopping is unsupported.
     stop_records_intent: AtomicBool,
+    /// Stop requests that answer an unknown outcome: before storing the intent (the
+    /// connection failed) or after it (the interrupt reply was lost).
+    unknown_stops_before_intent: AtomicUsize,
+    unknown_stops_after_intent: AtomicUsize,
 }
 
 /// Uses one of `remaining` unreachable answers, if any are left.
@@ -153,6 +157,15 @@ impl ScheduledRunExecution for ControlledRoute {
         self.stop_requests.lock().unwrap().push(self.clock.now());
         if take_unreachable(&self.unreachable_stops) {
             return Box::pin(async { Err(DeliveryContractError::ClientOperation) });
+        }
+        if take_unreachable(&self.unknown_stops_before_intent) {
+            return Box::pin(async { Ok(StopRequestOutcome::Unknown) });
+        }
+        if take_unreachable(&self.unknown_stops_after_intent) {
+            return Box::pin(async move {
+                sink.record_stop_intent().await?;
+                Ok(StopRequestOutcome::Unknown)
+            });
         }
         if !self.stop_records_intent.load(Ordering::Acquire) {
             return self.inner.request_stop(context, sink);
@@ -259,6 +272,8 @@ impl SchedulerFixture {
             unreachable_settlements: AtomicUsize::new(0),
             unreachable_stops: AtomicUsize::new(0),
             stop_records_intent: AtomicBool::new(false),
+            unknown_stops_before_intent: AtomicUsize::new(0),
+            unknown_stops_after_intent: AtomicUsize::new(0),
         });
         Ok(Self {
             _no_auto_advance: no_auto_advance,
@@ -309,16 +324,19 @@ impl SchedulerFixture {
     }
 
     fn start(&self) -> TestResult<RunningScheduler> {
-        self.start_with(None)
+        self.start_with(|worker| worker)
     }
 
     /// Starts the scheduler with every step task held after it reported, until `gate`
     /// is released.
     fn start_holding_step_exits(&self, gate: Arc<Mutex<()>>) -> TestResult<RunningScheduler> {
-        self.start_with(Some(gate))
+        self.start_with(|worker| worker.hold_step_exits(gate))
     }
 
-    fn start_with(&self, step_exit_gate: Option<Arc<Mutex<()>>>) -> TestResult<RunningScheduler> {
+    fn start_with(
+        &self,
+        configure: impl FnOnce(ScheduleTimingWorker) -> ScheduleTimingWorker,
+    ) -> TestResult<RunningScheduler> {
         let worker = ScheduleTimingWorker::new(
             Arc::clone(&self.store),
             Arc::clone(&self.interactions),
@@ -334,10 +352,7 @@ impl SchedulerFixture {
             Arc::clone(&self.clock) as Arc<dyn Clock>,
         )
         .wake_on_completions(self.journal.subscribe_commits());
-        let worker = match step_exit_gate {
-            Some(gate) => worker.hold_step_exits(gate),
-            None => worker,
-        };
+        let worker = configure(worker);
         let observation = worker.observation();
         let shutdown = CancellationToken::new();
         let task = tokio::spawn(worker.run(shutdown.clone()));
@@ -472,6 +487,9 @@ async fn advance(by: Duration) {
         tokio::task::yield_now().await;
     }
 }
+
+#[path = "schedule_timing_worker_ordering_test.rs"]
+mod ordering_tests;
 
 #[tokio::test(start_paused = true)]
 #[expect(
