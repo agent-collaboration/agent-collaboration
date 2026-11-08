@@ -117,6 +117,7 @@ mod numeric_composed;
 mod object_bootstrap;
 mod object_identity;
 mod organization_admin_link;
+mod organization_admin_origin;
 mod organization_provisioning_link;
 mod owner_admin_sessions;
 mod owner_fence_ordering;

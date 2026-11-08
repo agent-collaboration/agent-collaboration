@@ -132,11 +132,15 @@ where
             shared_host,
             engine,
             delivery,
+            organization_stamp,
             ..
         } = &self.work
         else {
             return Err(wrong_face());
         };
+        if organization_stamp.is_sign_in_service(&request.installation) {
+            return Ok(EnrollmentDecision::Refused(EnrollmentRefusal::InvalidInput));
+        }
         let now = DateTime::from_timestamp_millis(shared_host.now().unix_millis())
             .ok_or_else(|| corrupt("clock"))?;
         let (admission, _) = StepDriver::new(host.clone())

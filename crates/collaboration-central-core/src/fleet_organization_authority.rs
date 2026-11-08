@@ -58,6 +58,14 @@ impl FleetOrganizationAuthority {
         self.check.read().ok().map(|check| check.clone())
     }
 
+    /// Only the sign-in service writes with its ServiceId, so no machine may be
+    /// enrolled under it. A Fleet with no configured ID reserves nothing.
+    pub(crate) fn is_sign_in_service(&self, installation: &message_board::ServiceId) -> bool {
+        self.check()
+            .and_then(|check| check.sign_in_service())
+            .is_some_and(|service| &service == installation)
+    }
+
     /// Unchecked means this process has not yet looked at the stored stamp.
     pub(crate) fn needs_check(&self) -> bool {
         self.health
