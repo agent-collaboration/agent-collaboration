@@ -11,6 +11,8 @@ IF the assignment covers board-upgrade, load [board upgrade](references/board-up
 
 IF the assignment covers central-runtime, load [central runtime](references/central-runtime.md) and return its source-pinned commands, counts, executable hashes and uncovered obligations. It uses central's existing conformance harness. IF the assignment covers central-staging preparation, load [central staging](references/central-staging.md) and return the retired/unavailable result and unobserved OB7 cases. A build never authorizes a staging request or deploy.
 
+IF the assignment covers central-execution-model D4, load [D4 central engine](references/d4-central-engine.md) and return its declared shell/source, per-journey observations or missing seams, original byte-window measurements, wrong-build sensitivity and owned cleanup; keep uncommissioned staging and undeclared product targets unobserved.
+
 For model-free private Tailnet MCP/board verification, follow the separate [Tailnet journey](references/tailnet-mcp.md) and its HostPlan/BoardPlan launch. That journey is draft until exercised on a declared real target.
 
 For Sessions/Quota presentation, follow [compiled TUI journeys](references/tui-journeys.md). Reusable source-bound drivers use prebuilt compiled PTY fixtures and retain original wterm DOM PNGs from actual PTY bytes without starting a Host/provider session. Declare exact source/build/tools, plan, viewport and owned cleanup; fixture evidence is not public/provider proof. Narrow-width and short-height desktop proxies are the adopted phone scope; actual iPhone hardware is waived. Run results/history belong in the task evidence under `tmp/tui-verification/`, not this recipe.

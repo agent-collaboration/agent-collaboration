@@ -59,7 +59,7 @@ async function main(): Promise<void> {
   const arguments_ = process.argv.slice(2);
   if (arguments_.length === 1 && arguments_[0] === "--help") {
     process.stdout.write(
-      "D4 window byte reader\nUsage: node verification/observations/central/d4-central-engine/window-readback.ts TRACE.jsonl\nReads an owner-private original byte transcript, preserving per-physical-socket order.\nRows: {kind:opened|ended,connection} or {kind:server|client,connection,bytes:canonical-base64}.\nRequires real Hello/Welcome, complete valid bytes both ways and a nonempty owed-request observation; rejects a peak above 32.\nOutput is a retained-byte measurement only. It supplies no source/build binding, durable-row comparison, runtime journey, hour/wake or product sensitivity credit.\nNo processes, network, model inputs or state writes.\n",
+      "D4 window byte reader\nUsage: node verification/observations/central/d4-central-engine/window-readback.ts TRACE.jsonl\nReads an owner-private original byte transcript, preserving per-physical-socket order.\nRows: {kind:opened|ended,connection} or {kind:server|client,connection,bytes:canonical-base64}.\nStatus sends also require a preceding {kind:publicationSubject,connection,sendId:UUIDv7,subject:UUIDv7} from actual conformance evidence.\nRequires real Hello/Welcome, complete valid bytes both ways and a nonempty owed-request observation; rejects a peak above 32.\nOutput is a retained-byte measurement only. It supplies no source/build binding, durable-row comparison, runtime journey, hour/wake or product sensitivity credit.\nNo processes, network, model inputs or state writes.\n",
     );
     return;
   }
