@@ -110,8 +110,14 @@ export class FixtureInstallation {
     await copyFile(plan.native.path, stagedNative);
     await qualifyArtifact({ ...plan.native, path: stagedNative });
     const config = `model = "gpt-6-luna"\nmodel_provider = "codex-router-debug"\ncli_auth_credentials_store = "ephemeral"\n[features]\nenable_request_compression = false\n[model_providers.codex-router-debug]\nname = "OpenAI"\nbase_url = "http://127.0.0.1:${port}/v1"\nwire_api = "responses"\nrequires_openai_auth = false\nsupports_websockets = true\n`;
-    for (const name of ["config.toml", "codex-router-debug.config.toml"])
-      await writeFile(`${this.home}/${name}`, config, { mode: 0o600, flag: "wx" });
+    await writeFile(`${this.home}/config.toml`, config, { mode: 0o600, flag: "wx" });
+    // v0.1.125's Host projection accepts provider/model settings only. The
+    // native home's ephemeral credential policy stays in its own config.
+    await writeFile(
+      `${this.home}/codex-router-debug.config.toml`,
+      config.replace('cli_auth_credentials_store = "ephemeral"\n', ""),
+      { mode: 0o600, flag: "wx" },
+    );
     await writeFile(
       `${this.root}/providers.json`,
       encode({
