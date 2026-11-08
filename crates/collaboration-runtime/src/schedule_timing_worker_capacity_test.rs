@@ -611,3 +611,65 @@ async fn a_deadline_that_passes_while_failed_passes_retry_is_acted_on_behind_the
     drop(cursor.gate);
     Ok(())
 }
+
+#[tokio::test(start_paused = true)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
+async fn a_deadline_that_passes_after_a_single_failed_next_due_is_acted_on_behind_the_scan()
+-> TestResult<()> {
+    let gate = Arc::new(Mutex::new(()));
+    let held = Arc::clone(&gate).lock_owned().await;
+    let (reached, reached_signal) = tokio::sync::oneshot::channel();
+    let (go_signal, go) = tokio::sync::oneshot::channel();
+    let cursor = CursorFixture::start_with(Arc::clone(&gate), |worker| {
+        worker.pause_before_first_next_due(reached, go)
+    })
+    .await?;
+    let started_at = cursor.fixture.clock.now();
+    let mut fault = cursor.fixture.fault_connection().await?;
+
+    // The first pass starts the first sixteen steps, held after reading their turns
+    // running before the deadline; its next due read alone fails, so nothing is armed.
+    // The store is back before the loop's retry, whose pass then succeeds, after the
+    // deadline has passed.
+    reached_signal.await?;
+    wait_until("the first sixteen steps were held", || {
+        cursor.arrivals.load(Ordering::SeqCst) >= STEP_SLOTS
+    })
+    .await?;
+    sqlx::query("ALTER TABLE schedule_timing_state RENAME TO schedule_timing_state_hidden")
+        .execute(&mut fault)
+        .await?;
+    let _ = go_signal.send(());
+    settled_holding(&cursor.scheduler.observation).await?;
+    let retry = cursor.scheduler.observation.snapshot().armed_deadline;
+    let failed_passes = cursor.scheduler.observation.snapshot().passes;
+    sqlx::query("ALTER TABLE schedule_timing_state_hidden RENAME TO schedule_timing_state")
+        .execute(&mut fault)
+        .await?;
+    advance(Duration::from_secs(120)).await;
+    settled_holding(&cursor.scheduler.observation).await?;
+    drop(held);
+    wait_until("every Run's stop was requested", || {
+        cursor.fixture.route.per_run.stopped() >= RUN_COUNT
+    })
+    .await?;
+    settled(&cursor.scheduler).await?;
+
+    assert_eq!(
+        retry,
+        Some(started_at.after(Duration::from_secs(1))),
+        "the failed read armed only the loop's retry"
+    );
+    assert_eq!(failed_passes, 1, "only the start-up pass failed");
+    assert_eq!(
+        cursor.fixture.route.per_run.stopped(),
+        RUN_COUNT,
+        "the pass after the failed read sweeps back to the sixteen behind the scan"
+    );
+    cursor.scheduler.stop().await;
+    drop(cursor.gate);
+    Ok(())
+}
