@@ -129,3 +129,69 @@ async fn clock_change_with_no_alarm_creates_none() -> Result<(), Box<dyn std::er
     assert_eq!(timer.stored().await?, None);
     Ok(())
 }
+
+/// Park a waiter on the timer. On the test's current-thread runtime one yield
+/// runs the spawned task until it awaits the alarm.
+async fn parked_waiter(timer: &Arc<ObjectAlarmTimer>) -> tokio::task::JoinHandle<SyncTime> {
+    let waiting = timer.clone();
+    let handle = tokio::spawn(async move { waiting.wait().await });
+    tokio::task::yield_now().await;
+    handle
+}
+
+#[tokio::test(start_paused = true)]
+async fn parked_waiter_fires_at_an_earlier_lower() -> Result<(), Box<dyn std::error::Error>> {
+    // Arrange: a waiter already parked on an alarm 100 s away.
+    let timer = Arc::new(ObjectAlarmTimer::new(Arc::new(ManualClock::default())));
+    timer.set_exact(Some(at(100_000))).await?;
+    let waiter = parked_waiter(&timer).await;
+
+    // Act: a unit lowers the alarm to 10 s.
+    timer.wake_at(at(10_000)).await?;
+    let fired = tokio::time::timeout(Duration::from_secs(20), waiter).await;
+
+    // Assert: a waiter that kept its old 100 s trigger would still be asleep.
+    assert_eq!(fired.ok().transpose()?, Some(at(10_000)));
+    Ok(())
+}
+
+#[tokio::test(start_paused = true)]
+async fn parked_waiter_cannot_fire_at_a_bound_moved_later() -> Result<(), Box<dyn std::error::Error>>
+{
+    // Arrange: a waiter already parked on an alarm 10 s away.
+    let timer = Arc::new(ObjectAlarmTimer::new(Arc::new(ManualClock::default())));
+    timer.set_exact(Some(at(10_000))).await?;
+    let waiter = parked_waiter(&timer).await;
+
+    // Act: the recompute moves the alarm to 100 s.
+    timer.set_exact(Some(at(100_000))).await?;
+    let mut waiter = waiter;
+    let before_new_bound = tokio::time::timeout(Duration::from_secs(20), &mut waiter).await;
+    let at_new_bound = tokio::time::timeout(Duration::from_secs(100), &mut waiter).await;
+
+    // Assert: nothing fires at the old 10 s bound; the moved alarm fires at 100 s.
+    assert!(
+        before_new_bound.is_err(),
+        "fired at the old bound: {before_new_bound:?}"
+    );
+    assert_eq!(at_new_bound.ok().transpose()?, Some(at(100_000)));
+    Ok(())
+}
+
+#[tokio::test(start_paused = true)]
+async fn clock_change_wakes_a_parked_waiter() -> Result<(), Box<dyn std::error::Error>> {
+    // Arrange: a waiter parked on an alarm an hour of business time away.
+    let clock = ManualClock::default();
+    let timer = Arc::new(ObjectAlarmTimer::new(Arc::new(clock.clone())));
+    timer.set_exact(Some(at(3_600_000))).await?;
+    let waiter = parked_waiter(&timer).await;
+
+    // Act: business time passes the deadline; Tokio time does not.
+    clock.set(3_600_001);
+    timer.clock_changed().await?;
+    let fired = tokio::time::timeout(Duration::from_secs(1), waiter).await;
+
+    // Assert: a trigger update that never notified the parked wait would leave it asleep.
+    assert_eq!(fired.ok().transpose()?, Some(at(3_600_000)));
+    Ok(())
+}
