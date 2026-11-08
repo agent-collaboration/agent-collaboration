@@ -58,7 +58,6 @@ async function queueItem(
 async function heldItems(
   input: CustodyActors & {
     readonly items: readonly string[];
-    readonly afterEach?: (count: number) => Promise<void>;
   },
 ): Promise<OfflineHeldReadbacks> {
   const recipientViews: unknown[] = [],
@@ -85,7 +84,6 @@ async function heldItems(
     senderViews.push(senderView);
     recipientViews.push(recipientView);
     await requireNoD1Turns([input.sender, input.recipient], input.receipt);
-    await input.afterEach?.(index + 1);
   }
   return { items: [...input.items], recipientViews, senderViews };
 }
@@ -126,22 +124,62 @@ async function collateralChat(
   await input.receipt.record("d4CollateralCustody", { phase: input.phase, fromC, fromA });
 }
 
-async function fullHeldWindow(input: {
+async function heldWindow(input: {
   readonly read: () => Promise<HeldWindowReadback>;
   readonly receipt: Receipt;
   readonly phase: string;
+  readonly expected?: number;
 }): Promise<void> {
   const observed = await input.read();
   z.uuidv7().parse(observed.recipientConnection);
   requireWindowSnapshotAgreement(observed.snapshot, observed.wireCurrent);
-  if (observed.wireCurrent.get(observed.recipientConnection) !== 32n)
-    throw new Error("the held recipient never reached the real 32-item window");
+  const expected = input.expected ?? 32;
+  if (observed.wireCurrent.get(observed.recipientConnection) !== BigInt(expected))
+    throw new Error(`the held recipient lacks its actual ${expected}-item window`);
   await input.receipt.save(`d4-window-${input.phase}.json`, {
     snapshot: observed.snapshot,
     wireCurrent: [...observed.wireCurrent],
     recipientConnection: observed.recipientConnection,
     runtimeQualified: false,
   });
+}
+
+async function drainWithCollateral(
+  input: CustodyActors & {
+    readonly collateral: D1Machine;
+    readonly barrier: ReceiverCustodyBarrier;
+    readonly readHeldWindow: () => Promise<HeldWindowReadback>;
+    readonly total: number;
+  },
+): Promise<void> {
+  let released = 0;
+  while (released < input.total) {
+    const group = Math.min(32, input.total - released);
+    await input.barrier.waitForReached(released + group);
+    const before = input.barrier.snapshot();
+    if (before.phase !== "holding" || before.held < group)
+      throw new Error("the next receiver drain group is not held");
+    // These are actual current wire/S8 slots, never a count inferred from markers.
+    await heldWindow({
+      read: input.readHeldWindow,
+      receipt: input.receipt,
+      phase: `drain-${released}`,
+      expected: group,
+    });
+    await collateralChat({ ...input, phase: `d4-held-drain-${released}` });
+    await heldWindow({
+      read: input.readHeldWindow,
+      receipt: input.receipt,
+      phase: `drain-${released}-after-collateral`,
+      expected: group,
+    });
+    const count = input.barrier.releaseReached(group);
+    if (count !== group) throw new Error("receiver drain group disappeared before release");
+    released += count;
+    await input.receipt.record("d4ReceiverDrainRelease", { before, released, group });
+  }
+  // Future retries must not encounter an abandoned apparatus cut.
+  input.barrier.release();
 }
 
 /** The caller starts B with this barrier's existing runtime-test-support hook and supplies actual wire/S8 readback. */
@@ -168,7 +206,7 @@ export async function driveBacklogWithCollateral(
     await input.receipt.save("d4-offline-items.json", { items: [...items] });
     await input.recipient.reopen();
     await input.barrier.waitForReached(1);
-    await fullHeldWindow({
+    await heldWindow({
       read: input.readHeldWindow,
       receipt: input.receipt,
       phase: "before-last-item",
@@ -176,7 +214,7 @@ export async function driveBacklogWithCollateral(
     items.push(await queueItem({ ...input, phase: "d4-after-welcome-1001", status: "sent" }));
     await input.receipt.save("d4-backlog-items.json", { items });
     await collateralChat({ ...input, phase: "d4-full-window-chat" });
-    await fullHeldWindow({
+    await heldWindow({
       read: input.readHeldWindow,
       receipt: input.receipt,
       phase: "after-collateral",
@@ -184,17 +222,9 @@ export async function driveBacklogWithCollateral(
     const held = input.barrier.snapshot();
     if (held.phase !== "holding" || held.held < 1)
       throw new Error("receiver commit cut was lost before release");
-    await input.receipt.record("d4ReceiverCommitRelease", {
-      held,
-      released: input.barrier.release(),
-    });
-    const result = await heldItems({
-      ...input,
-      items,
-      afterEach: async (count): Promise<void> => {
-        if (count % 100 === 0) await collateralChat({ ...input, phase: `d4-drain-chat-${count}` });
-      },
-    });
+    await input.receipt.record("d4ReceiverControlledDrain", { held, items: items.length });
+    await drainWithCollateral({ ...input, total: items.length });
+    const result = await heldItems({ ...input, items });
     await requireNoD1Turns(machines, input.receipt);
     return result;
   } finally {

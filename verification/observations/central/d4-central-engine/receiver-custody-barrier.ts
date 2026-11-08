@@ -41,6 +41,8 @@ export class ReceiverCustodyBarrier {
       this.peers.set(socket, peer);
       socket.on("error", (): void => {});
       socket.on("close", (): void => {
+        if (this.phase === "holding" && peer.reached && !peer.released)
+          this.fail(new Error("reached receiver left before its receipt was released"));
         this.peers.delete(socket);
         this.changes.emit("change");
       });
@@ -129,6 +131,20 @@ export class ReceiverCustodyBarrier {
       peer.released = true;
       peer.socket.end(Buffer.from([1]));
     }
+  }
+  /** Release only reached receipts; later peers remain held for the next drain group. */
+  releaseReached(maximum: number): number {
+    this.requireHealthy();
+    if (this.phase !== "holding") throw new Error("partial release requires a holding barrier");
+    if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > 32)
+      throw new Error("one to 32 reached receipts may be released per group");
+    let released = 0;
+    for (const peer of this.peers.values())
+      if (peer.reached && !peer.released && released < maximum) {
+        this.releasePeer(peer);
+        released += 1;
+      }
+    return released;
   }
   release(): number {
     this.requireHealthy();

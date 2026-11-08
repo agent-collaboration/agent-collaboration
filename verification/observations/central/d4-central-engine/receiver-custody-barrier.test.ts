@@ -60,6 +60,77 @@ test(
 );
 
 test(
+  "releasing one reached group keeps existing and future receipts held",
+  { timeout: 5000 },
+  async (): Promise<void> => {
+    const root = await mkdtemp("/private/tmp/d4b-");
+    const barrier = await ReceiverCustodyBarrier.listen(`${root}/accepted.sock`);
+    const clients: ReturnType<typeof createConnection>[] = [];
+    const connect = async (): Promise<ReturnType<typeof createConnection>> => {
+      const client = createConnection(barrier.path);
+      clients.push(client);
+      await once(client, "connect");
+      client.write("inbox-accepted\n");
+      await barrier.waitForReached(clients.length, 1000);
+      return client;
+    };
+    try {
+      const first = await connect(),
+        second = await connect();
+      const secondBytes: Buffer[] = [];
+      second.on("data", (bytes: Buffer): void => {
+        secondBytes.push(bytes);
+      });
+      const firstAnswer = once(first, "data");
+      assert.throws(() => barrier.releaseReached(0), /one to 32/);
+      assert.throws(() => barrier.releaseReached(33), /one to 32/);
+      assert.equal(barrier.releaseReached(1), 1);
+      assert.deepEqual((await firstAnswer)[0], Buffer.from([1]));
+      assert.equal(barrier.snapshot().phase, "holding");
+      assert.equal(barrier.snapshot().held, 1);
+      assert.deepEqual(secondBytes, []);
+      const third = await connect();
+      assert.equal(barrier.snapshot().held, 2);
+      const secondAnswer = once(second, "data");
+      assert.equal(barrier.releaseReached(1), 1);
+      assert.deepEqual((await secondAnswer)[0], Buffer.from([1]));
+      assert.equal(barrier.snapshot().held, 1);
+      const thirdAnswer = once(third, "data");
+      assert.equal(barrier.release(), 1);
+      assert.deepEqual((await thirdAnswer)[0], Buffer.from([1]));
+      assert.throws(() => barrier.releaseReached(1), /requires a holding/);
+    } finally {
+      for (const client of clients) client.destroy();
+      await barrier.close();
+      await rm(root, { recursive: true });
+    }
+  },
+);
+
+test(
+  "a reached peer disappearing before release invalidates the held cut",
+  { timeout: 5000 },
+  async (): Promise<void> => {
+    const root = await mkdtemp("/private/tmp/d4b-");
+    const barrier = await ReceiverCustodyBarrier.listen(`${root}/accepted.sock`);
+    const client = createConnection(barrier.path);
+    try {
+      await once(client, "connect");
+      client.write("inbox-accepted\n");
+      await barrier.waitForReached(1, 1000);
+      const invalid = assert.rejects(barrier.waitForReached(2, 1000), /barrier invalid/);
+      client.destroy();
+      await invalid;
+      assert.throws(() => barrier.releaseReached(1), /barrier invalid/);
+    } finally {
+      client.destroy();
+      await barrier.close();
+      await rm(root, { recursive: true });
+    }
+  },
+);
+
+test(
   "wrong or repeated marker bytes latch a failure rather than reaching the custody cut",
   { timeout: 5000 },
   async (): Promise<void> => {
