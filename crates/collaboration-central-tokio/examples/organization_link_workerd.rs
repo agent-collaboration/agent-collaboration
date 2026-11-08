@@ -12,6 +12,8 @@ mod link_client;
 mod organization_stamps;
 #[path = "organization_link_workerd/record_checks.rs"]
 mod record_checks;
+#[path = "organization_link_workerd/stamp_time_cases.rs"]
+mod stamp_time_cases;
 use collaboration_central_conformance::{
     ConformanceResult, DispatchCallSelector, DispatchKey, FIXTURE_KID, JwksFixtureServer,
     RuntimeControl, RuntimeControlRequest, fixture_policy, legacy_organization, sign_assertion,
@@ -393,6 +395,8 @@ async fn main() -> ConformanceResult<()> {
             "a stamp under the second published key is accepted while that key is published",
             &keyed,
         )?;
+        // Statement time and the warm key cache, each on its own Fleet object.
+        stamp_time_cases::run(&caller, &keys).await?;
         let renewal_held = stamps::renewal(RACE, &first_racing, 10)?;
         let renewal_racing = stamps::renewal(RACE, &first_racing, 11)?;
         let renewal_race = race(&caller, RACE, renewal_held, renewal_racing.clone()).await?;

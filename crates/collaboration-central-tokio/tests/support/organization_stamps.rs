@@ -75,9 +75,20 @@ pub(crate) fn stamp(organization: &str) -> ConformanceResult<String> {
 
 /// A valid statement signed by the published `stamp-b` key (seed 8).
 pub(crate) fn stamp_under_second_key(organization: &str) -> ConformanceResult<String> {
+    stamp_under_second_key_at(organization, 0)
+}
+
+/// A valid setup statement under `stamp-b`, issued `issued_offset` seconds
+/// after the fixture stamp: different bytes for each offset.
+pub(crate) fn stamp_under_second_key_at(
+    organization: &str,
+    issued_offset: i64,
+) -> ConformanceResult<String> {
+    let mut claims = claims(organization);
+    set_claim(&mut claims, "iat", json!(NOW_SECONDS - 60 + issued_offset))?;
     sign(
         &json!({"typ":"fleet-organization-stamp+jwt","alg":"EdDSA","kid":"stamp-b"}),
-        &claims(organization),
+        &claims,
         8,
     )
 }
@@ -138,6 +149,7 @@ pub(crate) fn set_claim(claims: &mut Value, name: &str, value: Value) -> Conform
 pub(crate) struct SignInKeys {
     pub url: String,
     retired: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    fetches: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     stop: tokio::sync::oneshot::Sender<()>,
     task: tokio::task::JoinHandle<Result<(), std::io::Error>>,
 }
@@ -147,10 +159,13 @@ impl SignInKeys {
         let url = format!("http://{}/api/auth/jwks", listener.local_addr()?);
         let retired = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let published = retired.clone();
+        let fetches = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = fetches.clone();
         let router = axum::Router::new().route(
             "/api/auth/jwks",
             axum::routing::get(move || {
                 let published = published.clone();
+                counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 async move {
                     let retired = published
                         .lock()
@@ -173,6 +188,7 @@ impl SignInKeys {
         Ok(Self {
             url,
             retired,
+            fetches,
             stop,
             task,
         })
@@ -185,6 +201,10 @@ impl SignInKeys {
             .map_err(|_| "retired key list poisoned")?
             .push(kid.to_owned());
         Ok(())
+    }
+    /// How many times central has fetched the published key set.
+    pub(crate) fn fetches(&self) -> usize {
+        self.fetches.load(std::sync::atomic::Ordering::SeqCst)
     }
     pub(crate) async fn shutdown(self) -> ConformanceResult<()> {
         let _ = self.stop.send(());

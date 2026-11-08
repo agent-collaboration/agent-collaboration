@@ -119,6 +119,7 @@ mod object_identity;
 mod organization_admin_link;
 mod organization_admin_lost_answer;
 mod organization_admin_origin;
+mod organization_provisioning_expiry;
 mod organization_provisioning_link;
 mod organization_provisioning_races;
 mod organization_retired_key;

@@ -179,7 +179,7 @@ where
                 statement,
                 compact: request.organization_statement.as_str().to_owned(),
                 record_id: io.new_id(),
-                now_millis: io.now().unix_millis(),
+                clock: io.clone(),
                 stored_trusted,
                 #[cfg(feature = "conformance")]
                 fail_after_record: io.take_organization_record_fault(),

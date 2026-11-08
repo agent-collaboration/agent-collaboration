@@ -44,6 +44,14 @@ fn record_id(suffix: u16) -> Uuid {
     Uuid::parse_str(&format!("019f0000-0000-7000-8000-00000000{suffix:04x}")).unwrap()
 }
 
+/// The applying transaction's clock, fixed for the case.
+struct ApplyClock(i64);
+impl runtime_primitives::Clock for ApplyClock {
+    fn now(&self) -> runtime_primitives::SyncTime {
+        runtime_primitives::SyncTime::from_unix_millis(self.0)
+    }
+}
+
 fn input(
     statement: VerifiedFleetOrganizationStatement,
     compact: &str,
@@ -54,7 +62,7 @@ fn input(
         statement,
         compact: compact.to_owned(),
         record_id: record_id(record),
-        now_millis,
+        clock: std::sync::Arc::new(ApplyClock(now_millis)),
         stored_trusted: true,
         #[cfg(feature = "conformance")]
         fail_after_record: false,

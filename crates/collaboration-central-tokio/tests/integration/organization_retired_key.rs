@@ -3,10 +3,10 @@
 //! refused before any write, and stamps under the remaining key keep working.
 #![cfg(feature = "conformance")]
 use crate::organization_provisioning_link::{
-    ORGANIZATION_A, PROVISION, provision_body, start, stored,
+    ORGANIZATION_A, PROVISION, control, provision_body, start, stored,
 };
 use crate::organization_stamps::{self as stamps, NOW_SECONDS, SignInKeys, link_post};
-use collaboration_central_conformance::{ConformanceResult, JwksFixtureServer};
+use collaboration_central_conformance::{ConformanceResult, JwksFixtureServer, RuntimeControl};
 use serde_json::json;
 
 const ORGANIZATION_B: &str = "019f0000-0000-7000-8000-00000000b2b1";
@@ -131,6 +131,125 @@ async fn a_retired_key_refuses_its_stamps_after_a_cold_start() -> ConformanceRes
     assert!(
         identity_c.is_empty() && records_c.is_empty(),
         "nothing written for C"
+    );
+    keys.shutdown().await?;
+    access.shutdown().await?;
+    Ok(())
+}
+
+async fn set_time_millis(base: &str, now_millis: i64) -> ConformanceResult<()> {
+    control(
+        base,
+        ORGANIZATION_A,
+        RuntimeControl::SetTime {
+            now: collaboration_central_core::RegistryTime(
+                chrono::DateTime::from_timestamp_millis(now_millis).ok_or("fixture time")?,
+            ),
+        },
+    )
+    .await
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare the answers and fetches across the key cache's refresh bound while fixture errors propagate."
+)]
+#[tokio::test]
+async fn a_warm_key_cache_refuses_a_retired_key_once_its_refresh_bound_passes()
+-> ConformanceResult<()> {
+    // Wrong build caught: a cached key kept after the sign-in service retired
+    // it. The cache keeps a fetched key set for min(max-age, 300 s) from its
+    // receipt on the Fleet's clock; the fixture sends no max-age, so a retired
+    // key still verifies at t0 + 299 999 ms and is refused from t0 + 300 000 ms,
+    // when the cache first refreshes. Nothing asks for an unknown
+    // kid before the bound, so nothing refreshes early. No restart, no wait.
+    let root = tempfile::tempdir()?;
+    let access = JwksFixtureServer::start().await?;
+    let keys = SignInKeys::start().await?;
+    let central = start(root.path(), &access, &keys, NOW_SECONDS).await?;
+    let base = central.server.base_url().to_owned();
+    let t0 = NOW_SECONDS * 1000;
+    let first = stamps::stamp_under_second_key_at(ORGANIZATION_A, 0)?;
+    let cached = link_post(
+        &central.socket,
+        PROVISION,
+        &provision_body(ORGANIZATION_A, &first),
+    )
+    .await?;
+    let warmed = keys.fetches();
+    keys.retire("stamp-b")?;
+    set_time_millis(&base, t0 + 299_999).await?;
+    let inside_bound = link_post(
+        &central.socket,
+        PROVISION,
+        &provision_body(
+            ORGANIZATION_A,
+            &stamps::stamp_under_second_key_at(ORGANIZATION_A, 1)?,
+        ),
+    )
+    .await?;
+    let inside_fetches = keys.fetches();
+    set_time_millis(&base, t0 + 300_000).await?;
+    let past_bound = link_post(
+        &central.socket,
+        PROVISION,
+        &provision_body(
+            ORGANIZATION_A,
+            &stamps::stamp_under_second_key_at(ORGANIZATION_A, 2)?,
+        ),
+    )
+    .await?;
+    let boundary_fetches = keys.fetches();
+    // The refresh also re-checked A's stored stamp, signed by the retired key:
+    // a setup statement under the remaining key now meets a refused stamp.
+    let over_refused = link_post(
+        &central.socket,
+        PROVISION,
+        &provision_body(ORGANIZATION_A, &stamps::stamp(ORGANIZATION_A)?),
+    )
+    .await?;
+    // Positive control: the refreshed key set is usable for a current key.
+    let remaining_key = link_post(
+        &central.socket,
+        PROVISION,
+        &provision_body(ORGANIZATION_B, &stamps::stamp(ORGANIZATION_B)?),
+    )
+    .await?;
+    central.server.shutdown().await?;
+    let (identity, records) = stored(root.path(), ORGANIZATION_A).await?;
+
+    assert_eq!(cached.0, 200, "the key is published when the cache fills");
+    assert_eq!(
+        inside_bound.0, 200,
+        "inside the bound the cached key still verifies (setup retry: no change)"
+    );
+    assert_eq!(
+        past_bound.0, 422,
+        "from the bound on, the retired key is refused"
+    );
+    assert_eq!(
+        (warmed, inside_fetches, boundary_fetches),
+        (1, 1, 3),
+        // At the bound the stale set is refreshed to re-check the stored stamp
+        // (fetch 2); the incoming kid then misses and its one forced refresh
+        // follows (fetch 3). Each verification fetches at most once.
+        "one fetch warms the cache, none inside the bound, refreshes only at it"
+    );
+    assert_eq!(
+        over_refused.0, 409,
+        "after the refresh the stamp stored under the retired key is refused"
+    );
+    assert_eq!(
+        remaining_key.0, 200,
+        "a statement under the remaining key provisions another organization"
+    );
+    assert_eq!(
+        (
+            identity.iter().map(|row| row.1.clone()).collect::<Vec<_>>(),
+            records.len()
+        ),
+        (vec![first], 1),
+        "A keeps exactly its first stamp and record"
     );
     keys.shutdown().await?;
     access.shutdown().await?;

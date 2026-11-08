@@ -76,7 +76,9 @@ pub(crate) struct ApplyProvisioning {
     pub statement: VerifiedFleetOrganizationStatement,
     pub compact: String,
     pub record_id: Uuid,
-    pub now_millis: i64,
+    /// Sampled inside the applying transaction: the statement must still be
+    /// valid when it is applied, not only when it was verified.
+    pub clock: std::sync::Arc<dyn runtime_primitives::Clock>,
     /// False when the stored stamp failed its check since this process started:
     /// then only a replacement naming it is accepted, and a setup retry is
     /// refused instead of answering Provisioned over a stamp nothing trusts.
@@ -101,6 +103,15 @@ where
     for<'v> Option<String>: Type<S::Database> + Decode<'v, S::Database> + Encode<'v, S::Database>,
     for<'r> &'r str: ColumnIndex<<S::Database as Database>::Row>,
 {
+    // A statement verified before a wait (another provisioning, a slow queue)
+    // may have expired since; decide on the time this transaction runs at.
+    let now = input.clock.now();
+    if input.statement.require_valid_at(now).is_err() {
+        return Ok(ProvisioningOutcome {
+            applied: ProvisioningApplied::InvalidStatement,
+        });
+    }
+    let now_millis = now.unix_millis();
     let stored = organization_stamp_store::read(scope).await?;
     let current = match &stored {
         StoredStampRead::Unprovisioned => None,
@@ -122,13 +133,8 @@ where
             return Ok(unchanged(ProvisioningApplied::Provisioned, stored));
         }
         Ok(OrganizationStatementReplacement::Initialize) => {
-            organization_stamp_store::insert(
-                scope,
-                &organization,
-                &input.compact,
-                input.now_millis,
-            )
-            .await?;
+            organization_stamp_store::insert(scope, &organization, &input.compact, now_millis)
+                .await?;
             // Setup carries only the organization ID; a retry finds this record.
             (
                 OrganizationChangeKind::OrganizationProvisioned,
@@ -141,8 +147,7 @@ where
                     reason: "a replacement decision requires a stored stamp".into(),
                 });
             };
-            organization_stamp_store::replace(scope, previous, &input.compact, input.now_millis)
-                .await?;
+            organization_stamp_store::replace(scope, previous, &input.compact, now_millis).await?;
             // A renewal is identified by the statement it installs.
             (
                 OrganizationChangeKind::StampRenewed,
@@ -158,7 +163,7 @@ where
             kind,
             origin: OrganizationChangeOrigin::SignInProvisioning {},
             target_id: organization.as_str().to_owned(),
-            created_at_millis: input.now_millis,
+            created_at_millis: now_millis,
         },
     )
     .await?;

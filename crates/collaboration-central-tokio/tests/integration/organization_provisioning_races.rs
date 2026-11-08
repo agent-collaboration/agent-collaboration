@@ -12,7 +12,7 @@ use collaboration_central_conformance::{
 };
 use collaboration_central_core::ObjectAddress;
 
-fn held_provisioning() -> ConformanceResult<DispatchKey> {
+pub(crate) fn held_provisioning() -> ConformanceResult<DispatchKey> {
     Ok(DispatchKey::new(
         ObjectAddress::Fleet {
             organization: ORGANIZATION_A.to_owned().try_into()?,
