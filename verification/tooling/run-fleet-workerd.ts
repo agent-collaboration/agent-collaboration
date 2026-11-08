@@ -186,6 +186,20 @@ try {
     "wasm32-unknown-unknown",
   ]);
   const runner = resolve(repository, "scripts/cargo_debug_signing_runner.sh");
+  if (process.platform === "darwin") {
+    runStage({ name: "bindgen-signing", command: runner, arguments: ["--sign-only", bindgen] });
+    runStage({ name: "bindgen-identity", command: "codesign", arguments: ["-dv", bindgen] });
+    assert.match(
+      readFileSync(resolve(evidence, "bindgen-identity.log"), "utf8"),
+      /^TeamIdentifier=974QD84WVC\r?$/m,
+      "wasm-bindgen must carry the project's Developer ID before launch",
+    );
+    runStage({
+      name: "bindgen-signature",
+      command: "codesign",
+      arguments: ["--verify", "--strict", bindgen],
+    });
+  }
   runStage({ name: "bindgen-version", command: runner, arguments: [bindgen, "--version"] });
   assert.match(
     readFileSync(resolve(evidence, "bindgen-version.log"), "utf8"),
