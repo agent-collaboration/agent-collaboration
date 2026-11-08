@@ -366,7 +366,7 @@ async fn receiver_rollback_is_unavailable_but_a_failed_store_boundary_is_unknown
     Ok(())
 }
 
-#[path = "../object_bootstrap/owner_migrate.rs"]
+#[path = "object_bootstrap/owner_migrate.rs"]
 mod owner_migrate;
 
 #[expect(

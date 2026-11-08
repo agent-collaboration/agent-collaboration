@@ -42,7 +42,7 @@ async fn version_one(fixture: &Fixture) -> Result<(), TestError> {
             .find(|migration| migration.version == 1)
             .ok_or_else(|| StoreError::backend("public receiver version1 absent"))?;
         scope.executor().execute(migration.sql.as_ref()).await.map_err(StoreError::backend)?;
-        scope.executor().execute(include_str!("../../../collaboration-central-core/core_migrations/0000_migration_history.sql"))
+        scope.executor().execute(include_str!("../../../../collaboration-central-core/core_migrations/0000_migration_history.sql"))
             .await.map_err(StoreError::backend)?;
         let checksum = migration.checksum.to_vec();
         query::<sqlx_turso::Turso>("INSERT INTO central_schema_migrations(row_id,corpus,version,description,installed_on,success,checksum,execution_time,created_at,updated_at) VALUES (?1,'fleet-sync-receiver',1,?4,?3,1,?2,0,?3,?3)")

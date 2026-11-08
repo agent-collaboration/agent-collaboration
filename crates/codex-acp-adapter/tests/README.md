@@ -18,3 +18,11 @@ empty e2e target is declared because CI selects no separate e2e category here.
 A former binary `<root>` and test `<case>` becomes binary `integration` and
 test `<root>::<case>`. Library test identities do not change. Nextest preserves
 one process per case and the existing scheduling and deadline rules.
+
+## Test folder ownership
+
+- `integration/native_prompt_execution`: integration modules, moved from `native_prompt_execution/`.
+- `integration/session_creation`: integration modules, moved from `session_creation/`.
+
+Existing `support/` and fixture data stay in place. Module names, case identities
+and process selectors are unchanged.

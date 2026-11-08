@@ -1,5 +1,5 @@
 //! Opt-in live board proof against an already running isolated debug Host.
-#[path = "../board_live_support/mod.rs"]
+#[path = "board_live_support/mod.rs"]
 mod board_live_support;
 
 mod proof_context {

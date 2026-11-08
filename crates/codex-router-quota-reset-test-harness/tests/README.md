@@ -13,3 +13,6 @@ features in their ordinary test selection. The existing default
 quota-reset-test-harness feature still owns the executable dependencies and
 sessions-picker dispatch; the harness binary requires that feature. Dedicated
 harness selections retain their defaults, original cases and process proof.
+
+The Claude terminal lifecycle fixture embeds the unchanged receipt data from
+agent-collaboration/tests/integration/claude_background_cli.

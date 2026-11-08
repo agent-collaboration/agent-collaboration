@@ -5,18 +5,18 @@ use crate::central_pair;
 use crate::fixture;
 use crate::follow_fixture;
 use crate::owned_host;
-#[path = "../board_e2e/owned_host_startup_proofs.rs"]
+#[path = "board_e2e/owned_host_startup_proofs.rs"]
 mod owned_host_startup_proofs;
-#[path = "../board_e2e/takeover_cancels.rs"]
+#[path = "board_e2e/takeover_cancels.rs"]
 mod takeover_cancels;
-#[path = "../board_e2e/takeover_controls.rs"]
+#[path = "board_e2e/takeover_controls.rs"]
 mod takeover_controls;
-#[path = "../board_e2e/takeover_follows.rs"]
+#[path = "board_e2e/takeover_follows.rs"]
 mod takeover_follows;
-#[path = "../board_e2e/takeover_prefixes.rs"]
+#[path = "board_e2e/takeover_prefixes.rs"]
 mod takeover_prefixes;
 use crate::takeover_readbacks;
-#[path = "../board_e2e/takeover_recipients.rs"]
+#[path = "board_e2e/takeover_recipients.rs"]
 mod takeover_recipients;
 use router_peer_test_support::FixtureResult;
 use takeover_prefixes::ReplicatedPrefix;

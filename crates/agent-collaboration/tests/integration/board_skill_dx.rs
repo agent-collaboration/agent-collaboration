@@ -1,5 +1,5 @@
 //! Opt-in unscripted developer-experience evaluation for the board communication skill.
-#[path = "../board_skill_dx_support/mod.rs"]
+#[path = "board_skill_dx_support/mod.rs"]
 mod board_skill_dx_support;
 
 mod proof_context {

@@ -18,3 +18,11 @@ declared because CI selects no separate e2e category for this crate.
 A former binary `<root>` and test `<case>` becomes binary `integration` and
 test `<root>::<case>`. Library test identities do not change. Nextest preserves
 one process per case and the existing scheduling and deadline rules.
+
+## Test folder ownership
+
+- `integration/run_route_transitions`: integration modules, moved from `run_route_transitions/`.
+- `integration/schema_initialization`: integration modules, moved from `schema_initialization/`.
+
+Existing `support/` and fixture data stay in place. Module names, case identities
+and process selectors are unchanged.

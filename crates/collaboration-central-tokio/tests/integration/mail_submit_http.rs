@@ -5,9 +5,9 @@ use crate::configuration;
 
 #[path = "../support/fleet_mail_expiry_scenarios.rs"]
 mod fleet_mail_expiry_scenarios;
-#[path = "../mail_submit_http/grants.rs"]
+#[path = "../support/mail_submit_http/grants.rs"]
 mod grants;
-#[path = "../mail_submit_http/historical_piece.rs"]
+#[path = "../support/mail_submit_http/historical_piece.rs"]
 mod historical_piece;
 use crate::{mail_push_inbox, mail_push_transport};
 
@@ -31,18 +31,18 @@ async fn shared_offline_fleet_mail_alarm_oracle() -> ConformanceResult<()> {
     result
 }
 use crate::registry_setup;
-#[path = "../mail_submit_http/relay.rs"]
+#[path = "../support/mail_submit_http/relay.rs"]
 mod relay;
 use crate::mail_relay_transport as relay_transport;
-#[path = "../mail_submit_http/reopen.rs"]
+#[path = "../support/mail_submit_http/reopen.rs"]
 mod reopen;
 #[path = "../support/mail_submit_scenarios.rs"]
 mod scenarios;
 #[path = "../support/sender_control_scenarios.rs"]
 mod sender_control_scenarios;
-#[path = "../mail_submit_http/sender_controls.rs"]
+#[path = "../support/mail_submit_http/sender_controls.rs"]
 mod sender_controls;
-#[path = "../mail_submit_http/status_ack.rs"]
+#[path = "../support/mail_submit_http/status_ack.rs"]
 mod status_ack;
 
 use collaboration_central_conformance::{ConformanceResult, JwksFixtureServer, fixture_policy};

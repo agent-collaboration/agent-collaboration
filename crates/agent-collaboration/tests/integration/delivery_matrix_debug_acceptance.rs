@@ -27,7 +27,7 @@ use collaboration_client::protocol::{
     ScheduleEnableRequest, SchedulePrepareRequest, SessionRef, TimingRequest,
 };
 use collaboration_client::{ConversationClient, ConversationCreateActor, ConversationCreateInput};
-#[path = "../delivery_matrix/approval.rs"]
+#[path = "delivery_matrix/approval.rs"]
 mod delivery_matrix_approval;
 
 mod delivery_matrix_support {
@@ -56,10 +56,10 @@ use crate::peer_fixture;
 use delivery_matrix_support::{
     ConfigHashGuard, mcp_send, prepare_acp_target_fixture, prepare_provider_fixture,
 };
-#[path = "../delivery_matrix/acp_target.rs"]
+#[path = "delivery_matrix/acp_target.rs"]
 mod delivery_matrix_acp_target;
 use proof_context::{ProofContext, ProofResult};
-#[path = "../delivery_matrix/subscription.rs"]
+#[path = "delivery_matrix/subscription.rs"]
 mod subscription;
 use serde_json::{Value, json};
 use std::time::Duration;

@@ -24,3 +24,21 @@ A former binary `<root>` and test `<case>` becomes binary `integration` or
 Nextest launches each case in its own process. Use `cargo test --no-run` for
 compilation measurements; do not replace that process isolation with plain
 multi-case `cargo test` execution.
+
+## Test folder ownership
+
+- `integration/automation_live_support`: integration modules, moved from `automation_live_support/`.
+- `e2e/board_e2e`: e2e modules, moved from `board_e2e/`.
+- `integration/board_live_support`: integration modules, moved from `board_live_support/`.
+- `integration/board_skill_dx_support`: integration modules, moved from `board_skill_dx_support/`.
+- `integration/claude_background_cli`: integration modules, moved from `claude_background_cli/`.
+- `integration/conversation_fault_entry_paths`: integration modules, moved from `conversation_fault_entry_paths/`.
+- `integration/delivery_matrix`: integration modules, moved from `delivery_matrix/`.
+- `e2e/mail_reconcile`: e2e modules, moved from `mail_reconcile/`.
+- `e2e/mail_retirement`: e2e modules, moved from `mail_retirement/`.
+- `integration/messaging_skill_dx_support`: integration modules, moved from `messaging_skill_dx_support/`.
+- `integration/provider_conversation_cli`: integration modules, moved from `provider_conversation_cli/`.
+- `integration/thread_subscription_cli`: integration modules, moved from `thread_subscription_cli/`.
+
+Existing `support/` and fixture data stay in place. Module names, case identities
+and process selectors are unchanged.

@@ -44,11 +44,11 @@ async fn applied_summary_keeps_unknown_time_and_no_status_in_copy_and_directory(
     proof
 }
 
-#[path = "../copy_receiver/retry.rs"]
+#[path = "copy_receiver_fixture/retry.rs"]
 mod retry;
-#[path = "../copy_receiver/rollback.rs"]
+#[path = "copy_receiver_fixture/rollback.rs"]
 mod rollback;
-#[path = "../copy_receiver/snapshot.rs"]
+#[path = "copy_receiver_fixture/snapshot.rs"]
 mod snapshot;
 
 fn schema_piece(database: fleet_protocol::DatabaseId) -> TestResult<Piece<BoardAnnotation>> {
@@ -120,11 +120,11 @@ async fn a_piece_without_annotation_keeps_the_last_summary_and_admits_no_new_upd
     proof
 }
 
-#[path = "../copy_receiver/capacity.rs"]
+#[path = "copy_receiver_fixture/capacity.rs"]
 mod capacity;
 
-#[path = "../copy_receiver/operations_metadata.rs"]
+#[path = "copy_receiver_fixture/operations_metadata.rs"]
 mod operations_metadata;
 
-#[path = "../copy_receiver/owner_repair.rs"]
+#[path = "copy_receiver_fixture/owner_repair.rs"]
 mod owner_repair;

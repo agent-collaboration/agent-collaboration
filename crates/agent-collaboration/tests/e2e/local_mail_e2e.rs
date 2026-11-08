@@ -1,13 +1,13 @@
 //! LM01–LM05: actual CLI/MCP/Host and authenticated Rust peer, without agent turns.
 
 #![deny(clippy::too_many_lines)]
-#[path = "../board_e2e/mail_fixture.rs"]
+#[path = "board_e2e/mail_fixture.rs"]
 mod mail_fixture;
-#[path = "../board_e2e/mail_messages.rs"]
+#[path = "board_e2e/mail_messages.rs"]
 mod mail_messages;
-#[path = "../board_e2e/mail_migration.rs"]
+#[path = "board_e2e/mail_migration.rs"]
 mod mail_migration;
-#[path = "../board_e2e/mail_wakes.rs"]
+#[path = "board_e2e/mail_wakes.rs"]
 mod mail_wakes;
 use crate::owned_host;
 use router_peer_test_support::FixtureResult;

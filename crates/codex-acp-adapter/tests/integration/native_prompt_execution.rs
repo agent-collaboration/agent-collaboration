@@ -44,7 +44,7 @@ enum FinalReplyFixture {
     PlanOnly,
     PlanWithProse,
 }
-#[path = "../native_prompt_execution/early_cancellation.rs"]
+#[path = "native_prompt_execution/early_cancellation.rs"]
 mod early_cancellation;
 fn expected_final_reply(fixture: FinalReplyFixture) -> Value {
     match fixture {

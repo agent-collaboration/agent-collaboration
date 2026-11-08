@@ -23,9 +23,9 @@ use sqlx_core::{
 use std::time::Duration;
 
 use crate::configuration;
-#[path = "../fleet_requests/feed_reads.rs"]
+#[path = "fleet_requests/feed_reads.rs"]
 mod feed_reads;
-#[path = "../fleet_requests/snapshot_reads.rs"]
+#[path = "fleet_requests/snapshot_reads.rs"]
 mod snapshot_reads;
 const SERVICE: &str = "550e8400-e29b-41d4-a716-4466554400f4";
 const WORKSPACE: &str = "019f0000-0000-7000-8000-000000000f41";

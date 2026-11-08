@@ -229,7 +229,7 @@ fn run_claude_terminal_lifecycle(expected_mode: &str) -> TestResult<()> {
     command.env(
         "CLAUDE_FIXTURE_RECEIPT",
         include_str!(
-            "../../../../agent-collaboration/tests/claude_background_cli/claude_bg_2_1_312.txt"
+            "../../../../agent-collaboration/tests/integration/claude_background_cli/claude_bg_2_1_312.txt"
         ),
     );
     command.cwd(env!("CARGO_MANIFEST_DIR"));

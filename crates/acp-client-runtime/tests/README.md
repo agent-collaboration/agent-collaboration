@@ -17,3 +17,12 @@ so only the integration target is declared.
 A former binary `<root>` and test `<case>` becomes binary `integration` and
 test `<root>::<case>`. Library test identities do not change. Nextest preserves
 one process per case and the existing scheduling and deadline rules.
+
+## Test folder ownership
+
+- `integration/create_settings_order`: integration modules, moved from `create_settings_order/`.
+- `integration/cursor_model_settings`: integration modules, moved from `cursor_model_settings/`.
+- `integration/provider_turn_boundaries`: integration modules, moved from `provider_turn_boundaries/`.
+
+Existing `support/` and fixture data stay in place. Module names, case identities
+and process selectors are unchanged.

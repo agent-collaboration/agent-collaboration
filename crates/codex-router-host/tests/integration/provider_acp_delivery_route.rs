@@ -731,8 +731,8 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
     }
 }
 
-#[path = "../provider_acp_delivery_route/provider_failure_tests.rs"]
+#[path = "provider_acp_delivery_route/provider_failure_tests.rs"]
 mod provider_failure_tests;
 
-#[path = "../provider_acp_delivery_route/auto_direct_message_tests.rs"]
+#[path = "provider_acp_delivery_route/auto_direct_message_tests.rs"]
 mod auto_direct_message_tests;

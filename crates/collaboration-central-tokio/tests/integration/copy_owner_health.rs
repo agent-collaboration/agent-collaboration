@@ -22,21 +22,21 @@ use crate::creation_scenarios;
 use crate::native_fleet as fleet_setup;
 
 use crate::imported_board_fixture;
-#[path = "../copy_owner_health/migration_cases.rs"]
+#[path = "copy_owner_health/migration_cases.rs"]
 mod migration_cases;
-#[path = "../copy_owner_health/migration_reopen.rs"]
+#[path = "copy_owner_health/migration_reopen.rs"]
 mod migration_reopen;
 
 use crate::owner_registry_scenarios;
-#[path = "../copy_owner_health/page_cases.rs"]
+#[path = "copy_owner_health/page_cases.rs"]
 mod page_cases;
 
-#[path = "../copy_owner_health/retired_reopen.rs"]
+#[path = "copy_owner_health/retired_reopen.rs"]
 mod retired_reopen;
 
 const PROJECT: &str = "019f0000-0000-7000-8000-000000004730";
 
-#[path = "../copy_owner_health/bookkeeping_identity.rs"]
+#[path = "copy_owner_health/bookkeeping_identity.rs"]
 mod bookkeeping_identity;
 
 fn settings(root: &Path, jwks: &str) -> ConformanceResult<TokioSettings> {
@@ -189,5 +189,5 @@ async fn owner_copy_operations_use_the_real_http_core_and_retirement_receipt()
     proof
 }
 
-#[path = "../copy_owner_health/migrate_cases.rs"]
+#[path = "copy_owner_health/migrate_cases.rs"]
 mod migrate_cases;

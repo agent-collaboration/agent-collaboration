@@ -2,7 +2,7 @@
 
 //! Original test roots retain their case namespaces.
 
-#[path = "../upload_support/central_fixture.rs"]
+#[path = "../support/upload_support/central_fixture.rs"]
 mod central_fixture;
 #[expect(
     dead_code,
@@ -14,10 +14,10 @@ mod fixture_support;
     dead_code,
     reason = "Upload helpers are shared with sibling integration targets."
 )]
-#[path = "../upload_support/mod.rs"]
+#[path = "../support/upload_support/mod.rs"]
 mod upload_support;
 
-#[path = "../upgrade_binary_e2e/support/mod.rs"]
+#[path = "upgrade_binary_e2e/support/mod.rs"]
 mod e2e_support;
 
 #[expect(

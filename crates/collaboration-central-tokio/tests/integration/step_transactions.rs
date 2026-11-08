@@ -16,13 +16,13 @@ type TestError = Box<dyn std::error::Error + Send + Sync>;
 type TestResult = Result<(), TestError>;
 type ReceiptDriver = StepConformance<TokioStorageHost<FixtureHost>>;
 
-#[path = "../step_transactions/native_unwind.rs"]
+#[path = "step_transactions/native_unwind.rs"]
 mod native_unwind;
-#[path = "../step_transactions/typed_ledger.rs"]
+#[path = "step_transactions/typed_ledger.rs"]
 mod typed_ledger;
-#[path = "../step_transactions/typed_receipts.rs"]
+#[path = "step_transactions/typed_receipts.rs"]
 mod typed_receipts;
-#[path = "../step_transactions/validation.rs"]
+#[path = "step_transactions/validation.rs"]
 mod validation;
 
 struct FixtureHost;

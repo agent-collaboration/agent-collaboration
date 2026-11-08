@@ -28,3 +28,11 @@ Relaunched test names derive from `module_path!()`. Normally completed children
 with captured output must report one passed test. Intentional exits, kills,
 exec replacements and managed children with discarded output retain actual
 readiness, effect, exit-code or reaping checks that reject zero matches.
+
+## Test folder ownership
+
+- `integration/external_provider_supervisor`: integration modules, moved from `external_provider_supervisor/`.
+- `integration/provider_acp_delivery_route`: integration modules, moved from `provider_acp_delivery_route/`.
+
+Existing `support/` and fixture data stay in place. Module names, case identities
+and process selectors are unchanged.

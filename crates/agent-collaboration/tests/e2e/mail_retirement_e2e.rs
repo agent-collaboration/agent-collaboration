@@ -2,9 +2,9 @@
 
 #![deny(clippy::too_many_lines)]
 use crate::{central_pair, fixture};
-#[path = "../mail_retirement/readback.rs"]
+#[path = "mail_retirement/readback.rs"]
 mod readback;
-#[path = "../mail_retirement/wake_and_capacity.rs"]
+#[path = "mail_retirement/wake_and_capacity.rs"]
 mod wake_and_capacity;
 use collaboration_client::protocol::{EndpointRef, SessionRef};
 use owned_process_test_support::scenario_finalization::run_scenario;

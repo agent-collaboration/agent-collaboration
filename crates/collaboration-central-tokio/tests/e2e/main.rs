@@ -9,7 +9,7 @@
 mod fleet_ledger_rows;
 
 #[cfg(feature = "conformance")]
-#[path = "../native_http/support.rs"]
+#[path = "../support/native_http/support.rs"]
 mod configuration;
 #[cfg(feature = "conformance")]
 #[path = "../support/creation_scenarios.rs"]
@@ -63,14 +63,14 @@ mod holder_writer_retry;
 #[path = "../../src/test_support/mail_relay_transport.rs"]
 mod mail_relay_transport;
 #[cfg(feature = "conformance")]
-#[path = "../mail_submit_http/registry_setup.rs"]
+#[path = "../support/mail_submit_http/registry_setup.rs"]
 #[expect(
     dead_code,
     reason = "Shared fixture capabilities serve different test aggregates."
 )]
 mod registry_setup;
 #[cfg(feature = "conformance")]
-#[path = "../session_publication/support.rs"]
+#[path = "../support/session_publication/support.rs"]
 #[expect(
     dead_code,
     reason = "Shared fixture capabilities serve different test aggregates."

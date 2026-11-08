@@ -2,7 +2,7 @@
 
 #![deny(clippy::too_many_lines)]
 use crate::central_pair;
-#[path = "../mail_reconcile/connected_status.rs"]
+#[path = "mail_reconcile/connected_status.rs"]
 mod connected_status;
 
 use crate::fixture;

@@ -1,12 +1,12 @@
 //! Opt-in live proof. Run only against automation-debug-host, never production or an existing thread.
-#[path = "../automation_live_support/automatic_summary_timeout.rs"]
+#[path = "automation_live_support/automatic_summary_timeout.rs"]
 mod automatic_summary_timeout;
-#[path = "../automation_live_support/busy_thread_delivery.rs"]
+#[path = "automation_live_support/busy_thread_delivery.rs"]
 mod busy_thread_delivery;
 use crate::debug_backend_restart;
-#[path = "../automation_live_support/durable_delivery_recovery.rs"]
+#[path = "automation_live_support/durable_delivery_recovery.rs"]
 mod durable_delivery_recovery;
-#[path = "../automation_live_support/native_fork_continuation.rs"]
+#[path = "automation_live_support/native_fork_continuation.rs"]
 mod native_fork_continuation;
 mod proof_context {
     pub(super) use crate::proof_context::*;
@@ -29,11 +29,11 @@ mod proof_context {
         }
     }
 }
-#[path = "../automation_live_support/scheduled_continuity.rs"]
+#[path = "automation_live_support/scheduled_continuity.rs"]
 mod scheduled_continuity;
-#[path = "../automation_live_support/summary_failure_recovery.rs"]
+#[path = "automation_live_support/summary_failure_recovery.rs"]
 mod summary_failure_recovery;
-#[path = "../automation_live_support/worker_timeout_proof.rs"]
+#[path = "automation_live_support/worker_timeout_proof.rs"]
 mod worker_timeout_proof;
 use collaboration_client::protocol::{
     AutomationPageRequest, DeliveryClientReceipt, DeliveryEvidence, DeliveryListRequest,

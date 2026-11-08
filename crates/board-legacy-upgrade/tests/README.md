@@ -29,3 +29,12 @@ A former binary `<root>` and test `<case>` becomes binary `integration` or
 the same main/e2e split, scheduling and deadlines; nextest uses one process per
 case. The message-copy child selector derives from `module_path!()`. Its
 intentional exit 93, durable copy and replay/drop checks reject zero matches.
+
+## Test folder ownership
+
+- `integration/message_support`: integration modules, moved from `message_support/`.
+- `e2e/upgrade_binary_e2e`: e2e modules, moved from `upgrade_binary_e2e/`.
+- `support/upload_support`: e2e and integration modules, moved from `upload_support/`.
+
+Existing `support/` and fixture data stay in place. Module names, case identities
+and process selectors are unchanged.

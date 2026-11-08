@@ -92,8 +92,8 @@ async fn receiver_failure_survives_rollback_best_effort_recording_and_clears_on_
         }).await?;
         // Both fixtures affect central-owned metadata. No receiver-private table is queried.
         sql(root.path(), database, &[
-            include_str!("../../../collaboration-central-core/core_migrations/0000_migration_history.sql"),
-            include_str!("../../../collaboration-central-core/core_migrations/0009_migration_failures.sql"),
+            include_str!("../../../../collaboration-central-core/core_migrations/0000_migration_history.sql"),
+            include_str!("../../../../collaboration-central-core/core_migrations/0009_migration_failures.sql"),
             "CREATE TRIGGER receiver_history_fault BEFORE INSERT ON central_schema_migrations WHEN NEW.corpus='fleet-sync-receiver' AND NEW.version=3 BEGIN SELECT RAISE(ABORT,'receiver history fault'); END",
             "CREATE TRIGGER diagnostic_write_fault BEFORE INSERT ON central_schema_migration_failures BEGIN SELECT RAISE(ABORT,'failure record fault'); END",
         ]).await?;

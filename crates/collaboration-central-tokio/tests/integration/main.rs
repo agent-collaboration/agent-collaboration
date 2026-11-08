@@ -7,12 +7,11 @@ mod fleet_record_rows;
 #[cfg(feature = "conformance")]
 #[path = "../support/clocked_server.rs"]
 mod clocked_server;
-#[path = "../native_http/support.rs"]
+#[path = "../support/native_http/support.rs"]
 mod configuration;
 #[cfg(feature = "conformance")]
 #[path = "../support/copy_read_scenarios.rs"]
 mod copy_read_scenarios;
-#[path = "../copy_receiver/mod.rs"]
 mod copy_receiver_fixture;
 #[cfg(feature = "conformance")]
 #[path = "../support/copy_wait_scenarios.rs"]
@@ -21,7 +20,7 @@ mod copy_wait_scenarios;
 #[path = "../support/creation_scenarios.rs"]
 mod creation_scenarios;
 #[cfg(feature = "conformance")]
-#[path = "../directory_session/support.rs"]
+#[path = "directory_session/support.rs"]
 mod directory_session_fixture;
 #[cfg(feature = "conformance")]
 #[path = "../support/fleet_cache_source.rs"]
@@ -43,9 +42,9 @@ mod imported_claim_scenarios;
 #[path = "../../src/test_support/mail_relay_transport.rs"]
 mod mail_relay_transport;
 #[cfg(feature = "conformance")]
-#[path = "../fleet_storage/support.rs"]
+#[path = "fleet_storage/support.rs"]
 mod native_fleet;
-#[path = "../native_http/platform.rs"]
+#[path = "../support/native_http/platform.rs"]
 mod native_http_platform;
 #[cfg(feature = "conformance")]
 #[path = "../support/owner_registry_scenarios.rs"]
@@ -55,16 +54,16 @@ mod native_http_platform;
 )]
 mod owner_registry_scenarios;
 #[cfg(feature = "conformance")]
-#[path = "../mail_submit_http/registry_setup.rs"]
+#[path = "../support/mail_submit_http/registry_setup.rs"]
 mod registry_setup;
 #[cfg(feature = "conformance")]
-#[path = "../session_move/fixture.rs"]
+#[path = "session_move/fixture.rs"]
 mod session_move_fixture;
 #[cfg(feature = "conformance")]
-#[path = "../session_publication/support.rs"]
+#[path = "../support/session_publication/support.rs"]
 mod session_publication_fixture;
 #[cfg(feature = "conformance")]
-#[path = "../transfer_boundaries/fixture.rs"]
+#[path = "transfer_boundaries/fixture.rs"]
 mod transfer_fixture;
 
 mod access_carryover;
@@ -142,7 +141,7 @@ mod transfer_schema_support;
 mod fleet_layout;
 
 #[cfg(feature = "conformance")]
-#[path = "../fleet_notice_outbox/fault_store.rs"]
+#[path = "fleet_notice_outbox/fault_store.rs"]
 mod fleet_fault_store;
 #[cfg(feature = "conformance")]
 mod fleet_lease_atomicity;

@@ -16,14 +16,14 @@ use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use sqlx_core::{executor::Executor, query::query, row::Row};
 use std::{path::Path, sync::Arc, time::Duration};
 
-#[path = "../machine_enrollment/call_edge_mapping.rs"]
+#[path = "machine_enrollment/call_edge_mapping.rs"]
 mod call_edge_mapping;
-#[path = "../machine_enrollment/mail_admission.rs"]
+#[path = "machine_enrollment/mail_admission.rs"]
 mod mail_admission;
 use crate::native_http_platform as native_fixture;
-#[path = "../machine_enrollment/peer_binding.rs"]
+#[path = "machine_enrollment/peer_binding.rs"]
 mod peer_binding;
-#[path = "../machine_enrollment/presence_cases.rs"]
+#[path = "machine_enrollment/presence_cases.rs"]
 mod presence_cases;
 use crate::registry_setup;
 
@@ -402,7 +402,7 @@ async fn stored_domain_corruption_is_an_error_instead_of_an_authentication_refus
     Ok(())
 }
 
-#[path = "../machine_enrollment/readmission_cases.rs"]
+#[path = "machine_enrollment/readmission_cases.rs"]
 mod readmission_cases;
 
 #[expect(

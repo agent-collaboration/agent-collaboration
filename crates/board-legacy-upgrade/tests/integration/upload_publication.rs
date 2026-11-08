@@ -10,7 +10,7 @@ use collaboration_central_core::{
 use owned_process_test_support::scenario_finalization::run_scenario;
 use std::{error::Error, fmt::Display, time::Duration};
 use support::*;
-#[path = "../upload_support/publication_faults.rs"]
+#[path = "../support/upload_support/publication_faults.rs"]
 mod publication_faults;
 
 type SafeResult<Value = ()> = owned_process_test_support::FixtureResult<Value>;

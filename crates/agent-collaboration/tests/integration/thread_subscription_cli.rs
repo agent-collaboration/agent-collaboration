@@ -20,7 +20,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-#[path = "../thread_subscription_cli/wait_uncertainty.rs"]
+#[path = "thread_subscription_cli/wait_uncertainty.rs"]
 mod wait_uncertainty;
 
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000101";

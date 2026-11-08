@@ -16,3 +16,10 @@ Cargo.toml; CI selects no separate e2e category for this package.
 A former binary `<root>` and test `<case>` becomes its category binary and
 test `<root>::<case>`. Library test identities do not change. Nextest preserves
 one process per case and the existing scheduling and deadline rules.
+
+## Test folder ownership
+
+- `integration/push_repository`: integration modules, moved from `push_repository/`.
+
+Existing `support/` and fixture data stay in place. Module names, case identities
+and process selectors are unchanged.

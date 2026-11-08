@@ -2,19 +2,19 @@
 #![cfg(feature = "conformance")]
 
 use crate::configuration;
-#[path = "../owner_registry/fixture.rs"]
+#[path = "owner_registry/fixture.rs"]
 mod fixture;
-#[path = "../owner_registry/grant_refusals.rs"]
+#[path = "owner_registry/grant_refusals.rs"]
 mod grant_refusals;
 
 use crate::native_fleet;
-#[path = "../owner_registry/notices.rs"]
+#[path = "owner_registry/notices.rs"]
 mod notices;
-#[path = "../owner_registry/preview_presence.rs"]
+#[path = "owner_registry/preview_presence.rs"]
 mod preview_presence;
 
 use crate::registry_setup;
-#[path = "../owner_registry/retirement.rs"]
+#[path = "owner_registry/retirement.rs"]
 mod retirement;
 
 use crate::directory_session_fixture as support;

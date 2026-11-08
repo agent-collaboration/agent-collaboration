@@ -1,6 +1,6 @@
 //! Original test roots retain their case namespaces.
 
-#[path = "../project_storage_support/mod.rs"]
+#[path = "project_storage_support/mod.rs"]
 mod project_storage_support;
 
 mod board_project_schema;

@@ -3,23 +3,23 @@
 #[path = "../support/board_cli_execution.rs"]
 mod board_cli_execution;
 use collaboration_application_test_support::board_fixture;
-#[path = "../automation_live_support/debug_backend_restart.rs"]
+#[path = "automation_live_support/debug_backend_restart.rs"]
 mod debug_backend_restart;
-#[path = "../delivery_matrix/support.rs"]
+#[path = "delivery_matrix/support.rs"]
 mod delivery_matrix_support;
 #[path = "../support/local_mail_surfaces.rs"]
 mod local_mail_surfaces;
-#[path = "../delivery_matrix/native_push_correlation.rs"]
+#[path = "delivery_matrix/native_push_correlation.rs"]
 mod native_push_correlation_fixture;
 #[path = "../support/local_mail_native_sql.rs"]
 mod native_sql;
-#[path = "../delivery_matrix/peer_fixture.rs"]
+#[path = "delivery_matrix/peer_fixture.rs"]
 mod peer_fixture;
-#[path = "../automation_live_support/proof_context.rs"]
+#[path = "automation_live_support/proof_context.rs"]
 mod proof_context;
-#[path = "../delivery_matrix/public_push_receipt.rs"]
+#[path = "delivery_matrix/public_push_receipt.rs"]
 mod public_push_receipt_fixture;
-#[path = "../delivery_matrix/subscription_notice_observer.rs"]
+#[path = "delivery_matrix/subscription_notice_observer.rs"]
 mod subscription_notice_observer;
 use board_fixture::native_mail_owner;
 

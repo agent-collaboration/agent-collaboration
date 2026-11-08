@@ -5,9 +5,9 @@ use crate::configuration;
 use crate::creation_scenarios;
 
 use crate::transfer_fixture as fixture;
-#[path = "../transfer_boundaries/grant_readback.rs"]
+#[path = "transfer_boundaries/grant_readback.rs"]
 mod grant_readback;
-#[path = "../transfer_missing_copy/mod.rs"]
+#[path = "transfer_missing_copy/mod.rs"]
 mod missing_copy;
 
 use crate::owner_registry_scenarios;

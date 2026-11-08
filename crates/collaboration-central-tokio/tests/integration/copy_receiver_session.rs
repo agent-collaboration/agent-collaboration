@@ -1,7 +1,7 @@
 //! The normal socket binds writer authority before the real Copy apply.
 #![cfg(feature = "conformance")]
 
-#[path = "../copy_receiver_session/bootstrap_refusals.rs"]
+#[path = "copy_receiver_session/bootstrap_refusals.rs"]
 mod bootstrap_refusals;
 use crate::configuration;
 use crate::copy_wait_scenarios;

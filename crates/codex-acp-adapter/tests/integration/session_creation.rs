@@ -17,7 +17,7 @@ use tokio_tungstenite::{
 };
 
 #[cfg(target_os = "macos")]
-#[path = "../session_creation/private_scratch_alias.rs"]
+#[path = "session_creation/private_scratch_alias.rs"]
 mod private_scratch_alias;
 
 const TEST_SCRATCH: &str =

@@ -36,3 +36,33 @@ that existing overlap and the timer case's process-runtime reservation.
 Test names map from binary `<root>` / test `<case>` to the appropriate aggregate
 binary / test `<root>::<case>`. Library test identities do not change. Integration
 and e2e cases run under nextest with one process per test.
+
+## Test folder ownership
+
+- `integration/copy_owner_health`: integration modules, moved from `copy_owner_health/`.
+- `integration/copy_receiver_fixture`: integration modules, moved from `copy_receiver/`.
+- `integration/copy_receiver_session`: integration modules, moved from `copy_receiver_session/`.
+- `integration/directory_session`: integration modules, moved from `directory_session/`.
+- `e2e/fleet_client_cache`: e2e modules, moved from `fleet_client_cache/`.
+- `integration/fleet_notice_outbox`: integration modules, moved from `fleet_notice_outbox/`.
+- `integration/fleet_requests`: integration modules, moved from `fleet_requests/`.
+- `integration/fleet_storage`: integration modules, moved from `fleet_storage/`.
+- `e2e/forwarded_posts`: e2e modules, moved from `forwarded_posts/`.
+- `integration/machine_enrollment`: integration modules, moved from `machine_enrollment/`.
+- `integration/machine_notices`: integration modules, moved from `machine_notices/`.
+- `support/mail_submit_http`: e2e and integration modules, moved from `mail_submit_http/`.
+- `support/native_http`: e2e and integration modules, moved from `native_http/`.
+- `integration/normal_redeploy`: integration modules, moved from `normal_redeploy/`.
+- `integration/object_bootstrap`: integration modules, moved from `object_bootstrap/`.
+- `integration/owner_registry`: integration modules, moved from `owner_registry/`.
+- `integration/owner_takeover_recovery`: integration modules, moved from `owner_takeover_recovery/`.
+- `integration/process_restart`: integration modules, moved from `process_restart/`.
+- `integration/session_credentials`: integration modules, moved from `session_credentials/`.
+- `integration/session_move`: integration modules, moved from `session_move/`.
+- `support/session_publication`: e2e and integration modules, moved from `session_publication/`.
+- `integration/step_transactions`: integration modules, moved from `step_transactions/`.
+- `integration/transfer_boundaries`: integration modules, moved from `transfer_boundaries/`.
+- `integration/transfer_missing_copy`: integration modules, moved from `transfer_missing_copy/`.
+
+Existing `support/` and fixture data stay in place. Module names, case identities
+and process selectors are unchanged.

@@ -563,5 +563,5 @@ fn setting_response_launch(mode: &str) -> ExternalProviderLaunch {
     }
 }
 
-#[path = "../create_settings_order/settings_tail_tests.rs"]
+#[path = "create_settings_order/settings_tail_tests.rs"]
 mod settings_tail_tests;

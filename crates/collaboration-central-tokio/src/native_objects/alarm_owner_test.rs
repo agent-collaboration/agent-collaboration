@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
-#[path = "../../tests/native_http/support.rs"]
+#[path = "../../tests/support/native_http/support.rs"]
 mod configuration;
 async fn open(root: &Path) -> TestResult<Arc<NativeObjects>> {
     open_with_clock(root, Arc::new(runtime_primitives::SystemClock)).await

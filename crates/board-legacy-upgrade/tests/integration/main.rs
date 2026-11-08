@@ -1,12 +1,12 @@
 //! Original test roots retain their case namespaces.
 
-#[path = "../upload_support/central_fixture.rs"]
+#[path = "../support/upload_support/central_fixture.rs"]
 mod central_fixture;
-#[path = "../message_support/mod.rs"]
+#[path = "message_support/mod.rs"]
 mod message_support;
 #[path = "../support/mod.rs"]
 mod support;
-#[path = "../upload_support/mod.rs"]
+#[path = "../support/upload_support/mod.rs"]
 mod upload_support;
 
 mod activity_range_cutover;

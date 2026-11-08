@@ -356,8 +356,8 @@ async fn claude_foreground_preserves_required_option_values_that_resemble_modes(
     );
 }
 
-#[path = "../claude_background_cli/native_source_tests.rs"]
+#[path = "claude_background_cli/native_source_tests.rs"]
 mod native_source_tests;
 
-#[path = "../claude_background_cli/attach_flow_tests.rs"]
+#[path = "claude_background_cli/attach_flow_tests.rs"]
 mod attach_flow_tests;

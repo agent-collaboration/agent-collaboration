@@ -23,16 +23,16 @@ mod delivery_matrix_support {
         }
     }
 }
-#[path = "../delivery_matrix/held_cells.rs"]
+#[path = "delivery_matrix/held_cells.rs"]
 mod held_cells;
-#[path = "../delivery_matrix/held_subscription_producer.rs"]
+#[path = "delivery_matrix/held_subscription_producer.rs"]
 mod held_subscription_producer;
 use crate::native_push_correlation_fixture as native_push_correlation;
-#[path = "../delivery_matrix/native_push_receipt.rs"]
+#[path = "delivery_matrix/native_push_receipt.rs"]
 mod native_push_receipt;
-#[path = "../delivery_matrix/owned_resource_cleanup.rs"]
+#[path = "delivery_matrix/owned_resource_cleanup.rs"]
 mod owned_resource_cleanup;
-#[path = "../delivery_matrix/owned_resources.rs"]
+#[path = "delivery_matrix/owned_resources.rs"]
 mod owned_resources;
 use crate::peer_fixture;
 mod proof_context {
@@ -57,7 +57,7 @@ mod proof_context {
     }
 }
 use crate::public_push_receipt_fixture as public_push_receipt;
-#[path = "../delivery_matrix/settled_creation.rs"]
+#[path = "delivery_matrix/settled_creation.rs"]
 mod settled_creation;
 use crate::subscription_notice_observer as subscription;
 
@@ -67,7 +67,7 @@ use collaboration_protocol::{
     PushRecordListParams, PushRecordShowParams, RouterOriginRef,
 };
 use interaction_storage::InteractionStore;
-#[path = "../delivery_matrix/push_matrix_driver.rs"]
+#[path = "delivery_matrix/push_matrix_driver.rs"]
 mod push_matrix_driver;
 use native_push_receipt::record_push_input_correlation;
 use proof_context::{ProofContext, ProofResult};
