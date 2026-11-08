@@ -5,6 +5,7 @@
 //! its next timer. Each fixture holds a blocking task, which stops Tokio's auto-advance, so
 //! time moves only when a test advances it.
 use super::ScheduleTimingWorker;
+use crate::paused_worker_test_support::{self, NoAutoAdvance, WAIT_LIMIT, advance};
 use crate::{
     paused_wall_clock::PausedWallClock,
     scheduled_route_fixture::{
@@ -181,29 +182,6 @@ impl ScheduledRunExecution for ControlledRoute {
         context: RunObservationContext,
     ) -> DeliveryFuture<'_, RunReconciliation> {
         self.inner.reconcile_run(context)
-    }
-}
-
-/// While this blocking task runs, Tokio's paused clock does not auto-advance.
-struct NoAutoAdvance {
-    release: Option<std::sync::mpsc::Sender<()>>,
-}
-
-impl NoAutoAdvance {
-    fn hold() -> Self {
-        let (release, released) = std::sync::mpsc::channel::<()>();
-        drop(tokio::task::spawn_blocking(move || {
-            let _ = released.recv();
-        }));
-        Self {
-            release: Some(release),
-        }
-    }
-}
-
-impl Drop for NoAutoAdvance {
-    fn drop(&mut self) {
-        drop(self.release.take());
     }
 }
 
@@ -452,40 +430,13 @@ impl RunningScheduler {
     }
 }
 
-/// How many times a test waits on a condition before failing instead of hanging.
-const WAIT_LIMIT: usize = 5_000;
-
-/// Waits, without moving the clock, until the loop is asleep and stays so.
+/// Waits, without moving the clock, until the scheduler is asleep and stays so.
 async fn settled(scheduler: &RunningScheduler) -> TestResult<()> {
-    for _ in 0..WAIT_LIMIT / 100 {
-        if settle(scheduler).await {
-            return Ok(());
-        }
-    }
-    Err("the scheduler never settled".into())
+    paused_worker_test_support::settled(&scheduler.observation).await
 }
 
-/// Lets in-flight steps finish without moving the paused clock, then reports whether the
-/// loop is asleep with nothing new since.
 async fn settle(scheduler: &RunningScheduler) -> bool {
-    let before = scheduler.observation.snapshot();
-    for _ in 0..20 {
-        for _ in 0..100 {
-            tokio::task::yield_now().await;
-        }
-        if scheduler.observation.snapshot() != before {
-            return false;
-        }
-    }
-    before.sleeps >= 1
-}
-
-/// Moves both clocks with no work in flight.
-async fn advance(by: Duration) {
-    tokio::time::advance(by).await;
-    for _ in 0..2_000 {
-        tokio::task::yield_now().await;
-    }
+    paused_worker_test_support::settle(&scheduler.observation).await
 }
 
 #[path = "schedule_timing_worker_ordering_test.rs"]

@@ -26,6 +26,26 @@ impl AutomationStore {
             .map(|id| id.try_into().map_err(|_| StorageError::InvalidRecord))
             .collect()
     }
+    /// The wake-up worker's next due time strictly after `now_ms`, read with the
+    /// same filters as its inventories: an active wake's next firing, an active or
+    /// paused wake's expiry, and a pending or retryable delivery's eligibility.
+    pub async fn wake_worker_next_due_at_ms(
+        &mut self,
+        now_ms: i64,
+    ) -> Result<Option<i64>, StorageError> {
+        Ok(sqlx::query_scalar(
+            "SELECT MIN(due) FROM (
+                SELECT next_due_at_ms AS due FROM wakeup_definitions WHERE wakeup_status='active' AND next_due_at_ms>?
+                UNION ALL SELECT expires_at_ms FROM wakeup_definitions WHERE wakeup_status IN ('active','paused') AND expires_at_ms>?
+                UNION ALL SELECT eligible_at_ms FROM mailbox_deliveries WHERE delivery_status IN ('pending','retryable') AND eligible_at_ms>?
+            )",
+        )
+        .bind(now_ms)
+        .bind(now_ms)
+        .bind(now_ms)
+        .fetch_one(&mut self.connection)
+        .await?)
+    }
 }
 fn validate_batch(now_ms: i64, limit: u32) -> Result<(), StorageError> {
     if now_ms < 0 || !(1..=100).contains(&limit) {

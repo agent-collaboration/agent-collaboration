@@ -801,8 +801,9 @@ impl CollaborationRuntime {
         }
         if let Some(worker) = push_handoff_worker {
             let handoff_shutdown = shutdown.clone();
+            let clock = std::sync::Arc::clone(&worker_clock);
             tasks.spawn(async move {
-                worker.run(handoff_shutdown).await;
+                worker.run(clock, handoff_shutdown).await;
                 Ok(())
             });
         }

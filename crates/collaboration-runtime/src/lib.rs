@@ -123,6 +123,9 @@ mod wakeup_timing_worker;
 pub(crate) use interaction_storage_failure::map_interaction_storage_error;
 #[cfg(test)]
 mod captured_warnings_test_support;
+mod keyed_worker_tasks;
+#[cfg(test)]
+mod paused_worker_test_support;
 mod push_handoff_worker;
 mod wake_driven_worker_loop;
 mod wake_driven_worker_observation;
