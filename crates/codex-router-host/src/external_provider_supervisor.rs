@@ -124,6 +124,14 @@ impl ExternalProviderSupervisor {
             .map(|entry| Arc::clone(&entry.runtime))
     }
 
+    /// Announces a completion as a live operation publishing its result does.
+    #[cfg(test)]
+    pub(crate) fn announce_completion(&self) {
+        self.inner
+            .completions
+            .send_modify(|revision| *revision = revision.wrapping_add(1));
+    }
+
     /// A receiver that wakes after each live operation publishes its result. Subscribe
     /// before checking an operation, so a completion in between is not missed.
     #[must_use]

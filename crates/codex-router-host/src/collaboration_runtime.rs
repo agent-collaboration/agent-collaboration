@@ -157,6 +157,9 @@ pub struct CollaborationRuntime {
     observation_rechecks: observation_recheck::ObservationRechecks,
     /// Re-checks on the observation backoff when the journal failed to open.
     journal_unavailable_rechecks: Option<tokio::task::JoinHandle<()>>,
+    /// What the scheduler loop reports, for composition tests.
+    #[cfg(test)]
+    schedule_observation: Option<collaboration_runtime::WorkerObservation>,
     manifest: Option<collaboration_runtime::ManifestPublication>,
     collaboration_api: ServedCollaborationApi,
     tailscale_exposure: Option<crate::tailscale_exposure::TailscaleExposure>,

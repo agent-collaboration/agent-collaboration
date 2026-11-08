@@ -459,6 +459,10 @@ impl CollaborationRuntime {
                 None => worker,
             }
         });
+        #[cfg(test)]
+        let schedule_observation = schedule_worker
+            .as_ref()
+            .map(collaboration_runtime::ScheduleTimingWorker::observation);
         let retention_worker = automation_store.as_ref().map(|store| {
             collaboration_runtime::AutomationRetentionWorker::new(
                 store.clone(),
@@ -891,6 +895,8 @@ impl CollaborationRuntime {
             observer_task: None,
             observation_rechecks,
             journal_unavailable_rechecks,
+            #[cfg(test)]
+            schedule_observation,
             collaboration_api,
             tailscale_exposure: None,
         };
