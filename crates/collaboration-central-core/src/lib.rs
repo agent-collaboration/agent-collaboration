@@ -304,6 +304,7 @@ mod machine_notice_outbox;
 mod machine_notice_progress;
 mod machine_notice_store;
 /// Which notices each connection was already sent.
+mod notice_appends;
 mod notice_push;
 pub use notice_push::CENTRAL_FRAME_CAPABILITIES;
 mod registration_refusal;

@@ -84,7 +84,7 @@ impl KernelFace for RecordingFace {
     async fn drive_long_operations(&self) {
         self.record("long-operations");
     }
-    async fn finish_event(&self) {}
+    async fn finish_event(&self, _appended: std::collections::BTreeSet<fleet_protocol::PeerId>) {}
     async fn recompute(
         &self,
         next_batch_at: Option<SyncTime>,

@@ -206,3 +206,34 @@ async fn a_negotiated_router_is_resent_until_it_applies_and_reconnects_from_what
     fixture.objects.close().await?;
     Ok(())
 }
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions follow a catch-up larger than one push across two events."
+)]
+#[tokio::test]
+async fn a_catch_up_over_32_notices_finishes_on_the_next_event() -> Result<(), TestError> {
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path()).await?;
+    let peer = PeerId::new(durable_steps::Uuid::now_v7())?;
+    let (binding, socket, _) = admit_offering(&fixture, peer, None).await?;
+    drop(socket);
+    event(&fixture, ObjectEvent::SocketClosed { binding }).await;
+    let owed = (1..=33).map(notice).collect::<Result<Vec<_>, _>>()?;
+    for kind in &owed {
+        deliver(&fixture, &invocation(kind)?).await?;
+    }
+    // A released Router reconnecting is caught up from the retained floor, at
+    // most 32 notices per event. Admission runs two events (the Hello, then the
+    // alarm that welcomes it); neither appends, so the 33rd notice arriving
+    // shows the backlog kept the machine a push candidate.
+    let (_, mut socket, _) = admit_offering(&fixture, peer, None).await?;
+    for (index, kind) in owed.iter().enumerate() {
+        let position = u64::try_from(index)? + 1;
+        assert_hint(next(&mut socket).await?, position, position, kind);
+    }
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
+    assert!(socket.try_recv().is_err(), "the backlog repeated a notice");
+    fixture.objects.close().await?;
+    Ok(())
+}

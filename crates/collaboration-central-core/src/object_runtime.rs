@@ -109,9 +109,9 @@ where
         self.handle_fleet_event(event).await
     }
 
-    async fn finish_event(&self) {
+    async fn finish_event(&self, appended: std::collections::BTreeSet<fleet_protocol::PeerId>) {
         // Notices the event committed go out now, after all its transactions.
-        self.push_notices().await;
+        self.push_notices(appended).await;
     }
 
     async fn run_due_sources(&self, now: SyncTime) {
@@ -223,7 +223,7 @@ where
         }
     }
 
-    async fn finish_event(&self) {}
+    async fn finish_event(&self, _appended: std::collections::BTreeSet<fleet_protocol::PeerId>) {}
 
     async fn recompute(
         &self,

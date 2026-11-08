@@ -243,3 +243,34 @@ async fn engine_drives_after_a_mutation_do_no_notice_work() -> TestResult {
     }
     fixture.close().await
 }
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The assertion inspects the idle event's real SQL while fixture errors propagate."
+)]
+#[tokio::test]
+async fn an_idle_event_reads_no_machine_notice_progress() -> TestResult {
+    use super::fleet_alarm_sql::AlarmSql;
+    const PROGRESS: &str = include_str!(
+        "../../../collaboration-central-core/sql/machine_notices/read_machine_notice_applied.sql"
+    );
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path(), NOW).await?;
+    feed(&fixture, 0).await?;
+    decide(&fixture, &request(true)?).await?;
+    assert_eq!(notices(&fixture).await?.len(), 1);
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
+    // The post-event push reads only machines the event appended to; this
+    // alarm appended nothing, so no machine's progress is read.
+    let trace = AlarmSql::default();
+    trace
+        .observe(crate::kernel_alarm::deliver_alarm(&fixture.runtime))
+        .await?;
+    let progress_reads = trace
+        .statements()?
+        .into_iter()
+        .filter(|statement| statement.trim() == PROGRESS.trim())
+        .count();
+    assert_eq!(progress_reads, 0, "an idle event read a notice stream");
+    fixture.close().await
+}

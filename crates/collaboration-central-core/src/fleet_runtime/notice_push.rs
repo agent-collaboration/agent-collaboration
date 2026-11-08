@@ -1,8 +1,9 @@
 //! Notices go out after the transaction that issued them commits.
 //!
 //! Producers only append to a machine's stream. After each Fleet event this
-//! step compares every machine's in-memory cursor with what is committed and
-//! sends the gap, at most 32 notices per machine. A connection that just opened
+//! step compares the in-memory cursor of each machine the event appended to
+//! (see `notice_appends`), or whose push is unfinished, with what is committed
+//! and sends the gap, at most 32 notices per machine per event. A connection that just opened
 //! is caught up once its Hello has attached a session: from what its Router
 //! acknowledged, or from the retained floor for a released Router. A Router
 //! that negotiated NoticesApplied is owed its acknowledgment: while it is
@@ -86,7 +87,7 @@ where
     /// Give every machine's session the committed notices it hasn't been given.
     /// `publish_notice_to_peer` sends to an attached connection or keeps the
     /// notice in the session's transport log for a disconnected one.
-    pub(crate) async fn push_notices(&self) {
+    pub(crate) async fn push_notices(&self, appended: std::collections::BTreeSet<PeerId>) {
         let ObjectWork::Fleet {
             io, notice_cursors, ..
         } = &self.work
@@ -103,13 +104,21 @@ where
         };
         let cursors = notice_cursors.clone();
         let seeded = notice_cursors.seeded();
+        // Only machines this event appended to, plus unfinished pushes (a
+        // connection waiting for its catch-up, a backlog over 32): an idle
+        // event reads nothing.
+        let mut candidates = appended;
+        candidates.extend(notice_cursors.unfinished());
+        if candidates.is_empty() {
+            return;
+        }
         let id = io.new_id();
         let pushed = store
             .transaction(move |scope| {
                 Box::pin(async move {
                     let now = shared_host.now();
                     let mut pushed = Vec::new();
-                    for peer in crate::machine_notice_store::peers(scope).await? {
+                    for peer in candidates {
                         let Some(progress) =
                             crate::machine_notice_progress::progress(scope, peer).await?
                         else {
@@ -134,8 +143,7 @@ where
                         let acknowledges =
                             connected.is_some_and(|recipient| recipient.acknowledges);
                         // Caught up from what the Router acknowledged (or, released, from
-                        // the retained floor). A cursor lost to a rebuild restarts a
-                        // released Router at the head, since it polls anyway.
+                        // the retained floor).
                         let cursor = match (cursor, acknowledges) {
                             (Some(NoticeCursor::Sent(position)), _) => position,
                             (Some(NoticeCursor::CatchUp(_)) | None, true) => {
@@ -148,11 +156,11 @@ where
                             (None, false) => progress.issued,
                         };
                         if cursor >= progress.issued {
-                            pushed.push((peer, cursor));
+                            pushed.push((peer, cursor, progress.issued));
                             continue;
                         }
                         let through = scope.publish_notices_after(peer, cursor, now).await?;
-                        pushed.push((peer, through));
+                        pushed.push((peer, through, progress.issued));
                         let owed = AttemptKind::NoticeDelivery;
                         if acknowledges && progress.behind() {
                             crate::work_attempts::owe(
@@ -176,8 +184,8 @@ where
         match pushed {
             // Cursors move only once the sends are committed.
             Ok(pushed) => {
-                for (peer, through) in pushed {
-                    notice_cursors.set(peer, through);
+                for (peer, through, issued) in pushed {
+                    notice_cursors.set(peer, through, issued);
                 }
             }
             Err(failure) => eprintln!("Fleet notice push failed: {failure}"),

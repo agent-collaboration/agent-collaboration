@@ -5,7 +5,7 @@
 //! cursor afterwards has a stream that began in this incarnation and gets all of
 //! it. A negotiated Router restarts from what it acknowledged regardless.
 use fleet_protocol::{ConnectionId, PeerId};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{
     Mutex, PoisonError,
     atomic::{AtomicBool, Ordering},
@@ -28,6 +28,8 @@ pub(crate) enum NoticeCursor {
 #[derive(Debug, Default)]
 pub(crate) struct NoticeCursors {
     cursors: Mutex<BTreeMap<PeerId, NoticeCursor>>,
+    /// Machines a push left with unsent notices (more than 32 were owed).
+    behind: Mutex<BTreeSet<PeerId>>,
     seeded: AtomicBool,
 }
 
@@ -40,11 +42,18 @@ impl NoticeCursors {
             .copied()
     }
 
-    pub(crate) fn set(&self, peer: PeerId, position: u64) {
+    /// Everything through `position` was sent; `issued` is the stream's head.
+    pub(crate) fn set(&self, peer: PeerId, position: u64, issued: u64) {
         self.cursors
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .insert(peer, NoticeCursor::Sent(position));
+        let mut behind = self.behind.lock().unwrap_or_else(PoisonError::into_inner);
+        if position < issued {
+            behind.insert(peer);
+        } else {
+            behind.remove(&peer);
+        }
     }
 
     /// The machine opened a connection: its first push is the Welcome catch-up.
@@ -53,6 +62,27 @@ impl NoticeCursors {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .insert(peer, NoticeCursor::CatchUp(connection));
+    }
+
+    /// Machines with unfinished pushes: a connection waiting for its catch-up,
+    /// or notices a push left unsent.
+    pub(crate) fn unfinished(&self) -> BTreeSet<PeerId> {
+        let mut unfinished: BTreeSet<PeerId> = self
+            .cursors
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .filter(|(_, cursor)| matches!(cursor, NoticeCursor::CatchUp(_)))
+            .map(|(peer, _)| *peer)
+            .collect();
+        unfinished.extend(
+            self.behind
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .iter()
+                .copied(),
+        );
+        unfinished
     }
 
     /// Whether this runtime already seeded its cursors from the committed heads.

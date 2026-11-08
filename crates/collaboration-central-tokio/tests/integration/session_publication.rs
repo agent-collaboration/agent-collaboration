@@ -58,9 +58,8 @@ async fn closed_socket_cleanup_does_not_require_a_live_admission_and_other_sessi
             Err(durable_steps::CallFailure::AnswerLost)
         ));
     }
-    fixture.runtime.conformance_drive_operations().await?;
-    // Slice 4a: the appended notices go out in the post-event push, which runs
-    // after a kernel event, as the shells deliver them.
+    // The notice appends run in the kernel's long-operation phase, and the
+    // event's post-event push sends them, as the shells deliver events.
     crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     assert!(
         fixture
