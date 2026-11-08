@@ -42,7 +42,9 @@ pub use record::*;
 #[cfg(feature = "conformance")]
 mod trace;
 #[cfg(feature = "conformance")]
-pub(crate) use trace::{EventBounds, EventTrace, scoped};
+pub(crate) use trace::{
+    EventBounds, EventTrace, SendBinding, bind_send, current_trace, scoped, within_trace,
+};
 #[cfg(feature = "conformance")]
 pub use trace::{
     EventClass, EventContext, KernelObserver, current_event, record_lower, record_send, traced_call,

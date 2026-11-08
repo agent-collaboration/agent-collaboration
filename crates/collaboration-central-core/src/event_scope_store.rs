@@ -7,7 +7,8 @@
 //! (`worker` wraps it in `future_to_promise`). This store captures the scope
 //! when a transaction starts, inside the event's poll, and sets it again around
 //! every poll of the callback, so attribution doesn't depend on how the store
-//! polls. A store that runs the callback inline is unaffected.
+//! polls. A store that runs the callback inline is unaffected. Conformance
+//! builds carry the event's trace the same way, for its send bindings.
 
 use durable_steps::{AtomicStore, BoxFuture, ReborrowScope, StoreError};
 use std::sync::Arc;
@@ -40,9 +41,15 @@ impl<Store: AtomicStore> AtomicStore for EventScopeStore<Store> {
             + 'static,
     {
         let scope = crate::event_owed::current();
+        #[cfg(feature = "conformance")]
+        let trace = crate::event_trace::current_trace();
         self.inner
             .transaction(move |transaction| {
-                Box::pin(crate::event_owed::within(scope, callback(transaction)))
+                let carried = crate::event_owed::within(scope, callback(transaction));
+                // Conformance records (S1 send bindings) name the event too.
+                #[cfg(feature = "conformance")]
+                let carried = crate::event_trace::within_trace(trace, carried);
+                Box::pin(carried)
             })
             .await
     }

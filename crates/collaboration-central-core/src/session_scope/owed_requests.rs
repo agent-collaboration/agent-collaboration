@@ -353,6 +353,11 @@ where
         } = request;
         let send_id = Uuid::now_v7();
         let frame = FrameId::new(send_id).map_err(StoreError::backend)?;
+        #[cfg(feature = "conformance")]
+        let request_kind = serde_json::to_value(&body)
+            .ok()
+            .and_then(|value| value.get("kind")?.as_str().map(str::to_owned))
+            .unwrap_or_default();
         let bytes = serde_json::to_vec(&ServerFrame::<BoardConsumerProtocol>::Request {
             frame,
             body: ServerRequest::Crate(body),
@@ -365,6 +370,21 @@ where
             sent_version,
         };
         socket_requests::mark_sent(self, subject, kind, &send, retry_at, now).await?;
+        // S1 binds the frame's send record to its row once the frame leaves.
+        #[cfg(feature = "conformance")]
+        if let Some(row) = crate::work_attempts::attempt(self, subject, kind).await? {
+            crate::event_trace::bind_send(
+                send_id,
+                crate::event_trace::SendBinding {
+                    attempt: row.id,
+                    attempt_kind: kind.as_str(),
+                    subject,
+                    session: destination.session.as_uuid(),
+                    request_kind,
+                    sent_version,
+                },
+            );
+        }
         self.transport.push(SessionTransportEffect::Frame {
             connection: destination.connection,
             bytes: bytes.into(),

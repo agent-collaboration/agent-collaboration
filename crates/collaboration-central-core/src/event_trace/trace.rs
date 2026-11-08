@@ -9,6 +9,7 @@ use durable_steps::{BoxFuture, CallFailure, Uuid};
 use fleet_protocol::ConnectionId;
 use runtime_primitives::SyncTime;
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -61,6 +62,22 @@ struct TraceState {
     calls: Vec<CallRecord>,
     writes: Vec<AlarmWriteRecord>,
     batch: Option<BatchRecord>,
+    /// Owed sends this event staged, by send id, waiting for their frame.
+    bindings: BTreeMap<Uuid, SendBinding>,
+}
+
+/// The owed row a staged request belongs to. Its frame id is the send id, so
+/// the send record that carries that frame is bound to the row.
+#[derive(Clone, Debug)]
+pub(crate) struct SendBinding {
+    pub(crate) attempt: Uuid,
+    pub(crate) attempt_kind: &'static str,
+    pub(crate) subject: Uuid,
+    pub(crate) session: Uuid,
+    /// The inner crate request's kind (`push`, `publishStatus`), not the
+    /// frame's outer `request`.
+    pub(crate) request_kind: String,
+    pub(crate) sent_version: Option<u64>,
 }
 
 /// Everything the kernel measured around the event itself.
@@ -87,6 +104,7 @@ impl EventTrace {
                 calls: Vec::new(),
                 writes: Vec::new(),
                 batch: None,
+                bindings: BTreeMap::new(),
             }),
         }
     }
@@ -204,23 +222,83 @@ pub fn current_event() -> Option<EventClass> {
     current().map(|trace| trace.class)
 }
 
-/// A frame the shell put on a socket for the running event.
+/// The running event, to carry into work polled outside its own poll.
+pub(crate) fn current_trace() -> Option<Arc<EventTrace>> {
+    current()
+}
+
+/// Runs `inner` inside `trace`'s event when there is one.
+pub(crate) async fn within_trace<F: Future>(trace: Option<Arc<EventTrace>>, inner: F) -> F::Output {
+    match trace {
+        Some(trace) => scoped(trace, inner).await,
+        None => inner.await,
+    }
+}
+
+/// An owed request was staged under `send_id` in the running event.
+pub(crate) fn bind_send(send_id: Uuid, binding: SendBinding) {
+    if let Some(trace) = current() {
+        trace.state().bindings.insert(send_id, binding);
+    }
+}
+
+/// A frame the shell put on a socket for the running event. A request frame
+/// whose id an owed row staged carries that row's binding.
 pub fn record_send(connection: ConnectionId, frame: &[u8]) {
     let Some(trace) = current() else {
         return;
     };
-    trace.state().sends.push(SendRecord {
-        attempt: None,
-        attempt_kind: None,
-        subject: None,
-        send_id: None,
-        connection,
-        session: None,
-        request_kind: top_level_kind(frame),
-        sent_version: None,
-        batch: None,
-        frame: frame.to_vec(),
+    let mut state = trace.state();
+    let bound = request_frame_id(frame).and_then(|send_id| {
+        state
+            .bindings
+            .remove(&send_id)
+            .map(|binding| (send_id, binding))
     });
+    let record = match bound {
+        Some((send_id, binding)) => SendRecord {
+            attempt: Some(binding.attempt),
+            attempt_kind: Some(binding.attempt_kind.to_owned()),
+            subject: Some(binding.subject),
+            send_id: Some(send_id),
+            connection,
+            session: Some(binding.session),
+            request_kind: Some(binding.request_kind),
+            sent_version: binding.sent_version,
+            batch: None,
+            frame: frame.to_vec(),
+        },
+        None => SendRecord {
+            attempt: None,
+            attempt_kind: None,
+            subject: None,
+            send_id: None,
+            connection,
+            session: None,
+            request_kind: top_level_kind(frame),
+            sent_version: None,
+            batch: None,
+            frame: frame.to_vec(),
+        },
+    };
+    state.sends.push(record);
+}
+
+/// The frame id of a server request frame (`{"kind":"request","value":{"frame"}}`).
+fn request_frame_id(bytes: &[u8]) -> Option<Uuid> {
+    #[derive(serde::Deserialize)]
+    struct Framed {
+        frame: Uuid,
+    }
+    #[derive(serde::Deserialize)]
+    struct Tagged {
+        kind: String,
+        value: Framed,
+    }
+    serde_json::from_slice::<Tagged>(bytes)
+        .ok()
+        .filter(|tagged| tagged.kind == "request")
+        .map(|tagged| tagged.value.frame)
 }
 
 /// A unit lowered the alarm to `at` for the running event. While long
