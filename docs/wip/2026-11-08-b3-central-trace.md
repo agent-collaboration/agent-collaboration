@@ -20,9 +20,9 @@ shared type decides.
 
 The mirror changed on its side to match: the label byte check, C0 refusal, and lowercase
 UUIDs, including `formerServiceId`. `machine_login_mirror_vectors` reads a byte-exact copy of
-the mirror's 95 validation vectors (switchboard `86d79179`, in
-`contracts/issuer-mirror/`). Central refuses exactly the 59 the mirror refuses and accepts
-the 36 it accepts, writing each byte for byte. The one named exception is row 6's null
+the mirror's 103 validation vectors (switchboard `de59e3c4`, in
+`contracts/issuer-mirror/`), including 5 accepted and 3 refused change records. Central refuses
+exactly the 62 the mirror refuses and accepts the 41 it accepts, writing each byte for byte. The one named exception is row 6's null
 versus an omitted `approverSecondFactorAt`. With the label seeded as an unbounded string,
 36 of the 95 vectors disagree.
 

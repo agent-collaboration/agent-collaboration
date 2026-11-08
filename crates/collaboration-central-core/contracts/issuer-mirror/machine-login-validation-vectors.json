@@ -1,5 +1,5 @@
 {
-	"source": "machine-login-contracts.ts; PD boundary encoding and Fleet access Lead validation rulings, 2026-11-08; literal expected JSON output in schema field order",
+	"source": "machine-login-contracts.ts and fleet-admin-client.ts; PD boundary encoding and Fleet access Lead rulings, 2026-11-08; OrganizationChangeRecord producer dcbb13fedb41233362a9fe061fb1946006d52224; literal expected JSON output in schema field order",
 	"vectors": [
 		{
 			"contract": "DecideDeviceLogin",
@@ -1478,6 +1478,141 @@
 				"approverSecondFactorAt": null
 			},
 			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"﻿Router﻿\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+		},
+		{
+			"contract": "OrganizationChangeRecord",
+			"verdict": "accept",
+			"input": {
+				"id": "019a3dce-2000-7000-8000-0000000000d1",
+				"requestId": "019a3dce-2000-7000-8000-0000000000e1",
+				"kind": "allowanceChanged",
+				"origin": {
+					"kind": "person",
+					"personId": "019a3dce-2000-7000-8000-000000000002",
+					"permissionChecked": "machine:enroll"
+				},
+				"targetId": "019a3dce-2000-7000-8000-0000000000f1",
+				"createdAtMillis": 1800000000002
+			},
+			"output": "{\"id\":\"019a3dce-2000-7000-8000-0000000000d1\",\"requestId\":\"019a3dce-2000-7000-8000-0000000000e1\",\"kind\":\"allowanceChanged\",\"origin\":{\"kind\":\"person\",\"personId\":\"019a3dce-2000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\"},\"targetId\":\"019a3dce-2000-7000-8000-0000000000f1\",\"createdAtMillis\":1800000000002}"
+		},
+		{
+			"contract": "OrganizationChangeRecord",
+			"verdict": "accept",
+			"input": {
+				"id": "019a3dce-2000-7000-8000-0000000000d2",
+				"requestId": "019a3dce-2000-7000-8000-0000000000e1",
+				"kind": "machineRevoked",
+				"origin": {
+					"kind": "person",
+					"personId": "019a3dce-2000-7000-8000-000000000002",
+					"permissionChecked": "machine:enroll"
+				},
+				"targetId": "019a3dce-2000-7000-8000-0000000000f2",
+				"createdAtMillis": 1800000000003
+			},
+			"output": "{\"id\":\"019a3dce-2000-7000-8000-0000000000d2\",\"requestId\":\"019a3dce-2000-7000-8000-0000000000e1\",\"kind\":\"machineRevoked\",\"origin\":{\"kind\":\"person\",\"personId\":\"019a3dce-2000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\"},\"targetId\":\"019a3dce-2000-7000-8000-0000000000f2\",\"createdAtMillis\":1800000000003}"
+		},
+		{
+			"contract": "OrganizationChangeRecord",
+			"verdict": "accept",
+			"input": {
+				"id": "019a3dce-2000-7000-8000-0000000000d3",
+				"requestId": "019a3dce-2000-7000-8000-0000000000e1",
+				"kind": "machineEnrolled",
+				"origin": {
+					"kind": "person",
+					"personId": "019a3dce-2000-7000-8000-000000000002",
+					"permissionChecked": "machine:enroll"
+				},
+				"targetId": "019a3dce-2000-7000-8000-0000000000f3",
+				"createdAtMillis": 1800000000003
+			},
+			"output": "{\"id\":\"019a3dce-2000-7000-8000-0000000000d3\",\"requestId\":\"019a3dce-2000-7000-8000-0000000000e1\",\"kind\":\"machineEnrolled\",\"origin\":{\"kind\":\"person\",\"personId\":\"019a3dce-2000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\"},\"targetId\":\"019a3dce-2000-7000-8000-0000000000f3\",\"createdAtMillis\":1800000000003}"
+		},
+		{
+			"contract": "OrganizationChangeRecord",
+			"verdict": "accept",
+			"input": {
+				"id": "019a3dce-2000-7000-8000-0000000000d4",
+				"requestId": "019a3dce-2000-7000-8000-0000000000e2",
+				"kind": "machineRevoked",
+				"origin": {
+					"kind": "person",
+					"personId": "019a3dce-2000-7000-8000-000000000003",
+					"permissionChecked": "machine:revoke"
+				},
+				"targetId": "019a3dce-2000-7000-8000-0000000000f3",
+				"createdAtMillis": 1800000000004
+			},
+			"output": "{\"id\":\"019a3dce-2000-7000-8000-0000000000d4\",\"requestId\":\"019a3dce-2000-7000-8000-0000000000e2\",\"kind\":\"machineRevoked\",\"origin\":{\"kind\":\"person\",\"personId\":\"019a3dce-2000-7000-8000-000000000003\",\"permissionChecked\":\"machine:revoke\"},\"targetId\":\"019a3dce-2000-7000-8000-0000000000f3\",\"createdAtMillis\":1800000000004}"
+		},
+		{
+			"contract": "OrganizationChangeRecord",
+			"verdict": "accept",
+			"input": {
+				"id": "019a3dce-2000-7000-8000-0000000000d5",
+				"requestId": "019a3dce-2000-7000-8000-0000000000e2",
+				"kind": "allowanceChanged",
+				"origin": {
+					"kind": "person",
+					"personId": "019a3dce-2000-7000-8000-000000000003",
+					"permissionChecked": "machine:revoke"
+				},
+				"targetId": "019a3dce-2000-7000-8000-0000000000f1",
+				"createdAtMillis": 1800000000004
+			},
+			"output": "{\"id\":\"019a3dce-2000-7000-8000-0000000000d5\",\"requestId\":\"019a3dce-2000-7000-8000-0000000000e2\",\"kind\":\"allowanceChanged\",\"origin\":{\"kind\":\"person\",\"personId\":\"019a3dce-2000-7000-8000-000000000003\",\"permissionChecked\":\"machine:revoke\"},\"targetId\":\"019a3dce-2000-7000-8000-0000000000f1\",\"createdAtMillis\":1800000000004}"
+		},
+		{
+			"contract": "OrganizationChangeRecord",
+			"verdict": "refuse",
+			"input": {
+				"id": "019a3dce-2000-7000-8000-0000000000d1",
+				"requestId": "019a3dce-2000-7000-8000-0000000000e1",
+				"kind": "machineExpired",
+				"origin": {
+					"kind": "person",
+					"personId": "019a3dce-2000-7000-8000-000000000002",
+					"permissionChecked": "machine:enroll"
+				},
+				"targetId": "019a3dce-2000-7000-8000-0000000000f1",
+				"createdAtMillis": 1800000000002
+			}
+		},
+		{
+			"contract": "OrganizationChangeRecord",
+			"verdict": "refuse",
+			"input": {
+				"id": "019a3dce-2000-7000-8000-0000000000d1",
+				"requestId": "019a3dce-2000-7000-8000-0000000000e1",
+				"kind": "allowanceChanged",
+				"origin": {
+					"kind": "person",
+					"personId": "019a3dce-2000-7000-8000-000000000002",
+					"permissionChecked": "machine:enroll"
+				},
+				"targetId": "019a3dce-2000-7000-8000-0000000000f1",
+				"createdAtMillis": 1800000000002,
+				"unexpectedField": true
+			}
+		},
+		{
+			"contract": "OrganizationChangeRecord",
+			"verdict": "refuse",
+			"input": {
+				"id": "019a3dce-2000-7000-8000-0000000000d1",
+				"requestId": "019a3dce-2000-7000-8000-0000000000e1",
+				"kind": "allowanceChanged",
+				"origin": {
+					"kind": "person",
+					"personId": "019a3dce-2000-7000-8000-000000000002",
+					"permissionChecked": "machine:enroll",
+					"unexpectedField": true
+				},
+				"targetId": "019a3dce-2000-7000-8000-0000000000f1",
+				"createdAtMillis": 1800000000002
+			}
 		}
 	]
 }
