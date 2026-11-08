@@ -117,6 +117,7 @@ mod numeric_composed;
 mod object_bootstrap;
 mod object_identity;
 mod organization_admin_link;
+mod organization_admin_lost_answer;
 mod organization_admin_origin;
 mod organization_provisioning_link;
 mod organization_unstamped_routes;

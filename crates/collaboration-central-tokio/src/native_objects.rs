@@ -106,6 +106,11 @@ impl PlatformIo for TokioObjectIo {
         // A poisoned fault lock fails the conformance run closed.
         self.faults.take_organization_record_fault().unwrap_or(true)
     }
+    #[cfg(feature = "conformance")]
+    fn take_organization_answer_drop(&self) -> bool {
+        // A poisoned fault lock fails the conformance run closed.
+        self.faults.take_organization_answer_drop().unwrap_or(true)
+    }
     async fn object_call(
         &self,
         address: ObjectAddress,

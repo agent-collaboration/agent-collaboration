@@ -49,7 +49,8 @@ impl RuntimeControlRequest {
             | (
                 RuntimeControl::DropNextAnswer { .. }
                 | RuntimeControl::AwaitDroppedAnswer { .. }
-                | RuntimeControl::FailNextOrganizationRecord,
+                | RuntimeControl::FailNextOrganizationRecord
+                | RuntimeControl::DropNextOrganizationAnswer,
                 ObjectAddress::Fleet { .. },
             )
             | (
@@ -123,6 +124,9 @@ pub enum RuntimeControl {
     /// Abort the next provisioning transaction after its change record is
     /// written, to prove the stamp and its record commit as one unit.
     FailNextOrganizationRecord,
+    /// Let the Fleet commit its next admin change, then lose its answer, as a
+    /// reply cut after central commits would.
+    DropNextOrganizationAnswer,
     Observe,
 }
 

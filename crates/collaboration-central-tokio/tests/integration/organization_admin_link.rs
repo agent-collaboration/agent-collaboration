@@ -23,15 +23,15 @@ use std::{
     time::Duration,
 };
 
-const ORGANIZATION: &str = "019f0000-0000-7000-8000-00000000d201";
-const OWNER: &str = "019f0000-0000-7000-8000-00000000d202";
-const OWNER_SUBJECT: &str = "019f0000-0000-7000-8000-00000000d203";
+pub(crate) const ORGANIZATION: &str = "019f0000-0000-7000-8000-00000000d201";
+pub(crate) const OWNER: &str = "019f0000-0000-7000-8000-00000000d202";
+pub(crate) const OWNER_SUBJECT: &str = "019f0000-0000-7000-8000-00000000d203";
 const MEMBER: &str = "019f0000-0000-7000-8000-00000000d204";
 const MEMBER_SUBJECT: &str = "019f0000-0000-7000-8000-00000000d205";
 const SESSION: &str = "019f0000-0000-7000-8000-00000000d206";
 /// The sign-in service's digest of its permission policy (shared vector).
 const POLICY: &str = "2d31b5d72716e64e255d8858c231f593155289fb03ed354c4b762890667a3c22";
-const CREATE: &str = "/organization-admin/v1/create-workspace";
+pub(crate) const CREATE: &str = "/organization-admin/v1/create-workspace";
 const LOOKUP: &str = "/organization-admin/v1/workspace-lookup";
 const RECORDS: &str = "/organization-admin/v1/change-records";
 
@@ -52,7 +52,7 @@ fn settings(root: &Path, jwks: &str) -> ConformanceResult<TokioSettings> {
     })
 }
 
-async fn start(
+pub(crate) async fn start(
     root: &Path,
     access: &JwksFixtureServer,
     keys: &SignInKeys,
@@ -87,7 +87,7 @@ async fn start(
 }
 
 /// Floors are what the sign-in service would have pushed; seeded only here.
-async fn seed_floors(root: &Path) -> ConformanceResult<()> {
+pub(crate) async fn seed_floors(root: &Path) -> ConformanceResult<()> {
     let mut store = sqlx_turso::TursoConnectOptions::new()
         .filename(root.join(format!("fleet-{ORGANIZATION}.db")))
         .connect()
@@ -113,19 +113,19 @@ async fn seed_floors(root: &Path) -> ConformanceResult<()> {
     Ok(())
 }
 
-struct Person {
-    id: &'static str,
-    subject: &'static str,
-    revision: i64,
-    permissions: Vec<&'static str>,
-    second_factor_at: i64,
-    key: ProofKey,
+pub(crate) struct Person {
+    pub(crate) id: &'static str,
+    pub(crate) subject: &'static str,
+    pub(crate) revision: i64,
+    pub(crate) permissions: Vec<&'static str>,
+    pub(crate) second_factor_at: i64,
+    pub(crate) key: ProofKey,
 }
 
 static REQUESTS: AtomicU32 = AtomicU32::new(1);
 
 /// A fresh UUIDv7 a second before the Fleet's pinned time.
-fn fresh_request_id() -> String {
+pub(crate) fn fresh_request_id() -> String {
     let millis = NOW_SECONDS * 1000 - 1000;
     let serial = REQUESTS.fetch_add(1, Ordering::SeqCst);
     format!(
@@ -158,7 +158,7 @@ impl Person {
     }
 
     /// Headers for one attempt: the token, and a proof with a fresh jti.
-    fn headers(
+    pub(crate) fn headers(
         &self,
         path: &str,
         intent: &Value,
@@ -177,15 +177,15 @@ impl Person {
     }
 }
 
-fn create_intent(operation: &str, name: &str) -> Value {
+pub(crate) fn create_intent(operation: &str, name: &str) -> Value {
     json!({"v":1,"operation":"CreateWorkspace","organization":ORGANIZATION,"target":ORGANIZATION,
         "operationId":operation,"params":{"name":name,"description":""}})
 }
-fn create_body(operation: &str, name: &str) -> Value {
+pub(crate) fn create_body(operation: &str, name: &str) -> Value {
     json!({"organizationId":ORGANIZATION,"operationId":operation,"name":name,"description":""})
 }
 
-async fn answer(
+pub(crate) async fn answer(
     socket: &Path,
     path: &str,
     headers: &[(&str, String)],
@@ -200,7 +200,7 @@ async fn answer(
     Ok((status, body))
 }
 
-async fn counts(root: &Path) -> ConformanceResult<(i64, i64, i64)> {
+pub(crate) async fn counts(root: &Path) -> ConformanceResult<(i64, i64, i64)> {
     let mut store = sqlx_turso::TursoConnectOptions::new()
         .filename(root.join(format!("fleet-{ORGANIZATION}.db")))
         .connect()

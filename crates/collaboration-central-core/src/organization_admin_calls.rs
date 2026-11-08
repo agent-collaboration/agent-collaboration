@@ -204,6 +204,11 @@ where
             })
             .await
             .map_err(|_| CallFailure::AnswerLost)?;
+        // Conformance only: the change is committed; its answer is lost.
+        #[cfg(feature = "conformance")]
+        if io.take_organization_answer_drop() {
+            return Err(CallFailure::AnswerLost);
+        }
         encode(OrganizationAdminAnswer::Answered(answer))
     }
 }

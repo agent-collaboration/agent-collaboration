@@ -64,6 +64,7 @@ struct FaultState {
     object_reply: ObjectReplyFault,
     session: session_faults::SessionFaultState,
     organization_record: bool,
+    organization_answer: bool,
 }
 impl Default for FaultState {
     fn default() -> Self {
@@ -75,6 +76,7 @@ impl Default for FaultState {
             object_reply: ObjectReplyFault::Idle,
             session: Default::default(),
             organization_record: false,
+            organization_answer: false,
         }
     }
 }
@@ -104,6 +106,10 @@ impl RuntimeFaults {
     /// Consume an armed provisioning record fault, if any.
     pub fn take_organization_record_fault(&self) -> Result<bool, RuntimeControlFailure> {
         Ok(std::mem::take(&mut self.state()?.organization_record))
+    }
+    /// Consume an armed admin answer cut, if any.
+    pub fn take_organization_answer_drop(&self) -> Result<bool, RuntimeControlFailure> {
+        Ok(std::mem::take(&mut self.state()?.organization_answer))
     }
     pub fn project_unavailable(&self) -> Result<bool, RuntimeControlFailure> {
         Ok(matches!(
@@ -344,6 +350,9 @@ impl RuntimeFaults {
             }
             RuntimeControl::FailNextOrganizationRecord => {
                 self.state()?.organization_record = true;
+            }
+            RuntimeControl::DropNextOrganizationAnswer => {
+                self.state()?.organization_answer = true;
             }
             RuntimeControl::Observe => {}
         }

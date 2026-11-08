@@ -2,26 +2,26 @@
 //! the compiled central-link artifact, which reaches central's own Fleet
 //! objects. Public central reads the same rows back, before and after an owned
 //! workerd restart. The clock is the conformance build's fixed time.
+#[path = "organization_link_workerd/link_client.rs"]
+mod link_client;
 #[path = "../tests/support/organization_stamps.rs"]
 #[expect(
     dead_code,
     reason = "the Unix-socket client in the shared stamp fixtures is Tokio-only"
 )]
 mod organization_stamps;
+#[path = "organization_link_workerd/record_checks.rs"]
+mod record_checks;
 use collaboration_central_conformance::{
     ConformanceResult, FIXTURE_KID, JwksFixtureServer, fixture_policy, legacy_organization,
     sign_assertion,
 };
+use link_client::{AdminPerson, Caller, LinkHarness};
 use organization_stamps::{
-    self as stamps, ADMIN_AUDIENCE, B2_PUBLIC_PATHS_NOT_SERVED, ISSUER, NOW_SECONDS, PUBLIC_ORIGIN,
-    ProofKey, SignInKeys,
+    self as stamps, B2_PUBLIC_PATHS_NOT_SERVED, NOW_SECONDS, ProofKey, SignInKeys,
 };
+use record_checks::{created_records, origins_closed, require, summary};
 use serde_json::{Value, json};
-use std::{path::PathBuf, process::Stdio};
-use tokio::{
-    io::{AsyncBufReadExt, BufReader},
-    process::{Child, Command},
-};
 
 const OTHER: &str = "019f0000-0000-7000-8000-00000000b2c1";
 const THIRD: &str = "019f0000-0000-7000-8000-00000000b2c2";
@@ -78,267 +78,16 @@ const ADMIN_MEMBER: &str = "019f0000-0000-7000-8000-00000000b2e3";
 const ADMIN_MEMBER_SUBJECT: &str = "019f0000-0000-7000-8000-00000000b2e4";
 const FIXED_MILLIS: i64 = NOW_SECONDS * 1000;
 
-struct LinkHarness {
-    child: Child,
-    output: tokio::task::JoinHandle<ConformanceResult<()>>,
-}
-impl LinkHarness {
-    async fn start(arguments: &[String]) -> ConformanceResult<Self> {
-        let mut child = Command::new(arguments.first().ok_or("node path")?)
-            .current_dir(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."))
-            .arg("scripts/tooling/run-central-link-workerd.ts")
-            .args(arguments.get(1..).ok_or("harness arguments")?)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .kill_on_drop(true)
-            .spawn()?;
-        let mut lines = BufReader::new(child.stdout.take().ok_or("harness stdout")?).lines();
-        // Readiness is the harness's own ready line; no polling or sleep.
-        loop {
-            let line = lines
-                .next_line()
-                .await?
-                .ok_or("harness ended before readiness")?;
-            println!("{line}");
-            if line.starts_with("Ready on ")
-                && line.ends_with("(real workerd, central-link binding)")
-            {
-                break;
-            }
-        }
-        let output = tokio::spawn(async move {
-            while let Some(line) = lines.next_line().await? {
-                println!("{line}");
-            }
-            Ok(())
-        });
-        Ok(Self { child, output })
-    }
-    async fn stop(mut self) -> ConformanceResult<()> {
-        let pid = self.child.id().ok_or("harness already exited")?;
-        let signal = Command::new("kill")
-            .args(["-INT", &pid.to_string()])
-            .status()
-            .await?;
-        if !signal.success() {
-            return Err("could not signal the owned harness".into());
-        }
-        let status = self.child.wait().await?;
-        self.output.await??;
-        if !matches!(status.code(), Some(0 | 130)) {
-            return Err(format!("owned harness exited: {status}").into());
-        }
-        println!("LINK HARNESS reaped pid={pid} exit={:?}", status.code());
-        Ok(())
-    }
-}
-
-struct Caller {
-    http: reqwest::Client,
-    base: String,
-    owner: String,
-}
-impl Caller {
-    /// One request through the fixture caller: "/link" over the CENTRAL
-    /// binding carries no Access assertion (the private entry must not need
-    /// one); "/public" observer reads carry the owner's.
-    async fn post(&self, path: &str, body: &Value) -> ConformanceResult<(u16, String, Value)> {
-        self.send("POST", path, body).await
-    }
-    /// GET carries no body; any other method carries `body` as JSON.
-    async fn send(
-        &self,
-        method: &str,
-        path: &str,
-        body: &Value,
-    ) -> ConformanceResult<(u16, String, Value)> {
-        let url = format!("{}{path}", self.base);
-        let mut request = if method == "GET" {
-            self.http.get(url)
-        } else {
-            self.http.post(url).json(body)
-        };
-        if path.starts_with("/public/") {
-            request = request.header("Cf-Access-Jwt-Assertion", &self.owner);
-        }
-        let response = request.send().await?;
-        let status = response.status().as_u16();
-        let entry = response
-            .headers()
-            .get("x-collaboration-central-entry")
-            .and_then(|value| value.to_str().ok())
-            .unwrap_or("none")
-            .to_owned();
-        let bytes = response.bytes().await?;
-        let body = if bytes.is_empty() {
-            Value::Null
-        } else {
-            serde_json::from_slice(&bytes)
-                .unwrap_or(Value::String(String::from_utf8_lossy(&bytes).into()))
-        };
-        Ok((status, entry, body))
-    }
-    async fn provision(&self, organization: &str, statement: &str) -> ConformanceResult<u16> {
-        Ok(self
-            .post(
-                "/link/internal/organization-provisioning",
-                &json!({"organizationId":organization,"organizationStatement":statement}),
-            )
-            .await?
-            .0)
-    }
-    async fn digest(&self, organization: &str) -> ConformanceResult<(u16, Value)> {
-        let (status, _, body) = self
-            .post(
-                "/link/internal/organization-statement-digest",
-                &json!({"organizationId":organization}),
-            )
-            .await?;
-        Ok((status, body))
-    }
-    /// A person's admin call over the link with a real token and DPoP proof.
-    async fn admin(
-        &self,
-        path: &str,
-        intent: &Value,
-        body: &Value,
-        person: &AdminPerson,
-        jti_serial: u16,
-    ) -> ConformanceResult<(u16, Value)> {
-        let token = person.token()?;
-        let millis = NOW_SECONDS * 1000 - 1000;
-        let jti = format!(
-            "{:08x}-{:04x}-7000-8000-{:012x}",
-            millis >> 16,
-            millis & 0xffff,
-            jti_serial
-        );
-        let proof = person.key.proof(&json!({
-            "jti":jti,"htm":"POST","htu":format!("{PUBLIC_ORIGIN}{path}"),"iat":NOW_SECONDS - 1,
-            "ath":stamps::sha256_url(token.as_bytes()),
-            "intent":stamps::sha256_url(stamps::canonical(intent).as_bytes())
-        }))?;
-        let response = self
-            .http
-            .post(format!("{}/link{path}", self.base))
-            .header("authorization", format!("DPoP {token}"))
-            .header("dpop", proof)
-            .json(body)
-            .send()
-            .await?;
-        let status = response.status().as_u16();
-        let bytes = response.bytes().await?;
-        let body = if bytes.is_empty() {
-            Value::Null
-        } else {
-            serde_json::from_slice(&bytes)?
-        };
-        Ok((status, body))
-    }
-
-    /// Read through public central's own Fleet routing, not the link.
-    async fn records(&self, organization: &str) -> ConformanceResult<Value> {
-        let (status, _, body) = self
-            .post(
-                "/public/admin/v1/conformance/organization-records",
-                &json!({"organization":organization}),
-            )
-            .await?;
-        if status != 200 {
-            return Err(format!("organization records read failed: {status} {body}").into());
-        }
-        Ok(body)
-    }
-}
-
-struct AdminPerson {
-    id: &'static str,
-    subject: &'static str,
-    organization: String,
-    permissions: Vec<&'static str>,
-    key: ProofKey,
-}
-impl AdminPerson {
-    fn token(&self) -> ConformanceResult<String> {
-        stamps::sign(
-            &json!({"typ":"at+jwt","alg":"EdDSA","kid":"stamp-a"}),
-            &json!({
-                "iss":ISSUER,"aud":[ADMIN_AUDIENCE],"sub":self.id,
-                "sid":"019f0000-0000-7000-8000-00000000b2f0",
-                "iat":NOW_SECONDS - 10,"exp":NOW_SECONDS + 290,"cnf":{"jkt":self.key.thumbprint()?},
-                "token_profile":"person-fleet","organization_id":self.organization,
-                "authorization_subject_id":self.subject,"person_revision":1,"organization_revision":1,
-                "permission_policy_digest":ADMIN_POLICY,"permissions":self.permissions,
-                "second_factor_at":NOW_SECONDS - 60,"second_factor_method":"app",
-                "session_expires_at_ms":(NOW_SECONDS + 86_400) * 1000,
-                "authorization_snapshot_at_ms":NOW_SECONDS * 1000 - 10_000,
-                "authorization_snapshot_valid_until_ms":NOW_SECONDS * 1000 + 200_000
-            }),
-            7,
-        )
-    }
-}
 const ADMIN_POLICY: &str = "2d31b5d72716e64e255d8858c231f593155289fb03ed354c4b762890667a3c22";
 
-fn require(condition: bool, case: &str, observed: &impl std::fmt::Debug) -> ConformanceResult<()> {
-    if condition {
-        println!("LINK CASE passed: {case}");
-        Ok(())
-    } else {
-        Err(format!("LINK CASE failed: {case}: observed {observed:?}").into())
-    }
+const LOST_OPERATION: &str = "019f0000-0000-7000-8000-00000000b2f1";
+fn lost_intent(organization: &str) -> Value {
+    json!({"v":1,"operation":"CreateWorkspace","organization":organization,"target":organization,
+        "operationId":LOST_OPERATION,"params":{"name":"lost answer","description":""}})
 }
-
-fn summary(records: &Value) -> Vec<(String, String, String)> {
-    records
-        .get("records")
-        .and_then(Value::as_array)
-        .map(|records| {
-            records
-                .iter()
-                .map(|record| {
-                    let field = |name: &str| {
-                        record
-                            .get(name)
-                            .and_then(Value::as_str)
-                            .unwrap_or_default()
-                            .to_owned()
-                    };
-                    (field("requestId"), field("kind"), field("targetId"))
-                })
-                .collect()
-        })
-        .unwrap_or_default()
+fn lost_body(organization: &str) -> Value {
+    json!({"organizationId":organization,"operationId":LOST_OPERATION,"name":"lost answer","description":""})
 }
-
-/// Every record read back names exactly the origin its kind allows: setup and
-/// renewal records the sign-in service alone (no person, no permission), a
-/// created workspace the owner and the permission checked; each ID a UUIDv7.
-fn origins_closed(records: &Value) -> bool {
-    let Some(records) = records.get("records").and_then(Value::as_array) else {
-        return false;
-    };
-    !records.is_empty()
-        && records.iter().all(|record| {
-            let id = record.get("id").and_then(Value::as_str).unwrap_or_default();
-            let uuid_v7 = id.len() == 36
-                && id.get(14..15) == Some("7")
-                && id.chars().all(|character| {
-                    character == '-'
-                        || character.is_ascii_hexdigit() && !character.is_ascii_uppercase()
-                });
-            let expected = match record.get("kind").and_then(Value::as_str) {
-                Some("organizationProvisioned" | "stampRenewed") => {
-                    json!({"kind":"signInProvisioning"})
-                }
-                Some("workspaceCreated") => json!({"kind":"person","personId":ADMIN_OWNER,
-                    "permissionChecked":"workspace:create"}),
-                _ => return false,
-            };
-            uuid_v7 && record.get("origin") == Some(&expected)
-        })
-}
-
 #[tokio::main]
 async fn main() -> ConformanceResult<()> {
     let mut args = std::env::args().skip(1);
@@ -411,6 +160,7 @@ async fn main() -> ConformanceResult<()> {
         let mut unstamped_b2 = Vec::new();
         for (index, organization) in [legacy, UNSTAMPED].into_iter().enumerate() {
             let person = AdminPerson {
+                organization_revision: 1,
                 id: ADMIN_OWNER,
                 subject: ADMIN_SUBJECT,
                 organization: organization.to_owned(),
@@ -660,6 +410,7 @@ async fn main() -> ConformanceResult<()> {
             &(early_person, organization_floor, floors),
         )?;
         let owner = AdminPerson {
+                organization_revision: 1,
             id: ADMIN_OWNER,
             subject: ADMIN_SUBJECT,
             organization: legacy.to_owned(),
@@ -667,6 +418,7 @@ async fn main() -> ConformanceResult<()> {
             key: ProofKey::generate()?,
         };
         let member = AdminPerson {
+                organization_revision: 1,
             id: ADMIN_MEMBER,
             subject: ADMIN_MEMBER_SUBJECT,
             organization: legacy.to_owned(),
@@ -706,6 +458,31 @@ async fn main() -> ConformanceResult<()> {
             looked_up.1.pointer("/workspace/name") == Some(&json!("research")),
             "a member reads the workspace",
             &looked_up,
+        )?;
+        // A reply lost after central commits: the workspace and its record are
+        // already stored; the same operation after the restart finds them.
+        caller
+            .post(
+                "/public/admin/v1/conformance/runtime",
+                &json!({"address":{"kind":"fleet","value":{"organization":legacy}},
+                    "command":{"kind":"dropNextOrganizationAnswer"}}),
+            )
+            .await?;
+        let lost = caller
+            .admin(
+                "/organization-admin/v1/create-workspace",
+                &lost_intent(legacy),
+                &lost_body(legacy),
+                &owner,
+                20,
+            )
+            .await?;
+        let lost_rows = caller.records(legacy).await?;
+        require(
+            lost == (503, Value::Null)
+                && created_records(&lost_rows, LOST_OPERATION) == 1,
+            "a lost answer comes after the commit",
+            &(lost, lost_rows),
         )?;
         // A floor apply aborted after its write: no ACK, and the store still
         // holds the prior floor before any retry (an idempotent retry would
@@ -791,6 +568,58 @@ async fn main() -> ConformanceResult<()> {
             digest.0 == 200,
             "the restarted Fleet still trusts its stamp",
             &digest,
+        )?;
+        // The lost answer's operation, retried after the restart by the same
+        // owner (whose token now carries the raised organization floor).
+        let owner_again = AdminPerson {
+            organization_revision: 2,
+            id: ADMIN_OWNER,
+            subject: ADMIN_SUBJECT,
+            organization: legacy.to_owned(),
+            permissions: vec!["organization:view", "workspace:create"],
+            key: ProofKey::generate()?,
+        };
+        let recovered = caller
+            .admin(
+                "/organization-admin/v1/create-workspace",
+                &lost_intent(legacy),
+                &lost_body(legacy),
+                &owner_again,
+                21,
+            )
+            .await?;
+        let recovered_rows = caller.records(legacy).await?;
+        require(
+            recovered.0 == 200
+                && recovered.1.pointer("/result") == Some(&json!("applied"))
+                && recovered.1.pointer("/alreadyExisted") == Some(&json!(true))
+                && recovered.1.pointer("/workspace/workspaceId") == Some(&json!(LOST_OPERATION))
+                && created_records(&recovered_rows, LOST_OPERATION) == 1,
+            "the same operation finds its workspace after the restart: one workspace, one record",
+            &(recovered, recovered_rows),
+        )?;
+        // OTHER's stored statement was damaged in place before the restart:
+        // every call naming OTHER is refused, the damage is still what is
+        // stored, and the valid legacy organization is the control above.
+        let damaged_digest = caller.digest(OTHER).await?;
+        let damaged_setup = caller.provision(OTHER, &other_statement).await?;
+        let damaged_push = caller
+            .post(
+                "/link/internal/organization-authorization-revisions",
+                &json!({"kind":"organization","organizationId":OTHER,"revision":1,
+                    "state":"active","permissionPolicyDigest":ADMIN_POLICY}),
+            )
+            .await?;
+        let damaged_rows = caller.records(OTHER).await?;
+        require(
+            damaged_digest.0 == 503
+                && damaged_setup == 409
+                && damaged_push.0 == 503
+                && damaged_rows.get("statement")
+                    == Some(&json!(stamps::tamper_signature(&other_statement)?))
+                && damaged_rows.get("organizationFloor") == Some(&Value::Null),
+            "a damaged stored stamp refuses every call naming its organization after the restart and stays as stored",
+            &(damaged_digest, damaged_setup, damaged_push, damaged_rows),
         )?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }

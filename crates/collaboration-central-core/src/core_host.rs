@@ -40,6 +40,11 @@ pub trait PlatformIo: Clock + IdSource + WakeScheduler + Send + Sync + 'static {
     fn take_organization_record_fault(&self) -> bool {
         false
     }
+    /// Conformance only: whether the next admin answer is lost after its commit.
+    #[cfg(feature = "conformance")]
+    fn take_organization_answer_drop(&self) -> bool {
+        false
+    }
     fn object_call(
         &self,
         destination: ObjectAddress,
