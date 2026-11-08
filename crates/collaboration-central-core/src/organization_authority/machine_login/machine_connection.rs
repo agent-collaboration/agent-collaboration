@@ -37,6 +37,52 @@ pub async fn admit_machine_connection<P: MachineEnrollmentPort>(
     .await
 }
 
+/// A verified token's two upper bounds (PD:578): `now < exp + D`, and
+/// `now < grant_expires_at` with no leeway. Both are exclusive.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct TokenTimeBounds {
+    pub exp_with_skew_ms: i64,
+    pub grant_expires_at_ms: i64,
+}
+
+/// Which bound had passed by the time the admitting transaction read its clock.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum TokenLapse {
+    Expired,
+    GrantExpired,
+}
+
+/// Admission for a token verified before the transaction: its bounds are
+/// rechecked on the clock read inside the transaction, so a wait for the
+/// port can't carry a token past them.
+pub(super) async fn admit_within_token_bounds<P: MachineEnrollmentPort>(
+    port: &P,
+    request: &AdmitMachineConnection,
+    bounds: TokenTimeBounds,
+    clock: &dyn Clock,
+    settings: MachineLoginSettings,
+) -> Result<Result<MachineConnectionAdmission, TokenLapse>, MachineEnrollmentFailure> {
+    let query = EnrollmentQuery {
+        enrollment: Some(request.enrollment_id.clone()),
+        ..EnrollmentQuery::default()
+    };
+    port.transact(query, |facts| {
+        let time = DecisionTime::sample(clock);
+        if time.now_ms >= bounds.exp_with_skew_ms {
+            return Decided::unchanged(Err(TokenLapse::Expired));
+        }
+        if time.now_ms >= bounds.grant_expires_at_ms {
+            return Decided::unchanged(Err(TokenLapse::GrantExpired));
+        }
+        let decided = admit(request, facts, time, &settings);
+        Decided {
+            answer: Ok(decided.answer),
+            changes: decided.changes,
+        }
+    })
+    .await
+}
+
 fn refused(reason: MachineConnectionRefusal) -> Decided<MachineConnectionAdmission> {
     Decided::unchanged(MachineConnectionAdmission::Refused { reason })
 }

@@ -181,7 +181,8 @@ async fn a_valid_machine_token_with_unread_registered_claims_is_admitted() {
                 peer: PeerId::try_from(uuid7(MACHINE)).unwrap(),
                 organization_id: uuid7(0x01).try_into().unwrap(),
                 enrollment_id: enrollment(WORKING),
-                token_expires_at: UnixSeconds(NOW_S + 3600),
+                // The earlier of exp + 60 (NOW_S + 3660) and the grant (NOW_S + 1800).
+                token_expires_at: UnixSeconds(NOW_S + 1800),
             },
         })
     );
@@ -455,4 +456,148 @@ async fn renewal_answers_each_token_and_enrollment_refusal_in_its_own_kind() {
         renew(revoked, &token_with(|_| {})).await,
         renewal_refused(MachineTokenRenewalRefusal::EnrollmentNotActive {})
     );
+}
+
+/// A token checked valid before the transaction, then held until `release_ms`
+/// before its admission reads the enrollment (advisor point 01a1bc73-34bc).
+/// Also says whether the store is exactly as it was.
+async fn admit_after_wait(token: &str, release_ms: i64) -> (MachineTokenAdmission, bool) {
+    let keys = TestKeys::publishing(vec![(KID, 7)]);
+    let clock = TestClock::at(NOW_MS);
+    let port = InMemoryEnrollments::with(working());
+    let held = clock.clone();
+    port.before_next_decision(move || held.set(release_ms));
+    let admission = admit_machine_token(
+        &verifier(&keys, &clock),
+        &port,
+        token,
+        presented(),
+        settings(),
+    )
+    .await
+    .unwrap();
+    (admission, port.snapshot() == working())
+}
+
+async fn renew_after_wait(token: &str, release_ms: i64) -> (MachineTokenRenewal, bool) {
+    let keys = TestKeys::publishing(vec![(KID, 7)]);
+    let clock = TestClock::at(NOW_MS);
+    let port = InMemoryEnrollments::with(working());
+    let held = clock.clone();
+    port.before_next_decision(move || held.set(release_ms));
+    let renewal = renew_machine_token(
+        &verifier(&keys, &clock),
+        &port,
+        token,
+        &open_connection(),
+        settings(),
+    )
+    .await
+    .unwrap();
+    (renewal, port.snapshot() == working())
+}
+
+fn admitted_until(admission: &MachineTokenAdmission) -> Option<UnixSeconds> {
+    match admission {
+        MachineTokenAdmission::Admission(MachineConnectionAdmission::Admitted { machine }) => {
+            Some(machine.token_expires_at)
+        }
+        _ => None,
+    }
+}
+
+/// One bound under test, the other held valid; `bound_s` is where it ends.
+struct WaitedBound {
+    token: String,
+    bound_s: i64,
+    refusal: MachineTokenCheckRefusal,
+}
+
+fn bounded(exp: i64, grant: i64) -> String {
+    token_with(|claims| {
+        claims["exp"] = json!(exp);
+        claims["grant_expires_at"] = json!(grant);
+    })
+}
+
+fn waited_bounds() -> [WaitedBound; 2] {
+    [
+        // exp + 60 ends first: exp = NOW_S + 100, the grant much later. Just
+        // before the bound the clock is past the raw exp, inside the skew window.
+        WaitedBound {
+            token: bounded(NOW_S + 100, NOW_S + 1000),
+            bound_s: NOW_S + 100 + ISSUER_CLOCK_SKEW_SECONDS,
+            refusal: MachineTokenCheckRefusal::Expired,
+        },
+        // The grant ends first, with no leeway.
+        WaitedBound {
+            token: bounded(NOW_S + 3600, NOW_S + 100),
+            bound_s: NOW_S + 100,
+            refusal: MachineTokenCheckRefusal::GrantExpired,
+        },
+    ]
+}
+
+#[tokio::test]
+async fn admission_rechecks_both_token_bounds_on_the_clock_read_after_waiting() {
+    for WaitedBound {
+        token,
+        bound_s,
+        refusal,
+    } in waited_bounds()
+    {
+        let bound_ms = bound_s * 1000;
+        let (before, _) = admit_after_wait(&token, bound_ms - 1).await;
+        assert_eq!(
+            admitted_until(&before),
+            Some(UnixSeconds(bound_s)),
+            "{refusal:?}"
+        );
+        for late_ms in [bound_ms, bound_ms + 1] {
+            assert_eq!(
+                admit_after_wait(&token, late_ms).await,
+                (MachineTokenAdmission::TokenRefused(refusal), true),
+                "{refusal:?} at {late_ms}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn renewal_rechecks_both_token_bounds_on_the_clock_read_after_waiting() {
+    for WaitedBound { token, bound_s, .. } in waited_bounds() {
+        let bound_ms = bound_s * 1000;
+        assert_eq!(
+            renew_after_wait(&token, bound_ms - 1).await,
+            (MachineTokenRenewal::Renewed {}, true)
+        );
+        for late_ms in [bound_ms, bound_ms + 1] {
+            assert_eq!(
+                renew_after_wait(&token, late_ms).await,
+                (
+                    renewal_refused(MachineTokenRenewalRefusal::TokenExpired {}),
+                    true
+                ),
+                "at {late_ms}"
+            );
+        }
+    }
+}
+
+/// The host's timer is the earlier of exp + 60 and the grant, never the raw
+/// exp: each order, and a tie.
+#[tokio::test]
+async fn the_admitted_timer_is_the_earlier_of_exp_plus_skew_and_the_grant() {
+    for (exp, grant, until) in [
+        (NOW_S + 100, NOW_S + 1000, NOW_S + 160),
+        (NOW_S + 3600, NOW_S + 100, NOW_S + 100),
+        (NOW_S + 100, NOW_S + 160, NOW_S + 160),
+    ] {
+        let (admission, _) = admit_after_wait(&bounded(exp, grant), NOW_MS).await;
+        assert_eq!(
+            admitted_until(&admission),
+            Some(UnixSeconds(until)),
+            "exp {exp}, grant {grant}"
+        );
+    }
 }

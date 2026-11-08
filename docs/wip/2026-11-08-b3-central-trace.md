@@ -55,6 +55,15 @@ transaction, and IDs come from the injected source; a non-UUIDv7 ID is refused.
 | `MachineTokenVerifier::verify`, `admit_machine_token` | C9 in order: EdDSA header and kid; pinned issuer (before any key fetch); signature; audience; the clock read after the fetch: `now < exp + 60`, `iat ≤ now + 60`, `now < grant_expires_at`; typed machine claims (other registered claims unread) |
 | `renew_machine_token` | the fresh token through C9, naming the connection's own installation and enrollment, then admission; `MachineTokenRenewal` (`fleet-identity-protocol`) answers it |
 
+**Token bounds through the wait (Advisor point 01a1bc73-34bc, Lead ruling 01a1bc77).**
+
+- **The defect at 5826592fb:** the check ran before the port wait, and admission sampled its clock only for idle expiry. So a token verified 1 ms before its grant ended could be admitted or renewed after the wait.
+- **The fix:** `VerifiedMachineToken` carries `exp` and `grant_expires_at`. Admission and renewal recheck `now < exp + 60` and `now < grant_expires_at` on the clock read inside the admitting transaction. `AdmittedMachine.token_expires_at` is the earlier of `exp + 60` and the grant, as the host's timer value.
+- **Proof:** for both entries and both bounds, held through `before_next_decision`: 1 ms before the bound is admitted or renewed; equality and 1 ms after are refused as token expiry, with the store unchanged. The timer is tested with each bound ending first and with a tie.
+- **Seeded reds:**
+  - with only the in-transaction recheck bypassed, the equality case is admitted or renewed;
+  - with a raw-exp timer, or one without the grant, the timer test fails.
+
 ## Assumptions for the owner page
 
 Each of these was added by an agent or ruled by the Lead; the PD doesn't state them.

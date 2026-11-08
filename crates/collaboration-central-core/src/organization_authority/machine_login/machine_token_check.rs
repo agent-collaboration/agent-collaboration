@@ -6,7 +6,7 @@
 //! the enrollment live, for a new connection and for each renewal.
 use super::decision_support::MachineLoginSettings;
 use super::enrollment_port::{MachineEnrollmentFailure, MachineEnrollmentPort};
-use super::machine_connection::admit_machine_connection;
+use super::machine_connection::{TokenLapse, TokenTimeBounds, admit_within_token_bounds};
 use crate::identity_contract::{
     AdmitMachineConnection, AdmittedMachine, ClientId, MachineConnectionAdmission,
     MachineConnectionRefusal, MachinePrincipal, MachineTokenClaims, PresentedMachine,
@@ -39,7 +39,34 @@ pub struct VerifiedMachineToken {
     pub installation: InstallationId,
     pub enrollment_id: EnrollmentId,
     pub client_id: ClientId,
+    /// The JWT `exp`; the token stays usable until `exp + D`.
     pub expires_at: UnixSeconds,
+    /// The enrollment grant's own end, with no leeway.
+    pub grant_expires_at: UnixSeconds,
+}
+
+impl VerifiedMachineToken {
+    fn bounds(&self) -> TokenTimeBounds {
+        TokenTimeBounds {
+            exp_with_skew_ms: self
+                .expires_at
+                .0
+                .saturating_add(ISSUER_CLOCK_SKEW_SECONDS)
+                .saturating_mul(1000),
+            grant_expires_at_ms: self.grant_expires_at.0.saturating_mul(1000),
+        }
+    }
+
+    /// The earlier of the two bounds: when the host must stop trusting the
+    /// connection's token.
+    fn usable_until(&self) -> UnixSeconds {
+        UnixSeconds(
+            self.expires_at
+                .0
+                .saturating_add(ISSUER_CLOCK_SKEW_SECONDS)
+                .min(self.grant_expires_at.0),
+        )
+    }
 }
 
 /// Each step of the check refuses for its own reason.
@@ -194,6 +221,7 @@ impl<Ed: Ed25519Verification, Keys: IssuerKeySource> MachineTokenVerifier<Ed, Ke
             enrollment_id,
             client_id: body.client_id,
             expires_at: UnixSeconds(body.exp),
+            grant_expires_at: body.machine.grant_expires_at,
         })
     }
 }
@@ -221,9 +249,7 @@ where
 {
     match verifier.verify(token).await {
         Ok(verified) => {
-            admit_verified(verifier.clock.as_ref(), port, verified, presented, settings)
-                .await
-                .map(MachineTokenAdmission::Admission)
+            admit_verified(verifier.clock.as_ref(), port, verified, presented, settings).await
         }
         Err(refusal) => Ok(MachineTokenAdmission::TokenRefused(refusal)),
     }
@@ -235,16 +261,29 @@ async fn admit_verified<P: MachineEnrollmentPort>(
     verified: VerifiedMachineToken,
     presented: PresentedMachine,
     settings: MachineLoginSettings,
-) -> Result<MachineConnectionAdmission, MachineEnrollmentFailure> {
+) -> Result<MachineTokenAdmission, MachineEnrollmentFailure> {
+    let bounds = verified.bounds();
     let request = AdmitMachineConnection {
+        token_expires_at: verified.usable_until(),
         organization_id: verified.organization_id,
         enrollment_id: verified.enrollment_id,
         installation: verified.installation,
         presented,
-        token_expires_at: verified.expires_at,
         client_id: verified.client_id,
     };
-    admit_machine_connection(port, &request, clock, settings).await
+    // The bounds were checked at verification; checking them again on the
+    // transaction's clock covers any wait for the port.
+    Ok(
+        match admit_within_token_bounds(port, &request, bounds, clock, settings).await? {
+            Ok(admission) => MachineTokenAdmission::Admission(admission),
+            Err(TokenLapse::Expired) => {
+                MachineTokenAdmission::TokenRefused(MachineTokenCheckRefusal::Expired)
+            }
+            Err(TokenLapse::GrantExpired) => {
+                MachineTokenAdmission::TokenRefused(MachineTokenCheckRefusal::GrantExpired)
+            }
+        },
+    )
 }
 
 /// `RenewMachineToken` on an open connection: the fresh token is checked
@@ -280,18 +319,25 @@ where
         peer: connection.peer,
     };
     match admit_verified(verifier.clock.as_ref(), port, verified, presented, settings).await? {
-        MachineConnectionAdmission::Admitted { .. } => Ok(MachineTokenRenewal::Renewed {}),
-        MachineConnectionAdmission::Refused { reason } => refused(match reason {
-            MachineConnectionRefusal::WrongClient {} => MachineTokenRenewalRefusal::WrongClient {},
-            MachineConnectionRefusal::UnknownMachine {} => {
-                MachineTokenRenewalRefusal::WrongInstallation {}
-            }
-            MachineConnectionRefusal::EnrollmentNotActive {}
-            | MachineConnectionRefusal::Superseded {}
-            | MachineConnectionRefusal::MachineInAnotherOrganization {} => {
-                MachineTokenRenewalRefusal::EnrollmentNotActive {}
-            }
-        }),
+        MachineTokenAdmission::TokenRefused(refusal) => refused(refusal.renewal()),
+        MachineTokenAdmission::Admission(MachineConnectionAdmission::Admitted { .. }) => {
+            Ok(MachineTokenRenewal::Renewed {})
+        }
+        MachineTokenAdmission::Admission(MachineConnectionAdmission::Refused { reason }) => {
+            refused(match reason {
+                MachineConnectionRefusal::WrongClient {} => {
+                    MachineTokenRenewalRefusal::WrongClient {}
+                }
+                MachineConnectionRefusal::UnknownMachine {} => {
+                    MachineTokenRenewalRefusal::WrongInstallation {}
+                }
+                MachineConnectionRefusal::EnrollmentNotActive {}
+                | MachineConnectionRefusal::Superseded {}
+                | MachineConnectionRefusal::MachineInAnotherOrganization {} => {
+                    MachineTokenRenewalRefusal::EnrollmentNotActive {}
+                }
+            })
+        }
     }
 }
 
