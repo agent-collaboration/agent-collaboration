@@ -12,7 +12,9 @@ use collaboration_central_conformance::{
     ConformanceResult, FIXTURE_KID, JwksFixtureServer, fixture_policy, legacy_organization,
     sign_assertion,
 };
-use organization_stamps::{self as stamps, NOW_SECONDS, SignInKeys};
+use organization_stamps::{
+    self as stamps, ADMIN_AUDIENCE, ISSUER, NOW_SECONDS, PUBLIC_ORIGIN, ProofKey, SignInKeys,
+};
 use serde_json::{Value, json};
 use std::{path::PathBuf, process::Stdio};
 use tokio::{
@@ -21,6 +23,10 @@ use tokio::{
 };
 
 const OTHER: &str = "019f0000-0000-7000-8000-00000000b2c1";
+const ADMIN_OWNER: &str = "019f0000-0000-7000-8000-00000000b2e1";
+const ADMIN_SUBJECT: &str = "019f0000-0000-7000-8000-00000000b2e2";
+const ADMIN_MEMBER: &str = "019f0000-0000-7000-8000-00000000b2e3";
+const ADMIN_MEMBER_SUBJECT: &str = "019f0000-0000-7000-8000-00000000b2e4";
 const FIXED_MILLIS: i64 = NOW_SECONDS * 1000;
 
 struct LinkHarness {
@@ -127,6 +133,46 @@ impl Caller {
             .await?;
         Ok((status, body))
     }
+    /// A person's admin call over the link with a real token and DPoP proof.
+    async fn admin(
+        &self,
+        path: &str,
+        intent: &Value,
+        body: &Value,
+        person: &AdminPerson,
+        jti_serial: u16,
+    ) -> ConformanceResult<(u16, Value)> {
+        let token = person.token()?;
+        let millis = NOW_SECONDS * 1000 - 1000;
+        let jti = format!(
+            "{:08x}-{:04x}-7000-8000-{:012x}",
+            millis >> 16,
+            millis & 0xffff,
+            jti_serial
+        );
+        let proof = person.key.proof(&json!({
+            "jti":jti,"htm":"POST","htu":format!("{PUBLIC_ORIGIN}{path}"),"iat":NOW_SECONDS - 1,
+            "ath":stamps::sha256_url(token.as_bytes()),
+            "intent":stamps::sha256_url(stamps::canonical(intent).as_bytes())
+        }))?;
+        let response = self
+            .http
+            .post(format!("{}/link{path}", self.base))
+            .header("authorization", format!("DPoP {token}"))
+            .header("dpop", proof)
+            .json(body)
+            .send()
+            .await?;
+        let status = response.status().as_u16();
+        let bytes = response.bytes().await?;
+        let body = if bytes.is_empty() {
+            Value::Null
+        } else {
+            serde_json::from_slice(&bytes)?
+        };
+        Ok((status, body))
+    }
+
     /// Read through public central's own Fleet routing, not the link.
     async fn records(&self, organization: &str) -> ConformanceResult<Value> {
         let (status, _, body) = self
@@ -141,6 +187,35 @@ impl Caller {
         Ok(body)
     }
 }
+
+struct AdminPerson {
+    id: &'static str,
+    subject: &'static str,
+    organization: String,
+    permissions: Vec<&'static str>,
+    key: ProofKey,
+}
+impl AdminPerson {
+    fn token(&self) -> ConformanceResult<String> {
+        stamps::sign(
+            &json!({"typ":"at+jwt","alg":"EdDSA","kid":"stamp-a"}),
+            &json!({
+                "iss":ISSUER,"aud":[ADMIN_AUDIENCE],"sub":self.id,
+                "sid":"019f0000-0000-7000-8000-00000000b2f0",
+                "iat":NOW_SECONDS - 10,"exp":NOW_SECONDS + 290,"cnf":{"jkt":self.key.thumbprint()?},
+                "token_profile":"person-fleet","organization_id":self.organization,
+                "authorization_subject_id":self.subject,"person_revision":1,"organization_revision":1,
+                "permission_policy_digest":ADMIN_POLICY,"permissions":self.permissions,
+                "second_factor_at":NOW_SECONDS - 60,"second_factor_method":"app",
+                "session_expires_at_ms":(NOW_SECONDS + 86_400) * 1000,
+                "authorization_snapshot_at_ms":NOW_SECONDS * 1000 - 10_000,
+                "authorization_snapshot_valid_until_ms":NOW_SECONDS * 1000 + 200_000
+            }),
+            7,
+        )
+    }
+}
+const ADMIN_POLICY: &str = "2d31b5d72716e64e255d8858c231f593155289fb03ed354c4b762890667a3c22";
 
 fn require(condition: bool, case: &str, observed: &impl std::fmt::Debug) -> ConformanceResult<()> {
     if condition {
@@ -320,6 +395,103 @@ async fn main() -> ConformanceResult<()> {
             unproved_admin.0 == 401,
             "a link admin call without a DPoP-bound person token is refused",
             &unproved_admin,
+        )?;
+        // Floors pushed over the link, then a person's admin journey through
+        // central-link to the legacy Fleet object.
+        let early_person = caller
+            .post(
+                "/link/internal/organization-authorization-revisions",
+                &json!({"kind":"person","organizationId":legacy,"personId":ADMIN_OWNER,
+                    "subjectId":ADMIN_SUBJECT,"revision":1,"state":"active"}),
+            )
+            .await?;
+        let organization_floor = caller
+            .post(
+                "/link/internal/organization-authorization-revisions",
+                &json!({"kind":"organization","organizationId":legacy,"revision":1,"state":"active",
+                    "permissionPolicyDigest":ADMIN_POLICY}),
+            )
+            .await?;
+        let mut floors = Vec::new();
+        for (person, subject) in [(ADMIN_OWNER, ADMIN_SUBJECT), (ADMIN_MEMBER, ADMIN_MEMBER_SUBJECT)] {
+            floors.push(
+                caller
+                    .post(
+                        "/link/internal/organization-authorization-revisions",
+                        &json!({"kind":"person","organizationId":legacy,"personId":person,
+                            "subjectId":subject,"revision":1,"state":"active"}),
+                    )
+                    .await?
+                    .0,
+            );
+        }
+        require(
+            (early_person.0, organization_floor.0, floors.clone()) == (412, 200, vec![200, 200]),
+            "floors push over the binding, organization first",
+            &(early_person, organization_floor, floors),
+        )?;
+        let owner = AdminPerson {
+            id: ADMIN_OWNER,
+            subject: ADMIN_SUBJECT,
+            organization: legacy.to_owned(),
+            permissions: vec!["organization:view", "workspace:create"],
+            key: ProofKey::generate()?,
+        };
+        let member = AdminPerson {
+            id: ADMIN_MEMBER,
+            subject: ADMIN_MEMBER_SUBJECT,
+            organization: legacy.to_owned(),
+            permissions: vec!["organization:view"],
+            key: ProofKey::generate()?,
+        };
+        let operation = "019f0000-0000-7000-8000-00000000b2e0";
+        let intent = json!({"v":1,"operation":"CreateWorkspace","organization":legacy,"target":legacy,
+            "operationId":operation,"params":{"name":"research","description":""}});
+        let body = json!({"organizationId":legacy,"operationId":operation,"name":"research","description":""});
+        let created = caller.admin("/organization-admin/v1/create-workspace", &intent, &body, &owner, 1).await?;
+        let retried = caller.admin("/organization-admin/v1/create-workspace", &intent, &body, &owner, 2).await?;
+        let reused = caller.admin("/organization-admin/v1/create-workspace", &intent, &body, &owner, 2).await?;
+        let by_member = caller.admin("/organization-admin/v1/create-workspace", &intent, &body, &member, 3).await?;
+        require(
+            created.0 == 200
+                && created.1.pointer("/result") == Some(&json!("applied"))
+                && created.1.pointer("/workspace/workspaceId") == Some(&json!(operation))
+                && retried.1.pointer("/alreadyExisted") == Some(&json!(true))
+                && reused.1 == json!({"result":"refused","reason":"requestReused"})
+                && by_member.1 == json!({"result":"refused","reason":"notPermitted"}),
+            "a person creates one workspace through central-link; retry, replay and a member behave",
+            &(created, retried, reused, by_member),
+        )?;
+        let lookup_intent = json!({"v":1,"operation":"WorkspaceLookup","organization":legacy,
+            "target":operation,"operationId":null,"params":{}});
+        let looked_up = caller
+            .admin(
+                "/organization-admin/v1/workspace-lookup",
+                &lookup_intent,
+                &json!({"organizationId":legacy,"workspaceId":operation}),
+                &member,
+                4,
+            )
+            .await?;
+        require(
+            looked_up.1.pointer("/workspace/name") == Some(&json!("research")),
+            "a member reads the workspace",
+            &looked_up,
+        )?;
+        let collision = caller
+            .post(
+                "/public/admin/v1/machines/enroll",
+                &json!({"kind":"enrollMachine","value":{
+                    "label":"collision","installation":"019f0000-0000-7000-8000-00000000e501",
+                    "peer":"019f0000-0000-7000-8000-00000000b2e9",
+                    "access_client_id":collaboration_central_conformance::access_client_id("collision")?,
+                    "credential_hash":stamps::digest("collision"),"expires_at":"2033-05-18T03:33:20Z"}}),
+            )
+            .await?;
+        require(
+            collision.2 == json!({"kind":"refused","value":"invalidInput"}),
+            "no machine is enrolled under the sign-in service's ServiceId",
+            &collision,
         )?;
         let link_unknown = caller
             .post("/link/internal/organization-admin", &json!({}))
