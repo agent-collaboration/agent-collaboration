@@ -19,7 +19,7 @@ use sqlx_core::{
 use std::{path::Path, time::Duration};
 
 pub(crate) const ORGANIZATION_A: &str = "019f0000-0000-7000-8000-00000000b2a1";
-const ORGANIZATION_B: &str = "019f0000-0000-7000-8000-00000000b2b1";
+pub(crate) const ORGANIZATION_B: &str = "019f0000-0000-7000-8000-00000000b2b1";
 pub(crate) const PROVISION: &str = "/internal/organization-provisioning";
 const DIGEST: &str = "/internal/organization-statement-digest";
 

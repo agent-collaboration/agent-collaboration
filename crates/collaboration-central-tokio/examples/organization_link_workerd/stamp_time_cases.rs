@@ -229,3 +229,20 @@ pub(crate) async fn run(caller: &Caller, keys: &SignInKeys) -> ConformanceResult
     )?;
     Ok(())
 }
+
+/// The drained first-phase Worker lines for the statement-time cases: an
+/// apply-time expiry logs Expired once per refused call, a valid or a stored-
+/// stamp refusal (not a statement refusal) logs nothing.
+pub(crate) fn judge_logs(lines: &[String]) -> ConformanceResult<()> {
+    super::refusal_cases::expect_logged(
+        lines,
+        &[
+            (EXPIRY_FIRST, &["Expired"]),
+            (EXPIRY_CONTROL, &[]),
+            (EXPIRY_STORED, &["Expired", "Expired"]),
+            (STORED_EXPIRY, &[]),
+            (STORED_CONTROL, &[]),
+        ],
+        "apply-time expiries log Expired once per refused call; valid and stored-stamp refusals log no statement refusal",
+    )
+}

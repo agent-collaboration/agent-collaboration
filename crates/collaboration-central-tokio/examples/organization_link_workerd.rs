@@ -18,6 +18,8 @@ mod refusal_cases;
 mod stamp_time_cases;
 #[path = "../tests/support/statement_refusals.rs"]
 mod statement_refusals;
+#[path = "organization_link_workerd/wrong_stamp_case.rs"]
+mod wrong_stamp_case;
 use collaboration_central_conformance::{
     ConformanceResult, DispatchCallSelector, DispatchKey, FIXTURE_KID, JwksFixtureServer,
     RuntimeControl, RuntimeControlRequest, fixture_policy, legacy_organization, sign_assertion,
@@ -634,11 +636,13 @@ async fn main() -> ConformanceResult<()> {
             "the observer reads the whole organization from its Fleet object: stamp facts, person floors, used requests, workspaces and decisions",
             &final_rows,
         )?;
-        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(final_rows)
+        let wrong_before = wrong_stamp_case::seed(&caller).await?;
+        Ok::<_, Box<dyn std::error::Error + Send + Sync>>((final_rows, wrong_before))
     }
     .await;
-    harness.stop().await?;
-    let before_restart = first?;
+    let first_lines = harness.stop().await?;
+    let (before_restart, wrong_before) = first?;
+    stamp_time_cases::judge_logs(&first_lines)?;
     // The sign-in service retires its second key once every central restarted.
     keys.retire("stamp-b")?;
     let restarted = LinkHarness::start(&harness_arguments).await?;
@@ -726,12 +730,12 @@ async fn main() -> ConformanceResult<()> {
             "a damaged stored stamp refuses every call naming its organization after the restart and stays as stored",
             &(damaged_digest, damaged_setup, damaged_push, damaged_rows),
         )?;
-        let sent = refusal_cases::send(&caller).await?;
+        wrong_stamp_case::check(&caller, &wrong_before).await?;
+        let sent = refusal_cases::send(&caller, keys).await?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(sent)
     }
     .await;
     let restarted_lines = restarted.stop().await?;
-    keys.shutdown().await?;
     access.shutdown().await?;
     refusal_cases::judge(&second?, &restarted_lines)?;
     println!("LINK JOURNEY passed");

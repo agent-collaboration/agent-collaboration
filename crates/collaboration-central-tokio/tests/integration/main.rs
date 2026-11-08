@@ -133,6 +133,7 @@ mod organization_records_observer;
 mod organization_retired_key;
 mod organization_statement_refusal_log;
 mod organization_unstamped_routes;
+mod organization_wrong_stamp;
 mod owner_admin_sessions;
 mod owner_fence_ordering;
 mod owner_registry;

@@ -1,6 +1,10 @@
 //! A refused organization statement leaves exactly one log event naming its
 //! closed refusal kind and the Fleet's organization, and no log line carries
 //! statement material: not its bytes, segments, digest or key ID.
+//!
+//! Every refusal kind is sent except `InvalidConfiguration`, which only a host
+//! without sign-in trust produces: Tokio opens no link socket without
+//! `SignInLinkSettings`, so no link request can reach that state.
 #![cfg(feature = "conformance")]
 use crate::fleet_clock::FleetClock;
 use crate::organization_admin_link::settings;
@@ -28,6 +32,8 @@ const VALID: &str = "019f0000-0000-7000-8000-00000000d7f0";
 const HELD: &str = "019f0000-0000-7000-8000-00000000d7f1";
 /// Names the statement used by the another-organization case.
 const OTHER: &str = "019f0000-0000-7000-8000-00000000d7f2";
+/// Offered a statement once the sign-in key source is down.
+const UNREACHABLE: &str = "019f0000-0000-7000-8000-00000000d7f3";
 
 #[derive(Clone, Default)]
 struct CapturedLogs(Arc<Mutex<Vec<u8>>>);
@@ -228,6 +234,23 @@ async fn each_statement_refusal_logs_its_kind_once_and_no_statement_material()
     .await?;
     let held_refusals = logs.refusals(HELD)?;
     statements.push(held);
+
+    // The key source goes down; a key ID the cache does not hold forces a
+    // refresh that cannot complete.
+    keys.shutdown().await?;
+    let unreachable = stamps::sign(
+        &serde_json::json!({"typ":"fleet-organization-stamp+jwt","alg":"EdDSA","kid":"stamp-y"}),
+        &stamps::claims(UNREACHABLE),
+        9,
+    )?;
+    let unavailable = link_post(
+        &socket,
+        PROVISION,
+        &provision_body(UNREACHABLE, &unreachable),
+    )
+    .await?;
+    let unavailable_refusals = logs.refusals(UNREACHABLE)?;
+    statements.push(unreachable);
     server.shutdown().await?;
 
     for (case, status, expected_status, refusals, expected) in &observed {
@@ -241,7 +264,7 @@ async fn each_statement_refusal_logs_its_kind_once_and_no_statement_material()
     assert_eq!(
         observed.len(),
         13,
-        "every refusal kind reachable by a statement"
+        "every statement refusal case sent through the link"
     );
     assert_eq!(valid_answer.0, 200, "the valid control provisions");
     assert!(
@@ -253,6 +276,14 @@ async fn each_statement_refusal_logs_its_kind_once_and_no_statement_material()
         held_refusals,
         vec!["Expired".to_owned()],
         "apply-time expiry logged once"
+    );
+    assert_eq!(
+        unavailable.0, 503,
+        "a key source that cannot answer is unavailable"
+    );
+    assert!(
+        matches!(unavailable_refusals.as_slice(), [only] if only.starts_with("VerificationUnavailable(")),
+        "one event naming the unavailable verification: {unavailable_refusals:?}"
     );
 
     let text = logs.text()?;
