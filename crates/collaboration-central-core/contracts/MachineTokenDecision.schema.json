@@ -1,5 +1,28 @@
 {
   "$defs": {
+    "ClientId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "EndedMachineClient": {
+      "additionalProperties": false,
+      "description": "The enrollment and OAuth client a first grant ended by superseding them.",
+      "properties": {
+        "clientId": {
+          "$ref": "#/$defs/ClientId"
+        },
+        "enrollmentId": {
+          "$ref": "#/$defs/EnrollmentId"
+        }
+      },
+      "required": [
+        "enrollmentId",
+        "clientId"
+      ],
+      "type": "object"
+    },
     "EnrollmentId": {
       "maxLength": 36,
       "minLength": 36,
@@ -94,6 +117,16 @@
         "result": {
           "const": "grant",
           "type": "string"
+        },
+        "superseded": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EndedMachineClient"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [

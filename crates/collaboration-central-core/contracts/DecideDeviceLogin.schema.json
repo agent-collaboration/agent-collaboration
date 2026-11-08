@@ -1,9 +1,42 @@
 {
   "$defs": {
+    "AllowedWorkspaces": {
+      "items": {
+        "$ref": "#/$defs/WorkspaceId"
+      },
+      "maxItems": 100,
+      "type": "array"
+    },
+    "DeviceLoginLabel": {
+      "allOf": [
+        {
+          "pattern": "^[^\\u0000-\\u0008\\u000b-\\u001f]*$(?![\\s\\S])"
+        }
+      ],
+      "maxLength": 120,
+      "minLength": 1,
+      "pattern": "^(?:[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000](?:[\\s\\S]*[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000])?)?$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf16Units": 120,
+      "x-maxUtf8Bytes": 256
+    },
     "DeviceLoginRequestId": {
       "maxLength": 36,
       "minLength": 36,
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "EnrollPermission": {
+      "description": "The permission the issuer checked before asking: always `machine:enroll`.",
+      "enum": [
+        "machine:enroll"
+      ],
+      "type": "string"
+    },
+    "FormerServiceId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[47][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$(?![\\s\\S])",
       "type": "string"
     },
     "InstallationId": {
@@ -12,18 +45,6 @@
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
       "type": "string",
       "x-maxUtf8Bytes": 36
-    },
-    "MachineLabel": {
-      "allOf": [
-        {
-          "pattern": "^[^\\u0000-\\u0008\\u000b-\\u001f]*$(?![\\s\\S])"
-        }
-      ],
-      "maxLength": 256,
-      "minLength": 1,
-      "pattern": "^(?:[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000](?:[\\s\\S]*[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000])?)?$(?![\\s\\S])",
-      "type": "string",
-      "x-maxUtf8Bytes": 256
     },
     "OrganizationId": {
       "maxLength": 36,
@@ -56,12 +77,10 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "description": "The issuer asks central to approve a device login. `approverSecondFactorAt`\nis always present and may be null; `formerServiceId` is present only for a\nmachine re-keying from an older service identity.",
   "properties": {
     "allowedWorkspaces": {
-      "items": {
-        "$ref": "#/$defs/WorkspaceId"
-      },
-      "type": "array"
+      "$ref": "#/$defs/AllowedWorkspaces"
     },
     "approver": {
       "$ref": "#/$defs/PersonId"
@@ -76,17 +95,30 @@
         }
       ]
     },
+    "formerServiceId": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FormerServiceId"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "installation": {
       "$ref": "#/$defs/InstallationId"
     },
     "label": {
-      "$ref": "#/$defs/MachineLabel"
+      "$ref": "#/$defs/DeviceLoginLabel"
     },
     "organizationId": {
       "$ref": "#/$defs/OrganizationId"
     },
     "peer": {
       "$ref": "#/$defs/RecordId"
+    },
+    "permissionChecked": {
+      "$ref": "#/$defs/EnrollPermission"
     },
     "requestId": {
       "$ref": "#/$defs/DeviceLoginRequestId"
@@ -95,11 +127,13 @@
   "required": [
     "organizationId",
     "approver",
+    "permissionChecked",
     "requestId",
     "installation",
     "peer",
     "label",
-    "allowedWorkspaces"
+    "allowedWorkspaces",
+    "approverSecondFactorAt"
   ],
   "title": "DecideDeviceLogin",
   "type": "object"

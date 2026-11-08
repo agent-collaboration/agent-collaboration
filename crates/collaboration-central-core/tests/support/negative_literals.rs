@@ -94,6 +94,59 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
     }
     invalid.extend(composed_byte_overflows(name, literals));
     invalid.extend(scalar_rule_negatives(literals));
+    invalid.extend(machine_login_mirror_negatives(name, literals));
+    invalid
+}
+
+/// Inputs the issuer's `machine-login-contracts.ts` refuses; central refuses them too.
+fn machine_login_mirror_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
+    let mut invalid = Vec::new();
+    match name {
+        "DecideDeviceLogin" => {
+            let Some(first) = literals.first() else { return invalid };
+            let mut missing = first.clone();
+            if let Some(fields) = missing.as_object_mut() { fields.remove("approverSecondFactorAt"); }
+            invalid.push(missing);
+            let mut no_permission = first.clone();
+            if let Some(fields) = no_permission.as_object_mut() { fields.remove("permissionChecked"); }
+            invalid.push(no_permission);
+            let cases: [(&str, Value); 12] = [
+                ("permissionChecked", json!("machine:view")),
+                ("label", json!("a".repeat(121))),
+                // 61 astral characters: 61 code points, 122 UTF-16 code units.
+                ("label", json!("😀".repeat(61))),
+                // 86 three-byte characters: 86 code units, 258 UTF-8 bytes.
+                ("label", json!("€".repeat(86))),
+                ("label", json!("")),
+                ("allowedWorkspaces", json!(vec!["019a3dce-2000-7000-8000-000000000001"; 101])),
+                ("approverSecondFactorAt", json!("1793448000")),
+                ("formerServiceId", json!("019a3dce-2000-1000-8000-000000000001")),
+                ("formerServiceId", json!("019a3dce-2000-5000-8000-000000000001")),
+                ("formerServiceId", json!("00000000-0000-4000-0000-000000000001")),
+                ("formerServiceId", json!("00000000-0000-4000-8000-00000000000G")),
+                ("formerServiceId", json!(17)),
+            ];
+            for (field, value) in cases {
+                let mut changed = first.clone();
+                changed[field] = value;
+                invalid.push(changed);
+            }
+        }
+        "DeviceLoginRefusal" => invalid.extend([
+            json!({"kind":"notOwner"}),
+            json!({"kind":"secondFactorRequired","withinSeconds":0}),
+            json!({"kind":"secondFactorRequired"}),
+        ]),
+        "DeviceLoginDecision" => invalid.extend([
+            json!({"result":"refused","reason":{"kind":"notOwner"}}),
+            json!({"result":"refused","reason":{"kind":"secondFactorRequired","withinSeconds":0}}),
+        ]),
+        "MachineTokenDecision" => invalid.extend([
+            json!({"result":"grant","installation":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","decidedAt":1793448000_i64,"grantExpiresAt":1793448600_i64,"superseded":{"enrollmentId":"019a3dce-2000-7000-8000-000000000003"}}),
+            json!({"result":"grant","installation":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","decidedAt":1793448000_i64,"grantExpiresAt":1793448600_i64,"superseded":{"clientId":"019a3dce-2000-7000-8000-000000000004"}}),
+        ]),
+        _ => {}
+    }
     invalid
 }
 
@@ -101,7 +154,7 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
 // bound. Each owning contract must reject them through its registered keyword.
 fn composed_byte_overflows(name: &str, literals: &[Value]) -> Vec<Value> {
     let fields: &[(&str, usize)] = match name {
-        "DecideDeviceLogin" | "AllowedMachineRow" | "MachineLookupResult" => &[("/label", 256)],
+        "AllowedMachineRow" | "MachineLookupResult" => &[("/label", 256)],
         "CreateWorkspace" | "ProjectRef" | "WorkspaceRef" => &[("/name", 256)],
         "IdentityLookup" | "RemoveSession" | "SessionRow" => &[("/session/sessionId", 4096)],
         "MachineRow" => &[("/label", 256), ("/sessions/0/session/sessionId", 4096)],

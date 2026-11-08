@@ -15,8 +15,9 @@ fn decide_device_login_wire_contract() {
     contract_artifacts::assert_contract::<DecideDeviceLogin>(
         "DecideDeviceLogin",
         vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","label":"fixture machine","allowedWorkspaces":["019a3dce-2000-7000-8000-000000000001"]}),
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","label":"fixture machine","allowedWorkspaces":[],"approverSecondFactorAt":1793448000_i64}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","permissionChecked":"machine:enroll","requestId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","label":"fixture machine","allowedWorkspaces":["019a3dce-2000-7000-8000-000000000001"],"approverSecondFactorAt":null}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","permissionChecked":"machine:enroll","requestId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","label":"fixture machine","allowedWorkspaces":[],"approverSecondFactorAt":1793448000_i64,"formerServiceId":"0b6a1c5e-2f3d-4a8b-9c1d-2e3f4a5b6c7d"}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","permissionChecked":"machine:enroll","requestId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","label":"😀".repeat(60),"allowedWorkspaces":vec!["019a3dce-2000-7000-8000-000000000001"; 100],"approverSecondFactorAt":0,"formerServiceId":"019a3dce-2000-7000-8000-000000000003"}),
         ],
         false,
     );
@@ -28,10 +29,11 @@ fn device_login_decision_wire_contract() {
         "DeviceLoginDecision",
         vec![
             json!({"result":"approved","enrollmentId":"019a3dce-2000-7000-8000-000000000002"}),
-            json!({"result":"refused","reason":{"kind":"notOwner"}}),
+            json!({"result":"refused","reason":{"kind":"notPermitted"}}),
             json!({"result":"refused","reason":{"kind":"machineInAnotherOrganization"}}),
             json!({"result":"refused","reason":{"kind":"unknownWorkspace"}}),
             json!({"result":"refused","reason":{"kind":"secondFactorRequired","withinSeconds":900}}),
+            json!({"result":"refused","reason":{"kind":"formerServiceLinkedElsewhere"}}),
         ],
         false,
     );
@@ -42,10 +44,11 @@ fn device_login_refusal_wire_contract() {
     contract_artifacts::assert_contract::<DeviceLoginRefusal>(
         "DeviceLoginRefusal",
         vec![
-            json!({"kind":"notOwner"}),
+            json!({"kind":"notPermitted"}),
             json!({"kind":"machineInAnotherOrganization"}),
             json!({"kind":"unknownWorkspace"}),
             json!({"kind":"secondFactorRequired","withinSeconds":900}),
+            json!({"kind":"formerServiceLinkedElsewhere"}),
         ],
         false,
     );
@@ -68,6 +71,7 @@ fn machine_token_decision_wire_contract() {
         "MachineTokenDecision",
         vec![
             json!({"result":"grant","installation":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","decidedAt":1793448000_i64,"grantExpiresAt":1793448600_i64}),
+            json!({"result":"grant","installation":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","decidedAt":1793448000_i64,"grantExpiresAt":1793448600_i64,"superseded":{"enrollmentId":"019a3dce-2000-7000-8000-000000000003","clientId":"019a3dce-2000-7000-8000-000000000004"}}),
             json!({"result":"refuse","reason":{"kind":"enrollmentNotActive"}}),
             json!({"result":"refuse","reason":{"kind":"superseded"}}),
             json!({"result":"refuse","reason":{"kind":"wrongClient"}}),

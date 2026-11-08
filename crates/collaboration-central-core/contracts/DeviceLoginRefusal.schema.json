@@ -1,11 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "`formerServiceLinkedElsewhere` says only that the former service id cannot\nbe linked here; it names no organization, enrollment or installation.",
   "oneOf": [
     {
       "additionalProperties": false,
       "properties": {
         "kind": {
-          "const": "notOwner",
+          "const": "notPermitted",
           "type": "string"
         }
       },
@@ -49,13 +50,26 @@
         },
         "withinSeconds": {
           "format": "uint32",
-          "minimum": 0,
+          "minimum": 1,
           "type": "integer"
         }
       },
       "required": [
         "kind",
         "withinSeconds"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "formerServiceLinkedElsewhere",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
       ],
       "type": "object"
     }
