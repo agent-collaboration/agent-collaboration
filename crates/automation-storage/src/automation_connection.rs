@@ -1,17 +1,14 @@
 //! Database connection lifecycle; schema setup precedes every repository operation.
 use sqlite_storage_maintenance::{
-    CommitPoint, CommitSignal, SqliteStorageMaintenanceError, configure_new_database_options,
-    incremental_vacuum_step, prepare_existing_database,
+    CommitSignal, SignaledTransaction, SqliteStorageMaintenanceError,
+    configure_new_database_options, incremental_vacuum_step, prepare_existing_database,
+    sqlite_total_changes,
 };
 use sqlx::{
     Connection, Sqlite, SqliteConnection,
     sqlite::{SqliteConnectOptions, SqliteSynchronous},
 };
-use std::{
-    ops::{Deref, DerefMut},
-    path::Path,
-    time::Duration,
-};
+use std::{path::Path, time::Duration};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
@@ -122,56 +119,10 @@ pub struct AutomationStore {
     commits: CommitSignal,
 }
 
-/// How the store's one transaction function opens its transaction.
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum TransactionStart {
-    /// `BEGIN IMMEDIATE`: takes the write lock first. Every mutating method uses it.
-    Immediate,
-    /// `BEGIN`: a consistent read snapshot.
-    Deferred,
-}
-
-/// One transaction on the automation database. Committing it is the only way a write
-/// becomes visible, and it signals subscribers only when rows changed.
-pub(crate) struct AutomationTransaction<'store> {
-    transaction: sqlx::Transaction<'store, Sqlite>,
-    changes_at_begin: i64,
-    commits: &'store CommitSignal,
-}
-
-impl AutomationTransaction<'_> {
-    /// Commits, then bumps the commit signal if this transaction changed rows.
-    pub(crate) async fn commit(mut self) -> Result<(), sqlx::Error> {
-        let changed_rows = total_changes(&mut self.transaction).await? != self.changes_at_begin;
-        let pending = self.commits.begin_commit(changed_rows);
-        pending.checkpoint(CommitPoint::BeforeCommitInvoked).await;
-        let committed = self.transaction.commit().await;
-        if committed.is_ok() {
-            pending.checkpoint(CommitPoint::AfterCommitReturned).await;
-        }
-        pending.settle(committed.is_ok());
-        committed
-    }
-
-    /// A known rollback; it never signals.
-    pub(crate) async fn rollback(self) -> Result<(), sqlx::Error> {
-        self.transaction.rollback().await
-    }
-}
-
-impl Deref for AutomationTransaction<'_> {
-    type Target = SqliteConnection;
-
-    fn deref(&self) -> &SqliteConnection {
-        &self.transaction
-    }
-}
-
-impl DerefMut for AutomationTransaction<'_> {
-    fn deref_mut(&mut self) -> &mut SqliteConnection {
-        &mut self.transaction
-    }
-}
+/// One transaction on the automation database; committing it signals subscribers only
+/// when it changed rows.
+pub(crate) type AutomationTransaction<'store> = SignaledTransaction<'store, Sqlite>;
+pub(crate) use sqlite_storage_maintenance::TransactionStart;
 
 /// Runs one write statement as a one-statement transaction through
 /// [`AutomationStore::transaction`], so it signals like every other write.
@@ -197,11 +148,6 @@ where
     }
 }
 
-async fn total_changes(connection: &mut SqliteConnection) -> Result<i64, sqlx::Error> {
-    sqlx::query_scalar("SELECT total_changes()")
-        .fetch_one(connection)
-        .await
-}
 impl AutomationStore {
     pub async fn open(path: &Path) -> Result<Self, StorageError> {
         let mut connection = connect(path, true).await?;
@@ -222,16 +168,8 @@ impl AutomationStore {
         &mut self,
         start: TransactionStart,
     ) -> Result<AutomationTransaction<'_>, sqlx::Error> {
-        let mut transaction = match start {
-            TransactionStart::Immediate => self.connection.begin_with("BEGIN IMMEDIATE").await?,
-            TransactionStart::Deferred => self.connection.begin().await?,
-        };
-        let changes_at_begin = total_changes(&mut transaction).await?;
-        Ok(AutomationTransaction {
-            transaction,
-            changes_at_begin,
-            commits: &self.commits,
-        })
+        let transaction = self.connection.begin_with(start.statement()).await?;
+        SignaledTransaction::counting(transaction, sqlite_total_changes, &self.commits).await
     }
 
     /// A receiver that wakes after each committed transaction that changed rows.

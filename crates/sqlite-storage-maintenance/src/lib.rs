@@ -3,7 +3,10 @@
 mod commit_signal;
 #[cfg(feature = "test-support")]
 pub use commit_signal::CommitPause;
-pub use commit_signal::{CommitPoint, CommitSignal, PendingCommit};
+pub use commit_signal::{
+    ChangeCounter, CommitPoint, CommitSignal, PendingCommit, SignaledTransaction, TransactionStart,
+    sqlite_total_changes,
+};
 
 use std::{
     ffi::OsString,

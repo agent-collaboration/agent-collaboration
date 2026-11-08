@@ -4,6 +4,12 @@
 //! a transaction that changed nothing and a known rollback leave it alone. A commit
 //! whose future is dropped while it runs bumps anyway, because its outcome is unknown;
 //! the cost is one extra read after a write that in fact rolled back.
+use sqlx::Database;
+use std::{
+    future::Future,
+    ops::{Deref, DerefMut},
+    pin::Pin,
+};
 use tokio::sync::watch;
 
 /// The store-owned sender; each store's one transaction function settles through it.
@@ -49,6 +55,103 @@ impl CommitSignal {
     fn bump(&self) {
         self.commits
             .send_modify(|revision| *revision = revision.wrapping_add(1));
+    }
+}
+
+/// How a store's transaction function opens its transaction.
+#[derive(Clone, Copy, Debug)]
+pub enum TransactionStart {
+    /// `BEGIN IMMEDIATE`: takes the write lock first. Every mutating method uses it.
+    Immediate,
+    /// `BEGIN`: a consistent read snapshot.
+    Deferred,
+}
+
+impl TransactionStart {
+    /// The statement that opens this kind of transaction.
+    #[must_use]
+    pub const fn statement(self) -> &'static str {
+        match self {
+            Self::Immediate => "BEGIN IMMEDIATE",
+            Self::Deferred => "BEGIN",
+        }
+    }
+}
+
+/// Reads the connection's `SELECT total_changes()`. Each store passes the concrete query
+/// for its driver; SQLite and Turso both count every row an INSERT, UPDATE or DELETE
+/// matched, even when it wrote the same value.
+pub type ChangeCounter<TDatabase> = for<'connection> fn(
+    &'connection mut <TDatabase as Database>::Connection,
+) -> Pin<
+    Box<dyn Future<Output = Result<i64, sqlx::Error>> + Send + 'connection>,
+>;
+
+/// The SQLite driver's [`ChangeCounter`].
+pub fn sqlite_total_changes(
+    connection: &mut sqlx::SqliteConnection,
+) -> Pin<Box<dyn Future<Output = Result<i64, sqlx::Error>> + Send + '_>> {
+    Box::pin(sqlx::query_scalar("SELECT total_changes()").fetch_one(connection))
+}
+
+/// One transaction whose commit signals subscribers only when it changed rows: it counts
+/// changes after `BEGIN` and again just before `COMMIT`.
+pub struct SignaledTransaction<'connection, TDatabase: Database> {
+    transaction: sqlx::Transaction<'connection, TDatabase>,
+    changes_at_begin: i64,
+    count_changes: ChangeCounter<TDatabase>,
+    commits: &'connection CommitSignal,
+}
+
+impl<'connection, TDatabase: Database> SignaledTransaction<'connection, TDatabase> {
+    /// Takes a transaction the store just opened with [`TransactionStart::statement`];
+    /// its commit settles through `commits`. The store opens it on its concrete
+    /// connection, which keeps the future `Send` without higher-ranked bounds.
+    pub async fn counting(
+        mut transaction: sqlx::Transaction<'connection, TDatabase>,
+        count_changes: ChangeCounter<TDatabase>,
+        commits: &'connection CommitSignal,
+    ) -> Result<Self, sqlx::Error> {
+        let changes_at_begin = count_changes(&mut transaction).await?;
+        Ok(Self {
+            transaction,
+            changes_at_begin,
+            count_changes,
+            commits,
+        })
+    }
+
+    /// Commits, then bumps the commit signal if this transaction changed rows.
+    pub async fn commit(mut self) -> Result<(), sqlx::Error> {
+        let changed_rows =
+            (self.count_changes)(&mut self.transaction).await? != self.changes_at_begin;
+        let pending = self.commits.begin_commit(changed_rows);
+        pending.checkpoint(CommitPoint::BeforeCommitInvoked).await;
+        let committed = self.transaction.commit().await;
+        if committed.is_ok() {
+            pending.checkpoint(CommitPoint::AfterCommitReturned).await;
+        }
+        pending.settle(committed.is_ok());
+        committed
+    }
+
+    /// A known rollback; it never signals.
+    pub async fn rollback(self) -> Result<(), sqlx::Error> {
+        self.transaction.rollback().await
+    }
+}
+
+impl<TDatabase: Database> Deref for SignaledTransaction<'_, TDatabase> {
+    type Target = TDatabase::Connection;
+
+    fn deref(&self) -> &TDatabase::Connection {
+        &self.transaction
+    }
+}
+
+impl<TDatabase: Database> DerefMut for SignaledTransaction<'_, TDatabase> {
+    fn deref_mut(&mut self) -> &mut TDatabase::Connection {
+        &mut self.transaction
     }
 }
 
