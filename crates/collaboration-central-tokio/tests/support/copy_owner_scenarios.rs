@@ -51,7 +51,7 @@ impl OwnerClient {
     }
 }
 pub(super) fn bookkeeping(health: &Value, stored: Option<u64>) -> ConformanceResult<()> {
-    let expected = json!({"kind":"known","value":[{"corpus":"fleet-sync-receiver","stored":stored,"supported":3}]});
+    let expected = json!({"kind":"known","value":[{"corpus":"fleet-sync-receiver","stored":stored,"supported":4}]});
     if health.pointer("/value/bookkeeping") != Some(&expected) {
         return Err(format!("Health did not report the actual receiver corpus: {health}").into());
     }
@@ -106,7 +106,7 @@ pub async fn run(base: &str) -> ConformanceResult<()> {
         .into());
     }
     let repaired = client.health(fresh).await?;
-    bookkeeping(&repaired, Some(3))?;
+    bookkeeping(&repaired, Some(4))?;
     no_failures(&repaired)?;
     if repaired.pointer("/value/copy") != Some(&json!({"kind":"known","value":null})) {
         return Err("Repair invented an initialized replicated Copy".into());

@@ -188,10 +188,7 @@ where
 
     /// The Copy's due source: initialize a live copy, then expire its staged parts.
     pub(crate) async fn expire_copy_staged_parts(&self) -> Result<(), StoreError> {
-        let ObjectWork::Copy {
-            host, io, database, ..
-        } = &self.work
-        else {
+        let ObjectWork::Copy { host, io, .. } = &self.work else {
             return Err(StoreError::Aborted {
                 reason: "copy runtime has a different face".into(),
             });
@@ -203,25 +200,25 @@ where
             return Ok(());
         }
         self.initialize().await?;
-        // One unit, backing off on the Copy's part_expiry row while it fails (Lead Q5).
+        // One unit per staged transaction, keyed by its first part's UUIDv7.
         let now = io.now();
-        crate::due_unit::run_due_unit(
-            host.store().as_ref(),
-            crate::due_unit::DueItem {
-                subject: database.as_uuid(),
-                kind: crate::work_attempts::AttemptKind::PartExpiry,
-                now,
-                attempt_id: io.new_id(),
-            },
-            move |scope| {
-                Box::pin(async move {
-                    crate::copy_staged_parts::expire(scope, now)
-                        .await
-                        .map(|_| ())
-                })
-            },
-        )
-        .await;
+        let staged = host
+            .store()
+            .transaction(|scope| Box::pin(crate::copy_staged_parts::staged(scope)))
+            .await?;
+        for (key, subject) in staged {
+            Box::pin(crate::due_unit::run_due_unit(
+                host.store().as_ref(),
+                crate::due_unit::DueItem {
+                    subject,
+                    kind: crate::work_attempts::AttemptKind::PartExpiry,
+                    now,
+                    attempt_id: io.new_id(),
+                },
+                move |scope| Box::pin(crate::copy_staged_parts::expire(scope, key, now)),
+            ))
+            .await;
+        }
         Ok(())
     }
     pub async fn initialize(&self) -> Result<usize, StoreError> {

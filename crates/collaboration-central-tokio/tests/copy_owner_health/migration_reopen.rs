@@ -198,32 +198,40 @@ struct MigrationStamp {
 }
 
 // The caller has stopped the owning server. Only central's own stamp is changed.
-async fn remove_stamp(root: &Path) -> ConformanceResult<MigrationStamp> {
+// Every receiver stamp from version 3 up is removed, so the store reads as
+// stored version 2 and re-running version 3 collides with its own tables.
+async fn remove_stamps(root: &Path) -> ConformanceResult<Vec<MigrationStamp>> {
     let mut store = sqlx_turso::TursoConnectOptions::new()
         .filename(root.join(format!("copy-{PROJECT}.db")))
         .connect()
         .await?;
     let result = async {
-        let rows = query::<sqlx_turso::Turso>("SELECT row_id,corpus,version,checksum,created_at,updated_at,installed_on,description,success,execution_time FROM central_schema_migrations WHERE corpus='fleet-sync-receiver' AND version='3'").fetch_all(&mut store).await?;
-        let [row] = rows.as_slice() else { return Err("fixture did not have exactly one receiver version3 stamp".into()); };
+        let rows = query::<sqlx_turso::Turso>("SELECT row_id,corpus,version,checksum,created_at,updated_at,installed_on,description,success,execution_time FROM central_schema_migrations WHERE corpus='fleet-sync-receiver' AND CAST(version AS INTEGER)>=3 ORDER BY CAST(version AS INTEGER)").fetch_all(&mut store).await?;
+        if rows.len() != 2 { return Err("fixture did not have exactly the receiver version 3 and 4 stamps".into()); }
+        let mut stamps = Vec::with_capacity(rows.len());
+        for row in &rows {
         let stamp = MigrationStamp { row_id: row.try_get("row_id")?, corpus: row.try_get("corpus")?, version: row.try_get("version")?, checksum: row.try_get("checksum")?,created_at:row.try_get("created_at")?,updated_at:row.try_get("updated_at")?,installed_on:row.try_get("installed_on")?,description:row.try_get("description")?,success:row.try_get("success")?,execution_time:row.try_get("execution_time")? };
         query::<sqlx_turso::Turso>("DELETE FROM central_schema_migrations WHERE corpus=? AND version=? AND checksum=?").bind(&stamp.corpus).bind(stamp.version).bind(&stamp.checksum).execute(&mut store).await?;
-        Ok(stamp)
+        stamps.push(stamp);
+        }
+        Ok(stamps)
     }.await;
     store.close().await?;
     result
 }
 
-async fn restore_stamp(root: &Path, stamp: &MigrationStamp) -> ConformanceResult<()> {
+async fn restore_stamps(root: &Path, stamps: &[MigrationStamp]) -> ConformanceResult<()> {
     let mut store = sqlx_turso::TursoConnectOptions::new()
         .filename(root.join(format!("copy-{PROJECT}.db")))
         .connect()
         .await?;
     let result = async {
+        for stamp in stamps {
         query::<sqlx_turso::Turso>("INSERT INTO central_schema_migrations(row_id,corpus,version,checksum,created_at,updated_at,installed_on,description,success,execution_time) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(&stamp.row_id).bind(&stamp.corpus).bind(stamp.version).bind(&stamp.checksum).bind(stamp.created_at).bind(stamp.updated_at).bind(stamp.installed_on).bind(&stamp.description).bind(stamp.success).bind(stamp.execution_time).execute(&mut store).await?;
         let row = query::<sqlx_turso::Turso>("SELECT row_id,corpus,version,checksum,created_at,updated_at,installed_on,description,success,execution_time FROM central_schema_migrations WHERE corpus=? AND version=?").bind(&stamp.corpus).bind(stamp.version).fetch_one(&mut store).await?;
         let restored = MigrationStamp { row_id: row.try_get("row_id")?, corpus: row.try_get("corpus")?, version: row.try_get("version")?, checksum: row.try_get("checksum")?,created_at:row.try_get("created_at")?,updated_at:row.try_get("updated_at")?,installed_on:row.try_get("installed_on")?,description:row.try_get("description")?,success:row.try_get("success")?,execution_time:row.try_get("execution_time")? };
         if restored != *stamp { return Err("fixture did not restore the exact saved migration stamp".into()); }
+        }
         Ok(())
     }.await;
     store.close().await?;
@@ -396,7 +404,7 @@ async fn pending_migration_keeps_health_readable_and_preview_recovers_with_origi
     let proof = async {
         // Arrange a real registered Copy, then interrupt central-owned bookkeeping at rest.
         let original = serve(root_path, &jwks.url, |base, _platform| async move { create_project(&base).await }).await?;
-        let stamp = remove_stamp(root_path).await?;
+        let stamps = remove_stamps(root_path).await?;
         // Act through the ordinary prelude and owner HTTP; Health remains tolerant.
         let failed = serve(root_path, &jwks.url, |base, platform| async move {
             pending_session_refusals(&base).await?;
@@ -432,7 +440,7 @@ async fn pending_migration_keeps_health_readable_and_preview_recovers_with_origi
         }
         println!("OWNER_MIGRATION_REOPEN_CASE pending_health_exact_diagnostic_bytes_and_preview_refusal passed");
         // Assert recovery after exact restoration, including the normal snapshot contents.
-        restore_stamp(root_path, &stamp).await?;
+        restore_stamps(root_path, &stamps).await?;
         serve(root_path, &jwks.url, |base, _platform| async move {
             let (status, recovered) = preview(&base).await?;
             if status != StatusCode::OK { return Err(format!("Preview did not recover after exact stamp restore: {status}: {recovered}").into()); }
@@ -442,7 +450,7 @@ async fn pending_migration_keeps_health_readable_and_preview_recovers_with_origi
             // The retained recovery oracle is the original holder, fence and prefix.
             if recovered_native.fence != original_native.fence || recovered_native.acked != original_native.acked || recovered_native.holder != original_native.holder || recovered.get("holderInstallation") != Some(&json!(SERVICE)) { return Err(format!("Preview did not recover its original native fence/prefix after exact stamp restore: {status}: {recovered}").into()); }
             let health = OwnerClient::new(&base)?.health(PROJECT).await?;
-            bookkeeping(&health, Some(3))?;
+            bookkeeping(&health, Some(4))?;
             no_failures(&health)?;
             read_recovered_row(&base).await?;
             println!("OWNER_MIGRATION_REOPEN_CASE restored_preview_and_original_snapshot_row passed");
@@ -477,7 +485,7 @@ async fn pending_session_refusals(base: &str) -> ConformanceResult<()> {
         let session = SessionId::new(Uuid::now_v7())?;
         socket.send(Message::Binary(serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {
  capabilities: None,session_id:session,schema_support:SchemaSupport {max_version:1}})?.into())).await?;
-        let welcome = {
+        let welcome: serde_json::Value = {
             use futures_util::StreamExt;
             match tokio::time::timeout(Duration::from_secs(5),socket.next()).await?.ok_or("pending Welcome missing")?? {
                 Message::Binary(bytes)=>serde_json::from_slice(&bytes)?,
@@ -485,9 +493,10 @@ async fn pending_session_refusals(base: &str) -> ConformanceResult<()> {
                 _=>return Err("pending Welcome was not data".into()),
             }
         };
+        let shown = welcome.to_string();
         let frame:ServerFrame<BoardConsumerProtocol> = serde_json::from_value(welcome)?;
         assert!(matches!(frame,ServerFrame::Welcome {
- capabilities: None,session_id,databases} if session_id==session && databases.iter().any(|database|matches!(database,DatabaseStatus::Unavailable {database,lease:Some(_),reason:CopyUnavailableReason::MigrationPending {version:3}} if database.to_string()==PROJECT))),"Welcome lost pending Copy reason");
+ capabilities: None,session_id,databases} if session_id==session && databases.iter().any(|database|matches!(database,DatabaseStatus::Unavailable {database,lease:Some(_),reason:CopyUnavailableReason::MigrationPending {version:3}} if database.to_string()==PROJECT))),"Welcome lost pending Copy reason: {shown}");
         let control = DatabaseId::new(Uuid::now_v7())?;
         let copies=crate::copy_owner_health::copy_wait_scenarios::CopyClient::new(base)?;
         let created=copies.invoke(json!({"kind":"create","value":{"database":control,"epoch":1,"holder":PEER,"origin":{"kind":"empty"}}})).await?;

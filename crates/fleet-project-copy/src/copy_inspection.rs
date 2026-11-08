@@ -26,6 +26,8 @@ pub enum CopyStage {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct StagedPart {
+    /// The part row's UUIDv7 key.
+    pub id: uuid::Uuid,
     pub index: u32,
     pub staged_at: SyncTime,
 }
@@ -62,8 +64,16 @@ pub enum CopyInspection {
 fn staged_transactions(
     rows: Vec<checked_copy_queries::InspectionPartRow>,
 ) -> Result<Vec<StagedTransaction>, StoreError> {
-    let mut transactions: BTreeMap<TransactionKey, BTreeMap<u32, SyncTime>> = BTreeMap::new();
+    let mut transactions: BTreeMap<TransactionKey, BTreeMap<u32, (uuid::Uuid, SyncTime)>> =
+        BTreeMap::new();
     for row in rows {
+        let id = required_text(row.id, row.id_class, "staged part id")?;
+        let id = uuid::Uuid::parse_str(&id)
+            .ok()
+            .filter(|parsed| parsed.get_version_num() == 7 && parsed.to_string() == id)
+            .ok_or_else(|| StoreError::Corrupt {
+                field: "staged part id".into(),
+            })?;
         let key = required_text(row.transaction_key, row.key_class, "staged transaction key")?;
         let transaction_key: TransactionKey = decode_record(Some(key), "staged transaction key")?;
         if row.index_class.as_deref() != Some("integer") {
@@ -85,7 +95,7 @@ fn staged_transactions(
         if transactions
             .entry(transaction_key)
             .or_default()
-            .insert(index, SyncTime::from_unix_millis(staged_at))
+            .insert(index, (id, SyncTime::from_unix_millis(staged_at)))
             .is_some()
         {
             return Err(StoreError::Corrupt {
@@ -99,7 +109,11 @@ fn staged_transactions(
             transaction_key,
             parts: parts
                 .into_iter()
-                .map(|(index, staged_at)| StagedPart { index, staged_at })
+                .map(|(index, (id, staged_at))| StagedPart {
+                    id,
+                    index,
+                    staged_at,
+                })
                 .collect(),
         })
         .collect())

@@ -92,6 +92,21 @@ where
         .transaction(move |scope| {
             Box::pin(async move {
                 use durable_steps::storage::JournalStorage;
+                let subject = match sources {
+                    DueSources::Fleet => crate::fleet_feed_store::state_subject(scope).await.ok(),
+                    DueSources::Copy { subject } => Some(subject),
+                };
+                // This transaction writes the alarm; a failure rolls this back and
+                // records alarm_write afresh. Cleared first so the old row's retry
+                // time is not read back as due work.
+                if let Some(subject) = subject {
+                    crate::work_attempts::succeeded(
+                        scope,
+                        subject,
+                        crate::work_attempts::AttemptKind::AlarmWrite,
+                    )
+                    .await?;
+                }
                 // Deadlines the cadence never holds: forward expiry is a protocol
                 // answer (#scheduler), and until slice 4 the engine still carries
                 // request and owed jobs. Every other source is held by the cadence.
@@ -119,24 +134,17 @@ where
                         )
                         .await,
                     ],
-                    DueSources::Copy { subject } => vec![
+                    DueSources::Copy { .. } => vec![
                         read_source(
                             "staged_part_expiry",
-                            crate::copy_staged_parts::next_expiry(scope, subject),
+                            crate::copy_staged_parts::next_expiry(scope),
                         )
                         .await,
                     ],
                 };
-                let retries =
-                    read_source("attempt_retries", crate::work_attempts::next_retry(scope))
-                        .await;
                 // A failed read is kept on the object's source_read row, which
                 // backs off; all reads succeeding forgets it.
-                let subject = match sources {
-                    DueSources::Fleet => crate::fleet_feed_store::state_subject(scope).await.ok(),
-                    DueSources::Copy { subject } => Some(subject),
-                };
-                let failed = [Some(&journal), forwards.as_ref(), Some(&retries)]
+                let failed = [Some(&journal), forwards.as_ref()]
                     .into_iter()
                     .flatten()
                     .chain(held.iter())
@@ -184,6 +192,15 @@ where
                     }
                     (None, None) => None,
                 };
+                // Read only after source_read and alarm_write are settled, so a
+                // row just cleared is not counted as due.
+                let retries =
+                    read_source("attempt_retries", crate::work_attempts::next_retry(scope))
+                        .await;
+                if let Err(failure) = &retries.read {
+                    eprintln!("central attempt retries could not be read: {failure}");
+                }
+                let retry_at = retry_at.or(retries.read.is_err().then_some(fallback));
                 let deadlines = earliest([
                     journal.next(retry_at),
                     forwards.and_then(|forwards| forwards.next(retry_at)),
@@ -194,14 +211,6 @@ where
                         .chain([retries.next(retry_at)]),
                 );
                 let alarm = earliest([deadlines, next_alarm(next_due, next_batch_at)]);
-                if let Some(subject) = subject {
-                    crate::work_attempts::succeeded(
-                        scope,
-                        subject,
-                        crate::work_attempts::AttemptKind::AlarmWrite,
-                    )
-                    .await?;
-                }
                 alarm_owner
                     .alarm()
                     .set_exact(alarm)

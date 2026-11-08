@@ -141,7 +141,7 @@ impl<Face: KernelFace> ObjectKernel<Face> {
         }
         // 2. Handle.
         probe.step(PipelineStep::Handle);
-        let reply = self.face.handle(event).await;
+        let reply = Box::pin(self.face.handle(event)).await;
         probe.handler_outcome(&reply);
         probe
             .barrier(BarrierPoint::AfterUnitCommit, Some("handler"))
@@ -153,7 +153,9 @@ impl<Face: KernelFace> ObjectKernel<Face> {
         // 4. Recompute.
         probe.step(PipelineStep::Recompute);
         probe.barrier(BarrierPoint::BeforeRecomputeTx, None).await;
-        match self.face.recompute(self.claim.next_batch_at()).await {
+        // Phases run as heap-owned futures: an object call served inline nests a
+        // whole event inside its caller, so large inline frames overflow the stack.
+        match Box::pin(self.face.recompute(self.claim.next_batch_at())).await {
             Ok(at) => {
                 probe.exact(at);
                 reply
@@ -175,7 +177,9 @@ impl<Face: KernelFace> ObjectKernel<Face> {
         let now = self.face.now();
         match self.face.stored_alarm().await {
             Ok(Some(stored)) if stored < now => {
-                match self.face.recompute(self.claim.next_batch_at()).await {
+                // Phases run as heap-owned futures: an object call served inline nests a
+                // whole event inside its caller, so large inline frames overflow the stack.
+                match Box::pin(self.face.recompute(self.claim.next_batch_at())).await {
                     Ok(at) => probe.exact(at),
                     Err(failure) => eprintln!("central stale-alarm repair failed: {failure}"),
                 }
@@ -191,7 +195,7 @@ impl<Face: KernelFace> ObjectKernel<Face> {
         let now = self.face.now();
         match self.claim.try_claim(now) {
             Ok(claim) => {
-                self.face.run_due_sources(now).await;
+                Box::pin(self.face.run_due_sources(now)).await;
                 // Released before the engine runs, so a frame arriving while a
                 // step waits on a silent holder can run the next batch.
                 drop(claim);
@@ -202,11 +206,11 @@ impl<Face: KernelFace> ObjectKernel<Face> {
             }
         }
         probe.step(PipelineStep::DeadlineSources);
-        self.face.run_deadline_sources(now).await;
+        Box::pin(self.face.run_deadline_sources(now)).await;
         // Until slice 4 moves request and owed work off the engine, its drive is
         // not held by the cadence: a Hello's Welcome or a push can't wait 30 s.
         probe.step(PipelineStep::LongOperations);
-        self.face.drive_long_operations().await;
+        Box::pin(self.face.drive_long_operations()).await;
     }
 }
 

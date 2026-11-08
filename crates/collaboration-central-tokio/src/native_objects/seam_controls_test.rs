@@ -456,6 +456,9 @@ async fn an_armed_exact_write_fault_fails_one_alarm_event_and_keeps_an_alarm_wri
         rows, 0,
         "the successful write must forget the alarm_write row"
     );
+    // The cleared row's retry time is not read back as due work: a quiet Fleet
+    // stores no alarm after the recovered write (Verifier finding on 12e5c11f9).
+    assert_eq!(stored(&objects).await?, None);
     objects.shutdown().await?;
     Ok(())
 }

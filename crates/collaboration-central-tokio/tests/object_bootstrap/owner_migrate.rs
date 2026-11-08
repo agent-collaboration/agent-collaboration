@@ -67,12 +67,12 @@ async fn migrate_reports_absent_and_recorded_start_versions_then_current_without
             // Act: enter at the production owner envelope, before its prelude.
             let first = migrate(&fixture).await?;
             // Assert: decision577's literal from/to, then the idempotent result.
-            if first != json!({"kind":"migrated","corpus":"fleet-sync-receiver","from":from,"to":3})
+            if first != json!({"kind":"migrated","corpus":"fleet-sync-receiver","from":from,"to":4})
             {
                 return Err(format!("Migrate lost its prelude start version: {first}").into());
             }
             let second = migrate(&fixture).await?;
-            if second != json!({"kind":"current","corpus":"fleet-sync-receiver","version":3}) {
+            if second != json!({"kind":"current","corpus":"fleet-sync-receiver","version":4}) {
                 return Err(format!("Migrate was not idempotent: {second}").into());
             }
             if from.is_some() {
@@ -132,7 +132,7 @@ async fn migrate_reports_real_receiver_rollback_then_retries_from_the_retained_v
             scope.executor().execute("DROP TRIGGER receiver_migrate_fault").await.map_err(StoreError::backend)?;
             Ok(())
         })).await?;
-        if migrate(&fixture).await? != json!({"kind":"migrated","corpus":"fleet-sync-receiver","from":1,"to":3}) {
+        if migrate(&fixture).await? != json!({"kind":"migrated","corpus":"fleet-sync-receiver","from":1,"to":4}) {
             return Err("recovered Migrate did not resume from version1".into());
         }
         let failures: i64 = fixture.object.transaction(|scope| Box::pin(async move {
@@ -245,7 +245,7 @@ async fn migrate_names_hook_failure_separately_and_recovers_without_partial_rece
             scope.executor().execute("DROP TABLE _copy_summary").await.map_err(StoreError::backend)?;
             Ok(())
         })).await?;
-        if migrate(&fixture).await? != json!({"kind":"migrated","corpus":"fleet-sync-receiver","from":null,"to":3}) {
+        if migrate(&fixture).await? != json!({"kind":"migrated","corpus":"fleet-sync-receiver","from":null,"to":4}) {
             return Err("hook recovery did not start from rolled-back history absence".into());
         }
         Ok::<_,TestError>(())

@@ -1,1 +1,1 @@
-INSERT INTO _fleet_sync_staged_parts(transaction_key, part_index, staged_at, payload) VALUES (?, CAST(? AS INTEGER), ?, ?)
+INSERT INTO _fleet_sync_staged_parts(id, transaction_key, part_index, staged_at, payload) VALUES (printf('%08x-%04x-7%03x-%04x-%012x', CAST(?3 AS INTEGER) >> 16, CAST(?3 AS INTEGER) & 65535, random() & 4095, 32768 | (random() & 16383), random() & 281474976710655), ?1, CAST(?2 AS INTEGER), ?3, ?4)
