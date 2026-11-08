@@ -60,6 +60,8 @@ enum SelectedInvocationKind {
     CopyFence,
     #[serde(rename = "central.organization-provisioning")]
     OrganizationProvisioning,
+    #[serde(rename = "central.organization-admin")]
+    OrganizationAdmin,
     #[serde(other)]
     Other,
 }
@@ -104,6 +106,9 @@ impl DispatchSelection {
                         ) | (
                             DispatchCallSelector::OrganizationProvisioning,
                             SelectedInvocationKind::OrganizationProvisioning
+                        ) | (
+                            DispatchCallSelector::OrganizationAdmin,
+                            SelectedInvocationKind::OrganizationAdmin
                         )
                     )
                 })

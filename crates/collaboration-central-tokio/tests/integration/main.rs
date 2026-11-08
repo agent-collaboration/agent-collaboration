@@ -122,6 +122,7 @@ mod normal_redeploy;
 mod numeric_composed;
 mod object_bootstrap;
 mod object_identity;
+mod organization_admin_edges;
 mod organization_admin_link;
 mod organization_admin_lost_answer;
 mod organization_admin_origin;

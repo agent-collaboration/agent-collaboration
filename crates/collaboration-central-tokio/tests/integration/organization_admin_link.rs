@@ -26,8 +26,8 @@ use std::{
 pub(crate) const ORGANIZATION: &str = "019f0000-0000-7000-8000-00000000d201";
 pub(crate) const OWNER: &str = "019f0000-0000-7000-8000-00000000d202";
 pub(crate) const OWNER_SUBJECT: &str = "019f0000-0000-7000-8000-00000000d203";
-const MEMBER: &str = "019f0000-0000-7000-8000-00000000d204";
-const MEMBER_SUBJECT: &str = "019f0000-0000-7000-8000-00000000d205";
+pub(crate) const MEMBER: &str = "019f0000-0000-7000-8000-00000000d204";
+pub(crate) const MEMBER_SUBJECT: &str = "019f0000-0000-7000-8000-00000000d205";
 const SESSION: &str = "019f0000-0000-7000-8000-00000000d206";
 /// The sign-in service's digest of its permission policy (shared vector).
 const POLICY: &str = "2d31b5d72716e64e255d8858c231f593155289fb03ed354c4b762890667a3c22";
@@ -137,8 +137,8 @@ pub(crate) fn fresh_request_id() -> String {
 }
 
 impl Person {
-    fn token(&self) -> ConformanceResult<String> {
-        let claims = json!({
+    fn token(&self, adjust: &dyn Fn(&mut Value)) -> ConformanceResult<String> {
+        let mut claims = json!({
             "iss":ISSUER,"aud":ADMIN_AUDIENCE,"sub":self.id,"sid":SESSION,
             "iat":NOW_SECONDS - 10,"exp":NOW_SECONDS + 290,"cnf":{"jkt":self.key.thumbprint()?},
             "token_profile":"person-fleet","organization_id":ORGANIZATION,
@@ -150,6 +150,7 @@ impl Person {
             "authorization_snapshot_at_ms":NOW_SECONDS * 1000 - 10_000,
             "authorization_snapshot_valid_until_ms":NOW_SECONDS * 1000 + 200_000
         });
+        adjust(&mut claims);
         stamps::sign(
             &json!({"typ":"at+jwt","alg":"EdDSA","kid":"stamp-a"}),
             &claims,
@@ -164,7 +165,18 @@ impl Person {
         intent: &Value,
         jti: &str,
     ) -> ConformanceResult<Vec<(&'static str, String)>> {
-        let token = self.token()?;
+        self.headers_with(path, intent, jti, &|_| {})
+    }
+
+    /// Headers whose token claims `adjust` changes before signing.
+    pub(crate) fn headers_with(
+        &self,
+        path: &str,
+        intent: &Value,
+        jti: &str,
+        adjust: &dyn Fn(&mut Value),
+    ) -> ConformanceResult<Vec<(&'static str, String)>> {
+        let token = self.token(adjust)?;
         let proof = self.key.proof(&json!({
             "jti":jti,"htm":"POST","htu":format!("{PUBLIC_ORIGIN}{path}"),"iat":NOW_SECONDS - 1,
             "ath":stamps::sha256_url(token.as_bytes()),
@@ -473,13 +485,13 @@ async fn organization_admin_creates_one_workspace_under_the_checked_permission()
     Ok(())
 }
 
-const PUSH: &str = "/internal/organization-authorization-revisions";
+pub(crate) const PUSH: &str = "/internal/organization-authorization-revisions";
 
 fn organization_push(revision: i64, state: &str) -> Value {
     json!({"kind":"organization","organizationId":ORGANIZATION,"revision":revision,"state":state,
         "permissionPolicyDigest":POLICY})
 }
-fn person_push(revision: i64, state: &str, subject: &str) -> Value {
+pub(crate) fn person_push(revision: i64, state: &str, subject: &str) -> Value {
     json!({"kind":"person","organizationId":ORGANIZATION,"personId":OWNER,"subjectId":subject,
         "revision":revision,"state":state})
 }

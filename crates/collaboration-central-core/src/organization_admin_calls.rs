@@ -194,6 +194,11 @@ where
         if &verified.organization_id != organization {
             return encode(OrganizationAdminAnswer::Unauthenticated);
         }
+        // Conformance only: hold a verified request here, before the
+        // transaction that admits it, so the Fleet clock can move in between.
+        #[cfg(feature = "conformance")]
+        io.before_organization_apply(FleetOrganizationAdmin::KIND)
+            .await?;
         let (answer, _) = StepDriver::new(host.clone())
             .run(ApplyAdmin {
                 request: verified,

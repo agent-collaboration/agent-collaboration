@@ -149,6 +149,9 @@ pub enum DispatchCallSelector {
     /// A provisioning call, held after its statement verifies and before the
     /// transaction that applies it.
     OrganizationProvisioning,
+    /// A person's admin call, held after its token and proof verify and before
+    /// the transaction that admits and applies it.
+    OrganizationAdmin,
 }
 
 /// One invocation selection at one physical destination.
