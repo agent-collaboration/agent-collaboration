@@ -66,6 +66,11 @@ impl PlatformIo for CloudflareObjectIo {
         worker::send::SendFuture::new(crate::reply_deadline::ReplyDeadline::new(remaining))
     }
 
+    /// The Worker log the edge Access checks use; never blocks the call.
+    fn observe(&self, observation: collaboration_central_core::CentralObservation) {
+        crate::access_verification::log_observation(observation);
+    }
+
     #[cfg(feature = "conformance")]
     async fn before_local_call(&self, request: &[u8]) -> std::result::Result<(), CallFailure> {
         self.faults

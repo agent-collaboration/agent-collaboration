@@ -15,6 +15,8 @@ use tokio::{
 pub(crate) struct LinkHarness {
     pub(crate) child: Child,
     pub(crate) output: tokio::task::JoinHandle<ConformanceResult<()>>,
+    /// Every line the harness printed after readiness, Worker logs included.
+    lines: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
 }
 impl LinkHarness {
     pub(crate) async fn start(arguments: &[String]) -> ConformanceResult<Self> {
@@ -40,15 +42,26 @@ impl LinkHarness {
                 break;
             }
         }
+        let kept = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let keeper = kept.clone();
         let output = tokio::spawn(async move {
             while let Some(line) = lines.next_line().await? {
                 println!("{line}");
+                keeper
+                    .lock()
+                    .map_err(|_| "harness lines poisoned")?
+                    .push(line);
             }
             Ok(())
         });
-        Ok(Self { child, output })
+        Ok(Self {
+            child,
+            output,
+            lines: kept,
+        })
     }
-    pub(crate) async fn stop(mut self) -> ConformanceResult<()> {
+    /// Stop the harness and return every line it printed, all drained.
+    pub(crate) async fn stop(mut self) -> ConformanceResult<Vec<String>> {
         let pid = self.child.id().ok_or("harness already exited")?;
         let signal = Command::new("kill")
             .args(["-INT", &pid.to_string()])
@@ -63,7 +76,12 @@ impl LinkHarness {
             return Err(format!("owned harness exited: {status}").into());
         }
         println!("LINK HARNESS reaped pid={pid} exit={:?}", status.code());
-        Ok(())
+        let lines = self
+            .lines
+            .lock()
+            .map_err(|_| "harness lines poisoned")?
+            .clone();
+        Ok(lines)
     }
 }
 

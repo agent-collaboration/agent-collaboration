@@ -60,11 +60,16 @@ impl InvocationLabels {
     }
 
     pub(crate) fn observe(&self, layer: VerificationLayer, observation: CentralObservation) {
-        let CentralObservation::AccessCheck {
-            route_class,
-            outcome,
-            key_source,
-        } = observation;
+        let (route_class, outcome, key_source) = match observation {
+            CentralObservation::AccessCheck {
+                route_class,
+                outcome,
+                key_source,
+            } => (route_class, outcome, key_source),
+            refused @ CentralObservation::OrganizationStatementRefused { .. } => {
+                return log_observation(refused);
+            }
+        };
         let outcome = match outcome {
             AccessCheckOutcome::AcceptedMachine => "accepted machine".to_owned(),
             AccessCheckOutcome::AcceptedOwner => "accepted owner".to_owned(),
@@ -114,6 +119,21 @@ pub(crate) fn application(
             .map_err(|_| AccessRefusal::InvalidCaller)?,
     );
     CentralApplication::new(platform, policy, Arc::clone(&ACCESS_KEYS), organization)
+}
+
+/// Log an observation that carries no request labels: only closed kinds and
+/// the organization ID, never statement bytes, digests, key IDs or tokens.
+pub(crate) fn log_observation(observation: CentralObservation) {
+    if let CentralObservation::OrganizationStatementRefused {
+        organization,
+        refusal,
+    } = observation
+    {
+        worker::console_log!(
+            "central organization statement refused: organization={} refusal={refusal:?}",
+            organization.as_str()
+        );
+    }
 }
 
 fn log_safe(value: &str) -> &str {

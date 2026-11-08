@@ -24,6 +24,10 @@ mod session_routes;
 
 pub trait PlatformIo: Clock + IdSource + WakeScheduler + Send + Sync + 'static {
     fn reply_deadline(&self, remaining: std::time::Duration) -> impl Future<Output = ()> + Send;
+    /// Hand a classification to the host's telemetry, off the request path: it
+    /// must not block or fail the call. Fixture hosts that keep no telemetry
+    /// use this default; both production hosts override it.
+    fn observe(&self, _observation: crate::CentralObservation) {}
     #[cfg(feature = "conformance")]
     fn before_local_call(
         &self,

@@ -12,8 +12,12 @@ mod link_client;
 mod organization_stamps;
 #[path = "organization_link_workerd/record_checks.rs"]
 mod record_checks;
+#[path = "organization_link_workerd/refusal_cases.rs"]
+mod refusal_cases;
 #[path = "organization_link_workerd/stamp_time_cases.rs"]
 mod stamp_time_cases;
+#[path = "../tests/support/statement_refusals.rs"]
+mod statement_refusals;
 use collaboration_central_conformance::{
     ConformanceResult, DispatchCallSelector, DispatchKey, FIXTURE_KID, JwksFixtureServer,
     RuntimeControl, RuntimeControlRequest, fixture_policy, legacy_organization, sign_assertion,
@@ -39,49 +43,6 @@ const KEYED: &str = "019f0000-0000-7000-8000-00000000b2c6";
 const AFTER_RETIREMENT: &str = "019f0000-0000-7000-8000-00000000b2c7";
 const LEGACY_MACHINE: &str = "550e8400-e29b-41d4-a716-44665544b2a8";
 
-/// The stamp-profile refusals, each a correctly signed statement but for one field.
-fn profile_negatives(organization: &str) -> ConformanceResult<Vec<(&'static str, String)>> {
-    let with = |field: &str, value: Value| -> ConformanceResult<String> {
-        let mut claims = stamps::claims(organization);
-        stamps::set_claim(&mut claims, field, value)?;
-        stamps::sign(&stamps::stamp_header(), &claims, 7)
-    };
-    Ok(vec![
-        (
-            "edited signature",
-            stamps::tamper_signature(&stamps::stamp(organization)?)?,
-        ),
-        ("wrong purpose", with("purpose", json!("fleet-person"))?),
-        (
-            "wrong audience",
-            with("aud", json!("https://other.invalid"))?,
-        ),
-        ("wrong issuer", with("iss", json!("https://other.invalid"))?),
-        (
-            "longer than 120 days",
-            with(
-                "exp",
-                json!(NOW_SECONDS - 60 + stamps::LIFETIME_SECONDS + 1),
-            )?,
-        ),
-        (
-            "wrong type",
-            stamps::sign(
-                &json!({"typ":"at+jwt","alg":"EdDSA","kid":"stamp-a"}),
-                &stamps::claims(organization),
-                7,
-            )?,
-        ),
-        (
-            "unpublished key",
-            stamps::sign(
-                &json!({"typ":"fleet-organization-stamp+jwt","alg":"EdDSA","kid":"stamp-z"}),
-                &stamps::claims(organization),
-                9,
-            )?,
-        ),
-    ])
-}
 const ADMIN_OWNER: &str = "019f0000-0000-7000-8000-00000000b2e1";
 const ADMIN_SUBJECT: &str = "019f0000-0000-7000-8000-00000000b2e2";
 const ADMIN_MEMBER: &str = "019f0000-0000-7000-8000-00000000b2e3";
@@ -331,8 +292,8 @@ async fn main() -> ConformanceResult<()> {
         )?;
         // The full stamp profile is checked on Cloudflare too, before any write.
         let mut negatives = Vec::new();
-        for (case, statement) in profile_negatives(THIRD)? {
-            negatives.push((case, caller.provision(THIRD, &statement).await?));
+        for refusal in statement_refusals::profile_refusals(THIRD)? {
+            negatives.push((refusal.case, caller.provision(THIRD, &refusal.statement).await?));
         }
         let third_rows = caller.records(THIRD).await?;
         require(
@@ -765,13 +726,14 @@ async fn main() -> ConformanceResult<()> {
             "a damaged stored stamp refuses every call naming its organization after the restart and stays as stored",
             &(damaged_digest, damaged_setup, damaged_push, damaged_rows),
         )?;
-        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
+        let sent = refusal_cases::send(&caller).await?;
+        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(sent)
     }
     .await;
-    restarted.stop().await?;
+    let restarted_lines = restarted.stop().await?;
     keys.shutdown().await?;
     access.shutdown().await?;
-    second?;
+    refusal_cases::judge(&second?, &restarted_lines)?;
     println!("LINK JOURNEY passed");
     Ok(())
 }

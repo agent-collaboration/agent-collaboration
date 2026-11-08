@@ -92,6 +92,8 @@ pub(crate) struct ApplyProvisioning {
 #[derive(Debug)]
 pub(crate) struct ProvisioningOutcome {
     pub applied: ProvisioningApplied,
+    /// The statement's own refusal when the applying transaction refused it.
+    pub refusal: Option<super::FleetOrganizationStatementRefusal>,
 }
 
 pub(crate) async fn apply<S: TransactionScope>(
@@ -107,9 +109,10 @@ where
     // A statement verified before a wait (another provisioning, a slow queue)
     // may have expired since; decide on the time this transaction runs at.
     let now = input.clock.now();
-    if input.statement.require_valid_at(now).is_err() {
+    if let Err(refusal) = input.statement.require_valid_at(now) {
         return Ok(ProvisioningOutcome {
             applied: ProvisioningApplied::InvalidStatement,
+            refusal: Some(refusal),
         });
     }
     let now_millis = now.unix_millis();
@@ -180,6 +183,7 @@ where
     }
     Ok(ProvisioningOutcome {
         applied: ProvisioningApplied::Provisioned,
+        refusal: None,
     })
 }
 
@@ -195,7 +199,10 @@ fn stored_unexpired_at(stored: &StoredStampRead, now: runtime_primitives::SyncTi
 }
 
 fn unchanged(applied: ProvisioningApplied, _stored: StoredStampRead) -> ProvisioningOutcome {
-    ProvisioningOutcome { applied }
+    ProvisioningOutcome {
+        applied,
+        refusal: None,
+    }
 }
 
 #[cfg(test)]

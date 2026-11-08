@@ -1,4 +1,4 @@
-//! Access observations carry classifications, never assertions or identities.
+//! Observations carry classifications, never assertions, statements or tokens.
 
 use crate::AccessRefusal;
 
@@ -41,5 +41,12 @@ pub enum CentralObservation {
         route_class: AccessRouteClass,
         outcome: AccessCheckOutcome,
         key_source: Option<AccessKeySource>,
+    },
+    /// A Fleet refused an organization statement. Only the closed refusal kind
+    /// and the organization the Fleet serves: never statement bytes, digests,
+    /// key IDs or tokens.
+    OrganizationStatementRefused {
+        organization: fleet_identity_protocol::OrganizationId,
+        refusal: crate::organization_authority::FleetOrganizationStatementRefusal,
     },
 }

@@ -70,6 +70,9 @@ mod session_move_fixture;
 #[path = "../session_publication/support.rs"]
 mod session_publication_fixture;
 #[cfg(feature = "conformance")]
+#[path = "../support/statement_refusals.rs"]
+mod statement_refusals;
+#[cfg(feature = "conformance")]
 #[path = "../transfer_boundaries/fixture.rs"]
 mod transfer_fixture;
 
@@ -128,6 +131,7 @@ mod organization_provisioning_link;
 mod organization_provisioning_races;
 mod organization_records_observer;
 mod organization_retired_key;
+mod organization_statement_refusal_log;
 mod organization_unstamped_routes;
 mod owner_admin_sessions;
 mod owner_fence_ordering;

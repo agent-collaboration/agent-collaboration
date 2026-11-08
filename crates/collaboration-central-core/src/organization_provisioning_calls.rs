@@ -156,18 +156,21 @@ where
             .await
         {
             Ok(statement) => statement,
-            Err(
-                FleetOrganizationStatementRefusal::VerificationUnavailable(_)
-                | FleetOrganizationStatementRefusal::InvalidConfiguration,
-            ) => {
-                return Err(CallFailure::NotSent {
-                    reason: NotSentReason::Overloaded,
-                });
+            Err(refusal) => {
+                observe_refusal(io.as_ref(), organization, refusal);
+                return match refusal {
+                    FleetOrganizationStatementRefusal::VerificationUnavailable(_)
+                    | FleetOrganizationStatementRefusal::InvalidConfiguration => {
+                        Err(CallFailure::NotSent {
+                            reason: NotSentReason::Overloaded,
+                        })
+                    }
+                    FleetOrganizationStatementRefusal::OrganizationMismatch => {
+                        encode(ProvisioningApplied::OrganizationMismatch)
+                    }
+                    _ => encode(ProvisioningApplied::InvalidStatement),
+                };
             }
-            Err(FleetOrganizationStatementRefusal::OrganizationMismatch) => {
-                return encode(ProvisioningApplied::OrganizationMismatch);
-            }
-            Err(_) => return encode(ProvisioningApplied::InvalidStatement),
         };
         // Conformance only: hold a verified statement here, before its
         // transaction, so another provisioning can commit in between.
@@ -186,6 +189,9 @@ where
             }))
             .await
             .map_err(|_| CallFailure::AnswerLost)?;
+        if let Some(refusal) = outcome.refusal {
+            observe_refusal(io.as_ref(), organization, refusal);
+        }
         // The committed stamp is the one this process now trusts.
         if outcome.applied == ProvisioningApplied::Provisioned {
             organization_stamp.forget();
@@ -389,4 +395,17 @@ fn refused() -> CallFailure {
     CallFailure::NotSent {
         reason: NotSentReason::Unreachable { last_seen: None },
     }
+}
+
+/// Hand one statement refusal to the host's telemetry: its closed kind and the
+/// organization this Fleet serves, nothing from the statement itself.
+fn observe_refusal(
+    io: &impl crate::PlatformIo,
+    organization: &fleet_identity_protocol::OrganizationId,
+    refusal: FleetOrganizationStatementRefusal,
+) {
+    io.observe(crate::CentralObservation::OrganizationStatementRefused {
+        organization: organization.clone(),
+        refusal,
+    });
 }

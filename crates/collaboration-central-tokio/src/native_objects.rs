@@ -88,6 +88,11 @@ impl PlatformIo for TokioObjectIo {
         tokio::time::sleep(remaining)
     }
 
+    /// The same native log the server's Access checks use; never blocks.
+    fn observe(&self, observation: collaboration_central_core::CentralObservation) {
+        crate::native_logging::observe(observation);
+    }
+
     #[cfg(feature = "conformance")]
     async fn before_local_call(&self, request: &[u8]) -> Result<(), CallFailure> {
         self.faults
