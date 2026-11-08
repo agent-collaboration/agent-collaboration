@@ -53,6 +53,12 @@ struct ControlledRoute {
     stop_requests: std::sync::Mutex<Vec<SyncTime>>,
     clock: Arc<PausedWallClock>,
     initial_evidence_fails: AtomicBool,
+    /// Preparation cannot reach the client: the step changes nothing and stays quiet.
+    initial_evidence_unreachable: AtomicBool,
+    /// When each preparation step asked for its route evidence.
+    preparations: std::sync::Mutex<Vec<SyncTime>>,
+    /// The Run each settlement read was for.
+    observed_runs: std::sync::Mutex<Vec<agent_automation::RunId>>,
     /// How many settlement reads still answer that the client is unreachable.
     unreachable_settlements: AtomicUsize,
     /// How many stop requests still answer that the client is unreachable.
@@ -85,6 +91,10 @@ impl ScheduledRunExecution for ControlledRoute {
         destination: &ScheduleDestination,
     ) -> DeliveryFuture<'_, agent_automation::RouteEffectEvidence<SessionRef, CodexGeneration>>
     {
+        self.preparations.lock().unwrap().push(self.clock.now());
+        if self.initial_evidence_unreachable.load(Ordering::Acquire) {
+            return Box::pin(async { Err(DeliveryContractError::ClientOperation) });
+        }
         if self.initial_evidence_fails.load(Ordering::Acquire) {
             return Box::pin(async { Err(DeliveryContractError::InvalidEvidence) });
         }
@@ -125,8 +135,12 @@ impl ScheduledRunExecution for ControlledRoute {
         self.inner.submit_run(run, sink)
     }
 
-    fn observe_settlement(&self, _: RunObservationContext) -> DeliveryFuture<'_, RunSettlement> {
+    fn observe_settlement(
+        &self,
+        context: RunObservationContext,
+    ) -> DeliveryFuture<'_, RunSettlement> {
         self.settlement_reads.fetch_add(1, Ordering::AcqRel);
+        self.observed_runs.lock().unwrap().push(context.run_id);
         let unreachable = take_unreachable(&self.unreachable_settlements);
         let completed = self.turn_completed.load(Ordering::Acquire);
         Box::pin(async move {
@@ -247,6 +261,9 @@ impl SchedulerFixture {
             stop_requests: std::sync::Mutex::default(),
             clock: Arc::clone(&clock),
             initial_evidence_fails: AtomicBool::new(false),
+            initial_evidence_unreachable: AtomicBool::new(false),
+            preparations: std::sync::Mutex::default(),
+            observed_runs: std::sync::Mutex::default(),
             unreachable_settlements: AtomicUsize::new(0),
             unreachable_stops: AtomicUsize::new(0),
             stop_records_intent: AtomicBool::new(false),
@@ -441,6 +458,12 @@ async fn settle(scheduler: &RunningScheduler) -> bool {
 
 #[path = "schedule_timing_worker_ordering_test.rs"]
 mod ordering_tests;
+
+#[path = "schedule_timing_worker_capacity_test.rs"]
+mod capacity_tests;
+
+#[path = "schedule_timing_worker_preparation_test.rs"]
+mod preparation_tests;
 
 #[tokio::test(start_paused = true)]
 #[expect(
