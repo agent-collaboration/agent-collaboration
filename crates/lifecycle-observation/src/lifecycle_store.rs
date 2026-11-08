@@ -186,13 +186,16 @@ impl LifecycleStore {
         self.signal_commit();
         Ok(())
     }
+    /// Expires old history; it signals journal readers only when it removed rows.
     pub async fn maintain(&self, now: i64) -> Result<(), JournalError> {
         let mut journal = self.journal.lock().await;
-        let result = journal.expire_history(now).await;
+        let result = journal.expire_history_reporting_removal(now).await;
         self.observe_storage_result(&result)?;
-        result?;
+        let expiry = result?;
         journal.incremental_vacuum_step().await?;
-        self.signal_commit();
+        if expiry.removed_rows {
+            self.signal_commit();
+        }
         Ok(())
     }
     /// Internal retention maintenance only; this does not schedule agent work.
@@ -313,6 +316,9 @@ mod tests {
 
     #[path = "wal_mode_tests.rs"]
     mod wal_mode_tests;
+
+    #[path = "maintenance_signal_tests.rs"]
+    mod maintenance_signal_tests;
 
     #[tokio::test]
     async fn new_journal_database_uses_incremental_auto_vacuum() {
