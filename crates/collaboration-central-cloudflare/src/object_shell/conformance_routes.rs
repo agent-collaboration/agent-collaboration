@@ -8,6 +8,7 @@ impl ShellActor {
     async fn seam_control(
         &self,
         host: &StoreHost,
+        runtime: &RuntimeFace,
         control: collaboration_central_conformance::ObjectSeamControl,
     ) -> Result<Response> {
         use collaboration_central_conformance::{
@@ -50,11 +51,53 @@ impl ShellActor {
             | ObjectSeamControl::Barrier { .. }
             | ObjectSeamControl::AwaitBarrier { .. }
             | ObjectSeamControl::ReleaseBarrier { .. } => Err(RuntimeControlFailure::Unsupported),
+            ObjectSeamControl::Snapshot => self.snapshot(host, runtime).await,
         };
         match answer {
             Ok(answer) => Response::from_json(&answer),
             Err(failure) => Ok(Response::from_json(&failure)?.with_status(409)),
         }
+    }
+
+    /// S8: the durable read, fenced by the socket attachments read before and
+    /// after it. An isolate that has not opened its store answers `notOpen`.
+    async fn snapshot(
+        &self,
+        host: &StoreHost,
+        runtime: &RuntimeFace,
+    ) -> std::result::Result<
+        collaboration_central_conformance::RuntimeControlAnswer,
+        collaboration_central_conformance::RuntimeControlFailure,
+    > {
+        use collaboration_central_conformance::{RuntimeControlAnswer, RuntimeControlFailure};
+        use collaboration_central_core::conformance_snapshot::{SnapshotRefusal, fenced};
+        let refused = |refusal: SnapshotRefusal| {
+            worker::console_warn!("S8 snapshot refused: {refusal}");
+            match refusal {
+                SnapshotRefusal::CorruptRow { table, key, field } => {
+                    RuntimeControlFailure::CorruptRow {
+                        table: table.to_owned(),
+                        key,
+                        field: field.to_owned(),
+                    }
+                }
+                SnapshotRefusal::Storage(_) => RuntimeControlFailure::StorageFailed,
+                SnapshotRefusal::Unstable => RuntimeControlFailure::SnapshotUnstable,
+            }
+        };
+        if !self.opened.load(std::sync::atomic::Ordering::Acquire) {
+            return Err(RuntimeControlFailure::NotOpen);
+        }
+        let before = host.registration_rows();
+        let durable = match runtime {
+            RuntimeFace::Fleet(kernel) => kernel.face().conformance_snapshot_durable().await,
+            RuntimeFace::Copy(kernel) => kernel.face().conformance_snapshot_durable().await,
+        }
+        .map_err(refused)?;
+        let after = host.registration_rows();
+        fenced(before, durable, &after)
+            .map(RuntimeControlAnswer::Snapshot)
+            .map_err(refused)
     }
 
     /// Whether `alarmDelivery` allows this alarm; a dropped one emits its line.
@@ -156,7 +199,7 @@ impl ShellActor {
         if request.path() == crate::composed_control::OBJECT_PATH {
             let command: collaboration_central_conformance::RuntimeControl = request.json().await?;
             let command = match command.into_seam() {
-                Ok(seam) => return self.seam_control(host, seam).await.map(Some),
+                Ok(seam) => return self.seam_control(host, runtime, seam).await.map(Some),
                 Err(command) => command,
             };
             if matches!(

@@ -40,7 +40,8 @@ impl PreparedRuntimeControls {
                 | RuntimeControl::ReleaseBarrier { .. }
                 | RuntimeControl::Seed { .. }
                 | RuntimeControl::ArmFault { .. }
-                | RuntimeControl::ReadFault { .. } => {
+                | RuntimeControl::ReadFault { .. }
+                | RuntimeControl::Snapshot => {
                     return Err(StoreError::backend(
                         "native conformance startup controls must only arm faults",
                     ));

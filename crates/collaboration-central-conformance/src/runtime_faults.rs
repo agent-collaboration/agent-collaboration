@@ -349,7 +349,8 @@ impl RuntimeFaults {
             | RuntimeControl::ReleaseBarrier { .. }
             | RuntimeControl::Seed { .. }
             | RuntimeControl::ArmFault { .. }
-            | RuntimeControl::ReadFault { .. } => {
+            | RuntimeControl::ReadFault { .. }
+            | RuntimeControl::Snapshot => {
                 return Err(RuntimeControlFailure::SeamControl);
             }
         }

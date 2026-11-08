@@ -201,3 +201,36 @@ where
             .collect()
     }
 }
+
+#[derive(Debug)]
+pub(crate) struct StoredOutboxOwner {
+    pub item_id: Option<String>,
+    pub record_kind: Option<String>,
+    pub status_kind: Option<String>,
+}
+pub(crate) fn read_outbox_owner_rows<S>(
+    scope: &mut S,
+) -> impl std::future::Future<Output = Result<Vec<StoredOutboxOwner>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/read_outbox_owner_rows.sql"
+        )));
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredOutboxOwner {
+                    item_id: row.try_get("item_id")?,
+                    record_kind: row.try_get("record_kind")?,
+                    status_kind: row.try_get("status_kind")?,
+                })
+            })
+            .collect()
+    }
+}

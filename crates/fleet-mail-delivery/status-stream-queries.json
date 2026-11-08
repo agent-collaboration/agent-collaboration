@@ -299,6 +299,13 @@
         }
       ],
       "row": "StoredAppliedPublication"
+    },
+    {
+      "name": "read_status_owed_rows",
+      "sql": "sql/read_status_owed_rows.sql",
+      "result": "many",
+      "parameters": [],
+      "row": "StoredStatusOwedRow"
     }
   ]
 }

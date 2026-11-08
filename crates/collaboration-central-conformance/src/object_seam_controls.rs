@@ -46,6 +46,8 @@ pub enum ObjectSeamControl {
     ArmFault { fault: ObjectFault, count: u32 },
     /// How an armed fault has been used. Tokio.
     ReadFault { fault_id: Uuid },
+    /// S8: the object's durable state and the shell's registrations. Both shells.
+    Snapshot,
 }
 
 /// S5 seeds. Slice 3 offers the stale alarm; the others arrive with their slices.
@@ -96,6 +98,7 @@ pub enum FaultedEvent {
     deny_unknown_fields
 )]
 pub enum RuntimeControlAnswer {
+    Snapshot(collaboration_central_core::conformance_snapshot::ObjectSnapshot),
     /// Unix milliseconds, or null when no alarm is stored.
     Alarm {
         stored: Option<i64>,

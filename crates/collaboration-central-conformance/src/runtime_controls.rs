@@ -76,7 +76,8 @@ impl RuntimeControlRequest {
                 | RuntimeControl::ReleaseBarrier { .. }
                 | RuntimeControl::Seed { .. }
                 | RuntimeControl::ArmFault { .. }
-                | RuntimeControl::ReadFault { .. },
+                | RuntimeControl::ReadFault { .. }
+                | RuntimeControl::Snapshot,
                 _,
             ) => Ok(()),
             _ => Err(RuntimeControlFailure::WrongObjectKind),
@@ -172,6 +173,8 @@ pub enum RuntimeControl {
     ReadFault {
         fault_id: durable_steps::Uuid,
     },
+    /// S8: the object's durable state and the shell's registrations.
+    Snapshot,
 }
 
 impl RuntimeControl {
@@ -193,6 +196,7 @@ impl RuntimeControl {
             Self::Seed { seed } => ObjectSeamControl::Seed { seed },
             Self::ArmFault { fault, count } => ObjectSeamControl::ArmFault { fault, count },
             Self::ReadFault { fault_id } => ObjectSeamControl::ReadFault { fault_id },
+            Self::Snapshot => ObjectSeamControl::Snapshot,
             other => return Err(other),
         })
     }
@@ -366,6 +370,19 @@ pub enum RuntimeControlFailure {
     UnknownBarrier,
     /// A bounded seam wait ended before its causal signal.
     WaitBoundExceeded,
+    /// S8: the object has no open store in this process.
+    NotOpen,
+    /// S8: the shell's registrations changed across the durable read; retry.
+    SnapshotUnstable,
+    /// S8: a stored value failed to decode: the table, the row's key and the
+    /// column, as stored.
+    CorruptRow {
+        table: String,
+        key: String,
+        field: String,
+    },
+    /// S8: the store could not be read.
+    StorageFailed,
 }
 impl std::fmt::Display for RuntimeControlFailure {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

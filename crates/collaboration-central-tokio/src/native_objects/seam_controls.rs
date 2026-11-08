@@ -109,6 +109,7 @@ impl NativeObjects {
             } => RuntimeControlAnswer::FaultArmed {
                 fault_id: slot.io.wake.arm_exact_write_fault(on, count),
             },
+            ObjectSeamControl::Snapshot => super::snapshot_control::snapshot(slot).await?,
             ObjectSeamControl::ReadFault { fault_id } => {
                 let (armed, reached, consumed) = slot
                     .io

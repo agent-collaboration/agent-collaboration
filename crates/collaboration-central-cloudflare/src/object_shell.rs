@@ -177,6 +177,10 @@ struct ShellActor {
     /// Minted in this Rust `DurableObject::new`; not proof of a new JS instance.
     #[cfg(feature = "conformance")]
     isolate: durable_steps::Uuid,
+    /// This isolate migrated and initialized the store (S8 answers `notOpen`
+    /// until then).
+    #[cfg(feature = "conformance")]
+    opened: std::sync::atomic::AtomicBool,
 }
 impl ShellActor {
     fn new(state: State, env: Env, kind: PhysicalKind) -> Self {
@@ -190,6 +194,8 @@ impl ShellActor {
             faults: Arc::default(),
             #[cfg(feature = "conformance")]
             isolate: durable_steps::Uuid::now_v7(),
+            #[cfg(feature = "conformance")]
+            opened: std::sync::atomic::AtomicBool::new(false),
         }
     }
     fn config(&self) -> Result<RegistryConfig> {
@@ -331,6 +337,9 @@ impl ShellActor {
         let (host, runtime) = self.runtime_handles(address)?;
         host.migrate_store().await.map_err(error)?;
         runtime.initialize().await?;
+        #[cfg(feature = "conformance")]
+        self.opened
+            .store(true, std::sync::atomic::Ordering::Release);
         Ok((host, runtime))
     }
     async fn fetch(&self, mut request: Request) -> Result<Response> {

@@ -500,3 +500,36 @@ where
             .collect()
     }
 }
+
+#[derive(Debug)]
+pub(crate) struct StoredStatusOwedRow {
+    pub id: Option<String>,
+    pub item_id: Option<String>,
+    pub version: Option<String>,
+}
+pub(crate) fn read_status_owed_rows<S>(
+    scope: &mut S,
+) -> impl std::future::Future<Output = Result<Vec<StoredStatusOwedRow>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/read_status_owed_rows.sql"
+        )));
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredStatusOwedRow {
+                    id: row.try_get("id")?,
+                    item_id: row.try_get("item_id")?,
+                    version: row.try_get("version")?,
+                })
+            })
+            .collect()
+    }
+}

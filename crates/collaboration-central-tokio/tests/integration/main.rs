@@ -79,6 +79,7 @@ mod admin_import_reservation;
 mod archive_reports;
 mod archived_claim;
 mod binding_attachment;
+mod conformance_snapshot_http;
 mod copy_owner_health;
 mod copy_reads;
 mod copy_receiver;

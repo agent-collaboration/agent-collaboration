@@ -10,6 +10,29 @@ pub struct SocketOwnerSnapshot {
     pub admissions: Vec<collaboration_central_core::AdmissionOrigin>,
 }
 
+/// Why a runtime control was not answered: the control's own failure, which
+/// its route answers as that failure's JSON (seam contract v3.4), or a failure
+/// around it.
+#[cfg(feature = "conformance")]
+#[derive(Debug)]
+pub(crate) enum RuntimeControlError {
+    Control(collaboration_central_conformance::RuntimeControlFailure),
+    Store(StoreError),
+}
+
+#[cfg(feature = "conformance")]
+impl std::fmt::Display for RuntimeControlError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Control(failure) => failure.fmt(formatter),
+            Self::Store(error) => error.fmt(formatter),
+        }
+    }
+}
+
+#[cfg(feature = "conformance")]
+impl std::error::Error for RuntimeControlError {}
+
 #[cfg(feature = "conformance")]
 #[derive(serde::Serialize)]
 pub(crate) struct SessionConnectionSnapshot {
@@ -215,16 +238,20 @@ impl NativeObjects {
     pub(crate) async fn runtime_control(
         self: &Arc<Self>,
         request: collaboration_central_conformance::RuntimeControlRequest,
-    ) -> Result<collaboration_central_conformance::RuntimeControlResponse, StoreError> {
+    ) -> Result<collaboration_central_conformance::RuntimeControlResponse, RuntimeControlError>
+    {
         use collaboration_central_conformance::{RuntimeControl, RuntimeControlResponse};
-        request.validate().map_err(StoreError::backend)?;
-        let slot = self.slot_entry(&request.address).await?;
+        request.validate().map_err(RuntimeControlError::Control)?;
+        let slot = self
+            .slot_entry(&request.address)
+            .await
+            .map_err(RuntimeControlError::Store)?;
         match request.command.into_seam() {
             Ok(seam) => self
                 .seam_control(&slot, seam)
                 .await
                 .map(RuntimeControlResponse::Seam)
-                .map_err(StoreError::backend),
+                .map_err(RuntimeControlError::Control),
             Err(command) => {
                 let moves_clock = matches!(command, RuntimeControl::SetTime { .. });
                 let observed = slot
@@ -232,9 +259,12 @@ impl NativeObjects {
                     .faults
                     .control(command)
                     .await
-                    .map_err(StoreError::backend)?;
+                    .map_err(RuntimeControlError::Control)?;
                 if moves_clock {
-                    slot.io.clock_changed().await.map_err(StoreError::backend)?;
+                    slot.io
+                        .clock_changed()
+                        .await
+                        .map_err(|error| RuntimeControlError::Store(StoreError::backend(error)))?;
                 }
                 Ok(RuntimeControlResponse::Faults(observed))
             }
@@ -786,3 +816,6 @@ mod conformance_board_import;
 #[cfg(feature = "conformance")]
 #[path = "native_objects/seam_controls.rs"]
 mod seam_controls;
+#[cfg(feature = "conformance")]
+#[path = "native_objects/snapshot_control.rs"]
+mod snapshot_control;

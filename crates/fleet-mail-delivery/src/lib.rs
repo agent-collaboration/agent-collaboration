@@ -29,6 +29,9 @@ mod inbox_retirement;
 mod inbox_row;
 mod inbox_storage;
 mod outbox_outcome;
+pub use custody_record::owner_rows::{
+    OutboxOwnerRow, StatusOwedRow, outbox_owner_rows, status_owed_rows,
+};
 pub use outbox_record::owed_work::{JournaledRemoval, JournaledWork, OwedPush, OwedRemoval};
 pub use status_stream::owed_status::{JournaledStatus, OwedStatus};
 mod outbox_record;

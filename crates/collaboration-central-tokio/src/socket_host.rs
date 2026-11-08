@@ -109,6 +109,32 @@ impl TokioSockets {
             .collect()
     }
 
+    /// Every registration with its peer, read under one lock, as
+    /// `registrations` reports them (a quarantined socket is closed). Changes
+    /// nothing; the S8 snapshot's fence reads it before and after its durable read.
+    #[cfg(feature = "conformance")]
+    pub(crate) async fn registration_rows(
+        &self,
+    ) -> Vec<collaboration_central_core::conformance_snapshot::RegistrationRow> {
+        self.0
+            .lock()
+            .await
+            .iter()
+            .filter(|(_, socket)| !socket.commands.is_closed())
+            .map(|(connection, socket)| {
+                collaboration_central_core::conformance_snapshot::RegistrationRow {
+                    connection: *connection,
+                    peer: socket.binding.peer,
+                    registration: if socket.quarantined {
+                        ConnectionRegistration::Closed
+                    } else {
+                        socket.registration
+                    },
+                }
+            })
+            .collect()
+    }
+
     pub(crate) async fn publish(
         &self,
         edits: RegistrationEdits,

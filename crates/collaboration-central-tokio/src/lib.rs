@@ -56,6 +56,14 @@ pub struct TokioStorageHost<
 }
 
 impl<Io: ObjectIo, SharedHost: Host, Alarm: ObjectAlarm> TokioStorageHost<Io, SharedHost, Alarm> {
+    /// The socket table's registrations with their peers (S8 snapshot fence).
+    #[cfg(feature = "conformance")]
+    pub(crate) async fn registration_rows(
+        &self,
+    ) -> Vec<collaboration_central_core::conformance_snapshot::RegistrationRow> {
+        self.sockets.registration_rows().await
+    }
+
     /// `alarm` is the object's one timer, shared with the alarm loop that waits on it.
     pub fn new(object: Arc<TokioObject<SharedHost>>, io: Arc<Io>, alarm: Arc<Alarm>) -> Self {
         #[cfg(feature = "conformance")]

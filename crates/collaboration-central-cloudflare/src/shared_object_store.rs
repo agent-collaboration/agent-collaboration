@@ -184,6 +184,41 @@ impl<Io: ObjectIo> CloudflareStorageHost<Io> {
             .lock()
             .map_or(true, |quarantine| quarantine.contains(&connection))
     }
+    /// Every open socket's registration with its peer, as `registrations`
+    /// reports them (a quarantined socket is closed), without its side
+    /// effects: nothing is closed or quarantined, and a duplicated identity
+    /// appears twice. A socket whose attachment does not decode is skipped and
+    /// logged. The S8 snapshot's fence reads it before and after its durable read.
+    #[cfg(feature = "conformance")]
+    pub(crate) fn registration_rows(
+        &self,
+    ) -> Vec<collaboration_central_core::conformance_snapshot::RegistrationRow> {
+        let mut rows = Vec::new();
+        for socket in self.state.get_websockets() {
+            if !Self::is_open(&socket) {
+                continue;
+            }
+            match Self::attachment(&socket) {
+                Ok(attachment) => rows.push(
+                    collaboration_central_core::conformance_snapshot::RegistrationRow {
+                        connection: attachment.connection,
+                        peer: attachment.peer,
+                        registration: if self.is_quarantined(attachment.connection) {
+                            ConnectionRegistration::Closed
+                        } else {
+                            attachment.registration
+                        },
+                    },
+                ),
+                Err(failure) => {
+                    worker::console_warn!(
+                        "S8 snapshot skipped an undecodable attachment: {failure}"
+                    );
+                }
+            }
+        }
+        rows
+    }
     fn publish(&self, edits: RegistrationEdits) -> Vec<(ConnectionId, SocketFailure)> {
         let mut failures = Vec::new();
         for (connection, registration) in edits {

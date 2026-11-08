@@ -42,6 +42,13 @@
         }
       ],
       "row": "StoredExpiredPush"
+    },
+    {
+      "name": "read_outbox_owner_rows",
+      "sql": "sql/read_outbox_owner_rows.sql",
+      "result": "many",
+      "parameters": [],
+      "row": "StoredOutboxOwner"
     }
   ]
 }
