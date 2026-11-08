@@ -240,8 +240,9 @@ impl WorkerPass for WakePass {
         // dispatch an event overtook only needs the wake its report sends.
         let mut event = self.armed.take_if(|due| *due <= now).is_some();
         for source in &mut self.events {
-            event |= source.has_changed().unwrap_or(false);
-            source.borrow_and_update();
+            // One call checks and marks seen under the value's lock: no change can land
+            // between the check and the acknowledgement.
+            event |= source.borrow_and_update().has_changed();
         }
         if event {
             self.deliveries.event_arrived();

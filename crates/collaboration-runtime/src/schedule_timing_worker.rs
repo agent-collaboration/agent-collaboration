@@ -34,6 +34,16 @@ pub struct ScheduleTimingWorker {
     hold_full_table: bool,
     #[cfg(test)]
     reap_hold: Option<ReapHold>,
+    #[cfg(test)]
+    next_due_pause: Option<NextDuePause>,
+}
+
+/// The first pass tells the test it is about to read its next due time, then waits for
+/// the test to let it.
+#[cfg(test)]
+struct NextDuePause {
+    reached: tokio::sync::oneshot::Sender<()>,
+    go: tokio::sync::oneshot::Receiver<()>,
 }
 
 /// Held reports a test releases between a pass taking events and taking reports.
@@ -73,6 +83,8 @@ impl ScheduleTimingWorker {
             hold_full_table: false,
             #[cfg(test)]
             reap_hold: None,
+            #[cfg(test)]
+            next_due_pause: None,
         }
     }
 
@@ -132,6 +144,19 @@ impl ScheduleTimingWorker {
         armed: Arc<std::sync::atomic::AtomicBool>,
     ) -> Self {
         self.reap_hold = Some(ReapHold { held, armed });
+        self
+    }
+
+    /// The first pass sends `reached` before it reads its next due time and waits for
+    /// `go`, so a test can change the store in between.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn pause_before_first_next_due(
+        mut self,
+        reached: tokio::sync::oneshot::Sender<()>,
+        go: tokio::sync::oneshot::Receiver<()>,
+    ) -> Self {
+        self.next_due_pause = Some(NextDuePause { reached, go });
         self
     }
 
@@ -202,6 +227,9 @@ impl ScheduleTimingWorker {
             events,
             sweep_owed: false,
             armed: None,
+            failed: false,
+            #[cfg(test)]
+            next_due_pause: self.next_due_pause,
             #[cfg(test)]
             reap_hold: self.reap_hold,
             run_cursor: None,
@@ -226,6 +254,10 @@ struct SchedulePass {
     /// The due time this scheduler last armed. A wake at or after it is an event: what
     /// came due may be behind the scan, and next due reads only later times.
     armed: Option<SyncTime>,
+    /// The last pass failed; the loop's retry wakes the next one with nothing armed.
+    failed: bool,
+    #[cfg(test)]
+    next_due_pause: Option<NextDuePause>,
     #[cfg(test)]
     reap_hold: Option<ReapHold>,
     // Scan progress is only a fairness hint; durable Run state still owns exclusion.
@@ -235,12 +267,15 @@ struct SchedulePass {
 
 impl SchedulePass {
     /// Marks every event seen and reports whether any arrived since the last batch: a
-    /// commit, a configuration change, a completion, or the armed due time passing.
+    /// commit, a configuration change, a completion, the armed due time passing, or a
+    /// failed pass, after which an unknown time has passed with nothing armed.
     fn take_events(&mut self, now: SyncTime) -> bool {
         let mut arrived = self.armed.take_if(|due| *due <= now).is_some();
+        arrived |= std::mem::take(&mut self.failed);
         for event in &mut self.events {
-            arrived |= event.has_changed().unwrap_or(false);
-            event.borrow_and_update();
+            // One call checks and marks seen under the value's lock: no change can land
+            // between the check and the acknowledgement.
+            arrived |= event.borrow_and_update().has_changed();
         }
         arrived
     }
@@ -357,10 +392,8 @@ enum RunScan {
     AtCapacity,
 }
 
-impl WorkerPass for SchedulePass {
-    type Error = StorageError;
-
-    async fn drain_batch(
+impl SchedulePass {
+    async fn drain_one_batch(
         &mut self,
         now: SyncTime,
         observation: &WorkerObservation,
@@ -399,11 +432,16 @@ impl WorkerPass for SchedulePass {
         })
     }
 
-    async fn next_due(
+    async fn read_next_due(
         &mut self,
         now: SyncTime,
         observation: &WorkerObservation,
     ) -> Result<Option<SyncTime>, StorageError> {
+        #[cfg(test)]
+        if let Some(pause) = self.next_due_pause.take() {
+            let _ = pause.reached.send(());
+            let _ = pause.go.await;
+        }
         observation.record_read("scheduler next due");
         let stored = self
             .store
@@ -417,6 +455,32 @@ impl WorkerPass for SchedulePass {
             (stored, retry) => stored.or(retry),
         };
         Ok(self.armed)
+    }
+}
+
+impl WorkerPass for SchedulePass {
+    type Error = StorageError;
+
+    /// A failed batch is recorded before its error returns: the next pass is an event.
+    async fn drain_batch(
+        &mut self,
+        now: SyncTime,
+        observation: &WorkerObservation,
+    ) -> Result<BatchOutcome, StorageError> {
+        let batch = self.drain_one_batch(now, observation).await;
+        self.failed |= batch.is_err();
+        batch
+    }
+
+    /// A failed read is recorded before its error returns: the next pass is an event.
+    async fn next_due(
+        &mut self,
+        now: SyncTime,
+        observation: &WorkerObservation,
+    ) -> Result<Option<SyncTime>, StorageError> {
+        let next_due = self.read_next_due(now, observation).await;
+        self.failed |= next_due.is_err();
+        next_due
     }
 }
 

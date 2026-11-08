@@ -222,6 +222,13 @@ struct CursorFixture {
 
 impl CursorFixture {
     async fn start(gate: Arc<Mutex<()>>) -> TestResult<Self> {
+        Self::start_with(gate, |worker| worker).await
+    }
+
+    async fn start_with(
+        gate: Arc<Mutex<()>>,
+        configure: impl FnOnce(super::ScheduleTimingWorker) -> super::ScheduleTimingWorker,
+    ) -> TestResult<Self> {
         let fixture = SchedulerFixture::with_one_schedule().await?;
         let run = fixture.one_executing_run().await?;
         let mut runs = fixture.copy_executing_run(&run, RUN_COUNT - 1).await?;
@@ -230,9 +237,11 @@ impl CursorFixture {
         let arrivals = Arc::new(AtomicUsize::new(0));
         let (completions, completion_source) = tokio::sync::watch::channel(0);
         let scheduler = fixture.start_with(|worker| {
-            worker
-                .hold_step_reports_counting(Arc::clone(&gate), Arc::clone(&arrivals))
-                .wake_on_completions(completion_source)
+            configure(
+                worker
+                    .hold_step_reports_counting(Arc::clone(&gate), Arc::clone(&arrivals))
+                    .wake_on_completions(completion_source),
+            )
         })?;
         Ok(Self {
             fixture,
@@ -517,6 +526,86 @@ async fn a_deadline_that_comes_due_behind_a_full_table_is_acted_on_at_its_time()
     assert!(
         stops.iter().all(|stopped| *stopped == deadline),
         "at the deadline"
+    );
+    cursor.scheduler.stop().await;
+    drop(cursor.gate);
+    Ok(())
+}
+
+impl SchedulerFixture {
+    /// A connection the scheduler does not watch, for faults and their repair.
+    async fn fault_connection(&self) -> TestResult<sqlx::SqliteConnection> {
+        Ok(
+            <sqlx::SqliteConnection as sqlx::Connection>::connect(&format!(
+                "sqlite://{}",
+                self.root.path().join("automation.sqlite").display()
+            ))
+            .await?,
+        )
+    }
+}
+
+#[tokio::test(start_paused = true)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
+async fn a_deadline_that_passes_while_failed_passes_retry_is_acted_on_behind_the_scan()
+-> TestResult<()> {
+    let gate = Arc::new(Mutex::new(()));
+    let held = Arc::clone(&gate).lock_owned().await;
+    let (reached, reached_signal) = tokio::sync::oneshot::channel();
+    let (go_signal, go) = tokio::sync::oneshot::channel();
+    let cursor = CursorFixture::start_with(Arc::clone(&gate), |worker| {
+        worker.pause_before_first_next_due(reached, go)
+    })
+    .await?;
+    let started_at = cursor.fixture.clock.now();
+    let mut fault = cursor.fixture.fault_connection().await?;
+
+    // The first pass starts the first sixteen steps, which read their turns running
+    // before the deadline and are held; then its next due read fails, so nothing is
+    // armed and only the loop's retry wakes the next pass.
+    reached_signal.await?;
+    // The pass is paused, not asleep: wait only for the held steps.
+    wait_until("the first sixteen steps were held", || {
+        cursor.arrivals.load(Ordering::SeqCst) >= STEP_SLOTS
+    })
+    .await?;
+    sqlx::query("ALTER TABLE schedule_timing_state RENAME TO schedule_timing_state_hidden")
+        .execute(&mut fault)
+        .await?;
+    let _ = go_signal.send(());
+    settled_holding(&cursor.scheduler.observation).await?;
+    let first_retry = cursor.scheduler.observation.snapshot().armed_deadline;
+    // The retries at 1 s and 3 s fail too; the deadline passes before the store is back.
+    advance(Duration::from_secs(1)).await;
+    settled_holding(&cursor.scheduler.observation).await?;
+    advance(Duration::from_secs(2)).await;
+    settled_holding(&cursor.scheduler.observation).await?;
+    let failed_passes = cursor.scheduler.observation.snapshot().passes;
+    sqlx::query("ALTER TABLE schedule_timing_state_hidden RENAME TO schedule_timing_state")
+        .execute(&mut fault)
+        .await?;
+    advance(Duration::from_secs(117)).await;
+    settled_holding(&cursor.scheduler.observation).await?;
+    drop(held);
+    wait_until("every Run's stop was requested", || {
+        cursor.fixture.route.per_run.stopped() >= RUN_COUNT
+    })
+    .await?;
+    settled(&cursor.scheduler).await?;
+
+    assert_eq!(
+        first_retry,
+        Some(started_at.after(Duration::from_secs(1))),
+        "the failed read armed only the loop's retry"
+    );
+    assert!(failed_passes >= 3, "the start-up pass and two retries ran");
+    assert_eq!(
+        cursor.fixture.route.per_run.stopped(),
+        RUN_COUNT,
+        "the pass after the failures sweeps back to the sixteen behind the scan"
     );
     cursor.scheduler.stop().await;
     drop(cursor.gate);
