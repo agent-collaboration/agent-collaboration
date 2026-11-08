@@ -384,6 +384,50 @@ async fn the_timer_fires_at_the_earliest_due_moment_and_never_later_than_29_days
     fixture.stop().await;
 }
 
+#[tokio::test]
+async fn after_a_pass_with_nothing_open_the_timer_waits_at_most_29_days_and_records_a_scope_opened_since()
+ {
+    // Arrange: the first pass finds no folders and nothing open.
+    let mut fixture = Fixture::start(|_, _| {}).await;
+    let mut checks = fixture.clock.timer_checks();
+    fixture.start_sweep();
+    let empty = fixture.next_pass().await;
+    let empty_ran = empty.ran_at.unwrap_or_else(|| panic!("ran at"));
+    let armed = next_check(&mut checks).await;
+    // A session opens a scope after that pass and leaves it quiet.
+    let folder = fixture.folder("opened-later");
+    fixture.runtime.open_scratch_scopes.opened(&folder);
+    std::fs::write(folder.join("notes.md"), b"scratch")
+        .unwrap_or_else(|error| panic!("note: {error}"));
+
+    // Act: the clock reaches the armed deadline.
+    fixture
+        .clock
+        .advance(armed.deadline.duration_since(empty_ran).unwrap_or_default());
+    let fired = next_check(&mut checks).await;
+    let next = fixture.next_pass().await;
+
+    // Assert: the timer waited no longer than 29 days, and that pass recorded the
+    // later scope's use at its own time.
+    assert!(
+        empty.removed.is_empty() && empty.kept_open.is_empty(),
+        "{empty:?}"
+    );
+    assert!(!armed.fired, "{armed:?}");
+    assert!(
+        armed.deadline <= empty_ran + 29 * DAY,
+        "an empty pass must not wait longer than 29 days: armed {:?} after {:?}",
+        armed.deadline.duration_since(empty_ran),
+        empty_ran
+    );
+    assert!(fired.fired, "{fired:?}");
+    assert_eq!(next.ran_at, Some(armed.deadline));
+    assert_eq!(next.kept_open, vec!["opened-later".to_owned()]);
+    assert_eq!(last_used(&folder), armed.deadline);
+    assert!(folder.join("notes.md").is_file());
+    fixture.stop().await;
+}
+
 /// Starts `runtime`'s sweep on `clock`; each finished pass arrives on the receiver.
 fn start_observed_sweep(
     runtime: &mut CollaborationRuntime,
