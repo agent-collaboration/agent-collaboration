@@ -5,7 +5,7 @@ use collaboration_protocol::{
     DeliveryOutcome, DeliveryReceipt, EndpointId, EndpointRef, PushId, PushKind, PushRecord,
     SessionId, SessionRef, UuidIdentity,
 };
-use sqlx::{Connection, FromRow};
+use sqlx::FromRow;
 
 #[derive(FromRow)]
 struct DirectMessageTargetRow {
@@ -81,7 +81,12 @@ impl InteractionStore {
         let question = push_record_rows::serialize_kind(PushKind::Question)?;
         let board_notification = push_record_rows::serialize_kind(PushKind::BoardNotification)?;
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                crate::interaction_transaction::TransactionStart::Immediate,
+            )
+            .await?;
         let mut settled = 0;
         loop {
             let ids = sqlx_turso::query!("SELECT push_id AS \"push_id!: String\" FROM router_pushes WHERE retention='creationAge' AND delivery_state='attempted' AND last_outcome_json IS NULL AND kind IN (?, ?, ?, ?, ?, ?) ORDER BY push_id LIMIT 128", direct_message,subscription_activity,subscription_expiry,approval,question,board_notification).fetch_all(&mut *transaction).await?;

@@ -6,12 +6,15 @@ use collaboration_protocol::{
     DeliveryOutcome, DeliveryReceipt, MessageDelivery, PushDeliveryState, PushId, PushKind,
     PushRecord,
 };
-use sqlx::{Connection, Transaction};
-use sqlx_turso::Turso;
 impl InteractionStore {
     pub async fn mark_push_attempted(&self, push_id: &PushId) -> Result<PushRecord, StorageError> {
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                crate::interaction_transaction::TransactionStart::Immediate,
+            )
+            .await?;
         let _ = crate::push_records::read_push_with_connection(&mut transaction, push_id).await?;
         let result = sqlx_turso::query!(
             "UPDATE router_pushes SET delivery_state='attempted',last_outcome_json=NULL,settled_at=NULL WHERE retention='creationAge' AND push_id=? AND delivery_state IN ('pending','held')",
@@ -27,7 +30,12 @@ impl InteractionStore {
         push_id: &PushId,
     ) -> Result<PushRecord, StorageError> {
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                crate::interaction_transaction::TransactionStart::Immediate,
+            )
+            .await?;
         let _ = crate::push_records::read_push_with_connection(&mut transaction, push_id).await?;
         let result = sqlx_turso::query!(
             "UPDATE router_pushes SET delivery_state='pending',last_outcome_json=NULL,settled_at=NULL WHERE retention='creationAge' AND push_id=? AND delivery_state='attempted'",
@@ -44,7 +52,12 @@ impl InteractionStore {
         outcome: DeliveryReceipt,
     ) -> Result<PushRecord, StorageError> {
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                crate::interaction_transaction::TransactionStart::Immediate,
+            )
+            .await?;
         if !matches!(
             outcome.outcome,
             DeliveryOutcome::NotSubmitted {
@@ -81,7 +94,12 @@ impl InteractionStore {
         settled_at: DateTime<Utc>,
     ) -> Result<PushRecord, StorageError> {
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                crate::interaction_transaction::TransactionStart::Immediate,
+            )
+            .await?;
         let _ = crate::push_records::read_push_with_connection(&mut transaction, push_id).await?;
         let state = settled_state(&outcome.outcome);
         let outcome_json = push_record_rows::serialize_json(&outcome)?;
@@ -105,7 +123,12 @@ impl InteractionStore {
         receipt: DeliveryReceipt,
     ) -> Result<PushRecord, StorageError> {
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                crate::interaction_transaction::TransactionStart::Immediate,
+            )
+            .await?;
         let record = crate::push_records::read_push_with_connection(&mut transaction, push_id)
             .await?
             .ok_or(StorageError::PushNotFound)?;
@@ -150,7 +173,12 @@ impl InteractionStore {
         now: DateTime<Utc>,
     ) -> Result<PushRecord, StorageError> {
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                crate::interaction_transaction::TransactionStart::Immediate,
+            )
+            .await?;
         let _ = crate::push_records::read_push_with_connection(&mut transaction, push_id).await?;
         if !matches!(
             receipt.outcome,
@@ -174,7 +202,7 @@ impl InteractionStore {
 }
 
 async fn finish_transition(
-    mut transaction: Transaction<'_, Turso>,
+    mut transaction: crate::interaction_transaction::InteractionTransaction<'_>,
     id: &PushId,
     changed: u64,
 ) -> Result<PushRecord, StorageError> {

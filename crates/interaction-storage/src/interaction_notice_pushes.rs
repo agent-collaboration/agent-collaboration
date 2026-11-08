@@ -4,8 +4,7 @@ use chrono::{DateTime, Utc};
 use collaboration_protocol::{
     DeliveryOutcome, DeliveryReceipt, PushDeliveryState, PushId, PushKind, PushRecord,
 };
-use sqlx::{Connection, Transaction};
-use sqlx_turso::{Turso, TursoConnection};
+use sqlx_turso::TursoConnection;
 
 impl InteractionStore {
     pub async fn mark_interaction_notice_attempted(
@@ -13,7 +12,12 @@ impl InteractionStore {
         push_id: &PushId,
     ) -> Result<PushRecord, StorageError> {
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                crate::interaction_transaction::TransactionStart::Immediate,
+            )
+            .await?;
         let changed = async {
             read_interaction_notice_push(&mut transaction, push_id).await?;
             let result = sqlx_turso::query!("UPDATE router_pushes SET delivery_state='attempted',last_outcome_json=NULL,settled_at=NULL WHERE push_id=? AND delivery_state IN ('pending','held')",push_id.as_str()).execute(&mut *transaction).await?;
@@ -33,7 +37,12 @@ impl InteractionStore {
         settled_at: DateTime<Utc>,
     ) -> Result<PushRecord, StorageError> {
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                crate::interaction_transaction::TransactionStart::Immediate,
+            )
+            .await?;
         let changed = async {
             let current = read_interaction_notice_push(&mut transaction, push_id).await?;
             let (state, label) = match &receipt.outcome {
@@ -74,7 +83,12 @@ impl InteractionStore {
         now: DateTime<Utc>,
     ) -> Result<u64, StorageError> {
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                crate::interaction_transaction::TransactionStart::Immediate,
+            )
+            .await?;
         let recovered = async {
             let approval = push_record_rows::serialize_kind(PushKind::Approval)?;
             let question = push_record_rows::serialize_kind(PushKind::Question)?;
@@ -131,7 +145,7 @@ async fn read_interaction_notice_push(
     Ok(record)
 }
 async fn finish_notice_transaction(
-    transaction: Transaction<'_, Turso>,
+    transaction: crate::interaction_transaction::InteractionTransaction<'_>,
     result: Result<PushRecord, StorageError>,
 ) -> Result<PushRecord, StorageError> {
     match result {

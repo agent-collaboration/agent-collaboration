@@ -4,8 +4,7 @@ use chrono::{DateTime, Utc};
 use collaboration_protocol::MailItemId;
 use durable_steps::{Host, storage::TransactionScope, turso_store::TursoScope};
 use message_board::{EpochNumber, ProjectId};
-use sqlx::Transaction;
-use sqlx_turso::{Turso, TursoConnection};
+use sqlx_turso::TursoConnection;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailSubmissionEpoch {
@@ -56,7 +55,7 @@ async fn read_epoch(
 }
 
 pub(crate) async fn delete_submission_epoch_for_pruned_push(
-    transaction: &mut Transaction<'_, Turso>,
+    transaction: &mut crate::interaction_transaction::InteractionTransaction<'_>,
     push_id: &str,
 ) -> Result<u64, StorageError> {
     let Some(row) = sqlx::query_as::<sqlx_turso::Turso, SubmissionEpochRow>(

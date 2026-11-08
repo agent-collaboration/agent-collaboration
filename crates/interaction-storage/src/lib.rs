@@ -1,5 +1,6 @@
 //! One Turso transaction owner for typed interactions and local message delivery.
 mod interaction_store;
+mod interaction_transaction;
 pub use interaction_store::InteractionStore;
 mod error;
 pub use error::StorageError;

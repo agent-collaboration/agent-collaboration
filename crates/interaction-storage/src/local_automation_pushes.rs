@@ -4,8 +4,7 @@ use chrono::{DateTime, Utc};
 use collaboration_protocol::{
     DeliveryOutcome, DeliveryReceipt, PushDeliveryState, PushId, PushKind, RouterOriginRef,
 };
-use sqlx::{Connection, Transaction};
-use sqlx_turso::{Turso, TursoConnection};
+use sqlx_turso::TursoConnection;
 
 impl InteractionStore {
     pub async fn mark_wake_push_attempted(
@@ -28,7 +27,12 @@ impl InteractionStore {
         kind: PushKind,
     ) -> Result<PushRecord, StorageError> {
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                crate::interaction_transaction::TransactionStart::Immediate,
+            )
+            .await?;
         let changed = async {
             read_local_automation_push(&mut transaction,push_id,kind).await?;
             let result = sqlx_turso::query!("UPDATE router_pushes SET delivery_state='attempted',last_outcome_json=NULL,settled_at=NULL WHERE push_id=? AND delivery_state IN ('pending','held')",push_id.as_str()).execute(&mut *transaction).await?;
@@ -63,7 +67,12 @@ impl InteractionStore {
         kind: PushKind,
     ) -> Result<PushRecord, StorageError> {
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                crate::interaction_transaction::TransactionStart::Immediate,
+            )
+            .await?;
         let changed = async {
             read_local_automation_push(&mut transaction,push_id,kind).await?;
             let result = sqlx_turso::query!("UPDATE router_pushes SET delivery_state='pending',last_outcome_json=NULL,settled_at=NULL WHERE push_id=? AND delivery_state='attempted'",push_id.as_str()).execute(&mut *transaction).await?;
@@ -83,7 +92,12 @@ impl InteractionStore {
         settled_at: DateTime<Utc>,
     ) -> Result<PushRecord, StorageError> {
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                crate::interaction_transaction::TransactionStart::Immediate,
+            )
+            .await?;
         let changed = async {
             let current=read_local_automation_push(&mut transaction,push_id,PushKind::Wake).await?;
             let state=match &receipt.outcome {
@@ -128,7 +142,12 @@ impl InteractionStore {
             .canonical_string()
             .map_err(|_| StorageError::InvalidRecord)?;
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                crate::interaction_transaction::TransactionStart::Immediate,
+            )
+            .await?;
         let changed = async {
             let current=read_local_automation_push(&mut transaction,push_id,PushKind::ScheduleRun).await?;
             if current.origin_router_ref.as_deref() != Some(expected_origin.as_str()) {
@@ -196,7 +215,7 @@ fn push_state_label(state: PushDeliveryState) -> Result<&'static str, StorageErr
     }
 }
 async fn finish_push_transaction(
-    transaction: Transaction<'_, Turso>,
+    transaction: crate::interaction_transaction::InteractionTransaction<'_>,
     result: Result<PushRecord, StorageError>,
 ) -> Result<PushRecord, StorageError> {
     match result {

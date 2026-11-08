@@ -4,8 +4,7 @@ use chrono::{DateTime, Utc};
 use collaboration_mail_protocol::{CancelCause, CarrierAcceptance, MailItemId};
 use durable_steps::{Host, storage::TransactionScope, turso_store::TursoScope};
 use fleet_sync_protocol::RecipientOutcome;
-use sqlx::Transaction;
-use sqlx_turso::{Turso, TursoConnection};
+use sqlx_turso::TursoConnection;
 
 #[derive(Clone, Debug)]
 pub struct LocalCancelDelivery {
@@ -106,7 +105,7 @@ async fn read_cancel(
 }
 
 pub(crate) async fn prune_settled_local_cancels(
-    transaction: &mut Transaction<'_, Turso>,
+    transaction: &mut crate::interaction_transaction::InteractionTransaction<'_>,
     cutoff_ms: i64,
     batch_size: i64,
 ) -> Result<u64, StorageError> {

@@ -51,6 +51,7 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
     // Do not run today's initializer, or downgrade today's schema to fabricate it.
     let preceding = Arc::new(InteractionStore {
         writer: tokio::sync::Mutex::new(connection),
+        commits: sqlite_storage_maintenance::CommitSignal::new(),
     });
     let adapter = NativeStore::new(preceding.clone(), Arc::new(NoDispatchHost));
     let (item, draft) = native_item_and_push();

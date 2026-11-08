@@ -7,6 +7,7 @@ use tokio::sync::Mutex;
 
 pub struct InteractionStore {
     pub(crate) writer: Mutex<TursoConnection>,
+    pub(crate) commits: sqlite_storage_maintenance::CommitSignal,
 }
 
 impl InteractionStore {
@@ -18,6 +19,7 @@ impl InteractionStore {
             .await?;
         Ok(Self {
             writer: Mutex::new(connection),
+            commits: sqlite_storage_maintenance::CommitSignal::new(),
         })
     }
 
@@ -28,9 +30,10 @@ impl InteractionStore {
 
     /// Forgets the central status stream before a new enrollment attaches.
     pub async fn clear_central_mail_status_cursor(&self) -> Result<(), StorageError> {
-        sqlx::query::<sqlx_turso::Turso>("DELETE FROM _fleet_sync_outbox_status")
-            .execute(&mut *self.writer.lock().await)
-            .await?;
+        self.execute_as_transaction(sqlx::query::<sqlx_turso::Turso>(
+            "DELETE FROM _fleet_sync_outbox_status",
+        ))
+        .await?;
         Ok(())
     }
 
@@ -45,7 +48,12 @@ impl InteractionStore {
         }
 
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                crate::interaction_transaction::TransactionStart::Immediate,
+            )
+            .await?;
         let imported = async {
             for route in routes {
                 sqlx::query::<sqlx_turso::Turso>(
@@ -75,13 +83,12 @@ impl InteractionStore {
         used_at_ms: i64,
     ) -> Result<(), StorageError> {
         route.validate().map_err(|_| StorageError::InvalidRecord)?;
-        sqlx::query::<sqlx_turso::Turso>(
+        self.execute_as_transaction(sqlx::query::<sqlx_turso::Turso>(
             "INSERT INTO approval_routes(thread_id,route_json,last_used_at_ms) VALUES (?,?,?) ON CONFLICT(thread_id) DO UPDATE SET route_json=excluded.route_json,last_used_at_ms=excluded.last_used_at_ms",
         )
         .bind(&route.thread_id)
         .bind(&route.route_json)
-        .bind(used_at_ms)
-        .execute(&mut *self.writer.lock().await)
+        .bind(used_at_ms))
         .await?;
         Ok(())
     }
@@ -93,7 +100,12 @@ impl InteractionStore {
         used_at_ms: i64,
     ) -> Result<Option<String>, StorageError> {
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                crate::interaction_transaction::TransactionStart::Immediate,
+            )
+            .await?;
         let accessed = async {
             let route_json = sqlx::query_scalar::<sqlx_turso::Turso, String>(
                 "SELECT route_json FROM approval_routes WHERE thread_id=?",

@@ -3,8 +3,7 @@ use crate::{InteractionStore, StorageError, push_record_rows};
 use chrono::{DateTime, Utc};
 use collaboration_protocol::{MailItemId, MessageSendResult, RouterLink};
 use durable_steps::{Host, storage::TransactionScope, turso_store::TursoScope};
-use sqlx::Transaction;
-use sqlx_turso::{Turso, TursoConnection};
+use sqlx_turso::TursoConnection;
 
 // session_identity renders at most 120 display-name characters, or the 64-byte
 // endpoint and eight session characters, plus its emoji. This leaves headroom
@@ -117,7 +116,7 @@ async fn read_answer(
 }
 
 pub(crate) async fn prune_settled_message_send_answers(
-    transaction: &mut Transaction<'_, Turso>,
+    transaction: &mut crate::interaction_transaction::InteractionTransaction<'_>,
     cutoff_ms: i64,
     batch_size: i64,
 ) -> Result<u64, StorageError> {

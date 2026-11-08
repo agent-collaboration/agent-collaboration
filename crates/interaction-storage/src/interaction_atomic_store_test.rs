@@ -324,3 +324,64 @@ async fn assert_mail_admission_tasks(connection: &mut sqlx_turso::TursoConnectio
         "custody admission needs exactly its submit and 60-day removal, and failed admission leaves neither"
     );
 }
+
+fn commit_bumped(commits: &mut tokio::sync::watch::Receiver<u64>) -> bool {
+    let changed = commits.has_changed().unwrap_or(false);
+    commits.borrow_and_update();
+    changed
+}
+
+/// Q2 through the sync library's one `AtomicStore::transaction` entry: the real engine's
+/// own reads (`due`, `earliest` for rearm, `operation` for status) commit without a
+/// signal; a library write that commits signals; one that wrote rows and then rolled back
+/// on a real insert failure does not.
+#[tokio::test]
+async fn the_real_engine_signals_only_for_library_writes_that_commit() {
+    let directory = tempfile::tempdir().expect("native atomic fixture");
+    let owner = Arc::new(
+        InteractionStore::open(directory.path().join("interaction.sqlite"))
+            .await
+            .expect("composed owner"),
+    );
+    let adapter = Arc::new(InteractionAtomicStore::new(
+        owner.clone(),
+        Arc::new(NoDispatchHost),
+    ));
+    let engine = durable_steps::Engine::new(Arc::clone(&adapter), Arc::new(NoDispatchHost));
+    let mut commits = owner.subscribe_commits();
+
+    let report = engine.drive_due().await.expect("empty drive");
+    let missing = engine
+        .status(&durable_steps::OperationId::new(uuid::Uuid::now_v7()).expect("v7 id"))
+        .await;
+    let engine_reads_bumped = commit_bumped(&mut commits);
+    let (item, push) = native_item_and_push();
+    enqueue_and_project(&adapter, item, push)
+        .await
+        .expect("library write commits");
+    let library_write_bumped = commit_bumped(&mut commits);
+    let mut connection = owner.writer.lock().await;
+    sqlx::raw_sql("CREATE TRIGGER reject_atomic_push BEFORE INSERT ON router_pushes BEGIN SELECT RAISE(ABORT, 'fixture atomic push rejection'); END")
+        .execute(&mut *connection).await.expect("real native insertion fault");
+    drop(connection);
+    let (rejected_item, rejected_push) = native_item_and_push();
+    enqueue_and_project(&adapter, rejected_item, rejected_push)
+        .await
+        .expect_err("custody and journal rows roll back with the failed push");
+    let rolled_back_bumped = commit_bumped(&mut commits);
+
+    assert!(report.completed.is_empty() && report.failed.is_empty());
+    assert!(matches!(missing, Err(StoreError::MissingOperation { .. })));
+    assert!(
+        !engine_reads_bumped,
+        "drive_due, rearm and status are reads"
+    );
+    assert!(
+        library_write_bumped,
+        "a committed library write must signal"
+    );
+    assert!(
+        !rolled_back_bumped,
+        "a write rolled back after changing rows must not signal"
+    );
+}

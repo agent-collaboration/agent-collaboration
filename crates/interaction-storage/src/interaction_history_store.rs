@@ -69,7 +69,6 @@ pub(crate) mod interaction_history_database;
 use interaction_history_database::{
     HistoryDatabaseState, commit_delta, read_records, read_revision,
 };
-use sqlx::Connection;
 
 #[cfg(test)]
 struct CachePublicationPause {
@@ -91,9 +90,15 @@ impl InteractionHistoryStore {
         owner: Arc<crate::InteractionStore>,
     ) -> Result<Self, InteractionHistoryError> {
         let mut connection = owner.writer.lock().await;
-        let mut transaction = connection.begin().await.map_err(|_| {
-            InteractionHistoryError::from_storage(crate::StorageError::StorageUnavailable, true)
-        })?;
+        let mut transaction = owner
+            .transaction(
+                &mut connection,
+                crate::interaction_transaction::TransactionStart::Deferred,
+            )
+            .await
+            .map_err(|_| {
+                InteractionHistoryError::from_storage(crate::StorageError::StorageUnavailable, true)
+            })?;
         let revision = read_revision(&mut transaction)
             .await
             .map_err(|failure| InteractionHistoryError::from_storage(failure, true))?;
@@ -157,8 +162,12 @@ impl InteractionHistoryStore {
         let previous_revision = state.revision;
         let previous_cache = state.cache.clone();
         let mut connection = self.owner.writer.lock().await;
-        let mut transaction = connection
-            .begin_with("BEGIN IMMEDIATE")
+        let mut transaction = self
+            .owner
+            .transaction(
+                &mut connection,
+                crate::interaction_transaction::TransactionStart::Immediate,
+            )
             .await
             .map_err(|_| {
                 InteractionHistoryError::from_storage(
