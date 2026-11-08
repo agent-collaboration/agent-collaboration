@@ -6139,6 +6139,7 @@ dependencies = [
 name = "sqlite-storage-maintenance"
 version = "0.1.134"
 dependencies = [
+ "chrono",
  "fs2",
  "sqlx",
  "tempfile",

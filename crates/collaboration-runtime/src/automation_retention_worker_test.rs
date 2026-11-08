@@ -1,0 +1,384 @@
+use agent_automation::{EventId, InstructionText, OperationId};
+use sqlx::Connection;
+use tokio::sync::Mutex;
+
+use super::{AutomationRetentionWorker, native_retention_faults};
+use automation_storage::AutomationStore;
+use collaboration_protocol::PushRecordDraft;
+use collaboration_protocol::{
+    EndpointId, EndpointRef, PushHeaderFacts, PushId, PushKind, PushOrigin, SessionId, SessionRef,
+    UuidIdentity,
+};
+use sqlx_turso::{TursoConnectOptions, TursoConnection};
+use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
+
+#[tokio::test]
+async fn minute_worker_prunes_expired_events_without_touching_current_or_instruction_rows() {
+    let path = std::env::temp_dir().join(format!(
+        "automation-retention-worker-{}.sqlite",
+        OperationId::generate().as_str()
+    ));
+    let mut store = AutomationStore::open(&path)
+        .await
+        .unwrap_or_else(|error| panic!("automation store should open: {error}"));
+    let instruction = store
+        .create_instruction(
+            &OperationId::generate(),
+            &InstructionText::try_from("retained instruction".to_owned())
+                .unwrap_or_else(|error| panic!("instruction text should validate: {error}")),
+            0,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("instruction should persist: {error}"));
+    let now = chrono::Utc::now().timestamp_millis();
+    let expired = now - 90_i64 * 24 * 60 * 60 * 1000;
+    let mut observer = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&path)
+            .foreign_keys(true)
+            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("observer should connect: {error}"));
+    for timestamp in [expired, now] {
+        sqlx::query("INSERT INTO automation_events(event_id,subject_kind,subject_id,event_kind,event_body_json,recorded_at_ms) VALUES (?,'instruction',?,'fixture','{}',?)")
+                .bind(EventId::generate().as_str())
+                .bind(instruction.instruction_id.as_str())
+                .bind(timestamp)
+                .execute(&mut observer)
+                .await
+                .unwrap_or_else(|error| panic!("fixture event should persist: {error}"));
+    }
+
+    let shared_store = Arc::new(Mutex::new(store));
+    let shutdown = CancellationToken::new();
+    let task = tokio::spawn(
+        AutomationRetentionWorker::new(
+            Arc::clone(&shared_store),
+            Arc::new(runtime_primitives::SystemClock),
+        )
+        .run(shutdown.clone()),
+    );
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        loop {
+            let retained: Vec<i64> = sqlx::query_scalar(
+                "SELECT recorded_at_ms FROM automation_events ORDER BY recorded_at_ms",
+            )
+            .fetch_all(&mut observer)
+            .await
+            .unwrap_or_else(|error| panic!("worker result should query: {error}"));
+            if retained == vec![now] {
+                return;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_elapsed| panic!("minute worker should prune the expired event"));
+    assert_eq!(
+        shared_store
+            .lock()
+            .await
+            .read_instruction(&instruction.instruction_id)
+            .await
+            .unwrap_or_else(|error| panic!("instruction should remain readable: {error}")),
+        instruction
+    );
+
+    shutdown.cancel();
+    task.await
+        .unwrap_or_else(|error| panic!("worker should join: {error}"));
+    observer
+        .close()
+        .await
+        .unwrap_or_else(|error| panic!("observer should close: {error}"));
+    Arc::try_unwrap(shared_store)
+        .unwrap_or_else(|_| panic!("worker should release the store reference"))
+        .into_inner()
+        .close()
+        .await
+        .unwrap_or_else(|error| panic!("store should close: {error}"));
+    std::fs::remove_file(path)
+        .unwrap_or_else(|error| panic!("fixture database should remove: {error}"));
+}
+
+#[tokio::test]
+async fn automation_prune_trims_one_incremental_batch_then_skips_empty_pass() {
+    let directory = tempfile::tempdir().expect("automation fixture directory");
+    let path = directory.path().join("automation.sqlite");
+    let store = AutomationStore::open(&path)
+        .await
+        .expect("automation store should open");
+    let mut observer = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&path)
+            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal),
+    )
+    .await
+    .expect("WAL observer should open");
+    let now_ms = 1_800_000_000_000_i64;
+    let expired_at_ms = now_ms - 120_i64 * 24 * 60 * 60 * 1000;
+    let old_payload = format!("{{\"payload\":\"{}\"}}", "x".repeat(8 * 1024));
+
+    let mut transaction = observer
+        .begin()
+        .await
+        .expect("fixture transaction should begin");
+    for event_index in 0..512 {
+        sqlx::query(
+                "INSERT INTO automation_events(event_id,subject_kind,subject_id,event_kind,event_body_json,recorded_at_ms) VALUES (?,'fixture','owner','fixture',?,?)",
+            )
+            .bind(format!("expired-event-{event_index}"))
+            .bind(&old_payload)
+            .bind(expired_at_ms)
+            .execute(&mut *transaction)
+            .await
+            .expect("expired event fixture should insert");
+    }
+    sqlx::query(
+            "INSERT INTO automation_events(event_id,subject_kind,subject_id,event_kind,event_body_json,recorded_at_ms) VALUES ('retained-event','fixture','owner','fixture','{}',?)",
+        )
+        .bind(now_ms)
+        .execute(&mut *transaction)
+        .await
+        .expect("retained event fixture should insert");
+    transaction
+        .commit()
+        .await
+        .expect("fixture transaction should commit");
+
+    let before_pages: i64 = sqlx::query_scalar("PRAGMA page_count")
+        .fetch_one(&mut observer)
+        .await
+        .expect("page count should be readable before pruning");
+    let before_freelist: i64 = sqlx::query_scalar("PRAGMA freelist_count")
+        .fetch_one(&mut observer)
+        .await
+        .expect("freelist should be readable before pruning");
+    assert_eq!(before_freelist, 0);
+
+    let shared_store = Arc::new(Mutex::new(store));
+    let removed = AutomationRetentionWorker::new(
+        Arc::clone(&shared_store),
+        Arc::new(runtime_primitives::SystemClock),
+    )
+    .prune_batch(now_ms)
+    .await
+    .expect("automation prune batch should complete");
+    let after_pages: i64 = sqlx::query_scalar("PRAGMA page_count")
+        .fetch_one(&mut observer)
+        .await
+        .expect("page count should be readable after pruning");
+    let after_freelist: i64 = sqlx::query_scalar("PRAGMA freelist_count")
+        .fetch_one(&mut observer)
+        .await
+        .expect("freelist should be readable after pruning");
+    let retained_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM automation_events WHERE event_id='retained-event'",
+    )
+    .fetch_one(&mut observer)
+    .await
+    .expect("retained event should be readable");
+
+    assert_eq!(removed, 512);
+    assert_eq!(retained_count, 1);
+    assert!((1..=64).contains(&(before_pages - after_pages)));
+    assert!(after_freelist > 0);
+
+    assert_eq!(
+        AutomationRetentionWorker::new(
+            Arc::clone(&shared_store),
+            Arc::new(runtime_primitives::SystemClock)
+        )
+        .prune_batch(now_ms)
+        .await
+        .expect("empty automation prune batch should complete"),
+        0
+    );
+    let after_empty_pass_pages: i64 = sqlx::query_scalar("PRAGMA page_count")
+        .fetch_one(&mut observer)
+        .await
+        .expect("page count should be readable after empty pass");
+    assert_eq!(after_empty_pass_pages, after_pages);
+
+    observer.close().await.expect("WAL observer should close");
+    Arc::try_unwrap(shared_store)
+        .unwrap_or_else(|_| panic!("retention worker should release automation store"))
+        .into_inner()
+        .close()
+        .await
+        .expect("automation store should close");
+}
+
+fn session(endpoint_id: &str, session_id: &str) -> SessionRef {
+    SessionRef {
+        endpoint: EndpointRef {
+            service_id: UuidIdentity::try_from("018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned())
+                .expect("service id"),
+            endpoint_id: EndpointId::try_from(endpoint_id.to_owned()).expect("endpoint id"),
+        },
+        session_id: SessionId::try_from(session_id.to_owned()).expect("session id"),
+    }
+}
+
+fn expired_push(now_ms: i64) -> PushRecordDraft {
+    let sender = session("claude-local", "sender");
+    let created_at = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)
+        .expect("valid retention clock")
+        .checked_sub_months(chrono::Months::new(2))
+        .expect("valid calendar cutoff")
+        - chrono::Duration::milliseconds(1);
+    PushRecordDraft {
+        mode: Some(collaboration_protocol::MessageDelivery::Auto),
+        guard: None,
+        push_id: PushId::try_from(uuid::Uuid::now_v7().to_string()).expect("UUIDv7 push id"),
+        kind: PushKind::DirectMessage,
+        origin: PushOrigin::Session(sender),
+        origin_router_ref: None,
+        target: session("codex-local", "target"),
+        reply_to_push_id: None,
+        header_facts: PushHeaderFacts::DirectMessage {
+            sender_display_name: None,
+        },
+        body: Some("expired push body".to_owned()),
+        activity: None,
+        created_at,
+    }
+}
+
+#[tokio::test]
+async fn retention_worker_prunes_expired_push_records() {
+    let directory = tempfile::tempdir().expect("retention fixture");
+    let path = directory.path().join("automation.sqlite");
+    let interaction_path = directory.path().join("interaction.sqlite");
+    let store = AutomationStore::open(&path)
+        .await
+        .expect("automation store");
+    let interactions = Arc::new(
+        interaction_storage::InteractionStore::open(&interaction_path)
+            .await
+            .expect("native push owner"),
+    );
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let draft = expired_push(now_ms);
+    let push_id = draft.push_id.clone();
+    interactions
+        .insert_push_record(draft)
+        .await
+        .expect("insert expired push");
+    let mut interaction_writer =
+        TursoConnection::connect_with(&TursoConnectOptions::new().filename(&interaction_path))
+            .await
+            .expect("interaction fixture writer");
+    sqlx::query::<sqlx_turso::Turso>(
+        "UPDATE router_pushes SET delivery_state='delivered' WHERE push_id=?",
+    )
+    .bind(push_id.as_str())
+    .execute(&mut interaction_writer)
+    .await
+    .expect("old fixture push is terminal");
+    interaction_writer
+        .close()
+        .await
+        .expect("close fixture writer");
+    let shared_store = Arc::new(Mutex::new(store));
+    assert_eq!(
+        AutomationRetentionWorker::new(
+            shared_store.clone(),
+            Arc::new(runtime_primitives::SystemClock)
+        )
+        .with_native_push_store(interactions.clone())
+        .prune_batch(now_ms)
+        .await
+        .expect("bounded retention"),
+        1
+    );
+    assert!(
+        interactions
+            .get_push_record(&push_id)
+            .await
+            .expect("read pruned push")
+            .is_none()
+    );
+    Arc::try_unwrap(shared_store)
+        .unwrap_or_else(|_| panic!("retained automation owner"))
+        .into_inner()
+        .close()
+        .await
+        .expect("close automation");
+    Arc::try_unwrap(interactions)
+        .unwrap_or_else(|_| panic!("retained native owner"))
+        .close()
+        .await
+        .expect("close native owner");
+}
+
+#[tokio::test]
+async fn failed_push_prune_does_not_stop_expired_event_pruning() {
+    let directory = tempfile::tempdir().expect("retention fixture");
+    let path = directory.path().join("automation.sqlite");
+    let store = AutomationStore::open(&path)
+        .await
+        .expect("automation store");
+    let interactions = Arc::new(
+        interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
+            .await
+            .expect("native push owner"),
+    );
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let draft = expired_push(now_ms);
+    let push_id = draft.push_id.clone();
+    interactions
+        .insert_push_record(draft)
+        .await
+        .expect("insert expired push");
+    let mut observer = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
+    )
+    .await
+    .expect("automation observer");
+    sqlx::query("INSERT INTO automation_events(event_id,subject_kind,subject_id,event_kind,event_body_json,recorded_at_ms) VALUES (?,'run','fixture','fixture','{}',?)")
+            .bind(EventId::generate().as_str()).bind(now_ms - 90_i64 * 24 * 60 * 60 * 1000).execute(&mut observer).await.expect("expired event");
+    observer.close().await.expect("close observer");
+    native_retention_faults::execute(interactions.clone(), "CREATE TRIGGER fail_push_prune BEFORE DELETE ON router_pushes BEGIN SELECT RAISE(FAIL, 'push prune failure'); END", None).await.expect("native push fault");
+    let shared_store = Arc::new(Mutex::new(store));
+    let removed = AutomationRetentionWorker::new(
+        shared_store.clone(),
+        Arc::new(runtime_primitives::SystemClock),
+    )
+    .with_native_push_store(interactions.clone())
+    .prune_batch(now_ms)
+    .await
+    .expect("independent prune succeeds");
+    assert_eq!(removed, 1);
+    assert!(
+        interactions
+            .get_push_record(&push_id)
+            .await
+            .expect("read retained push")
+            .is_some()
+    );
+    let mut observer = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
+    )
+    .await
+    .expect("event observer");
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM automation_events")
+        .fetch_one(&mut observer)
+        .await
+        .expect("event count");
+    assert_eq!(count, 0);
+    observer.close().await.expect("close observer");
+    Arc::try_unwrap(shared_store)
+        .unwrap_or_else(|_| panic!("retained automation owner"))
+        .into_inner()
+        .close()
+        .await
+        .expect("close automation");
+    Arc::try_unwrap(interactions)
+        .unwrap_or_else(|_| panic!("retained native owner"))
+        .close()
+        .await
+        .expect("close native owner");
+}

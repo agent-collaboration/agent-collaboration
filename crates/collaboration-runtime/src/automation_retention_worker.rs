@@ -1,8 +1,16 @@
-//! Bounded event maintenance runs independently of native availability and workflow admission.
-use automation_storage::{AutomationStore, StorageError};
-use std::{sync::Arc, time::Duration};
+//! Retention for automation and interaction history, independent of native availability.
+//!
+//! The worker sleeps until a store commits or the first moment a retention rule allows a
+//! row to go. Each pass reads every class's next due time, deletes only the classes that
+//! are due, and arms one timer at the earliest due time or failed-class retry.
+use crate::{BatchOutcome, FailedPassBackoff, WakeDrivenWorkerLoop, WorkerObservation, WorkerPass};
+use automation_storage::{AutomationRetentionClass, AutomationStore};
+use runtime_primitives::SyncTime;
+use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
+
+const INTERACTION_PRUNE_BATCH: u32 = 500;
 
 pub struct AutomationRetentionWorker {
     store: Arc<Mutex<AutomationStore>>,
@@ -10,6 +18,7 @@ pub struct AutomationRetentionWorker {
     interaction_broker: Option<Arc<crate::ServiceInteractionBroker>>,
     native_push_store: Option<Arc<interaction_storage::InteractionStore>>,
 }
+
 impl AutomationRetentionWorker {
     pub fn new(
         store: Arc<Mutex<AutomationStore>>,
@@ -36,499 +45,334 @@ impl AutomationRetentionWorker {
         self
     }
 
-    /// Runs every retained-content prune independently in bounded batches.
-    pub async fn prune_batch(&self, now_ms: i64) -> Result<u64, StorageError> {
-        let now = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)
-            .ok_or(StorageError::InvalidRecord)?;
-        let mut pruned_total = 0_u64;
-        {
-            let mut store = self.store.lock().await;
-            for (name, result) in [
-                (
-                    "automation events",
-                    store.prune_automation_events(now_ms, 1000).await,
-                ),
-                (
-                    "settled mailbox deliveries",
-                    store.prune_settled_mailbox_deliveries(now_ms, 500).await,
-                ),
-                (
-                    "operation receipts",
-                    store.prune_operation_receipts(now_ms, 500).await,
-                ),
-                (
-                    "completed workflow runs",
-                    store.prune_completed_workflow_runs(now_ms, 500).await,
-                ),
-                (
-                    "expired or cancelled wakes",
-                    store.prune_terminal_wakeups(now_ms, 500).await,
-                ),
-                (
-                    "old instruction revisions",
-                    store.prune_old_instruction_revisions(now_ms, 500).await,
-                ),
-            ] {
-                match result {
-                    Ok(count) => add_pruned_total(&mut pruned_total, count)?,
-                    Err(error) => {
-                        tracing::warn!(error = %error, prune = name, "retention prune failed; the next pass will retry")
-                    }
-                }
-            }
-            if pruned_total > 0
-                && let Err(error) = store.incremental_vacuum_step().await
-            {
-                tracing::warn!(
-                    error = %error,
-                    "automation incremental-vacuum step failed; the next prune will retry"
-                );
-            }
-        }
-        if let Some(broker) = self.interaction_broker.as_ref() {
-            match broker.prune_interaction_history(now, 500).await {
-                Ok(count) => add_pruned_total(&mut pruned_total, count)?,
-                Err(error) => {
-                    tracing::warn!(error = %error, "interaction-history retention prune failed; the next pass will retry")
-                }
-            }
-        }
-        if let Some(store) = self.native_push_store.as_ref() {
-            match store.prune_push_records(now, 500).await {
-                Ok(count) => add_pruned_total(&mut pruned_total, count)?,
-                Err(error) => {
-                    tracing::warn!(error = %error, "native push retention prune failed; the next pass will retry")
-                }
-            }
-        }
-        Ok(pruned_total)
-    }
-
+    /// Runs passes until `shutdown`. The first pass drains whatever is already due.
     pub async fn run(self, shutdown: CancellationToken) {
-        let mut interval = tokio::time::interval(Duration::from_secs(60));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        loop {
-            tokio::select! { biased; _ = shutdown.cancelled() => return, _ = interval.tick() => {} }
-            let now = self.clock.now().unix_millis();
-            loop {
-                let result = tokio::select! { biased; _ = shutdown.cancelled() => return, result = self.prune_batch(now) => result };
-                match result {
-                    Ok(0) => break,
-                    Ok(_) => tokio::task::yield_now().await,
-                    Err(_) => {
-                        tracing::warn!(
-                            "automation retention maintenance unavailable; records remain intact"
-                        );
-                        break;
-                    }
-                }
+        let (worker_loop, mut pass) = self.into_loop().await;
+        worker_loop.run(&mut pass, shutdown).await;
+    }
+
+    /// The loop, subscribed to every store whose commits can make a row deletable, and the
+    /// pass it drives.
+    pub(crate) async fn into_loop(self) -> (WakeDrivenWorkerLoop, RetentionPass) {
+        let mut worker_loop =
+            WakeDrivenWorkerLoop::new("automation_retention", Arc::clone(&self.clock))
+                .wake_on(self.store.lock().await.subscribe_commits());
+        if let Some(store) = &self.native_push_store {
+            worker_loop = worker_loop.wake_on(store.subscribe_commits());
+        }
+        (worker_loop, self.retention_pass())
+    }
+
+    fn retention_pass(&self) -> RetentionPass {
+        let mut classes: Vec<ClassSchedule> = AutomationRetentionClass::ALL
+            .into_iter()
+            .map(|class| ClassSchedule::new(RetentionClass::Automation(class)))
+            .collect();
+        if self.native_push_store.is_some() {
+            classes.push(ClassSchedule::new(RetentionClass::InteractionRecords));
+        }
+        if self.interaction_broker.is_some() {
+            classes.push(ClassSchedule::new(RetentionClass::InteractionHistory));
+        }
+        RetentionPass {
+            store: Arc::clone(&self.store),
+            interaction_broker: self.interaction_broker.clone(),
+            native_push_store: self.native_push_store.clone(),
+            classes,
+        }
+    }
+
+    /// Prunes one batch of every class that is due at `now_ms`, as one pass does.
+    pub async fn prune_batch(&self, now_ms: i64) -> Result<u64, automation_storage::StorageError> {
+        let mut pass = self.retention_pass();
+        Ok(pass
+            .prune_due_classes(now_ms, &WorkerObservation::default())
+            .await)
+    }
+}
+
+/// One kind of record a retention rule prunes, with its own retry.
+#[derive(Clone, Copy, Debug)]
+enum RetentionClass {
+    Automation(AutomationRetentionClass),
+    InteractionRecords,
+    InteractionHistory,
+}
+
+impl RetentionClass {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Automation(class) => class.as_str(),
+            Self::InteractionRecords => "interaction records",
+            Self::InteractionHistory => "interaction history",
+        }
+    }
+
+    const fn due_read(self) -> &'static str {
+        match self {
+            Self::Automation(AutomationRetentionClass::Events) => "retention.events.due",
+            Self::Automation(AutomationRetentionClass::SettledMailboxDeliveries) => {
+                "retention.mailbox_deliveries.due"
             }
+            Self::Automation(AutomationRetentionClass::OperationReceipts) => {
+                "retention.operation_receipts.due"
+            }
+            Self::Automation(AutomationRetentionClass::CompletedWorkflowRuns) => {
+                "retention.workflow_runs.due"
+            }
+            Self::Automation(AutomationRetentionClass::TerminalWakes) => {
+                "retention.terminal_wakes.due"
+            }
+            Self::Automation(AutomationRetentionClass::OldInstructionRevisions) => {
+                "retention.instruction_revisions.due"
+            }
+            Self::InteractionRecords => "retention.interaction_records.due",
+            Self::InteractionHistory => "retention.interaction_history.due",
+        }
+    }
+
+    const fn prune_write(self) -> &'static str {
+        match self {
+            Self::Automation(AutomationRetentionClass::Events) => "retention.events.prune",
+            Self::Automation(AutomationRetentionClass::SettledMailboxDeliveries) => {
+                "retention.mailbox_deliveries.prune"
+            }
+            Self::Automation(AutomationRetentionClass::OperationReceipts) => {
+                "retention.operation_receipts.prune"
+            }
+            Self::Automation(AutomationRetentionClass::CompletedWorkflowRuns) => {
+                "retention.workflow_runs.prune"
+            }
+            Self::Automation(AutomationRetentionClass::TerminalWakes) => {
+                "retention.terminal_wakes.prune"
+            }
+            Self::Automation(AutomationRetentionClass::OldInstructionRevisions) => {
+                "retention.instruction_revisions.prune"
+            }
+            Self::InteractionRecords => "retention.interaction_records.prune",
+            Self::InteractionHistory => "retention.interaction_history.prune",
         }
     }
 }
 
-fn add_pruned_total(total: &mut u64, count: u64) -> Result<(), StorageError> {
-    *total = total
-        .checked_add(count)
-        .ok_or(StorageError::InvalidRecord)?;
-    Ok(())
+/// A class's next due time and its own failure retry, so one class's success never clears
+/// another's retry.
+struct ClassSchedule {
+    class: RetentionClass,
+    due_ms: Option<i64>,
+    retry_at_ms: Option<i64>,
+    failures: FailedPassBackoff,
 }
+
+impl ClassSchedule {
+    fn new(class: RetentionClass) -> Self {
+        Self {
+            class,
+            due_ms: None,
+            retry_at_ms: None,
+            failures: FailedPassBackoff::default(),
+        }
+    }
+}
+
+/// What one class did in a pass.
+struct ClassPass {
+    pruned: u64,
+    due_ms: Option<i64>,
+}
+
+pub(crate) struct RetentionPass {
+    store: Arc<Mutex<AutomationStore>>,
+    interaction_broker: Option<Arc<crate::ServiceInteractionBroker>>,
+    native_push_store: Option<Arc<interaction_storage::InteractionStore>>,
+    classes: Vec<ClassSchedule>,
+}
+
+impl RetentionPass {
+    /// Reads each class's due time and prunes one batch of every class that is due. A class
+    /// that fails keeps its own retry time; the others go on. Returns the rows removed.
+    async fn prune_due_classes(&mut self, now_ms: i64, observation: &WorkerObservation) -> u64 {
+        let mut pruned_total = 0_u64;
+        let mut automation_pruned = false;
+        for index in 0..self.classes.len() {
+            let Some(schedule) = self.classes.get(index) else {
+                continue;
+            };
+            if schedule
+                .retry_at_ms
+                .is_some_and(|retry_at| retry_at > now_ms)
+            {
+                continue;
+            }
+            let class = schedule.class;
+            let result = self.run_class(class, now_ms, observation).await;
+            let Some(schedule) = self.classes.get_mut(index) else {
+                continue;
+            };
+            match result {
+                Ok(pass) => {
+                    if schedule.failures.record_success() {
+                        tracing::info!(retention_class = class.name(), "retention prune recovered");
+                    }
+                    schedule.retry_at_ms = None;
+                    schedule.due_ms = pass.due_ms;
+                    pruned_total = pruned_total.saturating_add(pass.pruned);
+                    automation_pruned |=
+                        pass.pruned > 0 && matches!(class, RetentionClass::Automation(_));
+                }
+                Err(error) => {
+                    let retry = schedule.failures.record_failure();
+                    if retry.starts_run {
+                        tracing::warn!(
+                            %error,
+                            retention_class = class.name(),
+                            "retention prune failed; it retries with backoff"
+                        );
+                    }
+                    let delay_ms = i64::try_from(retry.delay.as_millis()).unwrap_or(i64::MAX);
+                    schedule.retry_at_ms = Some(now_ms.saturating_add(delay_ms));
+                    schedule.due_ms = None;
+                }
+            }
+        }
+        if automation_pruned
+            && let Err(error) = self.store.lock().await.incremental_vacuum_step().await
+        {
+            tracing::warn!(
+                %error,
+                "automation incremental-vacuum step failed; the next prune will retry"
+            );
+        }
+        pruned_total
+    }
+
+    /// Reads `class`'s due time and, only when it has passed, prunes one batch. A class
+    /// that pruned reports itself due now, so the next batch reads it again.
+    async fn run_class(
+        &self,
+        class: RetentionClass,
+        now_ms: i64,
+        observation: &WorkerObservation,
+    ) -> Result<ClassPass, String> {
+        observation.record_read(class.due_read());
+        let due_ms = self.read_due(class).await?;
+        if !due_ms.is_some_and(|due_ms| due_ms <= now_ms) {
+            return Ok(ClassPass { pruned: 0, due_ms });
+        }
+        observation.record_read(class.prune_write());
+        let pruned = self.prune(class, now_ms).await?;
+        if pruned == 0 {
+            // The due read and the DELETE share one rule; a due class that deletes nothing
+            // retries on its backoff instead of re-arming a timer in the past.
+            return Err(format!(
+                "{} was due but its prune removed nothing",
+                class.name()
+            ));
+        }
+        Ok(ClassPass {
+            pruned,
+            due_ms: Some(now_ms),
+        })
+    }
+
+    async fn read_due(&self, class: RetentionClass) -> Result<Option<i64>, String> {
+        match class {
+            RetentionClass::Automation(class) => self
+                .store
+                .lock()
+                .await
+                .retention_class_due_ms(class)
+                .await
+                .map_err(|error| error.to_string()),
+            RetentionClass::InteractionRecords => match &self.native_push_store {
+                Some(store) => store
+                    .push_records_prune_due()
+                    .await
+                    .map(|due| due.map(|due| due.timestamp_millis()))
+                    .map_err(|error| error.to_string()),
+                None => Ok(None),
+            },
+            RetentionClass::InteractionHistory => match &self.interaction_broker {
+                Some(broker) => Ok(broker
+                    .interaction_history_prune_due()
+                    .await
+                    .map(|due| due.timestamp_millis())),
+                None => Ok(None),
+            },
+        }
+    }
+
+    async fn prune(&self, class: RetentionClass, now_ms: i64) -> Result<u64, String> {
+        let now = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)
+            .ok_or_else(|| "retention clock is outside the supported range".to_owned())?;
+        match class {
+            RetentionClass::Automation(class) => self
+                .store
+                .lock()
+                .await
+                .prune_retention_class(class, now_ms, class.max_batch())
+                .await
+                .map_err(|error| error.to_string()),
+            RetentionClass::InteractionRecords => match &self.native_push_store {
+                Some(store) => store
+                    .prune_push_records(now, INTERACTION_PRUNE_BATCH)
+                    .await
+                    .map_err(|error| error.to_string()),
+                None => Ok(0),
+            },
+            RetentionClass::InteractionHistory => match &self.interaction_broker {
+                Some(broker) => broker
+                    .prune_interaction_history(now, 500)
+                    .await
+                    .map_err(|error| error.to_string()),
+                None => Ok(0),
+            },
+        }
+    }
+}
+
+impl WorkerPass for RetentionPass {
+    type Error = std::convert::Infallible;
+
+    async fn drain_batch(
+        &mut self,
+        now: SyncTime,
+        observation: &WorkerObservation,
+    ) -> Result<BatchOutcome, Self::Error> {
+        let pruned = self.prune_due_classes(now.unix_millis(), observation).await;
+        Ok(if pruned > 0 {
+            BatchOutcome::MoreWork
+        } else {
+            BatchOutcome::Drained
+        })
+    }
+
+    async fn next_due(
+        &mut self,
+        _now: SyncTime,
+        _observation: &WorkerObservation,
+    ) -> Result<Option<SyncTime>, Self::Error> {
+        Ok(self
+            .classes
+            .iter()
+            .flat_map(|schedule| [schedule.due_ms, schedule.retry_at_ms])
+            .flatten()
+            .min()
+            .map(SyncTime::from_unix_millis))
+    }
+}
+
+#[cfg(test)]
+use crate::native_worker_faults as native_retention_faults;
+
+#[cfg(test)]
+#[path = "automation_retention_worker_test.rs"]
+mod tests;
 
 #[cfg(test)]
 #[path = "automation_retention_worker/interaction_history_retention_tests.rs"]
 mod interaction_history_retention_tests;
 
 #[cfg(test)]
-use crate::native_worker_faults as native_retention_faults;
-
-#[cfg(test)]
-mod tests {
-    use agent_automation::{EventId, InstructionText, OperationId};
-    use sqlx::Connection;
-    use tokio::sync::Mutex;
-
-    use super::{AutomationRetentionWorker, native_retention_faults};
-    use automation_storage::AutomationStore;
-    use collaboration_protocol::PushRecordDraft;
-    use collaboration_protocol::{
-        EndpointId, EndpointRef, PushHeaderFacts, PushId, PushKind, PushOrigin, SessionId,
-        SessionRef, UuidIdentity,
-    };
-    use sqlx_turso::{TursoConnectOptions, TursoConnection};
-    use std::sync::Arc;
-    use tokio_util::sync::CancellationToken;
-
-    #[tokio::test]
-    async fn minute_worker_prunes_expired_events_without_touching_current_or_instruction_rows() {
-        let path = std::env::temp_dir().join(format!(
-            "automation-retention-worker-{}.sqlite",
-            OperationId::generate().as_str()
-        ));
-        let mut store = AutomationStore::open(&path)
-            .await
-            .unwrap_or_else(|error| panic!("automation store should open: {error}"));
-        let instruction = store
-            .create_instruction(
-                &OperationId::generate(),
-                &InstructionText::try_from("retained instruction".to_owned())
-                    .unwrap_or_else(|error| panic!("instruction text should validate: {error}")),
-                0,
-            )
-            .await
-            .unwrap_or_else(|error| panic!("instruction should persist: {error}"));
-        let now = chrono::Utc::now().timestamp_millis();
-        let expired = now - 90_i64 * 24 * 60 * 60 * 1000;
-        let mut observer = sqlx::SqliteConnection::connect_with(
-            &sqlx::sqlite::SqliteConnectOptions::new()
-                .filename(&path)
-                .foreign_keys(true)
-                .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal),
-        )
-        .await
-        .unwrap_or_else(|error| panic!("observer should connect: {error}"));
-        for timestamp in [expired, now] {
-            sqlx::query("INSERT INTO automation_events(event_id,subject_kind,subject_id,event_kind,event_body_json,recorded_at_ms) VALUES (?,'instruction',?,'fixture','{}',?)")
-                .bind(EventId::generate().as_str())
-                .bind(instruction.instruction_id.as_str())
-                .bind(timestamp)
-                .execute(&mut observer)
-                .await
-                .unwrap_or_else(|error| panic!("fixture event should persist: {error}"));
-        }
-
-        let shared_store = Arc::new(Mutex::new(store));
-        let shutdown = CancellationToken::new();
-        let task = tokio::spawn(
-            AutomationRetentionWorker::new(
-                Arc::clone(&shared_store),
-                Arc::new(runtime_primitives::SystemClock),
-            )
-            .run(shutdown.clone()),
-        );
-        tokio::time::timeout(std::time::Duration::from_secs(1), async {
-            loop {
-                let retained: Vec<i64> = sqlx::query_scalar(
-                    "SELECT recorded_at_ms FROM automation_events ORDER BY recorded_at_ms",
-                )
-                .fetch_all(&mut observer)
-                .await
-                .unwrap_or_else(|error| panic!("worker result should query: {error}"));
-                if retained == vec![now] {
-                    return;
-                }
-                tokio::task::yield_now().await;
-            }
-        })
-        .await
-        .unwrap_or_else(|_elapsed| panic!("minute worker should prune the expired event"));
-        assert_eq!(
-            shared_store
-                .lock()
-                .await
-                .read_instruction(&instruction.instruction_id)
-                .await
-                .unwrap_or_else(|error| panic!("instruction should remain readable: {error}")),
-            instruction
-        );
-
-        shutdown.cancel();
-        task.await
-            .unwrap_or_else(|error| panic!("worker should join: {error}"));
-        observer
-            .close()
-            .await
-            .unwrap_or_else(|error| panic!("observer should close: {error}"));
-        Arc::try_unwrap(shared_store)
-            .unwrap_or_else(|_| panic!("worker should release the store reference"))
-            .into_inner()
-            .close()
-            .await
-            .unwrap_or_else(|error| panic!("store should close: {error}"));
-        std::fs::remove_file(path)
-            .unwrap_or_else(|error| panic!("fixture database should remove: {error}"));
-    }
-
-    #[tokio::test]
-    async fn automation_prune_trims_one_incremental_batch_then_skips_empty_pass() {
-        let directory = tempfile::tempdir().expect("automation fixture directory");
-        let path = directory.path().join("automation.sqlite");
-        let store = AutomationStore::open(&path)
-            .await
-            .expect("automation store should open");
-        let mut observer = sqlx::SqliteConnection::connect_with(
-            &sqlx::sqlite::SqliteConnectOptions::new()
-                .filename(&path)
-                .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal),
-        )
-        .await
-        .expect("WAL observer should open");
-        let now_ms = 1_800_000_000_000_i64;
-        let expired_at_ms = now_ms - 120_i64 * 24 * 60 * 60 * 1000;
-        let old_payload = format!("{{\"payload\":\"{}\"}}", "x".repeat(8 * 1024));
-
-        let mut transaction = observer
-            .begin()
-            .await
-            .expect("fixture transaction should begin");
-        for event_index in 0..512 {
-            sqlx::query(
-                "INSERT INTO automation_events(event_id,subject_kind,subject_id,event_kind,event_body_json,recorded_at_ms) VALUES (?,'fixture','owner','fixture',?,?)",
-            )
-            .bind(format!("expired-event-{event_index}"))
-            .bind(&old_payload)
-            .bind(expired_at_ms)
-            .execute(&mut *transaction)
-            .await
-            .expect("expired event fixture should insert");
-        }
-        sqlx::query(
-            "INSERT INTO automation_events(event_id,subject_kind,subject_id,event_kind,event_body_json,recorded_at_ms) VALUES ('retained-event','fixture','owner','fixture','{}',?)",
-        )
-        .bind(now_ms)
-        .execute(&mut *transaction)
-        .await
-        .expect("retained event fixture should insert");
-        transaction
-            .commit()
-            .await
-            .expect("fixture transaction should commit");
-
-        let before_pages: i64 = sqlx::query_scalar("PRAGMA page_count")
-            .fetch_one(&mut observer)
-            .await
-            .expect("page count should be readable before pruning");
-        let before_freelist: i64 = sqlx::query_scalar("PRAGMA freelist_count")
-            .fetch_one(&mut observer)
-            .await
-            .expect("freelist should be readable before pruning");
-        assert_eq!(before_freelist, 0);
-
-        let shared_store = Arc::new(Mutex::new(store));
-        let removed = AutomationRetentionWorker::new(
-            Arc::clone(&shared_store),
-            Arc::new(runtime_primitives::SystemClock),
-        )
-        .prune_batch(now_ms)
-        .await
-        .expect("automation prune batch should complete");
-        let after_pages: i64 = sqlx::query_scalar("PRAGMA page_count")
-            .fetch_one(&mut observer)
-            .await
-            .expect("page count should be readable after pruning");
-        let after_freelist: i64 = sqlx::query_scalar("PRAGMA freelist_count")
-            .fetch_one(&mut observer)
-            .await
-            .expect("freelist should be readable after pruning");
-        let retained_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM automation_events WHERE event_id='retained-event'",
-        )
-        .fetch_one(&mut observer)
-        .await
-        .expect("retained event should be readable");
-
-        assert_eq!(removed, 512);
-        assert_eq!(retained_count, 1);
-        assert!((1..=64).contains(&(before_pages - after_pages)));
-        assert!(after_freelist > 0);
-
-        assert_eq!(
-            AutomationRetentionWorker::new(
-                Arc::clone(&shared_store),
-                Arc::new(runtime_primitives::SystemClock)
-            )
-            .prune_batch(now_ms)
-            .await
-            .expect("empty automation prune batch should complete"),
-            0
-        );
-        let after_empty_pass_pages: i64 = sqlx::query_scalar("PRAGMA page_count")
-            .fetch_one(&mut observer)
-            .await
-            .expect("page count should be readable after empty pass");
-        assert_eq!(after_empty_pass_pages, after_pages);
-
-        observer.close().await.expect("WAL observer should close");
-        Arc::try_unwrap(shared_store)
-            .unwrap_or_else(|_| panic!("retention worker should release automation store"))
-            .into_inner()
-            .close()
-            .await
-            .expect("automation store should close");
-    }
-
-    fn session(endpoint_id: &str, session_id: &str) -> SessionRef {
-        SessionRef {
-            endpoint: EndpointRef {
-                service_id: UuidIdentity::try_from(
-                    "018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned(),
-                )
-                .expect("service id"),
-                endpoint_id: EndpointId::try_from(endpoint_id.to_owned()).expect("endpoint id"),
-            },
-            session_id: SessionId::try_from(session_id.to_owned()).expect("session id"),
-        }
-    }
-
-    fn expired_push(now_ms: i64) -> PushRecordDraft {
-        let sender = session("claude-local", "sender");
-        let created_at = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)
-            .expect("valid retention clock")
-            .checked_sub_months(chrono::Months::new(2))
-            .expect("valid calendar cutoff")
-            - chrono::Duration::milliseconds(1);
-        PushRecordDraft {
-            mode: Some(collaboration_protocol::MessageDelivery::Auto),
-            guard: None,
-            push_id: PushId::try_from(uuid::Uuid::now_v7().to_string()).expect("UUIDv7 push id"),
-            kind: PushKind::DirectMessage,
-            origin: PushOrigin::Session(sender),
-            origin_router_ref: None,
-            target: session("codex-local", "target"),
-            reply_to_push_id: None,
-            header_facts: PushHeaderFacts::DirectMessage {
-                sender_display_name: None,
-            },
-            body: Some("expired push body".to_owned()),
-            activity: None,
-            created_at,
-        }
-    }
-
-    #[tokio::test]
-    async fn retention_worker_prunes_expired_push_records() {
-        let directory = tempfile::tempdir().expect("retention fixture");
-        let path = directory.path().join("automation.sqlite");
-        let interaction_path = directory.path().join("interaction.sqlite");
-        let store = AutomationStore::open(&path)
-            .await
-            .expect("automation store");
-        let interactions = Arc::new(
-            interaction_storage::InteractionStore::open(&interaction_path)
-                .await
-                .expect("native push owner"),
-        );
-        let now_ms = chrono::Utc::now().timestamp_millis();
-        let draft = expired_push(now_ms);
-        let push_id = draft.push_id.clone();
-        interactions
-            .insert_push_record(draft)
-            .await
-            .expect("insert expired push");
-        let mut interaction_writer =
-            TursoConnection::connect_with(&TursoConnectOptions::new().filename(&interaction_path))
-                .await
-                .expect("interaction fixture writer");
-        sqlx::query::<sqlx_turso::Turso>(
-            "UPDATE router_pushes SET delivery_state='delivered' WHERE push_id=?",
-        )
-        .bind(push_id.as_str())
-        .execute(&mut interaction_writer)
-        .await
-        .expect("old fixture push is terminal");
-        interaction_writer
-            .close()
-            .await
-            .expect("close fixture writer");
-        let shared_store = Arc::new(Mutex::new(store));
-        assert_eq!(
-            AutomationRetentionWorker::new(
-                shared_store.clone(),
-                Arc::new(runtime_primitives::SystemClock)
-            )
-            .with_native_push_store(interactions.clone())
-            .prune_batch(now_ms)
-            .await
-            .expect("bounded retention"),
-            1
-        );
-        assert!(
-            interactions
-                .get_push_record(&push_id)
-                .await
-                .expect("read pruned push")
-                .is_none()
-        );
-        Arc::try_unwrap(shared_store)
-            .unwrap_or_else(|_| panic!("retained automation owner"))
-            .into_inner()
-            .close()
-            .await
-            .expect("close automation");
-        Arc::try_unwrap(interactions)
-            .unwrap_or_else(|_| panic!("retained native owner"))
-            .close()
-            .await
-            .expect("close native owner");
-    }
-
-    #[tokio::test]
-    async fn failed_push_prune_does_not_stop_expired_event_pruning() {
-        let directory = tempfile::tempdir().expect("retention fixture");
-        let path = directory.path().join("automation.sqlite");
-        let store = AutomationStore::open(&path)
-            .await
-            .expect("automation store");
-        let interactions = Arc::new(
-            interaction_storage::InteractionStore::open(
-                directory.path().join("interaction.sqlite"),
-            )
-            .await
-            .expect("native push owner"),
-        );
-        let now_ms = chrono::Utc::now().timestamp_millis();
-        let draft = expired_push(now_ms);
-        let push_id = draft.push_id.clone();
-        interactions
-            .insert_push_record(draft)
-            .await
-            .expect("insert expired push");
-        let mut observer = sqlx::SqliteConnection::connect_with(
-            &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
-        )
-        .await
-        .expect("automation observer");
-        sqlx::query("INSERT INTO automation_events(event_id,subject_kind,subject_id,event_kind,event_body_json,recorded_at_ms) VALUES (?,'run','fixture','fixture','{}',?)")
-            .bind(EventId::generate().as_str()).bind(now_ms - 90_i64 * 24 * 60 * 60 * 1000).execute(&mut observer).await.expect("expired event");
-        observer.close().await.expect("close observer");
-        native_retention_faults::execute(interactions.clone(), "CREATE TRIGGER fail_push_prune BEFORE DELETE ON router_pushes BEGIN SELECT RAISE(FAIL, 'push prune failure'); END", None).await.expect("native push fault");
-        let shared_store = Arc::new(Mutex::new(store));
-        let removed = AutomationRetentionWorker::new(
-            shared_store.clone(),
-            Arc::new(runtime_primitives::SystemClock),
-        )
-        .with_native_push_store(interactions.clone())
-        .prune_batch(now_ms)
-        .await
-        .expect("independent prune succeeds");
-        assert_eq!(removed, 1);
-        assert!(
-            interactions
-                .get_push_record(&push_id)
-                .await
-                .expect("read retained push")
-                .is_some()
-        );
-        let mut observer = sqlx::SqliteConnection::connect_with(
-            &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
-        )
-        .await
-        .expect("event observer");
-        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM automation_events")
-            .fetch_one(&mut observer)
-            .await
-            .expect("event count");
-        assert_eq!(count, 0);
-        observer.close().await.expect("close observer");
-        Arc::try_unwrap(shared_store)
-            .unwrap_or_else(|_| panic!("retained automation owner"))
-            .into_inner()
-            .close()
-            .await
-            .expect("close automation");
-        Arc::try_unwrap(interactions)
-            .unwrap_or_else(|_| panic!("retained native owner"))
-            .close()
-            .await
-            .expect("close native owner");
-    }
-}
+#[path = "automation_retention_worker/retention_schedule_tests.rs"]
+mod retention_schedule_tests;

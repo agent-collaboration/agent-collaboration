@@ -246,6 +246,12 @@ pub enum TypedInteractionDecisionOutcome {
 }
 
 impl ServiceInteractionBroker {
+    pub(crate) async fn interaction_history_prune_due(
+        &self,
+    ) -> Option<chrono::DateTime<chrono::Utc>> {
+        self.interaction_history.prune_due().await
+    }
+
     pub(crate) async fn prune_interaction_history(
         &self,
         now: chrono::DateTime<chrono::Utc>,
