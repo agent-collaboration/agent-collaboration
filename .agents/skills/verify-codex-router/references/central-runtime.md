@@ -1,5 +1,7 @@
 # Central runtime
 
+For B2 organization provisioning, central-link and person-admin verification, load [B2 central](b2-central.md) and return its declared-target observations, bundle guards and limits. Its current harness route takes precedence over the historical recipes below for those surfaces.
+
 For central-storage-reset D1, use [D1 central mail](d1-central-mail.md). Its three-Router/two-project topology and Push controls are not supplied by the historical recipes below. The partial Tokio driver has bounded intermediate observations; no final D1 or newly pinned live result is implied.
 
 This mapping is pinned to Central `ad34f727f28d1e573fd7be74e8366cf88eb382e3`. Fleet owns sessions, admission, lease state and mail outbox custody; Copy owns project storage. Legacy test/selector names and logical envelope facets may retain `registry`, but there is no separate object or store for that role. Typed Submitter and D1 mail expiry/retention await their combined pin.
