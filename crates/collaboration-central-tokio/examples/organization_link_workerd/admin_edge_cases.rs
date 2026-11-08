@@ -6,6 +6,7 @@
 //! - a changed actor on an existing operation;
 //! - a body changed under its signed intent;
 //! - an audience array without central's admin audience.
+//!
 //! Every refusal is judged with the organization's rows before and after it.
 use super::link_client::{AdminPerson, Caller};
 use super::organization_stamps::{self as stamps, NOW_SECONDS, ProofKey};
