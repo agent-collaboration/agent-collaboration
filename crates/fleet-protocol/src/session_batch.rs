@@ -1,4 +1,4 @@
-use crate::{FrameId, unit_budget::encoded_json_size};
+use crate::{FrameId, encoded_size::encoded_json_size};
 use serde::{Deserialize, Deserializer, Serialize, de::DeserializeOwned};
 
 pub const MAX_BATCH_ITEMS: usize = 32;

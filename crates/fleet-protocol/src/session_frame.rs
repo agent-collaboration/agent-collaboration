@@ -327,3 +327,22 @@ pub enum ServerFrame<P: ConsumerProtocol = NoConsumer> {
         reason: CloseReason,
     },
 }
+
+impl<P: ConsumerProtocol> BatchRequest for OperationRequest<P> {
+    fn same_request_kind(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Replication(left), Self::Replication(right)) => {
+                std::mem::discriminant(left) == std::mem::discriminant(right)
+            }
+            (Self::Lease(left), Self::Lease(right)) => {
+                std::mem::discriminant(left) == std::mem::discriminant(right)
+            }
+            (Self::Delivery(left), Self::Delivery(right)) => {
+                std::mem::discriminant(left) == std::mem::discriminant(right)
+            }
+            (Self::Consumer(left), Self::Consumer(right)) => P::same_request_kind(left, right),
+            (Self::NoticesApplied { .. }, Self::NoticesApplied { .. }) => true,
+            _ => false,
+        }
+    }
+}

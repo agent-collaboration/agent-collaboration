@@ -10,14 +10,10 @@ fn new_batch_and_acknowledgment_vocabulary_decodes_in_both_directions() {
         let wire = json!({"kind":kind,"value":[{
             "sendId":SEND_ID,"body":{"kind":"consumer","value":null}
         }]});
-        assert!(
-            serde_json::from_value::<ClientFrame>(wire.clone()).is_ok(),
-            "{wire}"
-        );
-        assert!(
-            serde_json::from_value::<ServerFrame>(wire.clone()).is_ok(),
-            "{wire}"
-        );
+        let client: ClientFrame = serde_json::from_value(wire.clone()).unwrap();
+        let server: ServerFrame = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(client).unwrap(), wire);
+        assert_eq!(serde_json::to_value(server).unwrap(), wire);
     }
     for kind in ["request", "answer"] {
         let wire = json!({"kind":kind,"value":{
@@ -114,6 +110,22 @@ fn answer_batches_preserve_order_ids_and_independent_outcomes() {
     ]});
     let decoded: ServerFrame = serde_json::from_value(wire.clone()).unwrap();
     assert_eq!(serde_json::to_value(decoded).unwrap(), wire);
+}
+
+#[test]
+fn capability_fields_are_optional_and_their_contents_stay_strict() {
+    let hello = json!({"kind":"hello","value":{
+        "sessionId":SEND_ID,"schemaSupport":{"maxVersion":1},
+        "capabilities":{"batches":true,"noticesApplied":false}
+    }});
+    let frame: ClientFrame = serde_json::from_value(hello.clone()).unwrap();
+    assert_eq!(serde_json::to_value(frame).unwrap(), hello);
+    let mut extra = hello.clone();
+    extra["value"]["capabilities"]["unknownFeature"] = json!(true);
+    assert!(serde_json::from_value::<ClientFrame>(extra).is_err());
+    let mut invalid = hello;
+    invalid["value"]["capabilities"]["batches"] = json!("yes");
+    assert!(serde_json::from_value::<ClientFrame>(invalid).is_err());
 }
 
 #[test]

@@ -4,7 +4,6 @@
 //! Operation identities belong to their owners; frame IDs only correlate replies.
 
 mod actor_reference;
-mod batch_request_kind;
 mod copy_failure;
 mod crate_call_frame;
 mod delivery_binding;
