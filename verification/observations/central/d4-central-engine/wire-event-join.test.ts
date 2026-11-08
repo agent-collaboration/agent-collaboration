@@ -159,11 +159,36 @@ test("same-item status destinations remain distinct attempt slots in a real enco
   assert.equal(replayWindowBytes(result.trace).window.peak, 2);
 });
 
+test("decoded slice-2b unbound sends never supply owed-window metadata", (): void => {
+  const payload = Buffer.from(encode({ kind: "requestBatch", value: [publication(2)] }));
+  const event = source(payload, [{ send: 2, subject: 100, attempt: 200, index: 0, items: 1 }]);
+  const unbound = d4EventRecordSchema.parse({
+    ...event,
+    sends: [
+      {
+        attempt: null,
+        attemptKind: null,
+        subject: null,
+        sendId: null,
+        connection: connection.connection,
+        session: null,
+        requestKind: "requestBatch",
+        sentVersion: null,
+        batch: null,
+        frame: payload.toString("base64"),
+      },
+    ],
+  });
+  assert.throws((): void => {
+    joinWireEvents({ trace: data(payload), events: [unbound], connections: [connection] });
+  }, /invalid Session/);
+});
+
 test("missing/foreign S1 identity, payload changes or invalid batch metadata cannot be guessed away", (): void => {
   const payload = Buffer.from(encode({ kind: "requestBatch", value: [publication(2)] }));
   const event = source(payload, [{ send: 2, subject: 100, attempt: 200, index: 0, items: 1 }]);
   const send = event.sends[0];
-  assert.ok(send);
+  assert.ok(send && send.attempt !== null);
   for (const sends of [
     [],
     [{ ...send, connection: identity(99) }],

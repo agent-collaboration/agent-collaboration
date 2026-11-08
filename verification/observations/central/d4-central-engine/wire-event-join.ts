@@ -27,7 +27,7 @@ interface AuditedConnection {
   readonly clientId: number;
 }
 interface SourceSend {
-  readonly source: D4EventRecord["sends"][number];
+  readonly source: Extract<D4EventRecord["sends"][number], { attempt: string }>;
   readonly binding: OwedSendBinding;
   readonly payload: Buffer;
 }
@@ -110,6 +110,9 @@ function collectSourceSends(
   const sourceSends = new Map<string, SourceSend>();
   for (const event of events) {
     for (const send of event.sends) {
+      // Slice 2b retains raw sends with all owed identifiers explicitly null.
+      // Their bytes are observable, but cannot supply an owed-window binding.
+      if (send.attempt === null) continue;
       if (
         !platformConnections.has(send.connection) ||
         !["push", "publishStatus"].includes(send.requestKind)

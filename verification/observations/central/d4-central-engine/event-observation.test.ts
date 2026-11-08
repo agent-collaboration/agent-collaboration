@@ -34,7 +34,11 @@ function eventRecord(sequence = 0n, construction = 1, event = 100): D4EventRecor
         outcome: "answered",
       },
     ],
-    alarm: { before: 1792281600000n, after: null, writes: [{ op: "exact", at: null }] },
+    alarm: {
+      before: 1792281600000n,
+      after: null,
+      writes: [{ op: "exact", at: null, unitKind: "recompute" }],
+    },
     batch: null,
     reply: { kind: "alarmDone" },
   });
@@ -65,6 +69,76 @@ test("literal S1 JSON integers remain exact above 2^53 and copy addresses use ac
   });
   assert.throws((): void => {
     parseD4StderrLine('{"centralUnknown":{}}');
+  });
+});
+
+test("v3.4 retains literal unbound slice-2b fields without granting due-unit or owed bindings", (): void => {
+  const unbound = {
+    attempt: null,
+    attemptKind: null,
+    subject: null,
+    sendId: null,
+    connection: identity(10),
+    session: null,
+    requestKind: "welcome",
+    sentVersion: null,
+    batch: null,
+    frame: "e30=",
+  };
+  const input = {
+    ...eventRecord(),
+    units: [{ unitKind: "handler", subject: null, outcome: { kind: "done" } }],
+    calls: [
+      {
+        to: { kind: "copy", value: identity(5) },
+        callKind: "central.directory-summary",
+        unitKind: "handler",
+        subject: null,
+        outcome: "answered",
+      },
+    ],
+    sends: [unbound],
+    batch: { claimed: false, startedAt: null, endedAt: null, sources: [] },
+  };
+  const parsed = d4EventRecordSchema.parse(input);
+  assert.equal(parsed.sends[0]?.attempt, null);
+  assert.equal(parsed.calls[0]?.subject, null);
+  assert.throws(
+    (): void => requireAlarmCallsFromDueUnits(parsed, new Set(["handler:null"])),
+    /no bound/,
+  );
+  assert.equal(
+    d4EventRecordSchema.parse({ ...input, event: { kind: "call", callKind: null } }).event.kind,
+    "call",
+  );
+  const unknownCall = d4EventRecordSchema.parse({
+    ...input,
+    reply: { kind: "socketFailed" },
+    calls: [{ ...input.calls[0], callKind: null, unitKind: null }],
+  });
+  assert.equal(unknownCall.reply.kind, "socketFailed");
+  assert.equal(unknownCall.calls[0]?.callKind, null);
+  assert.throws(
+    (): void => requireAlarmCallsFromDueUnits(unknownCall, new Set(["null:null"])),
+    /no bound/,
+  );
+  for (const send of [
+    { ...unbound, attempt: identity(99) },
+    { ...unbound, session: identity(99) },
+    { ...unbound, sendId: identity(99) },
+    { ...unbound, subject: undefined },
+  ])
+    assert.throws((): void => {
+      d4EventRecordSchema.parse({ ...input, sends: [send] });
+    });
+  assert.throws((): void => {
+    d4EventRecordSchema.parse({ ...input, batch: { claimed: false } });
+  });
+  assert.throws((): void => {
+    d4EventRecordSchema.parse({
+      ...input,
+      batch: { claimed: false, startedAt: 1n, endedAt: 2n, sources: [] },
+    });
   });
 });
 

@@ -1,7 +1,7 @@
 import { fixture, type ControlFixture } from "./control-fixture.ts";
-import { test } from "node:test";
+import { test, mock } from "node:test";
 import assert from "node:assert/strict";
-import { D4ControlClient } from "./control-client.ts";
+import { D4ControlClient, D4ControlFailure } from "./control-client.ts";
 
 const subject = "01900000-0000-7000-8000-000000000001";
 function client(
@@ -92,6 +92,7 @@ test("Tokio-only controls never leak onto workerd", async (): Promise<void> => {
     for (const call of [
       (): Promise<unknown> => controls.readPending(),
       (): Promise<unknown> => controls.readEvents(0n),
+      (): Promise<unknown> => controls.duplicateAlarm(),
       (): Promise<unknown> => controls.rebuildAtQuiescence(true),
       (): Promise<unknown> => controls.settleClock("2026-11-08T00:00:00Z"),
       (): Promise<unknown> => controls.barrier("beforeClaim", null),
@@ -141,6 +142,44 @@ test("wrong response tags and invalid fault data fail without implicit retries",
     await assert.rejects(client(input).armFault({ kind: "attemptsWrite" }, 0n));
     assert.equal(input.requests.length, 1);
   } finally {
+    await input.close();
+  }
+});
+
+test("v3.4 names a bounded causal-wait failure distinctly and never retries it", async (): Promise<void> => {
+  const input = await fixture([
+    new Response('"waitBoundExceeded"', {
+      status: 409,
+      headers: { "content-type": "application/json" },
+    }),
+  ]);
+  try {
+    await assert.rejects(
+      client(input).awaitBarrier(subject),
+      (error: unknown): boolean =>
+        error instanceof D4ControlFailure && error.failure === "waitBoundExceeded",
+    );
+    assert.equal(input.requests.length, 1);
+  } finally {
+    await input.close();
+  }
+});
+
+test("the control HTTP deadline leaves room for the producer's named 30-second wait failure", async (): Promise<void> => {
+  const input = await fixture([{ kind: "clockSettled", value: { alarmEvents: 0n } }]);
+  const deadline = AbortSignal.timeout.bind(AbortSignal);
+  const observed: number[] = [];
+  const observation = mock.method(AbortSignal, "timeout", (milliseconds: number): AbortSignal => {
+    observed.push(milliseconds);
+    return deadline(milliseconds);
+  });
+  try {
+    await client(input).settleClock("2026-11-08T01:00:00Z");
+    assert.ok(
+      observed.some((milliseconds): boolean => milliseconds > 30_000 && milliseconds <= 60_000),
+    );
+  } finally {
+    observation.mock.restore();
     await input.close();
   }
 });

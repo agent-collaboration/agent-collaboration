@@ -1,4 +1,4 @@
-/** Lossless S1/S4 observations from the Implementer's D4 seam contract v3.
+/** Lossless S1/S4 observations from the Implementer's D4 seam contract v3.4.
  * Draft until the corresponding product slice is declared and its real bytes qualify this reader.
  */
 import { z } from "zod";
@@ -29,7 +29,7 @@ const eventSchema = z.discriminatedUnion("kind", [
       cause: z.enum(["callback", "inventoryReconcile"]),
     })
     .strict(),
-  z.object({ kind: z.literal("call"), callKind: label }).strict(),
+  z.object({ kind: z.literal("call"), callKind: label.nullable() }).strict(),
   z
     .object({
       kind: z.literal("alarm"),
@@ -40,7 +40,7 @@ const eventSchema = z.discriminatedUnion("kind", [
 const unitSchema = z
   .object({
     unitKind: label,
-    subject: z.uuidv7(),
+    subject: z.uuidv7().nullable(),
     outcome: z.discriminatedUnion("kind", [
       z.object({ kind: z.literal("done") }).strict(),
       z.object({ kind: z.literal("deferred"), retryAt: epochMillisecondsSchema }).strict(),
@@ -56,7 +56,7 @@ const sendBatchSchema = z
   })
   .strict()
   .refine((batch): boolean => batch.index < batch.items, "batch index outside item count");
-const sendSchema = z
+const boundSendSchema = z
   .object({
     attempt: z.uuidv7(),
     attemptKind: label,
@@ -74,9 +74,30 @@ const sendSchema = z
     (send): boolean => (send.attemptKind === "status") === (send.sentVersion !== null),
     "only status sends carry sentVersion",
   );
+const unboundSendSchema = z
+  .object({
+    attempt: z.null(),
+    attemptKind: z.null(),
+    subject: z.null(),
+    sendId: z.null(),
+    connection: z.uuidv7(),
+    session: z.null(),
+    requestKind: label.nullable(),
+    sentVersion: z.null(),
+    batch: z.null(),
+    frame: exactBytes,
+  })
+  .strict();
+const sendSchema = z.union([boundSendSchema, unboundSendSchema]);
 const alarmWriteSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("lower"), at: epochMillisecondsSchema, unitKind: label }).strict(),
-  z.object({ op: z.literal("exact"), at: epochMillisecondsSchema.nullable() }).strict(),
+  z
+    .object({
+      op: z.literal("exact"),
+      at: epochMillisecondsSchema.nullable(),
+      unitKind: z.enum(["recompute", "repair"]),
+    })
+    .strict(),
 ]);
 const sourceSchema = z
   .object({
@@ -103,8 +124,14 @@ const batchSchema = z.discriminatedUnion("claimed", [
       sources: z.array(sourceSchema),
     })
     .strict(),
-  // The unclaimed case promises only the false decision; timing fields are not used as evidence.
-  z.object({ claimed: z.literal(false) }).passthrough(),
+  z
+    .object({
+      claimed: z.literal(false),
+      startedAt: z.null(),
+      endedAt: z.null(),
+      sources: z.array(sourceSchema).max(0),
+    })
+    .strict(),
 ]);
 export const d4EventRecordSchema = z
   .object({
@@ -132,9 +159,9 @@ export const d4EventRecordSchema = z
       z
         .object({
           to: d4ObjectAddressSchema,
-          callKind: label,
-          unitKind: label,
-          subject: z.uuidv7(),
+          callKind: label.nullable(),
+          unitKind: label.nullable(),
+          subject: z.uuidv7().nullable(),
           outcome: z.enum(["answered", "deadlineExceeded", "failed"]),
         })
         .strict(),
@@ -148,7 +175,16 @@ export const d4EventRecordSchema = z
       .strict(),
     batch: batchSchema.nullable(),
     reply: z
-      .object({ kind: z.enum(["none", "callAnswer", "callFailure", "alarmDone", "alarmRetry"]) })
+      .object({
+        kind: z.enum([
+          "none",
+          "socketFailed",
+          "callAnswer",
+          "callFailure",
+          "alarmDone",
+          "alarmRetry",
+        ]),
+      })
       .passthrough(),
   })
   .strict();
@@ -280,6 +316,8 @@ export function requireAlarmCallsFromDueUnits(
 ): void {
   if (record.event.kind !== "alarm") throw new Error("expected actual Alarm event");
   for (const call of record.calls) {
+    if (call.subject === null || call.unitKind === null)
+      throw new Error("Alarm call has no bound due-unit identity");
     const key = `${call.unitKind}:${call.subject}`;
     if (
       !expectedDueUnits.has(key) ||

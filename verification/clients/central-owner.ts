@@ -17,13 +17,21 @@ export class CentralOwner {
     method?: string;
     body?: unknown;
     authenticated?: boolean;
+    timeoutMilliseconds?: number;
   }): Promise<{ status: number; headers: Headers; body: unknown }> {
     if (!input.path.startsWith("/admin/v1/") || input.path.startsWith("//"))
       throw new Error("owner path outside admin routes");
     const options: RequestInit = {
       method: input.method ?? "GET",
       redirect: "error",
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(
+        z
+          .number()
+          .int()
+          .positive()
+          .max(60_000)
+          .parse(input.timeoutMilliseconds ?? 30_000),
+      ),
       headers: {
         "Content-Type": "application/json",
         "User-Agent": "codex-router-verification/1.0",

@@ -1,6 +1,14 @@
-/** Drive two actual Tokio Alarm events into distinct one-shot beforeClaim latches. */
+/** Drive two actual Tokio Frames into distinct one-shot beforeClaim latches. */
 import { D4ControlClient } from "./control-client.ts";
 import type { D4EventRecord } from "./event-observation.ts";
+import { setTimeout } from "node:timers/promises";
+import { z } from "zod";
+
+export interface ClaimFrameAction {
+  readonly connection: string;
+  readonly bytes: Buffer;
+  send(bytes: Buffer): Promise<void>;
+}
 
 export class ClaimOverlapFailure extends Error {
   readonly check: "overlapping-claim" | "no-duplicate-batch";
@@ -11,12 +19,25 @@ export class ClaimOverlapFailure extends Error {
     this.actual = actual;
   }
 }
-function requireClaimPair(events: readonly D4EventRecord[], held: readonly string[]): void {
+function requireClaimPair(
+  events: readonly D4EventRecord[],
+  held: readonly string[],
+  frames: readonly { connection: string; bytes: string }[],
+): void {
+  const expectedFrames = frames.map((frame): string => `${frame.connection}:${frame.bytes}`).sort();
+  const actualFrames = events
+    .map((record): string =>
+      record.event.kind === "frame"
+        ? `${record.event.connection}:${record.event.frame}`
+        : "not a Frame",
+    )
+    .sort();
   if (
     events.length !== 2 ||
     new Set(events.map((event): string => event.eventId)).size !== 2 ||
     held.some((id): boolean => !events.some((event): boolean => event.eventId === id)) ||
-    events.some((event): boolean => event.event.kind !== "alarm" || event.batch === null) ||
+    events.some((event): boolean => event.batch === null) ||
+    actualFrames.some((frame, index): boolean => frame !== expectedFrames[index]) ||
     new Set(events.map((event): string => event.construction)).size !== 1
   )
     throw new ClaimOverlapFailure("overlapping-claim", { events, held });
@@ -24,7 +45,43 @@ function requireClaimPair(events: readonly D4EventRecord[], held: readonly strin
     throw new ClaimOverlapFailure("no-duplicate-batch", events);
 }
 
-export async function driveTokioClaimOverlap(controls: D4ControlClient) {
+async function completedFrames(
+  controls: D4ControlClient,
+  after: bigint,
+  held: readonly string[],
+): Promise<readonly D4EventRecord[]> {
+  const deadline = performance.now() + 30_000;
+  while (performance.now() < deadline) {
+    const delta = await controls.readEvents(after);
+    if (
+      held.every((id): boolean => delta.records.some((item): boolean => item.record.eventId === id))
+    ) {
+      const pending = await controls.readPending();
+      if (Object.values(pending).every((count): boolean => count === 0n))
+        return delta.records.map((item): D4EventRecord => item.record);
+    }
+    // This is an identity-based completion observation outside any quiet case.
+    // It does not establish overlap; both held event UUIDs already established that.
+    await setTimeout(20);
+  }
+  throw new Error("held Frame events did not produce their completed S1 records");
+}
+
+export async function driveTokioClaimOverlap(input: {
+  readonly controls: D4ControlClient;
+  readonly frames: readonly [ClaimFrameAction, ClaimFrameAction];
+}) {
+  const { controls } = input;
+  const frames = input.frames.map((frame) => ({
+    connection: z.uuidv7().parse(frame.connection),
+    bytes: frame.bytes.toString("base64"),
+  }));
+  if (
+    input.frames.some(
+      (frame): boolean => frame.bytes.length === 0 || frame.bytes.length > 1024 * 1024,
+    )
+  )
+    throw new Error("bounded original Frame payloads required");
   const pending = await controls.readPending();
   if (Object.values(pending).some((count): boolean => count !== 0n))
     throw new ClaimOverlapFailure("overlapping-claim", { pending });
@@ -40,7 +97,11 @@ export async function driveTokioClaimOverlap(controls: D4ControlClient) {
     if (barriers[0] === barriers[1]) throw new Error("same latch returned twice");
     // Start both real actions, attach rejection handlers now, and keep them
     // pending while both distinct entrant identities reach their latches.
-    completion = Promise.allSettled([controls.duplicateAlarm(), controls.duplicateAlarm()]);
+    completion = Promise.allSettled(
+      input.frames.map((frame): Promise<void> =>
+        Promise.resolve().then(() => frame.send(Buffer.from(frame.bytes))),
+      ),
+    );
     const reached = await Promise.allSettled(
       barriers.map((id): Promise<string> => controls.awaitBarrier(id)),
     );
@@ -69,12 +130,8 @@ export async function driveTokioClaimOverlap(controls: D4ControlClient) {
       "J18 actions or owned latch cleanup did not settle",
     );
   if (failure !== undefined) throw failure.error;
-  const delta = await controls.readEvents(baseline.through);
-  const events = delta.records.map((item): D4EventRecord => item.record);
-  requireClaimPair(events, held);
-  const after = await controls.readPending();
-  if (Object.values(after).some((count): boolean => count !== 0n))
-    throw new ClaimOverlapFailure("overlapping-claim", { after });
+  const events = await completedFrames(controls, baseline.through, held);
+  requireClaimPair(events, held, frames);
   return {
     journey: "J18" as const,
     shell: "tokio" as const,
@@ -84,7 +141,7 @@ export async function driveTokioClaimOverlap(controls: D4ControlClient) {
     runtimeQualified: false as const,
     remainingQualification: [
       "declared target, complete producer and source-bound one-shot event latch qualification",
-      "fixture has due work, no earlier cadence claim, no automatic Alarm or unrelated input during overlap",
+      "real S9 frame adapters, due work, no earlier cadence claim and no automatic Alarm or unrelated input during overlap",
       "actual workload effect and isolated wrong-product atomic-claim sensitivity with restored positive",
       "earlier-commit and step-lower recompute interleavings are separate J18 cases",
     ],

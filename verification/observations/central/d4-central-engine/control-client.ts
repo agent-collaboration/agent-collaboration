@@ -104,6 +104,14 @@ const barrierPointSchema = z.enum([
 ]);
 export type D4BarrierPoint = z.infer<typeof barrierPointSchema>;
 
+export class D4ControlFailure extends Error {
+  readonly failure: string;
+  constructor(failure: string) {
+    super(`D4 control refused: ${failure}`);
+    this.failure = failure;
+  }
+}
+
 export class D4ControlClient {
   private readonly owner: CentralOwner;
   private readonly address: D4ObjectAddress;
@@ -135,7 +143,18 @@ export class D4ControlClient {
   }
   private async control(command: unknown): Promise<unknown> {
     if (this.passivity !== "observed") throw new Error("D4 control passivity is unqualified");
-    return this.owner.control(this.address, command);
+    const response = await this.owner.response({
+      path: "/admin/v1/conformance/runtime",
+      method: "POST",
+      body: { address: this.address, command },
+      // Producer causal waits end at 30 s. Leave bounded transport time for its
+      // named 409 response instead of aborting before it can reach this caller.
+      timeoutMilliseconds: 35_000,
+    });
+    if (response.status === 409)
+      throw new D4ControlFailure(z.string().min(1).max(256).parse(response.body));
+    if (response.status !== 200) throw new Error(`D4 control HTTP status ${response.status}`);
+    return response.body;
   }
   async readAlarm(): Promise<bigint | null> {
     return z
@@ -152,6 +171,7 @@ export class D4ControlClient {
     );
   }
   async duplicateAlarm(): Promise<void> {
+    this.requireTokio();
     doneSchema.parse(await this.control({ kind: "duplicateAlarm" }));
   }
   async settleClock(now: string): Promise<bigint> {

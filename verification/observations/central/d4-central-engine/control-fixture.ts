@@ -26,6 +26,11 @@ export async function fixture(
           ? await answers(requests.at(-1), requests.length - 1)
           : answers[requests.length - 1];
       if (answer === undefined) throw new Error("fixture received an unexpected control");
+      if (answer instanceof Response) {
+        response.writeHead(answer.status, Object.fromEntries(answer.headers));
+        response.end(await answer.text());
+        return;
+      }
       response.setHeader("content-type", "application/json");
       response.end(encode(answer));
     })().catch((error: unknown): void => {
