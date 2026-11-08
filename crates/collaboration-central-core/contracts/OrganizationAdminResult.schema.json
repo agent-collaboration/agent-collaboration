@@ -1,0 +1,256 @@
+{
+  "$defs": {
+    "AdminRefusal": {
+      "oneOf": [
+        {
+          "enum": [
+            "notPermitted",
+            "secondFactorRequired",
+            "refreshRequired",
+            "authorizationSyncRequired",
+            "expired",
+            "requestTime",
+            "requestReused"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "conflict",
+          "description": "The same operation ID arrived with a different request.",
+          "type": "string"
+        },
+        {
+          "const": "rejected",
+          "description": "The Fleet's own rules refused the change.",
+          "type": "string"
+        }
+      ]
+    },
+    "ChangeRequestId": {
+      "maxLength": 128,
+      "minLength": 1,
+      "type": "string"
+    },
+    "Description": {
+      "maxLength": 16384,
+      "minLength": 0,
+      "type": "string",
+      "x-maxUtf8Bytes": 16384
+    },
+    "OrganizationChangeKind": {
+      "enum": [
+        "organizationProvisioned",
+        "stampRenewed",
+        "workspaceCreated"
+      ],
+      "type": "string"
+    },
+    "OrganizationChangeOrigin": {
+      "description": "A sign-in-originated change carries no person or permission; none is invented.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "An empty struct variant so an unknown field is refused like any other.",
+          "properties": {
+            "kind": {
+              "const": "signInProvisioning",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "person",
+              "type": "string"
+            },
+            "permissionChecked": {
+              "type": "string"
+            },
+            "personId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "personId",
+            "permissionChecked"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "OrganizationChangeRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "createdAtMillis": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/OrganizationChangeKind"
+        },
+        "origin": {
+          "$ref": "#/$defs/OrganizationChangeOrigin"
+        },
+        "requestId": {
+          "$ref": "#/$defs/ChangeRequestId"
+        },
+        "targetId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "requestId",
+        "kind",
+        "origin",
+        "targetId",
+        "createdAtMillis"
+      ],
+      "type": "object"
+    },
+    "ResourceName": {
+      "maxLength": 256,
+      "minLength": 1,
+      "pattern": "^(?:[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000](?:[\\s\\S]*[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000])?)?$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 256
+    },
+    "WorkspaceId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "WorkspaceState": {
+      "enum": [
+        "active",
+        "archiving",
+        "archived"
+      ],
+      "type": "string"
+    },
+    "WorkspaceView": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "$ref": "#/$defs/Description"
+        },
+        "name": {
+          "$ref": "#/$defs/ResourceName"
+        },
+        "state": {
+          "$ref": "#/$defs/WorkspaceState"
+        },
+        "workspaceId": {
+          "$ref": "#/$defs/WorkspaceId"
+        }
+      },
+      "required": [
+        "workspaceId",
+        "name",
+        "description",
+        "state"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The closed body of a 200 on an admin route.",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "description": "`alreadyExisted` when this operation, or another for the same canonical\nname, had already created it; the caller sees one workspace either way.",
+      "properties": {
+        "alreadyExisted": {
+          "type": "boolean"
+        },
+        "result": {
+          "const": "applied",
+          "type": "string"
+        },
+        "workspace": {
+          "$ref": "#/$defs/WorkspaceView"
+        }
+      },
+      "required": [
+        "result",
+        "workspace",
+        "alreadyExisted"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "result": {
+          "const": "found",
+          "type": "string"
+        },
+        "workspace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkspaceView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "result",
+        "workspace"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "records": {
+          "items": {
+            "$ref": "#/$defs/OrganizationChangeRecord"
+          },
+          "type": "array"
+        },
+        "result": {
+          "const": "records",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result",
+        "records"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/AdminRefusal"
+        },
+        "result": {
+          "const": "refused",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result",
+        "reason"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "OrganizationAdminResult"
+}

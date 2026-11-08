@@ -1,13 +1,14 @@
 //! Change records are written by the transaction that makes the change.
 use crate::{fleet_row_codec, generated_organization as queries};
 use durable_steps::{StoreError, Uuid, storage::TransactionScope};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
 };
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum OrganizationChangeKind {
     OrganizationProvisioned,
@@ -34,14 +35,16 @@ impl OrganizationChangeKind {
 }
 
 /// A sign-in-originated change carries no person or permission; none is invented.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
-    rename_all_fields = "camelCase"
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
 )]
 pub enum OrganizationChangeOrigin {
-    SignInProvisioning,
+    /// An empty struct variant so an unknown field is refused like any other.
+    SignInProvisioning {},
     Person {
         person_id: String,
         permission_checked: String,
@@ -70,6 +73,15 @@ impl From<ChangeRequestId> for String {
         value.0
     }
 }
+impl JsonSchema for ChangeRequestId {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "ChangeRequestId".into()
+    }
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({"type":"string","minLength":1,"maxLength":128})
+    }
+}
+
 impl ChangeRequestId {
     #[must_use]
     pub fn as_str(&self) -> &str {
@@ -77,9 +89,10 @@ impl ChangeRequestId {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct OrganizationChangeRecord {
+    #[schemars(with = "String", extend("format" = "uuid"))]
     pub id: Uuid,
     pub request_id: ChangeRequestId,
     pub kind: OrganizationChangeKind,
@@ -99,7 +112,7 @@ where
 {
     fleet_row_codec::check_private_id(&record.id.to_string(), "organization_change_records.id")?;
     let (origin, person, permission) = match &record.origin {
-        OrganizationChangeOrigin::SignInProvisioning => ("signInProvisioning", None, None),
+        OrganizationChangeOrigin::SignInProvisioning {} => ("signInProvisioning", None, None),
         OrganizationChangeOrigin::Person {
             person_id,
             permission_checked,
@@ -209,7 +222,7 @@ fn decode(columns: StoredColumns) -> Result<OrganizationChangeRecord, StoreError
     let person = optional_text(columns.actor_person_id, "actor_person_id")?;
     let permission = optional_text(columns.permission_checked, "permission_checked")?;
     let origin = match (text(columns.origin, "origin")?.as_str(), person, permission) {
-        ("signInProvisioning", None, None) => OrganizationChangeOrigin::SignInProvisioning,
+        ("signInProvisioning", None, None) => OrganizationChangeOrigin::SignInProvisioning {},
         ("person", Some(person_id), Some(permission_checked))
             if !person_id.is_empty() && !permission_checked.is_empty() =>
         {

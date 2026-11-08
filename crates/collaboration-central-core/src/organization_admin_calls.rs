@@ -28,6 +28,7 @@ use message_board::{
     RequestDecision, RequestId, ResourceName, WorkspaceId, WorkspaceState,
 };
 use runtime_primitives::Clock;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -43,23 +44,33 @@ impl CallTarget for FleetOrganizationAdmin {
     type Answer = OrganizationAdminAnswer;
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorkspaceView {
     pub workspace_id: WorkspaceId,
-    pub name: String,
-    pub description: String,
+    pub name: ResourceName,
+    pub description: Description,
     pub state: WorkspaceState,
 }
 
-/// Closed answers; a verification failure is `Unauthenticated` and reveals nothing.
+/// The Fleet object's answer to the link: a published result, or a
+/// verification failure the link turns into a bare 401 that reveals nothing.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum OrganizationAdminAnswer {
+    Answered(OrganizationAdminResult),
+    Unauthenticated,
+}
+
+/// The closed body of a 200 on an admin route.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(
     tag = "result",
     rename_all = "camelCase",
-    rename_all_fields = "camelCase"
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
 )]
-pub enum OrganizationAdminAnswer {
+pub enum OrganizationAdminResult {
     /// `alreadyExisted` when this operation, or another for the same canonical
     /// name, had already created it; the caller sees one workspace either way.
     Applied {
@@ -75,10 +86,9 @@ pub enum OrganizationAdminAnswer {
     Refused {
         reason: AdminRefusal,
     },
-    Unauthenticated,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum AdminRefusal {
     NotPermitted,
@@ -194,7 +204,7 @@ where
             })
             .await
             .map_err(|_| CallFailure::AnswerLost)?;
-        encode(answer)
+        encode(OrganizationAdminAnswer::Answered(answer))
     }
 }
 
@@ -217,7 +227,7 @@ where
     for<'value> Option<String>: Type<Driver> + Decode<'value, Driver> + Encode<'value, Driver>,
     for<'row> &'row str: ColumnIndex<Driver::Row>,
 {
-    type Output = OrganizationAdminAnswer;
+    type Output = OrganizationAdminResult;
     type Effect = Infallible;
     fn run<'scope, 'transaction>(
         self,
@@ -229,7 +239,7 @@ where
             let now_ms = self.clock.now().unix_millis();
             if let Err(refusal) = admit_person_request(scope, &self.request, now_ms).await? {
                 return Ok((
-                    OrganizationAdminAnswer::Refused {
+                    OrganizationAdminResult::Refused {
                         reason: refusal.into(),
                     },
                     Vec::new(),
@@ -248,11 +258,11 @@ where
                     )
                     .await?
                 }
-                AdminOperation::WorkspaceLookup(lookup) => OrganizationAdminAnswer::Found {
+                AdminOperation::WorkspaceLookup(lookup) => OrganizationAdminResult::Found {
                     workspace: read_workspace(scope, &lookup.workspace_id).await?,
                 },
-                AdminOperation::ReadChangeRecords(page) => OrganizationAdminAnswer::Records {
-                    records: change_records::read_page(scope, page.after, page.limit).await?,
+                AdminOperation::ReadChangeRecords(page) => OrganizationAdminResult::Records {
+                    records: change_records::read_page(scope, page.after, page.limit.get()).await?,
                 },
             };
             Ok((answer, Vec::new()))
@@ -268,7 +278,7 @@ async fn create_workspace<Store, Driver>(
     now_ms: i64,
     row_ids: crate::fleet_row_ids::FleetRowIds,
     record_id: durable_steps::Uuid,
-) -> Result<OrganizationAdminAnswer, StoreError>
+) -> Result<OrganizationAdminResult, StoreError>
 where
     Store: AtomicStore,
     Driver: Database,
@@ -296,7 +306,7 @@ where
         acting_for: None,
         protocol_version: ProtocolVersion::CURRENT,
         operation: FleetOperation::WorkspaceCreate {
-            name: ResourceName::try_from(create.name.clone()).map_err(invalid)?,
+            name: create.name.resource_name().clone(),
             description: Description::try_from(create.description.clone()).map_err(invalid)?,
         },
     };
@@ -315,12 +325,12 @@ where
     .await?;
     let existing = match decided {
         FleetRequestResult::ConflictingRequest => {
-            return Ok(OrganizationAdminAnswer::Refused {
+            return Ok(OrganizationAdminResult::Refused {
                 reason: AdminRefusal::Conflict,
             });
         }
         FleetRequestResult::CallerNotEnrolled => {
-            return Ok(OrganizationAdminAnswer::Refused {
+            return Ok(OrganizationAdminResult::Refused {
                 reason: AdminRefusal::Rejected,
             });
         }
@@ -337,7 +347,7 @@ where
             }) {
                 Some(id) => WorkspaceId::try_from(String::from(id)).map_err(invalid)?,
                 None => {
-                    return Ok(OrganizationAdminAnswer::Refused {
+                    return Ok(OrganizationAdminResult::Refused {
                         reason: AdminRefusal::Rejected,
                     });
                 }
@@ -369,7 +379,7 @@ where
         )
         .await?;
     }
-    Ok(OrganizationAdminAnswer::Applied {
+    Ok(OrganizationAdminResult::Applied {
         workspace,
         already_existed: !created_here,
     })
@@ -395,8 +405,8 @@ where
     };
     Ok(Some(WorkspaceView {
         workspace_id: workspace.workspace_id,
-        name: workspace.name.as_str().to_owned(),
-        description: workspace.description.as_str().to_owned(),
+        name: workspace.name,
+        description: workspace.description,
         state: workspace.state,
     }))
 }

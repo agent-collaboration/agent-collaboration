@@ -1,0 +1,41 @@
+{
+  "$defs": {
+    "OrganizationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "RecordPageLimit": {
+      "maximum": 100,
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "after": {
+      "default": null,
+      "description": "The last record ID of the previous page; absent or null for the first.",
+      "format": "uuid",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "limit": {
+      "$ref": "#/$defs/RecordPageLimit"
+    },
+    "organizationId": {
+      "$ref": "#/$defs/OrganizationId"
+    }
+  },
+  "required": [
+    "organizationId",
+    "after",
+    "limit"
+  ],
+  "title": "ReadChangeRecordsRequest",
+  "type": "object"
+}

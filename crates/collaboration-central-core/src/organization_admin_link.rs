@@ -74,7 +74,9 @@ async fn forward<Platform: CentralPlatform>(
     };
     match call(platform.as_ref(), organization_id, input).await {
         Ok(OrganizationAdminAnswer::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
-        Ok(answer) => (StatusCode::OK, axum::Json(answer)).into_response(),
+        Ok(OrganizationAdminAnswer::Answered(result)) => {
+            (StatusCode::OK, axum::Json(result)).into_response()
+        }
         Err(_) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
     }
 }

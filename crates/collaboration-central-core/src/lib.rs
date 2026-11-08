@@ -17,7 +17,8 @@ pub use organization_records_observation::{
 };
 mod organization_admin_calls;
 pub use organization_admin_calls::{
-    AdminRefusal, FleetOrganizationAdmin, OrganizationAdminAnswer, WorkspaceView,
+    AdminRefusal, FleetOrganizationAdmin, OrganizationAdminAnswer, OrganizationAdminResult,
+    WorkspaceView,
 };
 mod organization_provisioning_calls;
 pub use organization_provisioning_calls::{

@@ -156,7 +156,7 @@ where
             id: input.record_id,
             request_id: request_id.try_into()?,
             kind,
-            origin: OrganizationChangeOrigin::SignInProvisioning,
+            origin: OrganizationChangeOrigin::SignInProvisioning {},
             target_id: organization.as_str().to_owned(),
             created_at_millis: input.now_millis,
         },

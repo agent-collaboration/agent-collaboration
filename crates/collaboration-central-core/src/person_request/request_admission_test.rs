@@ -100,7 +100,7 @@ fn create() -> VerifiedPersonRequest {
                 .to_owned()
                 .try_into()
                 .unwrap(),
-            name: "research".into(),
+            name: String::from("research").try_into().unwrap(),
             description: String::new(),
         }),
     }

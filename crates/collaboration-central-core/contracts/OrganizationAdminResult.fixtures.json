@@ -1,0 +1,15 @@
+[
+{"alreadyExisted":false,"result":"applied","workspace":{"description":"","name":"research","state":"active","workspaceId":"019a3dce-2000-7000-8000-0000000000a1"}},
+{"result":"found","workspace":{"description":"","name":"research","state":"active","workspaceId":"019a3dce-2000-7000-8000-0000000000a1"}},
+{"result":"found","workspace":null},
+{"records":[{"createdAtMillis":1800000000000,"id":"019a3dce-2000-7000-8000-0000000000c1","kind":"organizationProvisioned","origin":{"kind":"signInProvisioning"},"requestId":"019a3dce-2000-7000-8000-0000000000c2","targetId":"019a3dce-2000-7000-8000-000000000001"},{"createdAtMillis":1800000000001,"id":"019a3dce-2000-7000-8000-0000000000c3","kind":"workspaceCreated","origin":{"kind":"person","permissionChecked":"workspace:create","personId":"019a3dce-2000-7000-8000-000000000002"},"requestId":"019a3dce-2000-7000-8000-0000000000a1","targetId":"019a3dce-2000-7000-8000-0000000000a1"}],"result":"records"},
+{"reason":"notPermitted","result":"refused"},
+{"reason":"secondFactorRequired","result":"refused"},
+{"reason":"refreshRequired","result":"refused"},
+{"reason":"authorizationSyncRequired","result":"refused"},
+{"reason":"expired","result":"refused"},
+{"reason":"requestTime","result":"refused"},
+{"reason":"requestReused","result":"refused"},
+{"reason":"conflict","result":"refused"},
+{"reason":"rejected","result":"refused"}
+]

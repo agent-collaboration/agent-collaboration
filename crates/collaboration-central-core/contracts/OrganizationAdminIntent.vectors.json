@@ -1,0 +1,117 @@
+{
+  "oracle": "independent: JSON.stringify with recursively sorted keys (RFC 8785 for these closed shapes), SHA-256, base64url",
+  "vectors": [
+    {
+      "name": "createWorkspaceNonAscii",
+      "route": "createWorkspace",
+      "path": "/organization-admin/v1/create-workspace",
+      "body": {
+        "organizationId": "019a3dce-2000-7000-8000-000000000001",
+        "operationId": "019a3dce-2000-7000-8000-0000000000a1",
+        "name": "Café 研究 🚀",
+        "description": ""
+      },
+      "intent": {
+        "v": 1,
+        "operation": "CreateWorkspace",
+        "organization": "019a3dce-2000-7000-8000-000000000001",
+        "target": "019a3dce-2000-7000-8000-000000000001",
+        "operationId": "019a3dce-2000-7000-8000-0000000000a1",
+        "params": {
+          "name": "Café 研究 🚀",
+          "description": ""
+        }
+      },
+      "jcs": "{\"operation\":\"CreateWorkspace\",\"operationId\":\"019a3dce-2000-7000-8000-0000000000a1\",\"organization\":\"019a3dce-2000-7000-8000-000000000001\",\"params\":{\"description\":\"\",\"name\":\"Café 研究 🚀\"},\"target\":\"019a3dce-2000-7000-8000-000000000001\",\"v\":1}",
+      "intentDigest": "9iDp_ZADC9oucWfCQw9BSTCo5SSb75w1ZT6LVewslGI"
+    },
+    {
+      "name": "createWorkspaceEscapes",
+      "route": "createWorkspace",
+      "path": "/organization-admin/v1/create-workspace",
+      "body": {
+        "organizationId": "019a3dce-2000-7000-8000-000000000001",
+        "operationId": "019a3dce-2000-7000-8000-0000000000a2",
+        "name": "quote \" back \\ slash",
+        "description": "tab\tline\nbell\u0007unit\u001fdel"
+      },
+      "intent": {
+        "v": 1,
+        "operation": "CreateWorkspace",
+        "organization": "019a3dce-2000-7000-8000-000000000001",
+        "target": "019a3dce-2000-7000-8000-000000000001",
+        "operationId": "019a3dce-2000-7000-8000-0000000000a2",
+        "params": {
+          "name": "quote \" back \\ slash",
+          "description": "tab\tline\nbell\u0007unit\u001fdel"
+        }
+      },
+      "jcs": "{\"operation\":\"CreateWorkspace\",\"operationId\":\"019a3dce-2000-7000-8000-0000000000a2\",\"organization\":\"019a3dce-2000-7000-8000-000000000001\",\"params\":{\"description\":\"tab\\tline\\nbell\\u0007unit\\u001fdel\",\"name\":\"quote \\\" back \\\\ slash\"},\"target\":\"019a3dce-2000-7000-8000-000000000001\",\"v\":1}",
+      "intentDigest": "-WZZjbySlhepa3UFqeFvZofCbTIi3hngJdf9aY2pl7k"
+    },
+    {
+      "name": "workspaceLookup",
+      "route": "workspaceLookup",
+      "path": "/organization-admin/v1/workspace-lookup",
+      "body": {
+        "organizationId": "019a3dce-2000-7000-8000-000000000001",
+        "workspaceId": "019a3dce-2000-7000-8000-0000000000a1"
+      },
+      "intent": {
+        "v": 1,
+        "operation": "WorkspaceLookup",
+        "organization": "019a3dce-2000-7000-8000-000000000001",
+        "target": "019a3dce-2000-7000-8000-0000000000a1",
+        "operationId": null,
+        "params": {}
+      },
+      "jcs": "{\"operation\":\"WorkspaceLookup\",\"operationId\":null,\"organization\":\"019a3dce-2000-7000-8000-000000000001\",\"params\":{},\"target\":\"019a3dce-2000-7000-8000-0000000000a1\",\"v\":1}",
+      "intentDigest": "UyMCuxGuY_q85rCekTqoq9aMPP5CTBVQXr-xdoGtgWE"
+    },
+    {
+      "name": "readChangeRecordsFirstPage",
+      "route": "readChangeRecords",
+      "path": "/organization-admin/v1/change-records",
+      "body": {
+        "organizationId": "019a3dce-2000-7000-8000-000000000001",
+        "limit": 100
+      },
+      "intent": {
+        "v": 1,
+        "operation": "ReadChangeRecords",
+        "organization": "019a3dce-2000-7000-8000-000000000001",
+        "target": "019a3dce-2000-7000-8000-000000000001",
+        "operationId": null,
+        "params": {
+          "after": null,
+          "limit": 100
+        }
+      },
+      "jcs": "{\"operation\":\"ReadChangeRecords\",\"operationId\":null,\"organization\":\"019a3dce-2000-7000-8000-000000000001\",\"params\":{\"after\":null,\"limit\":100},\"target\":\"019a3dce-2000-7000-8000-000000000001\",\"v\":1}",
+      "intentDigest": "XETP34uEO_pezXft41G35ZSv5Zy9xpqTaNLv3sjXZlw"
+    },
+    {
+      "name": "readChangeRecordsAfter",
+      "route": "readChangeRecords",
+      "path": "/organization-admin/v1/change-records",
+      "body": {
+        "organizationId": "019a3dce-2000-7000-8000-000000000001",
+        "after": "019a3dce-2000-7000-8000-0000000000b1",
+        "limit": 1
+      },
+      "intent": {
+        "v": 1,
+        "operation": "ReadChangeRecords",
+        "organization": "019a3dce-2000-7000-8000-000000000001",
+        "target": "019a3dce-2000-7000-8000-000000000001",
+        "operationId": null,
+        "params": {
+          "after": "019a3dce-2000-7000-8000-0000000000b1",
+          "limit": 1
+        }
+      },
+      "jcs": "{\"operation\":\"ReadChangeRecords\",\"operationId\":null,\"organization\":\"019a3dce-2000-7000-8000-000000000001\",\"params\":{\"after\":\"019a3dce-2000-7000-8000-0000000000b1\",\"limit\":1},\"target\":\"019a3dce-2000-7000-8000-000000000001\",\"v\":1}",
+      "intentDigest": "pkvvNS0Tgo5CvJCrT70-5r-CQECc9Z75km0vjgl-o9Q"
+    }
+  ]
+}

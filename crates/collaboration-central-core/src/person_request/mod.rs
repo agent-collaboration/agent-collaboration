@@ -10,7 +10,7 @@ mod request_verifier;
 
 pub use admin_operations::{
     AdminOperation, AdminOperationId, AdminRoute, CreateWorkspaceRequest, ReadChangeRecordsRequest,
-    WorkspaceLookupRequest,
+    RecordPageLimit, WorkspaceLookupRequest, WorkspaceName,
 };
 pub(crate) use floor_delivery::{FloorDelivery, deliver as deliver_floor};
 pub use refusal::PersonRequestRefusal;

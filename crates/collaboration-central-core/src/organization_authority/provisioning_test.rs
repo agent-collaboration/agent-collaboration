@@ -153,7 +153,10 @@ async fn organization_provisioning_stamps_once_and_a_repeat_writes_nothing() {
     .unwrap()
     .unwrap();
     assert_eq!(found.kind, OrganizationChangeKind::OrganizationProvisioned);
-    assert_eq!(found.origin, OrganizationChangeOrigin::SignInProvisioning);
+    assert_eq!(
+        found.origin,
+        OrganizationChangeOrigin::SignInProvisioning {}
+    );
 }
 
 #[tokio::test(start_paused = true)]

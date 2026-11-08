@@ -4,6 +4,7 @@
 use super::compact_jwt::sha256_url;
 use super::refusal::PersonRequestRefusal;
 use fleet_identity_protocol::OrganizationId;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -24,6 +25,15 @@ impl From<AdminOperationId> for String {
         value.0
     }
 }
+impl JsonSchema for AdminOperationId {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "AdminOperationId".into()
+    }
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({"type":"string",
+            "pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"})
+    }
+}
 impl AdminOperationId {
     #[must_use]
     pub fn as_str(&self) -> &str {
@@ -31,33 +41,109 @@ impl AdminOperationId {
     }
 }
 
-pub const MAXIMUM_NAME_BYTES: usize = 256;
 pub const MAXIMUM_DESCRIPTION_BYTES: usize = 2048;
 pub const MAXIMUM_RECORD_PAGE: u16 = 100;
 
+/// A workspace name exactly as the Fleet stores it: the Fleet's own
+/// `ResourceName` rules, but a name that would be trimmed is refused rather
+/// than rewritten, so the signed intent hashes the stored name.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct WorkspaceName(message_board::ResourceName);
+impl TryFrom<String> for WorkspaceName {
+    type Error = PersonRequestRefusal;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let name = message_board::ResourceName::try_from(value.clone())
+            .map_err(|_| PersonRequestRefusal::OperationBody)?;
+        if name.as_str() != value {
+            return Err(PersonRequestRefusal::OperationBody);
+        }
+        Ok(Self(name))
+    }
+}
+impl From<WorkspaceName> for String {
+    fn from(value: WorkspaceName) -> Self {
+        value.0.into()
+    }
+}
+impl WorkspaceName {
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+    #[must_use]
+    pub fn resource_name(&self) -> &message_board::ResourceName {
+        &self.0
+    }
+}
+impl JsonSchema for WorkspaceName {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "WorkspaceName".into()
+    }
+    // ResourceName's schema already admits only the trimmed form.
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        <message_board::ResourceName as JsonSchema>::json_schema(generator)
+    }
+}
+
+/// One page of change records: 1..=100.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "u16", into = "u16")]
+pub struct RecordPageLimit(u16);
+impl TryFrom<u16> for RecordPageLimit {
+    type Error = PersonRequestRefusal;
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        if !(1..=MAXIMUM_RECORD_PAGE).contains(&value) {
+            return Err(PersonRequestRefusal::OperationBody);
+        }
+        Ok(Self(value))
+    }
+}
+impl From<RecordPageLimit> for u16 {
+    fn from(value: RecordPageLimit) -> Self {
+        value.0
+    }
+}
+impl RecordPageLimit {
+    #[must_use]
+    pub const fn get(self) -> u16 {
+        self.0
+    }
+}
+impl JsonSchema for RecordPageLimit {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "RecordPageLimit".into()
+    }
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({"type":"integer","minimum":1,"maximum":MAXIMUM_RECORD_PAGE})
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CreateWorkspaceRequest {
     pub organization_id: OrganizationId,
     pub operation_id: AdminOperationId,
-    pub name: String,
+    pub name: WorkspaceName,
     pub description: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorkspaceLookupRequest {
     pub organization_id: OrganizationId,
     pub workspace_id: message_board::WorkspaceId,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ReadChangeRecordsRequest {
     pub organization_id: OrganizationId,
+    /// The last record ID of the previous page; absent or null for the first.
     #[serde(default)]
+    #[schemars(with = "Option<String>", extend("format" = "uuid"))]
     pub after: Option<durable_steps::Uuid>,
-    pub limit: u16,
+    pub limit: RecordPageLimit,
 }
 
 /// Which route a request arrived on decides how its body is read; the body
@@ -135,12 +221,10 @@ impl AdminOperation {
     fn validate(&self) -> Result<(), PersonRequestRefusal> {
         let valid = match self {
             Self::CreateWorkspace(request) => {
-                !request.name.trim().is_empty()
-                    && request.name.len() <= MAXIMUM_NAME_BYTES
-                    && request.description.len() <= MAXIMUM_DESCRIPTION_BYTES
+                request.description.len() <= MAXIMUM_DESCRIPTION_BYTES
             }
             Self::WorkspaceLookup(_) => true,
-            Self::ReadChangeRecords(request) => (1..=MAXIMUM_RECORD_PAGE).contains(&request.limit),
+            Self::ReadChangeRecords(_) => true,
         };
         if valid {
             Ok(())
@@ -182,12 +266,12 @@ impl AdminOperation {
         let (target, params) = match self {
             Self::CreateWorkspace(request) => (
                 json!(organization),
-                json!({"name":request.name,"description":request.description}),
+                json!({"name":request.name.as_str(),"description":request.description}),
             ),
             Self::WorkspaceLookup(request) => (json!(request.workspace_id.as_str()), json!({})),
             Self::ReadChangeRecords(request) => (
                 json!(organization),
-                json!({"after":request.after.map(|id| id.to_string()),"limit":request.limit}),
+                json!({"after":request.after.map(|id| id.to_string()),"limit":request.limit.get()}),
             ),
         };
         json!({
@@ -200,9 +284,14 @@ impl AdminOperation {
         })
     }
 
+    /// JCS(intent): the exact bytes the proof's `intent` claim hashes.
+    pub fn canonical_intent(&self) -> Result<String, PersonRequestRefusal> {
+        canonical_json(&self.intent())
+    }
+
     /// base64url(SHA-256(JCS(intent))), the proof's `intent` claim.
     pub fn intent_digest(&self) -> Result<String, PersonRequestRefusal> {
-        Ok(sha256_url(canonical_json(&self.intent())?.as_bytes()))
+        Ok(sha256_url(self.canonical_intent()?.as_bytes()))
     }
 }
 
