@@ -182,15 +182,18 @@ impl PendingCommit<'_> {
         self.armed = false;
     }
 
-    /// A no-op outside `test-support`; there a test can hold a commit that changed rows
-    /// at `point`.
+    /// Under `test-support`, a test can hold a commit that changed rows at `point`.
+    #[cfg(feature = "test-support")]
     pub async fn checkpoint(&self, point: CommitPoint) {
-        #[cfg(feature = "test-support")]
         if self.armed {
             test_support::wait_at(self.signal, point).await;
         }
-        #[cfg(not(feature = "test-support"))]
-        let _ = point;
+    }
+
+    /// Outside `test-support` a commit never pauses.
+    #[cfg(not(feature = "test-support"))]
+    pub fn checkpoint(&self, _point: CommitPoint) -> std::future::Ready<()> {
+        std::future::ready(())
     }
 }
 
