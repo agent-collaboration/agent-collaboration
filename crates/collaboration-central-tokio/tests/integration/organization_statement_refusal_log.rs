@@ -2,9 +2,9 @@
 //! closed refusal kind and the Fleet's organization, and no log line carries
 //! statement material: not its bytes, segments, digest or key ID.
 //!
-//! Every refusal kind is sent except `InvalidConfiguration`, which only a host
-//! without sign-in trust produces: Tokio opens no link socket without
-//! `SignInLinkSettings`, so no link request can reach that state.
+//! Every refusal kind is sent. `InvalidConfiguration` comes from the host: a
+//! link opened with present but empty sign-in settings answers each statement
+//! with it, which the second test drives.
 #![cfg(feature = "conformance")]
 use crate::fleet_clock::FleetClock;
 use crate::organization_admin_link::settings;
@@ -14,6 +14,7 @@ use crate::organization_stamps::{
     SignInKeys, link_post,
 };
 use crate::statement_refusals::{StatementRefusal, further_refusals, profile_refusals};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use collaboration_central_conformance::{
     ConformanceResult, DispatchCallSelector, DispatchKey, JwksFixtureServer, RuntimeControl,
 };
@@ -80,6 +81,31 @@ impl CapturedLogs {
     }
 }
 
+/// What a statement carries that must never reach a log: its long segments,
+/// its digest and the key ID its own header names (none when the header is
+/// empty-kid or unreadable, as in the deliberate Malformed case).
+struct StatementMaterial {
+    bytes: Vec<String>,
+    key_id: Option<String>,
+}
+
+fn statement_material(statement: &str) -> ConformanceResult<StatementMaterial> {
+    let mut bytes: Vec<String> = statement
+        .split('.')
+        .filter(|segment| segment.len() > 8)
+        .map(str::to_owned)
+        .collect();
+    bytes.push(stamps::digest(statement));
+    let key_id = statement
+        .split('.')
+        .next()
+        .and_then(|header| URL_SAFE_NO_PAD.decode(header).ok())
+        .and_then(|header| serde_json::from_slice::<Value>(&header).ok())
+        .and_then(|header| header.get("kid")?.as_str().map(str::to_owned))
+        .filter(|kid| !kid.is_empty());
+    Ok(StatementMaterial { bytes, key_id })
+}
+
 fn case_organization(index: usize) -> String {
     format!("019f0000-0000-7000-8000-00000000d7{index:02x}")
 }
@@ -89,12 +115,13 @@ async fn start(
     access: &JwksFixtureServer,
     keys: &SignInKeys,
     clock: &FleetClock,
+    issuer: &str,
 ) -> ConformanceResult<(TokioServer, std::path::PathBuf)> {
     let socket = root.join("sign-in-link.sock");
     let server = TokioServer::start_with_sign_in_controls_and_fleet_clock(
         settings(root, &access.url)?,
         SignInLinkSettings {
-            issuer: ISSUER.into(),
+            issuer: issuer.into(),
             audience: AUDIENCE.into(),
             admin_audience: ADMIN_AUDIENCE.into(),
             public_origin: PUBLIC_ORIGIN.into(),
@@ -176,7 +203,7 @@ async fn each_statement_refusal_logs_its_kind_once_and_no_statement_material()
     let access = JwksFixtureServer::start().await?;
     let keys = SignInKeys::start().await?;
     let clock = FleetClock::at(NOW_SECONDS * 1000);
-    let (server, socket) = start(root.path(), &access, &keys, &clock).await?;
+    let (server, socket) = start(root.path(), &access, &keys, &clock, ISSUER).await?;
 
     // Each case on its own never-named organization, so its events are its own.
     let mut statements = Vec::new();
@@ -288,21 +315,76 @@ async fn each_statement_refusal_logs_its_kind_once_and_no_statement_material()
 
     let text = logs.text()?;
     for statement in &statements {
-        let mut material: Vec<String> = statement
-            .split('.')
-            .filter(|segment| segment.len() > 8)
-            .map(str::to_owned)
-            .collect();
-        material.push(stamps::digest(statement));
-        for needle in material {
+        let material = statement_material(statement)?;
+        for needle in material.bytes {
             assert!(
                 !text.contains(&needle),
                 "statement material reached the log"
             );
         }
+        if let Some(kid) = material.key_id {
+            assert!(!text.contains(&kid), "a key ID reached the log: {kid}");
+        }
     }
-    for kid in ["stamp-a", "stamp-b", "stamp-z"] {
-        assert!(!text.contains(kid), "a key ID reached the log");
+    Ok(())
+}
+
+/// Never named before its statement reaches a link with an empty issuer.
+const UNCONFIGURED: &str = "019f0000-0000-7000-8000-00000000d7f4";
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare the answer, the event and the material scan while fixture errors propagate."
+)]
+#[tokio::test]
+async fn an_unusable_sign_in_configuration_refuses_and_logs_invalid_configuration_once()
+-> ConformanceResult<()> {
+    // Wrong builds caught: a configuration refusal that is dropped or logged
+    // twice, reported under another kind, or carries statement material. The
+    // link opens with present but empty settings; nothing validates them at
+    // start-up, so every statement meets this refusal.
+    let logs = CapturedLogs::default();
+    let output = logs.clone();
+    tracing::subscriber::set_global_default(
+        tracing_subscriber::fmt()
+            .json()
+            .with_ansi(false)
+            .without_time()
+            .with_writer(move || output.clone())
+            .finish(),
+    )?;
+    let root = tempfile::tempdir()?;
+    let access = JwksFixtureServer::start().await?;
+    let keys = SignInKeys::start().await?;
+    let clock = FleetClock::at(NOW_SECONDS * 1000);
+    let (server, socket) = start(root.path(), &access, &keys, &clock, "").await?;
+    let statement = stamps::stamp(UNCONFIGURED)?;
+    let answer = link_post(
+        &socket,
+        PROVISION,
+        &provision_body(UNCONFIGURED, &statement),
+    )
+    .await?;
+    let refusals = logs.refusals(UNCONFIGURED)?;
+    server.shutdown().await?;
+    keys.shutdown().await?;
+
+    assert_eq!(answer.0, 503, "an unusable configuration is unavailable");
+    assert_eq!(
+        refusals,
+        vec!["InvalidConfiguration".to_owned()],
+        "exactly one event naming the configuration refusal"
+    );
+    let text = logs.text()?;
+    let material = statement_material(&statement)?;
+    for needle in material.bytes {
+        assert!(
+            !text.contains(&needle),
+            "statement material reached the log"
+        );
+    }
+    if let Some(kid) = material.key_id {
+        assert!(!text.contains(&kid), "a key ID reached the log: {kid}");
     }
     Ok(())
 }

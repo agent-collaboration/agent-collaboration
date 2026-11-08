@@ -3,9 +3,10 @@
 //! leaves none, no line carries statement material, and the conformance
 //! observer refuses a valid assertion from a person who is not the owner.
 //!
-//! `InvalidConfiguration` is not sent: only a central Worker missing a
-//! `CENTRAL_SIGN_IN_*` variable produces it, and the journey's central is
-//! configured (the staging deploy guard refuses such a Worker too).
+//! `InvalidConfiguration` is not sent here: central produces it when its
+//! sign-in settings are missing or unusable, and this journey's central is
+//! configured. The Tokio refusal-log test drives that path on a link opened
+//! with an empty issuer.
 use super::link_client::Caller;
 use super::organization_stamps::{self as stamps, NOW_SECONDS, SignInKeys};
 use super::record_checks::require;
