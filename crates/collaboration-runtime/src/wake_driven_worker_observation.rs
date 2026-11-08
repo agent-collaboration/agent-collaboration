@@ -24,11 +24,11 @@ impl WorkerObservation {
         self.observed.pass_started();
     }
 
-    /// The loop logged the start of a run of failed passes.
-    pub(crate) fn failure_reported(&self) {
+    /// The loop stopped waiting on a source that can never change again.
+    pub(crate) fn source_closed(&self) {
         #[cfg(any(test, feature = "test-support"))]
         self.observed
-            .update(|snapshot| snapshot.failure_reports += 1);
+            .update(|snapshot| snapshot.closed_sources += 1);
     }
 
     /// The loop is about to sleep with this deadline.
@@ -62,8 +62,8 @@ mod observed {
         pub reads: Vec<&'static str>,
         pub passes: u64,
         pub sleeps: u64,
-        /// Warnings logged, one per run of failed passes.
-        pub failure_reports: u64,
+        /// Closed sources the loop removed from its wait set.
+        pub closed_sources: u64,
         /// The deadline armed before the latest sleep; `None` means no timer.
         pub armed_deadline: Option<SyncTime>,
     }

@@ -332,9 +332,10 @@ fn commit_bumped(commits: &mut tokio::sync::watch::Receiver<u64>) -> bool {
 }
 
 /// Q2 through the sync library's one `AtomicStore::transaction` entry: the real engine's
-/// own reads (`due`, `earliest` for rearm, `operation` for status) commit without a
-/// signal; a library write that commits signals; one that wrote rows and then rolled back
-/// on a real insert failure does not.
+/// own reads (`due`, `earliest` for rearm, `operation` for the status of an operation
+/// that exists, which commits) commit without a signal; status for a missing operation
+/// errors and rolls back without one; a library write that commits signals; one that wrote
+/// rows and then rolled back on a real insert failure does not.
 #[tokio::test]
 async fn the_real_engine_signals_only_for_library_writes_that_commit() {
     let directory = tempfile::tempdir().expect("native atomic fixture");
@@ -360,6 +361,18 @@ async fn the_real_engine_signals_only_for_library_writes_that_commit() {
         .await
         .expect("library write commits");
     let library_write_bumped = commit_bumped(&mut commits);
+    let existing: String = sqlx::query_scalar(
+        "SELECT operation_id FROM _fleet_sync_operations ORDER BY operation_id LIMIT 1",
+    )
+    .fetch_one(&mut *owner.writer.lock().await)
+    .await
+    .expect("the library write admitted an operation");
+    let existing = durable_steps::OperationId::new(
+        uuid::Uuid::parse_str(&existing).expect("stored operation id is a UUID"),
+    )
+    .expect("stored operation id is UUIDv7");
+    let existing_status = engine.status(&existing).await;
+    let existing_status_bumped = commit_bumped(&mut commits);
     let mut connection = owner.writer.lock().await;
     sqlx::raw_sql("CREATE TRIGGER reject_atomic_push BEFORE INSERT ON router_pushes BEGIN SELECT RAISE(ABORT, 'fixture atomic push rejection'); END")
         .execute(&mut *connection).await.expect("real native insertion fault");
@@ -373,15 +386,32 @@ async fn the_real_engine_signals_only_for_library_writes_that_commit() {
     assert!(report.completed.is_empty() && report.failed.is_empty());
     assert!(matches!(missing, Err(StoreError::MissingOperation { .. })));
     assert!(
-        !engine_reads_bumped,
-        "drive_due, rearm and status are reads"
+        existing_status.is_ok(),
+        "status of an existing operation commits its read: {existing_status:?}"
     );
-    assert!(
-        library_write_bumped,
-        "a committed library write must signal"
-    );
-    assert!(
-        !rolled_back_bumped,
-        "a write rolled back after changing rows must not signal"
+    // Each flag is named so a failure shows every path at once.
+    assert_eq!(
+        [
+            (
+                "empty drive, rearm and missing-id status",
+                engine_reads_bumped
+            ),
+            ("committed library write", library_write_bumped),
+            (
+                "existing-operation status that commits",
+                existing_status_bumped
+            ),
+            (
+                "library write rolled back after writing rows",
+                rolled_back_bumped
+            ),
+        ],
+        [
+            ("empty drive, rearm and missing-id status", false),
+            ("committed library write", true),
+            ("existing-operation status that commits", false),
+            ("library write rolled back after writing rows", false),
+        ],
+        "only the committed library write signals"
     );
 }

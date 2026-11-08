@@ -124,7 +124,6 @@ impl WakeDrivenWorkerLoop {
                 }
                 Err(error) => {
                     if consecutive_failures == 0 {
-                        self.observation.failure_reported();
                         tracing::warn!(
                             worker = self.worker,
                             %error,
@@ -190,6 +189,10 @@ impl WakeDrivenWorkerLoop {
                 // A closed source can never change again; stop waiting on it.
                 SourceEvent::Closed { index } => {
                     self.sources.remove(index);
+                    self.observation.source_closed();
+                    // Hand control back once per source event, so no source can hold
+                    // the runtime in a tight loop.
+                    tokio::task::yield_now().await;
                 }
             }
         }

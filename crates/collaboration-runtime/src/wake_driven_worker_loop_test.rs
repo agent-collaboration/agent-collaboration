@@ -1,7 +1,7 @@
 //! The loop on Tokio's paused clock with the wall clock that moves with it.
 use super::{BatchOutcome, WakeDrivenWorkerLoop, WorkerPass};
 use crate::{WorkerObservation, paused_wall_clock::PausedWallClock};
-use runtime_primitives::SyncTime;
+use runtime_primitives::{Clock, SyncTime};
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
@@ -29,7 +29,8 @@ struct FakeWork {
 
 struct FakePass {
     work: Arc<Mutex<FakeWork>>,
-    commits: watch::Sender<u64>,
+    /// Held only when the pass itself commits; otherwise the test owns the only sender.
+    commits: Option<watch::Sender<u64>>,
 }
 
 impl WorkerPass for FakePass {
@@ -70,7 +71,9 @@ impl WorkerPass for FakePass {
         let mut work = self.work.lock().map_err(|_| "poisoned")?;
         if let Some(name) = work.committed_during_next_due.take() {
             work.batches.push_back(name);
-            self.commits.send_modify(|revision| *revision += 1);
+            if let Some(commits) = &self.commits {
+                commits.send_modify(|revision| *revision += 1);
+            }
         }
         Ok(work.due.map(|(due, _)| due))
     }
@@ -78,6 +81,7 @@ impl WorkerPass for FakePass {
 
 struct RunningLoop {
     work: Arc<Mutex<FakeWork>>,
+    clock: Arc<PausedWallClock>,
     commits: watch::Sender<u64>,
     observation: WorkerObservation,
     shutdown: CancellationToken,
@@ -86,18 +90,16 @@ struct RunningLoop {
 
 impl RunningLoop {
     fn start(work: FakeWork) -> Self {
+        let pass_commits = work.committed_during_next_due.is_some();
         let work = Arc::new(Mutex::new(work));
         let (commits, receiver) = watch::channel(0);
-        let worker = WakeDrivenWorkerLoop::new(
-            "fake",
-            Arc::new(PausedWallClock::starting_at(at(Duration::ZERO))),
-        )
-        .wake_on(receiver);
+        let clock = Arc::new(PausedWallClock::starting_at(at(Duration::ZERO)));
+        let worker = WakeDrivenWorkerLoop::new("fake", clock.clone()).wake_on(receiver);
         let observation = worker.observation();
         let shutdown = CancellationToken::new();
         let mut pass = FakePass {
             work: Arc::clone(&work),
-            commits: commits.clone(),
+            commits: pass_commits.then(|| commits.clone()),
         };
         let task = tokio::spawn({
             let shutdown = shutdown.clone();
@@ -105,6 +107,7 @@ impl RunningLoop {
         });
         Self {
             work,
+            clock,
             commits,
             observation,
             shutdown,
@@ -116,6 +119,10 @@ impl RunningLoop {
     fn commit_batch(&self, name: &'static str) {
         self.work.lock().unwrap().batches.push_back(name);
         self.commits.send_modify(|revision| *revision += 1);
+    }
+
+    fn clock_now(&self) -> SyncTime {
+        self.clock.now()
     }
 
     fn handled(&self) -> Vec<(&'static str, SyncTime)> {
@@ -232,38 +239,110 @@ async fn due_work_runs_at_its_due_time_on_one_timer_and_does_not_fire_again() {
     worker.stop().await;
 }
 
+/// Collects the WARN events the loop emits, with their worker and error fields.
+#[derive(Clone, Default)]
+struct CapturedWarnings(Arc<Mutex<Vec<(String, String)>>>);
+
+impl<TSubscriber: tracing::Subscriber> tracing_subscriber::Layer<TSubscriber> for CapturedWarnings {
+    fn on_event(
+        &self,
+        event: &tracing::Event<'_>,
+        _: tracing_subscriber::layer::Context<'_, TSubscriber>,
+    ) {
+        if *event.metadata().level() != tracing::Level::WARN {
+            return;
+        }
+        let mut fields = WarningFields::default();
+        event.record(&mut fields);
+        self.0.lock().unwrap().push((fields.worker, fields.error));
+    }
+}
+
+#[derive(Default)]
+struct WarningFields {
+    worker: String,
+    error: String,
+}
+
+impl tracing::field::Visit for WarningFields {
+    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+        if field.name() == "worker" {
+            self.worker = value.to_owned();
+        }
+    }
+
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        match field.name() {
+            "worker" => self.worker = format!("{value:?}").trim_matches('"').to_owned(),
+            "error" => self.error = format!("{value:?}"),
+            _ => {}
+        }
+    }
+}
+
+/// The armed retry delays, in seconds, for `sleeps` sleeps starting at sleep `first`.
+async fn retry_delays(
+    worker: &RunningLoop,
+    first: u64,
+    sleeps: u64,
+    started: SyncTime,
+) -> Vec<i64> {
+    let mut delays = Vec::new();
+    let mut pass_started = started;
+    for sleep in first..first + sleeps {
+        worker.observation.asleep_at_least(sleep).await;
+        let armed = worker.observation.snapshot().armed_deadline.unwrap();
+        delays.push((armed.unix_millis() - pass_started.unix_millis()) / 1_000);
+        pass_started = armed;
+    }
+    delays
+}
+
 #[tokio::test(start_paused = true)]
-async fn a_failed_pass_retries_at_one_two_four_seconds_up_to_thirty_and_logs_once() {
+async fn a_failed_pass_retries_at_one_two_four_seconds_up_to_thirty_and_logs_once_per_run() {
+    let warnings = CapturedWarnings::default();
+    let _subscriber =
+        tracing::subscriber::set_default(tracing_subscriber::layer::SubscriberExt::with(
+            tracing_subscriber::registry(),
+            warnings.clone(),
+        ));
     let worker = RunningLoop::start(FakeWork {
         failing_passes: 7,
         ..FakeWork::default()
     });
-    let mut retry_delays = Vec::new();
-    let mut pass_started = at(Duration::ZERO);
 
-    for sleeps in 1..=7 {
-        worker.observation.asleep_at_least(sleeps).await;
-        let armed = worker.observation.snapshot().armed_deadline.unwrap();
-        retry_delays.push((armed.unix_millis() - pass_started.unix_millis()) / 1_000);
-        pass_started = armed;
-    }
+    let first_run = retry_delays(&worker, 1, 7, at(Duration::ZERO)).await;
     worker.observation.asleep_at_least(8).await;
     let recovered = worker.observation.snapshot();
+    let warnings_after_first_run = warnings.0.lock().unwrap().clone();
+    worker.work.lock().unwrap().failing_passes = 2;
+    worker.commit_batch("after recovery");
+    let second_started = worker.clock_now();
+    let second_run = retry_delays(&worker, 9, 2, second_started).await;
+    worker.observation.asleep_at_least(11).await;
 
-    assert_eq!(retry_delays, [1, 2, 4, 8, 16, 30, 30]);
-    assert_eq!(
-        recovered.failure_reports, 1,
-        "one log line per run of failures"
-    );
+    assert_eq!(first_run, [1, 2, 4, 8, 16, 30, 30]);
     assert_eq!(
         recovered.armed_deadline, None,
         "a good pass clears the retry"
     );
+    assert_eq!(
+        warnings_after_first_run,
+        [("fake".to_owned(), "injected read failure".to_owned())],
+        "one warning, with its worker and error, for a run of seven failures"
+    );
+    assert_eq!(second_run, [1, 2], "the backoff restarts after recovery");
+    assert_eq!(
+        warnings.0.lock().unwrap().len(),
+        2,
+        "a second run of failures logs once more"
+    );
+    assert_eq!(worker.observation.snapshot().armed_deadline, None);
     worker.stop().await;
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_closed_source_does_not_keep_waking_the_loop() {
+async fn a_closed_source_is_removed_and_does_not_keep_waking_the_loop() {
     let worker = RunningLoop::start(FakeWork::default());
     worker.observation.asleep_at_least(1).await;
     let RunningLoop {
@@ -275,9 +354,19 @@ async fn a_closed_source_does_not_keep_waking_the_loop() {
     } = worker;
 
     drop(commits);
+    for _ in 0..100 {
+        tokio::task::yield_now().await;
+    }
+    // Checked before any sleep: a loop that kept a closed source would never let the
+    // paused runtime go idle, so a sleep here would hang instead of failing.
+    assert_eq!(
+        observation.snapshot().closed_sources,
+        1,
+        "the closed source is removed once"
+    );
     tokio::time::sleep(Duration::from_secs(3600)).await;
 
-    assert_eq!(observation.snapshot().passes, 1);
+    assert_eq!(observation.snapshot().passes, 1, "closing wakes no pass");
     shutdown.cancel();
     task.await.unwrap();
 }
