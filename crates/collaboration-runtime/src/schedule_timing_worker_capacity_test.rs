@@ -183,17 +183,29 @@ async fn reports_queued_before_the_scheduler_waits_for_a_slot_are_not_lost() -> 
     Ok(())
 }
 
-/// Runs whose turn a test completed one by one.
+/// Per-Run script and record: the Runs whose turn a test completed one by one, and the
+/// Runs whose stop was requested.
 #[derive(Default)]
-pub(super) struct CompletedRuns(std::sync::Mutex<std::collections::HashSet<RunId>>);
+pub(super) struct PerRunScript {
+    completed: std::sync::Mutex<std::collections::HashSet<RunId>>,
+    stopped: std::sync::Mutex<std::collections::HashSet<RunId>>,
+}
 
-impl CompletedRuns {
-    pub(super) fn contains(&self, run: &RunId) -> bool {
-        self.0.lock().unwrap().contains(run)
+impl PerRunScript {
+    pub(super) fn completed(&self, run: &RunId) -> bool {
+        self.completed.lock().unwrap().contains(run)
+    }
+
+    pub(super) fn stop_requested(&self, run: &RunId) {
+        self.stopped.lock().unwrap().insert(run.clone());
     }
 
     fn complete(&self, run: RunId) {
-        self.0.lock().unwrap().insert(run);
+        self.completed.lock().unwrap().insert(run);
+    }
+
+    fn stopped(&self) -> usize {
+        self.stopped.lock().unwrap().len()
     }
 }
 
@@ -244,7 +256,7 @@ impl CursorFixture {
     /// until a pass consumed the announcement and the scheduler slept again.
     async fn complete(&self, run: &RunId) -> TestResult<()> {
         let sleeps = self.scheduler.observation.snapshot().sleeps;
-        self.fixture.route.completed_runs.complete(run.clone());
+        self.fixture.route.per_run.complete(run.clone());
         self.completions
             .send_modify(|revision| *revision = revision.wrapping_add(1));
         wait_until("the completion woke a pass", || {
@@ -374,7 +386,7 @@ async fn a_completion_that_resumes_a_sweep_past_its_run_is_followed_by_a_full_sw
             && fixture.observed_runs().len() >= STEP_SLOTS
     })
     .await?;
-    fixture.route.completed_runs.complete(target.clone());
+    fixture.route.per_run.complete(target.clone());
     completions.send_modify(|revision| *revision = revision.wrapping_add(1));
     first_sleep.release();
     let limit = super::CollectionLimit::start("the completed Run settled");
@@ -390,5 +402,123 @@ async fn a_completion_that_resumes_a_sweep_past_its_run_is_followed_by_a_full_sw
     );
     assert_eq!(fixture.clock.now(), started_at, "with no clock advance");
     scheduler.stop().await;
+    Ok(())
+}
+
+impl SchedulerFixture {
+    /// Gives every Run a day-long timeout and disables the schedule, so nothing comes due
+    /// within the next hours.
+    async fn nothing_due_for_a_day(&self) -> TestResult<()> {
+        let mut connection = <sqlx::SqliteConnection as sqlx::Connection>::connect(&format!(
+            "sqlite://{}",
+            self.root.path().join("automation.sqlite").display()
+        ))
+        .await?;
+        sqlx::query(
+            "UPDATE workflow_runs SET effective_timeout_seconds = 86400, \
+             execution_deadline_at_ms = execution_started_at_ms + 86400000, \
+             execution_evidence_json = json_set(execution_evidence_json, \
+               '$.timing.effectiveTimeoutSeconds', 86400, \
+               '$.timing.deadlineAtMs', \
+               json_extract(execution_evidence_json, '$.timing.dispatchStartedAtMs') + 86400000)",
+        )
+        .execute(&mut connection)
+        .await?;
+        sqlx::query("UPDATE schedule_definitions SET enabled = 0")
+            .execute(&mut connection)
+            .await?;
+        Ok(())
+    }
+}
+
+#[tokio::test(start_paused = true)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
+async fn two_running_turns_an_event_overtook_are_checked_again_once_and_then_go_quiet()
+-> TestResult<()> {
+    let fixture = SchedulerFixture::with_one_schedule().await?;
+    let run = fixture.one_executing_run().await?;
+    fixture.copy_executing_run(&run, 1).await?;
+    fixture.nothing_due_for_a_day().await?;
+    let gate = Arc::new(Mutex::new(()));
+    let held = Arc::clone(&gate).lock_owned().await;
+    let scheduler = fixture.start_with(|worker| worker.hold_step_reports(gate))?;
+    fixture.observed(2).await?;
+    settled_holding(&scheduler.observation).await?;
+
+    // Both checks are in flight when an event arrives; both report after it, so each
+    // may have missed it and asks for one more check. Those checks report quietly.
+    let sleeps = scheduler.observation.snapshot().sleeps;
+    observe(
+        &fixture,
+        json!({"kind":"threadStatus","status":{"type":"idle"},"ordering":"established"}),
+    )
+    .await?;
+    wait_until("the event woke a pass", || {
+        scheduler.observation.snapshot().sleeps > sleeps
+    })
+    .await?;
+    settled_holding(&scheduler.observation).await?;
+    drop(held);
+    settled(&scheduler).await?;
+    let reads_after_event = fixture.observed_runs().len();
+    advance(Duration::from_secs(3_600)).await;
+    settled(&scheduler).await?;
+
+    assert_eq!(
+        reads_after_event, 4,
+        "each Run is read once before the event and once again after it"
+    );
+    assert_eq!(
+        fixture.observed_runs().len(),
+        reads_after_event,
+        "with no event, no report asks for another check: an hour reads nothing"
+    );
+    scheduler.stop().await;
+    Ok(())
+}
+
+#[tokio::test(start_paused = true)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
+async fn a_deadline_that_comes_due_behind_a_full_table_is_acted_on_at_its_time() -> TestResult<()> {
+    let gate = Arc::new(Mutex::new(()));
+    let held = Arc::clone(&gate).lock_owned().await;
+    let cursor = CursorFixture::start(Arc::clone(&gate)).await?;
+    // The fixture route cannot stop a Run and records nothing, so no stop commits: only
+    // the deadline itself can lead the scheduler back to the Runs behind its scan.
+    let deadline = cursor.fixture.clock.now().after(Duration::from_secs(120));
+
+    // The first sixteen Runs are held after reading their turns running, before the
+    // deadline; the table is full and the scan has moved past them. Then the deadline
+    // every Run shares comes due.
+    cursor.held(STEP_SLOTS).await?;
+    let armed = cursor.scheduler.observation.snapshot().armed_deadline;
+    advance(Duration::from_secs(120)).await;
+    settled_holding(&cursor.scheduler.observation).await?;
+    drop(held);
+    wait_until("every Run's stop was requested", || {
+        cursor.fixture.route.per_run.stopped() >= RUN_COUNT
+    })
+    .await?;
+    settled(&cursor.scheduler).await?;
+    let stops = cursor.fixture.route.stop_requests.lock().unwrap().clone();
+
+    assert_eq!(armed, Some(deadline), "the timer was armed at the deadline");
+    assert_eq!(
+        cursor.fixture.route.per_run.stopped(),
+        RUN_COUNT,
+        "every Run's deadline is acted on, including the sixteen behind the scan"
+    );
+    assert!(
+        stops.iter().all(|stopped| *stopped == deadline),
+        "at the deadline"
+    );
+    cursor.scheduler.stop().await;
+    drop(cursor.gate);
     Ok(())
 }

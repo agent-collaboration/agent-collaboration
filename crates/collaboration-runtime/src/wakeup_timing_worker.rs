@@ -92,6 +92,8 @@ impl WakeTimingWorker {
         let commits = self.store.lock().await.subscribe_commits();
         let dispatch_commits = self.store.lock().await.subscribe_commits();
         let configuration = self.native.configuration.subscribe_changes();
+        // The pass tells an event from its own dispatches' reports through its own copies.
+        let events = vec![commits.clone(), configuration.clone()];
         #[cfg_attr(
             not(test),
             expect(unused_mut, reason = "only tests hold dispatch tasks")
@@ -115,6 +117,8 @@ impl WakeTimingWorker {
             store: self.store,
             native: self.native,
             deliveries,
+            events,
+            armed: None,
             recovered: false,
             #[cfg(any(test, feature = "test-support"))]
             accepted_observer: self.accepted_observer,
@@ -128,6 +132,11 @@ struct WakePass {
     store: Arc<Mutex<AutomationStore>>,
     native: crate::wakeup_delivery_sender::WakeDeliverySender,
     deliveries: KeyedWorkerTasks<DeliveryId>,
+    /// Automation commits and configuration changes: anything that may concern a
+    /// delivery, unlike a dispatch's report or a freed slot.
+    events: Vec<tokio::sync::watch::Receiver<u64>>,
+    /// The due time this worker last armed; a wake at or after it is an event.
+    armed: Option<SyncTime>,
     /// Interrupted deliveries from a previous process are recovered by the first pass.
     recovered: bool,
     #[cfg(any(test, feature = "test-support"))]
@@ -178,7 +187,7 @@ impl WakePass {
                 // A dispatch that finishes now frees a slot and wakes the loop.
                 return Ok(());
             }
-            if self.deliveries.skip_busy(&id, now) {
+            if self.deliveries.is_busy(&id, now) {
                 continue;
             }
             let store = Arc::clone(&self.store);
@@ -227,7 +236,18 @@ impl WorkerPass for WakePass {
         now: SyncTime,
         observation: &WorkerObservation,
     ) -> Result<BatchOutcome, StorageError> {
+        // Events are taken before reports, as the scheduler does; with no cursor, a
+        // dispatch an event overtook only needs the wake its report sends.
+        let mut event = self.armed.take_if(|due| *due <= now).is_some();
+        for source in &mut self.events {
+            event |= source.has_changed().unwrap_or(false);
+            source.borrow_and_update();
+        }
+        if event {
+            self.deliveries.event_arrived();
+        }
         self.deliveries.reap(now);
+        self.deliveries.take_sweep_request();
         let now_ms = now.unix_millis();
         if !self.recovered {
             observation.record_read("interrupted deliveries");
@@ -267,10 +287,11 @@ impl WorkerPass for WakePass {
             .wake_worker_next_due_at_ms(now.unix_millis())
             .await?
             .map(SyncTime::from_unix_millis);
-        Ok(match (stored, self.deliveries.next_retry(now)) {
+        self.armed = match (stored, self.deliveries.next_retry(now)) {
             (Some(stored), Some(retry)) => Some(stored.min(retry)),
             (stored, retry) => stored.or(retry),
-        })
+        };
+        Ok(self.armed)
     }
 }
 

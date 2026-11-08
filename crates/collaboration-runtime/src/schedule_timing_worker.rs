@@ -32,6 +32,16 @@ pub struct ScheduleTimingWorker {
     step_gate: Option<crate::keyed_worker_tasks::TaskGate>,
     #[cfg(test)]
     hold_full_table: bool,
+    #[cfg(test)]
+    reap_hold: Option<ReapHold>,
+}
+
+/// Held reports a test releases between a pass taking events and taking reports.
+#[cfg(test)]
+struct ReapHold {
+    held: tokio::sync::OwnedMutexGuard<()>,
+    /// Set by the test just before it publishes the event.
+    armed: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl ScheduleTimingWorker {
@@ -61,6 +71,8 @@ impl ScheduleTimingWorker {
             step_gate: None,
             #[cfg(test)]
             hold_full_table: false,
+            #[cfg(test)]
+            reap_hold: None,
         }
     }
 
@@ -95,6 +107,31 @@ impl ScheduleTimingWorker {
             crate::keyed_worker_tasks::TaskGatePoint::BeforeReport,
             gate,
         ));
+        self
+    }
+
+    /// Holds every step task after it enqueued its report and before it reads the event
+    /// generation, until the test releases the gate.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn hold_reports_before_generation(mut self, gate: Arc<Mutex<()>>) -> Self {
+        self.step_gate = Some(crate::keyed_worker_tasks::TaskGate::new(
+            crate::keyed_worker_tasks::TaskGatePoint::BetweenReportAndGeneration,
+            gate,
+        ));
+        self
+    }
+
+    /// The first pass after the test sets `armed` releases `held` between taking its
+    /// events and taking its queued reports, and waits there until a report is queued.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn release_between_events_and_reap(
+        mut self,
+        held: tokio::sync::OwnedMutexGuard<()>,
+        armed: Arc<std::sync::atomic::AtomicBool>,
+    ) -> Self {
+        self.reap_hold = Some(ReapHold { held, armed });
         self
     }
 
@@ -164,6 +201,9 @@ impl ScheduleTimingWorker {
             steps,
             events,
             sweep_owed: false,
+            armed: None,
+            #[cfg(test)]
+            reap_hold: self.reap_hold,
             run_cursor: None,
             waiting_cursor: None,
         };
@@ -180,23 +220,45 @@ struct SchedulePass {
     /// Automation commits, configuration changes and completions: anything that may
     /// concern a Run, unlike a step's report or a freed slot.
     events: Vec<watch::Receiver<u64>>,
-    /// An event, or a report a step was owed, arrived during a sweep that may already
-    /// have passed the Run it concerns: another full sweep follows this one.
+    /// An event, or the report of a step an event overtook, arrived during a sweep that
+    /// may already have passed the Run it concerns: another full sweep follows this one.
     sweep_owed: bool,
+    /// The due time this scheduler last armed. A wake at or after it is an event: what
+    /// came due may be behind the scan, and next due reads only later times.
+    armed: Option<SyncTime>,
+    #[cfg(test)]
+    reap_hold: Option<ReapHold>,
     // Scan progress is only a fairness hint; durable Run state still owns exclusion.
     run_cursor: Option<RunId>,
     waiting_cursor: Option<ScheduleId>,
 }
 
 impl SchedulePass {
-    /// Marks every event seen and reports whether any arrived since the last pass.
-    fn take_events(&mut self) -> bool {
-        let mut arrived = false;
+    /// Marks every event seen and reports whether any arrived since the last batch: a
+    /// commit, a configuration change, a completion, or the armed due time passing.
+    fn take_events(&mut self, now: SyncTime) -> bool {
+        let mut arrived = self.armed.take_if(|due| *due <= now).is_some();
         for event in &mut self.events {
             arrived |= event.has_changed().unwrap_or(false);
             event.borrow_and_update();
         }
         arrived
+    }
+
+    /// Releases the held reports between taking events and taking reports, once armed.
+    #[cfg(test)]
+    async fn release_held_reports(&mut self) {
+        let armed = self
+            .reap_hold
+            .as_ref()
+            .is_some_and(|hold| hold.armed.load(std::sync::atomic::Ordering::SeqCst));
+        let Some(hold) = self.reap_hold.take_if(|_| armed) else {
+            return;
+        };
+        drop(hold.held);
+        while self.steps.reports_queued() == 0 {
+            tokio::task::yield_now().await;
+        }
     }
 
     async fn enqueue_due(
@@ -267,7 +329,7 @@ impl SchedulePass {
                 return Ok(RunScan::AtCapacity);
             }
             self.run_cursor = Some(id.clone());
-            if !self.steps.skip_busy(&id, now) {
+            if !self.steps.is_busy(&id, now) {
                 let runner = self.runner.clone();
                 self.steps.spawn(id.clone(), async move {
                     matches!(
@@ -303,12 +365,17 @@ impl WorkerPass for SchedulePass {
         now: SyncTime,
         observation: &WorkerObservation,
     ) -> Result<BatchOutcome, StorageError> {
-        self.steps.reap(now);
-        // Whatever an event concerns, the next full sweep reaches: it steps an idle Run,
-        // and owes a Run still being stepped a recheck when it reports.
-        if self.take_events() {
+        // Events are taken before reports: a report queued before this point is taken
+        // and its Run stepped by this sweep; one queued after sees the newer generation
+        // and asks for its own sweep.
+        let event = self.take_events(now);
+        if event {
+            self.steps.event_arrived();
             self.sweep_owed = true;
         }
+        #[cfg(test)]
+        self.release_held_reports().await;
+        self.steps.reap(now);
         if self.steps.take_sweep_request() {
             self.sweep_owed = true;
         }
@@ -345,10 +412,11 @@ impl WorkerPass for SchedulePass {
             .scheduler_next_due_at_ms(now.unix_millis())
             .await?
             .map(SyncTime::from_unix_millis);
-        Ok(match (stored, self.steps.next_retry(now)) {
+        self.armed = match (stored, self.steps.next_retry(now)) {
             (Some(stored), Some(retry)) => Some(stored.min(retry)),
             (stored, retry) => stored.or(retry),
-        })
+        };
+        Ok(self.armed)
     }
 }
 

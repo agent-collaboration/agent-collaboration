@@ -186,3 +186,109 @@ async fn a_completion_consumed_while_its_run_is_being_checked_still_settles_the_
     scheduler.stop().await;
     Ok(())
 }
+
+impl SchedulerFixture {
+    /// A Run executing with its turn running, brought there by a scheduler that is then
+    /// stopped, so the next scheduler's first step is the one under test.
+    async fn executing_run_for_a_new_scheduler(&self) -> TestResult<agent_automation::RunId> {
+        let first = self.start()?;
+        settled(&first).await?;
+        advance(Duration::from_secs(u64::from(INTERVAL_SECONDS))).await;
+        let run = self.executing_and_asleep(&first).await?;
+        first.stop().await;
+        Ok(run)
+    }
+
+    async fn settles(&self, run: &agent_automation::RunId) -> TestResult<RunPhase> {
+        let limit = CollectionLimit::start("the completed Run settled");
+        while self.read_phase(run).await? == RunPhase::Executing {
+            limit.next().await?;
+        }
+        self.read_phase(run).await
+    }
+}
+
+#[tokio::test(start_paused = true)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
+async fn a_report_enqueued_before_the_event_is_taken_is_stepped_by_that_sweep() -> TestResult<()> {
+    let fixture = SchedulerFixture::with_one_schedule().await?;
+    let run = fixture.executing_run_for_a_new_scheduler().await?;
+    let reads_before = fixture.route.settlement_reads.load(Ordering::Acquire);
+    let gate = Arc::new(Mutex::new(()));
+    let held = Arc::clone(&gate).lock_owned().await;
+
+    // The step finds the turn running and enqueues its report, then is held before it
+    // reads the event generation; the completion's pass takes it with the new event.
+    let scheduler = fixture.start_with(|worker| worker.hold_reports_before_generation(gate))?;
+    wait_until("the step read the running turn", || {
+        fixture.route.settlement_reads.load(Ordering::Acquire) > reads_before
+    })
+    .await?;
+    settled_holding(&scheduler.observation).await?;
+    let started_at = fixture.clock.now();
+    fixture.route.turn_completed.store(true, Ordering::Release);
+    let sleeps = scheduler.observation.snapshot().sleeps;
+    observe(&fixture, turn_completed()).await?;
+    wait_until("the completion woke a pass", || {
+        scheduler.observation.snapshot().sleeps > sleeps
+    })
+    .await?;
+    settled_holding(&scheduler.observation).await?;
+    drop(held);
+    let phase = fixture.settles(&run).await?;
+
+    assert_eq!(
+        phase,
+        RunPhase::Finished,
+        "the queued report was taken after the event and its Run stepped again"
+    );
+    assert_eq!(fixture.clock.now(), started_at, "with no clock advance");
+    scheduler.stop().await;
+    Ok(())
+}
+
+#[tokio::test(start_paused = true)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
+async fn a_report_published_between_the_event_and_the_reap_asks_for_its_own_sweep() -> TestResult<()>
+{
+    let fixture = SchedulerFixture::with_one_schedule().await?;
+    let run = fixture.executing_run_for_a_new_scheduler().await?;
+    let reads_before = fixture.route.settlement_reads.load(Ordering::Acquire);
+    let gate = Arc::new(Mutex::new(()));
+    let held = Arc::clone(&gate).lock_owned().await;
+    let armed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    // The step finds the turn running and is held before it reports. The completion's
+    // pass takes its events, then releases the report and waits for it to be queued
+    // before it takes the reports.
+    let scheduler = fixture.start_with(|worker| {
+        worker
+            .hold_step_reports(gate)
+            .release_between_events_and_reap(held, Arc::clone(&armed))
+    })?;
+    wait_until("the step read the running turn", || {
+        fixture.route.settlement_reads.load(Ordering::Acquire) > reads_before
+    })
+    .await?;
+    settled_holding(&scheduler.observation).await?;
+    let started_at = fixture.clock.now();
+    fixture.route.turn_completed.store(true, Ordering::Release);
+    armed.store(true, Ordering::SeqCst);
+    observe(&fixture, turn_completed()).await?;
+    let phase = fixture.settles(&run).await?;
+
+    assert_eq!(
+        phase,
+        RunPhase::Finished,
+        "the report published after the event saw it and asked for the sweep that checks it"
+    );
+    assert_eq!(fixture.clock.now(), started_at, "with no clock advance");
+    scheduler.stop().await;
+    Ok(())
+}

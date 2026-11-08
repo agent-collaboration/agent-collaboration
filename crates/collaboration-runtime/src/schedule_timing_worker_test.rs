@@ -65,8 +65,8 @@ struct ControlledRoute {
     unreachable_targets: AtomicUsize,
     /// Fresh-session submissions, answered by the preparation tests.
     fresh: preparation_tests::FreshSubmissions,
-    /// Runs whose turn the capacity tests completed one by one.
-    completed_runs: capacity_tests::CompletedRuns,
+    /// Per-Run answers and records of the capacity tests.
+    per_run: capacity_tests::PerRunScript,
     /// How many settlement reads still answer that the client is unreachable.
     unreachable_settlements: AtomicUsize,
     /// How many stop requests still answer that the client is unreachable.
@@ -157,8 +157,8 @@ impl ScheduledRunExecution for ControlledRoute {
         context: RunObservationContext,
     ) -> DeliveryFuture<'_, RunSettlement> {
         self.settlement_reads.fetch_add(1, Ordering::AcqRel);
-        let completed = self.turn_completed.load(Ordering::Acquire)
-            || self.completed_runs.contains(&context.run_id);
+        let completed =
+            self.turn_completed.load(Ordering::Acquire) || self.per_run.completed(&context.run_id);
         self.observed_runs.lock().unwrap().push(context.run_id);
         let unreachable = take_unreachable(&self.unreachable_settlements);
         Box::pin(async move {
@@ -188,6 +188,7 @@ impl ScheduledRunExecution for ControlledRoute {
         sink: &'a dyn RunEvidenceSink,
     ) -> DeliveryFuture<'a, StopRequestOutcome> {
         self.stop_requests.lock().unwrap().push(self.clock.now());
+        self.per_run.stop_requested(&context.run_id);
         if take_unreachable(&self.unreachable_stops) {
             return Box::pin(async { Err(DeliveryContractError::ClientOperation) });
         }
@@ -284,7 +285,7 @@ impl SchedulerFixture {
             observed_runs: std::sync::Mutex::default(),
             unreachable_targets: AtomicUsize::new(0),
             fresh: preparation_tests::FreshSubmissions::default(),
-            completed_runs: capacity_tests::CompletedRuns::default(),
+            per_run: capacity_tests::PerRunScript::default(),
             unreachable_settlements: AtomicUsize::new(0),
             unreachable_stops: AtomicUsize::new(0),
             stop_records_intent: AtomicBool::new(false),
