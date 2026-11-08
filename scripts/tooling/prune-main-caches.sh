@@ -38,6 +38,8 @@ fi
 # A key created since the first writer started therefore belongs to this run.
 # Cache hits create no entry: a single existing key needs no pruning. Refuse an
 # ambiguous family rather than guess from last-access order or delete its key.
+# The release workflow saves its own Apple Silicon cache from manual main
+# dispatches; GitHub expires older entries, so this job leaves that family alone.
 cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_started_at" '
   def timestamp:
     (capture("^(?<whole>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2})(?:\\.(?<fraction>[0-9]{1,9}))?Z$")
@@ -46,8 +48,7 @@ cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_sta
   def family($key):
     ["Linux-X64-rust-tools-sqlx-", "Linux-X64-rust-tools-",
      "Linux-X64-worker-build-", "v0-rust-static-", "v0-rust-test-",
-     "v0-rust-e2e-", "v0-rust-wasm-", "v0-rust-release-arm64-background-",
-     "node-cache-Linux-x64-pnpm-"]
+     "v0-rust-e2e-", "v0-rust-wasm-", "node-cache-Linux-x64-pnpm-"]
     | map(. as $prefix | select($key | startswith($prefix))) | first;
   ($since | timestamp) as $started
   | if type != "array" or length >= 1000 then
