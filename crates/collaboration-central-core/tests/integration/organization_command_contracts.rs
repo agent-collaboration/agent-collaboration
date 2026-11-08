@@ -4,8 +4,8 @@ use crate::contract_artifacts;
 use collaboration_central_core::identity_contract::{
     AllowMachine, AllowanceState, CommandRefusal, CommandStatus, CreateWorkspace, IdentityLookup,
     MachineAllowance, MachineLookup, OrganizationCommandResult, RemoveSession,
-    RevokeMachineEnrollment, SetTokenLifetime, TokenLifetimeSeconds, WithdrawMachineAllowance,
-    WorkspaceLookup,
+    RevokeMachineEnrollment, RevokeMachineEnrollmentResult, SetTokenLifetime, TokenLifetimeSeconds,
+    WithdrawMachineAllowance, WorkspaceLookup,
 };
 use serde_json::json;
 
@@ -179,6 +179,23 @@ fn token_lifetime_seconds_wire_contract() {
     contract_artifacts::assert_contract::<TokenLifetimeSeconds>(
         "TokenLifetimeSeconds",
         vec![json!(60_i64), json!(600_i64), json!(3600_i64)],
+        false,
+    );
+}
+
+/// Only this command's answer names what ended (PD:904, B3 revocation flow).
+#[test]
+fn revoke_machine_enrollment_result_wire_contract() {
+    contract_artifacts::assert_contract::<RevokeMachineEnrollmentResult>(
+        "RevokeMachineEnrollmentResult",
+        vec![
+            json!({"result":"applied","ended":{"enrollmentId":"019a3dce-2000-7000-8000-000000000002","clientId":"019a3dce-2000-7000-8000-000000000002"}}),
+            json!({"result":"refused","reason":{"kind":"notOwner"}}),
+            json!({"result":"refused","reason":{"kind":"notFound"}}),
+            json!({"result":"refused","reason":{"kind":"conflict"}}),
+            json!({"result":"refused","reason":{"kind":"recordUnwritable"}}),
+            json!({"result":"refused","reason":{"kind":"secondFactorRequired","withinSeconds":900}}),
+        ],
         false,
     );
 }

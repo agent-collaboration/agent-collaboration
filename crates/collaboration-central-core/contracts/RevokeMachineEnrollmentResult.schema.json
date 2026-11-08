@@ -1,0 +1,147 @@
+{
+  "$defs": {
+    "ClientId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "CommandRefusal": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "notOwner",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "notFound",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "conflict",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "recordUnwritable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "secondFactorRequired",
+              "type": "string"
+            },
+            "withinSeconds": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "withinSeconds"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "EndedMachineClient": {
+      "additionalProperties": false,
+      "description": "The enrollment and OAuth client a first grant ended by superseding them.",
+      "properties": {
+        "clientId": {
+          "$ref": "#/$defs/ClientId"
+        },
+        "enrollmentId": {
+          "$ref": "#/$defs/EnrollmentId"
+        }
+      },
+      "required": [
+        "enrollmentId",
+        "clientId"
+      ],
+      "type": "object"
+    },
+    "EnrollmentId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "`RevokeMachineEnrollment`'s answer names the machine client whose enrollment\nended, so the sign-in service can disable it. Other commands answer `Applied {}`.",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "ended": {
+          "$ref": "#/$defs/EndedMachineClient"
+        },
+        "result": {
+          "const": "applied",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result",
+        "ended"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/CommandRefusal"
+        },
+        "result": {
+          "const": "refused",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result",
+        "reason"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "RevokeMachineEnrollmentResult"
+}

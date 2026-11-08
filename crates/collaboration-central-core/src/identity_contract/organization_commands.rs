@@ -1,5 +1,5 @@
 //! Organization commands share one refusal vocabulary and keep reads separate.
-use super::CommandId;
+use super::{CommandId, EndedMachineClient};
 use fleet_identity_protocol::{InstallationId, OrganizationId};
 use message_board::{IdentityValidationError, ResourceName, SessionRef, WorkspaceId};
 use schemars::JsonSchema;
@@ -52,6 +52,19 @@ pub struct SetTokenLifetime {
 pub enum OrganizationCommandResult {
     Applied {},
     Admitted { command_id: CommandId },
+    Refused { reason: CommandRefusal },
+}
+/// `RevokeMachineEnrollment`'s answer names the machine client whose enrollment
+/// ended, so the sign-in service can disable it. Other commands answer `Applied {}`.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    tag = "result",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum RevokeMachineEnrollmentResult {
+    Applied { ended: EndedMachineClient },
     Refused { reason: CommandRefusal },
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]

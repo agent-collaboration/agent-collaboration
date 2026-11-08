@@ -128,6 +128,11 @@ fn machine_login_mirror_negatives(name: &str, literals: &[Value]) -> Vec<Value> 
                 invalid.push(changed);
             }
         }
+        "RevokeMachineEnrollmentResult" => invalid.extend([
+            json!({"result":"applied"}),
+            json!({"result":"applied","ended":{"enrollmentId":"019a3dce-2000-7000-8000-000000000002"}}),
+            json!({"result":"admitted","commandId":"019a3dce-2000-7000-8000-000000000002"}),
+        ]),
         "DeviceLoginRefusal" => invalid.extend([
             json!({"kind":"notOwner"}),
             json!({"kind":"secondFactorRequired","withinSeconds":0}),
