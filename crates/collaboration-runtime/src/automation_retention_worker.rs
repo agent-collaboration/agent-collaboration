@@ -277,11 +277,8 @@ impl RetentionPass {
 
     async fn read_due(&self, class: RetentionClass) -> Result<Option<i64>, String> {
         match class {
-            RetentionClass::Automation(class) => self
-                .store
-                .lock()
-                .await
-                .retention_class_due_ms(class)
+            RetentionClass::Automation(class) => class
+                .due_ms(&mut *self.store.lock().await)
                 .await
                 .map_err(|error| error.to_string()),
             RetentionClass::InteractionRecords => match &self.native_push_store {
@@ -306,11 +303,8 @@ impl RetentionPass {
         let now = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)
             .ok_or_else(|| "retention clock is outside the supported range".to_owned())?;
         match class {
-            RetentionClass::Automation(class) => self
-                .store
-                .lock()
-                .await
-                .prune_retention_class(class, now_ms, class.max_batch())
+            RetentionClass::Automation(class) => class
+                .prune(&mut *self.store.lock().await, now_ms, class.max_batch())
                 .await
                 .map_err(|error| error.to_string()),
             RetentionClass::InteractionRecords => match &self.native_push_store {

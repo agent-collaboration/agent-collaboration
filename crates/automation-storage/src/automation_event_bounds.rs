@@ -1,20 +1,10 @@
 //! Retention boundaries use two calendar months, independent of whether cleanup has already run.
-use crate::{AutomationRetentionClass, AutomationStore, StorageError};
+use crate::{AutomationStore, StorageError};
 
-/// Retains automation events for two calendar months.
-pub(crate) const AUTOMATION_EVENT_RETENTION_MONTHS: u32 =
-    crate::automation_retention::AUTOMATION_RETENTION_MONTHS;
+/// Retains automation events, and every other automation history class, for two calendar months.
+pub(crate) const AUTOMATION_EVENT_RETENTION_MONTHS: u32 = 2;
 
 impl AutomationStore {
-    /// Removes a bounded batch strictly before the UTC calendar cutoff; owner records are never pruned.
-    pub async fn prune_automation_events(
-        &mut self,
-        now_ms: i64,
-        batch_limit: u32,
-    ) -> Result<u64, StorageError> {
-        self.prune_retention_class(AutomationRetentionClass::Events, now_ms, batch_limit)
-            .await
-    }
     pub async fn automation_event_floor(
         &mut self,
         now_ms: i64,

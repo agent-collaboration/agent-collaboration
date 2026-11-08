@@ -4,12 +4,15 @@
 //! cutoff). Its DELETE and its next-due read share that fragment, so the time the worker
 //! wakes is always the time the DELETE first takes a row.
 use crate::automation_connection::OneStatementWrite;
-use crate::{AutomationStore, StorageError, automation_event_bounds::calendar_months_before};
+use crate::{
+    AutomationStore, StorageError,
+    automation_event_bounds::{AUTOMATION_EVENT_RETENTION_MONTHS, calendar_months_before},
+};
 
 const MAX_AUTOMATION_PRUNE_BATCH: u32 = 500;
 
 /// Every automation history class keeps two calendar months.
-pub(crate) const AUTOMATION_RETENTION_MONTHS: u32 = 2;
+const AUTOMATION_RETENTION_MONTHS: u32 = AUTOMATION_EVENT_RETENTION_MONTHS;
 
 /// One kind of automation history a retention rule prunes.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -173,34 +176,32 @@ const INSTRUCTION_REVISIONS: ClassStatements = ClassStatements {
 
 // remote_wake_requests stays unpruned until the central-automations cutover.
 
-impl AutomationStore {
-    /// Deletes one bounded batch of `class` rows its rule allows at `now_ms`.
-    pub async fn prune_retention_class(
-        &mut self,
-        class: AutomationRetentionClass,
+impl AutomationRetentionClass {
+    /// Deletes one bounded batch of this class's rows its rule allows at `now_ms`.
+    pub async fn prune(
+        self,
+        store: &mut AutomationStore,
         now_ms: i64,
         batch_size: u32,
     ) -> Result<u64, StorageError> {
-        if !(1..=class.max_batch()).contains(&batch_size) {
+        if !(1..=self.max_batch()).contains(&batch_size) {
             return Err(StorageError::InvalidRecord);
         }
         let cutoff_ms = calendar_months_before(now_ms, AUTOMATION_RETENTION_MONTHS)?;
-        let result = sqlx::query(class.statements().prune)
+        let result = sqlx::query(self.statements().prune)
             .bind(cutoff_ms)
             .bind(i64::from(batch_size))
-            .execute_as_transaction(self)
+            .execute_as_transaction(store)
             .await?;
         Ok(result.rows_affected())
     }
 
-    /// The first moment `class`'s rule allows deleting a row it holds now, or `None` when no
-    /// row could ever go. A protected row is not counted; removing its protection commits.
-    pub async fn retention_class_due_ms(
-        &mut self,
-        class: AutomationRetentionClass,
-    ) -> Result<Option<i64>, StorageError> {
-        let oldest: Option<i64> = sqlx::query_scalar(class.statements().oldest)
-            .fetch_one(&mut self.connection)
+    /// The first moment this class's rule allows deleting a row the store holds now, or
+    /// `None` when no row could ever go. A protected row is not counted; removing its
+    /// protection commits.
+    pub async fn due_ms(self, store: &mut AutomationStore) -> Result<Option<i64>, StorageError> {
+        let oldest: Option<i64> = sqlx::query_scalar(self.statements().oldest)
+            .fetch_one(&mut store.connection)
             .await?;
         oldest
             .map(|stamped_ms| {
@@ -211,6 +212,19 @@ impl AutomationStore {
             })
             .transpose()
     }
+}
+
+impl AutomationStore {
+    /// Removes a bounded batch strictly before the UTC calendar cutoff; owner records are never pruned.
+    pub async fn prune_automation_events(
+        &mut self,
+        now_ms: i64,
+        batch_limit: u32,
+    ) -> Result<u64, StorageError> {
+        AutomationRetentionClass::Events
+            .prune(self, now_ms, batch_limit)
+            .await
+    }
 
     /// Deletes settled wake payload rows that no wake still references as pending.
     pub async fn prune_settled_mailbox_deliveries(
@@ -218,12 +232,9 @@ impl AutomationStore {
         now_ms: i64,
         batch_size: u32,
     ) -> Result<u64, StorageError> {
-        self.prune_retention_class(
-            AutomationRetentionClass::SettledMailboxDeliveries,
-            now_ms,
-            batch_size,
-        )
-        .await
+        AutomationRetentionClass::SettledMailboxDeliveries
+            .prune(self, now_ms, batch_size)
+            .await
     }
 
     /// Deletes whole replay receipts after the idempotency retention window.
@@ -232,12 +243,9 @@ impl AutomationStore {
         now_ms: i64,
         batch_size: u32,
     ) -> Result<u64, StorageError> {
-        self.prune_retention_class(
-            AutomationRetentionClass::OperationReceipts,
-            now_ms,
-            batch_size,
-        )
-        .await
+        AutomationRetentionClass::OperationReceipts
+            .prune(self, now_ms, batch_size)
+            .await
     }
 
     /// Deletes one bounded batch of old workflow runs, retaining each schedule's newest finished run.
@@ -246,12 +254,9 @@ impl AutomationStore {
         now_ms: i64,
         batch_size: u32,
     ) -> Result<u64, StorageError> {
-        self.prune_retention_class(
-            AutomationRetentionClass::CompletedWorkflowRuns,
-            now_ms,
-            batch_size,
-        )
-        .await
+        AutomationRetentionClass::CompletedWorkflowRuns
+            .prune(self, now_ms, batch_size)
+            .await
     }
 
     /// Deletes one bounded batch of expired or cancelled wakes with no retained work.
@@ -260,7 +265,8 @@ impl AutomationStore {
         now_ms: i64,
         batch_size: u32,
     ) -> Result<u64, StorageError> {
-        self.prune_retention_class(AutomationRetentionClass::TerminalWakes, now_ms, batch_size)
+        AutomationRetentionClass::TerminalWakes
+            .prune(self, now_ms, batch_size)
             .await
     }
 
@@ -270,11 +276,8 @@ impl AutomationStore {
         now_ms: i64,
         batch_size: u32,
     ) -> Result<u64, StorageError> {
-        self.prune_retention_class(
-            AutomationRetentionClass::OldInstructionRevisions,
-            now_ms,
-            batch_size,
-        )
-        .await
+        AutomationRetentionClass::OldInstructionRevisions
+            .prune(self, now_ms, batch_size)
+            .await
     }
 }
