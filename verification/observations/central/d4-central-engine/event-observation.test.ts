@@ -57,6 +57,24 @@ function observeLine(sequence: D4EventSequence, line: string): void {
   sequence.observeLine(line);
 }
 
+test("construction evidence is readable without exposing the sequence's retained state", (): void => {
+  const sequence = new D4EventSequence();
+  sequence.observeLine(constructionRecord());
+  sequence.observeLine(constructionRecord(2));
+  const captured = sequence.constructionRecords();
+  assert.deepEqual(
+    captured.map((record) => [record.construction, record.isolate, record.cause]),
+    [
+      [identity(1), identity(20), "start"],
+      [identity(2), identity(20), "rebuild"],
+    ],
+  );
+  const first = captured[0];
+  assert.ok(first);
+  first.construction = identity(99);
+  assert.equal(sequence.constructionRecords()[0]?.construction, identity(1));
+});
+
 test("literal S1 JSON integers remain exact above 2^53 and copy addresses use actual serde shape", (): void => {
   const raw = encode({ centralEvent: { ...eventRecord(), sequence: 9007199254740993n } });
   const parsed = parseD4StderrLine(raw);

@@ -19,7 +19,7 @@ test("the local matrix preserves every commissioned journey, while target except
   const tokio = requiredD4Checks("tokio");
   const workerd = requiredD4Checks("workerd");
   const staging = requiredD4Checks("staging");
-  for (const journey of "J1 J1b J1c J2 J2b J2c J3 J3b J4 J5 J5b J6 J6b J7 J7b J7c J8 J9 J10 J13 J14 J17 J18 J19 J20 J21 J22 J23 J25 J26 J27".split(
+  for (const journey of "J1 J1b J1c J2 J2b J2c J3 J3b J4 J5 J5b J6 J6b J7 J7b J7c J8 J9 J10 J13 J14 J17 J18 J19 J20 J21 J22 J23 J25 J26 J27 J28 J29".split(
     " ",
   ))
     assert.ok(
@@ -41,6 +41,23 @@ test("the local matrix preserves every commissioned journey, while target except
     ["J14", "J15"],
   );
   assert.equal(new Set(tokio).size, tokio.length);
+});
+
+test("new batch and notice-ack obligations cannot disappear behind old complete records", (): void => {
+  const checks = recorded("workerd");
+  checks.delete("J28:mailbox-full-item-alone-retries");
+  checks.delete("J29:backoff-resends-from43");
+  checks.delete("J29:applied45-retires-attempt");
+  const result = assessRecordedD4Coverage({ shell: "workerd", checks });
+  assert.equal(result.complete, false);
+  assert.deepEqual(
+    result.open.map((entry): string => entry.check),
+    [
+      "J28:mailbox-full-item-alone-retries",
+      "J29:backoff-resends-from43",
+      "J29:applied45-retires-attempt",
+    ],
+  );
 });
 
 test("empty or mostly completed records cannot close missing J22 carries or owner fault cuts", (): void => {

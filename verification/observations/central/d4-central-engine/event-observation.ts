@@ -268,6 +268,9 @@ export class D4EventSequence {
   records(): readonly D4EventRecord[] {
     return structuredClone(this.events);
   }
+  constructionRecords(): readonly D4ConstructionRecord[] {
+    return structuredClone([...this.constructions.values()]);
+  }
 }
 
 const pageSchema = z

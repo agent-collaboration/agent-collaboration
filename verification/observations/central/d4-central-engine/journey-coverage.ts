@@ -36,6 +36,8 @@ export const d4JourneySchema = z.enum([
   "J25",
   "J26",
   "J27",
+  "J28",
+  "J29",
 ]);
 export type D4Journey = z.infer<typeof d4JourneySchema>;
 export type D4Shell = "tokio" | "workerd" | "staging";
@@ -280,6 +282,23 @@ const requirements: Readonly<Record<D4Journey, JourneyRequirements>> = {
     "all-expired",
     "no-expired-row-served",
     "later-atomic-contiguous-prune",
+  ]),
+  J28: localRequirements([
+    "32-item-batch-per-item-send-id",
+    "mailbox-full-item-alone-retries",
+    "mixed-type-batch-refused",
+    "2MiB-item-goes-alone",
+    "released-router-single-pushes",
+    "agent-array-order-owned-by-D5",
+  ]),
+  J29: localRequirements([
+    "applied40-issued41-through45",
+    "miss43-without-poll",
+    "backoff-resends-from43",
+    "applied45-retires-attempt",
+    "lower-ack-monotonic",
+    "past-head-ack-clamped",
+    "released-no-owed-row-or-resend",
   ]),
 };
 const completionChecks = [

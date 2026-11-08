@@ -1,7 +1,11 @@
 /** Retain local workerd's original structured console messages and check S1 order. */
 import type { WorkerdStructuredLog } from "miniflare";
 import { encode } from "../../../exact-json.ts";
-import { D4EventSequence, type D4EventRecord } from "./event-observation.ts";
+import {
+  D4EventSequence,
+  type D4ConstructionRecord,
+  type D4EventRecord,
+} from "./event-observation.ts";
 
 export class D4WorkerdConsole {
   private readonly sequence = new D4EventSequence();
@@ -31,6 +35,10 @@ export class D4WorkerdConsole {
   records(): readonly D4EventRecord[] {
     this.requireHealthy();
     return this.sequence.records();
+  }
+  constructionRecords(): readonly D4ConstructionRecord[] {
+    this.requireHealthy();
+    return this.sequence.constructionRecords();
   }
   transcript(): string {
     this.requireHealthy();

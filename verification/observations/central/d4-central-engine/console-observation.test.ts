@@ -36,6 +36,7 @@ test("workerd console retains original messages and lossless S1 events", () => {
     original.map((record): string => `${encode(record)}\n`).join(""),
   );
   assert.deepEqual(capture.records(), [event.centralEvent]);
+  assert.deepEqual(capture.constructionRecords(), [created.centralConstruction]);
 });
 
 test("workerd console latches malformed S1 without throwing into the runtime callback", () => {
@@ -43,6 +44,7 @@ test("workerd console latches malformed S1 without throwing into the runtime cal
   assert.doesNotThrow(() => capture.observe(log('{"centralEvent":{}}')));
   capture.observe(log(encode(created)));
   assert.throws(() => capture.records(), /console observation failed/);
+  assert.throws(() => capture.constructionRecords(), /console observation failed/);
   assert.throws(() => capture.transcript(), /console observation failed/);
 });
 
