@@ -26,6 +26,8 @@ pub struct WakeTimingWorker {
     observation: WorkerObservation,
     #[cfg(any(test, feature = "test-support"))]
     accepted_observer: Option<tokio::sync::mpsc::UnboundedSender<DeliveryId>>,
+    #[cfg(test)]
+    dispatch_gate: Option<crate::keyed_worker_tasks::TaskGate>,
 }
 impl WakeTimingWorker {
     pub fn new(
@@ -49,7 +51,26 @@ impl WakeTimingWorker {
             observation: WorkerObservation::default(),
             #[cfg(any(test, feature = "test-support"))]
             accepted_observer: None,
+            #[cfg(test)]
+            dispatch_gate: None,
         }
+    }
+
+    /// Holds every dispatch task after its work and before it reports, until the test
+    /// releases the gate; `arrivals` counts the dispatches held.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn hold_dispatch_reports(
+        mut self,
+        gate: Arc<Mutex<()>>,
+        arrivals: Arc<std::sync::atomic::AtomicUsize>,
+    ) -> Self {
+        self.dispatch_gate = Some(crate::keyed_worker_tasks::TaskGate::counting(
+            crate::keyed_worker_tasks::TaskGatePoint::BeforeReport,
+            gate,
+            arrivals,
+        ));
+        self
     }
     #[cfg(any(test, feature = "test-support"))]
     pub fn observe_accepted_deliveries(
@@ -71,11 +92,17 @@ impl WakeTimingWorker {
         let commits = self.store.lock().await.subscribe_commits();
         let dispatch_commits = self.store.lock().await.subscribe_commits();
         let configuration = self.native.configuration.subscribe_changes();
-        let (deliveries, delivery_wakes) = KeyedWorkerTasks::new(
+        #[cfg_attr(
+            not(test),
+            expect(unused_mut, reason = "only tests hold dispatch tasks")
+        )]
+        let (mut deliveries, delivery_wakes) = KeyedWorkerTasks::new(
             MAX_ACTIVE_DISPATCHES,
             dispatch_commits,
             "automation delivery task stopped; persisted attempt must be inspected before replay",
         );
+        #[cfg(test)]
+        deliveries.hold(self.dispatch_gate);
         let worker = WakeDrivenWorkerLoop::new("wake-ups", Arc::clone(&self.native.clock))
             .with_observation(self.observation)
             .wake_on(commits)
@@ -144,11 +171,11 @@ impl WakePass {
             .eligible_delivery_ids(now.unix_millis(), INVENTORY_BATCH)
             .await?;
         for id in ids {
-            if self.deliveries.at_capacity() {
+            if self.deliveries.at_capacity(now).await {
                 // A dispatch that finishes now frees a slot and wakes the loop.
                 return Ok(());
             }
-            if self.deliveries.is_busy(&id, now) {
+            if self.deliveries.skip_busy(&id, now) {
                 continue;
             }
             let store = Arc::clone(&self.store);

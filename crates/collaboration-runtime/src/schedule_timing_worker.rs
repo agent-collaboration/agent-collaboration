@@ -30,6 +30,8 @@ pub struct ScheduleTimingWorker {
     observation: WorkerObservation,
     #[cfg(test)]
     step_gate: Option<crate::keyed_worker_tasks::TaskGate>,
+    #[cfg(test)]
+    hold_full_table: bool,
 }
 
 impl ScheduleTimingWorker {
@@ -57,6 +59,8 @@ impl ScheduleTimingWorker {
             observation: WorkerObservation::default(),
             #[cfg(test)]
             step_gate: None,
+            #[cfg(test)]
+            hold_full_table: false,
         }
     }
 
@@ -94,6 +98,15 @@ impl ScheduleTimingWorker {
         self
     }
 
+    /// The first time every step slot is taken, holds the scheduler before it waits for
+    /// a slot until all of those steps have queued their reports.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn hold_full_table_until_reports_queued(mut self) -> Self {
+        self.hold_full_table = true;
+        self
+    }
+
     /// What the scheduler's loop reports; under test-support a test reads it.
     #[must_use]
     pub fn observation(&self) -> WorkerObservation {
@@ -112,6 +125,10 @@ impl ScheduleTimingWorker {
         );
         #[cfg(test)]
         steps.hold(self.step_gate);
+        #[cfg(test)]
+        if self.hold_full_table {
+            steps.hold_full_table_until_reports_queued();
+        }
         let mut worker = WakeDrivenWorkerLoop::new("schedules", Arc::clone(&self.runner.clock))
             .with_observation(self.observation)
             .wake_on(commits)
@@ -206,12 +223,12 @@ impl SchedulePass {
             .await?;
         let read = ids.len();
         for id in ids {
-            if self.steps.at_capacity() {
+            if self.steps.at_capacity(now).await {
                 // A step that finishes now frees a slot and wakes the loop.
                 return Ok(RunScan::AtCapacity);
             }
             self.run_cursor = Some(id.clone());
-            if !self.steps.is_busy(&id, now) {
+            if !self.steps.skip_busy(&id, now) {
                 let runner = self.runner.clone();
                 self.steps.spawn(id.clone(), async move {
                     matches!(

@@ -3,18 +3,24 @@
 //!
 //! A finished task reports its key and outcome on a channel the loop drains, and only
 //! then wakes the loop, so a wake always finds what it announces. Progress (the store's
-//! commit counter moved during the task), a failure, or a slot freed while a key waited
-//! for one wakes the loop; a task that changed nothing stays silent. A key whose task
+//! commit counter moved during the task), a failure, a slot freed while the loop waited
+//! for one, or a recheck owed because a pass skipped the key while its task ran wakes the
+//! loop; a task that changed nothing and was owed nothing stays silent. A key whose task
 //! failed waits for its retry time, 1 s doubling to 30 s across its run of failures, and
 //! logs once per run.
+//!
+//! Two orders keep a wake from being lost. A reporter enqueues its report before it reads
+//! whether the loop waits for a slot or owes the key a recheck; the loop marks either
+//! before it looks for queued reports. Either the reporter sees the mark or the loop sees
+//! the report.
 use runtime_primitives::{Backoff, SyncTime};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     future::Future,
     hash::Hash,
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU8, Ordering, fence},
     },
     time::Duration,
 };
@@ -38,6 +44,39 @@ enum TaskOutcome {
     Failed,
 }
 
+/// Where one key's task is, as the loop and the task's reporter share it.
+struct TaskState(AtomicU8);
+
+impl TaskState {
+    const RUNNING: u8 = 0;
+    /// A pass skipped the key while its task ran; whatever woke that pass may concern it.
+    const RECHECK_OWED: u8 = 1;
+    /// The task has enqueued its report.
+    const REPORTED: u8 = 2;
+
+    fn running() -> Arc<Self> {
+        Arc::new(Self(AtomicU8::new(Self::RUNNING)))
+    }
+
+    /// Marks a recheck owed. False when the task has already reported.
+    fn owe_recheck(&self) -> bool {
+        match self.0.compare_exchange(
+            Self::RUNNING,
+            Self::RECHECK_OWED,
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        ) {
+            Ok(_) => true,
+            Err(current) => current != Self::REPORTED,
+        }
+    }
+
+    /// Marks the report enqueued; true when a recheck was owed.
+    fn reported(&self) -> bool {
+        self.0.swap(Self::REPORTED, Ordering::SeqCst) == Self::RECHECK_OWED
+    }
+}
+
 struct TaskReport<TKey> {
     key: TKey,
     outcome: TaskOutcome,
@@ -49,10 +88,11 @@ struct TaskRetry {
 }
 
 /// Reports a task when dropped: as finished with its outcome, or as failed when the task
-/// panicked or was aborted first. The report is sent before the wake.
+/// panicked or was aborted first. The report is enqueued before the wake.
 struct TaskReporter<TKey> {
     key: Option<TKey>,
     outcome: TaskOutcome,
+    state: Arc<TaskState>,
     reports: mpsc::UnboundedSender<TaskReport<TKey>>,
     wakes: watch::Sender<u64>,
     capacity_exhausted: Arc<AtomicBool>,
@@ -73,9 +113,11 @@ impl<TKey> Drop for TaskReporter<TKey> {
             key,
             outcome: self.outcome,
         });
-        if self.outcome != TaskOutcome::Pending
-            || self.capacity_exhausted.swap(false, Ordering::AcqRel)
-        {
+        // The report is queued before either mark is read.
+        fence(Ordering::SeqCst);
+        let recheck_owed = self.state.reported();
+        let slot_awaited = self.capacity_exhausted.swap(false, Ordering::SeqCst);
+        if self.outcome != TaskOutcome::Pending || recheck_owed || slot_awaited {
             self.wakes
                 .send_modify(|revision| *revision = revision.wrapping_add(1));
         }
@@ -86,7 +128,7 @@ pub(crate) struct KeyedWorkerTasks<TKey> {
     /// Owns the tasks so shutdown can abort them; finished tasks are read from
     /// `finished`, never from this set.
     tasks: tokio::task::JoinSet<()>,
-    active: HashSet<TKey>,
+    active: HashMap<TKey, Arc<TaskState>>,
     capacity: usize,
     reports: mpsc::UnboundedSender<TaskReport<TKey>>,
     finished: mpsc::UnboundedReceiver<TaskReport<TKey>>,
@@ -98,6 +140,10 @@ pub(crate) struct KeyedWorkerTasks<TKey> {
     failure_warning: &'static str,
     #[cfg(test)]
     gate: Option<TaskGate>,
+    /// Holds the loop at a full table, before it waits for a slot, until every slot's
+    /// report is queued.
+    #[cfg(test)]
+    hold_until_reports_queued: bool,
 }
 
 impl<TKey: Clone + Eq + Hash + Send + 'static> KeyedWorkerTasks<TKey> {
@@ -113,7 +159,7 @@ impl<TKey: Clone + Eq + Hash + Send + 'static> KeyedWorkerTasks<TKey> {
         (
             Self {
                 tasks: tokio::task::JoinSet::new(),
-                active: HashSet::new(),
+                active: HashMap::new(),
                 capacity,
                 reports,
                 finished,
@@ -124,6 +170,8 @@ impl<TKey: Clone + Eq + Hash + Send + 'static> KeyedWorkerTasks<TKey> {
                 failure_warning,
                 #[cfg(test)]
                 gate: None,
+                #[cfg(test)]
+                hold_until_reports_queued: false,
             },
             wake_source,
         )
@@ -151,22 +199,50 @@ impl<TKey: Clone + Eq + Hash + Send + 'static> KeyedWorkerTasks<TKey> {
         }
     }
 
-    /// No slot is free; a task that finishes now wakes the loop.
-    pub(crate) fn at_capacity(&self) -> bool {
+    /// No slot is free; a task that finishes now wakes the loop. The loop marks that it
+    /// waits before it looks for reports already queued, and takes them if there are
+    /// any, so a report enqueued just before the mark is not left unread.
+    #[cfg_attr(
+        not(test),
+        expect(
+            clippy::unused_async,
+            reason = "tests hold the loop here, before it marks the wait, to force a report first"
+        )
+    )]
+    pub(crate) async fn at_capacity(&mut self, now: SyncTime) -> bool {
+        if self.active.len() < self.capacity {
+            return false;
+        }
+        #[cfg(test)]
+        self.wait_for_every_report().await;
+        self.capacity_exhausted.store(true, Ordering::SeqCst);
+        fence(Ordering::SeqCst);
+        if self.finished.is_empty() {
+            return true;
+        }
+        self.reap(now);
         let full = self.active.len() >= self.capacity;
-        if full {
-            self.capacity_exhausted.store(true, Ordering::Release);
+        if !full {
+            self.capacity_exhausted.store(false, Ordering::SeqCst);
         }
         full
     }
 
-    /// A task for this key is running, or its retry time has not come.
-    pub(crate) fn is_busy(&self, key: &TKey, now: SyncTime) -> bool {
-        self.active.contains(key)
-            || self
-                .retries
-                .get(key)
-                .is_some_and(|retry| retry.retry_at > now)
+    /// A task for this key is running, or its retry time has not come. A running key is
+    /// owed a recheck: whatever woke this pass may concern it, so its task wakes the loop
+    /// when it reports. A key whose report is queued but not yet taken wakes the loop
+    /// now.
+    pub(crate) fn skip_busy(&self, key: &TKey, now: SyncTime) -> bool {
+        if let Some(state) = self.active.get(key) {
+            if !state.owe_recheck() {
+                self.wakes
+                    .send_modify(|revision| *revision = revision.wrapping_add(1));
+            }
+            return true;
+        }
+        self.retries
+            .get(key)
+            .is_some_and(|retry| retry.retry_at > now)
     }
 
     /// The earliest retry time after `now`.
@@ -182,9 +258,11 @@ impl<TKey: Clone + Eq + Hash + Send + 'static> KeyedWorkerTasks<TKey> {
     /// progress comes from the commit counter. A commit by anyone during the work also
     /// counts, costing at most one extra pass.
     pub(crate) fn spawn(&mut self, key: TKey, work: impl Future<Output = bool> + Send + 'static) {
+        let state = TaskState::running();
         let reporter = TaskReporter {
             key: Some(key.clone()),
             outcome: TaskOutcome::Failed,
+            state: Arc::clone(&state),
             reports: self.reports.clone(),
             wakes: self.wakes.clone(),
             capacity_exhausted: Arc::clone(&self.capacity_exhausted),
@@ -193,7 +271,7 @@ impl<TKey: Clone + Eq + Hash + Send + 'static> KeyedWorkerTasks<TKey> {
         commits.borrow_and_update();
         #[cfg(test)]
         let gate = self.gate.as_ref().map(TaskGate::shared);
-        self.active.insert(key);
+        self.active.insert(key, state);
         self.tasks.spawn(async move {
             let outcome = if !work.await {
                 TaskOutcome::Failed
@@ -232,23 +310,40 @@ pub(crate) enum TaskGatePoint {
 pub(crate) struct TaskGate {
     point: TaskGatePoint,
     gate: Arc<tokio::sync::Mutex<()>>,
+    /// Counts the tasks that reached the gate.
+    arrivals: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 #[cfg(test)]
 impl TaskGate {
     pub(crate) fn new(point: TaskGatePoint, gate: Arc<tokio::sync::Mutex<()>>) -> Self {
-        Self { point, gate }
+        Self::counting(point, gate, Arc::default())
+    }
+
+    /// A gate that counts each task reaching it in `arrivals`.
+    pub(crate) fn counting(
+        point: TaskGatePoint,
+        gate: Arc<tokio::sync::Mutex<()>>,
+        arrivals: Arc<std::sync::atomic::AtomicUsize>,
+    ) -> Self {
+        Self {
+            point,
+            gate,
+            arrivals,
+        }
     }
 
     fn shared(&self) -> Self {
         Self {
             point: self.point,
             gate: Arc::clone(&self.gate),
+            arrivals: Arc::clone(&self.arrivals),
         }
     }
 
     async fn pass_at(&self, point: TaskGatePoint) {
         if self.point == point {
+            self.arrivals.fetch_add(1, Ordering::SeqCst);
             drop(self.gate.lock().await);
         }
     }
@@ -259,4 +354,23 @@ impl<TKey> KeyedWorkerTasks<TKey> {
     pub(crate) fn hold(&mut self, gate: Option<TaskGate>) {
         self.gate = gate;
     }
+
+    /// The first time the table is full, waits until every slot's report is queued
+    /// before the loop marks that it waits for a slot.
+    pub(crate) fn hold_full_table_until_reports_queued(&mut self) {
+        self.hold_until_reports_queued = true;
+    }
+
+    async fn wait_for_every_report(&mut self) {
+        if !std::mem::take(&mut self.hold_until_reports_queued) {
+            return;
+        }
+        while self.finished.len() < self.capacity {
+            tokio::task::yield_now().await;
+        }
+    }
 }
+
+#[cfg(test)]
+#[path = "keyed_worker_tasks_test.rs"]
+mod tests;

@@ -70,6 +70,9 @@ pub(crate) enum StepProgress {
     Stepped,
     /// Its client could not be reached; only a retry would step the Run again.
     ClientUnavailable,
+    /// A stopped turn is not in its history yet and no deadline remains to step the Run
+    /// again; only a retry reads it again.
+    SettlementNotObserved,
 }
 
 #[derive(Clone)]
@@ -129,10 +132,7 @@ impl ScheduledRunWorker {
             record.phase,
             RunPhase::SummaryRequired | RunPhase::SummaryRunning | RunPhase::SummaryBlocked
         ) {
-            return self
-                .step_summary(record)
-                .await
-                .map(|()| StepProgress::Stepped);
+            return self.step_summary(record).await;
         }
         match record.phase {
             RunPhase::Preparing => Box::pin(self.step_preparation(record)).await,
@@ -143,17 +143,18 @@ impl ScheduledRunWorker {
         }
     }
 
-    async fn step_summary(&self, record: StoredRun) -> Result<(), StorageError> {
+    async fn step_summary(&self, record: StoredRun) -> Result<StepProgress, StorageError> {
+        // No admitted backend or configuration: their publication wakes the scheduler.
         let Some(backend) = &self.backend else {
-            return Ok(());
+            return Ok(StepProgress::Stepped);
         };
         let Ok(admission) = backend.gate.acquire() else {
-            return Ok(());
+            return Ok(StepProgress::Stepped);
         };
         let seconds = if record.phase == RunPhase::SummaryRequired {
             let lease = self.configuration.admission_lease().await;
             let Some(configuration) = lease.configuration() else {
-                return Ok(());
+                return Ok(StepProgress::Stepped);
             };
             u32::from(configuration.summary_timeout_seconds)
         } else {

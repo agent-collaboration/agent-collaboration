@@ -29,6 +29,7 @@ pub enum PushHandoffError {
 pub struct PushHandoffWorker {
     automation: Arc<Mutex<AutomationStore>>,
     interactions: Arc<InteractionStore>,
+    observation: crate::WorkerObservation,
 }
 
 impl PushHandoffWorker {
@@ -39,7 +40,14 @@ impl PushHandoffWorker {
         Self {
             automation,
             interactions,
+            observation: crate::WorkerObservation::default(),
         }
+    }
+
+    /// What the hand-off's loop reports; under test-support a test reads it.
+    #[must_use]
+    pub fn observation(&self) -> crate::WorkerObservation {
+        self.observation.clone()
     }
 
     /// One Host-owned instance runs after exclusive startup and drains on shutdown. It
@@ -47,7 +55,9 @@ impl PushHandoffWorker {
     /// is no timer except the failed-pass retry.
     pub async fn run(self, clock: Arc<dyn runtime_primitives::Clock>, shutdown: CancellationToken) {
         let commits = self.automation.lock().await.subscribe_commits();
-        let worker = crate::WakeDrivenWorkerLoop::new("push hand-off", clock).wake_on(commits);
+        let worker = crate::WakeDrivenWorkerLoop::new("push hand-off", clock)
+            .with_observation(self.observation.clone())
+            .wake_on(commits);
         let mut pass = HandoffPass { worker: self };
         worker.run(&mut pass, shutdown).await;
     }
@@ -164,3 +174,7 @@ impl crate::WorkerPass for HandoffPass {
         Ok(None)
     }
 }
+
+#[cfg(test)]
+#[path = "push_handoff_worker_test.rs"]
+mod tests;

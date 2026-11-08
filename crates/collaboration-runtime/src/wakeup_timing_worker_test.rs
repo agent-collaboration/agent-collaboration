@@ -161,6 +161,21 @@ impl WakeFixture {
 
     /// Starts the wake-up worker and the push hand-off, both on the loop helper.
     fn start(&self) -> TestResult<RunningWakes> {
+        let mut wakes = self.start_wakes_only(|worker| worker)?;
+        let handoff =
+            PushHandoffWorker::new(Arc::clone(&self.store), Arc::clone(&self.interactions));
+        wakes.tasks.push(tokio::spawn(handoff.run(
+            Arc::clone(&self.clock) as Arc<dyn Clock>,
+            wakes.shutdown.clone(),
+        )));
+        Ok(wakes)
+    }
+
+    /// Starts only the wake-up worker; the test applies the hand-off itself.
+    fn start_wakes_only(
+        &self,
+        configure: impl FnOnce(WakeTimingWorker) -> WakeTimingWorker,
+    ) -> TestResult<RunningWakes> {
         let worker = WakeTimingWorker::new(
             Arc::clone(&self.store),
             Arc::clone(&self.delivery) as Arc<dyn SessionMessageDelivery>,
@@ -174,14 +189,10 @@ impl WakeFixture {
             Arc::clone(&self.interactions),
             Arc::clone(&self.clock) as Arc<dyn Clock>,
         );
+        let worker = configure(worker);
         let observation = worker.observation();
         let shutdown = CancellationToken::new();
-        let handoff =
-            PushHandoffWorker::new(Arc::clone(&self.store), Arc::clone(&self.interactions));
-        let tasks = vec![
-            tokio::spawn(worker.run(shutdown.clone())),
-            tokio::spawn(handoff.run(Arc::clone(&self.clock) as Arc<dyn Clock>, shutdown.clone())),
-        ];
+        let tasks = vec![tokio::spawn(worker.run(shutdown.clone()))];
         Ok(RunningWakes {
             observation,
             shutdown,
@@ -455,6 +466,61 @@ async fn a_wake_created_while_the_worker_sleeps_arms_its_timer_without_a_clock_a
         wakes.observation.snapshot().armed_deadline,
         Some(at(Duration::from_secs(60))),
         "the creating commit woke the worker, which armed the new wake"
+    );
+    wakes.stop().await;
+    Ok(())
+}
+
+#[tokio::test(start_paused = true)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
+async fn a_push_admitted_while_its_dispatch_is_in_flight_is_still_delivered() -> TestResult {
+    let fixture = WakeFixture::new().await?;
+    fixture
+        .create_wake("woken-session", 60, ExpiryRule::None)
+        .await?;
+    let gate = Arc::new(Mutex::new(()));
+    let held = Arc::clone(&gate).lock_owned().await;
+    let arrivals = Arc::new(AtomicUsize::new(0));
+    let wakes = fixture.start_wakes_only(|worker| {
+        worker.hold_dispatch_reports(Arc::clone(&gate), Arc::clone(&arrivals))
+    })?;
+    settled(&wakes.observation).await?;
+
+    // At its time the wake's dispatch finds its push not yet admitted, writes nothing
+    // and is held before it reports. The hand-off then admits the push; the commit wakes
+    // a pass that skips the in-flight delivery.
+    advance(Duration::from_secs(60)).await;
+    for _ in 0..WAIT_LIMIT {
+        if arrivals.load(Ordering::SeqCst) > 0 {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    let delivered_while_unadmitted = fixture.deliveries();
+    let sleeps_before_admission = wakes.observation.snapshot().sleeps;
+    PushHandoffWorker::new(
+        Arc::clone(&fixture.store),
+        Arc::clone(&fixture.interactions),
+    )
+    .apply_pending()
+    .await?;
+    wakes
+        .observation
+        .asleep_at_least(sleeps_before_admission + 1)
+        .await;
+    settled(&wakes.observation).await?;
+    drop(held);
+    fixture.delivered(&wakes, 1).await?;
+
+    assert!(arrivals.load(Ordering::SeqCst) > 0, "the dispatch was held");
+    assert!(delivered_while_unadmitted.is_empty());
+    assert_eq!(
+        fixture.deliveries(),
+        [at(Duration::from_secs(60))],
+        "the dispatch owed a recheck is redispatched once admitted, with no clock advance"
     );
     wakes.stop().await;
     Ok(())

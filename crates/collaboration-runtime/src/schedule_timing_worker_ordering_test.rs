@@ -1,9 +1,11 @@
 //! Orderings a multi-threaded runtime allows between a step's own commit, its report and
-//! the scheduler's wake, and stop requests whose outcome is unknown.
+//! the scheduler's wake, a completion that arrives while its Run is being checked, and
+//! stop requests whose outcome is unknown.
 use super::{
-    INTERVAL_SECONDS, RunPhase, SchedulerFixture, TIMEOUT_SECONDS, TestResult, advance, at,
-    observe, settled, turn_completed,
+    INTERVAL_SECONDS, RunPhase, SchedulerFixture, TIMEOUT_SECONDS, TestResult, WAIT_LIMIT, advance,
+    at, observe, settled, turn_completed,
 };
+use runtime_primitives::Clock;
 use std::{
     sync::{Arc, atomic::Ordering},
     time::Duration,
@@ -129,6 +131,62 @@ async fn a_stop_with_an_unknown_outcome_after_its_intent_sends_one_interrupt_and
         RunPhase::Stopping,
         "the settlement read finishes the stopping Run"
     );
+    scheduler.stop().await;
+    Ok(())
+}
+
+#[tokio::test(start_paused = true)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
+async fn a_completion_consumed_while_its_run_is_being_checked_still_settles_the_run()
+-> TestResult<()> {
+    let fixture = SchedulerFixture::with_one_schedule().await?;
+    let first = fixture.start()?;
+    settled(&first).await?;
+    advance(Duration::from_secs(u64::from(INTERVAL_SECONDS))).await;
+    let run = fixture.executing_and_asleep(&first).await?;
+    first.stop().await;
+    let reads_before = fixture.route.settlement_reads.load(Ordering::Acquire);
+    let gate = Arc::new(Mutex::new(()));
+    let held = Arc::clone(&gate).lock_owned().await;
+
+    // The restarted scheduler checks the Run, finds its turn running and is held before
+    // it reports; the completion arrives and is consumed by a pass that skips the Run.
+    let scheduler = fixture.start_with(|worker| worker.hold_step_reports(gate))?;
+    for _ in 0..WAIT_LIMIT {
+        if fixture.route.settlement_reads.load(Ordering::Acquire) > reads_before {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    settled(&scheduler).await?;
+    let started_at = fixture.clock.now();
+    fixture.route.turn_completed.store(true, Ordering::Release);
+    let sleeps_before_completion = scheduler.observation.snapshot().sleeps;
+    observe(&fixture, turn_completed()).await?;
+    scheduler
+        .observation
+        .asleep_at_least(sleeps_before_completion + 1)
+        .await;
+    settled(&scheduler).await?;
+    let phase_while_held = fixture.read_phase(&run).await?;
+    drop(held);
+    for _ in 0..WAIT_LIMIT {
+        if fixture.read_phase(&run).await? != RunPhase::Executing {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+
+    assert_eq!(phase_while_held, RunPhase::Executing);
+    assert_eq!(
+        fixture.read_phase(&run).await?,
+        RunPhase::Finished,
+        "the held check reports, and the completion it missed is checked again"
+    );
+    assert_eq!(fixture.clock.now(), started_at, "with no clock advance");
     scheduler.stop().await;
     Ok(())
 }

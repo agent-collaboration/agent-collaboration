@@ -163,3 +163,30 @@ async fn runs_after_a_full_batch_waiting_for_retries_are_stepped_with_no_clock_a
     scheduler.stop().await;
     Ok(())
 }
+
+#[tokio::test(start_paused = true)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
+async fn reports_queued_before_the_scheduler_waits_for_a_slot_are_not_lost() -> TestResult<()> {
+    let fixture = SchedulerFixture::with_one_schedule().await?;
+    let run = fixture.one_executing_run().await?;
+    let mut runs = fixture.copy_executing_run(&run, RUN_COUNT - 1).await?;
+    runs.push(run);
+    let started_at = fixture.clock.now();
+
+    // When the slots first fill, every one of those steps reports (unchanged, so
+    // quietly) before the scheduler marks that it waits for a slot.
+    let scheduler = fixture.start_with(|worker| worker.hold_full_table_until_reports_queued())?;
+    fixture.observed(RUN_COUNT).await?;
+    settled(&scheduler).await?;
+    let mut observed = fixture.observed_runs();
+    observed.sort();
+    runs.sort();
+
+    assert_eq!(observed, runs, "every Run stepped exactly once");
+    assert_eq!(fixture.clock.now(), started_at, "with no clock advance");
+    scheduler.stop().await;
+    Ok(())
+}

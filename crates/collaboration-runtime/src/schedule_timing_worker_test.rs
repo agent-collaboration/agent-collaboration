@@ -59,6 +59,10 @@ struct ControlledRoute {
     preparations: std::sync::Mutex<Vec<SyncTime>>,
     /// The Run each settlement read was for.
     observed_runs: std::sync::Mutex<Vec<agent_automation::RunId>>,
+    /// How many target preparations still fail to reach the client, recording nothing.
+    unreachable_targets: AtomicUsize,
+    /// Fresh-session submissions, answered by the preparation tests.
+    fresh: preparation_tests::FreshSubmissions,
     /// How many settlement reads still answer that the client is unreachable.
     unreachable_settlements: AtomicUsize,
     /// How many stop requests still answer that the client is unreachable.
@@ -115,6 +119,9 @@ impl ScheduledRunExecution for ControlledRoute {
         declared_cwd: &str,
         sink: &'a dyn RunEvidenceSink,
     ) -> DeliveryFuture<'a, PreparedTarget> {
+        if take_unreachable(&self.unreachable_targets) {
+            return Box::pin(async { Err(DeliveryContractError::ClientOperation) });
+        }
         self.inner
             .prepare_existing_target(target, declared_cwd, sink)
     }
@@ -132,6 +139,12 @@ impl ScheduledRunExecution for ControlledRoute {
         run: ScheduledRunSubmission,
         sink: &'a dyn RunEvidenceSink,
     ) -> DeliveryFuture<'a, RunSubmission> {
+        if matches!(
+            run.payload,
+            collaboration_contracts::ScheduledRunPayload::Fresh { .. }
+        ) {
+            return self.fresh.submit(self.clock.now());
+        }
         self.inner.submit_run(run, sink)
     }
 
@@ -264,6 +277,8 @@ impl SchedulerFixture {
             initial_evidence_unreachable: AtomicBool::new(false),
             preparations: std::sync::Mutex::default(),
             observed_runs: std::sync::Mutex::default(),
+            unreachable_targets: AtomicUsize::new(0),
+            fresh: preparation_tests::FreshSubmissions::default(),
             unreachable_settlements: AtomicUsize::new(0),
             unreachable_stops: AtomicUsize::new(0),
             stop_records_intent: AtomicBool::new(false),
