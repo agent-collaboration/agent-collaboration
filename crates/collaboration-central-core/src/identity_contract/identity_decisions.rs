@@ -1,17 +1,16 @@
 //! Sign-in service decisions and machine-token extension claims.
 use super::{
-    AllowedWorkspaces, ClientId, DeviceLoginLabel, DeviceLoginRequestId, EnrollPermission,
-    FormerServiceId, PersonId,
+    AllowedWorkspaces, ClientId, DeviceLoginRequestId, EnrollPermission, FormerServiceId, PersonId,
 };
 use fleet_identity_protocol::{EnrollmentId, InstallationId, OrganizationId, UnixSeconds};
 use fleet_sync_protocol::PeerId;
+use message_board::{MachineLabel, RecordId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use std::num::NonZeroU32;
 
-/// The issuer asks central to approve a device login. `approverSecondFactorAt`
-/// is always present and may be null; `formerServiceId` is present only for a
-/// machine re-keying from an older service identity.
+/// The issuer asks central to approve a device login. `formerServiceId` is
+/// present only for a machine re-keying from an older service identity.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DecideDeviceLogin {
@@ -19,27 +18,25 @@ pub struct DecideDeviceLogin {
     pub approver: PersonId,
     pub permission_checked: EnrollPermission,
     pub request_id: DeviceLoginRequestId,
+    /// A machine logging in with B3 names itself by its peer UUIDv7, so this
+    /// installation is always a UUIDv7, though older installations are not.
+    #[serde(deserialize_with = "uuid_v7_installation")]
+    #[schemars(with = "RecordId")]
     pub installation: InstallationId,
-    #[schemars(with = "message_board::RecordId")]
+    #[schemars(with = "RecordId")]
     pub peer: PeerId,
-    pub label: DeviceLoginLabel,
+    pub label: MachineLabel,
     pub allowed_workspaces: AllowedWorkspaces,
-    #[serde(deserialize_with = "present_nullable")]
-    #[schemars(required, schema_with = "nullable_unix_seconds")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approver_second_factor_at: Option<UnixSeconds>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub former_service_id: Option<FormerServiceId>,
 }
-/// Makes an `Option` field's key required while its value may be null.
-fn present_nullable<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
+fn uuid_v7_installation<'de, D: Deserializer<'de>>(
     deserializer: D,
-) -> Result<Option<T>, D::Error> {
-    Option::deserialize(deserializer)
-}
-/// `approverSecondFactorAt`'s schema: a required key whose value may be null.
-fn nullable_unix_seconds(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
-    let seconds = generator.subschema_for::<UnixSeconds>();
-    schemars::json_schema!({"anyOf":[seconds,{"type":"null"}]})
+) -> Result<InstallationId, D::Error> {
+    let installation = RecordId::deserialize(deserializer)?;
+    InstallationId::try_from(String::from(installation)).map_err(serde::de::Error::custom)
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(

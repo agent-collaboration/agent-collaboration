@@ -7,38 +7,42 @@ enrollment store. SQL, migrations, D1/SQLite adapters, the enrollment's stamp pi
 
 ## Contract alignment with the issuer mirror
 
-Central's Rust contract matches the issuer's `machine-login-contracts.ts` (switchboard
-`item2/b3a-device-grant` at `4d7e0e1e`) field for field, camelCase on the wire.
+Central's contract matches the issuer's `machine-login-contracts.ts` (switchboard
+`item2/b3a-device-grant`) in shape, camelCase on the wire. Where validation differed, the
+Lead ruled each row against the Program Design; where the PD is silent, the owner of the
+shared type decides.
 
-| Shape | Change |
+| Shape | Central |
 | --- | --- |
-| `DecideDeviceLogin` | adds `permissionChecked: "machine:enroll"`. `label` is trimmed, 1–120 UTF-16 code units. `allowedWorkspaces` holds at most 100. `approverSecondFactorAt` is a required key that may be null. Adds optional `formerServiceId` (UUIDv4 or UUIDv7). |
+| `DecideDeviceLogin` | adds `permissionChecked: "machine:enroll"`. `label` is the board's `MachineLabel` (PD:880, PD:576): trimmed, 1–256 UTF-8 bytes, no C0 controls except tab and newline. `installation` must be a UUIDv7 here only (B3:126); `InstallationId` stays shared because older UUIDv4 rows still appear in lookups. `allowedWorkspaces` holds at most 100. `approverSecondFactorAt` follows PD:571 (omitted or null reads as none; never written as null). Adds optional `formerServiceId`: UUIDv4 or UUIDv7, RFC variant, canonical lowercase. |
 | `DeviceLoginRefusal` | `notOwner` is now `notPermitted`. Adds `formerServiceLinkedElsewhere {}`. `withinSeconds` is positive. |
 | `MachineTokenDecision.grant` | adds optional `superseded: EndedMachineClient { enrollmentId, clientId }` |
 
-Proof: the transcribed literals in `issuer_decision_contracts.rs` round-trip exactly. The
-mirror's refusals are in `machine_login_mirror_negatives`, and serde and the generated
-schema each refuse every one of them. Three seeded reds each failed at their own assertion:
-a missing `approverSecondFactorAt` accepted, the UTF-16 bound removed, and the
-former-service version check removed.
+The mirror is changing on its side to match: the label byte check, C0 refusal, and
+lowercase UUIDs, including `formerServiceId`. A cross-repo equality test will read a
+committed copy of the mirror's vectors.
 
-Central is stricter than the mirror in three places. The issuer's outputs never reach them:
+Proof:
 
-- A label is also refused when it holds C0 controls other than tab and newline, or runs
-  over 256 UTF-8 bytes (the board's existing `MachineLabel` rule).
-- UUIDs must be canonical lowercase; `z.uuid()` accepts uppercase.
-- An explicit `null` for `formerServiceId` or `superseded` is read as absent. That follows
-  central's convention for optional keys; central never writes null.
+- The literals in `issuer_decision_contracts.rs` round-trip exactly.
+- The bounds' negatives are in `machine_login_mirror_negatives`. Serde and the generated
+  schema each refuse every one.
+- Each of these seeded reds failed at its own assertion:
+  - a missing `approverSecondFactorAt` refused;
+  - the label as an unbounded string;
+  - the UUIDv7 installation check removed;
+  - the former-service version check removed.
 
 ## Assumptions for the owner page
 
 - **`formerServiceLinkedElsewhere {}`** is a new bounded device-login refusal. It answers a
   re-key whose former service id is already linked to a different installation or
-  organization. It reveals nothing beyond "not linkable here": no organization, enrollment
-  or installation. The variant was sent to the switchboard B3a Implementer.
+  organization. It says nothing beyond "not linkable here": no organization, enrollment
+  or installation. The switchboard B3a Implementer has the variant.
+- **`allowedWorkspaces` holds at most 100 workspaces.** The PD (PD:881) states no bound.
+  The issuer and central both enforce 100.
 
 ## Stand-ins
 
-Each entry: the seam, what stands in, the assumptions it encodes, what closes it.
-
-(Filled as each one lands.)
+Each entry gives the seam, what stands in, the assumptions it encodes and what closes it.
+Each entry is added as its stand-in lands.

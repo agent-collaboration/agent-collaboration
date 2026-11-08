@@ -87,7 +87,9 @@ fn optional_reads_accept_null_but_writes_omit_the_key() {
         "../../contracts/DecideDeviceLogin.fixtures.json"
     ))
     .unwrap();
-    assert_null_read_omitted_write::<DecideDeviceLogin>(decisions[0].clone(), "formerServiceId");
+    for field in ["approverSecondFactorAt", "formerServiceId"] {
+        assert_null_read_omitted_write::<DecideDeviceLogin>(decisions[0].clone(), field);
+    }
     let enrollments: Vec<Value> = serde_json::from_str(include_str!(
         "../../contracts/MachineEnrollment.fixtures.json"
     ))
@@ -95,27 +97,6 @@ fn optional_reads_accept_null_but_writes_omit_the_key() {
     for index in [0, 2, 4] {
         assert_null_read_omitted_write::<MachineEnrollment>(enrollments[index].clone(), "endsAt");
     }
-}
-
-/// The issuer always sends `approverSecondFactorAt`, as null when the approver
-/// gave no second factor. Central keeps the null and refuses a missing key.
-#[test]
-fn approver_second_factor_at_is_always_present_and_may_be_null() {
-    let decisions: Vec<Value> = serde_json::from_str(include_str!(
-        "../../contracts/DecideDeviceLogin.fixtures.json"
-    ))
-    .unwrap();
-    let without_factor = decisions[0].clone();
-    assert_eq!(without_factor["approverSecondFactorAt"], Value::Null);
-    let parsed: DecideDeviceLogin = serde_json::from_value(without_factor.clone()).unwrap();
-    assert_eq!(parsed.approver_second_factor_at, None);
-    assert_eq!(serde_json::to_value(parsed).unwrap(), without_factor);
-    let mut missing = without_factor;
-    missing
-        .as_object_mut()
-        .unwrap()
-        .remove("approverSecondFactorAt");
-    assert_refused::<DecideDeviceLogin>(missing);
 }
 
 #[test]

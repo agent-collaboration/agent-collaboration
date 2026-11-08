@@ -21,29 +21,6 @@ impl<'instance> Keyword<'instance> for Utf8ByteLimit {
     }
 }
 
-struct Utf16UnitLimit {
-    maximum_units: u64,
-}
-
-impl<'instance> Keyword<'instance> for Utf16UnitLimit {
-    fn validate(&self, instance: &'instance Value) -> Result<(), ValidationError<'instance>> {
-        if self.is_valid(instance) {
-            Ok(())
-        } else {
-            Err(ValidationError::custom(
-                "text exceeds its UTF-16 code unit limit",
-            ))
-        }
-    }
-
-    fn is_valid(&self, instance: &'instance Value) -> bool {
-        instance.as_str().is_none_or(|text| {
-            u64::try_from(text.encode_utf16().count())
-                .is_ok_and(|length| length <= self.maximum_units)
-        })
-    }
-}
-
 pub fn contract_validator(schema: &Value) -> Result<Validator, ValidationError<'static>> {
     jsonschema::options()
         .with_keyword("x-maxUtf8Bytes", |_, value, _| {
@@ -51,12 +28,6 @@ pub fn contract_validator(schema: &Value) -> Result<Validator, ValidationError<'
                 ValidationError::custom("x-maxUtf8Bytes must be a nonnegative integer")
             })?;
             Ok(Box::new(Utf8ByteLimit { maximum_bytes }))
-        })
-        .with_keyword("x-maxUtf16Units", |_, value, _| {
-            let maximum_units = value.as_u64().ok_or_else(|| {
-                ValidationError::custom("x-maxUtf16Units must be a nonnegative integer")
-            })?;
-            Ok(Box::new(Utf16UnitLimit { maximum_units }))
         })
         .build(schema)
 }

@@ -98,26 +98,22 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
     invalid
 }
 
-/// Inputs the issuer's `machine-login-contracts.ts` refuses; central refuses them too.
+/// The machine-login decisions' own bounds, as ruled against the Program Design.
 fn machine_login_mirror_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
     let mut invalid = Vec::new();
     match name {
         "DecideDeviceLogin" => {
             let Some(first) = literals.first() else { return invalid };
-            let mut missing = first.clone();
-            if let Some(fields) = missing.as_object_mut() { fields.remove("approverSecondFactorAt"); }
-            invalid.push(missing);
             let mut no_permission = first.clone();
             if let Some(fields) = no_permission.as_object_mut() { fields.remove("permissionChecked"); }
             invalid.push(no_permission);
-            let cases: [(&str, Value); 12] = [
+            let cases: [(&str, Value); 11] = [
                 ("permissionChecked", json!("machine:view")),
-                ("label", json!("a".repeat(121))),
-                // 61 astral characters: 61 code points, 122 UTF-16 code units.
-                ("label", json!("😀".repeat(61))),
-                // 86 three-byte characters: 86 code units, 258 UTF-8 bytes.
+                // 86 three-byte characters: 258 UTF-8 bytes in 86 characters.
                 ("label", json!("€".repeat(86))),
                 ("label", json!("")),
+                // A UUIDv4 installation: valid elsewhere, never in a B3 device login.
+                ("installation", json!("0b6a1c5e-2f3d-4a8b-9c1d-2e3f4a5b6c7d")),
                 ("allowedWorkspaces", json!(vec!["019a3dce-2000-7000-8000-000000000001"; 101])),
                 ("approverSecondFactorAt", json!("1793448000")),
                 ("formerServiceId", json!("019a3dce-2000-1000-8000-000000000001")),
@@ -154,7 +150,7 @@ fn machine_login_mirror_negatives(name: &str, literals: &[Value]) -> Vec<Value> 
 // bound. Each owning contract must reject them through its registered keyword.
 fn composed_byte_overflows(name: &str, literals: &[Value]) -> Vec<Value> {
     let fields: &[(&str, usize)] = match name {
-        "AllowedMachineRow" | "MachineLookupResult" => &[("/label", 256)],
+        "DecideDeviceLogin" | "AllowedMachineRow" | "MachineLookupResult" => &[("/label", 256)],
         "CreateWorkspace" | "ProjectRef" | "WorkspaceRef" => &[("/name", 256)],
         "IdentityLookup" | "RemoveSession" | "SessionRow" => &[("/session/sessionId", 4096)],
         "MachineRow" => &[("/label", 256), ("/sessions/0/session/sessionId", 4096)],
