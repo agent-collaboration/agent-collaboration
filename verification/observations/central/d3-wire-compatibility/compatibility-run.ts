@@ -1,10 +1,11 @@
 /** Run with verification/run.ts --d3-wire PLAN. Drives only declared isolated debug instances. */
 import { mkdir, mkdtemp, readFile, realpath } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
+import { openSync, closeSync } from "node:fs";
 import { z } from "zod";
 import type { CompatibilityPlan } from "./compatibility-plan.ts";
 import { FixtureInstallation, freePort } from "./fixture-installation.ts";
-import { driveCompatibilityJourneys } from "./compatibility-journeys.ts";
+import { driveCompatibilityJourneys, observeCompatibilityPair } from "./compatibility-journeys.ts";
 import { boardIdentity } from "../../../clients/board-requests.ts";
 import { decode } from "../../../exact-json.ts";
 import {
@@ -30,10 +31,18 @@ async function prepareCompatibility(plan: CompatibilityPlan): Promise<{
     throw new Error("central source pin changed");
   if ((await fingerprint(plan.oldSourceArchive.path)) !== plan.oldSourceArchive.sha256)
     throw new Error("old-source archive hash mismatch");
-  const archivedCommit = execFileSync("/usr/bin/git", ["get-tar-commit-id"], {
-    input: await readFile(plan.oldSourceArchive.path),
-    encoding: "utf8",
-  }).trim();
+  const archiveDescriptor = openSync(plan.oldSourceArchive.path, "r");
+  let archivedCommit: string;
+  try {
+    // get-tar-commit-id intentionally exits after the initial tar header. A
+    // pipe containing the whole archive can fail EPIPE after that valid exit.
+    archivedCommit = execFileSync("/usr/bin/git", ["get-tar-commit-id"], {
+      stdio: [archiveDescriptor, "pipe", "pipe"],
+      encoding: "utf8",
+    }).trim();
+  } finally {
+    closeSync(archiveDescriptor);
+  }
   if (archivedCommit !== plan.oldSourceHead)
     throw new Error("old source is not the adopted release tag");
   for (const artifact of [plan.oldRouter, plan.oldCli, plan.centralDriver, plan.native])
@@ -108,6 +117,7 @@ export async function runCompatibility(plan: CompatibilityPlan): Promise<void> {
     )
       throw new Error("two distinct old-source installations required");
     await driveCompatibilityJourneys({ a, b, receipt });
+    await observeCompatibilityPair({ a, b, receipt }, "final-completion");
     for (const artifact of [plan.oldRouter, plan.oldCli, plan.centralDriver])
       await qualifyArtifact(artifact);
     const final = await command("/usr/bin/git", ["rev-parse", "HEAD"], { cwd: plan.repository });
@@ -120,25 +130,8 @@ export async function runCompatibility(plan: CompatibilityPlan): Promise<void> {
       stack: error instanceof Error ? error.stack : undefined,
     });
   } finally {
-    for (const machine of machines.reverse()) {
-      try {
-        await machine.close();
-      } catch (error: unknown) {
-        cleanupFailures.push(String(error));
-      }
-      await receipt.save(`wire-${machine.input.name}.json`, {
-        snapshot: machine.wire.snapshot(),
-        frames: machine.wire.observations(),
-        audit: machine.gate?.audit.snapshot(),
-      });
-    }
-    if (central !== undefined)
-      try {
-        central.child.stdin?.end();
-        await central.stop();
-      } catch (error: unknown) {
-        cleanupFailures.push(String(error));
-      }
+    cleanupFailures.push(...(await closeCompatibility({ machines, central, receipt })));
+    if (failure === undefined) failure = await finalCompatibilityFailure({ machines, receipt });
     await receipt.save("result.json", {
       passed: failure === undefined && cleanupFailures.length === 0,
       buildLabel: "released 0.1.125 source, debug build",
@@ -156,4 +149,49 @@ export async function runCompatibility(plan: CompatibilityPlan): Promise<void> {
   }
   if (failure !== undefined || cleanupFailures.length > 0)
     throw new Error("D3 compatibility incomplete; inspect retained result/failure");
+}
+
+async function finalCompatibilityFailure(input: {
+  machines: readonly FixtureInstallation[];
+  receipt: Receipt;
+}): Promise<unknown> {
+  try {
+    const a = input.machines.find((machine): boolean => machine.input.name === "a");
+    const b = input.machines.find((machine): boolean => machine.input.name === "b");
+    if (a === undefined || b === undefined) throw new Error("final pair evidence incomplete");
+    await observeCompatibilityPair({ a, b, receipt: input.receipt }, "final-after-cleanup");
+    return undefined;
+  } catch (error: unknown) {
+    await input.receipt.save("final-audit-failure.json", { message: String(error) });
+    return error;
+  }
+}
+
+async function closeCompatibility(input: {
+  machines: readonly FixtureInstallation[];
+  central: OwnedProcess | undefined;
+  receipt: Receipt;
+}): Promise<readonly string[]> {
+  const failures: string[] = [];
+  for (const machine of [...input.machines].reverse()) {
+    try {
+      await machine.close();
+    } catch (error: unknown) {
+      failures.push(String(error));
+    }
+    await input.receipt.save(`wire-${machine.input.name}.json`, {
+      snapshot: machine.wire.snapshot(),
+      frames: machine.wire.observations(),
+      audit: machine.gate?.audit.snapshot(),
+    });
+  }
+  if (input.central !== undefined) {
+    try {
+      input.central.child.stdin?.end();
+      await input.central.stop();
+    } catch (error: unknown) {
+      failures.push(String(error));
+    }
+  }
+  return failures;
 }

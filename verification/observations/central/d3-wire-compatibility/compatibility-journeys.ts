@@ -2,7 +2,7 @@
 import { setTimeout } from "node:timers/promises";
 import { z } from "zod";
 import type { FixtureInstallation } from "./fixture-installation.ts";
-import { requireCompatibleWire, requireExactBacklog } from "./wire-observation.ts";
+import { requireCompatiblePair, requireExactBacklog } from "./wire-observation.ts";
 import { acceptedWrite, boardIdentity, writeHeader } from "../../../clients/board-requests.ts";
 import { field } from "../../../exact-json.ts";
 import type { Receipt } from "../../../receipt.ts";
@@ -136,6 +136,7 @@ async function createReplicatedProject(input: {
   ];
   for (const [tool, fields] of writes) {
     const request = { ...writeHeader(actor), ...fields };
+    await receipt.record("d3BoardRequest", { tool, request });
     const reply = await acceptedWrite({ client: a.mcp, tool, request });
     await receipt.record("d3BoardMutation", { tool, request, reply });
     a.requireNoTurns();
@@ -189,8 +190,7 @@ export async function driveCompatibilityJourneys(input: {
     const item = await sendMail({ sender, target, receipt });
     await settledMail({ sender, target, item, receipt });
   }
-  requireCompatibleWire(a.wire.snapshot());
-  requireCompatibleWire(b.wire.snapshot());
+  await observeCompatibilityPair(input, "j11-completion");
   await receipt.save("j11.json", {
     conclusion: "supported",
     target: "released 0.1.125 source, debug build",
@@ -217,15 +217,17 @@ async function driveBacklog(input: {
   const before = b.wire.snapshot();
   const backlog: string[] = [];
   for (let index = 0; index < 100; index += 1) {
+    const request = {
+      ...writeHeader(actor),
+      workspaceId,
+      name: `D3 notice ${index}`,
+      description: "Retained while B is stopped",
+    };
+    await receipt.record("d3RetainedNoticeRequest", { index, request });
     const reply = await acceptedWrite({
       client: a.mcp,
       tool: "workspace_update",
-      request: {
-        ...writeHeader(actor),
-        workspaceId,
-        name: `D3 notice ${index}`,
-        description: "Retained while B is stopped",
-      },
+      request,
     });
     await receipt.record("d3RetainedNoticeMutation", { index, reply });
   }
@@ -246,8 +248,7 @@ async function driveBacklog(input: {
   const caughtUp = await noticeCatchup(b, previous);
   if (caughtUp.length < 100)
     throw new Error("100 retained notices not observed in real Welcome-triggered catch-up");
-  requireCompatibleWire(a.wire.snapshot());
-  requireCompatibleWire(b.wire.snapshot());
+  await observeCompatibilityPair(input, "j22-completion");
   a.requireNoTurns();
   b.requireNoTurns();
   await receipt.save("j22.json", {
@@ -265,6 +266,22 @@ async function driveBacklog(input: {
       ],
     },
   });
+}
+
+export async function observeCompatibilityPair(
+  input: {
+    a: FixtureInstallation;
+    b: FixtureInstallation;
+    receipt: Receipt;
+  },
+  stage: string,
+): Promise<void> {
+  const evidence = {
+    a: { wire: input.a.wire.snapshot(), audit: input.a.gate?.audit.snapshot() },
+    b: { wire: input.b.wire.snapshot(), audit: input.b.gate?.audit.snapshot() },
+  };
+  await input.receipt.record("d3PairCompletionEvidence", { stage, evidence });
+  requireCompatiblePair(evidence);
 }
 
 async function noticeCatchup(

@@ -4,8 +4,64 @@ import {
   CompatibilityWireObservation,
   requireCompatibleWire,
   requireExactBacklog,
+  requireCompatiblePair,
 } from "./wire-observation.ts";
 import { SessionAudit } from "../../../access/session-audit.ts";
+
+function encodedAudit(): {
+  audit: SessionAudit;
+  wire: CompatibilityWireObservation;
+  send: (value: unknown) => void;
+} {
+  const wire = new CompatibilityWireObservation();
+  const audit = new SessionAudit((value): void => wire.observe(value));
+  const connection = audit.opened();
+  audit.receive(connection, Buffer.from("HTTP/1.1 101 Switching Protocols\r\n\r\n"));
+  const send = (value: unknown): void => {
+    const bytes = Buffer.from(JSON.stringify(value));
+    assert.ok(bytes.length < 126);
+    audit.receive(connection, Buffer.concat([Buffer.from([130, bytes.length]), bytes]));
+  };
+  send({ kind: "welcome", value: { sessionId: "fixture", databases: [] } });
+  return { audit, wire, send };
+}
+
+test("the shared completion gate rejects a real unsupported encoded frame when only A is corrupted", (): void => {
+  const a = encodedAudit(),
+    b = encodedAudit();
+  const evidence = (): Parameters<typeof requireCompatiblePair>[0] => ({
+    a: { wire: a.wire.snapshot(), audit: a.audit.snapshot() },
+    b: { wire: b.wire.snapshot(), audit: b.audit.snapshot() },
+  });
+  requireCompatiblePair(evidence());
+  a.send({ kind: "unsupportedActualFrame", value: {} });
+  assert.equal(a.audit.snapshot().invalidConnections, 1);
+  assert.equal(b.audit.snapshot().invalidConnections, 0);
+  assert.equal(a.wire.snapshot().unsupportedFrames, 0);
+  assert.throws((): void => requireCompatiblePair(evidence()), /invalid a raw Session audit/);
+});
+
+test("the shared completion gate rejects an unknown B frame and missing audits", (): void => {
+  const a = encodedAudit(),
+    b = encodedAudit();
+  b.send({ kind: "unknownOnB", value: {} });
+  assert.throws(
+    (): void =>
+      requireCompatiblePair({
+        a: { wire: a.wire.snapshot(), audit: a.audit.snapshot() },
+        b: { wire: b.wire.snapshot(), audit: b.audit.snapshot() },
+      }),
+    /invalid b raw Session audit/,
+  );
+  assert.throws(
+    (): void =>
+      requireCompatiblePair({
+        a: { wire: a.wire.snapshot(), audit: undefined },
+        b: { wire: b.wire.snapshot(), audit: b.audit.snapshot() },
+      }),
+    /invalid a raw Session audit/,
+  );
+});
 
 test("legacy Welcome and retained notice page are observed without optional capability leakage", (): void => {
   const observation = new CompatibilityWireObservation();

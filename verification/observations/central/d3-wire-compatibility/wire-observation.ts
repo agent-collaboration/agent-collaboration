@@ -1,6 +1,7 @@
 /** Observe real forwarded server payloads; never synthesize a product response. */
 import { z } from "zod";
 import { encode } from "../../../exact-json.ts";
+import type { SessionSnapshot } from "../../../access/session-audit.ts";
 
 const frameSchema = z.object({
   kind: z.enum(["welcome", "answer", "request", "notice", "closed"]),
@@ -52,7 +53,11 @@ export class CompatibilityWireObservation {
     const kind = typeof object.data.kind === "string" ? object.data.kind : undefined;
     if (kind !== undefined) {
       this.operationKinds.add(`${path}/${kind}`);
-      if (["refused", "outcomeUnknown", "deliveryUnavailable", "closed"].includes(kind))
+      if (
+        ["refused", "invalidShape", "outcomeUnknown", "deliveryUnavailable", "closed"].includes(
+          kind,
+        )
+      )
         this.refusals.push(encode(value));
     }
     const page = pageSchema.safeParse(object.data);
@@ -86,6 +91,26 @@ export function requireCompatibleWire(snapshot: CompatibilityWireSnapshot): void
     snapshot.refusalFrames.length !== 0
   )
     throw new Error("legacy wire refused, changed, or never welcomed");
+}
+
+export interface CompatibilityEndpointEvidence {
+  readonly wire: CompatibilityWireSnapshot;
+  readonly audit: SessionSnapshot | undefined;
+}
+
+export function requireCompatiblePair(endpoints: {
+  readonly a: CompatibilityEndpointEvidence;
+  readonly b: CompatibilityEndpointEvidence;
+}): void {
+  for (const [name, endpoint] of Object.entries(endpoints)) {
+    if (
+      endpoint.audit === undefined ||
+      endpoint.audit.invalidConnections !== 0 ||
+      endpoint.audit.welcomes === 0
+    )
+      throw new Error(`incomplete or invalid ${name} raw Session audit`);
+    requireCompatibleWire(endpoint.wire);
+  }
 }
 
 export function requireExactBacklog(expected: readonly string[], pushed: readonly string[]): void {
