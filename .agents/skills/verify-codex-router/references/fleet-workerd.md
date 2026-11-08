@@ -15,20 +15,31 @@ Preserve optional supplied snapshots outside the fixed 38-case denominator.
 ## Run the existing launcher
 
 Declare an immutable head, native signing configuration, installed Node/pnpm,
-wasm target, wasm-bindgen CLI **0.2.129**, fresh task evidence and the exclusive
+wasm target, a task-owned writable copy of wasm-bindgen CLI **0.2.129**, fresh
+task evidence and the exclusive
 build/runtime slot. Keep normal native `target/debug`; the standalone worker
 uses its own target, preventing native fixture features from joining its wasm
 closure. Use the existing verification lock, not a second runtime installation.
-From the root:
+Before launch, place a **regular writable copy**, not a symlink to an installed
+location, at `$TASK_TMP/wasm-bindgen-0.2.129/wasm-bindgen`. Keep this dedicated
+directory task-owned and declare it in the caller's write scope. On macOS the
+launcher invokes the signing runner for the tool: **the runner signs every
+executable in that containing directory**, not just wasm-bindgen, and writes
+`.debug-signing-verified` plus temporary sweep/signing metadata there. This is
+why the copy belongs in its own directory instead of a shared tool installation.
+
+From the repository root, with `TASK_TMP` set to the declared absolute task-owned
+temporary directory and the qualified CLI copy already in place:
 
 ```sh
+: "${TASK_TMP:?set the declared absolute task-owned temporary directory}"
 pnpm --dir verification install --frozen-lockfile
 node verification/tooling/run-fleet-workerd.ts --help
 df -h /System/Volumes/Data
-WASM_BINDGEN=/absolute/path/to/wasm-bindgen env -u GITHUB_ACTIONS CARGO_BUILD_JOBS=2 node verification/tooling/run-fleet-workerd.ts /absolute/fresh/task-evidence
+WASM_BINDGEN="$TASK_TMP/wasm-bindgen-0.2.129/wasm-bindgen" env -u GITHUB_ACTIONS CARGO_BUILD_JOBS=2 node verification/tooling/run-fleet-workerd.ts "$TASK_TMP/fleet-workerd-evidence"
 ```
 
-Replace the two absolute paths with declared tool/evidence locations. Help must
+The tool-copy directory and fresh evidence location must both be declared. Help must
 exit before tool lookup, evidence creation or builds. The launcher refuses
 nonempty evidence and checks the 30 GiB disk floor before Cargo stages. It:
 
