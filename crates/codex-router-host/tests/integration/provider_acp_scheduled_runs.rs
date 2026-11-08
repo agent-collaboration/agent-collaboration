@@ -458,6 +458,10 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
         .expect("busy result");
     assert!(matches!(busy, RunSubmission::NotStartedBusy));
     assert_eq!(sink.0.lock().await.len(), 1, "busy run dispatched");
+    // Q8: the scheduler subscribes before checking; the supervisor's own publication of
+    // the active prompt's result is what wakes it.
+    let completions = supervisor.subscribe_completions();
+    let completed_before_release = completions.has_changed().expect("supervisor alive");
     active_event
         .write_all(b"x")
         .await
@@ -473,6 +477,14 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
         settled_active.output,
         ConversationOperationWaitOutput::Available { .. }
     ));
+    assert!(
+        !completed_before_release,
+        "nothing completed while the prompt was held"
+    );
+    assert!(
+        completions.has_changed().expect("supervisor alive"),
+        "publishing the settled prompt wakes completion subscribers"
+    );
 
     let started = router
         .submit_run(run, &sink)

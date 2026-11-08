@@ -1,15 +1,49 @@
 //! Host-composed schedule timing and bounded Run steps; no overlap policy is delegated to native queues.
-use crate::scheduled_run_worker::ScheduledRunWorker;
+//!
+//! The scheduler sleeps until an automation commit, a configuration change, a completion
+//! a running Run waits for, a step that failed or freed a slot, or its next due time: a
+//! schedule's next occurrence, a Run's execution deadline or a summary's deadline. A step
+//! that finds its turn still running writes nothing and so wakes nothing.
+use crate::{
+    BatchOutcome, WakeDrivenWorkerLoop, WorkerObservation, WorkerPass,
+    scheduled_run_worker::ScheduledRunWorker,
+};
 use agent_automation::{RunId, ScheduleId};
 use automation_storage::{AutomationStore, StorageError};
 use collaboration_protocol::{EndpointRef, SessionRef};
-use std::{collections::HashMap, sync::Arc, time::Duration};
-use tokio::sync::Mutex;
+use runtime_primitives::SyncTime;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::Duration,
+};
+use tokio::sync::{Mutex, watch};
 use tokio_util::sync::CancellationToken;
+
+/// At most this many Run steps run at once.
+const MAX_ACTIVE_STEPS: usize = 16;
+/// The store returns inventories in batches of this size.
+const INVENTORY_BATCH: usize = 100;
+const STEP_TIMEOUT: Duration = Duration::from_secs(35);
+/// A failed Run step retries 1 s, doubling to 30 s, until a step succeeds.
+const FAILED_STEP_BACKOFF: runtime_primitives::Backoff = runtime_primitives::Backoff {
+    initial: Duration::from_secs(1),
+    max: Duration::from_secs(30),
+    factor: 2,
+};
+
 pub struct ScheduleTimingWorker {
     store: Arc<Mutex<AutomationStore>>,
     runner: ScheduledRunWorker,
+    completion_sources: Vec<watch::Receiver<u64>>,
+    observation: WorkerObservation,
+    #[cfg(test)]
+    step_gate: Option<StepGate>,
 }
+
 impl ScheduleTimingWorker {
     pub fn new(
         store: Arc<Mutex<AutomationStore>>,
@@ -31,113 +65,415 @@ impl ScheduleTimingWorker {
                 machine_identity,
                 clock,
             },
+            completion_sources: Vec::new(),
+            observation: WorkerObservation::default(),
+            #[cfg(test)]
+            step_gate: None,
         }
     }
+
+    /// Wakes the scheduler on a completion its running Runs wait for: the lifecycle
+    /// journal's commits (a native `turn/completed`), the provider supervisor's
+    /// completions, or the observation retry while lifecycle observation is unavailable.
+    /// Subscribe the receiver before the scheduler starts.
+    #[must_use]
+    pub fn wake_on_completions(mut self, source: watch::Receiver<u64>) -> Self {
+        self.completion_sources.push(source);
+        self
+    }
+
+    /// Holds every step task after it has reported and woken the loop, until the test
+    /// releases the gate: the task's completion then lags its report.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn hold_step_exits(mut self, gate: Arc<Mutex<()>>) -> Self {
+        self.step_gate = Some(StepGate {
+            point: StepGatePoint::AfterReport,
+            gate,
+        });
+        self
+    }
+
+    /// Holds every step task after its work, which may have committed, and before it
+    /// reports, until the test releases the gate.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn hold_step_reports(mut self, gate: Arc<Mutex<()>>) -> Self {
+        self.step_gate = Some(StepGate {
+            point: StepGatePoint::BeforeReport,
+            gate,
+        });
+        self
+    }
+
+    /// What the scheduler's loop reports; under test-support a test reads it.
+    #[must_use]
+    pub fn observation(&self) -> WorkerObservation {
+        self.observation.clone()
+    }
+
     pub async fn run(self, shutdown: CancellationToken) {
-        let mut interval = tokio::time::interval(Duration::from_millis(250));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        let mut active = HashMap::<tokio::task::Id, RunId>::new();
-        // Scan progress is only a fairness hint; durable Run state still owns exclusion.
-        let mut run_cursor = None;
-        let mut waiting_cursor = None;
-        let mut tasks = tokio::task::JoinSet::<(RunId, Result<(), StorageError>)>::new();
-        loop {
-            tokio::select! {
-                biased;
-                _ = shutdown.cancelled() => {
-                    tasks.abort_all();
-                    while tasks.join_next().await.is_some() {}
-                    return;
-                }
-                completed = tasks.join_next_with_id(), if !tasks.is_empty() => {
-                    match completed {
-                        Some(Ok((task_id, (_, result)))) => {
-                            active.remove(&task_id);
-                            if result.is_err() {
-                                tracing::warn!("scheduled Run step unavailable; retained state remains inspectable");
-                            }
-                        }
-                        Some(Err(error)) => {
-                            active.remove(&error.id());
-                            tracing::warn!("scheduled Run task interrupted; retained effect state requires inspection");
-                        }
-                        None => {}
-                    }
-                    continue;
-                }
-                _ = interval.tick() => {}
-            }
-            if self.tick(&mut waiting_cursor).await.is_err() {
-                tracing::warn!(
-                    "schedule timing storage unavailable; no new Run admission in this pass"
-                );
-                continue;
-            }
-            let ids = self
-                .store
-                .lock()
-                .await
-                .observable_run_ids(run_cursor.as_ref())
-                .await;
-            let Ok(ids) = ids else {
-                continue;
-            };
-            if ids.is_empty() {
-                run_cursor = None;
-            }
-            for id in ids {
-                if active.len() >= 16 {
-                    break;
-                }
-                run_cursor = Some(id.clone());
-                if !active.values().any(|active_id| active_id == &id) {
-                    let runner = self.runner.clone();
-                    let run_id = id.clone();
-                    let task = tasks.spawn(async move {
-                        let result = tokio::time::timeout(
-                            Duration::from_secs(35),
-                            Box::pin(runner.step(id.clone())),
-                        )
-                        .await
-                        .unwrap_or(Err(StorageError::InvalidRecord));
-                        (id, result)
-                    });
-                    active.insert(task.id(), run_id);
-                }
-            }
+        let commits = self.store.lock().await.subscribe_commits();
+        let step_commits = self.store.lock().await.subscribe_commits();
+        let configuration = self.runner.configuration.subscribe_changes();
+        let (step_outcomes, step_wakes) = watch::channel(0);
+        let (step_reports, finished_steps) = tokio::sync::mpsc::unbounded_channel();
+        let mut worker = WakeDrivenWorkerLoop::new("schedules", Arc::clone(&self.runner.clock))
+            .with_observation(self.observation)
+            .wake_on(commits)
+            .wake_on(configuration)
+            .wake_on(step_wakes);
+        for source in self.completion_sources {
+            worker = worker.wake_on(source);
+        }
+        let mut pass = SchedulePass {
+            store: self.store,
+            runner: self.runner,
+            steps: tokio::task::JoinSet::new(),
+            active: HashSet::new(),
+            run_cursor: None,
+            waiting_cursor: None,
+            step_reports,
+            finished_steps,
+            step_outcomes,
+            capacity_exhausted: Arc::new(AtomicBool::new(false)),
+            step_retries: HashMap::new(),
+            step_commits,
+            #[cfg(test)]
+            step_gate: self.step_gate,
+        };
+        worker.run(&mut pass, shutdown).await;
+        pass.steps.abort_all();
+        while pass.steps.join_next().await.is_some() {}
+    }
+}
+
+struct SchedulePass {
+    store: Arc<Mutex<AutomationStore>>,
+    runner: ScheduledRunWorker,
+    /// Owns the step tasks so shutdown can abort them; finished steps are read from
+    /// `finished_steps`, never from this set.
+    steps: tokio::task::JoinSet<()>,
+    /// Runs with a step in flight.
+    active: HashSet<RunId>,
+    // Scan progress is only a fairness hint; durable Run state still owns exclusion.
+    run_cursor: Option<RunId>,
+    waiting_cursor: Option<ScheduleId>,
+    /// Each finished step reports here before it wakes the loop, so a wake always finds
+    /// the report it announces.
+    step_reports: tokio::sync::mpsc::UnboundedSender<StepReport>,
+    finished_steps: tokio::sync::mpsc::UnboundedReceiver<StepReport>,
+    /// Moves when a step fails, or finishes while a Run waited for a free slot.
+    step_outcomes: watch::Sender<u64>,
+    capacity_exhausted: Arc<AtomicBool>,
+    /// A Run whose step failed waits for its retry time; other Runs keep stepping. Steps
+    /// fail after the pass that started them, so these retries come back through
+    /// `next_due`.
+    step_retries: HashMap<RunId, StepRetry>,
+    /// Each step compares the automation commit counter before and after its work: a
+    /// step that changed rows has progress the loop must act on, even though the commit
+    /// woke it while the Run was still active.
+    step_commits: watch::Receiver<u64>,
+    /// Under test, holds each step task before or after it reports.
+    #[cfg(test)]
+    step_gate: Option<StepGate>,
+}
+
+#[cfg(test)]
+struct StepGate {
+    point: StepGatePoint,
+    gate: Arc<Mutex<()>>,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StepGatePoint {
+    BeforeReport,
+    AfterReport,
+}
+
+#[cfg(test)]
+impl StepGate {
+    fn shared(&self) -> Self {
+        Self {
+            point: self.point,
+            gate: Arc::clone(&self.gate),
         }
     }
-    async fn tick(&self, waiting_cursor: &mut Option<ScheduleId>) -> Result<(), StorageError> {
-        let now = self.runner.clock.now().unix_millis();
-        let due = self.store.lock().await.due_schedule_ids(now).await?;
-        for id in due {
+
+    async fn pass_at(&self, point: StepGatePoint) {
+        if self.point == point {
+            drop(self.gate.lock().await);
+        }
+    }
+}
+
+/// What one finished step achieved, as the loop needs to know it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StepOutcome {
+    /// It changed rows: the loop runs another pass for the Run's next step.
+    Progress,
+    /// It changed nothing, such as a turn still running: nothing to wake for.
+    Pending,
+    /// It failed or could not reach its client: the Run retries on its backoff.
+    Failed,
+}
+
+/// What a finished step tells the pass.
+struct StepReport {
+    run_id: RunId,
+    outcome: StepOutcome,
+}
+
+/// Reports a step when dropped: as finished with its outcome, or as failed when the task
+/// panicked or was aborted first. The report is sent before the wake.
+struct StepReporter {
+    run_id: Option<RunId>,
+    outcome: StepOutcome,
+    reports: tokio::sync::mpsc::UnboundedSender<StepReport>,
+    outcomes: watch::Sender<u64>,
+    capacity_exhausted: Arc<AtomicBool>,
+}
+
+impl StepReporter {
+    fn finished(mut self, outcome: StepOutcome) {
+        self.outcome = outcome;
+    }
+}
+
+impl Drop for StepReporter {
+    fn drop(&mut self) {
+        let Some(run_id) = self.run_id.take() else {
+            return;
+        };
+        let _ = self.reports.send(StepReport {
+            run_id,
+            outcome: self.outcome,
+        });
+        // "Still pending" writes nothing and wakes nothing; progress, a failure or a
+        // freed slot that a Run waits for does.
+        if self.outcome != StepOutcome::Pending
+            || self.capacity_exhausted.swap(false, Ordering::AcqRel)
+        {
+            self.outcomes
+                .send_modify(|revision| *revision = revision.wrapping_add(1));
+        }
+    }
+}
+
+struct StepRetry {
+    consecutive_failures: u32,
+    retry_at: SyncTime,
+}
+
+impl SchedulePass {
+    /// Takes every finished step's report. A failed, interrupted or client-unreachable
+    /// step arms its Run's retry, which backs off across that Run's run of failures; a
+    /// step that succeeds clears it.
+    fn reap_finished_steps(&mut self, now: SyncTime) {
+        while self.steps.try_join_next().is_some() {}
+        while let Ok(StepReport { run_id, outcome }) = self.finished_steps.try_recv() {
+            self.active.remove(&run_id);
+            if outcome != StepOutcome::Failed {
+                self.step_retries.remove(&run_id);
+                continue;
+            }
+            let retry = self.step_retries.entry(run_id).or_insert(StepRetry {
+                consecutive_failures: 0,
+                retry_at: now,
+            });
+            if retry.consecutive_failures == 0 {
+                tracing::warn!(
+                    "scheduled Run step unavailable; retained state remains inspectable and the step retries with backoff"
+                );
+            }
+            retry.retry_at = now.after(FAILED_STEP_BACKOFF.delay(retry.consecutive_failures));
+            retry.consecutive_failures = retry.consecutive_failures.saturating_add(1);
+        }
+    }
+
+    async fn enqueue_due(
+        &mut self,
+        now_ms: i64,
+        observation: &WorkerObservation,
+    ) -> Result<usize, StorageError> {
+        observation.record_read("due schedules");
+        let due = self.store.lock().await.due_schedule_ids(now_ms).await?;
+        for id in &due {
             self.store
                 .lock()
                 .await
-                .enqueue_due_run::<SessionRef, EndpointRef>(&id, now)
+                .enqueue_due_run::<SessionRef, EndpointRef>(id, now_ms)
                 .await?;
         }
+        Ok(due.len())
+    }
+
+    async fn admit_waiting(
+        &mut self,
+        now_ms: i64,
+        observation: &WorkerObservation,
+    ) -> Result<usize, StorageError> {
+        observation.record_read("waiting schedules");
         let waiting = self
             .store
             .lock()
             .await
-            .waiting_schedule_ids(waiting_cursor.as_ref())
+            .waiting_schedule_ids(self.waiting_cursor.as_ref())
             .await?;
-        if waiting.is_empty() {
-            *waiting_cursor = None;
-        }
+        let read = waiting.len();
         for id in waiting {
-            *waiting_cursor = Some(id.clone());
+            self.waiting_cursor = Some(id.clone());
             let configuration_lease = self.runner.configuration.admission_lease().await;
             if configuration_lease.configuration().is_none() {
+                // A configuration change wakes the loop again.
                 break;
             }
             self.store
                 .lock()
                 .await
-                .admit_waiting_run::<SessionRef, EndpointRef>(&id, now)
+                .admit_waiting_run::<SessionRef, EndpointRef>(&id, now_ms)
                 .await?;
         }
-        Ok(())
+        if read < INVENTORY_BATCH {
+            self.waiting_cursor = None;
+        }
+        Ok(read)
+    }
+
+    async fn start_observable_steps(
+        &mut self,
+        now: SyncTime,
+        observation: &WorkerObservation,
+    ) -> Result<RunScan, StorageError> {
+        observation.record_read("observable runs");
+        let ids = self
+            .store
+            .lock()
+            .await
+            .observable_run_ids(self.run_cursor.as_ref())
+            .await?;
+        let read = ids.len();
+        for id in ids {
+            if self.active.len() >= MAX_ACTIVE_STEPS {
+                // A step that finishes now frees a slot and wakes the loop.
+                self.capacity_exhausted.store(true, Ordering::Release);
+                return Ok(RunScan::AtCapacity);
+            }
+            self.run_cursor = Some(id.clone());
+            let waiting_for_retry = self
+                .step_retries
+                .get(&id)
+                .is_some_and(|retry| retry.retry_at > now);
+            if !waiting_for_retry && !self.active.contains(&id) {
+                self.spawn_step(id);
+            }
+        }
+        if read < INVENTORY_BATCH {
+            self.run_cursor = None;
+            return Ok(RunScan::Complete);
+        }
+        Ok(RunScan::MoreRuns)
+    }
+
+    fn spawn_step(&mut self, id: RunId) {
+        let runner = self.runner.clone();
+        let reporter = StepReporter {
+            run_id: Some(id.clone()),
+            outcome: StepOutcome::Failed,
+            reports: self.step_reports.clone(),
+            outcomes: self.step_outcomes.clone(),
+            capacity_exhausted: Arc::clone(&self.capacity_exhausted),
+        };
+        let mut commits = self.step_commits.clone();
+        commits.borrow_and_update();
+        #[cfg(test)]
+        let gate = self.step_gate.as_ref().map(StepGate::shared);
+        self.active.insert(id.clone());
+        self.steps.spawn(async move {
+            let result =
+                tokio::time::timeout(STEP_TIMEOUT, Box::pin(runner.step_reporting_client(id)))
+                    .await;
+            let outcome = match result {
+                Ok(Ok(crate::scheduled_run_worker::StepProgress::Stepped)) => {
+                    // A commit by anyone during the step also counts; that costs at most
+                    // one extra pass.
+                    if commits.has_changed().unwrap_or(false) {
+                        StepOutcome::Progress
+                    } else {
+                        StepOutcome::Pending
+                    }
+                }
+                _ => StepOutcome::Failed,
+            };
+            #[cfg(test)]
+            if let Some(gate) = &gate {
+                gate.pass_at(StepGatePoint::BeforeReport).await;
+            }
+            reporter.finished(outcome);
+            #[cfg(test)]
+            if let Some(gate) = &gate {
+                gate.pass_at(StepGatePoint::AfterReport).await;
+            }
+        });
     }
 }
+
+enum RunScan {
+    Complete,
+    MoreRuns,
+    AtCapacity,
+}
+
+impl WorkerPass for SchedulePass {
+    type Error = StorageError;
+
+    async fn drain_batch(
+        &mut self,
+        now: SyncTime,
+        observation: &WorkerObservation,
+    ) -> Result<BatchOutcome, StorageError> {
+        self.reap_finished_steps(now);
+        let now_ms = now.unix_millis();
+        let due = self.enqueue_due(now_ms, observation).await?;
+        let waiting = self.admit_waiting(now_ms, observation).await?;
+        let runs = self.start_observable_steps(now, observation).await?;
+        let more = due == INVENTORY_BATCH
+            || waiting == INVENTORY_BATCH
+            || matches!(runs, RunScan::MoreRuns);
+        Ok(if more {
+            BatchOutcome::MoreWork
+        } else {
+            BatchOutcome::Drained
+        })
+    }
+
+    async fn next_due(
+        &mut self,
+        now: SyncTime,
+        observation: &WorkerObservation,
+    ) -> Result<Option<SyncTime>, StorageError> {
+        observation.record_read("scheduler next due");
+        let stored = self
+            .store
+            .lock()
+            .await
+            .scheduler_next_due_at_ms(now.unix_millis())
+            .await?
+            .map(SyncTime::from_unix_millis);
+        let retry = self
+            .step_retries
+            .values()
+            .map(|retry| retry.retry_at)
+            .filter(|retry_at| *retry_at > now)
+            .min();
+        Ok(match (stored, retry) {
+            (Some(stored), Some(retry)) => Some(stored.min(retry)),
+            (stored, retry) => stored.or(retry),
+        })
+    }
+}
+
+#[cfg(test)]
+#[path = "schedule_timing_worker_test.rs"]
+mod tests;

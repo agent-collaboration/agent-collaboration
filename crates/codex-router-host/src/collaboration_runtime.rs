@@ -153,6 +153,10 @@ pub struct CollaborationRuntime {
     fleet_outbox_maintenance: Option<tokio::task::JoinHandle<()>>,
     current_generation: Option<CodexGeneration>,
     observer_task: Option<tokio::task::JoinHandle<()>>,
+    /// One re-check per observation retry while lifecycle observation is unavailable.
+    observation_rechecks: observation_recheck::ObservationRechecks,
+    /// Re-checks on the observation backoff when the journal failed to open.
+    journal_unavailable_rechecks: Option<tokio::task::JoinHandle<()>>,
     manifest: Option<collaboration_runtime::ManifestPublication>,
     collaboration_api: ServedCollaborationApi,
     tailscale_exposure: Option<crate::tailscale_exposure::TailscaleExposure>,
@@ -263,6 +267,7 @@ mod lifecycle;
 mod mail_delivery_composition;
 #[path = "collaboration_runtime/native_backend.rs"]
 mod native_backend;
+mod observation_recheck;
 #[path = "collaboration_runtime/schema_bundle_retention.rs"]
 mod schema_bundle_retention;
 #[path = "collaboration_runtime/startup_composition.rs"]

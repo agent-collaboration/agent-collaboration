@@ -96,6 +96,18 @@ async fn exercise_scheduled_run(
     let store = Arc::new(tokio::sync::Mutex::new(
         AutomationStore::open(&database).await?,
     ));
+    // The lifecycle journal the native observer appends to; a thread that stops being
+    // busy reaches the scheduler as one of its commits.
+    let journal = Arc::new(lifecycle_observation::LifecycleStore::new(
+        lifecycle_observation::ObservationJournal::open(
+            &root.join("session-registry.sqlite"),
+            "00000000-0000-4000-8000-000000000001"
+                .to_owned()
+                .try_into()?,
+        )
+        .await?,
+    ));
+    journal.prepare(100).await?;
     let interaction_database = root.join("interaction.sqlite");
     let interactions =
         Arc::new(interaction_storage::InteractionStore::open(&interaction_database).await?);
@@ -153,7 +165,8 @@ async fn exercise_scheduled_run(
     let shutdown = tokio_util::sync::CancellationToken::new();
     let schedule_worker = identity
         .schedule_timing_worker()
-        .ok_or("scheduler missing")?;
+        .ok_or("scheduler missing")?
+        .wake_on_completions(journal.subscribe_commits());
     let served = served_api::ServedApi::start(identity)?;
     let client = served.client("scheduled-run-fixture").await?;
     let instruction = client
@@ -163,6 +176,9 @@ async fn exercise_scheduled_run(
         })
         .await?;
     let backend_store = Arc::clone(&store);
+    let backend_journal = Arc::clone(&journal);
+    let target_endpoint = target.endpoint.clone();
+    let backend_scope = json!({"endpoint":target.endpoint,"generation":{"serviceEpoch":service_id,"generation":1},"observerId":"00000000-0000-4000-8000-000000000003"});
     let resume_uncertainty_observed = Arc::new(tokio::sync::Notify::new());
     let backend_resume_uncertainty_observed = Arc::clone(&resume_uncertainty_observed);
     let backend = tokio::spawn(async move {
@@ -352,6 +368,16 @@ async fn exercise_scheduled_run(
                 if run.evidence.timing.is_some() {
                     return Err("busy wait consumed execution budget".into());
                 }
+                // The thread finished its turn: the observer records it, and that commit
+                // is what makes the scheduler look again.
+                let idle: collaboration_protocol::LifecycleObservation = serde_json::from_value(
+                    json!({
+                        "observedAt":"2026-09-08T00:00:01Z","source":"nativeNotification","scope":backend_scope,
+                        "subject":{"kind":"thread","address":{"endpoint":target_endpoint,"nativeThreadId":"scheduled-new-thread"}},
+                        "change":{"kind":"threadStatus","status":{"type":"idle"},"ordering":"established"},
+                    }),
+                )?;
+                backend_journal.append(&idle, 101).await?;
                 continue;
             }
             if logical_stage == 1 {

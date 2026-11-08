@@ -88,6 +88,14 @@ impl WakeDrivenWorkerLoop {
         }
     }
 
+    /// Reports to a handle its owner created first, so the owner can expose it before
+    /// the loop exists.
+    #[must_use]
+    pub fn with_observation(mut self, observation: WorkerObservation) -> Self {
+        self.observation = observation;
+        self
+    }
+
     #[must_use]
     pub fn wake_on(mut self, source: impl WakeSource + 'static) -> Self {
         self.sources.push(Box::new(source));

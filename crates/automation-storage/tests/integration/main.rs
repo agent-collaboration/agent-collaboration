@@ -32,6 +32,7 @@ mod schedule_definition_edits;
 mod schedule_import_continuity;
 mod schedule_package_import;
 mod scheduler_inventory_progress;
+mod scheduler_next_due;
 mod schema_initialization;
 mod summary_result_identity;
 mod summary_retry_identity;

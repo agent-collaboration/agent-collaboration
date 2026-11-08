@@ -121,6 +121,8 @@ mod interaction_storage_failure;
 pub mod stored_inventory_observation;
 mod wakeup_timing_worker;
 pub(crate) use interaction_storage_failure::map_interaction_storage_error;
+#[cfg(test)]
+mod captured_warnings_test_support;
 mod commit_or_timer_wait;
 mod failed_pass_backoff;
 mod push_handoff_worker;
