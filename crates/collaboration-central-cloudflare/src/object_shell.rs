@@ -85,6 +85,15 @@ impl PlatformIo for CloudflareObjectIo {
         self.faults.take_organization_record_fault().unwrap_or(true)
     }
     #[cfg(feature = "conformance")]
+    async fn before_organization_apply(&self, kind: &str) -> std::result::Result<(), CallFailure> {
+        let selector = serde_json::to_vec(&serde_json::json!({"kind": kind}))
+            .map_err(|_| CallFailure::AnswerLost)?;
+        self.faults
+            .before_dispatch(&self.address, &selector)
+            .await
+            .map_err(|_| CallFailure::AnswerLost)
+    }
+    #[cfg(feature = "conformance")]
     fn take_organization_answer_drop(&self) -> bool {
         // A poisoned fault lock fails the conformance run closed.
         self.faults.take_organization_answer_drop().unwrap_or(true)

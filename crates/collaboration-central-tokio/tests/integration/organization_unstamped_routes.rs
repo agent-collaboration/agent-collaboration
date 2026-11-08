@@ -350,11 +350,16 @@ async fn access_era_routes_keep_serving_only_the_unstamped_legacy_store() -> Con
     .await
     .map(drop)
     .map_err(|error| error.to_string());
-    let unserved = public(&base, "POST", "/no-such-route", true).await?;
     let mut answers = Vec::new();
     for (method, route) in ACCESS_ERA_ROUTES {
         let path = route.replace("{id}", "019f0000-0000-7000-8000-00000000f208");
-        answers.push((*route, public(&base, method, &path, true).await?));
+        let unserved = public(&base, method, "/no-such-route", true).await?;
+        answers.push((
+            *method,
+            *route,
+            public(&base, method, &path, true).await?,
+            unserved,
+        ));
     }
     server.shutdown().await?;
     let mut fleets = std::fs::read_dir(root.path())?
@@ -374,10 +379,10 @@ async fn access_era_routes_keep_serving_only_the_unstamped_legacy_store() -> Con
         Ok(()),
         "positive control: enrollment and a live session on the unstamped legacy store"
     );
-    for (route, answer) in &answers {
+    for (method, route, answer, unserved) in &answers {
         assert!(
-            answer.0 != 404 && answer != &unserved,
-            "{route} is an Access-era route served on the legacy store: {answer:?}"
+            answer.0 != 404 && answer != unserved,
+            "{method} {route} is an Access-era route served on the legacy store, unlike an unserved {method}: {answer:?}"
         );
     }
     assert_eq!(answers.len(), ACCESS_ERA_ROUTES.len());

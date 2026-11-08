@@ -13,8 +13,8 @@ mod organization_stamps;
 #[path = "organization_link_workerd/record_checks.rs"]
 mod record_checks;
 use collaboration_central_conformance::{
-    ConformanceResult, FIXTURE_KID, JwksFixtureServer, fixture_policy, legacy_organization,
-    sign_assertion,
+    ConformanceResult, DispatchCallSelector, DispatchKey, FIXTURE_KID, JwksFixtureServer,
+    RuntimeControl, RuntimeControlRequest, fixture_policy, legacy_organization, sign_assertion,
 };
 use link_client::{AdminPerson, Caller, LinkHarness};
 use organization_stamps::{
@@ -27,6 +27,8 @@ const OTHER: &str = "019f0000-0000-7000-8000-00000000b2c1";
 const THIRD: &str = "019f0000-0000-7000-8000-00000000b2c2";
 /// Never provisioned: a non-legacy organization with no stamp.
 const UNSTAMPED: &str = "019f0000-0000-7000-8000-00000000b2c3";
+/// Provisioned only by the barrier-forced races.
+const RACE: &str = "019f0000-0000-7000-8000-00000000b2c4";
 const LEGACY_MACHINE: &str = "550e8400-e29b-41d4-a716-44665544b2a8";
 
 /// The stamp-profile refusals, each a correctly signed statement but for one field.
@@ -88,6 +90,69 @@ fn lost_intent(organization: &str) -> Value {
 fn lost_body(organization: &str) -> Value {
     json!({"organizationId":organization,"operationId":LOST_OPERATION,"name":"lost answer","description":""})
 }
+/// One conformance control at `organization`'s Fleet object, through public
+/// central's owner route.
+async fn control(
+    caller: &Caller,
+    organization: &str,
+    command: RuntimeControl,
+) -> ConformanceResult<()> {
+    let request = serde_json::to_value(RuntimeControlRequest {
+        address: collaboration_central_core::ObjectAddress::Fleet {
+            organization: organization.to_owned().try_into()?,
+        },
+        command,
+    })?;
+    let answer = caller
+        .post("/public/admin/v1/conformance/runtime", &request)
+        .await?;
+    if answer.0 != 200 {
+        return Err(format!("runtime control refused: {answer:?}").into());
+    }
+    Ok(())
+}
+
+/// Hold `held`'s provisioning after it verifies and before its transaction,
+/// commit `racing`, then release `held`; both answers, held first.
+async fn race(
+    caller: &Caller,
+    organization: &str,
+    held: String,
+    racing: String,
+) -> ConformanceResult<(u16, u16)> {
+    let key = DispatchKey::new(
+        collaboration_central_core::ObjectAddress::Fleet {
+            organization: organization.to_owned().try_into()?,
+        },
+        DispatchCallSelector::OrganizationProvisioning,
+    );
+    control(
+        caller,
+        organization,
+        RuntimeControl::HoldNextDispatch { key: key.clone() },
+    )
+    .await?;
+    let held_caller = caller.clone();
+    let held_organization = organization.to_owned();
+    let held_call = tokio::spawn(async move {
+        held_caller
+            .provision(&held_organization, &held)
+            .await
+            .map_err(|error| error.to_string())
+    });
+    // Returns once the held call has verified and stopped before applying.
+    control(
+        caller,
+        organization,
+        RuntimeControl::AwaitHeldDispatch { key: key.clone() },
+    )
+    .await?;
+    let racing_answer = caller.provision(organization, &racing).await?;
+    control(caller, organization, RuntimeControl::ResumeDispatch { key }).await?;
+    let held_answer = held_call.await??;
+    Ok((held_answer, racing_answer))
+}
+
 #[tokio::main]
 async fn main() -> ConformanceResult<()> {
     let mut args = std::env::args().skip(1);
@@ -289,6 +354,31 @@ async fn main() -> ConformanceResult<()> {
                 && origins_closed(&third_after),
             "a faulted record leaves no stamp and the retry commits both",
             &(faulted, after_fault, retried_third, third_after),
+        )?;
+        // Barrier-forced races: a held provisioning verified before another
+        // committed must decide on what its own transaction reads.
+        let first_held = stamps::stamp(RACE)?;
+        let first_racing = stamps::first_statement(RACE, 1)?;
+        let first_race = race(&caller, RACE, first_held, first_racing.clone()).await?;
+        let after_first = caller.records(RACE).await?;
+        require(
+            first_race == (200, 200)
+                && after_first.get("statement") == Some(&json!(first_racing))
+                && summary(&after_first).len() == 1
+                && origins_closed(&after_first),
+            "two first provisions at once: one stamp (the one that committed first) and one setup record",
+            &(first_race, after_first),
+        )?;
+        let renewal_held = stamps::renewal(RACE, &first_racing, 10)?;
+        let renewal_racing = stamps::renewal(RACE, &first_racing, 11)?;
+        let renewal_race = race(&caller, RACE, renewal_held, renewal_racing.clone()).await?;
+        let after_renewals = caller.records(RACE).await?;
+        require(
+            renewal_race == (409, 200)
+                && after_renewals.get("statement") == Some(&json!(renewal_racing))
+                && summary(&after_renewals).len() == 2,
+            "two renewals of one stamp at once: the racing one wins, the held one is refused",
+            &(renewal_race, after_renewals),
         )?;
         let renewed = vec![
             caller.provision(legacy, &renewal).await?,

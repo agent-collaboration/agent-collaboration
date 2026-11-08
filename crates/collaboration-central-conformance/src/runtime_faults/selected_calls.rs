@@ -58,6 +58,8 @@ enum SelectedInvocationKind {
     CopyWrite,
     #[serde(rename = "fleet-sync.copy-fence")]
     CopyFence,
+    #[serde(rename = "central.organization-provisioning")]
+    OrganizationProvisioning,
     #[serde(other)]
     Other,
 }
@@ -99,6 +101,9 @@ impl DispatchSelection {
                         ) | (
                             DispatchCallSelector::CopyFence,
                             SelectedInvocationKind::CopyFence
+                        ) | (
+                            DispatchCallSelector::OrganizationProvisioning,
+                            SelectedInvocationKind::OrganizationProvisioning
                         )
                     )
                 })

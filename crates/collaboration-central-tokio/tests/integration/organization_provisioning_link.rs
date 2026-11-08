@@ -18,9 +18,9 @@ use sqlx_core::{
 };
 use std::{path::Path, time::Duration};
 
-const ORGANIZATION_A: &str = "019f0000-0000-7000-8000-00000000b2a1";
+pub(crate) const ORGANIZATION_A: &str = "019f0000-0000-7000-8000-00000000b2a1";
 const ORGANIZATION_B: &str = "019f0000-0000-7000-8000-00000000b2b1";
-const PROVISION: &str = "/internal/organization-provisioning";
+pub(crate) const PROVISION: &str = "/internal/organization-provisioning";
 const DIGEST: &str = "/internal/organization-statement-digest";
 
 fn settings(root: &Path, jwks: &str) -> ConformanceResult<TokioSettings> {
@@ -41,11 +41,11 @@ fn settings(root: &Path, jwks: &str) -> ConformanceResult<TokioSettings> {
 }
 
 /// The real server with both organizations' Fleet clocks pinned before startup.
-struct LinkedCentral {
-    server: TokioServer,
-    socket: std::path::PathBuf,
+pub(crate) struct LinkedCentral {
+    pub(crate) server: TokioServer,
+    pub(crate) socket: std::path::PathBuf,
 }
-async fn start(
+pub(crate) async fn start(
     root: &Path,
     access: &JwksFixtureServer,
     keys: &SignInKeys,
@@ -84,12 +84,12 @@ async fn start(
     Ok(LinkedCentral { server, socket })
 }
 
-fn provision_body(organization: &str, statement: &str) -> Value {
+pub(crate) fn provision_body(organization: &str, statement: &str) -> Value {
     json!({"organizationId":organization,"organizationStatement":statement})
 }
 
-type IdentityRow = (String, String, i64, i64);
-type RecordRow = (
+pub(crate) type IdentityRow = (String, String, i64, i64);
+pub(crate) type RecordRow = (
     String,
     String,
     String,
@@ -101,7 +101,7 @@ type RecordRow = (
     i64,
 );
 /// Read a stopped server's Fleet store exactly, so overwrites and timestamps show.
-async fn stored(
+pub(crate) async fn stored(
     root: &Path,
     organization: &str,
 ) -> ConformanceResult<(Vec<IdentityRow>, Vec<RecordRow>)> {
@@ -494,7 +494,11 @@ async fn organization_link_refuses_a_stamp_edited_on_disk_or_expired_after_resta
 }
 
 /// Drive a conformance control through the server's owner-only HTTP route.
-async fn control(base: &str, organization: &str, command: RuntimeControl) -> ConformanceResult<()> {
+pub(crate) async fn control(
+    base: &str,
+    organization: &str,
+    command: RuntimeControl,
+) -> ConformanceResult<()> {
     reqwest::Client::builder()
         .no_proxy()
         .build()?

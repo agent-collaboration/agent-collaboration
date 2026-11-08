@@ -136,13 +136,19 @@ pub enum RuntimeControl {
 pub enum DispatchCallSelector {
     Any,
     FleetMailSubmit,
-    FleetMailSubmitFor { peer: PeerId, item: ItemId },
+    FleetMailSubmitFor {
+        peer: PeerId,
+        item: ItemId,
+    },
     FleetMachineNotice,
     FleetClaimSettlement,
     InstallationPeer,
     ForwardRoute,
     CopyWrite,
     CopyFence,
+    /// A provisioning call, held after its statement verifies and before the
+    /// transaction that applies it.
+    OrganizationProvisioning,
 }
 
 /// One invocation selection at one physical destination.

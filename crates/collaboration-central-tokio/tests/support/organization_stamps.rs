@@ -75,6 +75,19 @@ pub(crate) fn digest(statement: &str) -> String {
 }
 
 /// A renewal names its predecessor's digest inside its signed claims.
+/// Another valid first statement for `organization`, issued `issued_offset`
+/// seconds after `stamp`'s: different bytes, no predecessor.
+pub(crate) fn first_statement(organization: &str, issued_offset: i64) -> ConformanceResult<String> {
+    let mut claims = claims(organization);
+    set_claim(&mut claims, "iat", json!(NOW_SECONDS - 60 + issued_offset))?;
+    set_claim(
+        &mut claims,
+        "exp",
+        json!(NOW_SECONDS - 60 + issued_offset + LIFETIME_SECONDS),
+    )?;
+    sign(&stamp_header(), &claims, 7)
+}
+
 pub(crate) fn renewal(
     organization: &str,
     predecessor: &str,

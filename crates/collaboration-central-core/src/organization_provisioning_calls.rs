@@ -169,6 +169,11 @@ where
             }
             Err(_) => return encode(ProvisioningApplied::InvalidStatement),
         };
+        // Conformance only: hold a verified statement here, before its
+        // transaction, so another provisioning can commit in between.
+        #[cfg(feature = "conformance")]
+        io.before_organization_apply(FleetProvisionOrganization::KIND)
+            .await?;
         let (outcome, _) = StepDriver::new(host.clone())
             .run(ProvisionStep(ApplyProvisioning {
                 statement,

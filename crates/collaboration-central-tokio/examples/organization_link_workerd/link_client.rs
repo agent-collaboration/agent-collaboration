@@ -67,6 +67,7 @@ impl LinkHarness {
     }
 }
 
+#[derive(Clone)]
 pub(crate) struct Caller {
     pub(crate) http: reqwest::Client,
     pub(crate) base: String,

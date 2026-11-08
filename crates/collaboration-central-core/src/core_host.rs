@@ -40,6 +40,15 @@ pub trait PlatformIo: Clock + IdSource + WakeScheduler + Send + Sync + 'static {
     fn take_organization_record_fault(&self) -> bool {
         false
     }
+    /// Conformance only: a hold point after a call has verified and before the
+    /// transaction that applies it; `kind` is the call's kind.
+    #[cfg(feature = "conformance")]
+    fn before_organization_apply(
+        &self,
+        _kind: &str,
+    ) -> impl Future<Output = Result<(), CallFailure>> + Send {
+        std::future::ready(Ok(()))
+    }
     /// Conformance only: whether the next admin answer is lost after its commit.
     #[cfg(feature = "conformance")]
     fn take_organization_answer_drop(&self) -> bool {
