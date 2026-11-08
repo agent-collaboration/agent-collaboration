@@ -7,15 +7,22 @@ import { acceptedWrite, boardIdentity, writeHeader } from "../../../clients/boar
 import { field } from "../../../exact-json.ts";
 import type { Receipt } from "../../../receipt.ts";
 
-function recipient(machine: FixtureInstallation): NonNullable<FixtureInstallation["recipient"]> {
+interface MailParticipant {
+  readonly recipient: FixtureInstallation["recipient"];
+  readonly mcp: Pick<FixtureInstallation["mcp"], "call">;
+}
+
+function recipient(
+  machine: Pick<FixtureInstallation, "recipient">,
+): NonNullable<FixtureInstallation["recipient"]> {
   if (machine.recipient === undefined) throw new Error("recipient identity not declared");
   return machine.recipient;
 }
-async function settledMail(input: {
-  sender: FixtureInstallation;
-  target: FixtureInstallation;
+export async function settledMail(input: {
+  sender: MailParticipant;
+  target: MailParticipant;
   item: string;
-  receipt: Receipt;
+  receipt: Pick<Receipt, "record">;
 }): Promise<void> {
   const deadline = Date.now() + 60_000;
   let last: unknown;
@@ -40,7 +47,7 @@ async function settledMail(input: {
       await input.receipt.record("d3MailReadback", { item: input.item, status, shown, received });
       return;
     }
-    if (!["sent", "pending", "queued"].includes(status)) {
+    if (!["sent", "pending", "queued", "atMachine"].includes(status)) {
       await input.receipt.record("d3MailUnexpectedStatus", { item: input.item, shown });
       throw new Error(`old-source message refused or lost: ${status}`);
     }
