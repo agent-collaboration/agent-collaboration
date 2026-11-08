@@ -5,6 +5,14 @@ lease, copy, delivery and restart behavior. The route is the integration/e2e
 aggregates, with same-package child binaries and the repository signing runner.
 A source count or a successful build leaves runtime coverage open.
 
+IF the assignment selects the retained holder-refusal, capability, basic frame
+or copy-containment observation scripts, load [native drivers](fleet-native-drivers.md)
+and return their real-path observations and separate gaps. Those scripts add
+controls beyond the aggregates; matching names alone do not establish coverage.
+IF delivery retirement, Local-to-Push promotion or typed cancel-report refusal
+is selected, load [delivery lifecycle](fleet-delivery-lifecycle.md) and return
+all seven exact identities actually passing.
+
 The adopted preservation baseline is agent-fleet-sync
 `b9470dcbfc177afc061203365b6bd6edbec35aa1`, `tests/consumer`, plus the caller's
 approved adaptations. The destination mapping is
@@ -104,8 +112,9 @@ agent-fleet-sync. The two raw workerd `journal/*` migration cases also stay
 there. A fleet pass does not authorize removal before those upstream targets
 are concretely preserved.
 
-The relocated aggregates replace upstream standalone consumer commands and
-legacy shell journey paths. General durable-steps/query-generator/DO scope
+The relocated aggregates replace upstream standalone consumer test commands.
+The retained shell journeys use the same-package example in the native driver
+reference; their separate observations remain in scope. General durable-steps/query-generator/DO scope
 recipes remain with their owning repository. Return each unsupported or
 unavailable control explicitly; native evidence establishes no production
 Router replacement, hosted Cloudflare, provider, release or merge acceptance.

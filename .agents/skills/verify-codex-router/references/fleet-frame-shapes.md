@@ -20,6 +20,15 @@ identities to execute; zero matches never pass. If the complete native suite
 already ran on the same qualified target, retain its observations instead of
 repeating an equivalent selection.
 
+IF the basic malformed-body/envelope script is selected, load
+[native drivers](fleet-native-drivers.md) to run `frame-shapes.sh` and return
+its exact correlated fields, follow-up counts and exit. Its oversized field
+mixes `界🙂a`, and each of five malformed bodies gets a distinct canonical
+UUIDv7 frame ID before its valid same-socket follow-up. The complete seven-case
+aggregate below additionally covers decoder ambiguities; the two routes have
+different input sets. Frame IDs follow today's UUIDv7 contract as well as
+entity IDs.
+
 | Case under `native_frame_shapes::`                                         | Deciding observation                                                                                                                                         |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `identified_bad_bodies_are_correlated_and_the_same_session_stays_usable`   | Exact `text`, `body`, `unexpected` or unnamed-body fallback; oversized name capped at 64 Unicode characters; five valid follow-ups route on the same socket. |
