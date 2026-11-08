@@ -16,6 +16,7 @@ use collaboration_central_core::identity_contract::{
     DecideDeviceLogin, DecideMachineToken, DeviceLoginDecision, DeviceLoginRefusal,
     MachineTokenDecision, MachineTokenRefusal,
 };
+use collaboration_central_core::organization_authority::OrganizationChangeRecord;
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 
@@ -84,6 +85,7 @@ fn central_agrees_with_every_issuer_vector_byte_for_byte() {
             "DecideMachineToken" => judge::<DecideMachineToken>(vector),
             "MachineTokenDecision" => judge::<MachineTokenDecision>(vector),
             "MachineTokenRefusal" => judge::<MachineTokenRefusal>(vector),
+            "OrganizationChangeRecord" => judge::<OrganizationChangeRecord>(vector),
             other => Err(format!("names no central contract: {other}")),
         };
         if let Err(disagreement) = verdict {

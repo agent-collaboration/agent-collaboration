@@ -89,6 +89,7 @@ Each of these was added by an agent or ruled by the Lead; the PD doesn't state t
   - Supersession writes `machineRevoked` (reason superseded) in the same transaction.
   - Records from approvals and first Grants carry the approver as origin, with
     `machine:enroll`. Revocation's carry the revoker, with `machine:revoke`.
+  - No new origin variant. Switchboard's `changeRecordSchema` (fleet-admin-client.ts) parses kinds strictly. The B3a Implementer adds the three kinds from central's exact records, which are in `OrganizationAdminResult.fixtures.json`.
 - **A former service id that names no installation here** links nothing.
 - **An approval lapses** once `now ≥ approved_at + device-code lifetime`. `approved_at` is
   central's own clock in the approving transaction; the lifetime is one setting,
