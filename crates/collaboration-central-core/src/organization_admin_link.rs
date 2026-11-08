@@ -2,8 +2,7 @@
 //! proof and body to the named organization's Fleet object, which verifies
 //! and applies them; the link itself decides nothing.
 use crate::{
-    CallerContext, CentralPlatform, EdgeKind, FleetAddress, FleetKind,
-    organization_admin_calls::{FleetOrganizationAdmin, OrganizationAdminAnswer},
+    organization_admin_calls::OrganizationAdminAnswer,
     person_request::{AdminRoute, PersonRequestInput},
 };
 use axum::{
@@ -13,24 +12,33 @@ use axum::{
     response::{IntoResponse, Response},
     routing::post,
 };
-use durable_steps::{CallFailure, CallId, OperationId, StepName};
+use durable_steps::CallFailure;
 use fleet_identity_protocol::OrganizationId;
 use serde::Deserialize;
-use std::sync::Arc;
+use std::{future::Future, sync::Arc};
 
-pub(crate) fn admin_link_routes<Platform: CentralPlatform>(platform: Platform) -> Router {
-    let platform = Arc::new(platform);
+/// Carries one admin request to the named organization's Fleet object.
+pub(crate) trait OrganizationAdminPort: Send + Sync + 'static {
+    fn admin(
+        &self,
+        organization: OrganizationId,
+        input: PersonRequestInput,
+    ) -> impl Future<Output = Result<OrganizationAdminAnswer, CallFailure>> + Send;
+}
+
+pub(crate) fn admin_link_routes<Port: OrganizationAdminPort>(port: Port) -> Router {
+    let port = Arc::new(port);
     let mut router = Router::new();
     for route in [
         AdminRoute::CreateWorkspace,
         AdminRoute::WorkspaceLookup,
         AdminRoute::ReadChangeRecords,
     ] {
-        let platform = platform.clone();
+        let port = port.clone();
         router = router.route(
             route.path(),
             post(move |headers: HeaderMap, body: Bytes| {
-                forward(platform.clone(), route, headers, body)
+                forward(port.clone(), route, headers, body)
             }),
         );
     }
@@ -44,8 +52,8 @@ struct Addressed {
     organization_id: OrganizationId,
 }
 
-async fn forward<Platform: CentralPlatform>(
-    platform: Arc<Platform>,
+async fn forward<Port: OrganizationAdminPort>(
+    port: Arc<Port>,
     route: AdminRoute,
     headers: HeaderMap,
     body: Bytes,
@@ -72,37 +80,11 @@ async fn forward<Platform: CentralPlatform>(
         proof,
         body,
     };
-    match call(platform.as_ref(), organization_id, input).await {
+    match port.admin(organization_id, input).await {
         Ok(OrganizationAdminAnswer::Unauthenticated) => StatusCode::UNAUTHORIZED.into_response(),
         Ok(OrganizationAdminAnswer::Answered(result)) => {
             (StatusCode::OK, axum::Json(result)).into_response()
         }
         Err(_) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
     }
-}
-
-async fn call<Platform: CentralPlatform>(
-    platform: &Platform,
-    organization: OrganizationId,
-    input: PersonRequestInput,
-) -> Result<OrganizationAdminAnswer, CallFailure> {
-    let caller = CallerContext::<EdgeKind>::for_sign_in_link(organization.clone());
-    let identity = CallId {
-        operation: OperationId::new(platform.ids().new_id())
-            .map_err(|_| CallFailure::AnswerLost)?,
-        step: StepName::new("organization_admin").map_err(|_| CallFailure::AnswerLost)?,
-    };
-    let call = crate::object_call_envelope::encode_shared_call::<
-        EdgeKind,
-        FleetKind,
-        FleetOrganizationAdmin,
-    >(
-        &caller,
-        FleetAddress::new(organization),
-        FleetOrganizationAdmin,
-        input,
-        identity,
-    )?;
-    let reply = platform.transport_object(call).await?;
-    serde_json::from_slice(&reply).map_err(|_| CallFailure::AnswerLost)
 }

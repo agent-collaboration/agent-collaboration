@@ -1,28 +1,19 @@
-//! The private link's provisioning port: each request becomes one call to the
-//! named organization's Fleet object, with the sign-in link as its authority.
+//! The private link's surface: provisioning, the renewal digest read, floor
+//! delivery and the three admin routes, each forwarded through a port to the
+//! named organization's Fleet object. The ports' transport over a host's
+//! object calls lives with the object-call transport (`object_transport`).
 use crate::{
-    CallerContext, CentralPlatform, EdgeKind, FleetAddress, FleetKind,
-    identity_contract::{
-        OrganizationStatementDigestReply, ProvisionOrganization, ProvisionOrganizationResult,
-        ReadOrganizationStatementDigest,
-    },
-    organization_authority::{
-        OrganizationProvisioningFailure, OrganizationProvisioningPort, ProvisioningApplied,
-    },
-    organization_provisioning_calls::{
-        FleetOrganizationStatementDigest, FleetProvisionOrganization, StatementDigestAnswer,
-    },
+    organization_admin_link::{OrganizationAdminPort, admin_link_routes},
+    organization_authority::OrganizationProvisioningPort,
 };
-use durable_steps::{CallFailure, CallId, CallTarget, OperationId, StepName};
-use fleet_identity_protocol::OrganizationId;
+use std::sync::Arc;
 
-/// Build the link router over a host's object transport: provisioning, the
-/// renewal digest read, and the three admin routes.
-pub fn organization_link_router<Platform: CentralPlatform>(platform: Platform) -> axum::Router {
-    crate::organization_provisioning_router(std::sync::Arc::new(FleetLinkProvisioner {
-        platform: platform.clone(),
-    }))
-    .merge(crate::organization_admin_link::admin_link_routes(platform))
+/// The link router over its two ports.
+pub(crate) fn link_routes<Port>(port: Port) -> axum::Router
+where
+    Port: OrganizationProvisioningPort + OrganizationAdminPort + Clone,
+{
+    crate::organization_provisioning_router(Arc::new(port.clone())).merge(admin_link_routes(port))
 }
 
 /// Whether a path belongs to the private link's surface (all of it, on any host).
@@ -30,131 +21,4 @@ pub fn organization_link_router<Platform: CentralPlatform>(platform: Platform) -
 pub fn is_private_link_path(path: &str) -> bool {
     path.starts_with(crate::PRIVATE_LINK_PREFIX)
         || path.starts_with(crate::ORGANIZATION_ADMIN_PREFIX)
-}
-
-struct FleetLinkProvisioner<Platform> {
-    platform: Platform,
-}
-
-impl<Platform: CentralPlatform> FleetLinkProvisioner<Platform> {
-    async fn call<Call: CallTarget>(
-        &self,
-        organization: &OrganizationId,
-        target: Call,
-        request: Call::Request,
-        step: &str,
-    ) -> Result<Call::Answer, OrganizationProvisioningFailure> {
-        let caller = CallerContext::<EdgeKind>::for_sign_in_link(organization.clone());
-        let identity = CallId {
-            operation: OperationId::new(self.platform.ids().new_id())
-                .map_err(|_| OrganizationProvisioningFailure::Unavailable)?,
-            step: StepName::new(step).map_err(|_| OrganizationProvisioningFailure::Unavailable)?,
-        };
-        let call = crate::object_call_envelope::encode_shared_call::<EdgeKind, FleetKind, Call>(
-            &caller,
-            FleetAddress::new(organization.clone()),
-            target,
-            request,
-            identity,
-        )
-        .map_err(|_| OrganizationProvisioningFailure::Unavailable)?;
-        match self.platform.transport_object(call).await {
-            Ok(reply) => serde_json::from_slice(&reply)
-                .map_err(|_| OrganizationProvisioningFailure::OutcomeUnknown),
-            // Refused before dispatch: nothing was applied.
-            Err(CallFailure::NotSent { .. }) => Err(OrganizationProvisioningFailure::Unavailable),
-            // The Fleet may have committed; only a repeat can tell.
-            Err(_) => Err(OrganizationProvisioningFailure::OutcomeUnknown),
-        }
-    }
-}
-
-impl<Platform: CentralPlatform> OrganizationProvisioningPort for FleetLinkProvisioner<Platform> {
-    async fn provision_organization(
-        &self,
-        request: &ProvisionOrganization,
-    ) -> Result<ProvisionOrganizationResult, OrganizationProvisioningFailure> {
-        match self
-            .call(
-                &request.organization_id,
-                FleetProvisionOrganization,
-                request.clone(),
-                "provision_organization",
-            )
-            .await?
-        {
-            ProvisioningApplied::Provisioned => Ok(ProvisionOrganizationResult::Provisioned {}),
-            ProvisioningApplied::OrganizationMismatch => {
-                Err(OrganizationProvisioningFailure::OrganizationMismatch)
-            }
-            ProvisioningApplied::InvalidStatement => {
-                Err(OrganizationProvisioningFailure::InvalidStatement)
-            }
-            ProvisioningApplied::StaleStatement => {
-                Err(OrganizationProvisioningFailure::StaleStatement)
-            }
-        }
-    }
-
-    async fn deliver_authorization_revision(
-        &self,
-        revision: &crate::identity_contract::AuthorizationRevision,
-    ) -> Result<
-        crate::identity_contract::AuthorizationRevisionAcknowledgement,
-        OrganizationProvisioningFailure,
-    > {
-        match self
-            .call(
-                revision.organization_id(),
-                crate::FleetAuthorizationRevision,
-                revision.clone(),
-                "deliver_authorization_revision",
-            )
-            .await?
-        {
-            crate::FloorDeliveryAnswer::Acknowledged { revision } => Ok(
-                crate::identity_contract::AuthorizationRevisionAcknowledgement {
-                    acknowledged_revision: revision,
-                },
-            ),
-            // Conflicts reuse the stale status: same revision, other payload.
-            crate::FloorDeliveryAnswer::Conflict => {
-                Err(OrganizationProvisioningFailure::StaleStatement)
-            }
-            crate::FloorDeliveryAnswer::OrganizationFloorMissing => {
-                Err(OrganizationProvisioningFailure::OrganizationFloorMissing)
-            }
-            crate::FloorDeliveryAnswer::OrganizationMismatch => {
-                Err(OrganizationProvisioningFailure::OrganizationMismatch)
-            }
-        }
-    }
-
-    async fn read_statement_digest(
-        &self,
-        request: &ReadOrganizationStatementDigest,
-    ) -> Result<OrganizationStatementDigestReply, OrganizationProvisioningFailure> {
-        match self
-            .call(
-                &request.organization_id,
-                FleetOrganizationStatementDigest,
-                (),
-                "read_statement_digest",
-            )
-            .await?
-        {
-            StatementDigestAnswer::Current {
-                digest,
-                expires_at,
-                signing_key_id,
-            } => Ok(OrganizationStatementDigestReply {
-                digest,
-                expires_at,
-                signing_key_id,
-            }),
-            StatementDigestAnswer::Unprovisioned => {
-                Err(OrganizationProvisioningFailure::Unprovisioned)
-            }
-        }
-    }
 }

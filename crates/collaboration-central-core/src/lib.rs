@@ -50,7 +50,7 @@ mod generated_organization;
 mod organization_addresses;
 pub use organization_addresses::{CopyAddress, FleetAddress, SessionAddress};
 mod organization_link;
-pub use organization_link::{is_private_link_path, organization_link_router};
+pub use organization_link::is_private_link_path;
 mod organization_admin_link;
 mod organization_provisioning_http;
 pub use organization_provisioning_http::organization_provisioning_router;
@@ -206,7 +206,9 @@ mod registry_lease_calls;
 mod registry_lease_store;
 mod registry_peer_lookup;
 mod registry_session_calls;
-pub use object_transport::{SerializedObjectCall, deserialize_object_reply, serialize_object_call};
+pub use object_transport::{
+    SerializedObjectCall, deserialize_object_reply, organization_link_router, serialize_object_call,
+};
 #[cfg(feature = "conformance")]
 #[expect(
     clippy::allow_attributes_without_reason,

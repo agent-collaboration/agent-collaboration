@@ -1,5 +1,6 @@
 //! The Fleet face owns central's nonreplicated application state.
 
+mod organization_admin_fleet;
 mod organization_link_fleet;
 
 use crate::{

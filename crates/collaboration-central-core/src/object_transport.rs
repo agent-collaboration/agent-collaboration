@@ -1,5 +1,7 @@
 //! The core binds call authority to its source before a runtime transports bytes.
+mod organization_link_transport;
 use crate::FleetKind;
+pub use organization_link_transport::organization_link_router;
 
 use crate::object_call_envelope::{ObjectCallEnvelope, encode_envelope, encode_refusal};
 use crate::{
