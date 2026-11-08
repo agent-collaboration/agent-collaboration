@@ -23,7 +23,7 @@ use codex_router_host::{
     router_fleet_database,
 };
 use message_board_storage::{RouterUpdateStep, read_update_ledger};
-use std::os::unix::fs::DirBuilderExt;
+use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 /// Every barrier of every step, in the order the update reaches them.
@@ -67,8 +67,10 @@ struct OldRoot {
     kept_for_pr_b: Vec<(PathBuf, Vec<u8>)>,
 }
 
-/// The machine's identity and enrollment files as an older Router wrote them. PR B's
-/// step 0003 moves them; until then no PR A step reads, rewrites or removes them.
+/// The machine's identity and enrollment files as an older Router wrote them, owner-only
+/// as its writers make them. PR B's step 0003 moves them; until then no PR A step reads,
+/// rewrites, removes or loosens them. Their contents are opaque here: the compiled-CLI
+/// journey proves the Host's own readers accept a genuinely enrolled root.
 fn write_identity_and_enrollment(root: &Path) -> UpdateResult<Vec<(PathBuf, Vec<u8>)>> {
     let collaboration = router_collaboration_directory(root);
     let fleet = root.join("fleet");
@@ -89,6 +91,7 @@ fn write_identity_and_enrollment(root: &Path) -> UpdateResult<Vec<(PathBuf, Vec<
     ];
     for (path, bytes) in &files {
         std::fs::write(path, bytes)?;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
     }
     Ok(files.into())
 }
@@ -173,11 +176,21 @@ async fn assert_whole_update_finished(root: &Path, old: &OldRoot, context: &str)
         ["enrollment.json"],
         "{context}"
     );
+    let mode = |path: &Path| -> std::io::Result<u32> {
+        Ok(std::fs::symlink_metadata(path)?.permissions().mode() & 0o777)
+    };
+    assert_eq!(mode(&root.join("fleet"))?, 0o700, "{context}: fleet folder");
     for (path, bytes) in &old.kept_for_pr_b {
         assert_eq!(
             &std::fs::read(path)?,
             bytes,
             "{context}: {} must keep its bytes until PR B",
+            path.display()
+        );
+        assert_eq!(
+            mode(path)?,
+            0o600,
+            "{context}: {} must stay owner-only until PR B",
             path.display()
         );
     }

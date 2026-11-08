@@ -17,7 +17,7 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 /// fails the test: its readiness line, and its answers to `host status` and
 /// `host stop`. Its collaboration runtime took about 16 seconds to come up on a loaded
 /// development machine, with or without the update before it.
-const HOST_SIGNAL_BOUND: Duration = Duration::from_secs(60);
+pub(super) const HOST_SIGNAL_BOUND: Duration = Duration::from_secs(60);
 
 /// The readiness-timing stage the Host writes once its collaboration runtime is
 /// synchronized; its operator socket is bound and `host status` answers after it.
@@ -27,7 +27,7 @@ const COLLABORATION_SYNCHRONIZED: &str = r#""stage":"collaborationSynchronized""
 /// reports its collaboration runtime synchronized. A Host that exits first ends the
 /// stream and fails the wait with what it wrote. The returned task keeps draining the
 /// rest into `log`, so the Host never blocks on a full pipe.
-async fn host_synchronized(
+pub(super) async fn host_synchronized(
     stderr: tokio::process::ChildStderr,
     log: &Path,
 ) -> Result<tokio::task::JoinHandle<std::io::Result<()>>, Box<dyn std::error::Error>> {
@@ -60,7 +60,7 @@ async fn host_synchronized(
 }
 
 /// Runs `codex-router host <subcommand>` against the fixture Host and returns its answer.
-async fn host_answer(
+pub(super) async fn host_answer(
     binary: &Path,
     router_root: &Path,
     codex_home: &Path,

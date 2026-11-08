@@ -12,9 +12,9 @@ use std::{error::Error, io, time::Duration};
 #[path = "../support/fleet_enrollment_failures.rs"]
 mod failures;
 #[path = "../support/fleet_cli.rs"]
-mod fleet_cli;
+pub(crate) mod fleet_cli;
 #[path = "../support/fleet_fixture.rs"]
-mod fleet_fixture;
+pub(crate) mod fleet_fixture;
 #[path = "../support/fleet_host.rs"]
 mod fleet_host;
 #[path = "../support/fleet_enrollment_status.rs"]
