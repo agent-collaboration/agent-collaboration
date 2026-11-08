@@ -56,6 +56,8 @@ pub(crate) enum CallAuthority {
     },
     Owner(OwnerIdentity),
     AccessMachine(AccessClientId),
+    /// The private sign-in link: its transport proves which service called.
+    SignInLink,
 }
 impl CallerContext<EdgeKind> {
     pub(crate) fn for_owner(owner: OwnerIdentity, organization: OrganizationId) -> Self {
@@ -63,6 +65,14 @@ impl CallerContext<EdgeKind> {
             address: FleetAddress::new(organization),
             face: PhantomData,
             authority: CallAuthority::Owner(owner),
+        }
+    }
+
+    pub(crate) fn for_sign_in_link(organization: OrganizationId) -> Self {
+        Self {
+            address: FleetAddress::new(organization),
+            face: PhantomData,
+            authority: CallAuthority::SignInLink,
         }
     }
 

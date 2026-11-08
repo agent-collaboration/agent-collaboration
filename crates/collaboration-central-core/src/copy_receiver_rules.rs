@@ -118,11 +118,20 @@ static COPY_MIGRATIONS: std::sync::LazyLock<Vec<sqlx_core::migrate::Migration>> 
             migrate::{Migration, MigrationType},
             sql_str::SqlSafeStr,
         };
-        vec![Migration::new(
-            COPY_SUMMARY_VERSION,
-            "copy summary".into(),
-            MigrationType::Simple,
-            include_str!("../copy_migrations/0001_copy_summary.sql").into_sql_str(),
-            false,
-        )]
+        vec![
+            Migration::new(
+                COPY_SUMMARY_VERSION,
+                "copy summary".into(),
+                MigrationType::Simple,
+                include_str!("../copy_migrations/0001_copy_summary.sql").into_sql_str(),
+                false,
+            ),
+            Migration::new(
+                2,
+                "copy fleet reference".into(),
+                MigrationType::Simple,
+                include_str!("../copy_migrations/0002_copy_fleet_reference.sql").into_sql_str(),
+                false,
+            ),
+        ]
     });

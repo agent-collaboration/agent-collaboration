@@ -1,0 +1,52 @@
+{
+  "migrations": [
+    "copy_migrations"
+  ],
+  "output": "src/generated_copy_fleet_reference.rs",
+  "metadata": "copy-fleet-reference-query-metadata.json",
+  "queries": [
+    {
+      "name": "copy_fleet_reference_table_exists",
+      "sql": "sql/copy_fleet_reference/copy_fleet_reference_table_exists.sql",
+      "row": null,
+      "result": "exists",
+      "parameters": []
+    },
+    {
+      "name": "read_copy_fleet_reference",
+      "sql": "sql/copy_fleet_reference/read_copy_fleet_reference.sql",
+      "row": "StoredCopyFleetReference",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "project_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_copy_fleet_reference",
+      "sql": "sql/copy_fleet_reference/insert_copy_fleet_reference.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "project_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "fleet_address_key",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

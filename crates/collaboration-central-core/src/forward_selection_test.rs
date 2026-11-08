@@ -65,6 +65,7 @@ async fn run(revoked: bool, replay: bool) -> Result<(), TestError> {
             organization: "019f0000-0000-7000-8000-00000000ac01"
                 .to_owned()
                 .try_into()?,
+            organization_stamp: Arc::default(),
             host: host.clone(),
             io: Arc::new(FixtureIo),
             engine: Arc::new(UnusedEngine),

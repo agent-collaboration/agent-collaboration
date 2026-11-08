@@ -9,6 +9,10 @@ use fleet_identity_protocol::{OrganizationId, UnixSeconds};
 use runtime_primitives::{Clock, SyncTime};
 use std::sync::Arc;
 
+/// Owner choice 3f: a statement lives 120 days and is renewed with 60 days left.
+/// The sign-in service owns issuance; central refuses anything longer-lived.
+pub const MAXIMUM_STATEMENT_LIFETIME_SECONDS: i64 = 10_368_000;
+
 pub struct FleetOrganizationStatementTrust {
     issuer: String,
     audience: String,
@@ -101,6 +105,9 @@ impl<Crypto: Ed25519Verification, Keys: IssuerKeySource>
         }
         if parsed.claims.exp.0 <= parsed.claims.iat.0 {
             return Err(FleetOrganizationStatementRefusal::Malformed);
+        }
+        if parsed.claims.exp.0 - parsed.claims.iat.0 > MAXIMUM_STATEMENT_LIFETIME_SECONDS {
+            return Err(FleetOrganizationStatementRefusal::LifetimeExceedsPolicy);
         }
         let verified = VerifiedFleetOrganizationStatement {
             organization: parsed.claims.organization_id,

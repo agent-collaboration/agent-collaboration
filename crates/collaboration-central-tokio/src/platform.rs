@@ -37,6 +37,12 @@ pub struct TokioCentralPlatform {
 }
 
 impl TokioCentralPlatform {
+    pub(crate) fn install_sign_in_trust(
+        &self,
+        trust: Arc<crate::sign_in_trust::NativeSignInTrust>,
+    ) -> Result<(), durable_steps::StoreError> {
+        self.objects.install_sign_in_trust(trust)
+    }
     /// Conformance-only real import/seed; no production or HTTP route.
     #[cfg(feature = "conformance")]
     pub async fn conformance_import_board_snapshot(

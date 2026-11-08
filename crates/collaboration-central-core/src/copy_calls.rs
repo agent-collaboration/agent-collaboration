@@ -70,6 +70,7 @@ where
                 }
             })?;
         }
+        self.bind_creating_fleet(&call).await?;
         if call.kind == crate::copy_write_calls::CopyAdminSeed::KIND {
             return self.admin_seed_call(call).await;
         }
@@ -333,29 +334,48 @@ where
         Type<Host::Database> + Decode<'value, Host::Database> + Encode<'value, Host::Database>,
     for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
 {
+    /// Refuse a call naming another organization than the Copy's note. A Copy
+    /// without a note admits the call: ownership was decided by the caller's
+    /// Fleet directory, and the note itself grants nothing.
     pub(crate) async fn admit_copy_call(
         &self,
         bytes: &[u8],
     ) -> Result<ObjectCallEnvelope, CallFailure> {
+        let ObjectWork::Copy { database, host, .. } = &self.work else {
+            return Err(refused());
+        };
+        let call = ObjectCallEnvelope::decode_copy_candidate(bytes, *database)?;
+        let (note, _) = crate::step_driver::StepDriver::new(host.clone())
+            .run(crate::copy_fleet_reference::ReadCopyFleetReference { project: *database })
+            .await
+            .map_err(|_| refused())?;
+        match note {
+            crate::copy_fleet_reference::CopyFleetReference::Bound(organization)
+                if organization != call.organization =>
+            {
+                Err(refused())
+            }
+            _ => Ok(call),
+        }
+    }
+
+    /// Only a validated creation or seed admission for an uninitialized Copy
+    /// writes the note. Reads, health, writers and repairs never guess a Fleet.
+    pub(crate) async fn bind_creating_fleet(
+        &self,
+        call: &ObjectCallEnvelope,
+    ) -> Result<(), CallFailure> {
         let ObjectWork::Copy {
             database,
             receiver,
-            fleet_references,
+            host,
+            io,
             ..
         } = &self.work
         else {
             return Err(refused());
         };
-        let call = ObjectCallEnvelope::decode_copy_candidate(bytes, *database)?;
-        match fleet_references.resolve(*database).await {
-            Ok(organization) if organization == call.organization => return Ok(call),
-            Ok(_) => return Err(refused()),
-            Err(crate::CopyFleetReferenceRefusal::Missing) => {}
-            Err(_) => return Err(refused()),
-        }
-        // Only a validated creation/seed admission can establish the private
-        // reference. Reads, health, writers and repairs never guess a Fleet.
-        let admission = if call.kind == CopyCreate::KIND
+        let creation = if call.kind == CopyCreate::KIND
             && call.source_face == CallerKind::Registry
             && matches!(call.authority, CallAuthority::Object)
         {
@@ -386,18 +406,22 @@ where
         } else {
             false
         };
-        if !admission
+        if !creation
             || !matches!(
                 self.inspection().await.map_err(|_| refused())?,
                 fleet_sync_receiver::CopyInspection::Uninitialized
             )
         {
-            return Err(refused());
+            return Ok(());
         }
-        fleet_references
-            .bind(*database, call.organization.clone())
+        let (bound, _) = crate::step_driver::StepDriver::new(host.clone())
+            .run(crate::copy_fleet_reference::BindCopyFleetReference {
+                project: *database,
+                organization: call.organization.clone(),
+                now_millis: io.now().unix_millis(),
+            })
             .await
-            .map_err(|_| refused())?;
-        Ok(call)
+            .map_err(|_| CallFailure::AnswerLost)?;
+        bound.map_err(|_| refused())
     }
 }

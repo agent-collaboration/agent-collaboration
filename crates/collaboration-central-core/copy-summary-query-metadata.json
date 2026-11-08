@@ -3,6 +3,7 @@
   "sources": {
     "copy-summary-queries.json": "b1cfbae6725120be70c9f1076146783f83b1585b1725ab75f7e13626339b317d",
     "copy_migrations/0001_copy_summary.sql": "bdaa4fb4812a81aabcc5d3c787d949b061183233de749406c25d2b4e015f23ee",
+    "copy_migrations/0002_copy_fleet_reference.sql": "324077324f20e13157a366ae977f8a686f4229d531280ecf8250b93c9bd3ac22",
     "generator:fleet-sync-query-gen/Cargo.toml": "01210c567dcbccb4ff127626a0ff7625641edd4c5f0787ea41777757b1eaa3e6",
     "generator:fleet-sync-query-gen/src/expression_classes.rs": "14dc40abaec059e437d3e44bc187b9560812b0ed21ee2ad9d558364032fb097e",
     "generator:fleet-sync-query-gen/src/lib.rs": "df50be1a279adf266fdd12d184637b0113740390c0cef7273d1995dea0475152",

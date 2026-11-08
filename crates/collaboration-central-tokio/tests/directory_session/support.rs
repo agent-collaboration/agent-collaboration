@@ -253,7 +253,6 @@ pub(super) async fn read_committed_owners(
             config.authoritative_receiver,
             database,
             Duration::from_secs(2),
-            std::sync::Arc::new(collaboration_central_core::InMemoryCopyFleetReferences::default()),
         );
         copy.initialize().await?;
         observed.push((copy.copy_summary().await?, snapshot));

@@ -1,5 +1,5 @@
 use super::{
-    OrganizationStatementReplacement as Decision,
+    CurrentStamp, OrganizationStatementReplacement as Decision,
     OrganizationStatementReplacementRefusal as Refusal, decide_organization_statement_replacement,
 };
 use crate::organization_authority::{
@@ -40,7 +40,10 @@ async fn fleet_replacement_accepts_the_matching_signed_predecessor() {
     let first = verified_fixture().await;
     let replacement = replacement_for(&first, 1_799_999_950).await;
 
-    let decision = decide_organization_statement_replacement(Some(&first), &replacement);
+    let decision = decide_organization_statement_replacement(
+        Some(&CurrentStamp::of_verified(&first)),
+        &replacement,
+    );
 
     assert_eq!(decision, Ok(Decision::Replace));
 }
@@ -52,7 +55,8 @@ async fn fleet_replacement_keeps_a_setup_retry_after_a_lost_reply() {
     retry_claims["iat"] = json!(1_799_999_951);
     let retry = verified_claims(retry_claims).await;
 
-    let decision = decide_organization_statement_replacement(Some(&first), &retry);
+    let decision =
+        decide_organization_statement_replacement(Some(&CurrentStamp::of_verified(&first)), &retry);
 
     assert_eq!(decision, Ok(Decision::AlreadyProvisioned));
     assert_ne!(first.digest(), retry.digest());
@@ -65,9 +69,14 @@ async fn fleet_replacement_clock_correction_cannot_rebase_a_delayed_candidate() 
     let clock_corrected = replacement_for(&first, 1_799_999_950).await;
     assert!(clock_ahead.issued_at() > clock_corrected.issued_at());
 
-    let first_decision = decide_organization_statement_replacement(Some(&first), &clock_corrected);
-    let delayed_decision =
-        decide_organization_statement_replacement(Some(&clock_corrected), &clock_ahead);
+    let first_decision = decide_organization_statement_replacement(
+        Some(&CurrentStamp::of_verified(&first)),
+        &clock_corrected,
+    );
+    let delayed_decision = decide_organization_statement_replacement(
+        Some(&CurrentStamp::of_verified(&clock_corrected)),
+        &clock_ahead,
+    );
 
     assert_eq!(first_decision, Ok(Decision::Replace));
     assert_eq!(delayed_decision, Err(Refusal::StaleOrganizationStatement));
@@ -79,9 +88,15 @@ async fn fleet_replacement_two_candidates_for_one_predecessor_have_one_decision_
     let winner = replacement_for(&first, 1_799_999_950).await;
     let other = replacement_for(&first, 1_799_999_951).await;
 
-    let admitted = decide_organization_statement_replacement(Some(&first), &winner);
+    let admitted = decide_organization_statement_replacement(
+        Some(&CurrentStamp::of_verified(&first)),
+        &winner,
+    );
     // Model the next serialized transaction reading the already committed winner.
-    let next = decide_organization_statement_replacement(Some(&winner), &other);
+    let next = decide_organization_statement_replacement(
+        Some(&CurrentStamp::of_verified(&winner)),
+        &other,
+    );
 
     assert_eq!(admitted, Ok(Decision::Replace));
     assert_eq!(next, Err(Refusal::StaleOrganizationStatement));
@@ -98,7 +113,10 @@ async fn fleet_replacement_original_setup_replay_preserves_the_replacement() {
     let before_digest = stored.digest().clone();
     let before_key = stored.key_id().to_owned();
 
-    let decision = decide_organization_statement_replacement(Some(&stored), &original);
+    let decision = decide_organization_statement_replacement(
+        Some(&CurrentStamp::of_verified(&stored)),
+        &original,
+    );
 
     assert_eq!(decision, Ok(Decision::AlreadyProvisioned));
     assert_eq!(stored.digest(), &before_digest);
@@ -111,7 +129,25 @@ async fn fleet_replacement_never_changes_the_stored_organization() {
     let stored = verified_fixture().await;
     let foreign = verified_foreign_organization().await;
 
-    let decision = decide_organization_statement_replacement(Some(&stored), &foreign);
+    let decision = decide_organization_statement_replacement(
+        Some(&CurrentStamp::of_verified(&stored)),
+        &foreign,
+    );
 
     assert_eq!(decision, Err(Refusal::OrganizationMismatch));
+}
+
+#[tokio::test(start_paused = true)]
+async fn fleet_replacement_byte_identical_replay_of_a_renewal_answers_without_a_swap() {
+    // Wrong build caught: a lost-reply retry of a committed renewal is refused as
+    // stale (its replaces names the predecessor, not the stored statement itself).
+    let first = verified_fixture().await;
+    let renewal = replacement_for(&first, 1_799_999_950).await;
+
+    let replay = decide_organization_statement_replacement(
+        Some(&CurrentStamp::of_verified(&renewal)),
+        &renewal,
+    );
+
+    assert_eq!(replay, Ok(Decision::AlreadyProvisioned));
 }

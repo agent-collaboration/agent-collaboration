@@ -124,7 +124,20 @@ pub fn central_router<Platform: CentralPlatform>(
             application.clone(),
             access_gate::<Platform>,
         ))
+        // Outermost: the private link's routes do not exist on the public
+        // surface, before any credential is even looked at.
+        .layer(middleware::from_fn(refuse_link_routes))
         .with_state(application)
+}
+
+/// Every route the private sign-in link serves lives under this prefix.
+pub const PRIVATE_LINK_PREFIX: &str = "/internal/";
+
+async fn refuse_link_routes(request: Request, next: Next) -> Response {
+    if request.uri().path().starts_with(PRIVATE_LINK_PREFIX) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    next.run(request).await
 }
 
 async fn access_gate<Platform: CentralPlatform>(

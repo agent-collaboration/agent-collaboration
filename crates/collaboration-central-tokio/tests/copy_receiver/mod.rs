@@ -183,7 +183,6 @@ impl Fixture {
             receiver,
             database,
             std::time::Duration::from_secs(2),
-            std::sync::Arc::new(collaboration_central_core::InMemoryCopyFleetReferences::default()),
         );
         runtime.initialize().await?;
         Ok(Self {

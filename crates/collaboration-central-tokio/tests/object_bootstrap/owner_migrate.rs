@@ -11,7 +11,6 @@ fn runtime(fixture: &Fixture) -> Result<ObjectRuntime<CopyKind, NativeHost, Prob
         ReceiverId::try_from("019f0000-0000-7000-8000-000000000604".to_owned())?,
         DatabaseId::try_from(DATABASE.to_owned())?,
         std::time::Duration::from_secs(2),
-        std::sync::Arc::new(collaboration_central_core::InMemoryCopyFleetReferences::default()),
     ))
 }
 

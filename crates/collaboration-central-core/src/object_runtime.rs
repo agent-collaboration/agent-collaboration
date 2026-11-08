@@ -10,6 +10,7 @@ pub struct ObjectRuntime<Face: ObjectKind, Host: ObjectHost, Io: PlatformIo> {
 pub(crate) enum ObjectWork<Host: ObjectHost, Io: PlatformIo> {
     Fleet {
         organization: fleet_identity_protocol::OrganizationId,
+        organization_stamp: Arc<crate::fleet_organization_authority::FleetOrganizationAuthority>,
         host: Arc<Host>,
         io: Arc<Io>,
         engine: Arc<dyn crate::fleet_task_engine::FleetTaskEngine>,
@@ -20,7 +21,6 @@ pub(crate) enum ObjectWork<Host: ObjectHost, Io: PlatformIo> {
         holder_answer_timeout: std::time::Duration,
     },
     Copy {
-        fleet_references: Arc<dyn crate::CopyFleetReferencePort>,
         host: Arc<Host>,
         database: fleet_sync_protocol::DatabaseId,
         io: Arc<Io>,

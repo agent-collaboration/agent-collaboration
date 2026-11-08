@@ -44,11 +44,9 @@ where
         receiver: ReceiverId,
         database: DatabaseId,
         copy_ack_wait: std::time::Duration,
-        fleet_references: Arc<dyn crate::CopyFleetReferencePort>,
     ) -> Self {
         Self {
             work: ObjectWork::Copy {
-                fleet_references,
                 host,
                 database,
                 io: Arc::new(io),

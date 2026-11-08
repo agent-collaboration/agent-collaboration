@@ -1,4 +1,4 @@
-//! Real native object files, stores and reopen routing; no Copy-reference durability claim.
+//! Real native object files, stores and reopen routing, including the durable Copy note.
 use super::*;
 use collaboration_central_core::FleetLocationPolicy;
 use durable_steps::{AtomicStore, storage::TransactionScope};
@@ -125,7 +125,8 @@ async fn organization_routing_isolates_real_native_stores_and_reopens_the_same_d
     reason = "Assertions reject rebinding at the real initialized Copy store while fixture errors propagate."
 )]
 #[tokio::test(start_paused = true)]
-async fn organization_routing_missing_reference_cannot_rebind_an_existing_copy() -> TestResult {
+async fn organization_routing_copy_note_survives_reopen_and_refuses_another_organization()
+-> TestResult {
     let root = tempfile::tempdir()?;
     let objects = open(root.path()).await?;
     let database: fleet_sync_protocol::DatabaseId = "019f0000-0000-7000-8000-00000000ac10"
@@ -168,11 +169,34 @@ async fn organization_routing_missing_reference_cannot_rebind_an_existing_copy()
             .await
             .is_err()
     );
-    assert_eq!(
-        reopened.fleet_references.resolve(database).await,
-        Err(collaboration_central_core::CopyFleetReferenceRefusal::Missing)
-    );
     let slot = reopened.slot(ObjectAddress::Copy(database)).await?;
+    // Wrong build caught: an in-memory note lost at restart, or a second
+    // organization's creation rebinding the Copy.
+    let host = slot.host.get().ok_or("Copy host missing")?;
+    let note = host
+        .object
+        .transaction(|scope| {
+            Box::pin(async move {
+                let row = query::<sqlx_turso::Turso>(
+                    "SELECT project_id, fleet_address_key FROM _copy_fleet_reference",
+                )
+                .fetch_all(scope.executor())
+                .await
+                .map_err(StoreError::backend)?;
+                row.iter()
+                    .map(|row| {
+                        Ok((
+                            row.try_get::<String, _>("project_id")
+                                .map_err(StoreError::backend)?,
+                            row.try_get::<String, _>("fleet_address_key")
+                                .map_err(StoreError::backend)?,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, StoreError>>()
+            })
+        })
+        .await?;
+    assert_eq!(note, vec![(database.to_string(), FIRST.to_owned())]);
     let RuntimeFace::Copy(copy) = slot.runtime.get().ok_or("copy runtime missing")?.as_ref() else {
         return Err("wrong face".into());
     };

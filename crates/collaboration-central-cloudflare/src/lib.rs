@@ -1,5 +1,12 @@
 //! Cloudflare capabilities for the shared asynchronous application core.
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    feature = "link",
+    expect(
+        dead_code,
+        reason = "the central-link build mounts only the private routes; the public entry stays in the shared crate"
+    )
+)]
 mod access_crypto;
 mod access_verification;
 mod binding_attachment;
@@ -24,10 +31,15 @@ mod object_shell;
 mod platform;
 mod reply_deadline;
 mod shared_object_store;
+mod sign_in_trust;
 mod storage_measurement;
 pub use object_shell::{FleetObject, ProjectCopyObject};
 pub use shared_object_store::CloudflareStorageHost;
+#[cfg(not(feature = "link"))]
 use worker::{Context, Env, Request, Response, Result, event};
+#[cfg(feature = "link")]
+mod link_entry;
+#[cfg(not(feature = "link"))]
 #[event(fetch)]
 pub async fn main(request: Request, env: Env, _context: Context) -> Result<Response> {
     let labels = access_verification::InvocationLabels::for_request(&request, &env)?;

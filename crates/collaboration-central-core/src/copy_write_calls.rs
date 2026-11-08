@@ -275,14 +275,24 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io> {
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io>
+where
+    for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
+        TransactionScope<Database = Host::Database>,
+    <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
+    for<'value> String: Type<Host::Database> + Encode<'value, Host::Database>,
+    for<'value> Option<String>: Type<Host::Database> + Decode<'value, Host::Database>,
+    for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
+{
     pub(crate) async fn drive_copy_followups(&self) -> Result<(), StoreError> {
         let ObjectWork::Copy {
             host,
             io,
             receiver,
             database,
-            fleet_references,
             ..
         } = &self.work
         else {
@@ -290,10 +300,16 @@ impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io> {
                 reason: "copy alarm reached another face".into(),
             });
         };
-        let organization = fleet_references
-            .resolve(*database)
-            .await
-            .map_err(StoreError::backend)?;
+        // Pending follow-ups report to the Fleet the note names; a Copy without
+        // one cannot guess its organization and leaves the work pending.
+        let (note, _) = crate::step_driver::StepDriver::new(host.clone())
+            .run(crate::copy_fleet_reference::ReadCopyFleetReference { project: *database })
+            .await?;
+        let crate::copy_fleet_reference::CopyFleetReference::Bound(organization) = note else {
+            return Err(StoreError::Aborted {
+                reason: "Copy has no private Fleet reference".into(),
+            });
+        };
         let shared = CoreHost::for_copy(io.clone(), *receiver, *database, organization)
             .map_err(|error| StoreError::backend(format!("{error:?}")))?;
         let mut engine = Engine::new(host.store().clone(), Arc::new(shared));

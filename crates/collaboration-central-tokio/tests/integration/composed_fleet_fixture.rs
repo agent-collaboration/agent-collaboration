@@ -258,7 +258,6 @@ impl Fixture {
             receiver,
             database,
             Duration::from_secs(2),
-            std::sync::Arc::new(collaboration_central_core::InMemoryCopyFleetReferences::default()),
         ));
         project.initialize().await?;
         let fleet_weak = Arc::downgrade(&runtime);

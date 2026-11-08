@@ -1,0 +1,156 @@
+{
+  "migrations": [
+    "organization_migrations"
+  ],
+  "output": "src/generated_organization.rs",
+  "metadata": "organization-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_organization_identities",
+      "sql": "organization_sql/read_organization_identities.sql",
+      "row": "StoredOrganizationIdentity",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "insert_organization_identity",
+      "sql": "organization_sql/insert_organization_identity.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "organization_statement",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "updated_at",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "replace_organization_statement",
+      "sql": "organization_sql/replace_organization_statement.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "organization_statement",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "updated_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "expected_statement",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_organization_change_record",
+      "sql": "organization_sql/insert_organization_change_record.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "request_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "actor_person_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "permission_checked",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "target_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "updated_at",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_organization_change_record",
+      "sql": "organization_sql/read_organization_change_record.sql",
+      "row": "StoredOrganizationChangeRecord",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "request_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_organization_change_records",
+      "sql": "organization_sql/read_organization_change_records.sql",
+      "row": "StoredOrganizationChangeRecordPage",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "after_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

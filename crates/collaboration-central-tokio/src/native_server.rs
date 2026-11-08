@@ -39,6 +39,10 @@ pub struct TokioServer {
     platform: TokioCentralPlatform,
     stop: CancellationToken,
     task: Option<tokio::task::JoinHandle<Result<(), std::io::Error>>>,
+    /// The private sign-in link, served only on its Unix socket.
+    link: Option<tokio::task::JoinHandle<Result<(), std::io::Error>>>,
+    /// Removed after the link stops; another process may own an existing one.
+    link_socket: Option<std::path::PathBuf>,
 }
 
 impl TokioServer {
@@ -62,7 +66,29 @@ impl TokioServer {
             settings.copy_ack_wait,
         )
         .await?;
-        Self::serve_platform(settings, listen, platform, None).await
+        Self::serve_platform(settings, listen, platform, None, None).await
+    }
+
+    /// Serve the public routes on TCP and the private sign-in link on its own
+    /// Unix socket. The public listener never mounts the link's routes.
+    pub async fn start_with_sign_in(
+        settings: TokioSettings,
+        listen: SocketAddr,
+        sign_in: crate::SignInLinkSettings,
+    ) -> Result<Self, TokioServerError> {
+        let platform = TokioCentralPlatform::new(
+            &settings.jwks_url,
+            Arc::new(SystemClock),
+            crate::native_logging::observe,
+            &settings.root,
+            settings.legacy_organization.clone(),
+            settings.registry,
+            settings.delivery,
+            settings.holder_answer_timeout,
+            settings.copy_ack_wait,
+        )
+        .await?;
+        Self::serve_platform(settings, listen, platform, None, Some(sign_in)).await
     }
 
     /// Publishes only public keys, outside the authenticated application routes.
@@ -83,7 +109,7 @@ impl TokioServer {
             settings.copy_ack_wait,
         )
         .await?;
-        Self::serve_platform(settings, listen, platform, Some(keys)).await
+        Self::serve_platform(settings, listen, platform, Some(keys), None).await
     }
 
     #[cfg(feature = "conformance")]
@@ -109,6 +135,36 @@ impl TokioServer {
             SocketAddr::from(([127, 0, 0, 1], 0)),
             platform,
             None,
+            None,
+        )
+        .await
+    }
+
+    #[cfg(feature = "conformance")]
+    pub async fn start_with_sign_in_and_controls(
+        settings: TokioSettings,
+        sign_in: crate::SignInLinkSettings,
+        controls: Vec<collaboration_central_conformance::RuntimeControlRequest>,
+    ) -> Result<Self, TokioServerError> {
+        let platform = TokioCentralPlatform::new_with_controls(
+            &settings.jwks_url,
+            Arc::new(SystemClock),
+            crate::native_logging::observe,
+            &settings.root,
+            settings.legacy_organization.clone(),
+            settings.registry,
+            settings.delivery,
+            settings.holder_answer_timeout,
+            settings.copy_ack_wait,
+            controls,
+        )
+        .await?;
+        Self::serve_platform(
+            settings,
+            SocketAddr::from(([127, 0, 0, 1], 0)),
+            platform,
+            None,
+            Some(sign_in),
         )
         .await
     }
@@ -118,7 +174,19 @@ impl TokioServer {
         listen: SocketAddr,
         platform: TokioCentralPlatform,
         keys: Option<collaboration_central_core::AccessJwks>,
+        sign_in: Option<crate::SignInLinkSettings>,
     ) -> Result<Self, TokioServerError> {
+        let link_socket = sign_in.as_ref().map(|sign_in| sign_in.socket.clone());
+        let link_listener = match sign_in {
+            Some(sign_in) => match Self::bind_link(&platform, sign_in) {
+                Ok(listener) => Some(listener),
+                Err(error) => {
+                    platform.shutdown().await?;
+                    return Err(error);
+                }
+            },
+            None => None,
+        };
         let application = match CentralApplication::new(
             platform.clone(),
             settings.access_policy.clone(),
@@ -157,12 +225,38 @@ impl TokioServer {
                 .with_graceful_shutdown(stopped.cancelled_owned())
                 .await
         });
+        let link = link_listener.map(|listener| {
+            let router = collaboration_central_core::organization_link_router(platform.clone());
+            let stopped = stop.clone();
+            tokio::spawn(async move {
+                axum::serve(listener, router)
+                    .with_graceful_shutdown(stopped.cancelled_owned())
+                    .await
+            })
+        });
         Ok(Self {
             base_url,
             platform,
             stop,
             task: Some(task),
+            link,
+            link_socket,
         })
+    }
+
+    /// Bind the link socket owner-only; a stale socket file is not reused.
+    fn bind_link(
+        platform: &TokioCentralPlatform,
+        sign_in: crate::SignInLinkSettings,
+    ) -> Result<tokio::net::UnixListener, TokioServerError> {
+        use std::os::unix::fs::PermissionsExt;
+        let socket = sign_in.socket.clone();
+        let trust = crate::sign_in_trust::NativeSignInTrust::new(sign_in)
+            .map_err(|error| TokioServerError::Listener(std::io::Error::other(error)))?;
+        platform.install_sign_in_trust(Arc::new(trust))?;
+        let listener = tokio::net::UnixListener::bind(&socket)?;
+        std::fs::set_permissions(&socket, std::fs::Permissions::from_mode(0o600))?;
+        Ok(listener)
     }
 
     pub fn base_url(&self) -> &str {
@@ -182,8 +276,20 @@ impl TokioServer {
             Some(task) => task.await,
             None => Ok(Ok(())),
         };
+        let linked = match self.link.take() {
+            Some(task) => task.await,
+            None => Ok(Ok(())),
+        };
+        if let Some(socket) = self.link_socket.take() {
+            match std::fs::remove_file(&socket) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
         let stopped = self.platform.shutdown().await;
         served??;
+        linked??;
         stopped?;
         Ok(())
     }

@@ -5,6 +5,12 @@
       "minLength": 36,
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
       "type": "string"
+    },
+    "OrganizationStatement": {
+      "maxLength": 4096,
+      "minLength": 5,
+      "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$",
+      "type": "string"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -12,10 +18,14 @@
   "properties": {
     "organizationId": {
       "$ref": "#/$defs/OrganizationId"
+    },
+    "organizationStatement": {
+      "$ref": "#/$defs/OrganizationStatement"
     }
   },
   "required": [
-    "organizationId"
+    "organizationId",
+    "organizationStatement"
   ],
   "title": "ProvisionOrganization",
   "type": "object"

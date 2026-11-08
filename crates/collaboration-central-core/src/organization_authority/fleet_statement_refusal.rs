@@ -21,6 +21,8 @@ pub enum FleetOrganizationStatementRefusal {
     WrongAudience,
     #[error("Fleet organization statement names a different organization")]
     OrganizationMismatch,
+    #[error("Fleet organization statement outlives the 120-day policy")]
+    LifetimeExceedsPolicy,
     #[error("Fleet organization statement has expired")]
     Expired,
     #[error("Fleet organization statement is not yet valid")]

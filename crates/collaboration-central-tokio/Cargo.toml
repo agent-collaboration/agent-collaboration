@@ -44,6 +44,7 @@ sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+sha2.workspace = true
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }

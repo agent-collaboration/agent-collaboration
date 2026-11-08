@@ -1,6 +1,9 @@
-//! HTTP policy for provisioning; hosts mount it only on the private sign-in link.
+//! HTTP policy for the private sign-in link; hosts mount it only on that link.
 use crate::{
-    identity_contract::{PROVISION_ORGANIZATION_ROUTE, ProvisionOrganization},
+    identity_contract::{
+        ORGANIZATION_STATEMENT_DIGEST_ROUTE, PROVISION_ORGANIZATION_ROUTE, ProvisionOrganization,
+        ReadOrganizationStatementDigest,
+    },
     organization_authority::{OrganizationProvisioningFailure, OrganizationProvisioningPort},
 };
 use axum::{
@@ -13,12 +16,16 @@ use axum::{
 use serde::Serialize;
 use std::sync::Arc;
 
-/// The host supplies the Fleet transaction capability; this router opens no store.
+/// The host supplies the Fleet capability; this router opens no store.
 pub fn organization_provisioning_router<Provisioner: OrganizationProvisioningPort>(
     provisioner: Arc<Provisioner>,
 ) -> Router {
     Router::new()
         .route(PROVISION_ORGANIZATION_ROUTE, post(provision::<Provisioner>))
+        .route(
+            ORGANIZATION_STATEMENT_DIGEST_ROUTE,
+            post(statement_digest::<Provisioner>),
+        )
         .with_state(provisioner)
 }
 
@@ -27,22 +34,45 @@ async fn provision<Provisioner: OrganizationProvisioningPort>(
     request: Result<Json<ProvisionOrganization>, JsonRejection>,
 ) -> Response {
     let Ok(Json(request)) = request else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ProvisioningRequestRefusal::WrongOperation),
-        )
-            .into_response();
+        return wrong_operation();
     };
     match provisioner.provision_organization(&request).await {
         Ok(answer) => (StatusCode::OK, Json(answer)).into_response(),
-        Err(OrganizationProvisioningFailure::OrganizationMismatch) => {
-            StatusCode::FORBIDDEN.into_response()
-        }
-        Err(
-            OrganizationProvisioningFailure::Unavailable
-            | OrganizationProvisioningFailure::OutcomeUnknown,
-        ) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+        Err(failure) => failure_status(failure).into_response(),
     }
+}
+
+async fn statement_digest<Provisioner: OrganizationProvisioningPort>(
+    State(provisioner): State<Arc<Provisioner>>,
+    request: Result<Json<ReadOrganizationStatementDigest>, JsonRejection>,
+) -> Response {
+    let Ok(Json(request)) = request else {
+        return wrong_operation();
+    };
+    match provisioner.read_statement_digest(&request).await {
+        Ok(answer) => (StatusCode::OK, Json(answer)).into_response(),
+        Err(failure) => failure_status(failure).into_response(),
+    }
+}
+
+/// Error bodies are empty: only a 200 with the closed answer is a contract.
+fn failure_status(failure: OrganizationProvisioningFailure) -> StatusCode {
+    match failure {
+        OrganizationProvisioningFailure::OrganizationMismatch => StatusCode::FORBIDDEN,
+        OrganizationProvisioningFailure::InvalidStatement => StatusCode::UNPROCESSABLE_ENTITY,
+        OrganizationProvisioningFailure::StaleStatement => StatusCode::CONFLICT,
+        OrganizationProvisioningFailure::Unprovisioned => StatusCode::NOT_FOUND,
+        OrganizationProvisioningFailure::Unavailable
+        | OrganizationProvisioningFailure::OutcomeUnknown => StatusCode::SERVICE_UNAVAILABLE,
+    }
+}
+
+fn wrong_operation() -> Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(ProvisioningRequestRefusal::WrongOperation),
+    )
+        .into_response()
 }
 
 #[derive(Serialize)]

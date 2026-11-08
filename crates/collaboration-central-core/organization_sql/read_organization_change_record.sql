@@ -1,0 +1,17 @@
+SELECT CAST(id AS TEXT) AS id,
+    typeof(id) AS id_class,
+    CAST(request_id AS TEXT) AS request_id,
+    typeof(request_id) AS request_id_class,
+    CAST(kind AS TEXT) AS kind,
+    typeof(kind) AS kind_class,
+    CAST(origin AS TEXT) AS origin,
+    typeof(origin) AS origin_class,
+    CAST(actor_person_id AS TEXT) AS actor_person_id,
+    typeof(actor_person_id) AS actor_person_id_class,
+    CAST(permission_checked AS TEXT) AS permission_checked,
+    typeof(permission_checked) AS permission_checked_class,
+    CAST(target_id AS TEXT) AS target_id,
+    typeof(target_id) AS target_id_class,
+    CAST(created_at AS TEXT) AS created_at,
+    typeof(created_at) AS created_at_class
+FROM organization_change_records WHERE request_id = ?;

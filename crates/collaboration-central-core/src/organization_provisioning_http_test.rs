@@ -1,7 +1,9 @@
 use super::organization_provisioning_router;
 use crate::{
     identity_contract::{
+        ORGANIZATION_STATEMENT_DIGEST_ROUTE, OrganizationStatementDigestReply,
         PROVISION_ORGANIZATION_ROUTE, ProvisionOrganization, ProvisionOrganizationResult,
+        ReadOrganizationStatementDigest,
     },
     organization_authority::{OrganizationProvisioningFailure, OrganizationProvisioningPort},
 };
@@ -14,10 +16,13 @@ use std::sync::{Arc, Mutex};
 use tower_service::Service;
 
 const ORGANIZATION: &str = "019a0000-0000-7000-8000-000000000001";
+// Shape only: the Fleet object, not this HTTP policy, checks its signature.
+const STATEMENT: &str = "aGVhZGVy.Y2xhaW1z.c2lnbmF0dXJl";
 
 // This stand-in records transport calls only; it proves no SQL, stamp or link isolation.
 struct RecordingProvisioner {
     requests: Mutex<Vec<ProvisionOrganization>>,
+    digests: Mutex<Vec<ReadOrganizationStatementDigest>>,
     answer: Result<ProvisionOrganizationResult, OrganizationProvisioningFailure>,
 }
 impl OrganizationProvisioningPort for RecordingProvisioner {
@@ -31,6 +36,22 @@ impl OrganizationProvisioningPort for RecordingProvisioner {
             .push(request.clone());
         self.answer.clone()
     }
+    async fn read_statement_digest(
+        &self,
+        request: &ReadOrganizationStatementDigest,
+    ) -> Result<OrganizationStatementDigestReply, OrganizationProvisioningFailure> {
+        self.digests
+            .lock()
+            .map_err(|_| OrganizationProvisioningFailure::Unavailable)?
+            .push(request.clone());
+        self.answer
+            .clone()
+            .map(|_| OrganizationStatementDigestReply {
+                digest: "ab".repeat(32),
+                expires_at: 1_810_368_000,
+                signing_key_id: "stamp-a".into(),
+            })
+    }
 }
 
 fn recorder(
@@ -38,6 +59,7 @@ fn recorder(
 ) -> Arc<RecordingProvisioner> {
     Arc::new(RecordingProvisioner {
         requests: Mutex::new(Vec::new()),
+        digests: Mutex::new(Vec::new()),
         answer,
     })
 }
@@ -57,7 +79,9 @@ async fn a_valid_request_calls_the_provisioner_once_and_returns_the_closed_answe
     let mut router = organization_provisioning_router(provisioner.clone());
 
     let response = router
-        .call(request(json!({"organizationId":ORGANIZATION})))
+        .call(request(
+            json!({"organizationId":ORGANIZATION,"organizationStatement":STATEMENT}),
+        ))
         .await
         .unwrap();
 
@@ -79,7 +103,10 @@ async fn another_operation_or_malformed_body_never_calls_the_provisioner() {
 
     for body in [
         json!({"operation":"admitSignIn","organizationId":ORGANIZATION}),
-        json!({"organizationId":ORGANIZATION,"owner":"invented"}),
+        json!({"organizationId":ORGANIZATION,"organizationStatement":STATEMENT,"owner":"invented"}),
+        // The retired organizationId-only body: a stamp is now required.
+        json!({"organizationId":ORGANIZATION}),
+        json!({"organizationId":ORGANIZATION,"organizationStatement":"not-a-jws"}),
         json!({"organizationId":"00000000-0000-4000-8000-000000000001"}),
         json!({}),
         Value::Null,
@@ -103,6 +130,14 @@ async fn a_failed_attempt_is_never_reported_provisioned_or_retried() {
             StatusCode::FORBIDDEN,
         ),
         (
+            OrganizationProvisioningFailure::InvalidStatement,
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ),
+        (
+            OrganizationProvisioningFailure::StaleStatement,
+            StatusCode::CONFLICT,
+        ),
+        (
             OrganizationProvisioningFailure::Unavailable,
             StatusCode::SERVICE_UNAVAILABLE,
         ),
@@ -115,7 +150,9 @@ async fn a_failed_attempt_is_never_reported_provisioned_or_retried() {
         let mut router = organization_provisioning_router(provisioner.clone());
 
         let response = router
-            .call(request(json!({"organizationId":ORGANIZATION})))
+            .call(request(
+                json!({"organizationId":ORGANIZATION,"organizationStatement":STATEMENT}),
+            ))
             .await
             .unwrap();
 
@@ -151,5 +188,34 @@ async fn the_method_and_path_select_the_operation_before_a_body_is_used() {
     ] {
         assert_eq!(router.call(request).await.unwrap().status(), expected);
     }
+    assert!(provisioner.requests.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn the_digest_read_returns_only_the_digest_for_the_named_organization() {
+    // Wrong build caught: the statement itself crossing the link, or the read
+    // reaching the provisioning capability.
+    let provisioner = recorder(Ok(ProvisionOrganizationResult::Provisioned {}));
+    let mut router = organization_provisioning_router(provisioner.clone());
+
+    let response = router
+        .call(
+            Request::post(ORGANIZATION_STATEMENT_DIGEST_ROUTE)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({"organizationId":ORGANIZATION})).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), 1024).await.unwrap();
+    assert_eq!(
+        serde_json::from_slice::<Value>(&body).unwrap(),
+        json!({"digest":"ab".repeat(32),"expiresAt":1_810_368_000,"signingKeyId":"stamp-a"})
+    );
+    assert_eq!(provisioner.digests.lock().unwrap().len(), 1);
     assert!(provisioner.requests.lock().unwrap().is_empty());
 }

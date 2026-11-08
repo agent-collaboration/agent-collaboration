@@ -39,6 +39,7 @@ where
     pub fn delivery(&self) -> Result<ObjectRuntime<DeliveryKind, Host, Io>, StoreError> {
         let ObjectWork::Fleet {
             organization,
+            organization_stamp,
             host,
             io,
             engine,
@@ -54,6 +55,7 @@ where
         Ok(ObjectRuntime {
             work: ObjectWork::Fleet {
                 organization: organization.clone(),
+                organization_stamp: organization_stamp.clone(),
                 host: host.clone(),
                 io: io.clone(),
                 engine: engine.clone(),

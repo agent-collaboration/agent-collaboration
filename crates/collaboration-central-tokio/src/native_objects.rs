@@ -171,10 +171,11 @@ pub(crate) struct NativeObjects {
     ids: Arc<dyn IdSource>,
     config: RegistryConfig,
     locations: collaboration_central_core::FleetLocationPolicy,
-    fleet_references: Arc<dyn collaboration_central_core::CopyFleetReferencePort>,
     delivery: crate::DeliveryConfig,
     holder_answer_timeout: std::time::Duration,
     copy_ack_wait: std::time::Duration,
+    /// Installed once, before serving, when the deployment links a sign-in service.
+    sign_in: Arc<OnceLock<Arc<crate::sign_in_trust::NativeSignInTrust>>>,
     pub(crate) stop: CancellationToken,
     pub(crate) tasks: TaskTracker,
     #[cfg(feature = "conformance")]
@@ -183,6 +184,14 @@ pub(crate) struct NativeObjects {
     health_samples: Mutex<BTreeMap<fleet_sync_protocol::DatabaseId, Vec<HealthFileSample>>>,
 }
 impl NativeObjects {
+    pub(crate) fn install_sign_in_trust(
+        &self,
+        trust: Arc<crate::sign_in_trust::NativeSignInTrust>,
+    ) -> Result<(), StoreError> {
+        self.sign_in
+            .set(trust)
+            .map_err(|_| StoreError::backend("sign-in trust is already installed"))
+    }
     fn legacy_address(&self) -> ObjectAddress {
         ObjectAddress::Fleet {
             organization: self.locations.legacy_organization().clone(),
@@ -298,13 +307,11 @@ impl NativeObjects {
             clock: SharedClock(clock),
             ids,
             locations,
-            fleet_references: Arc::new(
-                collaboration_central_core::InMemoryCopyFleetReferences::default(),
-            ),
             config,
             delivery,
             holder_answer_timeout,
             copy_ack_wait,
+            sign_in: Arc::default(),
             stop: CancellationToken::new(),
             tasks: TaskTracker::new(),
             #[cfg(feature = "conformance")]
@@ -401,17 +408,23 @@ impl NativeObjects {
                         self.config.authoritative_receiver,
                         *project,
                         self.copy_ack_wait,
-                        self.fleet_references.clone(),
                     )),
                     ObjectAddress::Fleet { organization } => {
-                        RuntimeFace::Fleet(ObjectRuntime::fleet(
+                        let fleet = ObjectRuntime::fleet(
                             host,
                             slot.io.clone(),
                             organization.clone(),
                             self.config,
                             self.delivery,
                             self.holder_answer_timeout,
-                        )?)
+                        )?;
+                        RuntimeFace::Fleet(fleet.with_organization_statements(Arc::new(
+                            crate::sign_in_trust::DeferredSignInCheck {
+                                trust: self.sign_in.clone(),
+                                organization: organization.clone(),
+                                clock: Arc::new(slot.io.clone()),
+                            },
+                        )))
                     }
                 };
                 runtime.initialize().await?;

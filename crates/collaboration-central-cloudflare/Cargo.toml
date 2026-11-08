@@ -15,6 +15,9 @@ crate-type = ["cdylib"]
 [features]
 conformance = [ "dep:collaboration-central-conformance", "collaboration-central-core/conformance"]
 conformance-faults = ["conformance", "durable-steps/test-support"]
+# Builds the central-link Worker: only the private sign-in link's routes, which
+# reach central's Fleet objects through a Durable Object binding to central.
+link = []
 
 [dependencies]
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }

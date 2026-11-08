@@ -14,7 +14,9 @@ mod native_server;
 mod object_keys;
 mod platform;
 mod self_hosted_issuer;
+mod sign_in_trust;
 pub use self_hosted_issuer::{IssuerError, SelfHostedIssuer};
+pub use sign_in_trust::SignInLinkSettings;
 mod socket_host;
 #[cfg(feature = "conformance")]
 mod startup_controls;

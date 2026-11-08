@@ -19,6 +19,7 @@ use worker::{
 #[path = "object_shell/conformance_routes.rs"]
 mod conformance_routes;
 
+#[derive(Clone)]
 pub(crate) struct CloudflareObjectIo {
     env: Arc<SendWrapper<Env>>,
     #[cfg(feature = "conformance")]
@@ -149,7 +150,8 @@ struct ShellActor {
     kind: PhysicalKind,
     host: OnceCell<Arc<StoreHost>>,
     runtime: OnceCell<Arc<RuntimeFace>>,
-    fleet_references: Arc<collaboration_central_core::InMemoryCopyFleetReferences>,
+    /// The sign-in service's keys, cached for this object's lifetime.
+    sign_in_keys: Arc<collaboration_central_core::IssuerKeyCache>,
     #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
 }
@@ -161,7 +163,7 @@ impl ShellActor {
             kind,
             host: OnceCell::new(),
             runtime: OnceCell::new(),
-            fleet_references: Arc::default(),
+            sign_in_keys: Arc::default(),
             #[cfg(feature = "conformance")]
             faults: Arc::default(),
         }
@@ -273,21 +275,29 @@ impl ShellActor {
                 config.authoritative_receiver,
                 project,
                 serde_json::from_str(&self.env.var("CENTRAL_COPY_ACK_WAIT")?.to_string())?,
-                self.fleet_references.clone(),
             )),
-            ObjectAddress::Fleet { organization } => RuntimeFace::Fleet(
-                ObjectRuntime::fleet(
-                    host.clone(),
-                    io,
-                    organization,
-                    config,
-                    self.delivery_config()?,
-                    serde_json::from_str(
-                        &self.env.var("CENTRAL_HOLDER_ANSWER_TIMEOUT")?.to_string(),
-                    )?,
+            ObjectAddress::Fleet { organization } => {
+                let check = crate::sign_in_trust::CloudflareStatementCheck {
+                    env: self.env.clone(),
+                    organization: organization.clone(),
+                    clock: Arc::new(io.clone()),
+                    cache: self.sign_in_keys.clone(),
+                };
+                RuntimeFace::Fleet(
+                    ObjectRuntime::fleet(
+                        host.clone(),
+                        io,
+                        organization,
+                        config,
+                        self.delivery_config()?,
+                        serde_json::from_str(
+                            &self.env.var("CENTRAL_HOLDER_ANSWER_TIMEOUT")?.to_string(),
+                        )?,
+                    )
+                    .map_err(error)?
+                    .with_organization_statements(Arc::new(check)),
                 )
-                .map_err(error)?,
-            ),
+            }
         };
         let runtime = Arc::new(runtime);
         // Publish before an initializer can yield, so independent socket events

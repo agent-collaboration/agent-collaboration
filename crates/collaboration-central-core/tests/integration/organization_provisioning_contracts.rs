@@ -1,20 +1,42 @@
-//! F1c's closed provisioning payload survives the B2 storage cutover.
+//! The closed provisioning payload: F1c's organization plus B2's signed stamp.
 use super::contract_artifacts;
 use collaboration_central_core::identity_contract::{
     ProvisionOrganization, ProvisionOrganizationResult,
 };
 use serde_json::json;
 
-// Oracle: B2's provisioning flow and F1c's reviewed literal contract.
-// Catch an invented person, a retired operation or an unknown result being accepted.
-// No pre-fix semantic red has run for this newly adopted contract on the D1 base.
+// Oracle: the B2 doc's flow (ProvisionOrganization { organizationId,
+// organizationStatement }) as the Lead adopted it over F1c's organization-only body.
+// Catch an invented person, a retired operation, a missing stamp or an unknown
+// result being accepted.
 #[test]
 fn provision_organization_wire_contract() {
     contract_artifacts::assert_contract::<ProvisionOrganization>(
         "ProvisionOrganization",
-        vec![json!({"organizationId":"019a3dce-2000-7000-8000-000000000001"})],
+        vec![json!({
+            "organizationId":"019a3dce-2000-7000-8000-000000000001",
+            "organizationStatement":"eyJ0eXAiOiJmbGVldCJ9.eyJzdWIiOiJvcmcifQ.c2lnbmF0dXJl"
+        })],
         false,
     );
+}
+
+// The F1c organization-only body is now refused by both serde and the schema.
+#[test]
+fn provision_organization_requires_the_signed_statement() {
+    let schema = serde_json::to_value(schemars::schema_for!(ProvisionOrganization)).unwrap();
+    let validator = crate::schema_validation::contract_validator(&schema).unwrap();
+    for body in [
+        json!({"organizationId":"019a3dce-2000-7000-8000-000000000001"}),
+        json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","organizationStatement":""}),
+        json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","organizationStatement":"a.b"}),
+    ] {
+        assert!(
+            serde_json::from_value::<ProvisionOrganization>(body.clone()).is_err(),
+            "{body}"
+        );
+        assert!(!validator.is_valid(&body), "{body}");
+    }
 }
 
 #[test]

@@ -156,6 +156,9 @@ where
         let local_io = io.clone();
         let local_replies = replies.clone();
         let local_organization = organization.clone();
+        let organization_stamp =
+            Arc::new(crate::fleet_organization_authority::FleetOrganizationAuthority::default());
+        let local_organization_stamp = organization_stamp.clone();
         shared_host.install_local_calls(Arc::new(move |bytes| {
             let host = weak_host.clone();
             let shared = weak_shared.clone();
@@ -163,10 +166,12 @@ where
             let io = local_io.clone();
             let replies = local_replies.clone();
             let organization = local_organization.clone();
+            let organization_stamp = local_organization_stamp.clone();
             Box::pin(async move {
                 let runtime = ObjectRuntime::<FleetKind, Host, Io> {
                     work: ObjectWork::Fleet {
                         organization,
+                        organization_stamp,
                         host: host.upgrade().ok_or(CallFailure::AnswerLost)?,
                         shared_host: shared.upgrade().ok_or(CallFailure::AnswerLost)?,
                         engine: engine.upgrade().ok_or(CallFailure::AnswerLost)?,
@@ -184,6 +189,7 @@ where
         Ok(Self {
             work: ObjectWork::Fleet {
                 organization,
+                organization_stamp,
                 host,
                 io,
                 engine,
@@ -196,6 +202,22 @@ where
             face: PhantomData,
         })
     }
+    /// Install the host's check of this organization's stamp against the
+    /// sign-in service's published keys. Without one, no stamp is accepted.
+    #[must_use]
+    pub fn with_organization_statements(
+        self,
+        check: Arc<dyn crate::organization_authority::OrganizationStatementCheck>,
+    ) -> Self {
+        if let ObjectWork::Fleet {
+            organization_stamp, ..
+        } = &self.work
+        {
+            organization_stamp.install_check(check);
+        }
+        self
+    }
+
     pub async fn on_alarm(&self) -> Result<durable_steps::DriveReport, StoreError> {
         // Callers combine this alarm with socket work. Keep all its phases in
         // one heap-owned future rather than inflating every caller's frame.
@@ -312,6 +334,18 @@ where
     }
     pub async fn on_call(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
         let envelope: ObjectCallEnvelope = serde_json::from_slice(&bytes).map_err(|_| refused())?;
+        // A stored stamp that failed its check refuses every command on every
+        // face; only the link's provisioning and digest calls may still run.
+        let link_call = matches!(
+            envelope.kind.as_str(),
+            crate::FleetProvisionOrganization::KIND | crate::FleetOrganizationStatementDigest::KIND
+        );
+        if !link_call
+            && self.stamp_standing().await?
+                == crate::fleet_organization_authority::StampStanding::Refused
+        {
+            return Err(refused());
+        }
         let answer = match envelope.destination_face {
             CallerKind::Registry => self.on_registry_call(bytes).await,
             CallerKind::Delivery => self.delivery().map_err(|_| refused())?.on_call(bytes).await,
@@ -425,6 +459,14 @@ where
             CallerKind::Fleet,
             &self.fleet_address()?.organization,
         )?;
+        // Provisioning is the one call a refused stamp still admits: a valid
+        // statement for this organization naming the stored one can replace it.
+        if call.kind == crate::FleetProvisionOrganization::KIND {
+            return self.provisioning_call(call).await;
+        }
+        if call.kind == crate::FleetOrganizationStatementDigest::KIND {
+            return self.statement_digest_call(call).await;
+        }
         if call.kind == crate::mail_submit_calls::FleetMailSubmit::KIND {
             return self.mail_submit_call(call).await;
         }

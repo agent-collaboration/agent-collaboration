@@ -273,7 +273,6 @@ impl GrantFixture {
             config.authoritative_receiver,
             database,
             Duration::from_secs(2),
-            std::sync::Arc::new(collaboration_central_core::InMemoryCopyFleetReferences::default()),
         );
         copy.initialize().await?;
         let host = Arc::new(GrantHost { copy, database });

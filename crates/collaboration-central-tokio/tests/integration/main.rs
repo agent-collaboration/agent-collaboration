@@ -48,6 +48,9 @@ mod native_fleet;
 #[path = "../native_http/platform.rs"]
 mod native_http_platform;
 #[cfg(feature = "conformance")]
+#[path = "../support/organization_stamps.rs"]
+mod organization_stamps;
+#[cfg(feature = "conformance")]
 #[path = "../support/owner_registry_scenarios.rs"]
 #[expect(
     dead_code,
@@ -113,6 +116,7 @@ mod normal_redeploy;
 mod numeric_composed;
 mod object_bootstrap;
 mod object_identity;
+mod organization_provisioning_link;
 mod owner_admin_sessions;
 mod owner_fence_ordering;
 mod owner_registry;

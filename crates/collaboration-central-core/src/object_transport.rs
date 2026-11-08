@@ -123,7 +123,7 @@ fn source_matches(call: &ObjectCallEnvelope) -> bool {
         CallAuthority::Owner(_) => {
             call.source == fleet && matches!(call.source_face, CallerKind::Edge | CallerKind::Fleet)
         }
-        CallAuthority::AccessMachine(_) => {
+        CallAuthority::AccessMachine(_) | CallAuthority::SignInLink => {
             call.source_face == CallerKind::Edge && call.source == fleet
         }
         CallAuthority::Object => {
