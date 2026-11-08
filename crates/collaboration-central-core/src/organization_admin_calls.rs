@@ -108,9 +108,20 @@ impl From<AdmissionRefusal> for AdminRefusal {
     }
 }
 
-/// Where a person's change is recorded as coming from: the sign-in service
-/// acting for this organization (the record's actor is the person).
-const ADMIN_ORIGIN_LABEL: &str = "organization admin";
+/// The one place a person's admin record origin is built: the installation
+/// that wrote it is the sign-in service (its configured ServiceId, never an
+/// organization ID); the record's actor is the person.
+pub(crate) fn admin_record_origin(
+    sign_in_service: message_board::ServiceId,
+) -> Result<ActorOrigin, StoreError> {
+    Ok(ActorOrigin {
+        installation: sign_in_service,
+        machine: "sign-in service"
+            .to_owned()
+            .try_into()
+            .map_err(|error| StoreError::backend(format!("admin origin label: {error}")))?,
+    })
+}
 
 impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
@@ -155,6 +166,11 @@ where
             return Err(refused());
         };
         let check = organization_stamp.check().ok_or_else(refused)?;
+        // Without the sign-in service's configured identity there is no
+        // honest origin to record; refuse rather than invent one.
+        let sign_in_service = check.sign_in_service().ok_or(CallFailure::NotSent {
+            reason: NotSentReason::Overloaded,
+        })?;
         let verified = match check.verify_person_request(&input).await {
             Ok(verified) => verified,
             Err(PersonRequestRefusal::VerificationUnavailable | PersonRequestRefusal::Policy) => {
@@ -171,6 +187,7 @@ where
         let (answer, _) = StepDriver::new(host.clone())
             .run(ApplyAdmin {
                 request: verified,
+                sign_in_service,
                 clock: io.clone(),
                 row_ids: crate::fleet_row_ids::FleetRowIds::new(io.clone()),
                 record_id: io.new_id(),
@@ -183,6 +200,7 @@ where
 
 struct ApplyAdmin<C> {
     request: VerifiedPersonRequest,
+    sign_in_service: message_board::ServiceId,
     clock: Arc<C>,
     row_ids: crate::fleet_row_ids::FleetRowIds,
     record_id: durable_steps::Uuid,
@@ -223,6 +241,7 @@ where
                         scope,
                         &self.request,
                         create,
+                        self.sign_in_service,
                         now_ms,
                         self.row_ids,
                         self.record_id,
@@ -245,6 +264,7 @@ async fn create_workspace<Store, Driver>(
     scope: &mut Store::Scope<'_>,
     request: &VerifiedPersonRequest,
     create: &CreateWorkspaceRequest,
+    sign_in_service: message_board::ServiceId,
     now_ms: i64,
     row_ids: crate::fleet_row_ids::FleetRowIds,
     record_id: durable_steps::Uuid,
@@ -280,15 +300,7 @@ where
             description: Description::try_from(create.description.clone()).map_err(invalid)?,
         },
     };
-    let origin = ActorOrigin {
-        installation: request
-            .organization_id
-            .as_str()
-            .to_owned()
-            .try_into()
-            .map_err(invalid)?,
-        machine: ADMIN_ORIGIN_LABEL.to_owned().try_into().map_err(invalid)?,
-    };
+    let origin = admin_record_origin(sign_in_service)?;
     let now = chrono::DateTime::from_timestamp_millis(now_ms)
         .ok_or_else(|| StoreError::backend("invalid admin clock"))?;
     let (decided, _) = StepCallback::<Store, Driver>::run(

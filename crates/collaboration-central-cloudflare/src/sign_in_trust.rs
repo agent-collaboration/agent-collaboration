@@ -101,6 +101,11 @@ impl SignInVerification for CloudflareStatementCheck {
             .await
         })
     }
+
+    fn sign_in_service(&self) -> Option<message_board::ServiceId> {
+        let configured = self.env.var("CENTRAL_SIGN_IN_SERVICE_ID").ok()?.to_string();
+        message_board::ServiceId::try_from(configured).ok()
+    }
 }
 
 #[derive(Clone)]

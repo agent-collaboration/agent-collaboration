@@ -491,6 +491,9 @@ where
         if call.kind == crate::FleetOrganizationAdmin::KIND {
             return self.organization_admin_call(call).await;
         }
+        if call.kind == crate::FleetAuthorizationRevision::KIND {
+            return self.authorization_revision_call(call).await;
+        }
         if call.kind == crate::mail_submit_calls::FleetMailSubmit::KIND {
             return self.mail_submit_call(call).await;
         }

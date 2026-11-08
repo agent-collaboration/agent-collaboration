@@ -1,8 +1,8 @@
 //! HTTP policy for the private sign-in link; hosts mount it only on that link.
 use crate::{
     identity_contract::{
-        ORGANIZATION_STATEMENT_DIGEST_ROUTE, PROVISION_ORGANIZATION_ROUTE, ProvisionOrganization,
-        ReadOrganizationStatementDigest,
+        AUTHORIZATION_REVISIONS_ROUTE, AuthorizationRevision, ORGANIZATION_STATEMENT_DIGEST_ROUTE,
+        PROVISION_ORGANIZATION_ROUTE, ProvisionOrganization, ReadOrganizationStatementDigest,
     },
     organization_authority::{OrganizationProvisioningFailure, OrganizationProvisioningPort},
 };
@@ -25,6 +25,10 @@ pub fn organization_provisioning_router<Provisioner: OrganizationProvisioningPor
         .route(
             ORGANIZATION_STATEMENT_DIGEST_ROUTE,
             post(statement_digest::<Provisioner>),
+        )
+        .route(
+            AUTHORIZATION_REVISIONS_ROUTE,
+            post(authorization_revision::<Provisioner>),
         )
         .with_state(provisioner)
 }
@@ -55,12 +59,28 @@ async fn statement_digest<Provisioner: OrganizationProvisioningPort>(
     }
 }
 
+async fn authorization_revision<Provisioner: OrganizationProvisioningPort>(
+    State(provisioner): State<Arc<Provisioner>>,
+    request: Result<Json<AuthorizationRevision>, JsonRejection>,
+) -> Response {
+    let Ok(Json(revision)) = request else {
+        return wrong_operation();
+    };
+    match provisioner.deliver_authorization_revision(&revision).await {
+        Ok(answer) => (StatusCode::OK, Json(answer)).into_response(),
+        Err(failure) => failure_status(failure).into_response(),
+    }
+}
+
 /// Error bodies are empty: only a 200 with the closed answer is a contract.
 fn failure_status(failure: OrganizationProvisioningFailure) -> StatusCode {
     match failure {
         OrganizationProvisioningFailure::OrganizationMismatch => StatusCode::FORBIDDEN,
         OrganizationProvisioningFailure::InvalidStatement => StatusCode::UNPROCESSABLE_ENTITY,
         OrganizationProvisioningFailure::StaleStatement => StatusCode::CONFLICT,
+        OrganizationProvisioningFailure::OrganizationFloorMissing => {
+            StatusCode::PRECONDITION_FAILED
+        }
         OrganizationProvisioningFailure::Unprovisioned => StatusCode::NOT_FOUND,
         OrganizationProvisioningFailure::Unavailable
         | OrganizationProvisioningFailure::OutcomeUnknown => StatusCode::SERVICE_UNAVAILABLE,

@@ -19,6 +19,12 @@ pub const SECOND_FACTOR_WINDOW_SECONDS: i64 = 900;
 /// A fence revision: a positive JavaScript-safe integer.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct FloorRevision(i64);
+impl FloorRevision {
+    #[must_use]
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+}
 impl TryFrom<i64> for FloorRevision {
     type Error = StoreError;
     fn try_from(value: i64) -> Result<Self, Self::Error> {

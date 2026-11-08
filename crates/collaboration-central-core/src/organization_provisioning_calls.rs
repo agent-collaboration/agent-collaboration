@@ -39,6 +39,29 @@ impl CallTarget for FleetOrganizationStatementDigest {
     type Answer = StatementDigestAnswer;
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct FleetAuthorizationRevision;
+impl CallTarget for FleetAuthorizationRevision {
+    const KIND: &'static str = "central.organization-authorization-revision";
+    type Request = crate::identity_contract::AuthorizationRevision;
+    type Answer = FloorDeliveryAnswer;
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum FloorDeliveryAnswer {
+    Acknowledged {
+        revision: crate::identity_contract::FenceRevision,
+    },
+    Conflict,
+    OrganizationFloorMissing,
+    OrganizationMismatch,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(
     tag = "kind",
@@ -206,6 +229,103 @@ where
                 })
             }
         }
+    }
+}
+
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+where
+    for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
+        TransactionScope<Database = Host::Database>,
+    <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
+        + sqlx_core::encode::Encode<'scalar, Host::Database>
+        + sqlx_core::decode::Decode<'scalar, Host::Database>,
+    for<'value> String:
+        Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
+    for<'value> Option<String>:
+        Type<Host::Database> + Decode<'value, Host::Database> + Encode<'value, Host::Database>,
+    for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
+{
+    /// Floors only reach a Fleet whose stamp is valid; otherwise the push stays
+    /// pending at the sign-in service.
+    pub(crate) async fn authorization_revision_call(
+        &self,
+        call: ObjectCallEnvelope,
+    ) -> Result<Vec<u8>, CallFailure> {
+        require_sign_in_link(&call)?;
+        let _: FleetAuthorizationRevision =
+            serde_json::from_value(call.target).map_err(|_| refused())?;
+        let revision: crate::identity_contract::AuthorizationRevision =
+            serde_json::from_value(call.request).map_err(|_| refused())?;
+        if self.stamp_standing().await? != StampStanding::Valid {
+            return Err(refused());
+        }
+        let ObjectWork::Fleet {
+            organization,
+            host,
+            io,
+            ..
+        } = &self.work
+        else {
+            return Err(refused());
+        };
+        if revision.organization_id() != organization {
+            return encode(FloorDeliveryAnswer::OrganizationMismatch);
+        }
+        let (answer, _) = StepDriver::new(host.clone())
+            .run(DeliverFloor {
+                revision,
+                now_ms: io.now().unix_millis(),
+                #[cfg(feature = "conformance")]
+                fail_after_write: io.take_organization_record_fault(),
+            })
+            .await
+            .map_err(|_| CallFailure::AnswerLost)?;
+        encode(answer)
+    }
+}
+
+struct DeliverFloor {
+    revision: crate::identity_contract::AuthorizationRevision,
+    now_ms: i64,
+    #[cfg(feature = "conformance")]
+    fail_after_write: bool,
+}
+impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for DeliverFloor
+where
+    for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
+    Driver::Arguments: IntoArguments<Driver>,
+    for<'value> String: Type<Driver> + Encode<'value, Driver>,
+    for<'value> Option<String>: Type<Driver> + Decode<'value, Driver> + Encode<'value, Driver>,
+    for<'row> &'row str: ColumnIndex<Driver::Row>,
+{
+    type Output = FloorDeliveryAnswer;
+    type Effect = Infallible;
+    fn run<'scope, 'transaction>(
+        self,
+        scope: &'scope mut Store::Scope<'transaction>,
+    ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
+        Box::pin(async move {
+            let delivered =
+                crate::person_request::deliver_floor(scope, &self.revision, self.now_ms).await?;
+            #[cfg(feature = "conformance")]
+            if self.fail_after_write {
+                return Err(durable_steps::StoreError::Aborted {
+                    reason: "conformance fault after the floor write".into(),
+                });
+            }
+            // The acknowledgement is the floor this same transaction retains.
+            let answer = match delivered {
+                crate::person_request::FloorDelivery::Acknowledged(revision) => {
+                    FloorDeliveryAnswer::Acknowledged { revision }
+                }
+                crate::person_request::FloorDelivery::Conflict => FloorDeliveryAnswer::Conflict,
+                crate::person_request::FloorDelivery::OrganizationFloorMissing => {
+                    FloorDeliveryAnswer::OrganizationFloorMissing
+                }
+            };
+            Ok((answer, Vec::new()))
+        })
     }
 }
 

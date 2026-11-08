@@ -59,6 +59,7 @@ const replacements = new Map(
     CENTRAL_SIGN_IN_JWKS_URL: SIGN_IN_KEYS,
     CENTRAL_ADMIN_AUDIENCE: "https://central.example.invalid/admin",
     CENTRAL_PUBLIC_ORIGIN: "https://central.example.invalid",
+    CENTRAL_SIGN_IN_SERVICE_ID: "019f0000-0000-7000-8000-00000000e501",
   }),
 );
 // Fill the shipped templates, so a missing binding cannot be masked by the

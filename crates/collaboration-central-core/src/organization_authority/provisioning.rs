@@ -31,6 +31,16 @@ pub trait OrganizationProvisioningPort: Send + Sync + 'static {
     ) -> impl Future<
         Output = Result<OrganizationStatementDigestReply, OrganizationProvisioningFailure>,
     > + Send;
+    /// Apply one pushed fence revision; the reply is the retained floor.
+    fn deliver_authorization_revision(
+        &self,
+        revision: &crate::identity_contract::AuthorizationRevision,
+    ) -> impl Future<
+        Output = Result<
+            crate::identity_contract::AuthorizationRevisionAcknowledgement,
+            OrganizationProvisioningFailure,
+        >,
+    > + Send;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
@@ -43,6 +53,8 @@ pub enum OrganizationProvisioningFailure {
     StaleStatement,
     #[error("the Fleet object has not been provisioned")]
     Unprovisioned,
+    #[error("a person floor arrived before its organization floor")]
+    OrganizationFloorMissing,
     #[error("organization provisioning is unavailable")]
     Unavailable,
     #[error("organization provisioning could not confirm its commit")]

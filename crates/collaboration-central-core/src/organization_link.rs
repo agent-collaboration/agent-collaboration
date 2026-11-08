@@ -96,6 +96,40 @@ impl<Platform: CentralPlatform> OrganizationProvisioningPort for FleetLinkProvis
         }
     }
 
+    async fn deliver_authorization_revision(
+        &self,
+        revision: &crate::identity_contract::AuthorizationRevision,
+    ) -> Result<
+        crate::identity_contract::AuthorizationRevisionAcknowledgement,
+        OrganizationProvisioningFailure,
+    > {
+        match self
+            .call(
+                revision.organization_id(),
+                crate::FleetAuthorizationRevision,
+                revision.clone(),
+                "deliver_authorization_revision",
+            )
+            .await?
+        {
+            crate::FloorDeliveryAnswer::Acknowledged { revision } => Ok(
+                crate::identity_contract::AuthorizationRevisionAcknowledgement {
+                    acknowledged_revision: revision,
+                },
+            ),
+            // Conflicts reuse the stale status: same revision, other payload.
+            crate::FloorDeliveryAnswer::Conflict => {
+                Err(OrganizationProvisioningFailure::StaleStatement)
+            }
+            crate::FloorDeliveryAnswer::OrganizationFloorMissing => {
+                Err(OrganizationProvisioningFailure::OrganizationFloorMissing)
+            }
+            crate::FloorDeliveryAnswer::OrganizationMismatch => {
+                Err(OrganizationProvisioningFailure::OrganizationMismatch)
+            }
+        }
+    }
+
     async fn read_statement_digest(
         &self,
         request: &ReadOrganizationStatementDigest,

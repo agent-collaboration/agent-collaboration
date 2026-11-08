@@ -20,7 +20,8 @@ pub use organization_admin_calls::{
 };
 mod organization_provisioning_calls;
 pub use organization_provisioning_calls::{
-    FleetOrganizationStatementDigest, FleetProvisionOrganization, StatementDigestAnswer,
+    FleetAuthorizationRevision, FleetOrganizationStatementDigest, FleetProvisionOrganization,
+    FloorDeliveryAnswer, StatementDigestAnswer,
 };
 #[expect(
     clippy::allow_attributes_without_reason,

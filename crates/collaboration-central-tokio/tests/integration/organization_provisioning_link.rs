@@ -74,6 +74,9 @@ async fn start(
             public_origin: PUBLIC_ORIGIN.into(),
             jwks_url: keys.url.clone(),
             socket: socket.clone(),
+            service_id: "019f0000-0000-7000-8000-00000000e501"
+                .to_owned()
+                .try_into()?,
         },
         controls,
     )

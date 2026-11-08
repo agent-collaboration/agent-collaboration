@@ -9,6 +9,7 @@ mod schema_validation;
 
 mod access_rules;
 mod admin_lookup_result_contracts;
+mod authorization_revision_contracts;
 mod call_edge_mapping;
 mod enrollment_contracts;
 mod identity_boundary_rules;

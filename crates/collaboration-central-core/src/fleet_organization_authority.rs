@@ -148,4 +148,7 @@ impl SignInVerification for UnconfiguredStatementCheck {
             crate::person_request::PersonRequestRefusal::Policy,
         )))
     }
+    fn sign_in_service(&self) -> Option<message_board::ServiceId> {
+        None
+    }
 }

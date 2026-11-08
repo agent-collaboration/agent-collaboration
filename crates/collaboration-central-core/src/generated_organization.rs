@@ -413,3 +413,113 @@ where
         Ok(())
     }
 }
+pub(crate) fn insert_organization_authorization_floor<S>(
+    scope: &mut S,
+    id: String,
+    minimum_revision: String,
+    state: String,
+    permission_policy_digest: String,
+    request_reject_through_ms: String,
+    now: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/organization_sql/insert_organization_authorization_floor.sql"
+        )))
+        .bind(id)
+        .bind(minimum_revision)
+        .bind(state)
+        .bind(permission_policy_digest)
+        .bind(request_reject_through_ms)
+        .bind(now);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn update_organization_authorization_floor<S>(
+    scope: &mut S,
+    id: String,
+    minimum_revision: String,
+    state: String,
+    permission_policy_digest: String,
+    now: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/organization_sql/update_organization_authorization_floor.sql"
+        )))
+        .bind(id)
+        .bind(minimum_revision)
+        .bind(state)
+        .bind(permission_policy_digest)
+        .bind(now);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn insert_person_authorization_floor<S>(
+    scope: &mut S,
+    id: String,
+    organization_id: String,
+    person_id: String,
+    minimum_revision: String,
+    state: String,
+    now: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/organization_sql/insert_person_authorization_floor.sql"
+        )))
+        .bind(id)
+        .bind(organization_id)
+        .bind(person_id)
+        .bind(minimum_revision)
+        .bind(state)
+        .bind(now);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn update_person_authorization_floor<S>(
+    scope: &mut S,
+    id: String,
+    minimum_revision: String,
+    state: String,
+    now: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/organization_sql/update_person_authorization_floor.sql"
+        )))
+        .bind(id)
+        .bind(minimum_revision)
+        .bind(state)
+        .bind(now);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}

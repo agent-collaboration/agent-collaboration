@@ -34,6 +34,9 @@ pub struct SignInLinkSettings {
     pub public_origin: String,
     pub jwks_url: String,
     pub socket: PathBuf,
+    /// The sign-in deployment's own UUIDv7 ServiceId: the link authority's
+    /// identity and the installation on records it writes for a person.
+    pub service_id: message_board::ServiceId,
 }
 
 /// One per process: every Fleet object shares the key cache and HTTP client.
@@ -94,6 +97,7 @@ impl NativeSignInTrust {
                     public_origin: self.settings.public_origin.clone(),
                 },
             ),
+            sign_in_service: Some(self.settings.service_id.clone()),
         }))
     }
 }
@@ -230,5 +234,10 @@ impl SignInVerification for DeferredSignInCheck {
                 .ok_or(PersonRequestRefusal::Policy)?;
             check.verify_person_request(input).await
         })
+    }
+    fn sign_in_service(&self) -> Option<message_board::ServiceId> {
+        self.trust
+            .get()
+            .map(|trust| trust.settings.service_id.clone())
     }
 }

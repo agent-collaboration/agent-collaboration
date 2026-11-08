@@ -3,6 +3,7 @@
 //! transaction against the floors the sign-in service pushed.
 mod admin_operations;
 mod compact_jwt;
+mod floor_delivery;
 mod refusal;
 mod request_admission;
 mod request_verifier;
@@ -11,6 +12,7 @@ pub use admin_operations::{
     AdminOperation, AdminOperationId, AdminRoute, CreateWorkspaceRequest, ReadChangeRecordsRequest,
     WorkspaceLookupRequest,
 };
+pub(crate) use floor_delivery::{FloorDelivery, deliver as deliver_floor};
 pub use refusal::PersonRequestRefusal;
 pub(crate) use request_admission::admit as admit_person_request;
 pub use request_admission::{

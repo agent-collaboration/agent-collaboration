@@ -1,0 +1,14 @@
+[
+null,
+{"kind":"organization","organizationId":"019a3dce-2000-7000-8000-000000000001","permissionPolicyDigest":"2d31b5d72716e64e255d8858c231f593155289fb03ed354c4b762890667a3c22","revision":3,"state":"active","unexpectedField":true},
+{"kind":"organization","organizationId":"019a3dce-2000-7000-8000-000000000001","permissionPolicyDigest":"2d31b5d72716e64e255d8858c231f593155289fb03ed354c4b762890667a3c22","revision":3,"state":"unrecognizedVariant"},
+{"kind":"organization","organizationId":"019a3dce-2000-7000-8000-000000000001","permission_policy_digest":"2d31b5d72716e64e255d8858c231f593155289fb03ed354c4b762890667a3c22","revision":3,"state":"active"},
+{"kind":"organization","organization_id":"019a3dce-2000-7000-8000-000000000001","permissionPolicyDigest":"2d31b5d72716e64e255d8858c231f593155289fb03ed354c4b762890667a3c22","revision":3,"state":"active"},
+{"kind":"person","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002","revision":4,"state":"inactive","subjectId":"019a3dce-2000-7000-8000-000000000003","unexpectedField":true},
+{"kind":"person","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002","revision":4,"state":"inactive","subject_id":"019a3dce-2000-7000-8000-000000000003"},
+{"kind":"person","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002","revision":4,"state":"unrecognizedVariant","subjectId":"019a3dce-2000-7000-8000-000000000003"},
+{"kind":"person","organizationId":"019a3dce-2000-7000-8000-000000000001","person_id":"019a3dce-2000-7000-8000-000000000002","revision":4,"state":"inactive","subjectId":"019a3dce-2000-7000-8000-000000000003"},
+{"kind":"person","organization_id":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002","revision":4,"state":"inactive","subjectId":"019a3dce-2000-7000-8000-000000000003"},
+{"kind":"unrecognizedVariant","organizationId":"019a3dce-2000-7000-8000-000000000001","permissionPolicyDigest":"2d31b5d72716e64e255d8858c231f593155289fb03ed354c4b762890667a3c22","revision":3,"state":"active"},
+{"kind":"unrecognizedVariant","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002","revision":4,"state":"inactive","subjectId":"019a3dce-2000-7000-8000-000000000003"}
+]

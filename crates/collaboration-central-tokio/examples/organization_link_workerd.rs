@@ -298,12 +298,35 @@ async fn main() -> ConformanceResult<()> {
             "central-link serves no public route",
             &link_public,
         )?;
+        let public_admin = caller
+            .post(
+                "/public/organization-admin/v1/create-workspace",
+                &json!({"organizationId":legacy}),
+            )
+            .await?;
+        require(
+            (public_admin.0, public_admin.1.as_str()) == (404, "collaboration-central-public-entry"),
+            "public central has no admin route",
+            &public_admin,
+        )?;
+        let unproved_admin = caller
+            .post(
+                "/link/organization-admin/v1/create-workspace",
+                &json!({"organizationId":legacy,"operationId":"019f0000-0000-7000-8000-00000000b2d1",
+                    "name":"research","description":""}),
+            )
+            .await?;
+        require(
+            unproved_admin.0 == 401,
+            "a link admin call without a DPoP-bound person token is refused",
+            &unproved_admin,
+        )?;
         let link_unknown = caller
             .post("/link/internal/organization-admin", &json!({}))
             .await?;
         require(
             link_unknown.0 == 404,
-            "central-link exposes only its two contracts",
+            "central-link refuses a path outside its six closed routes",
             &link_unknown,
         )?;
         caller.records(legacy).await

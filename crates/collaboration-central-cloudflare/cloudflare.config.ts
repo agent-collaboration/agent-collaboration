@@ -27,6 +27,8 @@ export default {
       // Person tokens name this audience; DPoP proofs name this external origin.
       CENTRAL_ADMIN_AUDIENCE: { type: "text", value: "REPLACE_CENTRAL_ADMIN_AUDIENCE" },
       CENTRAL_PUBLIC_ORIGIN: { type: "text", value: "REPLACE_CENTRAL_PUBLIC_ORIGIN" },
+      // The sign-in deployment's own UUIDv7 ServiceId, generated once.
+      CENTRAL_SIGN_IN_SERVICE_ID: { type: "text", value: "REPLACE_SIGN_IN_SERVICE_UUIDV7" },
       PROJECT_COPIES: {
         type: "durable-object",
         worker: "replace-worker-name",

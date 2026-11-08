@@ -23,6 +23,7 @@ const STATEMENT: &str = "aGVhZGVy.Y2xhaW1z.c2lnbmF0dXJl";
 struct RecordingProvisioner {
     requests: Mutex<Vec<ProvisionOrganization>>,
     digests: Mutex<Vec<ReadOrganizationStatementDigest>>,
+    revisions: Mutex<Vec<crate::identity_contract::AuthorizationRevision>>,
     answer: Result<ProvisionOrganizationResult, OrganizationProvisioningFailure>,
 }
 impl OrganizationProvisioningPort for RecordingProvisioner {
@@ -35,6 +36,23 @@ impl OrganizationProvisioningPort for RecordingProvisioner {
             .map_err(|_| OrganizationProvisioningFailure::Unavailable)?
             .push(request.clone());
         self.answer.clone()
+    }
+    async fn deliver_authorization_revision(
+        &self,
+        revision: &crate::identity_contract::AuthorizationRevision,
+    ) -> Result<
+        crate::identity_contract::AuthorizationRevisionAcknowledgement,
+        OrganizationProvisioningFailure,
+    > {
+        self.revisions
+            .lock()
+            .map_err(|_| OrganizationProvisioningFailure::Unavailable)?
+            .push(revision.clone());
+        self.answer.clone().map(|_| {
+            crate::identity_contract::AuthorizationRevisionAcknowledgement {
+                acknowledged_revision: 7.try_into().unwrap(),
+            }
+        })
     }
     async fn read_statement_digest(
         &self,
@@ -60,6 +78,7 @@ fn recorder(
     Arc::new(RecordingProvisioner {
         requests: Mutex::new(Vec::new()),
         digests: Mutex::new(Vec::new()),
+        revisions: Mutex::new(Vec::new()),
         answer,
     })
 }
@@ -218,4 +237,57 @@ async fn the_digest_read_returns_only_the_digest_for_the_named_organization() {
     );
     assert_eq!(provisioner.digests.lock().unwrap().len(), 1);
     assert!(provisioner.requests.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn the_revision_push_answers_the_retained_floor_and_maps_its_refusals() {
+    // Wrong build caught: a person-before-organization push answered as
+    // success, or a refusal leaking a body.
+    for (answer, expected, body) in [
+        (
+            Ok(ProvisionOrganizationResult::Provisioned {}),
+            StatusCode::OK,
+            Some(json!({"acknowledgedRevision":7})),
+        ),
+        (
+            Err(OrganizationProvisioningFailure::OrganizationFloorMissing),
+            StatusCode::PRECONDITION_FAILED,
+            None,
+        ),
+        (
+            Err(OrganizationProvisioningFailure::StaleStatement),
+            StatusCode::CONFLICT,
+            None,
+        ),
+        (
+            Err(OrganizationProvisioningFailure::OrganizationMismatch),
+            StatusCode::FORBIDDEN,
+            None,
+        ),
+    ] {
+        let provisioner = recorder(answer);
+        let mut router = organization_provisioning_router(provisioner.clone());
+        let response = router
+            .call(
+                Request::post(crate::identity_contract::AUTHORIZATION_REVISIONS_ROUTE)
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({"kind":"person","organizationId":ORGANIZATION,
+                            "personId":"019a0000-0000-7000-8000-000000000002",
+                            "subjectId":"019a0000-0000-7000-8000-000000000003",
+                            "revision":3,"state":"active"}))
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected);
+        let bytes = to_bytes(response.into_body(), 1024).await.unwrap();
+        match body {
+            Some(body) => assert_eq!(serde_json::from_slice::<Value>(&bytes).unwrap(), body),
+            None => assert!(bytes.is_empty()),
+        }
+        assert_eq!(provisioner.revisions.lock().unwrap().len(), 1);
+    }
 }

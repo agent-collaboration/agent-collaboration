@@ -248,6 +248,143 @@
           "nullable": false
         }
       ]
+    },
+    {
+      "name": "insert_organization_authorization_floor",
+      "sql": "organization_sql/insert_organization_authorization_floor.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "minimum_revision",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "state",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "permission_policy_digest",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "request_reject_through_ms",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "update_organization_authorization_floor",
+      "sql": "organization_sql/update_organization_authorization_floor.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "minimum_revision",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "state",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "permission_policy_digest",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_person_authorization_floor",
+      "sql": "organization_sql/insert_person_authorization_floor.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "organization_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "person_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "minimum_revision",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "state",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "update_person_authorization_floor",
+      "sql": "organization_sql/update_person_authorization_floor.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "minimum_revision",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "state",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
     }
   ]
 }

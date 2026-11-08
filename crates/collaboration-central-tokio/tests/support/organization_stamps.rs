@@ -188,3 +188,129 @@ fn dechunk(mut bytes: &[u8]) -> ConformanceResult<Vec<u8>> {
         bytes = bytes.get(size + 2..).ok_or("chunk terminator")?;
     }
 }
+
+/// A person's DPoP key, generated per test; its public JWK is what the token binds.
+pub(crate) struct ProofKey {
+    pair: ring::signature::EcdsaKeyPair,
+    rng: ring::rand::SystemRandom,
+}
+impl ProofKey {
+    pub(crate) fn generate() -> ConformanceResult<Self> {
+        use ring::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair};
+        let rng = ring::rand::SystemRandom::new();
+        let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &rng)
+            .map_err(|_| "proof key generation")?;
+        let pair = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, pkcs8.as_ref(), &rng)
+            .map_err(|_| "proof key import")?;
+        Ok(Self { pair, rng })
+    }
+    pub(crate) fn jwk(&self) -> ConformanceResult<Value> {
+        let point = self.pair.public_key().as_ref();
+        let x = point.get(1..33).ok_or("proof key x")?;
+        let y = point.get(33..65).ok_or("proof key y")?;
+        Ok(
+            json!({"kty":"EC","crv":"P-256","x":URL_SAFE_NO_PAD.encode(x),"y":URL_SAFE_NO_PAD.encode(y)}),
+        )
+    }
+    /// RFC 7638 thumbprint, the token's `cnf.jkt`.
+    pub(crate) fn thumbprint(&self) -> ConformanceResult<String> {
+        use sha2::{Digest, Sha256};
+        let jwk = self.jwk()?;
+        let canonical = format!(
+            r#"{{"crv":"P-256","kty":"EC","x":{},"y":{}}}"#,
+            jwk.get("x").ok_or("x")?,
+            jwk.get("y").ok_or("y")?
+        );
+        Ok(URL_SAFE_NO_PAD.encode(Sha256::digest(canonical.as_bytes())))
+    }
+    pub(crate) fn proof(&self, claims: &Value) -> ConformanceResult<String> {
+        let header = json!({"typ":"dpop+jwt","alg":"ES256","jwk":self.jwk()?});
+        let signed = format!(
+            "{}.{}",
+            URL_SAFE_NO_PAD.encode(serde_json::to_vec(&header)?),
+            URL_SAFE_NO_PAD.encode(serde_json::to_vec(claims)?)
+        );
+        let signature = self
+            .pair
+            .sign(&self.rng, signed.as_bytes())
+            .map_err(|_| "proof signature")?;
+        Ok(format!(
+            "{signed}.{}",
+            URL_SAFE_NO_PAD.encode(signature.as_ref())
+        ))
+    }
+}
+
+pub(crate) fn sha256_url(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    URL_SAFE_NO_PAD.encode(Sha256::digest(bytes))
+}
+
+/// RFC 8785 for the fixture's closed intent objects (ASCII keys, integers only).
+pub(crate) fn canonical(value: &Value) -> String {
+    match value {
+        Value::Object(members) => {
+            let mut keys = members.keys().collect::<Vec<_>>();
+            keys.sort();
+            let inner = keys
+                .into_iter()
+                .map(|key| {
+                    format!(
+                        "{}:{}",
+                        Value::String(key.clone()),
+                        members.get(key).map(canonical).unwrap_or_default()
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("{{{inner}}}")
+        }
+        Value::Array(items) => format!(
+            "[{}]",
+            items.iter().map(canonical).collect::<Vec<_>>().join(",")
+        ),
+        other => other.to_string(),
+    }
+}
+
+/// One HTTP/1.1 exchange over the link socket with extra request headers.
+pub(crate) async fn link_post_with(
+    socket: &Path,
+    path: &str,
+    headers: &[(&str, String)],
+    body: &Value,
+) -> ConformanceResult<(u16, Vec<u8>)> {
+    let mut stream = tokio::net::UnixStream::connect(socket).await?;
+    let body = serde_json::to_vec(body)?;
+    let mut head = format!(
+        "POST {path} HTTP/1.1\r\nhost: central.invalid\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n",
+        body.len()
+    );
+    for (name, value) in headers {
+        head.push_str(&format!("{name}: {value}\r\n"));
+    }
+    head.push_str("\r\n");
+    stream.write_all(head.as_bytes()).await?;
+    stream.write_all(&body).await?;
+    let mut response = Vec::new();
+    stream.read_to_end(&mut response).await?;
+    let split = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .ok_or("link response has no header terminator")?;
+    let (head, rest) = response.split_at(split);
+    let head = std::str::from_utf8(head)?;
+    let status = head
+        .split_whitespace()
+        .nth(1)
+        .ok_or("link response has no status")?
+        .parse()?;
+    let mut payload = rest.get(4..).ok_or("response ends at headers")?.to_vec();
+    if head
+        .to_ascii_lowercase()
+        .contains("transfer-encoding: chunked")
+    {
+        payload = dechunk(&payload)?;
+    }
+    Ok((status, payload))
+}
